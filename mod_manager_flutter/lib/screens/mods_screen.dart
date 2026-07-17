@@ -851,7 +851,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
             messenger.showSnackBar(
               SnackBar(
                 content: Text(
-                  loc.t('mods.errors.generic', params: {'message': e.toString()}),
+                  loc.t(
+                    'mods.errors.generic',
+                    params: {'message': e.toString()},
+                  ),
                 ),
                 backgroundColor: Colors.red,
               ),
@@ -862,8 +865,11 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         return AlertDialog(
           title: Row(
             children: [
-              const Icon(Icons.warning_amber_rounded,
-                  size: 24, color: Colors.red),
+              const Icon(
+                Icons.warning_amber_rounded,
+                size: 24,
+                color: Colors.red,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
@@ -1259,9 +1265,17 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         .toList();
     final hasCharacter =
         mod.characterId.isNotEmpty && mod.characterId != 'unknown';
-    final hasDescription =
-        mod.description != null && mod.description!.isNotEmpty;
     final hasUrl = mod.sourceUrl != null && mod.sourceUrl!.isNotEmpty;
+
+    // Inline description editing state, kept for the dialog's lifetime. The
+    // rendered markdown swaps to a TextField when the user taps the pencil.
+    final descController = TextEditingController(text: mod.description ?? '');
+    String currentDescription = mod.description ?? '';
+    bool isEditingDescription = false;
+
+    // Own controller so the scrollbar sits in a reserved gutter (see the
+    // right-padding below) instead of overlaying the info column's content.
+    final detailScroll = ScrollController();
 
     showDialog(
       context: context,
@@ -1297,123 +1311,248 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                 // Left: gallery fills the available vertical space.
                 SizedBox(width: 300, child: _detailGallery(mod, selectedImage)),
                 const SizedBox(width: 20),
-                // Right: scrollable info column.
+                // Right: scrollable info column. The scrollbar gets its own
+                // gutter (right padding) so it never overlaps the content.
                 Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (hasCharacter) ...[
-                          Row(
-                            children: [
-                              if (isBuiltInCategory(mod.characterId))
-                                Icon(
-                                  categoryIcon(mod.characterId),
-                                  size: 28,
-                                  color: Colors.grey[700],
-                                )
-                              else
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: Image.asset(
-                                    'assets/characters/${getCharacterAssetName(mod.characterId)}.png',
-                                    width: 28,
-                                    height: 28,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => Icon(
-                                      Icons.person,
-                                      size: 28,
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
-                                ),
-                              const SizedBox(width: 8),
-                              Text(
-                                categoryDisplayName(mod.characterId, loc),
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-                        // Description is always shown, even when empty.
-                        _detailSectionLabel(loc.t('mods.dialog.description')),
-                        const SizedBox(height: 4),
-                        if (hasDescription)
-                          _buildDescriptionMarkdown(context, mod.description!)
-                        else
-                          Text(
-                            loc.t('mods.details.no_description'),
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey[500],
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        const SizedBox(height: 16),
-                        if (mod.tags.isNotEmpty) ...[
-                          _detailSectionLabel(loc.t('mods.dialog.tags')),
-                          const SizedBox(height: 6),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: mod.tags
-                                .map(
-                                  (t) => Chip(
-                                    label: Text(t),
-                                    visualDensity: VisualDensity.compact,
-                                    materialTapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-                        if (hasUrl) ...[
-                          _detailSectionLabel(loc.t('mods.dialog.source_url')),
-                          const SizedBox(height: 4),
-                          InkWell(
-                            onTap: () => _openModLink(mod),
-                            child: Row(
+                  child: Scrollbar(
+                    controller: detailScroll,
+                    thumbVisibility: true,
+                    child: SingleChildScrollView(
+                      controller: detailScroll,
+                      padding: const EdgeInsets.only(right: 14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (hasCharacter) ...[
+                            Row(
                               children: [
-                                const Icon(
-                                  Icons.open_in_new,
-                                  size: 16,
-                                  color: Color(0xFF6366F1),
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    mod.sourceUrl!,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: Color(0xFF6366F1),
-                                      decoration: TextDecoration.underline,
+                                if (isBuiltInCategory(mod.characterId))
+                                  Icon(
+                                    categoryIcon(mod.characterId),
+                                    size: 28,
+                                    color: Colors.grey[700],
+                                  )
+                                else
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Image.asset(
+                                      'assets/characters/${getCharacterAssetName(mod.characterId)}.png',
+                                      width: 28,
+                                      height: 28,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => Icon(
+                                        Icons.person,
+                                        size: 28,
+                                        color: Colors.grey[600],
+                                      ),
                                     ),
+                                  ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  categoryDisplayName(mod.characterId, loc),
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
                               ],
                             ),
+                            const SizedBox(height: 16),
+                          ],
+                          // Description is always shown, even when empty, and can
+                          // be edited inline via the pencil button.
+                          StatefulBuilder(
+                            builder: (context, setLocal) {
+                              Future<void> saveDescription() async {
+                                final newDesc = descController.text.trim();
+                                final messenger = ScaffoldMessenger.of(context);
+                                try {
+                                  await ApiService.updateMod(
+                                    mod.copyWith(description: newDesc),
+                                  );
+                                  currentDescription = newDesc;
+                                  setLocal(() => isEditingDescription = false);
+                                  unawaited(loadMods(showLoading: false));
+                                } catch (e) {
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        loc.t(
+                                          'mods.errors.generic',
+                                          params: {'message': e.toString()},
+                                        ),
+                                      ),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              }
+
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Row(
+                                    children: [
+                                      _detailSectionLabel(
+                                        loc.t('mods.dialog.description'),
+                                      ),
+                                      const Spacer(),
+                                      if (!isEditingDescription)
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.edit_outlined,
+                                            size: 16,
+                                          ),
+                                          tooltip: loc.t(
+                                            'mods.context_menu.edit',
+                                          ),
+                                          visualDensity: VisualDensity.compact,
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                          onPressed: () {
+                                            descController.text =
+                                                currentDescription;
+                                            setLocal(
+                                              () => isEditingDescription = true,
+                                            );
+                                          },
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  if (isEditingDescription) ...[
+                                    TextField(
+                                      controller: descController,
+                                      autofocus: true,
+                                      minLines: 6,
+                                      maxLines: 10,
+                                      keyboardType: TextInputType.multiline,
+                                      style: const TextStyle(fontSize: 13),
+                                      decoration: InputDecoration(
+                                        hintText: loc.t(
+                                          'mods.dialog.description_hint',
+                                        ),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 8,
+                                            ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      children: [
+                                        TextButton(
+                                          onPressed: () {
+                                            descController.text =
+                                                currentDescription;
+                                            setLocal(
+                                              () =>
+                                                  isEditingDescription = false,
+                                            );
+                                          },
+                                          child: Text(
+                                            loc.t('mods.dialog.cancel'),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        FilledButton(
+                                          onPressed: saveDescription,
+                                          child: Text(
+                                            loc.t('mods.dialog.save'),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ] else if (currentDescription.isNotEmpty)
+                                    _buildDescriptionMarkdown(
+                                      context,
+                                      currentDescription,
+                                    )
+                                  else
+                                    Text(
+                                      loc.t('mods.details.no_description'),
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.grey[500],
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                ],
+                              );
+                            },
                           ),
                           const SizedBox(height: 16),
+                          if (mod.tags.isNotEmpty) ...[
+                            _detailSectionLabel(loc.t('mods.dialog.tags')),
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: mod.tags
+                                  .map(
+                                    (t) => Chip(
+                                      label: Text(t),
+                                      visualDensity: VisualDensity.compact,
+                                      materialTapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          if (hasUrl) ...[
+                            _detailSectionLabel(
+                              loc.t('mods.dialog.source_url'),
+                            ),
+                            const SizedBox(height: 4),
+                            InkWell(
+                              onTap: () => _openModLink(mod),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.open_in_new,
+                                    size: 16,
+                                    color: Color(0xFF6366F1),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      mod.sourceUrl!,
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        color: Color(0xFF6366F1),
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          if (validKeybinds.isNotEmpty) ...[
+                            _detailSectionLabel(loc.t('mods.details.keybinds')),
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: validKeybinds
+                                  .map(_detailKeybindChip)
+                                  .toList(),
+                            ),
+                          ],
                         ],
-                        if (validKeybinds.isNotEmpty) ...[
-                          _detailSectionLabel(loc.t('mods.details.keybinds')),
-                          const SizedBox(height: 6),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: validKeybinds
-                                .map(_detailKeybindChip)
-                                .toList(),
-                          ),
-                        ],
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -1800,32 +1939,29 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
   ///   `[!CAUTION]`, plus a non-standard `[!INFO]` alias of note) render as
   ///   coloured callouts ([_AlertElementBuilder]).
   Widget _buildDescriptionMarkdown(BuildContext context, String description) {
-    final styleSheet =
-        MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-          p: const TextStyle(fontSize: 13),
-          a: const TextStyle(
-            fontSize: 13,
-            color: Color(0xFF6366F1),
-            decoration: TextDecoration.underline,
-          ),
-          // A `>` at the start of a line is markdown blockquote syntax. Keep the
-          // text readable (inherit the body color) with a subtle accent bar
-          // instead of the default washed-out, heavily padded box.
-          blockquote: TextStyle(
-            fontSize: 13,
-            color: Theme.of(context).textTheme.bodyMedium?.color,
-          ),
-          blockquotePadding: const EdgeInsets.fromLTRB(12, 4, 8, 4),
-          blockquoteDecoration: BoxDecoration(
-            color: Theme.of(
-              context,
-            ).colorScheme.onSurface.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(4),
-            border: const Border(
-              left: BorderSide(color: Color(0xFF6366F1), width: 3),
-            ),
-          ),
-        );
+    final styleSheet = MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+      p: const TextStyle(fontSize: 13),
+      a: const TextStyle(
+        fontSize: 13,
+        color: Color(0xFF6366F1),
+        decoration: TextDecoration.underline,
+      ),
+      // A `>` at the start of a line is markdown blockquote syntax. Keep the
+      // text readable (inherit the body color) with a subtle accent bar
+      // instead of the default washed-out, heavily padded box.
+      blockquote: TextStyle(
+        fontSize: 13,
+        color: Theme.of(context).textTheme.bodyMedium?.color,
+      ),
+      blockquotePadding: const EdgeInsets.fromLTRB(12, 4, 8, 4),
+      blockquoteDecoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(4),
+        border: const Border(
+          left: BorderSide(color: Color(0xFF6366F1), width: 3),
+        ),
+      ),
+    );
 
     return MarkdownBody(
       data: description,
@@ -4062,7 +4198,8 @@ class _AlertElementBuilder extends MarkdownElementBuilder {
     TextStyle? preferredStyle,
     TextStyle? parentStyle,
   ) {
-    final spec = _alertSpecs[element.attributes['type']] ?? _alertSpecs['note']!;
+    final spec =
+        _alertSpecs[element.attributes['type']] ?? _alertSpecs['note']!;
     final body = element.attributes['body'] ?? '';
 
     return Container(
