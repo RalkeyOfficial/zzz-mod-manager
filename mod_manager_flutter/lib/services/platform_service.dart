@@ -1,5 +1,3 @@
-import 'dart:io';
-
 /// Абстрактний клас для платформно-специфічних операцій
 abstract class PlatformService {
   /// Відправляє F10 у вікно гри для перезавантаження модів
@@ -37,4 +35,9 @@ abstract class PlatformService {
 
   /// Відкриває вказану папку у файловому менеджері системи
   Future<bool> openFolderInFileManager(String folderPath);
+
+  /// Reads rich-text HTML from the system clipboard, or null when the
+  /// clipboard holds no HTML (or the platform tool needed to read it is
+  /// unavailable). Used to paste formatted text as markdown.
+  Future<String?> getClipboardHtml();
 }

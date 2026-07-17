@@ -1,6 +1,7 @@
 #include "my_application.h"
 
 #include <flutter_linux/flutter_linux.h>
+#include <gtk/gtk.h>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
@@ -11,9 +12,67 @@ struct _MyApplication
 {
   GtkApplication parent_instance;
   char **dart_entrypoint_arguments;
+  FlMethodChannel *clipboard_channel;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
+
+// Handles the "mod_manager/clipboard" channel. Reads the clipboard's
+// `text/html` target directly from the GTK clipboard — the same way native
+// apps (e.g. LibreOffice) do — so pasting formatted text into the description
+// editors works without any external CLI tool. Returns null when the clipboard
+// holds no HTML.
+static void clipboard_method_call_cb(FlMethodChannel *channel,
+                                     FlMethodCall *method_call,
+                                     gpointer user_data)
+{
+  g_autoptr(FlMethodResponse) response = nullptr;
+  if (g_strcmp0(fl_method_call_get_name(method_call), "getClipboardHtml") == 0)
+  {
+    GtkClipboard *clipboard = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
+    GtkSelectionData *data = gtk_clipboard_wait_for_contents(
+        clipboard, gdk_atom_intern("text/html", FALSE));
+    g_autoptr(FlValue) result = nullptr;
+    if (data != nullptr)
+    {
+      gint length = 0;
+      const guchar *bytes = gtk_selection_data_get_data_with_length(data, &length);
+      if (bytes != nullptr && length > 0)
+      {
+        gchar *utf8 = nullptr;
+        // Most sources provide UTF-8; some provide BOM-prefixed UTF-16.
+        if (length >= 2 &&
+            ((bytes[0] == 0xFF && bytes[1] == 0xFE) ||
+             (bytes[0] == 0xFE && bytes[1] == 0xFF)))
+        {
+          utf8 = g_convert((const gchar *)bytes, length, "UTF-8", "UTF-16",
+                           nullptr, nullptr, nullptr);
+        }
+        else
+        {
+          utf8 = g_strndup((const gchar *)bytes, length);
+        }
+        if (utf8 != nullptr)
+        {
+          result = fl_value_new_string(utf8);
+          g_free(utf8);
+        }
+      }
+      gtk_selection_data_free(data);
+    }
+    if (result == nullptr)
+      result = fl_value_new_null();
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+  }
+  else
+  {
+    response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
+  }
+
+  g_autoptr(GError) error = nullptr;
+  if (!fl_method_call_respond(method_call, response, &error))
+    g_warning("Failed to respond to clipboard method call: %s", error->message);
+}
 
 // Implements GApplication::activate.
 static void my_application_activate(GApplication *application)
@@ -64,6 +123,16 @@ static void my_application_activate(GApplication *application)
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
+  // Register the clipboard channel for native text/html reads.
+  FlEngine *engine = fl_view_get_engine(view);
+  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+  self->clipboard_channel = fl_method_channel_new(
+      fl_engine_get_binary_messenger(engine),
+      "mod_manager/clipboard",
+      FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(
+      self->clipboard_channel, clipboard_method_call_cb, self, nullptr);
+
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
 
@@ -113,6 +182,7 @@ static void my_application_dispose(GObject *object)
 {
   MyApplication *self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
+  g_clear_object(&self->clipboard_channel);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 

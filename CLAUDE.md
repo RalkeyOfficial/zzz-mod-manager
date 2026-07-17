@@ -60,6 +60,10 @@ System dependencies (Linux dev): the C++ toolchain (`clang`, `cmake`, `ninja`,
 `pkg-config`) + `gtk3` for building; `7z`/`7za`/`7zr` (p7zip) for archive imports; and
 `xdotool` (X11) or `ydotool` (Wayland) for the F10 auto-reload feature.
 
+Clipboard HTML (for paste-as-markdown) is read natively: on Linux via the GTK
+clipboard in the runner (`linux/runner/my_application.cc`, channel
+`mod_manager/clipboard`), on Windows via `pasteboard`. No external CLI tool.
+
 ## Changelog (keep up to date)
 
 `CHANGELOG.md` (repo root) follows [Keep a Changelog](https://keepachangelog.com)

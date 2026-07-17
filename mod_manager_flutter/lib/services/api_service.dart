@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/character_info.dart';
 import 'config_service.dart';
 import 'mod_manager_service.dart';
+import 'platform_service_factory.dart';
 
 /// API сервіс для роботи з модами
 class ApiService {
@@ -84,6 +85,16 @@ class ApiService {
       return await _modManager!.openModFolder(modId);
     } catch (e) {
       throw Exception('Помилка відкриття папки моду: $e');
+    }
+  }
+
+  /// Reads rich-text HTML from the system clipboard, or null if none. Used to
+  /// paste formatted text into the description editors as markdown.
+  static Future<String?> getClipboardHtml() async {
+    try {
+      return await PlatformServiceFactory.getInstance().getClipboardHtml();
+    } catch (e) {
+      return null;
     }
   }
 

@@ -4,6 +4,7 @@ import 'package:ffi/ffi.dart';
 import 'package:path/path.dart' as path;
 import 'package:win32/win32.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:pasteboard/pasteboard.dart';
 import 'platform_service.dart';
 
 /// Windows-специфічна реалізація PlatformService
@@ -285,6 +286,39 @@ class WindowsPlatformService implements PlatformService {
       print('WindowsPlatformService: Помилка відкриття папки: $e');
       return false;
     }
+  }
+
+  @override
+  Future<String?> getClipboardHtml() async {
+    try {
+      final raw = await Pasteboard.html;
+      if (raw == null || raw.isEmpty) return null;
+      return _extractCfHtmlFragment(raw);
+    } catch (e) {
+      print('WindowsPlatformService: Помилка читання HTML з буфера: $e');
+      return null;
+    }
+  }
+
+  /// The Windows "HTML Format" clipboard payload wraps the markup in a header
+  /// (Version/StartHTML/StartFragment/…). Return just the fragment markup so
+  /// the HTML→markdown converter doesn't choke on the header lines.
+  String? _extractCfHtmlFragment(String cfHtml) {
+    const startMarker = '<!--StartFragment-->';
+    const endMarker = '<!--EndFragment-->';
+    final start = cfHtml.indexOf(startMarker);
+    final end = cfHtml.indexOf(endMarker);
+    if (start != -1 && end != -1 && end > start) {
+      final frag = cfHtml.substring(start + startMarker.length, end).trim();
+      if (frag.isNotEmpty) return frag;
+    }
+    // No fragment markers — drop the header by starting at the first tag.
+    final firstTag = cfHtml.indexOf('<');
+    if (firstTag != -1) {
+      final body = cfHtml.substring(firstTag).trim();
+      if (body.isNotEmpty) return body;
+    }
+    return null;
   }
 
   // ===== Приватні методи =====

@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Right-click → "Open in file explorer" opens a mod's folder in the system file manager.
 - Right-click → "Delete" permanently removes a mod (folder, active link, and saved state) after a confirmation dialog.
 - The mod details dialog lets you edit the description inline (pencil → edit → save) without opening the full Edit dialog.
+- Pasting rich text into either description editor (Ctrl+V) converts it to markdown, preserving bold, italic, inline code, headers, links, and lists. Falls back to plain-text paste when the clipboard has no HTML.
 
 ### Changed
 

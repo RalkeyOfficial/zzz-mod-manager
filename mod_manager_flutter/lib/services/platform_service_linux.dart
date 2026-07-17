@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import 'package:url_launcher/url_launcher.dart';
 import 'platform_service.dart';
@@ -275,6 +276,25 @@ class LinuxPlatformService implements PlatformService {
       print('LinuxPlatformService: Помилка відкриття папки: $e');
       return false;
     }
+  }
+
+  /// Channel backed by the GTK clipboard reader in the Linux runner
+  /// (`linux/runner/my_application.cc`).
+  static const MethodChannel _clipboardChannel =
+      MethodChannel('mod_manager/clipboard');
+
+  @override
+  Future<String?> getClipboardHtml() async {
+    // Read the clipboard's text/html target straight from the GTK clipboard
+    // (the same way native apps do) — no external CLI tool required.
+    try {
+      final html =
+          await _clipboardChannel.invokeMethod<String>('getClipboardHtml');
+      if (html != null && html.trim().isNotEmpty) return html;
+    } catch (e) {
+      print('LinuxPlatformService: Помилка читання HTML з буфера: $e');
+    }
+    return null;
   }
 
   // ===== Приватні методи =====

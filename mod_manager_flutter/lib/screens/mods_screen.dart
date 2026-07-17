@@ -15,6 +15,7 @@ import 'package:cross_file/cross_file.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
+import 'package:html2md/html2md.dart' as html2md;
 import 'package:url_launcher/url_launcher.dart';
 import '../core/constants.dart';
 import '../models/character_info.dart';
@@ -901,6 +902,58 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     );
   }
 
+  /// Wraps a description [field] so Ctrl/Cmd+V pastes rich text as markdown:
+  /// when the clipboard holds HTML (e.g. copied from a web page) it's converted
+  /// to markdown; otherwise it falls back to a normal plain-text paste.
+  Widget _markdownPasteField(TextEditingController controller, Widget field) {
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyV, control: true): () =>
+            _smartPasteMarkdown(controller),
+        const SingleActivator(LogicalKeyboardKey.keyV, meta: true): () =>
+            _smartPasteMarkdown(controller),
+      },
+      child: field,
+    );
+  }
+
+  /// Reads the clipboard, converting HTML to markdown when present, and inserts
+  /// the result at the current selection of [controller].
+  Future<void> _smartPasteMarkdown(TextEditingController controller) async {
+    String toInsert;
+    final html = await ApiService.getClipboardHtml();
+    if (html != null && html.trim().isNotEmpty) {
+      // ATX headers (`## x`) and `-` bullets match how the description is
+      // written by hand; fenced code blocks render better than indented.
+      toInsert = html2md
+          .convert(
+            html,
+            styleOptions: {
+              'headingStyle': 'atx',
+              'bulletListMarker': '-',
+              'codeBlockStyle': 'fenced',
+            },
+          )
+          .trim();
+    } else {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      toInsert = data?.text ?? '';
+    }
+    if (toInsert.isEmpty) return;
+
+    final value = controller.value;
+    final sel = value.selection;
+    // Replace the selection (or insert at the caret); guard against an
+    // invalid/absent selection by appending to the end.
+    final start = sel.isValid ? sel.start : value.text.length;
+    final end = sel.isValid ? sel.end : value.text.length;
+    final newText = value.text.replaceRange(start, end, toInsert);
+    controller.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: start + toInsert.length),
+    );
+  }
+
   void _showEditDialog(ModInfo mod) {
     final selectedChar = ValueNotifier<String>(mod.characterId);
     final urlController = TextEditingController(text: mod.sourceUrl ?? '');
@@ -1087,19 +1140,22 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                   style: const TextStyle(fontSize: 13),
                 ),
                 const SizedBox(height: 8),
-                TextField(
-                  controller: descController,
-                  minLines: 8,
-                  maxLines: 8,
-                  keyboardType: TextInputType.multiline,
-                  decoration: InputDecoration(
-                    hintText: loc.t('mods.dialog.description_hint'),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
+                _markdownPasteField(
+                  descController,
+                  TextField(
+                    controller: descController,
+                    minLines: 8,
+                    maxLines: 8,
+                    keyboardType: TextInputType.multiline,
+                    decoration: InputDecoration(
+                      hintText: loc.t('mods.dialog.description_hint'),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                     ),
                   ),
                 ),
@@ -1423,27 +1479,30 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                                   ),
                                   const SizedBox(height: 4),
                                   if (isEditingDescription) ...[
-                                    TextField(
-                                      controller: descController,
-                                      autofocus: true,
-                                      minLines: 6,
-                                      maxLines: 10,
-                                      keyboardType: TextInputType.multiline,
-                                      style: const TextStyle(fontSize: 13),
-                                      decoration: InputDecoration(
-                                        hintText: loc.t(
-                                          'mods.dialog.description_hint',
-                                        ),
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
+                                    _markdownPasteField(
+                                      descController,
+                                      TextField(
+                                        controller: descController,
+                                        autofocus: true,
+                                        minLines: 6,
+                                        maxLines: 10,
+                                        keyboardType: TextInputType.multiline,
+                                        style: const TextStyle(fontSize: 13),
+                                        decoration: InputDecoration(
+                                          hintText: loc.t(
+                                            'mods.dialog.description_hint',
                                           ),
-                                        ),
-                                        contentPadding:
-                                            const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 8,
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
                                             ),
+                                          ),
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                horizontal: 12,
+                                                vertical: 8,
+                                              ),
+                                        ),
                                       ),
                                     ),
                                     const SizedBox(height: 8),
