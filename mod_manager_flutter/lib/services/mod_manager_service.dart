@@ -399,6 +399,47 @@ class ModManagerService {
     }
   }
 
+  /// Permanently deletes a mod: removes its active link (if any), deletes the
+  /// on-disk folder with all its files, and clears its config state
+  /// (active/favorite/category). The in-folder metadata is destroyed with the
+  /// folder. Returns false if the mod folder is missing or on any failure.
+  Future<bool> deleteMod(String modName) async {
+    try {
+      if (modsPath == null) return false;
+
+      final modDir = Directory(path.join(modsPath!, modName));
+      if (!await modDir.exists()) return false;
+
+      // Remove the active link first so we don't leave a dangling link in the
+      // game's mods folder once the source folder is gone.
+      if (saveModsPath != null && await isModActive(modName)) {
+        await _platformService.removeModLink(
+          path.join(saveModsPath!, modName),
+        );
+      }
+
+      await modDir.delete(recursive: true);
+
+      await _configService.removeActiveMod(modName);
+      await _configService.removeFavoriteMod(modName);
+      await _configService.removeModCharacterTag(modName);
+      invalidateKeybinds(modName);
+      return true;
+    } catch (e) {
+      print('ModManagerService: Помилка видалення мода "$modName": $e');
+      return false;
+    }
+  }
+
+  /// Opens a mod's folder in the system file manager. Returns false if the mod
+  /// folder is missing or the file manager could not be launched.
+  Future<bool> openModFolder(String modName) async {
+    if (modsPath == null) return false;
+    final modDir = Directory(path.join(modsPath!, modName));
+    if (!await modDir.exists()) return false;
+    return await _platformService.openFolderInFileManager(modDir.path);
+  }
+
   Future<String?> _findModImage(String modName) async {
     try {
       final modPath = path.join(modsPath!, modName);

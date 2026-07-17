@@ -272,7 +272,21 @@ class WindowsPlatformService implements PlatformService {
       return null;
     }
   }
-  
+
+  @override
+  Future<bool> openFolderInFileManager(String folderPath) async {
+    try {
+      // explorer.exe returns a non-zero exit code even on success, so treat a
+      // clean launch as success rather than checking the exit code.
+      await Process.start('explorer', [folderPath]);
+      print('WindowsPlatformService: Папку відкрито: $folderPath');
+      return true;
+    } catch (e) {
+      print('WindowsPlatformService: Помилка відкриття папки: $e');
+      return false;
+    }
+  }
+
   // ===== Приватні методи =====
   
   Future<bool> _sendF10ToForegroundWindow() async {

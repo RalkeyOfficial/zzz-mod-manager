@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Right-click → "Open in file explorer" opens a mod's folder in the system file manager.
+- Right-click → "Delete" permanently removes a mod (folder, active link, and saved state) after a confirmation dialog.
+
 ### Fixed
 
 - `> [!INFO]` in mod descriptions now renders as an info callout (a note-style alias) instead of a plain blockquote — `INFO` isn't a real GitHub alert, but people commonly reach for it over `NOTE`.

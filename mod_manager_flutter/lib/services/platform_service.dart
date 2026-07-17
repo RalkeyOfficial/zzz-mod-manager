@@ -34,4 +34,7 @@ abstract class PlatformService {
   
   /// Отримує шлях до системної Downloads директорії користувача
   String? getSystemDownloadsPath();
+
+  /// Відкриває вказану папку у файловому менеджері системи
+  Future<bool> openFolderInFileManager(String folderPath);
 }

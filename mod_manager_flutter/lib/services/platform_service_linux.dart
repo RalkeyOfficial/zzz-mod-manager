@@ -260,7 +260,23 @@ class LinuxPlatformService implements PlatformService {
       return null;
     }
   }
-  
+
+  @override
+  Future<bool> openFolderInFileManager(String folderPath) async {
+    try {
+      final result = await Process.run('xdg-open', [folderPath]);
+      if (result.exitCode == 0) {
+        print('LinuxPlatformService: Папку відкрито: $folderPath');
+        return true;
+      }
+      print('LinuxPlatformService: xdg-open завершився з кодом ${result.exitCode}');
+      return false;
+    } catch (e) {
+      print('LinuxPlatformService: Помилка відкриття папки: $e');
+      return false;
+    }
+  }
+
   // ===== Приватні методи =====
   
   Future<bool> _sendF10ViaXdotool() async {

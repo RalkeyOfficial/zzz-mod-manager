@@ -78,6 +78,9 @@
       "import_error": "Помилка імпорту: {message}",
       "tag_saved": "Tag оновлено",
       "renamed": "Мод перейменовано",
+      "deleted": "Мод видалено",
+      "delete_failed": "Не вдалося видалити мод",
+      "open_folder_failed": "Не вдалося відкрити папку моду",
       "invalid_url": "Невірне посилання",
       "paste_error": "Помилка вставки: {message}"
     },
@@ -116,6 +119,9 @@
       "rename_confirm": "Перейменувати",
       "rename_invalid": "Назва містить недопустимі символи",
       "rename_exists": "Мод з такою назвою вже існує",
+      "delete_title": "Видалити мод",
+      "delete_message": "Остаточно видалити \"{mod}\"? Це видалить папку моду з усіма файлами з диска. Цю дію не можна скасувати.",
+      "delete_confirm": "Видалити",
       "source_url": "Посилання на джерело:",
       "source_url_hint": "https://gamebanana.com/mods/...",
       "description": "Опис:",
@@ -150,10 +156,12 @@
       "edit_keybinds": "Редагувати клавіші ({count})",
       "open_link": "Відкрити сторінку джерела",
       "add_image": "Додати фото",
+      "open_folder": "Відкрити в провіднику",
       "favorite_add": "В улюблені",
       "favorite_remove": "Видалити з улюблених",
       "activate": "Активувати",
-      "deactivate": "Деактивувати"
+      "deactivate": "Деактивувати",
+      "delete": "Видалити"
     },
     "details": {
       "keybinds": "Клавіші",

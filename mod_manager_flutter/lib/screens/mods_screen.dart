@@ -905,6 +905,108 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     );
   }
 
+  /// Opens the mod's on-disk folder in the system file manager.
+  Future<void> _openModFolder(ModInfo mod) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final ok = await ApiService.openModFolder(mod.id);
+      if (!mounted || ok) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(loc.t('mods.snackbar.open_folder_failed')),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            loc.t('mods.errors.generic', params: {'message': e.toString()}),
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// Confirms and permanently deletes a mod (its folder and all state). The
+  /// action is irreversible, so it requires an explicit confirmation.
+  void _showDeleteDialog(ModInfo mod) {
+    final messenger = ScaffoldMessenger.of(context);
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        Future<void> confirm() async {
+          Navigator.pop(dialogContext);
+          try {
+            final ok = await ApiService.deleteMod(mod.id);
+            if (!mounted) return;
+            if (ok) {
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text(loc.t('mods.snackbar.deleted')),
+                  duration: const Duration(seconds: 1),
+                ),
+              );
+              unawaited(loadMods(showLoading: false));
+            } else {
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text(loc.t('mods.snackbar.delete_failed')),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          } catch (e) {
+            if (!mounted) return;
+            messenger.showSnackBar(
+              SnackBar(
+                content: Text(
+                  loc.t('mods.errors.generic', params: {'message': e.toString()}),
+                ),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+
+        return AlertDialog(
+          title: Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded,
+                  size: 24, color: Colors.red),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  loc.t('mods.dialog.delete_title'),
+                  style: const TextStyle(fontSize: 18),
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 380,
+            child: Text(
+              loc.t('mods.dialog.delete_message', params: {'mod': mod.name}),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(loc.t('mods.dialog.cancel')),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: confirm,
+              child: Text(loc.t('mods.dialog.delete_confirm')),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _showEditDialog(ModInfo mod) {
     final selectedChar = ValueNotifier<String>(mod.characterId);
     final urlController = TextEditingController(text: mod.sourceUrl ?? '');
@@ -2304,6 +2406,18 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
             Future.delayed(Duration.zero, () => _pasteImageFromClipboard(mod));
           },
         ),
+        PopupMenuItem(
+          child: Row(
+            children: [
+              const Icon(Icons.folder_open, size: 18),
+              const SizedBox(width: 8),
+              Text(loc.t('mods.context_menu.open_folder')),
+            ],
+          ),
+          onTap: () {
+            Future.delayed(Duration.zero, () => _openModFolder(mod));
+          },
+        ),
         // Відкрити сторінку джерела, якщо вказано посилання
         if (mod.sourceUrl != null && mod.sourceUrl!.isNotEmpty)
           PopupMenuItem(
@@ -2367,6 +2481,21 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
           ),
           onTap: () {
             Future.delayed(Duration.zero, () => toggleMod(mod));
+          },
+        ),
+        PopupMenuItem(
+          child: Row(
+            children: [
+              const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+              const SizedBox(width: 8),
+              Text(
+                loc.t('mods.context_menu.delete'),
+                style: const TextStyle(color: Colors.red),
+              ),
+            ],
+          ),
+          onTap: () {
+            Future.delayed(Duration.zero, () => _showDeleteDialog(mod));
           },
         ),
       ],

@@ -78,6 +78,9 @@
       "import_error": "Import error: {message}",
       "tag_saved": "Tag updated",
       "renamed": "Mod renamed",
+      "deleted": "Mod deleted",
+      "delete_failed": "Failed to delete mod",
+      "open_folder_failed": "Could not open the mod folder",
       "invalid_url": "Invalid link",
       "paste_error": "Paste error: {message}"
     },
@@ -116,6 +119,9 @@
       "rename_confirm": "Rename",
       "rename_invalid": "Name contains invalid characters",
       "rename_exists": "A mod with this name already exists",
+      "delete_title": "Delete mod",
+      "delete_message": "Permanently delete \"{mod}\"? This removes the mod folder and all its files from disk and cannot be undone.",
+      "delete_confirm": "Delete",
       "source_url": "Source link:",
       "source_url_hint": "https://gamebanana.com/mods/...",
       "description": "Description:",
@@ -150,10 +156,12 @@
       "edit_keybinds": "Edit keybinds ({count})",
       "open_link": "Open source page",
       "add_image": "Add image",
+      "open_folder": "Open in file explorer",
       "favorite_add": "Add to favorites",
       "favorite_remove": "Remove from favorites",
       "activate": "Activate",
-      "deactivate": "Deactivate"
+      "deactivate": "Deactivate",
+      "delete": "Delete"
     },
     "details": {
       "keybinds": "Keybinds",

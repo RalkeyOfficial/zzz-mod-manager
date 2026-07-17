@@ -66,6 +66,27 @@ class ApiService {
     }
   }
 
+  /// Permanently deletes a mod: its folder, active link, and config state.
+  /// Returns false if the mod is missing or on failure.
+  static Future<bool> deleteMod(String modId) async {
+    try {
+      await initialize();
+      return await _modManager!.deleteMod(modId);
+    } catch (e) {
+      throw Exception('Помилка видалення моду: $e');
+    }
+  }
+
+  /// Opens a mod's folder in the system file manager. Returns false on failure.
+  static Future<bool> openModFolder(String modId) async {
+    try {
+      await initialize();
+      return await _modManager!.openModFolder(modId);
+    } catch (e) {
+      throw Exception('Помилка відкриття папки моду: $e');
+    }
+  }
+
   /// Активує скін для персонажа, автоматично деактивуючи інші скіни цього персонажа
   static Future<bool> toggleModForCharacter(
     String modId, 
