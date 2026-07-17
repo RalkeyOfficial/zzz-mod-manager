@@ -1807,7 +1807,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
   /// - a run of `>` is treated as a single blockquote level
   ///   ([_FlatBlockquoteSyntax]) so decorative `>>>>> ... <<<<<` lines survive;
   /// - GitHub-style alerts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`,
-  ///   `[!CAUTION]`) render as coloured callouts ([_AlertElementBuilder]).
+  ///   `[!CAUTION]`, plus a non-standard `[!INFO]` alias of note) render as
+  ///   coloured callouts ([_AlertElementBuilder]).
   Widget _buildDescriptionMarkdown(BuildContext context, String description) {
     final styleSheet =
         MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
@@ -3979,7 +3980,10 @@ class _FlatBlockquoteSyntax extends md.BlockquoteSyntax {
 
 /// Parses GitHub-style alerts — a `> [!TYPE]` line followed by `>`-prefixed
 /// body lines — into an `alert` element carrying the type and the raw body
-/// markdown. Rendered by [_AlertElementBuilder].
+/// markdown. Rendered by [_AlertElementBuilder]. Also accepts a non-standard
+/// `[!INFO]` type (GitHub has no such alert); people unfamiliar with GitHub's
+/// flavour commonly reach for `INFO` over `NOTE`, so it renders identically to
+/// `[!NOTE]`.
 ///
 /// The body is kept as raw markdown (rather than pre-parsed AST children)
 /// because a custom block builder replaces the auto-built children; the builder
@@ -3989,7 +3993,7 @@ class _AlertBlockSyntax extends md.BlockSyntax {
 
   // The opener line: `> [!NOTE]` and friends (case-insensitive).
   static final _opener = RegExp(
-    r'^\s{0,3}>\s{0,3}\\?\[!(note|tip|important|caution|warning)\\?\]\s*$',
+    r'^\s{0,3}>\s{0,3}\\?\[!(note|tip|important|caution|warning|info)\\?\]\s*$',
     caseSensitive: false,
   );
   static final _quoteLine = RegExp(r'^\s{0,3}>');
@@ -4036,6 +4040,7 @@ class _AlertSpec {
 
 const Map<String, _AlertSpec> _alertSpecs = {
   'note': _AlertSpec('Note', Icons.info_outline, Color(0xFF3B82F6)),
+  'info': _AlertSpec('Info', Icons.info_outline, Color(0xFF3B82F6)),
   'tip': _AlertSpec('Tip', Icons.lightbulb_outline, Color(0xFF22C55E)),
   'important': _AlertSpec(
     'Important',

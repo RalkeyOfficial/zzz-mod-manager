@@ -164,7 +164,7 @@ const List<CharacterData> zzzCharactersData = [
     id: 'solder0anby',
     realName: 'Soldier 0 - Anby Demara',
     briefName: 'Soldier 0 - Anby',
-    aliases: ['solder0anby', 'soldier0', 'soldier 0'],
+    aliases: ['solder0anby', 'soldier0', 'soldier 0', 'sanby', 'anbys'],
   ),
   CharacterData(
     id: 'solder11',
