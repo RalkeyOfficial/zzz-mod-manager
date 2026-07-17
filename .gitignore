@@ -48,3 +48,6 @@ config.json
 *.log
 mod_manager.log
 /assets/mod_images/*.png
+
+# hide fixes-folder till this is worked out
+fixes-folder
