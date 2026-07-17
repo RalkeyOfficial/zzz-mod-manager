@@ -6,3 +6,4 @@
 6. Installing a zip with 2 folders in it (e.g. `{mod name}` and `previews`) will install both folders as 2 seperate mods. Perhaps we need to update the install modal so you can select what folders to install (when this situation applies)
 7. ✅ DONE — I want to be able to edit the description inline in the detail modal.
 8. ✅ DONE — the markdown `> [!INFO]` does nothing compared to `> [!WARNING]`.
+9. cleanup. split up files into components, services, etc. since most files are in the thousands of lines.
