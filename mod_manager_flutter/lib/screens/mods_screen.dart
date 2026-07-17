@@ -678,118 +678,6 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     );
   }
 
-  Future<void> _pasteImageFromClipboard(ModInfo mod) async {
-    try {
-      final imageBytes = await Pasteboard.image;
-      if (imageBytes != null) {
-        // Store the image inside the mod's own folder so it travels with the
-        // mod, and record it in the in-folder metadata sidecar.
-        final modManager = await ApiService.getModManagerService();
-        final modsPath = modManager.modsPath;
-        if (modsPath == null) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(loc.t('mods.snackbar.clipboard_empty'))),
-            );
-          }
-          return;
-        }
-
-        final modFolder = path.join(modsPath, mod.id);
-        final relPath = await modManager.metadataService.addImageBytes(
-          modFolder,
-          imageBytes,
-          extension: 'png',
-        );
-        if (relPath == null) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  loc.t(
-                    'mods.errors.generic',
-                    params: {'message': 'image write failed'},
-                  ),
-                ),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-          return;
-        }
-        final imagePath = path.join(modFolder, relPath);
-
-        // New image becomes the cover; existing gallery images are kept.
-        final updatedImages = [
-          imagePath,
-          ...mod.images.where((i) => i != imagePath),
-        ];
-        final updatedMod = mod.copyWith(
-          images: updatedImages,
-          imagePath: imagePath,
-        );
-        await ApiService.updateMod(updatedMod);
-
-        // Очищаємо кеш зображення
-        if (mounted) {
-          imageCache.clear();
-          imageCache.clearLiveImages();
-        }
-
-        // Оновлюємо стан без повного перезавантаження
-        if (mounted) {
-          final characters = ref.read(charactersProvider);
-          final updatedCharacters = characters.map((char) {
-            final updatedSkins = char.skins.map((skin) {
-              if (skin.id == mod.id) {
-                return skin.copyWith(
-                  images: updatedImages,
-                  imagePath: imagePath,
-                );
-              }
-              return skin;
-            }).toList();
-            return char.copyWith(skins: updatedSkins);
-          }).toList();
-
-          ref.read(charactersProvider.notifier).state = updatedCharacters;
-          _lastCharactersState = List.from(updatedCharacters);
-
-          // Форсуємо перебудову
-          setState(() {});
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(loc.t('mods.snackbar.photo_updated')),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 1),
-            ),
-          );
-        }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(loc.t('mods.snackbar.clipboard_empty')),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              loc.t('mods.errors.generic', params: {'message': e.toString()}),
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
   /// Renames a mod (its on-disk folder). Live-validates the new name and
   /// delegates to [ApiService.renameMod], which also migrates the active link
   /// and the mod's active/favorite/category state.
@@ -2397,18 +2285,6 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         PopupMenuItem(
           child: Row(
             children: [
-              const Icon(Icons.image, size: 18),
-              const SizedBox(width: 8),
-              Text(loc.t('mods.context_menu.add_image')),
-            ],
-          ),
-          onTap: () {
-            Future.delayed(Duration.zero, () => _pasteImageFromClipboard(mod));
-          },
-        ),
-        PopupMenuItem(
-          child: Row(
-            children: [
               const Icon(Icons.folder_open, size: 18),
               const SizedBox(width: 8),
               Text(loc.t('mods.context_menu.open_folder')),
@@ -2465,22 +2341,6 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
           ),
           onTap: () {
             Future.delayed(Duration.zero, () => _toggleFavorite(mod));
-          },
-        ),
-        PopupMenuItem(
-          child: Row(
-            children: [
-              Icon(mod.isActive ? Icons.toggle_off : Icons.toggle_on, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                mod.isActive
-                    ? loc.t('mods.context_menu.deactivate')
-                    : loc.t('mods.context_menu.activate'),
-              ),
-            ],
-          ),
-          onTap: () {
-            Future.delayed(Duration.zero, () => toggleMod(mod));
           },
         ),
         PopupMenuItem(

@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Right-click → "Open in file explorer" opens a mod's folder in the system file manager.
 - Right-click → "Delete" permanently removes a mod (folder, active link, and saved state) after a confirmation dialog.
 
+### Changed
+
+- Slimmed the mod right-click menu: removed the "Add image" and "Activate/Deactivate" entries (still available via the Edit dialog and the card's toggle switch respectively).
+
 ### Fixed
 
 - `> [!INFO]` in mod descriptions now renders as an info callout (a note-style alias) instead of a plain blockquote — `INFO` isn't a real GitHub alert, but people commonly reach for it over `NOTE`.

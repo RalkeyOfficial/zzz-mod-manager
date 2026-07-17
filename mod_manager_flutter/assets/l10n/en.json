@@ -155,12 +155,9 @@
       "rename": "Rename",
       "edit_keybinds": "Edit keybinds ({count})",
       "open_link": "Open source page",
-      "add_image": "Add image",
       "open_folder": "Open in file explorer",
       "favorite_add": "Add to favorites",
       "favorite_remove": "Remove from favorites",
-      "activate": "Activate",
-      "deactivate": "Deactivate",
       "delete": "Delete"
     },
     "details": {

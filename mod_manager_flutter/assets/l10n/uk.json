@@ -155,12 +155,9 @@
       "rename": "Перейменувати",
       "edit_keybinds": "Редагувати клавіші ({count})",
       "open_link": "Відкрити сторінку джерела",
-      "add_image": "Додати фото",
       "open_folder": "Відкрити в провіднику",
       "favorite_add": "В улюблені",
       "favorite_remove": "Видалити з улюблених",
-      "activate": "Активувати",
-      "deactivate": "Деактивувати",
       "delete": "Видалити"
     },
     "details": {
