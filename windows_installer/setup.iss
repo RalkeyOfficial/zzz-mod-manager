@@ -3,7 +3,7 @@
 ; Потрібен Inno Setup 6.0 або новіше: https://jrsoftware.org/isdl.php
 
 #define MyAppName "ZZZ Mod Manager"
-#define MyAppVersion "2.1.0"
+#define MyAppVersion "2.2.0"
 #define MyAppPublisher "NotionMe"
 #define MyAppURL "https://github.com/NotionMe/Mod-manager"
 #define MyAppExeName "mod_manager_flutter.exe"

@@ -497,7 +497,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
                                 ),
                               ),
                               child: Text(
-                                'v2.1.0',
+                                'v2.2.0',
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: Colors.grey[500],
