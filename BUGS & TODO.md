@@ -6,4 +6,4 @@
 6. Installing a zip with 2 folders in it (e.g. `{mod name}` and `previews`) will install both folders as 2 seperate mods. Perhaps we need to update the install modal so you can select what folders to install (when this situation applies)
 7. ✅ DONE — I want to be able to edit the description inline in the detail modal.
 8. ✅ DONE — the markdown `> [!INFO]` does nothing compared to `> [!WARNING]`.
-9. cleanup. split up files into components, services, etc. since most files are in the thousands of lines.
+9. ✅ DONE — cleanup: split up files into components, services, etc. `mods_screen.dart` split into components/dialogs/utils (4578 → ~1760 lines, 14 new files, no behaviour change). — IN PROGRESS: `mods_screen.dart` split into components/dialogs/utils (4578 → ~1760 lines, 14 new files, no behaviour change). Remaining large files to split: `settings_screen.dart` (~1200), `marketplace_screen.dart` (~1150).

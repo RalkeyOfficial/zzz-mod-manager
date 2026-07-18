@@ -1,0 +1,93 @@
+import 'package:flutter/material.dart';
+import '../../l10n/app_localizations.dart';
+import '../../models/character_info.dart';
+import '../../services/api_service.dart';
+
+/// Confirms and permanently deletes a mod (its folder and all state). The
+/// action is irreversible, so it requires an explicit confirmation. [onDeleted]
+/// runs after a successful delete so the caller can refresh its list.
+Future<void> showDeleteModDialog(
+  BuildContext context,
+  ModInfo mod, {
+  required VoidCallback onDeleted,
+}) {
+  final loc = context.loc;
+  final messenger = ScaffoldMessenger.of(context);
+  return showDialog(
+    context: context,
+    builder: (dialogContext) {
+      Future<void> confirm() async {
+        Navigator.pop(dialogContext);
+        try {
+          final ok = await ApiService.deleteMod(mod.id);
+          if (!context.mounted) return;
+          if (ok) {
+            messenger.showSnackBar(
+              SnackBar(
+                content: Text(loc.t('mods.snackbar.deleted')),
+                duration: const Duration(seconds: 1),
+              ),
+            );
+            onDeleted();
+          } else {
+            messenger.showSnackBar(
+              SnackBar(
+                content: Text(loc.t('mods.snackbar.delete_failed')),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        } catch (e) {
+          if (!context.mounted) return;
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                loc.t(
+                  'mods.errors.generic',
+                  params: {'message': e.toString()},
+                ),
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+
+      return AlertDialog(
+        title: Row(
+          children: [
+            const Icon(
+              Icons.warning_amber_rounded,
+              size: 24,
+              color: Colors.red,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                loc.t('mods.dialog.delete_title'),
+                style: const TextStyle(fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 380,
+          child: Text(
+            loc.t('mods.dialog.delete_message', params: {'mod': mod.name}),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(loc.t('mods.dialog.cancel')),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: confirm,
+            child: Text(loc.t('mods.dialog.delete_confirm')),
+          ),
+        ],
+      );
+    },
+  );
+}
