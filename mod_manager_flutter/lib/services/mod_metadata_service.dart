@@ -38,6 +38,11 @@ class ModMetadataService {
   /// Best-effort: returns false instead of throwing (e.g. read-only folder).
   Future<bool> write(String modFolderPath, ModMetadata metadata) async {
     try {
+      // Never recreate a mod folder that no longer exists — e.g. it was renamed
+      // out from under a still-open edit dialog. `create(recursive: true)` below
+      // would otherwise materialize the vanished folder holding only this
+      // sidecar (the "ghost folder" bug).
+      if (!await Directory(modFolderPath).exists()) return false;
       final dir = Directory(metadataDir(modFolderPath));
       if (!await dir.exists()) await dir.create(recursive: true);
       final file = File(metadataFile(modFolderPath));
@@ -59,6 +64,8 @@ class ModMetadataService {
     String extension = 'png',
   }) async {
     try {
+      // Don't recreate a vanished mod folder (see write()).
+      if (!await Directory(modFolderPath).exists()) return null;
       final dir = Directory(imagesDir(modFolderPath));
       if (!await dir.exists()) await dir.create(recursive: true);
 
@@ -76,6 +83,8 @@ class ModMetadataService {
   /// path relative to the mod folder root. Returns null on failure.
   Future<String?> importImageFile(String modFolderPath, String sourcePath) async {
     try {
+      // Don't recreate a vanished mod folder (see write()).
+      if (!await Directory(modFolderPath).exists()) return null;
       final source = File(sourcePath);
       if (!await source.exists()) return null;
       final bytes = await source.readAsBytes();

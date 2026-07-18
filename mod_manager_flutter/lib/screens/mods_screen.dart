@@ -148,7 +148,6 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       final loadedMods = await ApiService.getMods();
       final configService = await ApiService.getConfigService();
       final favoriteSet = configService.favoriteMods.toSet();
-      final Map<String, List<ModInfo>> characterMods = {};
       final List<ModInfo> allMods = [];
       final List<String> validModIds = [];
 
@@ -167,18 +166,12 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
 
         // Preserve all service-resolved metadata (image, description, url,
         // tags, images, keybinds); only override the per-install bits here.
-        final mod = oldMod.copyWith(
-          characterId: charId,
-          isFavorite: favoriteSet.contains(oldMod.id),
+        allMods.add(
+          oldMod.copyWith(
+            characterId: charId,
+            isFavorite: favoriteSet.contains(oldMod.id),
+          ),
         );
-
-        // Додаємо в загальний список
-        allMods.add(mod);
-
-        if (!characterMods.containsKey(charId)) {
-          characterMods[charId] = [];
-        }
-        characterMods[charId]!.add(mod);
       }
 
       // Очищуємо теги для видалених модів
@@ -190,53 +183,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         favoriteMods = favoriteSet;
       });
 
-      // Створюємо список персонажів, додаючи "ALL" на початок
-      var characters = <CharacterInfo>[];
-
-      // Додаємо "ALL" персонаж якщо є моди
-      if (allMods.isNotEmpty) {
-        characters.add(
-          CharacterInfo(
-            id: 'all',
-            name: loc.t('mods.all'),
-            iconPath: null, // Використаємо іконку по замовчуванню
-            skins: allMods,
-          ),
-        );
-      }
-
-      // Built-in non-character categories (UI/Texture/Audio/Misc) come before
-      // the characters and are always shown once any mod exists — even with no
-      // mods assigned yet — so users can see where non-character mods belong.
-      // (Characters, by contrast, only appear once they have a mod.)
-      if (allMods.isNotEmpty) {
-        characters.addAll(
-          builtInCategories.map((cat) {
-            return CharacterInfo(
-              id: cat.id,
-              name: categoryDisplayName(cat.id, loc),
-              icon: cat.icon,
-              skins: characterMods[cat.id] ?? [],
-            );
-          }).toList(),
-        );
-      }
-
-      // Додаємо інших персонажів
-      characters.addAll(
-        zzzCharacterIds
-            .map((charId) {
-              return CharacterInfo(
-                id: charId,
-                name: getCharacterDisplayName(charId),
-                iconPath:
-                    'assets/characters/${getCharacterAssetName(charId)}.png',
-                skins: characterMods[charId] ?? [],
-              );
-            })
-            .where((char) => char.skins.isNotEmpty)
-            .toList(),
-      );
+      // Group the flat list into the sidebar's character/category structure.
+      var characters = _buildGroups(allMods);
 
       // Збагачуємо персонажів keybinds з INI файлів
       try {
@@ -288,6 +236,181 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     } finally {
       _isLoadingMods = false;
     }
+  }
+
+  /// Groups a flat mod list into the sidebar structure: an "ALL" group, the
+  /// built-in non-character categories (shown whenever any mod exists), then
+  /// each character that has at least one mod. Pure (no disk I/O), so both
+  /// [loadMods] and the targeted in-memory updates below reuse it.
+  List<CharacterInfo> _buildGroups(List<ModInfo> allMods) {
+    final Map<String, List<ModInfo>> characterMods = {};
+    for (final mod in allMods) {
+      characterMods.putIfAbsent(mod.characterId, () => []).add(mod);
+    }
+
+    final characters = <CharacterInfo>[];
+    if (allMods.isNotEmpty) {
+      characters.add(
+        CharacterInfo(
+          id: 'all',
+          name: loc.t('mods.all'),
+          iconPath: null, // Використаємо іконку по замовчуванню
+          skins: allMods,
+        ),
+      );
+      // Built-in categories (UI/Texture/Audio/Misc) always show once any mod
+      // exists — even with none assigned — so users can see where non-character
+      // mods belong. (Characters, below, only appear once they have a mod.)
+      characters.addAll(
+        builtInCategories.map(
+          (cat) => CharacterInfo(
+            id: cat.id,
+            name: categoryDisplayName(cat.id, loc),
+            icon: cat.icon,
+            skins: characterMods[cat.id] ?? [],
+          ),
+        ),
+      );
+    }
+    characters.addAll(
+      zzzCharacterIds
+          .map(
+            (charId) => CharacterInfo(
+              id: charId,
+              name: getCharacterDisplayName(charId),
+              iconPath:
+                  'assets/characters/${getCharacterAssetName(charId)}.png',
+              skins: characterMods[charId] ?? [],
+            ),
+          )
+          .where((char) => char.skins.isNotEmpty),
+    );
+    return characters;
+  }
+
+  /// The current flat mod list, recovered from the "ALL" group in
+  /// [charactersProvider]. Returns null if the list hasn't been built yet, so
+  /// callers can fall back to a full [loadMods].
+  List<ModInfo>? _currentAllMods() {
+    for (final char in ref.read(charactersProvider)) {
+      if (char.id == 'all') return List<ModInfo>.from(char.skins);
+    }
+    return null;
+  }
+
+  /// Rebuilds [charactersProvider] from an updated flat mod list without a disk
+  /// rescan, keeping the selected character where possible. Backs the targeted
+  /// editorial-action handlers (rename/edit/favorite/delete) so a single-mod
+  /// action costs O(1) instead of an O(N) rescan of every mod.
+  void _applyGroups(List<ModInfo> allMods) {
+    final characters = _buildGroups(allMods);
+
+    final previousCharacters = ref.read(charactersProvider);
+    final selectedIndex = ref.read(selectedCharacterIndexProvider);
+    String? previousSelectedId;
+    if (previousCharacters.isNotEmpty &&
+        selectedIndex >= 0 &&
+        selectedIndex < previousCharacters.length) {
+      previousSelectedId = previousCharacters[selectedIndex].id;
+    }
+
+    _lastCharactersState = List.from(characters);
+    ref.read(charactersProvider.notifier).state = characters;
+
+    if (previousSelectedId != null && characters.isNotEmpty) {
+      final newIndex =
+          characters.indexWhere((char) => char.id == previousSelectedId);
+      ref.read(selectedCharacterIndexProvider.notifier).state =
+          newIndex != -1 ? newIndex : 0;
+    } else if (characters.isNotEmpty) {
+      ref.read(selectedCharacterIndexProvider.notifier).state = 0;
+    }
+
+    if (mounted) setState(() {});
+  }
+
+  /// Reflects a completed rename in the UI without a rescan. The folder op and
+  /// the service's state migration (active link, config keys, keybind cache)
+  /// already happened; only [charactersProvider] needs the id/name swap — plus
+  /// a rewrite of the cached image paths, which are absolute and still point at
+  /// the old folder (otherwise the thumbnail can't load until a refresh).
+  Future<void> _onModRenamed(String oldId, String newName) async {
+    final allMods = _currentAllMods();
+    final index = allMods?.indexWhere((m) => m.id == oldId) ?? -1;
+    final modsPath = (await ApiService.getModManagerService()).modsPath;
+    if (allMods == null || index == -1 || modsPath == null || !mounted) {
+      unawaited(loadMods(showLoading: false));
+      return;
+    }
+
+    // Repoint any path under the old folder (managed gallery images and shipped
+    // previews alike) at the new folder; leave anything else untouched.
+    final oldFolder = path.join(modsPath, oldId);
+    final newFolder = path.join(modsPath, newName);
+    String remap(String abs) {
+      final rel = path.relative(abs, from: oldFolder);
+      return rel.startsWith('..') ? abs : path.join(newFolder, rel);
+    }
+
+    final old = allMods[index];
+    final newImages = old.images.map(remap).toList();
+    // Rename preserves character, keybinds (the .ini is unchanged) and every
+    // metadata field; only the identity and image locations change.
+    allMods[index] = old.copyWith(
+      id: newName,
+      name: newName,
+      imagePath: newImages.isNotEmpty ? newImages.first : null,
+      images: newImages,
+    );
+    _applyGroups(allMods);
+  }
+
+  /// Reflects a saved edit in the UI without a rescan. [updated] carries the
+  /// edited fields (character, url, description, tags, images) already written
+  /// to disk; a character change moves the mod between groups via [_buildGroups].
+  void _onModEdited(ModInfo updated) {
+    final allMods = _currentAllMods();
+    final index = allMods?.indexWhere((m) => m.id == updated.id) ?? -1;
+    if (allMods == null || index == -1) {
+      unawaited(loadMods(showLoading: false));
+      return;
+    }
+    final existing = allMods[index];
+    // Normalize the character the same way loadMods does (explicit pick wins,
+    // else fall back to name-based auto-detection).
+    var charId = updated.characterId;
+    if (charId.isEmpty || charId == 'unknown') {
+      charId = detectCharacterId(updated.name) ?? charId;
+    }
+    // Rebuild explicitly (not copyWith) so cleared fields — a removed cover or
+    // emptied url/description — actually reset instead of keeping stale values.
+    allMods[index] = ModInfo(
+      id: updated.id,
+      name: updated.name,
+      characterId: charId,
+      isActive: existing.isActive,
+      imagePath: updated.images.isNotEmpty ? updated.images.first : null,
+      description: updated.description,
+      sourceUrl: updated.sourceUrl,
+      tags: updated.tags,
+      images: updated.images,
+      isFavorite: existing.isFavorite,
+      keybinds: existing.keybinds,
+    );
+    setState(() => modCharacterTags[updated.id] = charId);
+    _applyGroups(allMods);
+  }
+
+  /// Removes a deleted mod from the UI without a rescan (its folder and state
+  /// are already gone).
+  void _onModDeleted(String modId) {
+    final allMods = _currentAllMods();
+    if (allMods == null) {
+      unawaited(loadMods(showLoading: false));
+      return;
+    }
+    allMods.removeWhere((m) => m.id == modId);
+    _applyGroups(allMods);
   }
 
   Future<void> toggleMod(ModInfo mod) async {
@@ -459,7 +582,15 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         );
       }
 
-      await loadMods(showLoading: false);
+      // Targeted update: flip the one mod's favorite flag instead of rescanning.
+      final allMods = _currentAllMods();
+      final index = allMods?.indexWhere((m) => m.id == mod.id) ?? -1;
+      if (allMods != null && index != -1) {
+        allMods[index] = allMods[index].copyWith(isFavorite: !isFavorite);
+        _applyGroups(allMods);
+      } else {
+        await loadMods(showLoading: false);
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -524,10 +655,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     showEditModDialog(
       context,
       mod,
-      onSaved: (characterId) {
-        setState(() => modCharacterTags[mod.id] = characterId);
-        unawaited(loadMods(showLoading: false));
-      },
+      onSaved: _onModEdited,
     );
   }
 
@@ -551,7 +679,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         context,
         ref,
         mod,
-        onRenamed: () => unawaited(loadMods(showLoading: false)),
+        onRenamed: (newName) => unawaited(_onModRenamed(mod.id, newName)),
       ),
       onOpenFolder: () => _openModFolder(mod),
       onOpenLink: () => openModLink(context, mod),
@@ -564,7 +692,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       onDelete: () => showDeleteModDialog(
         context,
         mod,
-        onDeleted: () => unawaited(loadMods(showLoading: false)),
+        onDeleted: () => _onModDeleted(mod.id),
       ),
     );
   }

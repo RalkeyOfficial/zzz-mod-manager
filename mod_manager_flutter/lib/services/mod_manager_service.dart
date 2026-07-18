@@ -91,55 +91,66 @@ class ModManagerService {
       final modsInfo = <ModInfo>[];
       final favoriteSet = _configService.favoriteMods.toSet();
 
-      // Очищуємо символічні посилання на неіснуючі моди
-      await _cleanupInvalidLinks();
+      // Очищуємо символічні посилання на неіснуючі моди. Reuse the scan above
+      // instead of enumerating the mods dir a second time.
+      await _cleanupInvalidLinks(modNames);
 
-      for (final modName in modNames) {
-        final isActive = await isModActive(modName);
-        final modFolder = path.join(modsPath!, modName);
-
-        // Load the in-folder metadata sidecar, migrating legacy storage
-        // (config char tag + app-data image) into it on first encounter.
-        final metadata = await _loadOrMigrateMetadata(modName, modFolder);
-
-        // Resolve the gallery to absolute paths, dropping any that no longer
-        // exist. Fall back to a shipped preview image (Preview.png, etc.).
-        final images = <String>[];
-        for (final rel in metadata.images) {
-          final abs = path.join(modFolder, rel);
-          if (await File(abs).exists()) images.add(abs);
-        }
-        if (images.isEmpty) {
-          final preview = await _findModImage(modName);
-          if (preview != null) images.add(preview);
-        }
-
-        final characterId = canonicalCharacterId(
-          (metadata.characterId != null && metadata.characterId!.isNotEmpty)
-              ? metadata.characterId!
-              : (_configService.modCharacterTags[modName] ?? 'unknown'),
-        );
-
-        modsInfo.add(
-          ModInfo(
-            id: modName,
-            name: modName,
-            characterId: characterId,
-            isActive: isActive,
-            imagePath: images.isNotEmpty ? images.first : null,
-            description: metadata.description,
-            sourceUrl: metadata.sourceUrl,
-            tags: metadata.tags,
-            images: images,
-            isFavorite: favoriteSet.contains(modName),
-          ),
-        );
-      }
+      // Resolve every mod concurrently — each mod's work (link stat, sidecar
+      // read, image existence checks) is independent I/O, so a serial loop
+      // over N mods was the main cost of the post-action rescan.
+      modsInfo.addAll(
+        await Future.wait(
+          modNames.map((modName) => _buildModInfo(modName, favoriteSet)),
+        ),
+      );
 
       return modsInfo;
     } catch (e) {
       return [];
     }
+  }
+
+  /// Builds a single [ModInfo] from disk (active state, metadata sidecar,
+  /// gallery/preview image). Factored out of [getModsInfo] so the whole set can
+  /// be resolved with `Future.wait`.
+  Future<ModInfo> _buildModInfo(String modName, Set<String> favoriteSet) async {
+    final isActive = await isModActive(modName);
+    final modFolder = path.join(modsPath!, modName);
+
+    // Load the in-folder metadata sidecar, migrating legacy storage
+    // (config char tag + app-data image) into it on first encounter.
+    final metadata = await _loadOrMigrateMetadata(modName, modFolder);
+
+    // Resolve the gallery to absolute paths, dropping any that no longer
+    // exist. Fall back to a shipped preview image (Preview.png, etc.).
+    final images = <String>[];
+    for (final rel in metadata.images) {
+      final abs = path.join(modFolder, rel);
+      if (await File(abs).exists()) images.add(abs);
+    }
+    if (images.isEmpty) {
+      final preview = await _findModImage(modName);
+      if (preview != null) images.add(preview);
+    }
+
+    final characterId = canonicalCharacterId(
+      (metadata.characterId != null && metadata.characterId!.isNotEmpty)
+          ? metadata.characterId!
+          : (_configService.modCharacterTags[modName] ?? 'unknown'),
+    );
+
+    return ModInfo(
+      id: modName,
+      name: modName,
+      characterId: characterId,
+      isActive: isActive,
+      imagePath: images.isNotEmpty ? images.first : null,
+      description: metadata.description,
+      sourceUrl: metadata.sourceUrl,
+      tags: metadata.tags,
+      images: images,
+      isFavorite: favoriteSet.contains(modName),
+    );
   }
 
   /// Loads a mod's metadata sidecar. If none exists yet, migrates legacy
@@ -236,14 +247,13 @@ class ModManagerService {
   ModMetadataService get metadataService => _metadataService;
 
   /// Видаляє символічні посилання на моди, які більше не існують
-  Future<void> _cleanupInvalidLinks() async {
+  Future<void> _cleanupInvalidLinks(List<String> modNames) async {
     try {
       if (saveModsPath == null) return;
 
       final saveModsDir = Directory(saveModsPath!);
       if (!await saveModsDir.exists()) return;
 
-      final modNames = await scanMods();
       final validModNames = Set<String>.from(modNames);
 
       await for (final entity in saveModsDir.list()) {
@@ -690,12 +700,21 @@ class ModManagerService {
     List<CharacterInfo> characters,
   ) async {
     try {
-      final updatedCharacters = <CharacterInfo>[];
+      // Warm the cache for every distinct mod once, concurrently. A mod can
+      // appear in several groups (Favorites / ALL / its character); parsing
+      // each unique folder's .ini files in parallel — rather than serially per
+      // skin occurrence — is what keeps the enrich step off the critical path.
+      final uniqueIds = <String>{
+        for (final character in characters)
+          for (final mod in character.skins) mod.id,
+      };
+      await Future.wait(uniqueIds.map(getModKeybinds));
 
+      final updatedCharacters = <CharacterInfo>[];
       for (final character in characters) {
         final updatedMods = <ModInfo>[];
-
         for (final mod in character.skins) {
+          // Cache hit after the warm-up above.
           final keybinds = await getModKeybinds(mod.id);
           if (keybinds != null && keybinds.isNotEmpty) {
             updatedMods.add(mod.copyWith(keybinds: keybinds));
@@ -703,7 +722,6 @@ class ModManagerService {
             updatedMods.add(mod);
           }
         }
-
         updatedCharacters.add(character.copyWith(skins: updatedMods));
       }
 

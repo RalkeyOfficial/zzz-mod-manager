@@ -19,11 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Slimmed the mod right-click menu: removed the "Add image" and "Activate/Deactivate" entries (still available via the Edit dialog and the card's toggle switch respectively).
 - Refactored the mods screen: split the 4500-line `mods_screen.dart` into focused component, dialog, and util files (no behaviour change) for readability and maintenance.
+- Editorial actions (rename, edit, favorite, delete) now update the list in place instead of rescanning every mod, so they stay fast no matter how many mods you have.
 
 ### Fixed
 
 - `> [!INFO]` in mod descriptions now renders as an info callout (a note-style alias) instead of a plain blockquote — `INFO` isn't a real GitHub alert, but people commonly reach for it over `NOTE`.
 - Soldier 0 Anby auto-categorises from the community nicknames "sanby" and "anbys".
+- Saving the Edit dialog after the mod was renamed (or deleted) no longer recreates a ghost folder containing only metadata; it now reports that the mod no longer exists and skips the save.
 
 ## [2.1.0] - 2026-06-27
 

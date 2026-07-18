@@ -14,12 +14,12 @@ import '../components/category_picker.dart';
 
 /// Edits a mod's character tag, source URL, description, tags, and gallery.
 /// Nothing touches disk until Save. [onSaved] runs after a successful save with
-/// the (possibly changed) character id, so the caller can update its tag cache
-/// and refresh.
+/// the updated [ModInfo] (as written to disk), so the caller can apply a
+/// targeted in-memory update instead of a full rescan.
 Future<void> showEditModDialog(
   BuildContext context,
   ModInfo mod, {
-  required void Function(String characterId) onSaved,
+  required void Function(ModInfo updated) onSaved,
 }) {
   final loc = context.loc;
   final messenger = ScaffoldMessenger.of(context);
@@ -344,21 +344,41 @@ Future<void> showEditModDialog(
             // Fold any text still in the tag input into the list.
             addTag(tagController.text);
 
+            // Guard against a save that races a rename: if the folder this
+            // dialog was opened on no longer exists (it was renamed away), the
+            // writes below would be no-ops but could otherwise leave a ghost
+            // folder. Bail out and tell the user instead of silently dropping
+            // their edits.
+            final modManager = await ApiService.getModManagerService();
+            final modsPath = modManager.modsPath;
+            final stillExists = modsPath != null &&
+                await Directory(path.join(modsPath, mod.id)).exists();
+            if (!stillExists) {
+              if (!context.mounted) return;
+              Navigator.pop(dialogContext);
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text(loc.t('mods.snackbar.mod_gone')),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              return;
+            }
+
             // 1) Persist everything (the actual save — fast disk writes):
             //    commit staged images, then the metadata + character tag.
             final committedImages = await _commitGalleryImages(
               mod,
               images.value,
             );
-            await ApiService.updateMod(
-              mod.copyWith(
-                characterId: selectedChar.value,
-                sourceUrl: urlController.text.trim(),
-                description: descController.text.trim(),
-                tags: tags.value,
-                images: committedImages,
-              ),
+            final updated = mod.copyWith(
+              characterId: selectedChar.value,
+              sourceUrl: urlController.text.trim(),
+              description: descController.text.trim(),
+              tags: tags.value,
+              images: committedImages,
             );
+            await ApiService.updateMod(updated);
             await ApiService.setModCharacter(mod.id, selectedChar.value);
 
             if (!context.mounted) return;
@@ -370,8 +390,8 @@ Future<void> showEditModDialog(
                 duration: const Duration(seconds: 1),
               ),
             );
-            // 3) Let the caller update its tag cache and refresh the list.
-            onSaved(selectedChar.value);
+            // 3) Let the caller apply a targeted in-memory update.
+            onSaved(updated);
           },
           child: Text(loc.t('mods.dialog.save')),
         ),

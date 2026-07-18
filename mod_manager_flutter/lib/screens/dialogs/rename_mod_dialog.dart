@@ -8,12 +8,12 @@ import '../../utils/state_providers.dart';
 /// Renames a mod (its on-disk folder). Live-validates the new name and
 /// delegates to [ApiService.renameMod], which also migrates the active link
 /// and the mod's active/favorite/category state. [onRenamed] runs after a
-/// successful rename so the caller can refresh its list.
+/// successful rename with the new folder name so the caller can update its list.
 Future<void> showRenameModDialog(
   BuildContext context,
   WidgetRef ref,
   ModInfo mod, {
-  required VoidCallback onRenamed,
+  required void Function(String newName) onRenamed,
 }) {
   final loc = context.loc;
   final controller = TextEditingController(text: mod.name);
@@ -56,7 +56,7 @@ Future<void> showRenameModDialog(
                     duration: const Duration(seconds: 1),
                   ),
                 );
-                onRenamed();
+                onRenamed(name);
               } else {
                 messenger.showSnackBar(
                   SnackBar(
