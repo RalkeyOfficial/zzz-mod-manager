@@ -12,6 +12,21 @@ Targets Linux (primary) and Windows; macOS is explicitly unsupported.
 > The repo root is a packaging/docs wrapper. **The actual Flutter app lives in
 > `mod_manager_flutter/`** — run all `flutter`/`dart` commands from there.
 
+## Language
+
+**All code and descriptions must be in English** — it's the universal language.
+This covers identifiers, comments, doc comments, commit messages, and any text
+in source files. The **only** exceptions are:
+
+- **l10n/i18n translation files** (`assets/l10n/*.json`), which hold the
+  translated user-facing strings by design;
+- **documentation deliberately written in another language** (e.g. a localized
+  README).
+
+When editing a file that has legacy non-English (e.g. Ukrainian) comments or
+strings, write your additions in English; converting the surrounding legacy text
+to English as you touch it is welcome but not required.
+
 ## Commands
 
 All commands run from `mod_manager_flutter/`:
@@ -150,8 +165,10 @@ Custom JSON-based i18n (not ARB/gen-l10n). Strings live in
 `context.loc.t('navigation.mods')` (dotted key path). `localeProvider` holds the
 active locale; supported locales are English and Ukrainian.
 
-> Note: much of the codebase has Ukrainian comments and user-facing strings.
-> Match the surrounding language when editing comments in a given file.
+> Note: much of the codebase still has legacy Ukrainian comments and hardcoded
+> strings. Per the [Language](#language) rule, write all new/edited code and
+> comments in English regardless of the surrounding language (a bulk translation
+> of the existing legacy text is not being done right now).
 
 ### App-data locations
 
