@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Importing an archive (or dropping) with multiple folders now opens a selection dialog: pick which folders to install, and choose whether each becomes its own mod or they combine into one mod (for a mod plus a dependency folder). Real mods (folders with a `.ini`) are pre-selected over auxiliary folders like `previews`, fixing multi-folder zips installing junk as separate mods.
 - Right-click → "Open in file explorer" opens a mod's folder in the system file manager.
 - Right-click → "Delete" permanently removes a mod (folder, active link, and saved state) after a confirmation dialog.
 - The mod details dialog lets you edit the description inline (pencil → edit → save) without opening the full Edit dialog.

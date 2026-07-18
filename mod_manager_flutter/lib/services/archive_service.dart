@@ -32,6 +32,26 @@ class ArchiveService {
     return extension == '.zip' || extension == '.rar' || extension == '.7z';
   }
 
+  /// Whether [folderPath] contains a `.ini` file at any depth — the strongest
+  /// signal that a folder is an actual mod rather than auxiliary content (a
+  /// `previews`/images folder). Stops at the first match. Best-effort: any
+  /// error is treated as "no .ini".
+  static Future<bool> containsIniFile(String folderPath) async {
+    try {
+      final dir = Directory(folderPath);
+      if (!await dir.exists()) return false;
+      await for (final entity in dir.list(recursive: true, followLinks: false)) {
+        if (entity is File &&
+            path.extension(entity.path).toLowerCase() == '.ini') {
+          return true;
+        }
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<ArchiveExtractionResult> extractArchive({
     required File archiveFile,
     Directory? destinationDir,

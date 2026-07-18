@@ -27,6 +27,7 @@ import 'components/mods_grouped_view.dart';
 import 'components/own_scroll_controller.dart';
 import 'dialogs/rename_mod_dialog.dart';
 import 'dialogs/delete_mod_dialog.dart';
+import 'dialogs/import_selection_dialog.dart';
 import 'dialogs/keybinds_dialog.dart';
 import 'dialogs/mod_context_menu.dart';
 import 'dialogs/edit_mod_dialog.dart';
@@ -1428,6 +1429,70 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         return;
       }
 
+      // Deletes the temp extract dirs (zzz_archive_extract_*). Used both when
+      // the user cancels the selection dialog and on the normal paths below.
+      Future<void> cleanupTempFolders() async {
+        for (final tempPath in tempFoldersToCleanup) {
+          try {
+            final tempDir = Directory(tempPath);
+            if (await tempDir.exists()) {
+              final parentDir = tempDir.parent;
+              if (parentDir.path.contains('zzz_archive_extract_')) {
+                await parentDir.delete(recursive: true);
+              }
+            }
+          } catch (e) {
+            print('ModsScreen: temp cleanup error $tempPath: $e');
+          }
+        }
+      }
+
+      // When more than one folder would be installed, let the user choose which
+      // ones — and whether each becomes its own mod or they combine into one.
+      var combine = false;
+      var combinedName = '';
+      String? combinedHint;
+      if (folderPaths.length > 1) {
+        final choices = <ImportFolderChoice>[];
+        for (final folder in folderPaths) {
+          choices.add(
+            ImportFolderChoice(
+              path: folder,
+              name: path.basename(folder),
+              looksLikeMod: await ArchiveService.containsIniFile(folder),
+            ),
+          );
+        }
+
+        // Default combined name: the shared originating archive name when all
+        // folders came from one archive, else the first folder's name.
+        final hints = folderPaths.map((f) => detectionHints[f]).toSet();
+        final sharedHint =
+            (hints.length == 1 && (hints.first?.isNotEmpty ?? false))
+                ? hints.first
+                : null;
+        final defaultName = sharedHint ?? path.basename(folderPaths.first);
+
+        if (!mounted) return;
+        final selection = await showImportSelectionDialog(
+          context,
+          choices,
+          defaultCombinedName: defaultName,
+        );
+        if (selection == null || selection.folders.isEmpty) {
+          await cleanupTempFolders();
+          return;
+        }
+        folderPaths
+          ..clear()
+          ..addAll(selection.folders);
+        combine = selection.combine;
+        combinedName = selection.combinedName;
+        combinedHint = sharedHint;
+      }
+
+      final expectedCount = combine ? 1 : folderPaths.length;
+
       // Показуємо діалог з прогресом
       if (mounted) {
         dialogShown = true;
@@ -1455,8 +1520,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                     loc.t(
                       'mods.dialog.import_progress',
                       params: {
-                        'count': folderPaths.length.toString(),
-                        'plural': folderPaths.length == 1
+                        'count': expectedCount.toString(),
+                        'plural': expectedCount == 1
                             ? loc.t('mods.import.single')
                             : loc.t('mods.import.plural'),
                       },
@@ -1482,10 +1547,16 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       final modManagerService = await ref.read(
         modManagerServiceProvider.future,
       );
-      final (importedMods, autoTags) = await modManagerService.importMods(
-        folderPaths,
-        detectionHints: detectionHints,
-      );
+      final (importedMods, autoTags) = combine
+          ? await modManagerService.importCombinedMod(
+              folderPaths,
+              combinedName,
+              detectionHint: combinedHint,
+            )
+          : await modManagerService.importMods(
+              folderPaths,
+              detectionHints: detectionHints,
+            );
 
       // Закриваємо діалог прогресу
       if (mounted && dialogShown) {

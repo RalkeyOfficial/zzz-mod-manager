@@ -566,6 +566,70 @@ class ModManagerService {
     }
   }
 
+  /// Installs [folderPaths] as subfolders of a single new mod named [modName]
+  /// (e.g. a mod plus a dependency folder that must sit beside it). The whole
+  /// `<modName>` folder is what gets activated. Returns ([modName] on success,
+  /// otherwise the empty list, plus any auto-detected character tag) — the same
+  /// shape as [importMods] so callers can share result handling.
+  Future<(List<String>, Map<String, String>)> importCombinedMod(
+    List<String> folderPaths,
+    String modName, {
+    String? detectionHint,
+  }) async {
+    try {
+      final (valid, _) = await validatePaths();
+      if (!valid) return (<String>[], <String, String>{});
+
+      final modsDir = Directory(modsPath!);
+      if (!await modsDir.exists()) {
+        await modsDir.create(recursive: true);
+      }
+
+      final targetPath = path.join(modsPath!, modName);
+      final targetDir = Directory(targetPath);
+      // Existing mod with this name — treat as a duplicate (nothing installed).
+      if (await targetDir.exists()) {
+        return (<String>[], <String, String>{});
+      }
+      await targetDir.create(recursive: true);
+
+      var copied = 0;
+      for (final folderPath in folderPaths) {
+        final sourceDir = Directory(folderPath);
+        if (!await sourceDir.exists()) continue;
+        await _copyDirectory(
+          sourceDir,
+          Directory(path.join(targetPath, path.basename(folderPath))),
+        );
+        copied++;
+      }
+
+      // Nothing usable was copied — roll back the empty mod folder.
+      if (copied == 0) {
+        try {
+          await targetDir.delete(recursive: true);
+        } catch (_) {}
+        return (<String>[], <String, String>{});
+      }
+
+      final autoTags = <String, String>{};
+      final detectedChar = _detectCharacterFromName(
+        modName,
+        extraNames: [
+          if (detectionHint != null && detectionHint.isNotEmpty) detectionHint,
+        ],
+      );
+      if (detectedChar != null) {
+        await setModCharacter(modName, detectedChar);
+        autoTags[modName] = detectedChar;
+      }
+
+      return (<String>[modName], autoTags);
+    } catch (e) {
+      return (<String>[], <String, String>{});
+    }
+  }
+
   /// Визначає персонажа за назвами моду — спершу за назвою папки, далі за
   /// [extraNames] (зазвичай ім'я архіву). Раніше метод також сканував вміст
   /// .ini файлів та імена підпапок, але назви персонажів там не стандартизовані
