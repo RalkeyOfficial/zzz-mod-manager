@@ -38,6 +38,66 @@ decisions made so far, not *how* to implement it. Items are grouped by area.
 
 ---
 
+## Roadmap (prioritized)
+
+The section numbers below (§1–§6) group work by *area*; this roadmap groups the
+same work by *when it lands*. Dependency order is largely forced: the API layer
+(§2) and origin model (§3) are roots, the download manager (§5) turns finds into
+files, the browser (§1) sits on top, and updating (§4) is the payoff that needs
+all of them. Decision: **ship a thin vertical slice first** (see M1), then thicken.
+
+### M1 — Thin vertical slice (both platforms) ← lands first
+
+Goal: kill the broken Linux external-browser path and get one real end-to-end
+install working identically on Linux and Windows. Deliberately plain — no update
+UI, no badges, minimal styling.
+
+- [ ] **§2 (subset)** — GameBanana API client: search, mod profile, file list.
+  Only what browsing + install needs; no caching/retry polish yet.
+- [ ] **§5 (basic)** — extract the inline download code into a service;
+  download → extract → auto-tag. Single fixed flow, no queue/resume yet.
+- [ ] **§3 (write side)** — record the origin block at install time (source,
+  remote mod id, file id, version string + label, date, hash). *Written now,
+  read in M2.* Critical: installs before this ship with no origin block and can
+  never show update info.
+- [ ] **§1 (plain)** — results grid + mod detail screens, both platforms; remove
+  the `_isWebViewSupported => _isWindows` gate and the Downloads-folder watcher.
+- [ ] **§6 (as needed)** — add the download-directory config key.
+
+Exit criteria: on Linux *and* Windows, search a ZZZ mod in-app → open detail →
+download → it installs, auto-tags, and carries an origin block.
+
+### M2 — Smart installs (read the origin block)
+
+Goal: make the data recorded in M1 pay off in the UI.
+
+- [ ] **§3 (read side)** — "already installed" detection; file-hash dedup.
+- [ ] **§3** — auto-populate metadata (description, images, tags, character) from
+  the API on install instead of leaving it blank.
+- [ ] **§1** — "already installed" / "update available" indicators on cards + detail.
+
+### M3 — Updating
+
+Goal: the payoff feature. Needs §2 + §3 + §5 from M1/M2.
+
+- [ ] **§4** — manual update check (per-mod + bulk), version-string+label rule,
+  update badges, changelog display, backup/rollback, preserve user edits.
+
+### M4 — Robustness & polish
+
+- [ ] **§5** — download queue, progress, retry/resume; revisit SSL bypass.
+- [ ] **§4** — opt-in auto-update (global + per-mod) with notification.
+- [ ] **§6** — surface all new settings in the Settings tab.
+- [ ] **§1** — empty/error/loading/offline states.
+
+### Later — backlog
+
+Everything under "Additional feature ideas" (paste-URL install, wishlist, feeds,
+NSFW filter, profiles, conflict detection, storage view). Pull items forward as
+they earn priority.
+
+---
+
 ## 1. Marketplace — native GameBanana browser
 
 - [ ] Remove the Linux/Windows split in `marketplace_screen.dart` (the
@@ -47,6 +107,10 @@ decisions made so far, not *how* to implement it. Items are grouped by area.
   mod cards (thumbnail, name, author, likes/views, category badge).
 - [ ] **Mod detail screen**: gallery images, description, author, category, and a
   **file list** (each file = version label + upload date + size + download button).
+  - **Default-selection rule**: the download button auto-selects a file **only**
+    when there is a single clear highest version and **no competing variants**.
+    When variants exist or the choice is ambiguous, do **not** default — the user
+    must pick. This same rule feeds "installed file id" (§3).
 - [ ] "Open in browser" escape hatch on each mod (for content we don't render).
 - [ ] "Already installed" / "update available" indicators on cards & detail,
   driven by the per-mod origin data (see §3).
@@ -92,19 +156,24 @@ version/origin data. Extend the per-mod metadata (and `ModInfo`) with an
 - [ ] **Changelog display** from GameBanana before updating.
 - [ ] **Backup / rollback** — snapshot the previous version before updating so a
   bad update is one click to revert.
-- [ ] **Preserve user edits across updates** — attempt to carry over edited `.ini`
-  keybinds/configs and re-apply after update. Not foolproof (identifiers/names can
-  change, keybinds can be added/removed) → when uncertain, back up + warn instead
-  of overwrite.
+- [ ] **Preserve user edits across updates — conservative merge + report.** Always
+  snapshot the old folder first (non-negotiable). Then re-apply **only** edits that
+  match confidently (same `[Section]` + same key identifier); leave anything
+  uncertain to the new version. Show a post-update **report** of what carried over,
+  what changed, and what couldn't be matched — never a silent uncertain merge.
+  Not foolproof (identifiers/names can change, keybinds can be added/removed), so
+  the report + backup are how the user recovers.
 
 ## 5. Download manager
 
 - [ ] Extract the inline download code out of `marketplace_screen.dart`
   (`_downloadToTemporaryFile` bare `HttpClient`) into a dedicated service.
 - [ ] Queue + progress + retry/resume.
-- [ ] **Configurable download directory** — today it's inconsistent (system
-  Downloads on Linux vs `<appData>/downloads` for HTTP grabs); unify + expose in
-  config.
+- [ ] **Unify the download directory.** Today it's inconsistent (system Downloads
+  on Linux vs `<appData>/downloads` for HTTP grabs). **Decision**: incoming
+  archives land in **`<appData>/downloads`** and are **deleted after successful
+  extraction** — the archive is a throwaway intermediate. Not user-configurable in
+  M1; add a config key later only if requested.
 - [ ] One consistent download → extract → tag → (optionally activate) flow for
   both platforms.
 - [ ] Revisit the current SSL-validation bypass on Win/Linux.
@@ -128,8 +197,13 @@ version/origin data. Extend the per-mod metadata (and `ModInfo`) with an
 - [ ] **NSFW / content filtering** setting.
 
 ### Library management
-- [ ] **Mod profiles / load-outs** — save & restore named sets of active mods;
-  export/share a profile.
+- [ ] **Mod profiles / load-outs** — named **library-wide** saves of *which mods
+  are active* (on/off state across the whole library), switchable in one click
+  (e.g. "Combat", "Photo mode"). Ties into Single/Multi activation mode. Lives in
+  its **own sidebar tab** with a dedicated page + list (the Mods tab header is
+  too cluttered for an inline switcher). Later: export/share a profile.
+  - **Not** per-mod settings saves — a mod's in-game state/config is owned by
+    ZZMI itself, not this manager, so we can't snapshot it.
 - [ ] **Conflict detection** — warn when two mods target the same character/slot.
 - [ ] **Storage view + orphan cleanup** — disk usage per mod, prune dead links /
   stale downloads.
@@ -138,7 +212,19 @@ version/origin data. Extend the per-mod metadata (and `ModInfo`) with an
 
 ## Open questions
 
-- [ ] How exactly to render the file list when a mod has many files/variants
-  (which one is the "primary"?).
-- [ ] How aggressive should keybind-preservation be vs. always backing up?
-- [ ] Where do mod profiles fit in the UI (new tab? section of Mods tab?).
+*(none open — all resolved below)*
+
+### Resolved
+
+- [x] **File list with many variants — which is "primary"?** The download button
+  auto-selects only when there's a single clear highest version and no competing
+  variants; otherwise the user must choose. (See §1.)
+- [x] **Download directory** — archives go to `<appData>/downloads`, deleted after
+  extraction; not configurable in M1. (See §5.)
+- [x] **Keybind-preservation aggressiveness?** Conservative merge + report: always
+  back up, re-apply only confidently-matched edits (same section + same key id),
+  flag everything else in a post-update report — never a silent uncertain merge.
+  (See §4.)
+- [x] **Mod profiles in the UI?** Own sidebar tab with a dedicated page + list;
+  library-wide active-set load-outs only (not per-mod settings — ZZMI owns that).
+  (See backlog.)
