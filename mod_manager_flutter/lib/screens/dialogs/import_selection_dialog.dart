@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as path;
 import '../../l10n/app_localizations.dart';
+import '../../services/archive_service.dart';
 
 /// One extracted/dropped top-level folder offered for import.
 class ImportFolderChoice {
@@ -37,6 +39,70 @@ class ImportSelection {
     required this.folders,
     required this.combinedName,
   });
+}
+
+/// A resolved import plan: which folders to install and how.
+class ImportPlan {
+  /// Folders to install (a single folder, or the user's selected subset).
+  final List<String> folders;
+
+  /// When true, [folders] become subfolders of one mod named [combinedName];
+  /// otherwise each folder is installed as its own mod.
+  final bool combine;
+
+  /// Name of the combined mod (only meaningful when [combine] is true).
+  final String combinedName;
+
+  const ImportPlan({
+    required this.folders,
+    required this.combine,
+    required this.combinedName,
+  });
+}
+
+/// The single entry point both the mods-screen import (drag/drop + button) and
+/// the marketplace auto-install use to decide how a set of extracted/dropped
+/// folders becomes mods. For one folder it installs as-is with no prompt; for
+/// several it opens [showImportSelectionDialog] so the user picks which to
+/// install and whether to combine. Returns null if the user cancelled — the
+/// caller is responsible for cleaning up any extracted temp dirs.
+///
+/// Keeping this in one place is deliberate: the multi-folder branch was once
+/// added to the mods screen but forgotten in the marketplace, so both paths now
+/// share this resolver rather than each hand-rolling the choice building.
+Future<ImportPlan?> resolveImportSelection(
+  BuildContext context,
+  List<String> folderPaths, {
+  required String defaultCombinedName,
+}) async {
+  if (folderPaths.length <= 1) {
+    return ImportPlan(folders: folderPaths, combine: false, combinedName: '');
+  }
+
+  final choices = <ImportFolderChoice>[];
+  for (final folder in folderPaths) {
+    choices.add(
+      ImportFolderChoice(
+        path: folder,
+        name: path.basename(folder),
+        looksLikeMod: await ArchiveService.containsIniFile(folder),
+      ),
+    );
+  }
+
+  if (!context.mounted) return null;
+  final selection = await showImportSelectionDialog(
+    context,
+    choices,
+    defaultCombinedName: defaultCombinedName,
+  );
+  if (selection == null || selection.folders.isEmpty) return null;
+
+  return ImportPlan(
+    folders: selection.folders,
+    combine: selection.combine,
+    combinedName: selection.combinedName,
+  );
 }
 
 /// Lets the user pick which of several extracted/dropped folders to install and

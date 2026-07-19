@@ -73,6 +73,7 @@
       "photo_updated": "Image updated",
       "clipboard_empty": "Clipboard is empty",
       "import_no_folders": "Please drop mod folders",
+      "import_no_ini": "Imported, but no .ini found in: {mods} — the mod may be incomplete.",
       "import_duplicates": "Mods already exist or an error occurred",
       "import_success_title": "Imported successfully!",
       "import_error": "Import error: {message}",

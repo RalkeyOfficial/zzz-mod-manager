@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-07-19
+
+### Changed
+
+- The multi-folder selection flow and the "no `.ini`" check are now shared between the Marketplace and the mod import button/drag-drop, so both paths always behave identically (the Marketplace previously lacked the selection dialog).
+
+### Fixed
+
+- Auto-installing a multi-folder download from the Marketplace now opens the same folder-selection dialog as the upload button and drag/drop, instead of silently installing every folder (e.g. `previews`) as its own mod.
+- An archive whose root holds a `.ini` next to resource folders (e.g. `res/`, `buffer/`, `name.ini`) now installs as one mod instead of treating each folder as separate and dropping the `.ini`. Applies to both the Marketplace and the mod import button/drag-drop.
+- Imports now warn when a resulting mod contains no `.ini` at all, catching incomplete/broken mods early.
+
 ## [2.2.0] - 2026-07-18
 
 ### Added

@@ -1447,49 +1447,33 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         }
       }
 
+      // Default combined name: the shared originating archive name when all
+      // folders came from one archive, else the first folder's name.
+      final hints = folderPaths.map((f) => detectionHints[f]).toSet();
+      final sharedHint =
+          (hints.length == 1 && (hints.first?.isNotEmpty ?? false))
+              ? hints.first
+              : null;
+
       // When more than one folder would be installed, let the user choose which
       // ones — and whether each becomes its own mod or they combine into one.
-      var combine = false;
-      var combinedName = '';
-      String? combinedHint;
-      if (folderPaths.length > 1) {
-        final choices = <ImportFolderChoice>[];
-        for (final folder in folderPaths) {
-          choices.add(
-            ImportFolderChoice(
-              path: folder,
-              name: path.basename(folder),
-              looksLikeMod: await ArchiveService.containsIniFile(folder),
-            ),
-          );
-        }
-
-        // Default combined name: the shared originating archive name when all
-        // folders came from one archive, else the first folder's name.
-        final hints = folderPaths.map((f) => detectionHints[f]).toSet();
-        final sharedHint =
-            (hints.length == 1 && (hints.first?.isNotEmpty ?? false))
-                ? hints.first
-                : null;
-        final defaultName = sharedHint ?? path.basename(folderPaths.first);
-
-        if (!mounted) return;
-        final selection = await showImportSelectionDialog(
-          context,
-          choices,
-          defaultCombinedName: defaultName,
-        );
-        if (selection == null || selection.folders.isEmpty) {
-          await cleanupTempFolders();
-          return;
-        }
-        folderPaths
-          ..clear()
-          ..addAll(selection.folders);
-        combine = selection.combine;
-        combinedName = selection.combinedName;
-        combinedHint = sharedHint;
+      // Shared with the marketplace auto-install via resolveImportSelection.
+      if (!mounted) return;
+      final plan = await resolveImportSelection(
+        context,
+        folderPaths,
+        defaultCombinedName: sharedHint ?? path.basename(folderPaths.first),
+      );
+      if (plan == null) {
+        await cleanupTempFolders();
+        return;
       }
+      folderPaths
+        ..clear()
+        ..addAll(plan.folders);
+      final combine = plan.combine;
+      final combinedName = plan.combinedName;
+      final combinedHint = sharedHint;
 
       final expectedCount = combine ? 1 : folderPaths.length;
 
@@ -1618,6 +1602,30 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
 
       // Перезавантажуємо список модів
       await loadMods(showLoading: false);
+
+      // Safety net: warn about any imported mod that has no .ini at all — a
+      // strong sign the mod is incomplete (e.g. a broken multi-folder archive).
+      final modsPath = modManagerService.modsPath;
+      if (modsPath != null) {
+        final noIni = await ArchiveService.modsWithoutIni(
+          modsPath,
+          importedMods,
+        );
+        if (noIni.isNotEmpty && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                loc.t(
+                  'mods.snackbar.import_no_ini',
+                  params: {'mods': noIni.join(', ')},
+                ),
+              ),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 6),
+            ),
+          );
+        }
+      }
 
       // Видаляємо успішно імпортовані архіви
       if (successfullyExtractedArchives.isNotEmpty) {

@@ -75,7 +75,7 @@ mod_manager_flutter\build\windows\x64\runner\Release\
 
 ```powershell
 # З кореневої директорії проекту
-.\windows_installer\build_portable.ps1 -Version "2.2.0"
+.\windows_installer\build_portable.ps1 -Version "2.2.1"
 ```
 
 **Що включає скрипт:**
@@ -89,7 +89,7 @@ mod_manager_flutter\build\windows\x64\runner\Release\
 **Результат:**
 ```
 windows_installer\output\
-└── ZZZ-Mod-Manager-Portable-2.2.0.zip
+└── ZZZ-Mod-Manager-Portable-2.2.1.zip
 ```
 
 **Переваги:**
@@ -127,7 +127,7 @@ windows_installer\output\
 **Результат:**
 ```
 windows_installer\output\
-└── ZZZ-Mod-Manager-Setup-2.2.0.exe
+└── ZZZ-Mod-Manager-Setup-2.2.1.exe
 ```
 
 **Переваги:**
@@ -166,8 +166,8 @@ windows_installer\output\
 
 ```bash
 # Створи git tag
-git tag v2.2.0
-git push origin v2.2.0
+git tag v2.2.1
+git push origin v2.2.1
 
 # GitHub Actions автоматично:
 # 1. Зібере Windows версію

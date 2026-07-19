@@ -17,6 +17,7 @@ import '../services/mod_manager_service.dart';
 import '../services/platform_service_factory.dart';
 import '../utils/path_helper.dart';
 import '../utils/state_providers.dart';
+import 'dialogs/import_selection_dialog.dart';
 
 enum _MarketplaceDownloadChoice { cancel, downloadOnly, downloadAndInstall }
 
@@ -1003,23 +1004,54 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         );
       }
 
-      final directoriesToImport = extractionResult.extractedFolders ?? [];
+      final directoriesToImport = List<String>.from(
+        extractionResult.extractedFolders ?? const <String>[],
+      );
 
       if (directoriesToImport.isEmpty) {
         return _InstallResult.warning(loc.t('marketplace.install_empty'));
       }
 
-      final ModManagerService modManager =
-          await ApiService.getModManagerService();
       // The character is often in the archive name rather than the inner folder
       // (or vice versa), so pass the archive base name as an extra detection hint.
       final archiveBaseName = path.basenameWithoutExtension(archiveFile.path);
-      final (importedMods, autoTags) = await modManager.importMods(
+
+      // When an archive expands to more than one top-level folder (e.g. a mod
+      // folder next to a `previews` folder), let the user choose which folders
+      // to install and whether they become separate mods or one combined mod.
+      // Shared with the drag/drop and upload-button flow via resolveImportSelection.
+      if (!mounted) return _InstallResult.cancelled();
+      final plan = await resolveImportSelection(
+        context,
         directoriesToImport,
-        detectionHints: {
-          for (final dir in directoriesToImport) dir: archiveBaseName,
-        },
+        defaultCombinedName: archiveBaseName,
       );
+      if (plan == null) {
+        // Cancelled — drop the extracted temp folders (the archive itself is
+        // cleaned up by the caller's `finally`).
+        await _cleanupExtractedFolders(directoriesToImport);
+        return _InstallResult.cancelled();
+      }
+      directoriesToImport
+        ..clear()
+        ..addAll(plan.folders);
+      final combine = plan.combine;
+      final combinedName = plan.combinedName;
+
+      final ModManagerService modManager =
+          await ApiService.getModManagerService();
+      final (importedMods, autoTags) = combine
+          ? await modManager.importCombinedMod(
+              directoriesToImport,
+              combinedName,
+              detectionHint: archiveBaseName,
+            )
+          : await modManager.importMods(
+              directoriesToImport,
+              detectionHints: {
+                for (final dir in directoriesToImport) dir: archiveBaseName,
+              },
+            );
 
       if (importedMods.isEmpty) {
         return _InstallResult.warning(loc.t('marketplace.install_duplicate'));
@@ -1029,9 +1061,17 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
           .map((entry) => '${entry.key} → ${entry.value}')
           .join(', ');
 
-      final message = tagSummary.isNotEmpty
-          ? loc.t('marketplace.install_tags', params: {'tags': tagSummary})
-          : null;
+      // Safety net: warn about any imported mod that has no .ini at all — a
+      // strong sign the mod is incomplete (e.g. a broken multi-folder archive).
+      final noIni = await ArchiveService.modsWithoutIni(modsPath, importedMods);
+
+      final messages = <String>[
+        if (tagSummary.isNotEmpty)
+          loc.t('marketplace.install_tags', params: {'tags': tagSummary}),
+        if (noIni.isNotEmpty)
+          loc.t('mods.snackbar.import_no_ini', params: {'mods': noIni.join(', ')}),
+      ];
+      final message = messages.isEmpty ? null : messages.join('\n');
 
       return _InstallResult.success(importedMods, message: message);
     } finally {
@@ -1041,6 +1081,23 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
     }
   }
   
+  /// Deletes the temp extract dirs (`zzz_archive_extract_*`) that hold the given
+  /// extracted folders. Called when the user cancels the import selection dialog.
+  Future<void> _cleanupExtractedFolders(List<String> folderPaths) async {
+    for (final folderPath in folderPaths) {
+      try {
+        final dir = Directory(folderPath);
+        if (!await dir.exists()) continue;
+        final parentDir = dir.parent;
+        if (parentDir.path.contains('zzz_archive_extract_')) {
+          await parentDir.delete(recursive: true);
+        }
+      } catch (e) {
+        print('Marketplace: temp cleanup error $folderPath: $e');
+      }
+    }
+  }
+
   Future<void> _safeDeleteArchive(File archiveFile) async {
     try {
       final platformService = PlatformServiceFactory.getInstance();
@@ -1122,6 +1179,10 @@ class _InstallResult {
 
   factory _InstallResult.error(String message) =>
       _InstallResult._(mods: const [], errorMessage: message);
+
+  /// No-op result (e.g. the user cancelled the folder-selection dialog):
+  /// [when] renders nothing.
+  factory _InstallResult.cancelled() => const _InstallResult._(mods: []);
 
   void when({
     required void Function(List<String> mods, String? message) success,

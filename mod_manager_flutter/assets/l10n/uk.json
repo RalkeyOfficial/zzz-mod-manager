@@ -73,6 +73,7 @@
       "photo_updated": "Фото оновлено",
       "clipboard_empty": "Буфер обміну порожній",
       "import_no_folders": "Будь ласка, перетягніть папки з модами",
+      "import_no_ini": "Імпортовано, але .ini не знайдено в: {mods} — мод може бути неповним.",
       "import_duplicates": "Моди вже існують або сталася помилка",
       "import_success_title": "Успішно імпортовано!",
       "import_error": "Помилка імпорту: {message}",

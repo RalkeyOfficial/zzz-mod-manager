@@ -97,6 +97,27 @@ and [Semantic Versioning](https://semver.org). Update it as part of every change
   `## [Unreleased]` at the top. Patch = fixes, minor = features, major =
   breaking.
 
+### Bumping the version (all the spots)
+
+The `x.y.z` version string lives in **several** files — updating only
+`pubspec.yaml` is a recurring mistake. On every bump, update **all** of these:
+
+- `mod_manager_flutter/pubspec.yaml` — `version: x.y.z+N`
+- `mod_manager_flutter/lib/main.dart` — the `'vx.y.z'` badge shown in the UI
+  (search for `'v` followed by the old version)
+- `windows_installer/setup.iss` — `#define MyAppVersion "x.y.z"`
+- `BUILD_WINDOWS_GUIDE.md` — the example `-Version`, output filenames
+  (`…-Portable-x.y.z.zip`, `…-Setup-x.y.z.exe`), and `git tag vx.y.z`
+- `CHANGELOG.md` — per the release step above
+
+**Leave alone** (auto-generated or historical): `PKGBUILD` / `.SRCINFO` (git
+`pkgver` like `r6.967f969`), `pubspec.lock`, `linux/flutter/ephemeral/…`, and
+any older `## [x.y.z]` changelog entries.
+
+Verify with:
+`grep -rn "<old-version>" . | grep -v build/ | grep -v .git/` — every remaining
+hit should be an intentional one (historical changelog / dependency / generated).
+
 ## Architecture
 
 ### Layered structure (`lib/`)

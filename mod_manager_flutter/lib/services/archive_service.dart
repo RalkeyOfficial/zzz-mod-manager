@@ -52,6 +52,22 @@ class ArchiveService {
     }
   }
 
+  /// Returns the subset of [modNames] whose folder under [modsPath] contains no
+  /// `.ini` anywhere — a strong sign the mod is incomplete (e.g. a broken
+  /// multi-folder archive). Used by both import paths for a post-install warning.
+  static Future<List<String>> modsWithoutIni(
+    String modsPath,
+    List<String> modNames,
+  ) async {
+    final missing = <String>[];
+    for (final name in modNames) {
+      if (!await containsIniFile(path.join(modsPath, name))) {
+        missing.add(name);
+      }
+    }
+    return missing;
+  }
+
   static Future<ArchiveExtractionResult> extractArchive({
     required File archiveFile,
     Directory? destinationDir,
@@ -245,12 +261,29 @@ class ArchiveService {
     }
 
     final dirEntries = entries.whereType<Directory>().toList();
-    if (dirEntries.isEmpty) {
+
+    // A `.ini` sitting directly at the archive root means the whole root IS one
+    // mod (the sibling folders are that mod's resource folders — res/, buffer/,
+    // textures/ — referenced by the .ini). Without this, an archive laid out as
+    // `res/  buffer/  textures/  name.ini` would be treated as several unrelated
+    // folders and the root .ini silently dropped.
+    final hasRootIni = entries.whereType<File>().any(
+      (f) => path.extension(f.path).toLowerCase() == '.ini',
+    );
+
+    // Wrap the whole root into a single mod folder when it is one mod: either a
+    // .ini lives at the root (folders beside it are its resources), or there are
+    // no subfolders at all (a flat pile of files). This keeps everything —
+    // especially the root .ini — instead of returning bare subfolders.
+    if (hasRootIni || dirEntries.isEmpty) {
       final baseName = path.basenameWithoutExtension(archiveFile.path);
       final wrapperDir = Directory(path.join(extractDir.path, baseName));
       await wrapperDir.create(recursive: true);
 
       for (final entity in entries) {
+        // Guard the rare archive-name == folder-name collision: never move the
+        // wrapper into itself; the other siblings just move into it.
+        if (path.equals(entity.path, wrapperDir.path)) continue;
         final targetPath = path.join(
           wrapperDir.path,
           path.basename(entity.path),
@@ -266,6 +299,7 @@ class ArchiveService {
       return directories;
     }
 
+    // Otherwise the root is a container of independent mod folders.
     for (final dir in dirEntries) {
       directories.add(dir.path);
     }
