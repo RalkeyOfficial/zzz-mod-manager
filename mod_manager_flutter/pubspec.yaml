@@ -1,7 +1,7 @@
 name: mod_manager_flutter
 description: "Modern mod manager for Zenless Zone Zero using symbolic links."
 publish_to: "none"
-version: 2.2.1+1
+version: 2.2.2+1
 
 environment:
   sdk: ^3.8.1

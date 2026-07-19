@@ -76,7 +76,15 @@ Future<ImportPlan?> resolveImportSelection(
   required String defaultCombinedName,
 }) async {
   if (folderPaths.length <= 1) {
-    return ImportPlan(folders: folderPaths, combine: false, combinedName: '');
+    // Return a copy, never the caller's own list: both call sites do
+    // `folderPaths..clear()..addAll(plan.folders)`, so aliasing the argument
+    // would clear the list and then add nothing back, silently dropping the
+    // single folder and reporting a false "already exists / error".
+    return ImportPlan(
+      folders: List<String>.from(folderPaths),
+      combine: false,
+      combinedName: '',
+    );
   }
 
   final choices = <ImportFolderChoice>[];

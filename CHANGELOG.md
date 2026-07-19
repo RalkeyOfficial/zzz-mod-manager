@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.2] - 2026-07-19
+
+### Fixed
+
+- Importing a single-folder mod no longer fails with a false "Mods already exist or an error occurred" and installs nothing. A list-aliasing bug in the shared import resolver emptied the folder list before the copy, breaking the common single-folder import on both the mod import button/drag-drop and the Marketplace.
+
 ## [2.2.1] - 2026-07-19
 
 ### Changed
