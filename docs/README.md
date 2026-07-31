@@ -1,0 +1,40 @@
+# Developer documentation
+
+Reference material for people working *on* ZZZ Mod Manager. For using the app, see
+the root [`README.md`](../README.md).
+
+## Contents
+
+| Document | Covers |
+|---|---|
+| [`metadata-schema.md`](metadata-schema.md) | Every on-disk format: the per-mod `metadata.json` sidecar, `config.json`, the dual-storage pattern, schema versioning and the migration hook |
+
+## Related files outside this directory
+
+| File | Covers |
+|---|---|
+| [`../CLAUDE.md`](../CLAUDE.md) | Architecture overview, layer structure, dev workflow (hot reload vs restart), the platform abstraction, and the version-bump checklist |
+| [`../CHANGELOG.md`](../CHANGELOG.md) | Release history (Keep a Changelog / SemVer) |
+| [`../BUGS & TODO.md`](../BUGS%20&%20TODO.md) | Pre-planning for the marketplace / download / update overhaul — decisions and rationale, not yet implemented |
+| [`../BUILD_WINDOWS_GUIDE.md`](../BUILD_WINDOWS_GUIDE.md) | Windows build and packaging |
+
+## Conventions
+
+- **New developer docs go in this directory**, not the repo root. The root has
+  accumulated a dozen one-off markdown files and is no longer navigable.
+- **English only**, per the language rule in `CLAUDE.md`. Some older root-level
+  documents are in Ukrainian (`*_UK.md`) and predate that rule.
+- **Document what the code does**, and mark anything planned as planned with a link
+  to where it's specified. A reference that quietly describes unbuilt behaviour is
+  worse than no reference.
+
+## Legacy root-level documents
+
+These predate this directory and are **not maintained**. They describe past
+migrations and one-off investigations, and may be inaccurate about current
+behaviour. Kept for history; don't treat them as reference:
+
+`CHANGES_SUMMARY.md`, `IMPLEMENTATION_SUMMARY_UK.md`, `MARKETPLACE_IMPROVEMENTS.md`,
+`LINUX_MARKETPLACE_SETUP.md`, `WINDOWS_COMPATIBILITY_ANALYSIS_UK.md`,
+`WINDOWS_IMPLEMENTATION_GUIDE.md`, `QUICK_START_WINDOWS_UK.md`,
+`GAMEBANANA_BODY.md`, and `mod_manager_flutter/KEYBINDS_*.md`.

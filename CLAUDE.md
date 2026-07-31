@@ -120,6 +120,14 @@ hit should be an intentional one (historical changelog / dependency / generated)
 
 ## Architecture
 
+> Developer documentation lives in **`docs/`** — start at
+> [`docs/README.md`](docs/README.md). In particular,
+> [`docs/metadata-schema.md`](docs/metadata-schema.md) is the authoritative
+> reference for the on-disk formats (per-mod `metadata.json` sidecar,
+> `config.json`, schema versioning and the migration hook). Read it before
+> changing anything that persists. New developer docs go in `docs/`, not the
+> repo root.
+
 ### Layered structure (`lib/`)
 
 - **`main.dart`** — app entry. Initializes `window_manager` (custom hidden title
