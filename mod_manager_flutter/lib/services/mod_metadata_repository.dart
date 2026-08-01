@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:path/path.dart' as path;
 import '../models/character_info.dart';
 import '../models/mod_metadata.dart';
+import '../models/mod_origin.dart';
 import '../utils/path_helper.dart';
 import '../utils/zzz_characters.dart';
 import 'mod_metadata_service.dart';
@@ -120,7 +121,8 @@ class ModMetadataRepository {
       // cleared URL) are actually removed, rather than copyWith keeping the old
       // value. ModInfo carries every user-editable field, so this is a full
       // save — while replaceUserFields carries the machine-owned ones
-      // (schema_version) and any unknown keys over from the copy on disk.
+      // (schema_version, origin) and any unknown keys over from the copy on
+      // disk.
       final existing = await _service.read(modFolder);
       String? orNull(String? v) => (v == null || v.isEmpty) ? null : v;
       final metadata = (existing ?? const ModMetadata()).replaceUserFields(
@@ -133,6 +135,35 @@ class ModMetadataRepository {
       return await _service.write(modFolder, metadata);
     } catch (e) {
       print('ModMetadataRepository: failed to save metadata for ${mod.id}: $e');
+      return false;
+    }
+  }
+
+  /// Records where a freshly-ingested mod came from.
+  ///
+  /// **Replaces any origin block that arrived inside the copied folder, by
+  /// construction.** `_copyDirectory` copies a source folder's
+  /// `.zzz-mod-manager/` wholesale, so a mod folder passed around on Discord
+  /// arrives carrying *someone else's* origin block — a claim about a remote
+  /// file that we never made, sitting on the one field that gates unattended
+  /// updates. Because this method never reads or merges the inbound block, and
+  /// [ModMetadata.withOrigin] replaces the field outright, there is no branch
+  /// where a stranger's block can survive — and so no heuristic to get wrong.
+  ///
+  /// The user-facing fields (description, tags, images) are deliberately kept:
+  /// those travelling with a shared folder is the entire point of a sidecar.
+  ///
+  /// Returns false when the mod folder is missing or unwritable. Callers should
+  /// surface that once rather than silently retrying, since nothing re-attempts
+  /// it — origin is written at ingest and never during a scan.
+  Future<bool> recordOrigin(String modName, ModOrigin origin) async {
+    try {
+      final modFolder = _folderOf(modName);
+      if (modFolder == null) return false;
+      final existing = await _service.read(modFolder) ?? const ModMetadata();
+      return await _service.write(modFolder, existing.withOrigin(origin));
+    } catch (e) {
+      print('ModMetadataRepository: failed to record origin for $modName: $e');
       return false;
     }
   }

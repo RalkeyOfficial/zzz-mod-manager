@@ -85,6 +85,25 @@ class PathHelper {
     }
   }
 
+  /// Where downloaded mod archives land.
+  ///
+  ///   Windows: `%APPDATA%\zzz-mod-manager\downloads`
+  ///   Linux:   `~/.local/share/zzz-mod-manager/downloads`
+  ///
+  /// Every incoming archive goes here regardless of how it arrived, and is
+  /// deleted once it has been extracted successfully — the archive is a
+  /// throwaway intermediate, not something the user is meant to manage. Not
+  /// user-configurable; add a config key only if it's actually asked for.
+  static String getDownloadsPath() => path.join(getAppDataPath(), 'downloads');
+
+  /// Ensure the downloads directory exists.
+  static Future<void> ensureDownloadsDirectoryExists() async {
+    final dir = Directory(getDownloadsPath());
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+  }
+
   /// Reset cached paths (useful for testing)
   static void resetCache() {
     _modImagesPath = null;

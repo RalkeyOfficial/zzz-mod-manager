@@ -2,11 +2,14 @@ import 'dart:io';
 import 'package:path/path.dart' as path;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/character_info.dart';
+import '../models/mod_origin.dart';
+import '../models/mod_origin_seed.dart';
 import '../models/keybind_info.dart';
 import '../core/constants.dart';
 import '../utils/state_providers.dart';
 import '../utils/zzz_characters.dart';
 import 'config_service.dart';
+import 'ingest_origin_builder.dart';
 import 'mod_metadata_repository.dart';
 import 'mod_metadata_service.dart';
 import 'platform_service.dart';
@@ -20,6 +23,10 @@ class ModManagerService {
   final ProviderContainer _container;
   final IniParserService _iniParser;
   final ModMetadataRepository _metadata;
+
+  /// Builds origin blocks at ingest. Pure and injectable so the group/mode
+  /// decisions are testable without a configured library.
+  final IngestOriginBuilder _originBuilder = IngestOriginBuilder();
 
   /// Parsed keybinds cached per mod id. Keybinds only change when the user
   /// edits one (or edits the .ini externally), so caching avoids re-parsing
@@ -434,9 +441,14 @@ class ModManagerService {
   /// визначення персонажа (зазвичай — ім'я архіву, з якого розпаковано папку).
   /// Часто персонаж є в імені .zip/.rar, а не у внутрішній папці (або навпаки),
   /// тож скануємо обидві назви.
+  /// [originSeeds] maps a **source folder path** to what the caller knew about
+  /// where it came from, in the same shape as [detectionHints] and for the same
+  /// reason: one call can mix folders from several archives with folders the
+  /// user dragged in, so provenance has to be per-folder rather than per-call.
   Future<(List<String>, Map<String, String>)> importMods(
     List<String> folderPaths, {
     Map<String, String>? detectionHints,
+    Map<String, ModOriginSeed>? originSeeds,
   }) async {
     try {
       final (valid, _) = await validatePaths();
@@ -444,6 +456,8 @@ class ModManagerService {
 
       final importedMods = <String>[];
       final autoTags = <String, String>{};
+      // Kept so the origin pass below can name the folder each mod came out of.
+      final sourceOf = <String, String>{};
       final modsDir = Directory(modsPath!);
 
       if (!await modsDir.exists()) {
@@ -466,6 +480,7 @@ class ModManagerService {
         // Копіюємо папку з модом
         await _copyDirectory(sourceDir, targetDir);
         importedMods.add(modName);
+        sourceOf[modName] = folderPath;
 
         // Автоматично визначаємо тег персонажа і одразу зберігаємо його в
         // sidecar (+ config mirror), щоб завантажені моди отримали постійну
@@ -482,9 +497,47 @@ class ModManagerService {
         }
       }
 
+      // After the copy loop, deliberately: duplicates are skipped above, so
+      // generating a group id up front would leave a stale group-of-one behind
+      // whenever N-1 folders already existed.
+      final group = _originBuilder.siblingGroupFor(importedMods.length);
+      for (final modName in importedMods) {
+        final seed = originSeeds?[sourceOf[modName]];
+        if (seed == null) continue;
+        await _recordOrigin(
+          modName,
+          _originBuilder.separate(
+            seed: seed,
+            sourceFolder: sourceOf[modName]!,
+            siblingGroup: group,
+          ),
+        );
+      }
+
       return (importedMods, autoTags);
     } catch (e) {
       return (<String>[], <String, String>{});
+    }
+  }
+
+  /// Mods whose origin block could not be written, drained by the UI.
+  ///
+  /// Draining is what makes the report happen **once**: nothing re-attempts the
+  /// write, because origin is recorded at ingest and never during a scan, so a
+  /// failure that stayed in this list would have no second chance to be shown.
+  final List<String> _originWriteFailures = [];
+
+  List<String> takeOriginWriteFailures() {
+    final failures = List<String>.from(_originWriteFailures);
+    _originWriteFailures.clear();
+    return failures;
+  }
+
+  Future<void> _recordOrigin(String modName, ModOrigin origin) async {
+    final ok = await _metadata.recordOrigin(modName, origin);
+    if (!ok) {
+      print('ModManagerService: could not record origin for $modName');
+      _originWriteFailures.add(modName);
     }
   }
 
@@ -493,10 +546,15 @@ class ModManagerService {
   /// `<modName>` folder is what gets activated. Returns ([modName] on success,
   /// otherwise the empty list, plus any auto-detected character tag) — the same
   /// shape as [importMods] so callers can share result handling.
+  ///
+  /// [origin] describes where the merged folders came from. Scalar rather than
+  /// a map because this produces exactly one mod — and for the same reason it
+  /// never carries a sibling group.
   Future<(List<String>, Map<String, String>)> importCombinedMod(
     List<String> folderPaths,
     String modName, {
     String? detectionHint,
+    ModOriginSeed? origin,
   }) async {
     try {
       final (valid, _) = await validatePaths();
@@ -516,6 +574,7 @@ class ModManagerService {
       await targetDir.create(recursive: true);
 
       var copied = 0;
+      final copiedFolders = <String>[];
       for (final folderPath in folderPaths) {
         final sourceDir = Directory(folderPath);
         if (!await sourceDir.exists()) continue;
@@ -523,6 +582,7 @@ class ModManagerService {
           sourceDir,
           Directory(path.join(targetPath, path.basename(folderPath))),
         );
+        copiedFolders.add(folderPath);
         copied++;
       }
 
@@ -532,6 +592,13 @@ class ModManagerService {
           await targetDir.delete(recursive: true);
         } catch (_) {}
         return (<String>[], <String, String>{});
+      }
+
+      if (origin != null) {
+        await _recordOrigin(
+          modName,
+          _originBuilder.combined(seed: origin, sourceFolders: copiedFolders),
+        );
       }
 
       final autoTags = <String, String>{};

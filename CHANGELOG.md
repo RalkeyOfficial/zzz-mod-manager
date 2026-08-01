@@ -10,8 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Groundwork for the native GameBanana marketplace: a read-only API client for browsing, searching and reading mod details, covered by tests that run without a network. Nothing user-visible yet — the marketplace still uses the existing browser flow.
+- Marketplace downloads now resume where they left off instead of starting over, survive the app being closed mid-download, and show a transfer rate and estimated time remaining.
+- Marketplace downloads can now be cancelled while in progress.
+- Mods now record where they came from (downloaded, imported archive, or imported folder) along with the archive's checksum, so a future release can tell you when an update is available.
+
+### Changed
+
+- Downloaded archives now always land in the app's own downloads folder and are deleted once installed; an archive that fails to extract is kept, and the app tells you where to find it.
 
 ### Fixed
+
+- Certificate validation is no longer disabled when downloading mods.
+- Installing a mod no longer risks deleting the folder its archive was sitting in.
+- A failed or interrupted marketplace download no longer leaves a partial file and an open file handle behind.
 
 - Metadata written into a mod's `.zzz-mod-manager/metadata.json` by a newer version of the app (or another tool) is no longer erased when you edit that mod's description, tags or character.
 - Saving the edit dialog for a mod with no character assigned no longer records the placeholder "unknown" as its character, and mods carrying that placeholder from an older version are now treated as untagged.

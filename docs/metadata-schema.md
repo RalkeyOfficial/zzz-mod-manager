@@ -50,7 +50,7 @@ three layers, split by responsibility:
 | Layer | File | Owns |
 |---|---|---|
 | `ModMetadataService` | `services/mod_metadata_service.dart` | Where a sidecar lives and how to read/write it. No opinions, no collaborators. |
-| `ModMetadataRepository` | `services/mod_metadata_repository.dart` | The **rules** — legacy migration, what "no character" means on disk, which image paths are storable, and (planned) the origin block + its backfill. |
+| `ModMetadataRepository` | `services/mod_metadata_repository.dart` | The **rules** — legacy migration, what "no character" means on disk, which image paths are storable, and recording the origin block (its offline backfill is still planned). |
 | `ModManagerService` | `services/mod_manager_service.dart` | Assembles a `ModInfo` from the above plus link state and config. Delegates; holds no metadata logic. |
 
 Everything the repository needs is injected — the mods path, the legacy image
@@ -78,7 +78,13 @@ network and no UI, so there is no excuse for them to be untested.
   "source_url": "https://gamebanana.com/mods/123456",
   "tags": ["swimsuit", "4k"],
   "character_id": "ellen",
-  "images": [".zzz-mod-manager/images/01.png", "Preview.png"]
+  "images": [".zzz-mod-manager/images/01.png", "Preview.png"],
+  "origin": {
+    "provenance": "downloaded",
+    "ingest": { "mode": "separate", "folders": ["Ellen Swimsuit"] },
+    "installed_at": "2026-08-01T12:34:56.000Z",
+    "archive_md5": "9e107d9d372bb6826bd81d3542a419d6"
+  }
 }
 ```
 
@@ -90,6 +96,67 @@ network and no UI, so there is no excuse for them to be untested.
 | `tags` | `string[]` | **always** (even `[]`) | Arbitrary user tags. Drive the tag filters in the mods toolbar. |
 | `character_id` | `string?` | non-null only | Canonical character/category id. Normalised through `canonicalCharacterId()` (`utils/zzz_characters.dart`) on read. |
 | `images` | `string[]` | **always** (even `[]`) | Gallery, **relative to the mod folder root**. First entry is the cover. |
+| `origin` | `object?` | non-null only | Where the mod came from. **Machine-owned** — see below. |
+
+### The `origin` block
+
+Written at ingest by `ModMetadataRepository.recordOrigin()`, modelled by
+`ModOrigin` (`lib/models/mod_origin.dart`). Every sub-field is optional except
+`provenance`, and **anything equal to its read-side default is omitted**, so the
+common block is the four keys shown above rather than fifteen mostly-null ones.
+
+| Field | Meaning |
+|---|---|
+| `source` | Which service, e.g. `gamebanana`. |
+| `mod_id` / `file_id` | Remote handles. A mod publishes many files, so both are needed to say what is installed. |
+| `mod_id_confidence` / `version_confidence` | See the tiers below. Identity and version resolve independently, so they carry separate confidences. |
+| `version` / `version_label` | `version` is a version string; `version_label` is the author's free-text *variant* marker ("white hair ver"). **Never conflate them** — that makes two variants of one release look like two releases. |
+| `provenance` | `downloaded` \| `imported_archive` \| `imported_folder`. |
+| `ingest` | `mode` (`separate`/`combined`), `folders` (archive-relative **basenames**), `sibling_group`. |
+| `installed_at` / `installed_at_is_proxy` | When, and whether that was observed or derived from file mtimes. |
+| `baseline_remote_date` | For `assumed_latest`: only flag remote files newer than this. |
+| `archive_md5` | md5 of the archive it was extracted from. |
+| `tracking` | `auto` \| `off` (the user declared the mod local). |
+| `remote_missing` | Gone upstream — read from the remote's explicit private/trashed/withheld flags, not inferred from a 404. |
+
+**Confidence and provenance are separate axes.** Confidence is how sure we are
+*which remote file this is*; provenance is *where the folder came from*. They
+came apart the moment a hand-imported archive could be matched exactly by its
+checksum: that mod is known precisely despite never having been downloaded by
+us. The tiers are `exact`, `user`, `inferred`, `assumed_latest`, `unknown`, and
+**only `exact` may drive an unattended overwrite** — on *both* axes, since
+knowing the mod but not the file is not enough to know what to replace it with.
+
+Three rules that are load-bearing rather than stylistic:
+
+- **An unrecognised confidence value parses to `unknown`, never upward.** A
+  future build inventing a stronger tier must not be read by this build as a
+  claim it can act on.
+- **`ModOrigin.fromJson` never throws, for any input.** A sidecar travels with
+  its folder, so one can arrive from a stranger holding `"mod_id": "123"`. A
+  throwing cast would propagate into `ModMetadataService.read`, which catches and
+  returns null — and since that method cannot tell "missing" from "corrupt", the
+  sidecar would then be **replaced wholesale on the next save**, destroying the
+  user's own description, tags and images.
+- **On any ingest we did not download ourselves, the inbound `origin` is
+  dropped.** `_copyDirectory` copies a source folder's `.zzz-mod-manager/`
+  wholesale, so a mod passed around on Discord arrives carrying someone else's
+  block — a claim about a remote file we never made, on the field that gates
+  unattended updates. `recordOrigin` enforces this *by construction*: it never
+  reads or merges the inbound block, and `ModMetadata.withOrigin()` replaces the
+  field outright. There is no branch where a stranger's block survives, and so
+  none to get wrong. The user-facing fields are kept — those travelling is the
+  whole point of a sidecar.
+
+`archive_md5` deserves its own warning: it is a **matching key, never an
+integrity or authenticity claim**. It exists only because GameBanana publishes
+one per file, which is what lets a *hand-supplied* archive be identified exactly.
+md5 is cryptographically broken and deliberate collisions are constructible —
+harmless here precisely because a match grants no trust: it sets a version label,
+skips no security check, and doesn't change what gets extracted. Never render a
+match as "verified" or with a shield icon; the honest phrasing is "byte-identical
+to file X on the mod page". If real integrity is ever wanted, add sha256 alongside
+rather than reinterpreting this field.
 
 ### Field rules that aren't obvious from the type
 
@@ -314,7 +381,7 @@ a feature flag. `ModMetadata.currentSchemaVersion` is the version this build
 writes; a file with no `schema_version` is assumed to be current (a tolerant
 default, since v1 was the first format).
 
-Current version: **1**.
+Current version: **2** — the format that carries the `origin` block.
 
 ### When to bump it
 
@@ -332,6 +399,47 @@ doesn't recognise.
 so the posture is "don't care what else is in there, as long as the keys we need
 are present". That is what makes a purely additive field backward-safe in *both*
 directions, not just the read one.
+
+**Worked example — the `origin` block bumped it to 2, and the rule above did not
+require that.** `origin` is a new key; nothing changed type or meaning, older
+builds tolerate it, and strictly nothing breaks without a bump.
+
+It was bumped anyway, which is worth recording because it refines the rule rather
+than breaking it. The rule above is about *safety* — when a bump is mandatory. It
+is silent on when one is merely **useful**, and here it is: without a version, a
+sidecar holding no `origin` is ambiguous between "written before origin existed"
+and "written by a current build; this mod is genuinely untracked". Those are
+different facts and every future reader of this format will want to tell them
+apart. The cost side of the ledger turned out to be near zero — no code branches
+on `schema_version`, and a build reading a higher number than it knows carries it
+through untouched.
+
+So the working rule is: **bump when the format changes in a way an older build
+would misinterpret, or when the version is the only thing that can answer a
+question a future reader will actually ask.** Don't bump for a cosmetic field.
+
+Two consequences that had to land with the bump, because a version that lies is
+worse than no version:
+
+- **A sidecar with no `schema_version` is assumed to be `1`, not "current".** The
+  key has been written on every save since v1, so its absence dates the file.
+  (`ModMetadata.assumedSchemaVersion`.)
+- **Writing an `origin` block advances the stamp**, via `withOrigin()`, since the
+  version describes the file's contents — a v1 stamp on a file holding an origin
+  block would assert the opposite of what is true. It takes the max, so a sidecar
+  from a newer build is never downgraded on its way past us.
+
+The rest of this release's metadata work — notably the offline backfill — lands
+as **2** as well. A version describes a format users can actually receive, and
+nothing in this cycle has shipped, so a library goes from 1 to 2 in one step and
+never observes anything in between. Burning a number on an intermediate
+development state buys nothing.
+
+For the backfill specifically there is also nothing to mark: it writes **no
+sidecar at all** for a mod it can derive nothing from, so there is no file on
+which an "already swept" version could be recorded. Re-sniffing those on each
+scan is accepted by design — see the don't-litter rule in
+[§2](#dont-litter-empty-sidecars).
 
 Two limits worth being explicit about:
 
@@ -416,14 +524,16 @@ every existing install — but do expect the confusion when reading the code.
 
 ## 6. Planned changes
 
-The metadata schema is slated for a **v2** that adds an *origin block* — where a
-mod came from, which remote file it is, and how confident we are about that — plus
-the offline backfill and status UI around it. **The origin block itself is not
-implemented yet**, so the shape below is a design sketch, not a format to code
-against; this section becomes authoritative only when the write side ships.
+**The origin block has shipped** — its write side, its field reference and the
+rules around it are documented in [§2](#the-origin-block), which is now the
+authoritative description. It shipped as **schema v2**; see
+[§4](#when-to-bump-it) for why the bump was taken even though the additive-field
+rule did not demand it.
 
-The design rests on two decisions worth recording here, because they constrain the
-format rather than merely the UI:
+What remains planned is everything that *reads* it: the offline backfill that
+derives identity from an existing `source_url`, the status UI, and update
+checking. Two decisions recorded here because they constrain the format rather
+than merely the UI:
 
 - **Confidence and provenance are separate axes.** *Confidence* is how sure we are
   which remote file this is; *provenance* is where the folder came from
@@ -444,12 +554,16 @@ independently and must be tracked as separate unknowns — the first is often
 recoverable offline by parsing an existing `source_url`, the second almost never is,
 because the archive is deleted after extraction.
 
-The block's **prerequisite** has shipped, though: the sidecar now round-trips unknown
-keys and preserves machine-owned ones across a save ([§2](#save-semantics-three-classes-of-field)),
-so an `origin` block written by a future build survives contact with this one.
-That had to land first, because the fix is forward-only
-([§4](#when-to-bump-it)).
+The block's **prerequisite** shipped first, deliberately: the sidecar round-trips
+unknown keys and preserves machine-owned ones across a save
+([§2](#save-semantics-three-classes-of-field)), so an `origin` block survives
+contact with a build that predates it. That had to come first because the fix is
+forward-only ([§4](#when-to-bump-it)) — a released build will keep stripping keys
+it doesn't know, and nothing can change that retroactively.
 
-When it lands: fold the field reference into [§2](#2-metadatajson--the-per-mod-sidecar)
-of this document and the rationale into a decision record here, so this file stays
-the durable home once the planning doc is retired.
+Still unresolved, and worth stating so it isn't mistaken for an oversight:
+**identity is not yet obtainable at download time.** The marketplace intercepts a
+CDN url, which yields no mod id, so every block written today carries
+`provenance`, `ingest`, `installed_at` and `archive_md5` with both confidences at
+`unknown`. That is the honest output, not a bug — but it does mean "the mod
+carries an origin block" is not the same as "we know what it is".

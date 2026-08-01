@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 
-import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,12 +9,19 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:path/path.dart' as path;
 
 import '../l10n/app_localizations.dart';
+import '../models/install_result.dart';
+import '../models/mod_origin_seed.dart';
+import '../models/origin_enums.dart';
 import '../services/api_service.dart';
 import '../services/archive_service.dart';
+import '../services/download/download_exceptions.dart';
+import '../services/download/download_progress.dart';
+import '../services/download/download_request.dart';
 import '../services/mod_manager_service.dart';
 import '../services/platform_service_factory.dart';
-import '../utils/path_helper.dart';
 import '../utils/state_providers.dart';
+import 'components/install_result_snackbars.dart';
+import 'dialogs/download_progress_dialog.dart';
 import 'dialogs/import_selection_dialog.dart';
 
 enum _MarketplaceDownloadChoice { cancel, downloadOnly, downloadAndInstall }
@@ -540,43 +545,18 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
     
     try {
       final file = File(filePath);
-      final installResult = await _installArchive(file);
+      // `imported_archive`, never `downloaded`: the user's own browser fetched
+      // this file and we merely noticed it appear in their Downloads folder.
+      // "Arrived via the marketplace screen" is not evidence that we fetched
+      // it, and claiming otherwise would assert provenance we didn't earn.
+      final installResult = await _installArchive(
+        file,
+        provenance: OriginProvenance.importedArchive,
+      );
       
       if (!mounted) return;
       
-      installResult.when(
-        success: (mods, message) {
-          final importedMods = mods.join(', ');
-          scaffoldMessenger.showSnackBar(
-            SnackBar(
-              content: Text(
-                loc.t(
-                  'marketplace.install_success',
-                  params: {
-                    'mods': importedMods.isEmpty
-                        ? loc.t('marketplace.install_success_default')
-                        : importedMods,
-                  },
-                ),
-              ),
-            ),
-          );
-          if (message != null && message.isNotEmpty) {
-            scaffoldMessenger.showSnackBar(SnackBar(content: Text(message)));
-          }
-        },
-        warning: (message) {
-          scaffoldMessenger.showSnackBar(SnackBar(content: Text(message)));
-        },
-        error: (message) {
-          scaffoldMessenger.showSnackBar(
-            SnackBar(
-              backgroundColor: Theme.of(context).colorScheme.error,
-              content: Text(message),
-            ),
-          );
-        },
-      );
+      showInstallResult(context, installResult);
     } catch (e) {
       if (!mounted) return;
       scaffoldMessenger.showSnackBar(
@@ -791,225 +771,135 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
     required bool autoInstall,
   }) async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
-    final sanitizedFilename = _sanitizeFilename(
-      suggestedName?.isNotEmpty == true
-          ? suggestedName!
-          : path.basename(uri.path),
-      fallback:
-          'mod_${DateTime.now().millisecondsSinceEpoch}${path.extension(uri.path)}',
+    final errorColor = Theme.of(context).colorScheme.error;
+
+    final handle = ref.read(downloadServiceProvider).start(
+          DownloadRequest(url: uri, suggestedFilename: suggestedName),
+        );
+
+    final progressNotifier = ValueNotifier<DownloadProgress>(
+      const DownloadProgress(state: DownloadState.connecting),
+    );
+    final progressSub = handle.progress.listen((p) => progressNotifier.value = p);
+
+    // One guarded close for every exit path. Previously the dialog future was
+    // never awaited before the download began, and three separate places popped
+    // the root navigator — so a fast failure could pop a route that wasn't ours.
+    var dialogClosed = false;
+    void closeDialog() {
+      if (dialogClosed) return;
+      dialogClosed = true;
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => DownloadProgressDialog(
+          progress: progressNotifier,
+          onCancel: () {
+            // An explicit cancel means "and don't leave junk behind" — keeping
+            // several hundred MB of partial would be surprising here.
+            unawaited(handle.cancel(deletePartial: true));
+          },
+        ),
+      ),
     );
 
-    final progressNotifier = ValueNotifier<double?>(0);
-    final progressDialog = _showProgressDialog(progressNotifier);
-    var dialogClosed = false;
-
     try {
-      final downloadedFile = await _downloadToTemporaryFile(
-        uri: uri,
-        filename: sanitizedFilename,
-        progressNotifier: progressNotifier,
-      );
-
-      if (!dialogClosed && mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-        dialogClosed = true;
-      }
-
-      await progressDialog;
-
+      final result = await handle.done;
+      closeDialog();
       if (!mounted) return;
 
       if (!autoInstall) {
-        final savedFile = await _moveToDownloads(
-          downloadedFile,
-          sanitizedFilename,
-        );
+        // Nothing to move: the archive already downloaded straight into
+        // <appData>/downloads.
         scaffoldMessenger.showSnackBar(
           SnackBar(
             content: Text(
-              loc.t('marketplace.download_saved', params: {'path': savedFile}),
+              loc.t('marketplace.download_saved',
+                  params: {'path': result.file.path}),
             ),
           ),
         );
         return;
       }
 
-      final installResult = await _installArchive(downloadedFile);
-      if (!mounted) return;
-
-      installResult.when(
-        success: (mods, message) {
-          final importedMods = mods.join(', ');
-          scaffoldMessenger.showSnackBar(
-            SnackBar(
-              content: Text(
-                loc.t(
-                  'marketplace.install_success',
-                  params: {
-                    'mods': importedMods.isEmpty
-                        ? loc.t('marketplace.install_success_default')
-                        : importedMods,
-                  },
-                ),
-              ),
-            ),
-          );
-          if (message != null && message.isNotEmpty) {
-            scaffoldMessenger.showSnackBar(SnackBar(content: Text(message)));
-          }
-        },
-        warning: (message) {
-          scaffoldMessenger.showSnackBar(SnackBar(content: Text(message)));
-        },
-        error: (message) {
-          scaffoldMessenger.showSnackBar(
-            SnackBar(
-              backgroundColor: Theme.of(context).colorScheme.error,
-              content: Text(message),
-            ),
-          );
-        },
+      final installResult = await _installArchive(
+        result.file,
+        knownMd5: result.md5,
+        provenance: OriginProvenance.downloaded,
       );
-    } catch (e) {
-      if (!dialogClosed && mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-        dialogClosed = true;
-      }
-      await progressDialog;
+      if (!mounted) return;
+      showInstallResult(context, installResult);
+    } on DownloadCancelledException {
+      // Not an error — the user asked for this. Say so quietly and move on.
+      closeDialog();
       if (!mounted) return;
       scaffoldMessenger.showSnackBar(
-        SnackBar(
-          backgroundColor: Theme.of(context).colorScheme.error,
-          content: Text(
-            loc.t('marketplace.download_failed', params: {'message': '$e'}),
-          ),
-        ),
+        SnackBar(content: Text(loc.t('marketplace.download_cancelled'))),
+      );
+    } catch (e) {
+      closeDialog();
+      if (!mounted) return;
+      final message = e is DownloadStalledException
+          ? loc.t('marketplace.download_stalled')
+          : loc.t('marketplace.download_failed', params: {'message': '$e'});
+      scaffoldMessenger.showSnackBar(
+        SnackBar(backgroundColor: errorColor, content: Text(message)),
       );
     } finally {
-      if (!dialogClosed && mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-        await progressDialog;
-      }
+      closeDialog();
+      await progressSub.cancel();
       progressNotifier.dispose();
     }
   }
 
-  Future<File> _downloadToTemporaryFile({
-    required Uri uri,
-    required String filename,
-    required ValueNotifier<double?> progressNotifier,
+  Future<InstallResult> _installArchive(
+    File archiveFile, {
+    String? knownMd5,
+    required OriginProvenance provenance,
   }) async {
-    final tempDir = await Directory.systemTemp.createTemp(
-      'zzz_marketplace_download_',
-    );
-    final targetFile = File(path.join(tempDir.path, filename));
-
-    final httpClient = HttpClient();
-    
-    // Fix SSL certificate issues on Windows and Linux
-    if (Platform.isWindows || Platform.isLinux) {
-      httpClient.badCertificateCallback = (cert, host, port) => true;
-    }
+    // Only set once the archive has been unpacked and is genuinely spent. The
+    // archive is a throwaway intermediate, but throwing it away *before* it has
+    // been extracted would leave the user with nothing to retry from.
+    var archiveConsumed = false;
 
     try {
-      final request = await httpClient.getUrl(uri);
-      final response = await request.close();
+      final config = await ApiService.getConfig();
+      final modsPath = config['mods_path'] ?? '';
 
-      if (response.statusCode >= 400) {
-        throw Exception('HTTP ${response.statusCode}');
+      // Inside the try, deliberately: as an early return above it, this skipped
+      // the cleanup in `finally` entirely and leaked the archive.
+      if (modsPath.isEmpty) {
+        return InstallResult.error(loc.t('marketplace.install_missing_path'));
       }
 
-      final sink = targetFile.openWrite();
-      final total = response.contentLength;
-      int received = 0;
-      int lastProgressUpdate = 0;
-      const progressUpdateThreshold = 262144; // Оновлювати прогрес кожні 256 KB
-
-      await response.listen(
-        (chunk) {
-          received += chunk.length;
-          sink.add(chunk);
-          
-          // Оновлювати прогрес не частіше ніж кожні 256 KB
-          if (received - lastProgressUpdate >= progressUpdateThreshold || received == total) {
-            if (total > 0) {
-              progressNotifier.value = min(received / total, 1);
-            } else {
-              progressNotifier.value = null;
-            }
-            lastProgressUpdate = received;
-          }
-        },
-        onDone: () {},
-        onError: (e) => throw e,
-        cancelOnError: true,
-      ).asFuture();
-
-      await sink.flush();
-      await sink.close();
-      progressNotifier.value = 1;
-
-      return targetFile;
-    } finally {
-      httpClient.close();
-    }
-  }
-
-  Future<String> _moveToDownloads(File file, String filename) async {
-    final downloadsDir = Directory(
-      path.join(PathHelper.getAppDataPath(), 'downloads'),
-    );
-    if (!await downloadsDir.exists()) {
-      await downloadsDir.create(recursive: true);
-    }
-
-    final targetPath = path.join(downloadsDir.path, filename);
-    await file.copy(targetPath);
-    
-    try {
-      if (file.parent.path.contains('zzz_marketplace_download_')) {
-        await file.parent.delete(recursive: true);
-      } else {
-        await file.delete();
-      }
-    } catch (e) {
-      print('Marketplace: Помилка видалення файлу після копіювання: $e');
-    }
-    
-    return targetPath;
-  }
-
-  Future<_InstallResult> _installArchive(File archiveFile) async {
-    print('Marketplace: Початок інсталяції архіву: ${archiveFile.path}');
-    print('Marketplace: Розмір файлу: ${await archiveFile.length()} bytes');
-    
-    final config = await ApiService.getConfig();
-    final modsPath = config['mods_path'] ?? '';
-
-    if (modsPath.isEmpty) {
-      print('Marketplace: Шлях до модів не налаштовано');
-      return _InstallResult.error(loc.t('marketplace.install_missing_path'));
-    }
-
-    try {
-      // Використовуємо ArchiveService для розархівування
       final extractionResult = await ArchiveService.extractArchive(
         archiveFile: archiveFile,
+        knownMd5: knownMd5,
       );
 
       if (!extractionResult.success) {
-        print('Marketplace: Помилка розархівування: ${extractionResult.error}');
-        return _InstallResult.error(
-          extractionResult.error ?? loc.t('marketplace.install_unsupported'),
+        // Keep the archive: the user can still extract it by hand, and telling
+        // them where it is turns a dead end into a workaround.
+        final reason =
+            extractionResult.error ?? loc.t('marketplace.install_unsupported');
+        final kept = loc.t(
+          'marketplace.archive_kept',
+          params: {'path': archiveFile.path},
         );
+        return InstallResult.error('$reason\n$kept');
       }
+      archiveConsumed = true;
 
       final directoriesToImport = List<String>.from(
         extractionResult.extractedFolders ?? const <String>[],
       );
 
       if (directoriesToImport.isEmpty) {
-        return _InstallResult.warning(loc.t('marketplace.install_empty'));
+        return InstallResult.warning(loc.t('marketplace.install_empty'));
       }
 
       // The character is often in the archive name rather than the inner folder
@@ -1020,7 +910,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       // folder next to a `previews` folder), let the user choose which folders
       // to install and whether they become separate mods or one combined mod.
       // Shared with the drag/drop and upload-button flow via resolveImportSelection.
-      if (!mounted) return _InstallResult.cancelled();
+      if (!mounted) return InstallResult.cancelled();
       final plan = await resolveImportSelection(
         context,
         directoriesToImport,
@@ -1030,13 +920,21 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         // Cancelled — drop the extracted temp folders (the archive itself is
         // cleaned up by the caller's `finally`).
         await _cleanupExtractedFolders(directoriesToImport);
-        return _InstallResult.cancelled();
+        return InstallResult.cancelled();
       }
       directoriesToImport
         ..clear()
         ..addAll(plan.folders);
       final combine = plan.combine;
       final combinedName = plan.combinedName;
+
+      // Every folder here came out of the same archive, so one seed covers all
+      // of them. `archiveMd5` is null when hashing failed — null-or-exact, and
+      // a miss simply costs us the fast path later.
+      final seed = ModOriginSeed(
+        provenance: provenance,
+        archiveMd5: extractionResult.archiveMd5,
+      );
 
       final ModManagerService modManager =
           await ApiService.getModManagerService();
@@ -1045,16 +943,20 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
               directoriesToImport,
               combinedName,
               detectionHint: archiveBaseName,
+              origin: seed,
             )
           : await modManager.importMods(
               directoriesToImport,
               detectionHints: {
                 for (final dir in directoriesToImport) dir: archiveBaseName,
               },
+              originSeeds: {
+                for (final dir in directoriesToImport) dir: seed,
+              },
             );
 
       if (importedMods.isEmpty) {
-        return _InstallResult.warning(loc.t('marketplace.install_duplicate'));
+        return InstallResult.warning(loc.t('marketplace.install_duplicate'));
       }
 
       final tagSummary = autoTags.entries
@@ -1065,17 +967,24 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       // strong sign the mod is incomplete (e.g. a broken multi-folder archive).
       final noIni = await ArchiveService.modsWithoutIni(modsPath, importedMods);
 
+      // Drained, so it is reported exactly once: nothing re-attempts an origin
+      // write, because it happens at ingest and never during a scan.
+      final originFailures = modManager.takeOriginWriteFailures();
+
       final messages = <String>[
         if (tagSummary.isNotEmpty)
           loc.t('marketplace.install_tags', params: {'tags': tagSummary}),
         if (noIni.isNotEmpty)
           loc.t('mods.snackbar.import_no_ini', params: {'mods': noIni.join(', ')}),
+        if (originFailures.isNotEmpty)
+          loc.t('mods.snackbar.origin_write_failed',
+              params: {'mods': originFailures.join(', ')}),
       ];
       final message = messages.isEmpty ? null : messages.join('\n');
 
-      return _InstallResult.success(importedMods, message: message);
+      return InstallResult.success(importedMods, message: message);
     } finally {
-      if (await archiveFile.exists()) {
+      if (archiveConsumed && await archiveFile.exists()) {
         await _safeDeleteArchive(archiveFile);
       }
     }
@@ -1098,109 +1007,19 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
     }
   }
 
+  /// Deletes a consumed archive — **the file, never a directory.**
+  ///
+  /// This used to delete `archiveFile.parent` recursively whenever the archive
+  /// wasn't in the system Downloads folder, which was survivable only because
+  /// every download got its own throwaway temp directory. Now that archives
+  /// share `<appData>/downloads`, that same line would wipe every other archive
+  /// and every in-flight partial download the first time it ran. One rule, no
+  /// special cases: remove the file we just consumed and nothing else.
   Future<void> _safeDeleteArchive(File archiveFile) async {
     try {
-      final platformService = PlatformServiceFactory.getInstance();
-      final systemDownloadsPath = platformService.getSystemDownloadsPath();
-      
-      final archiveParentPath = archiveFile.parent.path;
-      
-      final isInSystemDownloads = systemDownloadsPath != null && 
-          path.equals(archiveParentPath, systemDownloadsPath);
-      
-      if (isInSystemDownloads) {
-        await archiveFile.delete();
-        print('Marketplace: Видалено тільки файл з системної Downloads: ${archiveFile.path}');
-      } else {
-        await archiveFile.parent.delete(recursive: true);
-        print('Marketplace: Видалено тимчасову директорію: ${archiveFile.parent.path}');
-      }
+      await archiveFile.delete();
     } catch (e) {
-      print('Marketplace: Помилка видалення архіву: $e');
-    }
-  }
-
-  Future<void> _showProgressDialog(ValueNotifier<double?> progressNotifier) {
-    final completer = Completer<void>();
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return ValueListenableBuilder<double?>(
-          valueListenable: progressNotifier,
-          builder: (context, value, _) {
-            return AlertDialog(
-              title: Text(loc.t('marketplace.downloading')),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (value != null)
-                    LinearProgressIndicator(value: value)
-                  else
-                    const LinearProgressIndicator(),
-                  const SizedBox(height: 16),
-                  Text(
-                    value != null
-                        ? '${(value * 100).clamp(0, 100).toStringAsFixed(0)}%'
-                        : loc.t('marketplace.download_progress_unknown'),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    ).then((_) => completer.complete());
-    return completer.future;
-  }
-
-  String _sanitizeFilename(String input, {required String fallback}) {
-    final sanitized = input.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    final trimmed = sanitized.trim();
-    if (trimmed.isEmpty) {
-      return fallback;
-    }
-    return trimmed;
-  }
-}
-
-class _InstallResult {
-  final List<String> mods;
-  final String? message;
-  final String? errorMessage;
-
-  const _InstallResult._({required this.mods, this.message, this.errorMessage});
-
-  factory _InstallResult.success(List<String> mods, {String? message}) =>
-      _InstallResult._(mods: mods, message: message);
-
-  factory _InstallResult.warning(String message) =>
-      _InstallResult._(mods: const [], message: message);
-
-  factory _InstallResult.error(String message) =>
-      _InstallResult._(mods: const [], errorMessage: message);
-
-  /// No-op result (e.g. the user cancelled the folder-selection dialog):
-  /// [when] renders nothing.
-  factory _InstallResult.cancelled() => const _InstallResult._(mods: []);
-
-  void when({
-    required void Function(List<String> mods, String? message) success,
-    required void Function(String message) warning,
-    required void Function(String message) error,
-  }) {
-    if (errorMessage != null) {
-      error(errorMessage!);
-      return;
-    }
-
-    if (mods.isNotEmpty) {
-      success(mods, message);
-      return;
-    }
-
-    if (message != null) {
-      warning(message!);
+      print('Marketplace: could not delete archive ${archiveFile.path}: $e');
     }
   }
 }

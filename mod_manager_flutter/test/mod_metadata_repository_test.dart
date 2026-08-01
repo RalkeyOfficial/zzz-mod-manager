@@ -3,6 +3,9 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
 import 'package:mod_manager_flutter/models/character_info.dart';
+import 'package:mod_manager_flutter/models/mod_ingest.dart';
+import 'package:mod_manager_flutter/models/mod_origin.dart';
+import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/mod_metadata_repository.dart';
 
 /// In-memory stand-in for the `config.json` character-tag mirror.
@@ -125,7 +128,8 @@ void main() {
         ..writeAsStringSync(jsonEncode({
           'schema_version': 1,
           'character_id': 'miyabi',
-          'origin': {'mod_id': 42},
+          'vendor_x': {'id': 42},
+          'origin': {'provenance': 'downloaded', 'mod_id': 42},
         }));
       // A stale config tag must not override what's on disk.
       await config.setModCharacterTag('Tracked Mod', 'ellen');
@@ -133,7 +137,9 @@ void main() {
       final meta = await repo.loadOrMigrate('Tracked Mod', dir.path);
 
       expect(meta.characterId, 'miyabi');
-      expect(meta.extra['origin'], {'mod_id': 42});
+      expect(meta.extra['vendor_x'], {'id': 42});
+      expect(meta.origin?.modId, 42, reason: 'typed origin parsed off disk');
+      expect(meta.origin?.provenance, OriginProvenance.downloaded);
     });
 
     test('is idempotent — a second pass changes nothing', () async {
@@ -171,7 +177,8 @@ void main() {
           'schema_version': 1,
           'description': 'old text',
           'source_url': 'https://gamebanana.com/mods/1',
-          'origin': {'mod_id': 7},
+          'vendor_x': {'id': 7},
+          'origin': {'provenance': 'downloaded', 'mod_id': 7},
         }));
 
       final ok = await repo.save(ModInfo(
@@ -186,7 +193,13 @@ void main() {
       expect(raw.containsKey('description'), isFalse);
       expect(raw.containsKey('source_url'), isFalse);
       expect(raw.containsKey('character_id'), isFalse, reason: 'placeholder must not persist');
-      expect(raw['origin'], {'mod_id': 7}, reason: 'machine-owned survives a user edit');
+      expect(raw['vendor_x'], {'id': 7}, reason: 'unknown key survives a user edit');
+      expect(
+        (raw['origin'] as Map)['mod_id'],
+        7,
+        reason: 'the typed origin block survives a user edit too — this is the '
+            'exact regression that would silently untrack an installed mod',
+      );
     });
 
     test('stores gallery paths relative and drops ones outside the mod folder', () async {
@@ -241,14 +254,130 @@ void main() {
         ..createSync(recursive: true)
         ..writeAsStringSync(jsonEncode({
           'schema_version': 1,
-          'origin': {'mod_id': 99},
+          'vendor_x': {'id': 99},
+          'origin': {'provenance': 'imported_archive', 'mod_id': 99},
         }));
 
       await repo.setCharacter('Origin Mod', 'ellen');
 
       final raw = sidecarOf('Origin Mod')!;
       expect(raw['character_id'], 'ellen');
-      expect(raw['origin'], {'mod_id': 99});
+      expect(raw['vendor_x'], {'id': 99});
+      expect((raw['origin'] as Map)['mod_id'], 99);
     });
+  });
+
+  group('recordOrigin', () {
+    ModOrigin origin({
+      OriginProvenance provenance = OriginProvenance.importedArchive,
+      String? md5 = 'aaaa',
+    }) =>
+        ModOrigin(
+          provenance: provenance,
+          archiveMd5: md5,
+          ingest: const ModIngest(folders: ['Mod']),
+          installedAt: DateTime.utc(2026, 8, 1),
+        );
+
+    test('writes an origin block into a folder with no sidecar', () async {
+      makeMod('Fresh Mod');
+
+      expect(await repo.recordOrigin('Fresh Mod', origin()), isTrue);
+
+      final raw = sidecarOf('Fresh Mod')!;
+      expect((raw['origin'] as Map)['provenance'], 'imported_archive');
+      expect((raw['origin'] as Map)['archive_md5'], 'aaaa');
+    });
+
+    test("drops a stranger's origin block but keeps their user data", () async {
+      // The rule this method exists for. `_copyDirectory` copies a source
+      // folder's `.zzz-mod-manager/` wholesale, so a mod passed around on
+      // Discord arrives carrying someone else's origin — a claim of `exact`
+      // confidence about a remote file that we never made, on the one field
+      // that gates unattended updates.
+      final dir = makeMod('Shared Mod');
+      File(path.join(dir.path, '.zzz-mod-manager', 'metadata.json'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync(jsonEncode({
+          'schema_version': 1,
+          'description': 'notes from the author',
+          'tags': ['4k', 'swimsuit'],
+          'images': ['Preview.png'],
+          'origin': {
+            'source': 'gamebanana',
+            'mod_id': 999,
+            'mod_id_confidence': 'exact',
+            'file_id': 555,
+            'version_confidence': 'exact',
+            'provenance': 'downloaded',
+          },
+        }));
+
+      expect(
+        await repo.recordOrigin(
+          'Shared Mod',
+          origin(provenance: OriginProvenance.importedFolder, md5: null),
+        ),
+        isTrue,
+      );
+
+      final raw = sidecarOf('Shared Mod')!;
+      final written = raw['origin'] as Map;
+
+      // The foreign identity is gone entirely...
+      expect(written.containsKey('mod_id'), isFalse);
+      expect(written.containsKey('file_id'), isFalse);
+      expect(written.containsKey('source'), isFalse);
+      expect(written['provenance'], 'imported_folder');
+      // ...and with it every claim of exactness.
+      expect(written.containsKey('mod_id_confidence'), isFalse);
+      expect(written.containsKey('version_confidence'), isFalse);
+
+      final parsed = ModOrigin.fromJson(written)!;
+      expect(parsed.allowsUnattendedUpdate, isFalse);
+
+      // But the user-facing fields survive — those travelling with a shared
+      // folder is the whole point of a sidecar.
+      expect(raw['description'], 'notes from the author');
+      expect(raw['tags'], ['4k', 'swimsuit']);
+      expect(raw['images'], ['Preview.png']);
+    });
+
+    test('a later user edit does not erase the origin block', () async {
+      makeMod('Tracked');
+      await repo.recordOrigin('Tracked', origin());
+
+      await repo.save(ModInfo(
+        id: 'Tracked',
+        name: 'Tracked',
+        characterId: 'ellen',
+        isActive: false,
+        description: 'my notes',
+      ));
+
+      final raw = sidecarOf('Tracked')!;
+      expect(raw['description'], 'my notes');
+      expect((raw['origin'] as Map)['archive_md5'], 'aaaa');
+    });
+
+    test('returns false when no library is configured', () async {
+      final orphan = ModMetadataRepository(config, modsPath: () => null);
+      expect(await orphan.recordOrigin('Any', origin()), isFalse);
+    });
+
+    test('never recreates a mod folder that no longer exists', () async {
+      // The ghost-folder guard: a mod renamed out from under us must not
+      // rematerialize as a directory holding only our sidecar.
+      expect(await repo.recordOrigin('Vanished', origin()), isFalse);
+      expect(Directory(path.join(modsDir.path, 'Vanished')).existsSync(), isFalse);
+    });
+
+    test('returns false for a read-only mod folder', () async {
+      final dir = makeMod('Locked');
+      Process.runSync('chmod', ['a-w', dir.path]);
+      addTearDown(() => Process.runSync('chmod', ['u+w', dir.path]));
+
+      expect(await repo.recordOrigin('Locked', origin()), isFalse);
+    }, skip: Platform.isWindows ? 'chmod is POSIX-only' : false);
   });
 }

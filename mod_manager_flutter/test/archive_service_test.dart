@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
+import 'package:mod_manager_flutter/services/archive_hash.dart';
 import 'package:mod_manager_flutter/services/archive_service.dart';
 
 /// Builds a `.zip` at [zipPath] from a map of archive-relative path -> contents.
@@ -30,6 +31,22 @@ bool _hasFileNamed(String dir, String fileName) => Directory(dir)
     .listSync(recursive: true)
     .whereType<File>()
     .any((f) => path.basename(f.path) == fileName);
+
+/// Path to a 7-Zip binary, or null when none is installed.
+final String? _sevenZip = () {
+  for (final candidate in ['7z', '7za', '7zr']) {
+    try {
+      final which = Process.runSync('which', [candidate]);
+      if (which.exitCode == 0) {
+        final found = which.stdout.toString().trim();
+        if (found.isNotEmpty) return found;
+      }
+    } catch (_) {
+      // `which` missing (Windows); the test skips.
+    }
+  }
+  return null;
+}();
 
 void main() {
   late Directory tmp;
@@ -136,5 +153,85 @@ void main() {
       expect(_hasFileNamed(folders.single, 'Foo.ini'), isTrue);
       expect(_hasFileNamed(folders.single, 'inner.txt'), isTrue);
     });
+  });
+
+  group('archive fingerprint', () {
+    // The archive is deleted after a successful install and a zip cannot be
+    // reproduced byte-for-byte from its extracted files, so this hash is the
+    // only residue that survives. If it isn't taken here, it is gone.
+    test('a successful extraction reports the archive md5', () async {
+      final zip = _makeZip(path.join(tmp.path, 'Mod.zip'), {
+        'Mod/mod.ini': '[Key]',
+      });
+      final dest = Directory(path.join(tmp.path, 'out'))..createSync();
+
+      final result = await ArchiveService.extractArchive(
+        archiveFile: zip,
+        destinationDir: dest,
+      );
+
+      expect(result.success, isTrue);
+      expect(result.archiveMd5, isNotNull);
+      expect(result.archiveMd5, await md5OfFile(zip));
+    });
+
+    test('knownMd5 is returned verbatim and never verified', () async {
+      // Documents the contract as much as it tests it: the download path has
+      // already hashed the bytes in-stream, and re-reading a 1.24 GB file to
+      // "check" that would defeat the entire point of passing it.
+      final zip = _makeZip(path.join(tmp.path, 'Mod.zip'), {
+        'Mod/mod.ini': '[Key]',
+      });
+      final dest = Directory(path.join(tmp.path, 'out'))..createSync();
+      const wrongButWellFormed = '00000000000000000000000000000000';
+
+      final result = await ArchiveService.extractArchive(
+        archiveFile: zip,
+        destinationDir: dest,
+        knownMd5: wrongButWellFormed,
+      );
+
+      expect(result.archiveMd5, wrongButWellFormed);
+      expect(result.archiveMd5, isNot(await md5OfFile(zip)));
+    });
+
+    test('a failed extraction carries no md5', () async {
+      final notAnArchive = File(path.join(tmp.path, 'mod.tar.gz'))
+        ..writeAsStringSync('nope');
+      final dest = Directory(path.join(tmp.path, 'out'))..createSync();
+
+      final result = await ArchiveService.extractArchive(
+        archiveFile: notAnArchive,
+        destinationDir: dest,
+      );
+
+      expect(result.success, isFalse);
+      expect(result.archiveMd5, isNull);
+    });
+
+    test('works for 7z too, where bytes never enter Dart', () async {
+      // The reason the hash is taken in extractArchive rather than in the zip
+      // decoder: 7z/rar are extracted by shelling out, so a hash computed
+      // inside _extractZip would silently cover only zips.
+      final source = Directory(path.join(tmp.path, 'src', 'Mod'))
+        ..createSync(recursive: true);
+      File(path.join(source.path, 'mod.ini')).writeAsStringSync('[Key]');
+
+      final archivePath = path.join(tmp.path, 'Mod.7z');
+      final made = Process.runSync(
+        _sevenZip!,
+        ['a', archivePath, path.join(tmp.path, 'src', 'Mod')],
+      );
+      expect(made.exitCode, 0, reason: made.stderr.toString());
+
+      final dest = Directory(path.join(tmp.path, 'out'))..createSync();
+      final result = await ArchiveService.extractArchive(
+        archiveFile: File(archivePath),
+        destinationDir: dest,
+      );
+
+      expect(result.success, isTrue, reason: result.error);
+      expect(result.archiveMd5, await md5OfFile(File(archivePath)));
+    }, skip: _sevenZip == null ? '7z not installed' : null);
   });
 }

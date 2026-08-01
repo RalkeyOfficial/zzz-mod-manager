@@ -102,17 +102,31 @@ UI, no badges, minimal styling.
   with it rather than being deferred — they were a few lines each once the seam
   existed. The mod-page-url parser went to `utils/gamebanana_url.dart` so §7.3
   can use it offline.
-- [ ] **§5 (basic)** — extract the inline download code into a service;
+- [x] **§5 (basic)** — extract the inline download code into a service;
   download → extract → auto-tag. Single fixed flow, no queue yet — but **resume and
   a stall timeout are in scope for M1**, not deferred: §0 measured 1.24 GB files and
   a CDN node serving at 0.08 MB/s, so a download that survives an interruption is
   table stakes rather than polish. Hash the archive in-stream on every ingest path
   (§7.8) — it's unrecoverable afterwards, so this has to land with the flow itself
   even though nothing reads it until M2.
-- [ ] **§3 (write side)** — record the origin block at install time (source,
+  **Done.** `services/download/` — resume via `Range`/`If-Range` on the original
+  `/dl/` link, stall timeout (never total-duration), socket backpressure,
+  cancellation, resume across an app restart, and `<appData>/downloads` as the
+  single landing spot. The SSL bypass is gone: `package:http`-style clients aside,
+  the new transport simply never sets `badCertificateCallback`. **Blocker found
+  and fixed on the way:** `_safeDeleteArchive` deleted `archiveFile.parent`
+  *recursively*, which was survivable only while every download had its own temp
+  dir — against a shared downloads folder it would have wiped every other archive
+  and every in-flight partial on the first use.
+- [x] **§3 (write side)** — record the origin block at install time (source,
   remote mod id, file id, version string + label, date, hash). *Written now,
   read in M2.* Ships **with the confidence fields from day one** (§7.2) —
   otherwise M1's own format needs migrating later.
+  **Done**, on every ingest path, with the drop-inbound-origin rule enforced by
+  construction. Two corrections to what this doc assumed, both applied — see
+  below: it ships as **schema v2** and **`ModInfo` gains nothing**. Note the honest limit: the
+  webview yields a CDN url and no mod id, so today every block lands with both
+  confidences `unknown`. Identity arrives with §1.
 - [x] **§3 (prerequisite)** — make the sidecar **round-trip unknown keys** and
   treat machine-owned fields (`origin`, `schema_version`) as preserved-from-disk
   rather than sourced from `ModInfo`. Must land **before** anything writes an origin
@@ -278,8 +292,17 @@ probing, which is one more reason to keep our client tiny.
 ## 3. Mod metadata & origin model
 
 Today `ModMetadata` only has a free-form `sourceUrl` (user-editable) and no
-version/origin data. Extend the per-mod metadata (and `ModInfo`) with an
-**origin block**, recorded at install time:
+version/origin data. Extend the per-mod metadata with an **origin block**,
+recorded at install time.
+
+> **Correction (applied):** an earlier draft of this line said "and `ModInfo`".
+> It must **not** go there. `docs/metadata-schema.md` §2 is explicit that routing
+> a machine-owned field through the runtime view is exactly what makes it
+> vulnerable — a later unrelated edit rebuilds the sidecar from `ModInfo` and
+> silently erases the block. `ModInfo` gains nothing; §8's hygiene note to add
+> origin fields to it is void for the same reason.
+
+The block:
 
 - [ ] **Source service** (e.g. `gamebanana`) — future-proofs for other sources.
 - [ ] **Remote mod id** (GameBanana `_idRow`) — stable handle to re-query; more
@@ -703,10 +726,16 @@ GameBanana publishes an md5 per file (`_sMd5Checksum` in `_aFiles`). So hashing 
 *manually supplied* archive — not only ones we downloaded — can identify the exact
 file the user has, which is the one path to exactness for hand-imported mods.
 
-- [ ] **Hash every archive we ingest**, from any path: in-app download, drag-drop,
-  file picker. Stream the hash during the read that extraction already performs —
-  no second pass, and it works for `.rar`/`.7z` too, since hashing bytes doesn't
-  care that an external `7z` does the extracting.
+- [x] **Hash every archive we ingest**, from any path: in-app download, drag-drop,
+  file picker. **Done** in `ArchiveService.extractArchive`, the one point both
+  format branches meet with the file in hand.
+  *Correction to the original cost claim:* "no second pass" holds only for `.zip`,
+  where `_extractZip` already has the bytes in memory. `.rar`/`.7z` are extracted
+  by shelling out, so their bytes never enter Dart and there is nothing to
+  piggyback on — which is also precisely why the hash is taken in `extractArchive`
+  rather than in the zip decoder, where it would have silently covered zips only.
+  Honest cost: **free on download** (hashed in-stream, passed in as `knownMd5`),
+  **one extra streamed read on manual import**.
 - [ ] **Hash before the archive is deleted** (§5 discards it after extraction).
   The hash is the cheap 32-char residue that survives that deletion — it cannot be
   recovered later, because zip output isn't reproducible from extracted files.

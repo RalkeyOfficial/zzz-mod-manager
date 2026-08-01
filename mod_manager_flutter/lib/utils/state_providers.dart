@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/character_info.dart';
 import '../services/api_service.dart';
+import '../services/download/download_service.dart';
 import '../services/gamebanana/gamebanana_client.dart';
 import '../services/mod_manager_service.dart';
 
@@ -24,6 +25,17 @@ final gameBananaClientProvider = Provider<GameBananaClient>((ref) {
   final client = GameBananaClient();
   ref.onDispose(client.close);
   return client;
+});
+
+/// The mod-archive downloader.
+///
+/// Shared rather than per-screen so the resume bookkeeping in
+/// `<appData>/downloads` has a single owner, and so a download survives the
+/// user navigating away from the screen that started it.
+final downloadServiceProvider = Provider<DownloadService>((ref) {
+  final service = DownloadService();
+  ref.onDispose(service.close);
+  return service;
 });
 
 // Zoom scale provider

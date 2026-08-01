@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
 import 'package:mod_manager_flutter/models/mod_metadata.dart';
+import 'package:mod_manager_flutter/models/mod_origin.dart';
+import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/mod_metadata_service.dart';
 import 'package:mod_manager_flutter/utils/zzz_characters.dart';
 
@@ -13,12 +15,33 @@ import 'package:mod_manager_flutter/utils/zzz_characters.dart';
 /// so it can only police fields it can see — a conditionally-emitted field
 /// (most of them) left out of here is invisible to it.
 const _fullyPopulatedJson = <String, dynamic>{
-  'schema_version': 1,
+  'schema_version': 2,
   'description': 'd',
   'source_url': 'u',
   'tags': ['t'],
   'character_id': 'ellen',
   'images': ['i'],
+  'origin': {
+    'source': 'gamebanana',
+    'mod_id': 531649,
+    'mod_id_confidence': 'exact',
+    'file_id': 1491924,
+    'version': '1.0',
+    'version_label': 'Full Mod',
+    'version_confidence': 'exact',
+    'provenance': 'downloaded',
+    'ingest': {
+      'mode': 'separate',
+      'folders': ['Ellen Swimsuit'],
+      'sibling_group': 'a3f1c9d2e4b5',
+    },
+    'installed_at': '2026-08-01T12:00:00.000Z',
+    'installed_at_is_proxy': true,
+    'baseline_remote_date': '2026-07-01T00:00:00.000Z',
+    'archive_md5': '9e107d9d372bb6826bd81d3542a419d6',
+    'tracking': 'off',
+    'remote_missing': true,
+  },
 };
 
 void main() {
@@ -57,7 +80,16 @@ void main() {
       expect(const ModMetadata(tags: ['x']).isEmpty, isFalse);
       expect(const ModMetadata(characterId: 'anby').isEmpty, isFalse);
       // Unknown keys are someone else's data — worth persisting.
-      expect(const ModMetadata(extra: {'origin': 1}).isEmpty, isFalse);
+      expect(const ModMetadata(extra: {'vendor_x': 1}).isEmpty, isFalse);
+      // An origin-only sidecar is worth writing too. Not covered by the
+      // knownKeys test below, and without it loadOrMigrate silently refuses to
+      // persist a freshly-recorded origin.
+      expect(
+        const ModMetadata(
+          origin: ModOrigin(provenance: OriginProvenance.importedFolder),
+        ).isEmpty,
+        isFalse,
+      );
     });
 
     test('toJson never resurrects a known key from extra', () {
@@ -81,11 +113,16 @@ void main() {
 
       final meta = ModMetadata.fromJson(Map.of(_fullyPopulatedJson));
       expect(meta.extra, isEmpty, reason: 'a typed key leaked into extra');
-      expect(meta.toJson().keys.toSet(), ModMetadata.knownKeys);
+      expect(
+        meta.toJson().keys.toSet(),
+        ModMetadata.knownKeys,
+        reason: 'a typed field that failed to parse emits nothing and silently '
+            'drops out of this set — check its fromJson against the fixture',
+      );
     });
 
     test('extra is unmodifiable on every path it arrives through', () {
-      final fromRead = ModMetadata.fromJson({'origin': {'mod_id': 1}});
+      final fromRead = ModMetadata.fromJson({'vendor_x': {'id': 1}});
       expect(() => fromRead.extra['x'] = 1, throwsUnsupportedError);
       expect(() => const ModMetadata().extra['x'] = 1, throwsUnsupportedError);
       expect(
@@ -95,11 +132,16 @@ void main() {
     });
 
     test('replaceUserFields clears user fields but keeps machine-owned and unknown', () {
+      // The exact failure this design exists to prevent: install from the
+      // marketplace, sidecar gains an origin block, user edits the description
+      // a week later, save rebuilds metadata from ModInfo (which has no origin
+      // field) — and the mod silently reverts to untracked.
       final onDisk = ModMetadata.fromJson({
         'schema_version': 7,
         'description': 'old',
         'character_id': 'ellen',
-        'origin': {'mod_id': 123},
+        'origin': {'provenance': 'downloaded', 'mod_id': 123},
+        'vendor_x': {'id': 1},
       });
       final saved = onDisk.replaceUserFields(
         description: null,
@@ -112,7 +154,13 @@ void main() {
       expect(json.containsKey('description'), isFalse, reason: 'clearing must work');
       expect(json.containsKey('character_id'), isFalse);
       expect(json['schema_version'], 7, reason: 'machine-owned: carried from disk');
-      expect(json['origin'], {'mod_id': 123}, reason: 'unknown: carried from disk');
+      expect(json['vendor_x'], {'id': 1}, reason: 'unknown: carried from disk');
+      expect(
+        (json['origin'] as Map)['mod_id'],
+        123,
+        reason: 'typed machine-owned field survives a user edit',
+      );
+      expect((json['origin'] as Map)['provenance'], 'downloaded');
     });
 
     test('replaceUserFields never lets the "unknown" placeholder reach disk', () {
@@ -131,15 +179,70 @@ void main() {
       }
     });
 
+
+    group('schema_version', () {
+      test('an absent version means the file predates versioning', () {
+        // Not "current". The key has been written on every save since v1, so
+        // its absence dates the file — defaulting to current would stamp the
+        // newest format onto the oldest files and make the marker useless.
+        final meta = ModMetadata.fromJson({'description': 'old file'});
+        expect(meta.schemaVersion, 1);
+        expect(ModMetadata.assumedSchemaVersion, 1);
+      });
+
+      test('an ordinary save does not touch the version', () {
+        // A user editing a description must not silently restamp the format.
+        final onDisk = ModMetadata.fromJson({'schema_version': 1, 'tags': ['a']});
+        final saved = onDisk.replaceUserFields(
+          description: 'new',
+          sourceUrl: null,
+          tags: const [],
+          characterId: null,
+          images: const [],
+        );
+        expect(saved.schemaVersion, 1);
+      });
+
+      test('writing an origin advances the version to match the content', () {
+        // Leaving a v1 stamp on a file that now holds an origin block would
+        // make the marker say the opposite of what is true.
+        final onDisk = ModMetadata.fromJson({'schema_version': 1});
+        final withOrigin = onDisk.withOrigin(
+          const ModOrigin(provenance: OriginProvenance.downloaded),
+        );
+        expect(withOrigin.schemaVersion, ModMetadata.currentSchemaVersion);
+        expect(withOrigin.toJson()['schema_version'], 2);
+      });
+
+      test('a newer build\'s version is never downgraded', () {
+        final fromFuture = ModMetadata.fromJson({'schema_version': 7});
+        final withOrigin = fromFuture.withOrigin(
+          const ModOrigin(provenance: OriginProvenance.downloaded),
+        );
+        expect(withOrigin.schemaVersion, 7);
+      });
+
+      test('clearing an origin leaves the version alone', () {
+        // The file has been through a v2 build; saying so stays true.
+        final tracked = ModMetadata.fromJson({
+          'schema_version': 2,
+          'origin': {'provenance': 'downloaded'},
+        });
+        expect(tracked.withOrigin(null).schemaVersion, 2);
+      });
+    });
+
     test('copyWith preserves unknown keys', () {
       // The setModCharacter path: read from disk, adjust one field, write back.
       final onDisk = ModMetadata.fromJson({
         'schema_version': 1,
-        'origin': {'mod_id': 456},
+        'vendor_x': {'id': 456},
+        'origin': {'provenance': 'imported_archive', 'mod_id': 456},
       });
       final json = onDisk.copyWith(characterId: 'miyabi').toJson();
       expect(json['character_id'], 'miyabi');
-      expect(json['origin'], {'mod_id': 456});
+      expect(json['vendor_x'], {'id': 456});
+      expect((json['origin'] as Map)['mod_id'], 456);
     });
   });
 
@@ -180,7 +283,9 @@ void main() {
           'description': 'hello',
           'tags': ['a'],
           'images': <String>[],
-          'origin': {'source': 'gamebanana', 'mod_id': 123456},
+          // A map-valued unknown key as well as a scalar one: nested structures
+          // are the shape most likely to be mangled by a naive re-encode.
+          'ratings': {'sc': 'Sexual Content'},
           'vendor_x': 'whatever',
         }));
 
@@ -188,14 +293,14 @@ void main() {
       expect(read, isNotNull);
       expect(read!.description, 'hello');
       expect(read.extra, {
-        'origin': {'source': 'gamebanana', 'mod_id': 123456},
+        'ratings': {'sc': 'Sexual Content'},
         'vendor_x': 'whatever',
       });
 
       expect(await service.write(tmp.path, read), isTrue);
 
       final raw = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
-      expect(raw['origin'], {'source': 'gamebanana', 'mod_id': 123456});
+      expect(raw['ratings'], {'sc': 'Sexual Content'});
       expect(raw['vendor_x'], 'whatever');
       expect(raw['description'], 'hello');
       expect(raw['tags'], ['a']);
@@ -207,14 +312,14 @@ void main() {
       // are lost. See docs/metadata-schema.md §4.
       final file = File(path.join(tmp.path, '.zzz-mod-manager', 'metadata.json'))
         ..createSync(recursive: true)
-        ..writeAsStringSync('{ not valid json, "origin": {"mod_id": 1}');
+        ..writeAsStringSync('{ not valid json, "vendor_x": {"id": 1}');
 
       expect(await service.read(tmp.path), isNull);
       expect(await service.write(tmp.path, const ModMetadata(description: 'new')), isTrue);
 
       final raw = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
       expect(raw['description'], 'new');
-      expect(raw.containsKey('origin'), isFalse);
+      expect(raw.containsKey('vendor_x'), isFalse);
     });
 
     test('never recreates a mod folder that no longer exists', () async {

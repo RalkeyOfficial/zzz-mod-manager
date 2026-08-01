@@ -2,23 +2,44 @@ import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:path/path.dart' as path;
 
+import 'archive_hash.dart';
+
 class ArchiveExtractionResult {
   final bool success;
   final String? error;
   final List<String>? extractedFolders;
 
+  /// md5 of the archive these folders came out of, when it could be computed.
+  ///
+  /// Carried here because this is the last moment it exists: the archive is
+  /// deleted once extracted, and a zip cannot be reproduced byte-for-byte from
+  /// its extracted contents. Recording it lets us later say *which* published
+  /// file a local install came from — including for archives the user supplied
+  /// by hand, which is otherwise unknowable.
+  ///
+  /// A **matching key only**, never an integrity or authenticity claim; see
+  /// `services/archive_hash.dart`.
+  final String? archiveMd5;
+
   const ArchiveExtractionResult({
     required this.success,
     this.error,
     this.extractedFolders,
+    this.archiveMd5,
   });
 
-  factory ArchiveExtractionResult.successResult(List<String> folders) =>
+  factory ArchiveExtractionResult.successResult(
+    List<String> folders, {
+    String? archiveMd5,
+  }) =>
       ArchiveExtractionResult(
         success: true,
         extractedFolders: folders,
+        archiveMd5: archiveMd5,
       );
 
+  /// Deliberately carries no md5: a failed extraction installs nothing, so
+  /// there is no sidecar for a hash to be attached to.
   factory ArchiveExtractionResult.failure(String error) =>
       ArchiveExtractionResult(
         success: false,
@@ -68,9 +89,23 @@ class ArchiveService {
     return missing;
   }
 
+  /// Extracts [archiveFile] and reports the top-level folders to import.
+  ///
+  /// Also fingerprints the archive — see [ArchiveExtractionResult.archiveMd5].
+  /// The hash is taken **here**, at the one point both format branches meet
+  /// with the file still in hand: `_extractZip` already holds the whole archive
+  /// in memory and would be the tempting place, but `_extractWith7Zip` shells
+  /// out and rar/7z bytes never enter Dart, so hashing there would silently
+  /// cover zips only.
+  ///
+  /// Pass [knownMd5] when the bytes were already hashed as they streamed past
+  /// (the download path), to avoid re-reading a file that can reach 1.24 GB. It
+  /// is trusted verbatim and never verified: there is nothing here to verify it
+  /// against, and re-reading to "check" would defeat the point of passing it.
   static Future<ArchiveExtractionResult> extractArchive({
     required File archiveFile,
     Directory? destinationDir,
+    String? knownMd5,
   }) async {
     try {
       print('ArchiveService: Розархівування ${archiveFile.path}');
@@ -98,6 +133,11 @@ class ArchiveService {
         return ArchiveExtractionResult.failure(error);
       }
 
+      // After the success check, so a failed extraction (e.g. no 7-Zip
+      // installed) doesn't pay for a full read of a very large archive.
+      // Extraction only reads the file, so it is still intact and hashable.
+      final md5 = knownMd5 ?? await md5OfFile(archiveFile);
+
       final directories = await _prepareDirectoriesForImport(
         tempExtractDir,
         archiveFile,
@@ -109,7 +149,7 @@ class ArchiveService {
       }
 
       print('ArchiveService: Знайдено ${directories.length} папок');
-      return ArchiveExtractionResult.successResult(directories);
+      return ArchiveExtractionResult.successResult(directories, archiveMd5: md5);
     } catch (e) {
       print('ArchiveService: Виняток: $e');
       return ArchiveExtractionResult.failure('Помилка розархівування: $e');

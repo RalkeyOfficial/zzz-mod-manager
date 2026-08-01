@@ -1,4 +1,5 @@
 import '../utils/zzz_characters.dart';
+import 'mod_origin.dart';
 
 /// Portable, per-mod metadata stored inside the mod's own folder
 /// (`<mod>/.zzz-mod-manager/metadata.json`) so it travels with the mod when it
@@ -21,6 +22,7 @@ class ModMetadata {
     'tags',
     'character_id',
     'images',
+    'origin',
   };
 
   /// Schema version, so the on-disk format can evolve without breaking old files.
@@ -53,7 +55,39 @@ class ModMetadata {
   /// it throws rather than silently editing a map shared with another instance.
   final Map<String, dynamic> extra;
 
-  static const int currentSchemaVersion = 1;
+  /// Where this mod came from — **machine-owned**, never sourced from `ModInfo`.
+  ///
+  /// Written by the app at ingest time and carried across saves from the file on
+  /// disk. See [replaceUserFields] for why that distinction is structural rather
+  /// than a convention.
+  final ModOrigin? origin;
+
+  /// **2** — the format that carries the `origin` block.
+  ///
+  /// Strictly, `origin` is an additive key and older builds tolerate it (they
+  /// round-trip unrecognised keys through [extra] rather than stripping them),
+  /// so nothing *breaks* without a bump. It is here because the version earns
+  /// its keep as a statement about what wrote the file: with it, a sidecar
+  /// saying `1` means "written before origin existed" and one saying `2` with no
+  /// `origin` means "written by a build that knows about origin — this mod is
+  /// genuinely untracked". Those are different facts, and only the version
+  /// distinguishes them.
+  ///
+  /// The rest of this release's metadata work — notably the offline backfill —
+  /// lands as **2** as well. Version numbers describe formats users can actually
+  /// receive, and nothing here has shipped yet, so the whole unreleased cycle is
+  /// one format: a library goes from 1 to 2 in a single step and never observes
+  /// anything in between. Bump again only after this ships.
+  static const int currentSchemaVersion = 2;
+
+  /// What a sidecar with no `schema_version` at all is assumed to be.
+  ///
+  /// Pinned to the literal first format, **not** [currentSchemaVersion]: the key
+  /// has been written on every save since v1, so its absence means the file
+  /// predates versioning entirely. Defaulting it to "current" would stamp the
+  /// newest format onto the oldest files — precisely backwards, and it would
+  /// quietly make the version untrustworthy for the one job it has.
+  static const int assumedSchemaVersion = 1;
 
   const ModMetadata({
     this.schemaVersion = currentSchemaVersion,
@@ -63,6 +97,7 @@ class ModMetadata {
     this.characterId,
     this.images = const [],
     this.extra = const {},
+    this.origin,
   });
 
   /// True when there is nothing worth persisting. Unknown keys count as content:
@@ -74,6 +109,7 @@ class ModMetadata {
       tags.isEmpty &&
       (characterId == null || characterId!.isEmpty) &&
       images.isEmpty &&
+      origin == null &&
       extra.isEmpty;
 
   factory ModMetadata.fromJson(Map<String, dynamic> json) {
@@ -82,12 +118,13 @@ class ModMetadata {
       if (!knownKeys.contains(entry.key)) extra[entry.key] = entry.value;
     }
     return ModMetadata(
-      schemaVersion: json['schema_version'] as int? ?? currentSchemaVersion,
+      schemaVersion: json['schema_version'] as int? ?? assumedSchemaVersion,
       description: json['description'] as String?,
       sourceUrl: json['source_url'] as String?,
       tags: (json['tags'] as List?)?.map((e) => e.toString()).toList() ?? const [],
       characterId: json['character_id'] as String?,
       images: (json['images'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      origin: ModOrigin.fromJson(json['origin']),
       extra: Map.unmodifiable(extra),
     );
   }
@@ -100,6 +137,7 @@ class ModMetadata {
       'tags': tags,
       if (characterId != null) 'character_id': characterId,
       'images': images,
+      if (origin != null) 'origin': origin!.toJson(),
       // Unknown keys last, so existing files keep their familiar ordering.
       // Filtered against [knownKeys] rather than against what was emitted
       // above: a null description means the key is genuinely absent and must
@@ -111,8 +149,7 @@ class ModMetadata {
 
   /// Replaces every user-editable field wholesale — so clearing a description
   /// or URL actually removes it — while carrying machine-owned fields
-  /// (`schema_version`, and later the origin block) and unknown keys over from
-  /// `this`.
+  /// (`schema_version`, `origin`) and unknown keys over from `this`.
   ///
   /// **Call this on the copy read from disk**, not on a fresh instance: `this`
   /// is the only source for the fields being preserved.
@@ -135,6 +172,7 @@ class ModMetadata {
   }) {
     return ModMetadata(
       schemaVersion: schemaVersion, // machine-owned: from disk
+      origin: origin, // machine-owned: from disk
       extra: extra, // unknown: from disk
       description: description,
       sourceUrl: sourceUrl,
@@ -152,6 +190,7 @@ class ModMetadata {
     String? characterId,
     List<String>? images,
     Map<String, dynamic>? extra,
+    ModOrigin? origin,
   }) {
     return ModMetadata(
       schemaVersion: schemaVersion ?? this.schemaVersion,
@@ -160,7 +199,36 @@ class ModMetadata {
       tags: tags ?? this.tags,
       characterId: characterId ?? this.characterId,
       images: images ?? this.images,
+      origin: origin ?? this.origin,
       extra: extra != null ? Map.unmodifiable(extra) : this.extra,
     );
   }
+
+  /// Replaces the origin block outright, **including with null**.
+  ///
+  /// Separate from [copyWith] because `origin ?? this.origin` cannot express
+  /// clearing — the same limitation `characterId` has. Clearing is not a corner
+  /// case here: it is how an inbound block from someone else's sidecar is
+  /// dropped, which is the one thing standing between a stranger's folder and a
+  /// claim of exact confidence.
+  ///
+  /// Writing an origin also **advances `schema_version`**, because the version
+  /// describes the file's contents: leaving a v1 stamp on a file that now holds
+  /// an origin block would make the marker say the opposite of what is true.
+  /// Uses a max rather than an assignment so a sidecar from a *newer* build is
+  /// never downgraded on its way past us.
+  ModMetadata withOrigin(ModOrigin? origin) => ModMetadata(
+        schemaVersion: origin == null
+            ? schemaVersion
+            : (schemaVersion > currentSchemaVersion
+                ? schemaVersion
+                : currentSchemaVersion),
+        description: description,
+        sourceUrl: sourceUrl,
+        tags: tags,
+        characterId: characterId,
+        images: images,
+        origin: origin,
+        extra: extra,
+      );
 }

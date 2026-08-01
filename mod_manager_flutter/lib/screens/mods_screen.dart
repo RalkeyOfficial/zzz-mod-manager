@@ -11,8 +11,10 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:cross_file/cross_file.dart';
 import '../core/constants.dart';
 import '../models/character_info.dart';
+import '../models/mod_origin_seed.dart';
 import '../services/api_service.dart';
 import '../services/archive_service.dart';
+import '../services/ingest_origin_builder.dart';
 import '../utils/state_providers.dart';
 import '../utils/categories.dart';
 import '../utils/zzz_characters.dart';
@@ -1355,6 +1357,9 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       // Extracted-folder path -> originating archive base name, used as an extra
       // character-detection hint (the character is often in the archive name).
       final detectionHints = <String, String>{};
+      // Same shape and the same reason: one drop can mix folders from several
+      // archives with folders dragged in directly, so provenance is per-folder.
+      final originSeeds = <String, ModOriginSeed>{};
 
       for (final file in files) {
         // Перевіряємо чи це архів
@@ -1366,6 +1371,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
           final dir = Directory(file.path);
           if (await dir.exists()) {
             folderPaths.add(file.path);
+            originSeeds[file.path] = ModOriginSeed.importedFolder;
           }
         }
       }
@@ -1395,6 +1401,9 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
             );
             for (final folder in result.extractedFolders!) {
               detectionHints[folder] = archiveBaseName;
+              originSeeds[folder] = ModOriginSeed.importedArchive(
+                archiveMd5: result.archiveMd5,
+              );
             }
             print(
               'ModsScreen: Розархівовано ${result.extractedFolders!.length} папок з ${archiveFile.name}',
@@ -1474,6 +1483,13 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       final combine = plan.combine;
       final combinedName = plan.combinedName;
       final combinedHint = sharedHint;
+      // Merging folders from different sources yields a mod that is only partly
+      // from any one archive, so combineSeeds drops to the least-trusted answer
+      // rather than claiming a hash that would imply the whole folder matches a
+      // published file.
+      final combinedSeed = IngestOriginBuilder.combineSeeds(
+        folderPaths.map((folder) => originSeeds[folder]),
+      );
 
       final expectedCount = combine ? 1 : folderPaths.length;
 
@@ -1536,10 +1552,12 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
               folderPaths,
               combinedName,
               detectionHint: combinedHint,
+              origin: combinedSeed,
             )
           : await modManagerService.importMods(
               folderPaths,
               detectionHints: detectionHints,
+              originSeeds: originSeeds,
             );
 
       // Закриваємо діалог прогресу
@@ -1625,6 +1643,25 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
             ),
           );
         }
+      }
+
+      // Reported once, here: nothing re-attempts an origin write, because it
+      // happens at ingest and never during a scan. Without this the mod would
+      // just be silently untracked for updates with no explanation.
+      final originFailures = modManagerService.takeOriginWriteFailures();
+      if (originFailures.isNotEmpty && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              loc.t(
+                'mods.snackbar.origin_write_failed',
+                params: {'mods': originFailures.join(', ')},
+              ),
+            ),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 6),
+          ),
+        );
       }
 
       // Видаляємо успішно імпортовані архіви

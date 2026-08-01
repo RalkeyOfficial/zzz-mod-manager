@@ -43,6 +43,11 @@ dependencies:
   # HTTP Client
   http: ^1.3.0
 
+  # md5 for archive fingerprinting. Available transitively already, but declared
+  # because we import it directly: an undeclared transitive dep trips
+  # `depend_on_referenced_packages` and can disappear on a `pub upgrade`.
+  crypto: ^3.0.6
+
   # Path utilities
   path: ^1.9.1
 

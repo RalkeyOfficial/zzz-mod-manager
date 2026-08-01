@@ -217,6 +217,27 @@ than looking.
   the client because the offline metadata backfill runs it during a normal scan
   with no network. A `/dl/<id>` link is a *file* id and correctly yields null.
 
+#### The download layer (`services/download/`)
+
+Fetches mod archives into `<appData>/downloads`, resumably. Separate from the
+JSON client above because it needs streamed bodies, byte ranges and socket
+backpressure — `docs/gamebanana-api.md` §8 has the measurements that shape it.
+
+- `DownloadService` — reached via `downloadServiceProvider`. Returns a
+  `DownloadHandle` (progress stream, `done` future, `cancel()`).
+- `DownloadTransport` / `IoDownloadTransport` — the seam, and the app's only
+  remaining `dart:io HttpClient`. Two settings are load-bearing:
+  `autoUncompress = false` (or `Content-Length` and every range offset lies), and
+  the deliberate **absence** of `badCertificateCallback`.
+- `resume_policy.dart` — pure, and where the subtle bugs live. In particular a
+  `200` answering a ranged request means *restart*: appending it would
+  concatenate two copies into a corrupt archive that still looks plausible.
+- **The timeout is a stall timeout, never a total duration.** A legitimate
+  transfer over a degraded CDN node runs ~25 minutes and must be allowed to.
+- `services/archive_hash.dart` — md5 for archive fingerprinting. Free during a
+  download (hashed in-stream), one extra read on manual import. A **matching
+  key, never an integrity claim** — never render a match as "verified".
+
 ### How mods work (the core flow)
 
 Two configured paths drive everything: **`modsPath`** (where mod folders live,
