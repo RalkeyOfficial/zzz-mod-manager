@@ -1,0 +1,91 @@
+/// Recovering a GameBanana **mod id** from a url.
+///
+/// Lives in `utils/` rather than inside the API client on purpose: the offline
+/// metadata backfill parses each mod's stored `source_url` during an ordinary
+/// folder scan, which runs on every launch and must never touch the network.
+/// This is a pure string function with no client and no I/O.
+///
+/// It is deliberately strict. `source_url` is a free-form field a human typed,
+/// so it may hold a collection link, a Drive link, a file link, or a different
+/// mod entirely — and a wrong id silently binds a local folder to an unrelated
+/// remote mod, after which an "update" would overwrite it with another mod's
+/// files. Returning null costs nothing; a wrong answer is expensive.
+library;
+
+const Set<String> _gameBananaHosts = {
+  'gamebanana.com',
+  'www.gamebanana.com',
+};
+
+/// Extracts the mod id from a GameBanana **mod page** url, or null.
+///
+/// Accepted:
+/// - `https://gamebanana.com/mods/531649` (plus trailing slash, `?query`,
+///   `#fragment`, `http://`, `www.`, and a missing scheme)
+/// - `https://gamebanana.com/mods/download/531649`
+///
+/// Rejected — each returns null:
+/// - **`https://gamebanana.com/dl/1770600`** — that is a *file* id, not a mod
+///   id. The two are different id spaces, and reading one as the other is the
+///   exact mis-binding described above.
+/// - `https://gamebanana.com/mods/cats/30305` — a category.
+/// - `https://gamebanana.com/games/19567`, member pages, any other host, and
+///   anything unparseable.
+int? gameBananaModIdFromUrl(String? url) {
+  final trimmed = url?.trim();
+  if (trimmed == null || trimmed.isEmpty) return null;
+
+  // Tolerate a pasted url with no scheme ("gamebanana.com/mods/531649"),
+  // which Uri would otherwise read as a bare path with no host.
+  final normalized =
+      trimmed.contains('://') ? trimmed : 'https://$trimmed';
+
+  final Uri uri;
+  try {
+    uri = Uri.parse(normalized);
+  } on FormatException {
+    return null;
+  }
+
+  if (!_gameBananaHosts.contains(uri.host.toLowerCase())) return null;
+
+  final segments =
+      uri.pathSegments.where((segment) => segment.isNotEmpty).toList();
+  if (segments.length < 2 || segments.first.toLowerCase() != 'mods') {
+    return null;
+  }
+
+  // /mods/<id> or /mods/download/<id> — and nothing else. In particular this
+  // rejects /mods/cats/<id>, whose second segment is not a number.
+  final candidate = switch (segments.length) {
+    2 => segments[1],
+    3 when segments[1].toLowerCase() == 'download' => segments[2],
+    _ => null,
+  };
+  if (candidate == null) return null;
+
+  final id = int.tryParse(candidate);
+  return (id == null || id <= 0) ? null : id;
+}
+
+/// Whether [url] points at GameBanana at all.
+///
+/// Useful for deciding whether a stored `source_url` is even worth trying to
+/// resolve, without claiming it identifies a mod.
+bool isGameBananaUrl(String? url) {
+  final trimmed = url?.trim();
+  if (trimmed == null || trimmed.isEmpty) return false;
+  final normalized = trimmed.contains('://') ? trimmed : 'https://$trimmed';
+  try {
+    return _gameBananaHosts.contains(Uri.parse(normalized).host.toLowerCase());
+  } on FormatException {
+    return false;
+  }
+}
+
+/// The canonical mod-page url for [modId].
+///
+/// `source_url` stays user-facing and mod-page-only — machine handles and
+/// `/dl/<fileid>` links belong in the origin block, never here — so this is
+/// what a resolved id normalises back to.
+String gameBananaModUrl(int modId) => 'https://gamebanana.com/mods/$modId';

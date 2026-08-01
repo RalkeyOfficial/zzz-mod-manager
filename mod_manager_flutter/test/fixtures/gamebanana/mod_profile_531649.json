@@ -1,0 +1,815 @@
+{
+  "_idRow": 531649,
+  "_nStatus": "0",
+  "_bIsPrivate": false,
+  "_bAccessorIsSubmitter": false,
+  "_bIsTrashed": false,
+  "_bIsWithheld": false,
+  "_sName": "ZZMI RabbitFX - Glow FX + Censor Remover",
+  "_sCommentsMode": "open",
+  "_tsDateModified": 1781872754,
+  "_tsDateAdded": 1722287660,
+  "_sProfileUrl": "https://gamebanana.com/mods/531649",
+  "_aPreviewMedia": {
+    "_aImages": [
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "66a8054aa3360.jpg",
+        "_sFile220": "220-90_66a8054aa3360.jpg",
+        "_hFile220": 193,
+        "_wFile220": 220,
+        "_sFile530": "530-90_66a8054aa3360.jpg",
+        "_hFile530": 466,
+        "_wFile530": 530,
+        "_sFile100": "100-90_66a8054aa3360.jpg",
+        "_hFile100": 88,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "66a805529113e.jpg",
+        "_sFile100": "100-90_66a805529113e.jpg",
+        "_hFile100": 92,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "66a80559908b7.jpg",
+        "_sFile100": "100-90_66a80559908b7.jpg",
+        "_hFile100": 106,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "66a8056e8f344.jpg",
+        "_sFile100": "100-90_66a8056e8f344.jpg",
+        "_hFile100": 86,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "66a805749a5df.jpg",
+        "_sFile100": "100-90_66a805749a5df.jpg",
+        "_hFile100": 99,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "66a8057a10d0e.jpg",
+        "_sFile100": "100-90_66a8057a10d0e.jpg",
+        "_hFile100": 99,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "66a80580863bf.jpg",
+        "_sFile100": "100-90_66a80580863bf.jpg",
+        "_hFile100": 100,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "67846657a1d75.jpg",
+        "_sFile100": "100-90_67846657a1d75.jpg",
+        "_hFile100": 107,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "678469667d613.jpg",
+        "_sFile100": "100-90_678469667d613.jpg",
+        "_hFile100": 101,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "678468a531e31.jpg",
+        "_sFile100": "100-90_678468a531e31.jpg",
+        "_hFile100": 99,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "6855aed1625e9.jpg",
+        "_sFile100": "100-90_6855aed1625e9.jpg",
+        "_hFile100": 96,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "6892f67f61eeb.jpg",
+        "_sFile100": "100-90_6892f67f61eeb.jpg",
+        "_hFile100": 100,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "6892f76bb30af.jpg",
+        "_sFile100": "100-90_6892f76bb30af.jpg",
+        "_hFile100": 100,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "6892f77d9f560.jpg",
+        "_sFile100": "100-90_6892f77d9f560.jpg",
+        "_hFile100": 100,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "6892f95f5e81b.jpg",
+        "_sFile100": "100-90_6892f95f5e81b.jpg",
+        "_hFile100": 84,
+        "_wFile100": 100
+      }
+    ]
+  },
+  "_nUpdatesCount": 50,
+  "_bHasUpdates": true,
+  "_tsDateUpdated": 1781872904,
+  "_nAllTodosCount": 0,
+  "_bHasTodos": false,
+  "_nPostCount": 614,
+  "_aTags": [],
+  "_bCreatedBySubmitter": true,
+  "_bIsPorted": false,
+  "_nThanksCount": 116,
+  "_sInitialVisibility": "show",
+  "_sDownloadUrl": "https://gamebanana.com/mods/download/531649",
+  "_nDownloadCount": 438060,
+  "_aArchivedFiles": [
+    {
+      "_idRow": 1607175,
+      "_sFile": "v614_cac91.zip",
+      "_nFilesize": 8262,
+      "_tsDateAdded": 1769000625,
+      "_nDownloadCount": 14449,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1607175",
+      "_sMd5Checksum": "8c2e77e6805c2401dcb797514f8b17d2",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": true,
+      "_bHasContents": true,
+      "_sVersion": "6.14",
+      "_sDescription": "Main file"
+    },
+    {
+      "_idRow": 1632603,
+      "_sFile": "v70_408d8.zip",
+      "_nFilesize": 8321,
+      "_tsDateAdded": 1771846271,
+      "_nDownloadCount": 4813,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1632603",
+      "_sMd5Checksum": "ca9bca7e244e68e203e71ff323d3a14e",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": true,
+      "_bHasContents": true,
+      "_sVersion": "7.0",
+      "_sDescription": "Main file"
+    },
+    {
+      "_idRow": 1638860,
+      "_sFile": "v71_9ecb1.zip",
+      "_nFilesize": 8330,
+      "_tsDateAdded": 1772536369,
+      "_nDownloadCount": 15718,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1638860",
+      "_sMd5Checksum": "18436dc49648e0891d34a431e48bf7b4",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": true,
+      "_bHasContents": true,
+      "_sVersion": "7.1",
+      "_sDescription": "Main file"
+    },
+    {
+      "_idRow": 1694708,
+      "_sFile": "v72.zip",
+      "_nFilesize": 8500,
+      "_tsDateAdded": 1778080507,
+      "_nDownloadCount": 2019,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1694708",
+      "_sMd5Checksum": "f8a8585de222fb028e243376a4b2ac56",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": true,
+      "_bHasContents": true,
+      "_sVersion": "7.2",
+      "_sDescription": "Main file"
+    },
+    {
+      "_idRow": 1695165,
+      "_sFile": "v73.zip",
+      "_nFilesize": 8444,
+      "_tsDateAdded": 1778122477,
+      "_nDownloadCount": 3231,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1695165",
+      "_sMd5Checksum": "18b741db96df8c640d7c897681c5e478",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": true,
+      "_bHasContents": true,
+      "_sVersion": "7.3",
+      "_sDescription": "Main file"
+    },
+    {
+      "_idRow": 1696178,
+      "_sFile": "v74.zip",
+      "_nFilesize": 8785,
+      "_tsDateAdded": 1778243355,
+      "_nDownloadCount": 759,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1696178",
+      "_sMd5Checksum": "16ff653df6a6d2a994b2dd5c4ef470b3",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": true,
+      "_bHasContents": true,
+      "_sVersion": "7.4",
+      "_sDescription": "Main file"
+    },
+    {
+      "_idRow": 1696293,
+      "_sFile": "v75.zip",
+      "_nFilesize": 8893,
+      "_tsDateAdded": 1778255785,
+      "_nDownloadCount": 1358,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1696293",
+      "_sMd5Checksum": "35b5906d4c5211964422ebeb0dda5ff6",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": true,
+      "_bHasContents": true,
+      "_sVersion": "7.5",
+      "_sDescription": "Main file"
+    },
+    {
+      "_idRow": 1696517,
+      "_sFile": "v76.zip",
+      "_nFilesize": 8979,
+      "_tsDateAdded": 1778274886,
+      "_nDownloadCount": 14805,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1696517",
+      "_sMd5Checksum": "0dbe133592d4e9d715b4d6a43ac1c576",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": true,
+      "_bHasContents": true,
+      "_sVersion": "7.6",
+      "_sDescription": "Main file"
+    }
+  ],
+  "_aFiles": [
+    {
+      "_idRow": 1491924,
+      "_sFile": "rabbitfx_fixer_exe_version.zip",
+      "_nFilesize": 7675340,
+      "_tsDateAdded": 1754460009,
+      "_nDownloadCount": 40141,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1491924",
+      "_sMd5Checksum": "ed55759a72c577a6aa682ba88d149fc3",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": false,
+      "_bHasContents": true,
+      "_sVersion": "1.0",
+      "_sDescription": "RabbitFX Fixer EXE Version",
+      "_aAnalysisWarnings": {
+        "contains_exe": [
+          "RabbitFXFixer.exe",
+          "Restore backups.bat"
+        ]
+      }
+    },
+    {
+      "_idRow": 1491926,
+      "_sFile": "rabbitfx_fixer_python_ver.zip",
+      "_nFilesize": 2033,
+      "_tsDateAdded": 1754460015,
+      "_nDownloadCount": 8900,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1491926",
+      "_sMd5Checksum": "7e574741e89b32aff1c3e6af221bf7d4",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": false,
+      "_bHasContents": true,
+      "_sVersion": "1.0",
+      "_sDescription": "RabbitFX Fixer Python Version"
+    },
+    {
+      "_idRow": 1492636,
+      "_sFile": "anbisworddemonew.zip",
+      "_nFilesize": 271478,
+      "_tsDateAdded": 1754553443,
+      "_nDownloadCount": 4718,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1492636",
+      "_sMd5Checksum": "fc63a65f8ce4c1c4f0e9e81ab14ce9c2",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": false,
+      "_bHasContents": true,
+      "_sDescription": "Glow demo"
+    },
+    {
+      "_idRow": 1492637,
+      "_sFile": "karinenginecutoutshowcase.zip",
+      "_nFilesize": 2545469,
+      "_tsDateAdded": 1754553794,
+      "_nDownloadCount": 1997,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1492637",
+      "_sMd5Checksum": "714fa37fc717b486137de435d078e48a",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": false,
+      "_bHasContents": true,
+      "_sDescription": "Engine FX and cutout demo"
+    },
+    {
+      "_idRow": 1491927,
+      "_sFile": "karincolorshifttest.zip",
+      "_nFilesize": 1779785,
+      "_tsDateAdded": 1754460237,
+      "_nDownloadCount": 1970,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1491927",
+      "_sMd5Checksum": "59ebd69849f6d7c53f8a33b3caf61ed5",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": false,
+      "_bHasContents": true,
+      "_sDescription": "Color shift demo"
+    },
+    {
+      "_idRow": 1732269,
+      "_sFile": "v77.zip",
+      "_nFilesize": 8963,
+      "_tsDateAdded": 1781872746,
+      "_nDownloadCount": 25343,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1732269",
+      "_sMd5Checksum": "362bb10d2ebe1bb78afe99911c307e98",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": false,
+      "_bHasContents": true,
+      "_sVersion": "7.7",
+      "_sDescription": "Main file"
+    }
+  ],
+  "_nSubscriberCount": 1846,
+  "_aContributingStudios": [],
+  "_sLicense": "<a rel=\"license\" href=\"http://creativecommons.org/licenses/by-nc-nd/4.0/\"><img alt=\"Creative Commons License\" style=\"border-width:0\" src=\"https://i.creativecommons.org/l/by-nc-nd/4.0/88x31.png\" /></a><br />This work is licensed under a <a rel=\"license\" href=\"http://creativecommons.org/licenses/by-nc-nd/4.0/\">Creative Commons Attribution-NonCommercial-NoDerivs 4.0 Unported License</a>.",
+  "_aLicenseChecklist": {
+    "yes": [
+      "Download and install this Mod"
+    ],
+    "ask": [
+      "Redistribute this Mod on other sites",
+      "Modify this Mod and distribute the modified Mod on GameBanana",
+      "Modify this Mod and distribute the modified Mod on another site",
+      "Use parts of this Mod in another Mod and distribute the Mod on GameBanana",
+      "Use parts of this Mod in another Mod and distribute the Mod on another site",
+      "Use this Mod or components of this Mod in adult/NSFW content"
+    ],
+    "no": [
+      "Use this Mod or components of this Mod commercially"
+    ]
+  },
+  "_bGenerateTableOfContents": false,
+  "_sText": "<h1><strong><span class=\"RedColor\">!Important Warning!</span></strong></h1>Having multiple RabbitFXs will cause unexpected behaviours and game crashes.<br><br>You should only ever have one instance of RabbitFX anywhere in your mods folder as that is how it is designed to work. If you see creators including RabbitFX with their mods, please let them know it is dangerous to do so.<br><br>Please read the pinned comment for details.<br><br>RabbitFX is also <span class=\"RedColor\"><b>INCOMPATIBLE</b></span> with other decensoring mods, which is why there is a decensor function included.<br><br><span class=\"RedColor\"><b>FAQ Regarding stuttering</b></span><br>As RabbitFX encounters new shaders for the first time, it will try to read them and rewrite them in order for the decensoring, texture replacement, and glow effect to work. <br><br>This can be alleviated by turning on the ShaderCache feature of 3DMigoto which means, it will only do it once and the rewritten shader will be saved for the next time you run the game. <br>There is a small ReadMe file included that explains this in further detail. <br><br>However, game updates or changes / fixes / additions made to RabbitFX will reset the shader cache and require it to be rebuilt again.<br><br>ーーーーーーーーーーーーーーーーーーーー<br>Default Keybinds:<br>Toggle Censor Filter - \\<br>ーーーーーーーーーーーーーーーーーーーー<br><br>Hey everyone!<h1><span class=\"RedColor\">Incompatible with other Censor Filter removers</span></h1><br>If you've seen my mods, you know I love adding glow effects to my mods and the biggest enabler for me to do that is TexFX. Because of the of how successful the WuWa version had been, I thought I'd make a version for ZZZ as well. Once again with help from Sins and borrowing the code for hue-shifting from the upcoming update for TexFX.<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/66a805529113e.jpg\"><br><br>It's probably not as well written as it would be if Sins was in charge but it works relatively well and allows glowing patterns to be made for mods.<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/66a8056e8f344.jpg\"><br><br>It also comes with a Censor Filter remover due to it conflicting with the removers that already exists on GB.<br>ーーーーーーーーーーーーーーーーーーーー<br><br>For the average user, place the files into your mod folder and that's all you need to know. <br><br>For modders wishing to use RabbitFX for glow related effects read on. <br><br>Please be aware that some level of knowledge on how to make texture mods for Wuthering Waves is required as this is not a guide on how to make mods for Wuthering Waves, rather a guide on how to use this tool to further enhance your mods.<br>ーーーーーーーーーーーーーーーーーーーー<br><br>There is a fundamental change in how RabbitFX works compared to TexFX for Genshin. Iinstead of using just the blue and green channel for controlling luminence and bloom, an entire RGBA texture is dedicated for glow. <br><br>What each channel does is relatively straight forward, RGB dictates the colour of the glow and the alpha channel dictates the brightness.<br>Once created, attach this texture to the 17th pixel shader slot of whatever component this effect is to be used on using <code><br><br></code><pre><code>Resource\\RabbitFX\\Glowmap = ref ResouceName</code> </pre><br>and call the run command.<br><br><pre><code>run = CommandList\\RabbitFX\\Run</code></pre><br>This is the bare minimum needed to activate RabbitFX.<br><br>Another feature RabbitFX has is the ability to shift colours through the use of HSV courtesy of <a href=\"https://gamebanana.com/members/2823441\">SinsOfSeven</a>. Just like in picture editing softwares, Hue is shifted with by a value ranging from 0 - 360 with it fully wrapping around at 360. Saturation and brightness can also be adjusted with S and V respectively. These values can be set with the following values<br><br><pre><code>$\\rabbitfx\\h<br></code><code>$\\rabbitfx\\s<br></code><code>$\\rabbitfx\\v<br></code><code>$\\rabbitfx\\brightness </code></pre>Another thing you can do is set an Interpolation value from 0 - 1 that lets you transition towards your target colour for better special FX modding with 0 being the original colour and 1 being the target colour. This can be set using the following value<br><pre>$\\rabbitfx\\interpolate</pre><br>Here is a snippet from my Ambi mod to give you a better idea on how it works, note all values other than Resource\\RabbitFX\\Glowmap = ref ResourceSwordFX and run = CommandList\\RabbitFX\\Run are optional.<br><br><pre>[TextureOverrideAnbiTestSwordA]\r\nhash = 5bb510c6\r\nmatch_first_index = 0\r\nrun = CommandListSkinTexture\r\nib = ResourceAnbiTestSwordAIB\r\n$\\RabbitFX\\H = 0\r\n$\\RabbitFX\\S = 0\r\n$\\RabbitFX\\V = 0\r\n$\\RabbitFX\\brightness = 20\r\n$\\RabbitFX\\interpolate = 1\r\nResource\\RabbitFX\\Glowmap = ref ResourceSwordFX\r\nrun = CommandList\\RabbitFX\\Run<br></pre>Here is an example of how the effect mask is made.<br><br>This is the texture for the sword Anbi uses<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/66a805749a5df.jpg\"><br><br>I want to make the blade of it glow a nice green to match her motif so I make a seperate texture that is completely black with the parts I want to glow coloured in like so.<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/66a8057a10d0e.jpg\"><br><br>Next, on the alpha channel I colour in the same parts in white to show that I want these areas to be bright.<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/66a80580863bf.jpg\"><br><br>Next I set the brightness of the mod to 20, pass the texture to RabbitFX as a Glowmap and run the RabbitFX command.<br><br><pre>$\\RabbitFX\\brightness = 20\r\nResource\\RabbitFX\\Glowmap = ref ResourceSwordFX<br>run = CommandList\\RabbitFX\\Run</pre><br>And this is the result.<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/66a8054aa3360.jpg\"><br><br>Happy modding!<br><h1><span class=\"GreenColor\">** V4.0 NEW FEATURES ** GUIDE UPDATED FOR 4.5 **</span></h1>I'm adding the ability to change the colour of the special W Engine glow effect colours, change their intensity/brightness, and then set your glow sync up with the special W Engine glow effect colours! Many, many, many thanks to <a href=\"https://gamebanana.com/members/2823441\">SinsOfSeven</a> for helping me get this feature working!!!<br><br>Here is a small example of this working in game.<br><img src=\"https://i.imgur.com/j828xZs.gif\"><br><br>The method of doing this is rather complicated, so this will take some dedication!<br><br>First, follow all the steps above to get your glow to work.<br><br>Next we need to add a special variable to retrieve the W Engine glow colour, it looks like this:<br><br><pre>[ResourceFXBuffer]<br>[Constant]\r\nResourceFXBuffer = copy Resource\\RabbitFX\\FXBuffer<br></pre><br>This can also be used to reset the buffer if the values become stuck when switching characters or when the effect ends abrupty.<br><br><pre>ResourceFXBuffer = copy Resource\\RabbitFX\\FXBuffer</pre><br>It looks a little bit intimidating but you don't need to think about it that much, you can place this wherever you want in your ini.<br><br>Next, just below where you've entered<br><pre>Resource\\RabbitFX\\Glowmap = ref ResourceFX</pre>Enter<br><pre>Resource\\RabbitFX\\SetFXBuffer = ref ResourceFXBuffer</pre><br>There is now an additional blend mode that will do a comparison to see if the glow is bright enough to be displayed. This will imitate the normal engine glow effect where it only shows up conditionally.<br><br>To use this mode, simply paint the part black in the FX texture and set this following line.<br><pre>$\\rabbitfx\\blendmode = 1</pre><br>Following the earlier examples, it should now look something like this<br><pre>[ResourceFXBuffer]<br>[Constant]\r\nResourceEngineRGB = copy Resource\\RabbitFX\\FXBuffer\r\n\r\n[TextureOverrideAnbiTestSwordA]\r\nhash = 5bb510c6\r\nmatch_first_index = 0\r\nrun = CommandListSkinTexture\r\nib = ResourceAnbiTestSwordAIB\r\n$\\RabbitFX\\H = 0\r\n$\\RabbitFX\\S = 0\r\n$\\RabbitFX\\V = 0\r\n$\\RabbitFX\\brightness = 20\r\n$\\RabbitFX\\interpolate = 1\r\n$\\rabbitfx\\blendmode = 1\r\nResource\\RabbitFX\\Glowmap = ref ResourceSwordFX\r\nResource\\RabbitFX\\SetFXBuffer = ref ResourceEngineRGB\r\nrun = CommandList\\RabbitFX\\Run</pre><br>Now for this to work properly, you must also add the following lines to below the <code>ib =</code> line<br><pre class=\"SelectedElement\">Resource\\RabbitFX\\SetFXBuffer = ref ResourceEngineRGB\r\nrun = CommandList\\RabbitFX\\ERun</pre>To the part that actually has the W Engine glow in order to extract the colour. <br><br>This is usually the part that contains the hair... However, since it is different for every character, I'm afraid I can't really provide any concrete methods, but I believe in you!<br><br><h1><span class=\"GreenColor\">** 4.1 new feature **</span></h1>Patterned discarding (Cut outs)<br><br>I realize the character I'm using as a demo might be slightly controversial... Please ignore it, I wasn't really thinking when I picked her, she's just AGMG's ZZZ mascot character...<br><br>But with patterned discards, you can cut holes and shapes out of textures and meshes without having to do them perfectly in blender, here is an example.<br><img src=\"https://files.gamebanana.com/img/ss/mods/67846657a1d75.jpg\"><br><br>As you can see, I (perfectly) cut out my name and you can see right through it.<br><br>This is a step towards adding in transparency which I am slowly working towards.<br><br>Here is how it works.<br><br>You must first prepare an extra texture, right now the RGB values doesn't really do anything, <b><span class=\"RedColor\">you should leave it black</span></b> as I can't guarantee they won't be used for other things in the future. However for demonstration purposes I've left the original texture in so you can see what I've done.<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/678469667d613.jpg\"><br><br>As you can see, I wrote caverabbit (in reverse) into the texture, but the important part is in the alpha channel.<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/678468a531e31.jpg\"><br><br>Anything that's black (0 in value) in this channel will be discarded (cut out). This means you can cut out complex patterns such as lace designs or fishnet meshes or intricately shaped holes with very minimal effort.<br><br>Next we need to pass this texture to RabbitFX as FXMap, similar to how the glow texture is passed and run RabbitFX as per usual.<br><br><pre>[TextureOverrideKarinDress]\r\nhash = e74620b5\r\nResource\\RabbitFX\\FXMap = ref ResourceTransparencyMask\r\nrun = CommandList\\RabbitFX\\Run</pre><br>Following the earlier examples, it would look something like this<br><br><pre>[TextureOverrideAnbiTestSwordA]\r\nhash = 5bb510c6\r\nmatch_first_index = 0\r\nrun = CommandListSkinTexture\r\nib = ResourceAnbiTestSwordAIB\r\n$\\RabbitFX\\H = 0\r\n$\\RabbitFX\\S = 0\r\n$\\RabbitFX\\V = 0\r\n$\\RabbitFX\\brightness = 20\r\n$\\RabbitFX\\interpolate = 1\r\n$\\rabbitfx\\blendmode = 1\r\nResource\\RabbitFX\\Glowmap = ref ResourceSwordFX\r\nResource\\RabbitFX\\FXMap = ref ResourceTransparencyMask\r\nps-u4 = ResourceEngineRGB\r\nrun = CommandList\\RabbitFX\\Run</pre><br>In the future, I'd like to expand this into true transparency with help from <a href=\"https://gamebanana.com/members/2176153\">SilentNightSound</a> and <a href=\"https://gamebanana.com/members/2823441\">SinsOfSeven</a>.<br><br>I've included the Karin demo for everyone to look at to see how it is done.<br><br>Happy Modding!<br><br><h1><span class=\"GreenColor\">** V5.0 NEW FEATURES ** Stable texture slots</span></h1>Hello everyone!<br><br>Version 5.0 introduces the ability to mod textures through RabbitFX which should automatically apply the new textures to your mods regardless of the LOD.<br>In simpler terms, textures should no longer break due to low VRAM with this new method (LOD for the character models is still required).<br><br>I originally developed this system for the ZZMI library, but sadly due to the fact that this method would not work if shaderfix mods are used, it has been determined that it cannot be used as a universal fix.<br><br>However, I still see potential usefulness for this system, specifically it can be used in conjuctions with masks to create simple color shift mods. I plan to add this function in the next update once I have determined that this system is stable.<br><br>To use this new feature, you must take note of all the textures being used in the mod and which parts of your mod it corresponds to.<br><br>For example:<br><pre>[TextureOverrideCharacterBodyA]\r\nhash = \r\nMatch_first_Index = 0\r\nrun = CommandListSkinTexture\r\nib = ResourceCharacterBodyAIB\r\nDrawindexed = 1000, 0, 0\r\n\r\n; 2048\r\n\r\n[TextureOverrideCharacterBodyADiffuse.2048]<br>hash = \r\nthis = ResourceCharacterBodyADiffuse\r\n\r\n[TextureOverrideCharacterBodyANormalMap.2048]<br>hash = \r\nthis = ResourceCharacterBodyANormalMap\r\n\r\n[TextureOverrideCharacterBodyAMaterialMap.2048]<br>hash = \r\nthis = ResourceCharacterBodyAMaterialMap\r\n\r\n[TextureOverrideCharacterBodyALightMap.2048]<br>hash = \r\nthis = ResourceCharacterBodyALightMap\r\n\r\n; 1024\r\n\r\n[TextureOverrideCharacterBodyADiffuse.1024]\r\nhash = \r\nthis = ResourceCharacterBodyADiffuse\r\n\r\n[TextureOverrideCharacterBodyANormalMap.1024]\r\nhash = \r\nthis = ResourceCharacterBodyANormalMap\r\n\r\n[TextureOverrideCharacterBodyAMaterialMap.1024]\r\nhash = \r\nthis = ResourceCharacterBodyAMaterialMap\r\n\r\n[TextureOverrideCharacterBodyALightMap.1024]\r\nhash = \r\nthis = ResourceCharacterBodyALightMap\r\n\r\n; 512\r\n\r\n[TextureOverrideCharacterBodyADiffuse.512]\r\nhash = e826a564\r\nthis = ResourceCharacterBodyADiffuse\r\n\r\n[TextureOverrideCharacterBodyANormalMap.512]\r\nhash = Part2Normal\r\nthis = ResourceCharacterBodyANormalMap\r\n\r\n[TextureOverrideCharacterBodyAMaterialMap.512]\r\nhash = 23f2a4cf\r\nthis = ResourceCharacterBodyAMaterialMap\r\n\r\n[TextureOverrideCharacterBodyALightMap.512]\r\nhash = b24f1752\r\nthis = ResourceCharacterBodyALightMap\r\n</pre><br>This then becomes<br><br>As you can see, it significantly simplifies the textures sections and there isn't a need to get 3 sets of hashes for all the LOD textures.<br><br>Also, all characters actually have special built in FX textures, most of these are triggered when they have their special balls equipped and they look something like this<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/6855aed1625e9.jpg\"><br><br>I have extended the stable slots to be able to handle these as well.<br>Most characters have only one, but some characters like Astra has 2.<br>For a lack of a better name and not knowing if this number may increase, I have named these:<br><br><pre>CharFXMap0\r\nCharFXMap1</pre><br>And you can set them similarly like so<br><br><pre>Resource\\RabbitFX\\CharFXMap0 = ref ResourceCharacterFXMap0\r\nResource\\RabbitFX\\CharFXMap0 = ref ResourceCharacterFXMap1</pre><br>Going back to the earlier example, the full thing might look something like this.<br><br><pre>[TextureOverrideCharacterBodyA]\r\nhash = \r\nMatch_first_Index = 0\r\nib = ResourceCharacterBodyIB\r\nResource\\RabbitFX\\Diffuse = ref ResourceCharacterBodyADiffuse\r\nResource\\RabbitFX\\Normalmap = ref ResourceCharacterBodyANormalMap\r\nResource\\RabbitFX\\Materialmap = ref ResourceCharacterBodyAMaterialMap\r\nResource\\RabbitFX\\Lightmap = ref ResourceCharacterBodyALightMap\r\nResource\\RabbitFX\\CharFXMap0 = ref ResourceCharacterFXMap0<br>Resource\\RabbitFX\\CharFXMap0 = ref ResourceCharacterFXMap1\r\nrun = Commandlist\\RabbitFX\\SetTextures\r\nDrawindexed = 1000, 0, 0</pre><br><h1>＝＝＝＝＝＝　Version 6.0　＝＝＝＝＝</h1><br>A lot of changes were made with the jump to version 6, please use the fixer to fix older mods that were made by attaching textures to the t17 and t18 slots.<br><br>But it wouldn't be a new version without any new features.<br>You can now selectively edit and shift colors on character textures!<br><br><img src=\"https://i.imgur.com/ZFUfHGB.gif\"><br><br>I've been planning on adding this for a while and with all the upgrades I made, I thought it would be time to finally implement it.<br><br>It functions similar to the glow color shifter, except this will retain all the shading and post processing effects applied on the character.<br><br>This effect uses the same texture as the cutout pattern, now named as FXMap since each channel will hopefully eventually have a different function.<br><br>To mask the parts of the texture you wish to apply the color shift to, simply fill in the RED channel of the FXMap, and then set the HSV value for how much you want to shift the colors by, and then apply it using <code>Run = CommandList\\RabbitFX\\ColorShift</code>.<br><br>Here is an example snippet of what it looks like<br><br><pre>[TextureOverrideCharacterIB]\r\nhash = IB hash<br>Resource\\RabbitFX\\FXMap = ref ResourceFXMap<br>$\\RabbitFX\\H = Hue shift<br>$\\RabbitFX\\S = Saturation shift<br>$\\RabbitFX\\V = Value shift<br>run = CommandList\\RabbitFX\\ColorShift<br>draw = 100,100,0</pre><br>I'll walk you through how Karin's hair is shifted as shown in the GIF above.<br><br>This is Karin's hair texture with the UVs overlain on top for visual reference.<img src=\"https://files.gamebanana.com/img/ss/mods/6892f67f61eeb.jpg\"><br><br>We need to make sure the red channel is filled for all the parts we want to recolor and the other parts are set to 0 (pure black).<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/6892f76bb30af.jpg\"><br><br>Remember, that is just the red channel, in color view it would look something like this.<img src=\"https://files.gamebanana.com/img/ss/mods/6892f77d9f560.jpg\"><br><br>Next, we just need to set the values needed to change her hair color from green to the color you would like. <br><br>For demonstration purposes, let's make her hair a nice pink color. We'll need to shift the color -105 degrees from her original green color and increase the Saturation by 30 and the Value by 50.<br><br><pre>[TextureOverrideKarinHair]\r\nhash = 5a839fb2<br>Resource\\RabbitFX\\FXMap = ref ResourceFXMap<br><br>$\\RabbitFX\\H = -105<br>$\\RabbitFX\\S = 30<br>$\\RabbitFX\\V = 50<br>run = CommandList\\RabbitFX\\ColorShift<br>draw = 12345, 0, 0<br></pre><br>This will turn Karin's hair from green to this lovely shade of pink.<br><img src=\"https://files.gamebanana.com/img/ss/mods/6892f95f5e81b.jpg\"><br><br>Happy modding!",
+  "_bIsObsolete": false,
+  "_nLikeCount": 3715,
+  "_nViewCount": 1040234,
+  "_sVersion": "7.7",
+  "_bAcceptsDonations": true,
+  "_bShowRipePromo": true,
+  "_aEmbeddables": {
+    "_sEmbeddableImageBaseUrl": "https://gamebanana.com/mods/embeddables/531649",
+    "_aVariants": [
+      "small",
+      "small_square",
+      "medium",
+      "medium_square",
+      "medium_square_minimal",
+      "large",
+      "large_minimal",
+      "large_square",
+      "large_minimal_square",
+      "thumbnail"
+    ]
+  },
+  "_aSubmitter": {
+    "_idRow": 2987570,
+    "_sName": "caverabbit",
+    "_sUserTitle": "Quaso Devotee",
+    "_sHonoraryTitle": "",
+    "_tsJoinDate": 1698990379,
+    "_sAvatarUrl": "https://images.gamebanana.com/img/av/66107b5189b4a.png",
+    "_sSigUrl": "",
+    "_sProfileUrl": "https://gamebanana.com/members/2987570",
+    "_sPointsUrl": "https://gamebanana.com/members/logs/pointslog/2987570",
+    "_sMedalsUrl": "https://gamebanana.com/members/stats/medals/2987570",
+    "_bIsOnline": false,
+    "_sLocation": "<a href=\"https://gamebanana.com\">Home</a> > <a href=\"https://gamebanana.com/members\">Members</a> > <a href=\"https://gamebanana.com/members/2987570\">caverabbit</a> > <a href=\"/members/settings/2987570\">Control Center : caverabbit</a> > <a href=\"https://gamebanana.com/members/cc/visibility/2987570\">Visibility : caverabbit</a>",
+    "_sOnlineTitle": "",
+    "_sOfflineTitle": "",
+    "_nPoints": 615333,
+    "_nPointsRank": 17,
+    "_aNormalMedals": [
+      [
+        "m_age_1.png",
+        "One month a member",
+        "normal",
+        1398105
+      ],
+      [
+        "m_pr_1.png",
+        "Reached 1,000 Points",
+        "normal",
+        1467210
+      ],
+      [
+        "subscribers_1.png",
+        "Reached 10 subscribers",
+        "normal",
+        1470887
+      ],
+      [
+        "thanks_recvd_1.png",
+        "Received thanks 5 times",
+        "normal",
+        1478122
+      ],
+      [
+        "m_pr_2.png",
+        "Reached 2,500 Points",
+        "normal",
+        1479771
+      ],
+      [
+        "features_1.png",
+        "Submission featured",
+        "normal",
+        1484531
+      ],
+      [
+        "m_pr_3.png",
+        "Reached 7,500 Points",
+        "normal",
+        1491245
+      ],
+      [
+        "mods1.png",
+        "Submitted 5 Mods",
+        "normal",
+        1519300
+      ],
+      [
+        "m_pr_4.png",
+        "Reached 25,000 Points",
+        "normal",
+        1531495
+      ],
+      [
+        "monthly_award.gif",
+        "WiPper of the Month, January 2024",
+        "normal",
+        1539006
+      ],
+      [
+        "mods2.png",
+        "Submitted 10 Mods",
+        "normal",
+        1589971
+      ],
+      [
+        "monthly_award.gif",
+        "WiPper of the Month, February 2024",
+        "normal",
+        1609605
+      ],
+      [
+        "wips1.png",
+        "Submitted 10 WiPs",
+        "normal",
+        1621927
+      ],
+      [
+        "monthly_award.gif",
+        "Scripter of the Month, March 2024",
+        "normal",
+        1682901
+      ],
+      [
+        "m_age_2.png",
+        "6 months a member",
+        "normal",
+        1761322
+      ],
+      [
+        "thanks_sent_1.png",
+        "Thanked 5 submitters",
+        "normal",
+        2002456
+      ],
+      [
+        "tools1.png",
+        "Submitted 1 Tool",
+        "normal",
+        2088378
+      ],
+      [
+        "m_age_3.png",
+        "1 year a member",
+        "normal",
+        2403905
+      ],
+      [
+        "monthly_award.gif",
+        "WiPper of the Month, May 2025",
+        "normal",
+        3243121
+      ],
+      [
+        "monthly_award.gif",
+        "WiPper of the Month, August 2025",
+        "normal",
+        3649257
+      ],
+      [
+        "returns_1.png",
+        "Returned 100 times",
+        "normal",
+        3698015
+      ],
+      [
+        "m_age_4.png",
+        "2 years a member",
+        "normal",
+        3915362
+      ],
+      [
+        "monthly_award.gif",
+        "Tooler of the Month, November 2025",
+        "normal",
+        4032624
+      ]
+    ],
+    "_aRareMedals": [
+      [
+        "subscribers_2.png",
+        "Reached 50 subscribers",
+        "rare",
+        1483478
+      ],
+      [
+        "thanks_recvd_2.png",
+        "Received thanks 50 times",
+        "rare",
+        1518479
+      ],
+      [
+        "features_2.png",
+        "10 submissions featured",
+        "rare",
+        1612697
+      ],
+      [
+        "mods3.png",
+        "Submitted 15 Mods",
+        "rare",
+        1680378
+      ],
+      [
+        "m_pr_5.png",
+        "Reached 75,000 Points",
+        "rare",
+        1756353
+      ],
+      [
+        "mods4.png",
+        "Submitted 20 Mods",
+        "rare",
+        1792226
+      ],
+      [
+        "m_pr_6.png",
+        "Reached 200,000 Points",
+        "rare",
+        2224019
+      ],
+      [
+        "tools2.png",
+        "Submitted 5 Tools",
+        "rare",
+        2268457
+      ],
+      [
+        "mods5.png",
+        "Submitted 50 Mods",
+        "rare",
+        3128140
+      ],
+      [
+        "m_pr_7.png",
+        "Reached 500,000 Points",
+        "rare",
+        3498169
+      ]
+    ],
+    "_aLegendaryMedals": [
+      [
+        "subscribers_3.png",
+        "Reached 100 subscribers",
+        "legendary",
+        1494131
+      ],
+      [
+        "features_3.png",
+        "30 submissions featured",
+        "legendary",
+        2092945
+      ],
+      [
+        "thanks_recvd_3.png",
+        "Received thanks 500 times",
+        "legendary",
+        2269975
+      ]
+    ],
+    "_bHasRipe": false,
+    "_nBuddyCount": 16,
+    "_nSubscriberCount": 6034,
+    "_aDonationMethods": [
+      {
+        "_sTitle": "Patreon Profile",
+        "_sValue": "https://patreon.com/Caverabbit",
+        "_sInputType": "text",
+        "_sInputPlaceholder": "Patreon Profile URL...",
+        "_sIconClasses": "MiscIcon PatreonProfileIcon",
+        "_aValidator": {
+          "_regexValidPattern": "^https?\\:\\/\\/(www\\.)?patreon\\.com\\/.+$",
+          "_sWarningMessage": "URL looks incorrect - it should look like: https://patreon.com/USERNAME"
+        },
+        "_sValueTemplate": "<a target=\"_blank\" href=\"%VALUE%\">Patreon Profile</a>",
+        "_bIsUrl": true,
+        "_sFormattedValue": "<a target=\"_blank\" href=\"https://patreon.com/Caverabbit\">Patreon Profile</a>"
+      }
+    ],
+    "_bAccessorIsBuddy": false,
+    "_bBuddyRequestExistsWithAccessor": false,
+    "_bAccessorIsSubscribed": false,
+    "_aDefaultLicenseChecklist": [
+      "yes",
+      "ask",
+      "ask",
+      "ask",
+      "ask",
+      "ask",
+      "no",
+      "ask"
+    ],
+    "_sDefaultLicense": "",
+    "_sHdAvatarUrl": "https://images.gamebanana.com/img/av/66103adb80f20.png"
+  },
+  "_bFollowLinks": true,
+  "_aGame": {
+    "_idRow": 19567,
+    "_sName": "Zenless Zone Zero",
+    "_sAbbreviation": "ZZZ",
+    "_sProfileUrl": "https://gamebanana.com/games/19567",
+    "_sIconUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png",
+    "_sBannerUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png",
+    "_nSubscriberCount": 98271,
+    "_bHasSubmissionQueue": false,
+    "_bAccessorIsSubscribed": false
+  },
+  "_aCategory": {
+    "_idRow": 29874,
+    "_sName": "Other/Misc",
+    "_sModelName": "ModCategory",
+    "_sProfileUrl": "https://gamebanana.com/mods/cats/29874",
+    "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/6688c2aba07b5.png",
+    "_bIsObsolete": false
+  },
+  "_aFeaturings": {
+    "3day": {
+      "_sFeatureGroup": "3day",
+      "_sTitle": "Best of the Banana",
+      "_sIconClasses": "MiscIcon FeaturedBestOfTheBananaIcon",
+      "_tsDate": 1722546001
+    }
+  },
+  "_aCredits": [
+    {
+      "_sGroupName": "Key Authors",
+      "_aAuthors": [
+        {
+          "_sRole": "ME!!!♪(´▽｀)",
+          "_idRow": 2987570,
+          "_sName": "caverabbit",
+          "_sProfileUrl": "https://gamebanana.com/members/2987570",
+          "_sAvatarUrl": "https://images.gamebanana.com/img/av/66107b5189b4a.png",
+          "_bIsOnline": false
+        }
+      ]
+    },
+    {
+      "_sGroupName": "Contributors",
+      "_aAuthors": [
+        {
+          "_sRole": "Creator of TexFX",
+          "_idRow": 2823441,
+          "_sName": "SinsOfSeven",
+          "_sProfileUrl": "https://gamebanana.com/members/2823441",
+          "_sAvatarUrl": "https://images.gamebanana.com/img/av/6587fd8c69fea.png",
+          "_bIsOnline": false
+        },
+        {
+          "_sRole": "AMD testing",
+          "_idRow": 2841781,
+          "_sName": "Nurarihyon",
+          "_sProfileUrl": "https://gamebanana.com/members/2841781",
+          "_sAvatarUrl": "https://images.gamebanana.com/img/av/65146a3478eb2.jpg",
+          "_bIsOnline": false
+        }
+      ]
+    },
+    {
+      "_sGroupName": "Special Thanks",
+      "_aAuthors": [
+        {
+          "_sRole": "Helping me test with their RTX5080",
+          "_sName": "Bastion"
+        },
+        {
+          "_sRole": "Helping me test and find the cause for the AMD crashes",
+          "_sName": "CMOS"
+        }
+      ]
+    }
+  ],
+  "_bAdvancedRequirementsExist": false,
+  "_aRequirements": [
+    [
+      "XXMI",
+      "https://github.com/SpectrumQT/XXMI-Launcher"
+    ]
+  ]
+}

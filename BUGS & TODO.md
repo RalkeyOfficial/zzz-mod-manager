@@ -88,8 +88,20 @@ UI, no badges, minimal styling.
     download service must use a **stall** timeout (no bytes for N seconds), never a
     total-duration one, or it will cancel legitimate slow downloads.
   - **In-stream md5 costs nothing**, confirming §7.8 is free to do on every ingest.
-- [ ] **§2 (subset)** — GameBanana API client: search, mod profile, file list.
+- [x] **§2 (subset)** — GameBanana API client: search, mod profile, file list.
   Only what browsing + install needs; no caching/retry polish yet.
+  **Done.** `GameBananaClient` (`services/gamebanana/`) exposes `browseMods`,
+  `searchMods`, `modProfile`, `modProfileByUrl` and `categories`, over an
+  injectable `HttpTransport` seam (`services/http/`) so all 132 tests run with no
+  network — verified in a namespace with no route out. Wire DTOs live in
+  `models/gamebanana/`, one type per file, against 9 real captured fixtures in
+  `test/fixtures/gamebanana/`. Two corrections to what this doc assumed, both
+  applied — see §2 below: **browse is `Mod/Index`, not `Subfeed`**, and
+  **`Mod/Categories` was a missing fourth method**. Caching (the server's own
+  10-min `max-age`), reactive 429/503 backoff and in-flight coalescing landed
+  with it rather than being deferred — they were a few lines each once the seam
+  existed. The mod-page-url parser went to `utils/gamebanana_url.dart` so §7.3
+  can use it offline.
 - [ ] **§5 (basic)** — extract the inline download code into a service;
   download → extract → auto-tag. Single fixed flow, no queue yet — but **resume and
   a stall timeout are in scope for M1**, not deferred: §0 measured 1.24 GB files and
@@ -212,9 +224,26 @@ holds. Recorded here so it isn't re-litigated, and so the field names can be cod
 against directly. There is no `/apidocs` page; the surface is discoverable only by
 probing, which is one more reason to keep our client tiny.
 
-- [ ] **Endpoints that do the job.** `GET /apiv11/Game/19567/Subfeed?_nPage&_nPerpage`
-  (browse), `GET /apiv11/Util/Search/Results?_sModelName=Mod&_sSearchString=…&_idGameRow=19567`
-  (search — the server caps `_nPerpage` at 15 and returns `_nRecordCount` for paging),
+- [x] **Endpoints that do the job.** ~~`GET /apiv11/Game/19567/Subfeed`~~ →
+  **`GET /apiv11/Mod/Index?_aFilters[Generic_Game]=19567&_sSort=…&_nPage&_nPerpage`
+  (browse)**. Corrected while building the client: `Subfeed` accepts **no filters
+  and no sort**, so it cannot satisfy §1's "search box + category/character
+  filters" — and the character filter is only expressible as a
+  `Generic_Category` over the 60 children of Character Skins (`30305`). `Index`
+  is what `docs/gamebanana-api.md` calls the browse workhorse; `_nPerpage` is a
+  hard 50 there (`INVALID_PERPAGE` above it, not a silent cap).
+  **`GET /apiv11/Mod/Categories?_idGameRow=…|_idCategoryRow=…&_sSort=…`** was
+  missing from this list entirely and is a fourth endpoint M1 needs, since it is
+  what the category/character filter is built from. It returns a **bare array**
+  and *requires* `_sSort` (its own internal default is a value it rejects). One
+  knock-on this doc never budgeted: the filter list is therefore a network call,
+  so it wants a cached provider plus an offline fallback to the hardcoded
+  `utils/zzz_characters.dart` roster.
+  `GET /apiv11/Util/Search/Results?_sModelName=Mod&_sSearchString=…&_idGameRow=19567`
+  (search — the server caps `_nPerpage` at 15 **silently, with no error**, so the
+  client doesn't expose the knob at all and reads `_aMetadata._nPerpage` back;
+  `_nRecordCount` drives paging). Note search scopes by `_idGameRow` while Index
+  scopes by `_aFilters[Generic_Game]` — different spellings, no overlap.
   `GET /apiv11/Mod/<id>/ProfilePage` (everything the detail screen needs, in one call),
   `GET /apiv11/Mod/<id>/Updates` (the author's changelog feed — that's §4's changelog
   display, no scraping required).

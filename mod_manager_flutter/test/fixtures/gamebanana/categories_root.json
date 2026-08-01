@@ -1,0 +1,38 @@
+[
+  {
+    "_idRow": 30702,
+    "_sName": "Bangboo Skins",
+    "_nItemCount": 46,
+    "_nCategoryCount": 22,
+    "_sUrl": "https://gamebanana.com/mods/cats/30702",
+    "_bIsObsolete": false,
+    "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/669c13bb037b1.png"
+  },
+  {
+    "_idRow": 30305,
+    "_sName": "Character Skins",
+    "_nItemCount": 4589,
+    "_nCategoryCount": 60,
+    "_sUrl": "https://gamebanana.com/mods/cats/30305",
+    "_bIsObsolete": false,
+    "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/66a1928c3e239.gif"
+  },
+  {
+    "_idRow": 29874,
+    "_sName": "Other/Misc",
+    "_nItemCount": 259,
+    "_nCategoryCount": 1,
+    "_sUrl": "https://gamebanana.com/mods/cats/29874",
+    "_bIsObsolete": false,
+    "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/6688c2aba07b5.png"
+  },
+  {
+    "_idRow": 30395,
+    "_sName": "UI",
+    "_nItemCount": 254,
+    "_nCategoryCount": 1,
+    "_sUrl": "https://gamebanana.com/mods/cats/30395",
+    "_bIsObsolete": false,
+    "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/6690641770738.png"
+  }
+]

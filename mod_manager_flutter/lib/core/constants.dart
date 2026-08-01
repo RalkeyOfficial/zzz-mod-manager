@@ -3,6 +3,17 @@ class AppConstants {
   // Private constructor to prevent instantiation
   AppConstants._();
 
+  /// The app version, kept in sync with `pubspec.yaml`'s `version:`.
+  ///
+  /// Single source for everything that has to *say* the version: the badge in
+  /// the UI and the `User-Agent` we send to GameBanana. Bumping the release
+  /// means updating this alongside `pubspec.yaml` — see CLAUDE.md's checklist.
+  static const String appVersion = '2.2.2';
+
+  /// Zenless Zone Zero's game id on GameBanana. Every remote request is scoped
+  /// to it: <https://gamebanana.com/games/19567>.
+  static const int gameBananaGameId = 19567;
+
   // UI Scaling
   static const double minScale = 0.8;
   static const double maxScale = 1.5;

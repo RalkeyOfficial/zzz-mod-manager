@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Groundwork for the native GameBanana marketplace: a read-only API client for browsing, searching and reading mod details, covered by tests that run without a network. Nothing user-visible yet — the marketplace still uses the existing browser flow.
+
 ### Fixed
 
 - Metadata written into a mod's `.zzz-mod-manager/metadata.json` by a newer version of the app (or another tool) is no longer erased when you edit that mod's description, tags or character.

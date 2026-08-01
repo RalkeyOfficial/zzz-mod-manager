@@ -2,11 +2,28 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/character_info.dart';
 import '../services/api_service.dart';
+import '../services/gamebanana/gamebanana_client.dart';
 import '../services/mod_manager_service.dart';
 
 // API Service Provider
 final modManagerServiceProvider = FutureProvider<ModManagerService>((ref) async {
   return await ApiService.getModManagerService();
+});
+
+/// The GameBanana API client (browse / search / mod detail).
+///
+/// Deliberately **not** hung off `ApiService`, despite that being the usual
+/// entry point for screens: `ApiService` is a static facade over singletons,
+/// and a static singleton cannot take an injected HTTP transport — which is the
+/// whole point of the seam that lets this layer be tested offline. A provider
+/// gives the same single shared instance with a real disposal hook.
+///
+/// Screens should read this rather than constructing a client, so the response
+/// cache is shared across the results grid and the detail view.
+final gameBananaClientProvider = Provider<GameBananaClient>((ref) {
+  final client = GameBananaClient();
+  ref.onDispose(client.close);
+  return client;
 });
 
 // Zoom scale provider
