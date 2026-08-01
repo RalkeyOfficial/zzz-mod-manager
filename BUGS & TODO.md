@@ -66,20 +66,37 @@ Goal: kill the broken Linux external-browser path and get one real end-to-end
 install working identically on Linux and Windows. Deliberately plain — no update
 UI, no badges, minimal styling.
 
-- [ ] **§0 — one remaining API unknown** (small spike, before §5 is hardened). The
-  contract is verified and written up in
-  [`docs/gamebanana-api.md`](docs/gamebanana-api.md): search, profile, file list and
-  anonymous download all work, 30 concurrent requests drew no throttling, and
-  `Mod/Multi` can fetch many mods' file lists in **one** request — which shrinks
-  §7.6's bulk pass from ~80 requests to a handful and largely retires the rate-limit
-  worry. Still unmeasured: how a **very large file** behaves mid-download. Files run
-  to ~650 MB, so resume is a requirement rather than the M4 polish it's filed as.
+- [x] **§0 — the large-download unknown is now measured.** **Done** (2026-08-01);
+  full results in [`docs/gamebanana-api.md`](docs/gamebanana-api.md) §8. The rest of
+  the contract was already verified there: search, profile, file list and anonymous
+  download all work, 30 concurrent requests drew no throttling, and `Mod/Multi` can
+  fetch many mods' file lists in **one** request — which shrinks §7.6's bulk pass
+  from ~80 requests to a handful and largely retires the rate-limit worry. What the
+  spike found:
+  - **Resume works, from the `/dl/` link itself.** `Range` survives both redirect
+    hops, `ETag` is stable across CDN nodes (so `If-Range` is safe), and we never
+    need to persist a resolved CDN url. Verified byte-exact on a 655 MB file with
+    three interruptions via curl and four through Dart's `HttpClient`, both matching
+    the published `_sMd5Checksum`.
+  - **Files reach 1.24 GB, not ~650 MB** — but the median is only 21.9 MB and just
+    9.5% exceed 100 MB. The tail is what needs engineering, not the common case.
+  - **Throughput is a property of the CDN node and node choice is deterministic per
+    file.** A healthy node gives 14–22 MB/s; a degraded one gave 0.83 MB/s falling to
+    0.08 MB/s, for every file it served. **Retrying cannot route around it**, and
+    parallel connections don't help. Worst observed case: ~25 min for one file.
+  - **Consequence — resume moves out of M4 polish and into M1** (below), and the
+    download service must use a **stall** timeout (no bytes for N seconds), never a
+    total-duration one, or it will cancel legitimate slow downloads.
+  - **In-stream md5 costs nothing**, confirming §7.8 is free to do on every ingest.
 - [ ] **§2 (subset)** — GameBanana API client: search, mod profile, file list.
   Only what browsing + install needs; no caching/retry polish yet.
 - [ ] **§5 (basic)** — extract the inline download code into a service;
-  download → extract → auto-tag. Single fixed flow, no queue/resume yet. Hash the
-  archive in-stream on every ingest path (§7.8) — it's unrecoverable afterwards,
-  so this has to land with the flow itself even though nothing reads it until M2.
+  download → extract → auto-tag. Single fixed flow, no queue yet — but **resume and
+  a stall timeout are in scope for M1**, not deferred: §0 measured 1.24 GB files and
+  a CDN node serving at 0.08 MB/s, so a download that survives an interruption is
+  table stakes rather than polish. Hash the archive in-stream on every ingest path
+  (§7.8) — it's unrecoverable afterwards, so this has to land with the flow itself
+  even though nothing reads it until M2.
 - [ ] **§3 (write side)** — record the origin block at install time (source,
   remote mod id, file id, version string + label, date, hash). *Written now,
   read in M2.* Ships **with the confidence fields from day one** (§7.2) —
@@ -131,7 +148,8 @@ Goal: the payoff feature. Needs §2 + §3 + §5 from M1/M2.
 
 ### M4 — Robustness & polish
 
-- [ ] **§5** — download queue, progress, retry/resume; revisit SSL bypass.
+- [ ] **§5** — download queue and multi-download progress; revisit SSL bypass.
+  (Resume itself moved to M1 — see §0.)
 - [ ] **§4** — opt-in auto-update (global + per-mod) with notification.
 - [ ] **§6** — surface all new settings in the Settings tab.
 - [ ] **§1** — empty/error/loading/offline states.
@@ -379,15 +397,36 @@ update is **not** a re-run of the import path.
   alongside the new one — duplicate hotkeys and conflicting overrides, which present
   to the user as "the update broke my mod". Snapshots go in `<appData>/backups/<mod>/`.
 - [ ] **Bounded retention.** §7.2 has `inferred` updates *keep* their backup rather
-  than pruning it; with mod archives running to hundreds of MB that grows without
-  limit. Pick a cap (last N per mod, or an age limit), and expose total backup size in
-  the storage view (backlog) so it isn't invisible disk usage.
+  than pruning it, which grows without limit. Pick a cap (last N per mod, or an age
+  limit), and expose total backup size in the storage view (backlog) so it isn't
+  invisible disk usage. §0's sizing: the median mod is only ~22 MB, so a generous
+  count cap is cheap for most libraries — but the tail reaches 1.24 GB, so the cap
+  has to be **size-aware**, not purely count-based, or a handful of big mods quietly
+  eats several GB.
 
 ## 5. Download manager
 
 - [ ] Extract the inline download code out of `marketplace_screen.dart`
   (`_downloadToTemporaryFile` bare `HttpClient`) into a dedicated service.
-- [ ] Queue + progress + retry/resume.
+- [ ] Queue + progress. **Resume is M1, not M4** — §0 measured the numbers behind
+  this; `docs/gamebanana-api.md` §8 has the mechanics. What the service must do:
+  - **Resume by re-requesting the original `/dl/<id>` with `Range: bytes=<have>-`.**
+    Range survives both redirect hops, so the resolved `filecacheNN` url never needs
+    persisting. Send `If-Range` with the stored `ETag`; it's `hex(mtime)-hex(size)`
+    and identical across nodes, so a resume landing elsewhere won't restart.
+    Expect `206`; treat a `200` as "file changed upstream, start over" and `416` as
+    "already complete".
+  - **Stall timeout, never a total-duration timeout.** Abort only after N seconds
+    with zero bytes. A legitimate download can take ~25 minutes.
+  - **Don't retry-storm a slow node.** Node assignment is deterministic per file, so
+    reconnecting lands on the same machine; resume from the offset instead.
+  - **Backpressure the socket** (`sub.pause(sink.addStream(...))`). Today's
+    `sink.add()` is never awaited and the subscription is never paused.
+  - Persist enough per download (`file_id`, expected size, ETag, bytes-on-disk) that
+    a resume survives an app restart, not just a flaky connection.
+- [ ] Progress UI must suit hour-long transfers: rate + ETA, not just a bar, and
+  cancellable throughout. `_nFilesize` exactly equals `Content-Length`, so it's a
+  reliable denominator and a preflight disk-space check.
 - [ ] **Unify the download directory.** Today it's inconsistent (system Downloads
   on Linux vs `<appData>/downloads` for HTTP grabs). **Decision**: incoming
   archives land in **`<appData>/downloads`** and are **deleted after successful

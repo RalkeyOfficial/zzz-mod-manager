@@ -10,8 +10,7 @@ use the ZZZ game id **`19567`**; a real mod (`698834`) and file (`1770600`) are 
 so you can paste any of them into a terminal.
 
 > This documents the *remote* API only. How we store what comes back is
-> [`metadata-schema.md`](metadata-schema.md); what we plan to build on it is
-> [`../BUGS & TODO.md`](../BUGS%20&%20TODO.md) §2–§4.
+> [`metadata-schema.md`](metadata-schema.md).
 
 ---
 
@@ -315,7 +314,7 @@ downloadable**.
 |---|---|
 | `_idRow` | **File id.** What `/dl/<id>` refers to; record this, not the filename. |
 | `_sFile` | Original filename (`remielleswimlite.rar`). |
-| `_nFilesize` | Bytes. Can be large — 650 MB files exist. |
+| `_nFilesize` | Bytes. **Exactly equals the eventual `Content-Length`** (checked on four files), so it's safe for a preflight disk-space check and for a progress bar's denominator. Can be large — see [§8](#8-downloading-a-file) for the real distribution. |
 | `_tsDateAdded` | When this file was uploaded. The date comparator for update checks. |
 | `_sVersion` | **Per-file version string.** Optional; distinct from the mod-level `_sVersion`. |
 | `_sDescription` | Free-text label the author gave the file (`"Full Mod"`). This is the *variant* label ("white hair ver"), not a version. |
@@ -334,7 +333,10 @@ Two consequences worth internalising:
 - **`_sMd5Checksum` is a matching key, not a trust signal.** It identifies *which*
   file something is; it doesn't make it safe. md5 is cryptographically broken. If you
   want to show the user a safety indicator, show `_sAvResult` — that one actually
-  means something. (Same rule as `../BUGS & TODO.md` §7.8.)
+  means something. Never render an md5 match as "✓ verified" or attach a shield icon
+  to it; the honest phrasing is "byte-identical to file X on the mod page". If real
+  integrity checking is ever wanted, add sha256 alongside rather than reinterpreting
+  this field.
 
 ---
 
@@ -369,11 +371,95 @@ GET https://gamebanana.com/dl/1770600
 ```
 
 - **Follow redirects** (two hops, cross-host) — a client that doesn't will get an
-  empty 302 body.
-- **Range requests are honoured** (`Accept-Ranges` / `206 Partial Content`), so
-  resumable downloads are possible. With 650 MB files around, that matters.
-- The final filename comes from `_sFile`; don't parse it out of the URL.
+  empty 302 body. Dart's `HttpClient` does this by default
+  (`response.redirects.length == 2`); no manual handling needed.
+- The final filename comes from `_sFile`. There is **no `Content-Disposition`**
+  header, so don't expect to learn it from the response.
+- `HEAD` works on `/dl/<id>` and returns the full header set, so you can preflight
+  size and existence without transferring anything.
 - Archived files download the same way — `/dl/<archived file id>` works.
+- 8 concurrent download starts all returned `206` with no throttling.
+
+### How big do files actually get?
+
+Sampled 694 files across 238 ZZZ mods (2026-08-01):
+
+| median | p75 | p90 | p95 | p99 | max |
+|---|---|---|---|---|---|
+| 21.9 MB | 42.8 MB | 95.7 MB | 150.1 MB | 358.9 MB | **1244.7 MB** |
+
+9.5% exceed 100 MB, 1.4% exceed 250 MB, and two files in the sample exceed 1 GB.
+So the common case is small and quick, but the tail is long enough that a download
+**cannot** be treated as a short operation. Dart handles >1 GB fine —
+`contentLength` is a 64-bit int and reported `1244723883` correctly.
+
+### Resume works, and it works from the `/dl/` link
+
+This is the important one, because it means we never have to persist a resolved
+CDN url.
+
+- **`Range` survives both redirect hops.** Sending `Range: bytes=N-` to
+  `gamebanana.com/dl/<id>` yields `206 Partial Content` from the filecache node
+  with a correct `Content-Range: bytes N-M/total`. Resume by re-requesting the
+  *original* `/dl/` link with a `Range` header.
+- Open-ended (`bytes=N-`) and bounded (`bytes=N-M`) ranges both work. A range past
+  EOF returns **`416`** with `Content-Range: bytes */<total>`.
+- **`ETag` is stable and safe for `If-Range`.** It's nginx's
+  `hex(mtime)-hex(size)` (`"6a6d2f6d-271697ec"` ⇒ size `655792108`) and is
+  **identical across filecache nodes**, so a resume that lands on a different node
+  won't spuriously restart. `Last-Modified` matches across nodes too.
+- Verified end to end twice on a 655 MB file: three interruptions via `curl -C -`
+  produced a file **byte-identical** to an uninterrupted download, and four
+  interruptions through Dart's `HttpClient` produced an md5 equal to the published
+  `_sMd5Checksum`. Resuming costs no throughput (17–20 MB/s across every pass).
+
+The md5 can be computed **in-stream while downloading**, at no measurable cost to
+throughput, and it matched the published `_sMd5Checksum` on every run. That matters
+because the archive is normally deleted once extracted: the hash is the only residue
+that survives, it cannot be reconstructed from the extracted files afterwards, and it
+is what later lets you say *which* file on the mod page a local install came from.
+So hash on the way past — there is no second chance.
+
+### Throughput is per-node, and some nodes are badly degraded
+
+The single biggest surprise of the measurement, and it shapes the whole retry design.
+
+- A healthy node serves at **14–22 MB/s** (655 MB in ~35 s).
+- `filecache43` served at **0.83 MB/s**, degrading to **~0.08 MB/s** over the same
+  hour — 20–200× slower. It was slow for *every* file it served, including one that
+  streams at 10 MB/s from `filecache30`/`filecache38`. So it's the **node**, not the
+  file, and not our client.
+- **Node assignment is deterministic per filename** — 10/10 samples for a given file
+  resolved to the same node, and different files resolve to different nodes.
+  **Therefore a retry cannot escape a degraded node.** Reconnecting to the same
+  `/dl/` link lands you on the same slow machine every time.
+- Opening 4 parallel range connections recovered only ~2 MB/s in total, so the limit
+  is not per-connection and multi-part downloading doesn't rescue it.
+
+Consequences for the download manager:
+
+- **Never use a total-duration timeout.** The 1.24 GB file over a degraded node
+  needs ~25 minutes at best, and got worse while being measured. Any fixed ceiling
+  would cancel legitimate downloads. Use a **stall timeout** — abort only after N
+  seconds with *zero* bytes received — and let slow-but-moving transfers run.
+- Progress UI has to tolerate hour-long transfers: show a rate and an ETA, not just
+  a bar, and keep the download cancellable and resumable throughout.
+- Since a retry can't route around a bad node, retrying instantly and repeatedly
+  achieves nothing. Resume from the current offset and keep going.
+- *(Observation, not a recommendation: the same file fetched directly from another
+  `filecacheNN` host is fast. Hard-coding node numbers is undocumented, discourteous
+  and will break — don't build on it. Recorded only so the cause isn't
+  re-investigated.)*
+
+### A note on the client itself
+
+The current inline downloader (`marketplace_screen.dart`, `_downloadToTemporaryFile`)
+calls `sink.add(chunk)` without awaiting it and never pauses the subscription, so
+nothing throttles the socket when the disk falls behind. In practice this was benign
+— writing to local disk at 20 MB/s, peak RSS was identical (217 MB) with and without
+backpressure. Forcing a deliberately slow consumer did separate them (+57 MB vs
++15 MB above baseline), so it's a latent risk rather than an observed failure. The
+fix is free when the code moves into a service: `sub.pause(sink.addStream(...))`.
 
 ---
 
@@ -465,10 +551,16 @@ Collected so nobody rediscovers them:
 - **`_ts…` of `0` means never.** `_nStatus` is a string.
 - **A root-category filter includes subcategories**, so counts won't exactly match
   `_nItemCount` (4591 vs 4589 for ZZZ Character Skins — close, not equal).
+- **Download speed is a property of the CDN node, not of your connection.** Node
+  choice is deterministic per filename, so a slow file stays slow however often you
+  retry. Don't read a 0.8 MB/s transfer as a bug in the client
+  ([§8](#8-downloading-a-file)).
+- **No `Content-Disposition` on downloads.** The filename only exists in `_sFile`.
 - **Errors never list valid values.** If something is "not recognized", consult
   [§4](#4-sorting-and-filtering) rather than guessing; the guess-rate is low.
 - **No `/apidocs` for apiv11.** The surface is discoverable only by probing, which is
-  a standing argument for keeping our client's surface small ([`../BUGS & TODO.md`](../BUGS%20&%20TODO.md) §2).
+  a standing argument for keeping our client's surface small: every endpoint and field
+  we depend on is one more thing that can change without warning.
 
 ### Re-verifying this document
 
@@ -476,4 +568,15 @@ Every claim above came from a `curl` against the live API. To re-check after an 
 change, the highest-value probes are: a bogus `_sSort` and a bogus `_aFilters[…]` key
 (confirms the error shape), `_nPerpage=100` (confirms the cap), one
 `Mod/<id>/ProfilePage` (confirms field names), and a ranged `GET` on a `/dl/` link
-(confirms downloads are still open and resumable).
+(confirms downloads are still open and resumable):
+
+```bash
+# resume still works? expect: 206 + "content-range: bytes 1000-.../<total>"
+curl -sSI -L -r 1000-2000 'https://gamebanana.com/dl/1770254' \
+  -H 'User-Agent: zzz-mod-manager/2.0' | grep -Ei 'HTTP/|content-range|etag'
+```
+
+The download numbers in [§8](#8-downloading-a-file) are the perishable ones — node
+health changes, and the size distribution drifts as mods are uploaded. The
+*structural* claims (range support, redirect count, ETag stability, deterministic
+node assignment) are the ones worth re-testing before trusting §8 again.

@@ -4,11 +4,9 @@ Reference for every piece of data the app writes to disk: what the fields mean,
 which file owns them, and the rules you must follow when changing them.
 
 **This documents what the code does today.** Where behaviour is planned but not
-implemented, it says so and links out — nothing here describes a format that
-doesn't exist yet.
+implemented, it says so — nothing here describes a format that doesn't exist yet.
 
-Related: [`../CLAUDE.md`](../CLAUDE.md) for the service/layer architecture,
-[`../BUGS & TODO.md`](../BUGS%20&%20TODO.md) for planned schema work.
+Related: [`../CLAUDE.md`](../CLAUDE.md) for the service/layer architecture.
 
 ---
 
@@ -61,8 +59,8 @@ role, *not* the whole `ConfigService`, which writes to real app-data on
 construction). So the rules are testable against a temp dir with no app state:
 see `test/mod_metadata_repository_test.dart`. Keep it that way — the riskiest
 planned logic (the `source_url` → `mod_id` parse, the confidence tiers) lands in
-`loadOrMigrate()`, and [`../BUGS & TODO.md`](../BUGS%20&%20TODO.md) §9 requires
-it under test.
+`loadOrMigrate()`, and must ship under test. Those are pure functions with no
+network and no UI, so there is no excuse for them to be untested.
 
 ```
 <mod folder>/
@@ -203,11 +201,15 @@ sidecar. Previously the first metadata edit silently stripped anything this buil
 didn't recognise — which accidentally scrubbed a foreign `origin` block. Now it
 is preserved faithfully, forever.
 
-Nothing reads `origin` yet, so there is no live risk. But it means
-[`../BUGS & TODO.md`](../BUGS%20&%20TODO.md) §3's rule — *drop the inbound
-`origin` block entirely on any ingest we didn't download ourselves
-(`imported_folder`, `imported_archive`)* — went from prudent to **load-bearing**,
-and has to land in the same change as the origin write side. Without it, a
+Nothing reads `origin` yet, so there is no live risk. But it promotes one rule from
+prudent to **load-bearing**:
+
+> On any ingest we did not download ourselves (`imported_folder`,
+> `imported_archive`), drop the inbound `origin` block entirely. Keep the
+> user-facing fields — description, tags, images — since those travelling between
+> people is the whole point of a sidecar.
+
+That has to land in the same change as the origin write side. Without it, a
 stranger's folder asserts `exact` confidence we never established, on the one
 tier gated for unattended auto-update.
 
@@ -416,15 +418,34 @@ every existing install — but do expect the confusion when reading the code.
 
 The metadata schema is slated for a **v2** that adds an *origin block* — where a
 mod came from, which remote file it is, and how confident we are about that — plus
-the offline backfill and status UI around it.
+the offline backfill and status UI around it. **The origin block itself is not
+implemented yet**, so the shape below is a design sketch, not a format to code
+against; this section becomes authoritative only when the write side ships.
 
-That work is specified in [`../BUGS & TODO.md`](../BUGS%20&%20TODO.md) §3 and §7,
-including the confidence tiers, what each tier is allowed to trigger, and the
-reasoning behind the safety gates. **The origin block itself is not implemented
-yet.**
+The design rests on two decisions worth recording here, because they constrain the
+format rather than merely the UI:
 
-Its prerequisite is, though: the sidecar now round-trips unknown keys and
-preserves machine-owned ones across a save ([§2](#save-semantics-three-classes-of-field)),
+- **Confidence and provenance are separate axes.** *Confidence* is how sure we are
+  which remote file this is; *provenance* is where the folder came from
+  (`downloaded`, `imported_archive`, `imported_folder`). They are independent: a
+  hand-imported archive whose md5 matches the checksum the remote publishes is known
+  exactly, despite never having been downloaded by us. A single enum named after a
+  source would therefore mislabel it.
+- **Only exact knowledge may drive a destructive path.** The tiers are `exact` (we
+  downloaded it, or its archive hash matched a published checksum), `user` (the user
+  told us), `inferred` (guessed from local data — a URL parse, a name match),
+  `assumed_latest` ("don't know what I have, got it around then"), and `unknown`.
+  Anything short of `exact` may badge, suggest and prompt, but must never overwrite
+  files unattended; `inferred` in particular came from a free-form text field a human
+  typed, so it has to be confirmed once before any update acts on it.
+
+Identity ("which remote mod is this?") and version ("which file of it?") resolve
+independently and must be tracked as separate unknowns — the first is often
+recoverable offline by parsing an existing `source_url`, the second almost never is,
+because the archive is deleted after extraction.
+
+The block's **prerequisite** has shipped, though: the sidecar now round-trips unknown
+keys and preserves machine-owned ones across a save ([§2](#save-semantics-three-classes-of-field)),
 so an `origin` block written by a future build survives contact with this one.
 That had to land first, because the fix is forward-only
 ([§4](#when-to-bump-it)).

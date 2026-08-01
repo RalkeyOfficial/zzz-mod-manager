@@ -16,7 +16,6 @@ the root [`README.md`](../README.md).
 |---|---|
 | [`../CLAUDE.md`](../CLAUDE.md) | Architecture overview, layer structure, dev workflow (hot reload vs restart), the platform abstraction, and the version-bump checklist |
 | [`../CHANGELOG.md`](../CHANGELOG.md) | Release history (Keep a Changelog / SemVer) |
-| [`../BUGS & TODO.md`](../BUGS%20&%20TODO.md) | Pre-planning for the marketplace / download / update overhaul — decisions and rationale, not yet implemented |
 | [`../BUILD_WINDOWS_GUIDE.md`](../BUILD_WINDOWS_GUIDE.md) | Windows build and packaging |
 
 ## Conventions
@@ -25,9 +24,13 @@ the root [`README.md`](../README.md).
   accumulated a dozen one-off markdown files and is no longer navigable.
 - **English only**, per the language rule in `CLAUDE.md`. Some older root-level
   documents are in Ukrainian (`*_UK.md`) and predate that rule.
-- **Document what the code does**, and mark anything planned as planned with a link
-  to where it's specified. A reference that quietly describes unbuilt behaviour is
-  worse than no reference.
+- **Document what the code does**, and mark anything planned clearly as planned. A
+  reference that quietly describes unbuilt behaviour is worse than no reference.
+- **Every doc must stand on its own.** Don't cite temporary planning or scratch files
+  for the substance of a claim — restate the rule or rationale here instead, quoting
+  it if that's clearest. Planning files get deleted as their contents ship, taking
+  the meaning (and leaving a dead link) with them. Linking to durable things — the
+  code, `CLAUDE.md`, other docs in this directory — is fine.
 
 ## Legacy root-level documents
 
