@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Metadata written into a mod's `.zzz-mod-manager/metadata.json` by a newer version of the app (or another tool) is no longer erased when you edit that mod's description, tags or character.
+- Saving the edit dialog for a mod with no character assigned no longer records the placeholder "unknown" as its character, and mods carrying that placeholder from an older version are now treated as untagged.
+
 ## [2.2.2] - 2026-07-19
 
 ### Fixed

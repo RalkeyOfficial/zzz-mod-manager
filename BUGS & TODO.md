@@ -84,12 +84,16 @@ UI, no badges, minimal styling.
   remote mod id, file id, version string + label, date, hash). *Written now,
   read in M2.* Ships **with the confidence fields from day one** (§7.2) —
   otherwise M1's own format needs migrating later.
-- [ ] **§3 (prerequisite)** — make the sidecar **round-trip unknown keys** and
+- [x] **§3 (prerequisite)** — make the sidecar **round-trip unknown keys** and
   treat machine-owned fields (`origin`, `schema_version`) as preserved-from-disk
   rather than sourced from `ModInfo`. Must land **before** anything writes an origin
   block: today an unrelated metadata edit would silently erase it, and older builds
   strip keys they don't know. Forward-only fix — see
   [`docs/metadata-schema.md`](docs/metadata-schema.md) §2 and §4.
+  **Done.** `ModMetadata.extra` + `knownKeys` round-trip unrecognised keys, and
+  `replaceUserFields()` makes preservation structural: adding a machine-owned field
+  needs no save-site change, adding a user-editable one is a compile error at every
+  save site. Written up in `docs/metadata-schema.md` §2.
 - [ ] **§7 (offline backfill)** — schema v1 → v2 during the normal scan:
   `source_url` → remote mod id, proxy install date. Local-only, no network, no
   UI. Without this, every pre-existing install is permanently invisible to §4.
@@ -271,6 +275,12 @@ version/origin data. Extend the per-mod metadata (and `ModInfo`) with an
   the inbound `origin` block entirely** — provenance already tells us it isn't ours.
   Keep the user-facing fields (description, tags, images); those travelling is the
   whole point of sidecars. Cheap, and it must land in M1 *with* the write side.
+  **Now load-bearing, not merely prudent.** The round-trip fix shipped, so an
+  inbound `origin` block is preserved faithfully instead of being accidentally
+  scrubbed by the first metadata edit. The accidental safety net is gone; this
+  rule is the only thing left standing between a stranger's sidecar and a claim
+  of `exact` confidence. See [`docs/metadata-schema.md`](docs/metadata-schema.md)
+  §2.
 - [ ] **Define what "already installed" means** before §1 renders a badge for it: per
   `mod_id` (this mod is in your library, maybe a different file) or per `file_id`
   (this exact file)? They differ constantly — two skins of one mod are two folders.
@@ -666,14 +676,14 @@ Known limits — worth writing down so nothing is built to depend on this:
 Small, agreed, low-risk. **No separate milestone** — do each one alongside the M1
 work that already opens the same file, so they cost nothing extra.
 
-- [ ] **Delete `ModInfo.toJson()` / `ModInfo.fromJson()`**
+- [x] **Delete `ModInfo.toJson()` / `ModInfo.fromJson()`**
   (`models/character_info.dart`). Dead everywhere, tests included — `ModInfo` is a
   runtime view, never a storage format. They're not merely inert: someone fixing
   the save path could reach for `ModInfo.toJson()` assuming it's the sidecar
   format, which would write absolute image paths plus per-install state
   (`is_active`, `is_favorite`, `keybinds`) into a file that must stay portable and
   intrinsic-only. *Do it while adding the origin fields to `ModInfo` (§3).*
-- [ ] **Wire up `ModMetadata.isEmpty` instead of leaving it unused.** Replace the
+- [x] **Wire up `ModMetadata.isEmpty` instead of leaving it unused.** Replace the
   parallel `hasLegacyData` bool in `ModManagerService._loadOrMigrateMetadata()`
   with `!metadata.isEmpty`. Verified equivalent: in that constructor
   `description`/`source_url`/`tags` are always empty, so the two agree in every

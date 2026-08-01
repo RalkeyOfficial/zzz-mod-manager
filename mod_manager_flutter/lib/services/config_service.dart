@@ -4,9 +4,10 @@ import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
 import '../utils/path_helper.dart';
+import 'mod_metadata_repository.dart';
 
 /// Сервіс для роботи з конфігурацією додатку
-class ConfigService {
+class ConfigService implements ModCharacterTagStore {
   static const String _keyModsPath = 'mods_path';
   static const String _keySaveModsPath = 'save_mods_path';
   static const String _keyActiveMods = 'active_mods';

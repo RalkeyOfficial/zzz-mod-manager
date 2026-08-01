@@ -46,8 +46,23 @@ a public interchange format, not private storage.
 
 ## 2. `metadata.json` — the per-mod sidecar
 
-Written by `ModMetadataService` (`lib/services/mod_metadata_service.dart`),
-modelled by `ModMetadata` (`lib/models/mod_metadata.dart`).
+Modelled by `ModMetadata` (`lib/models/mod_metadata.dart`) and written through
+three layers, split by responsibility:
+
+| Layer | File | Owns |
+|---|---|---|
+| `ModMetadataService` | `services/mod_metadata_service.dart` | Where a sidecar lives and how to read/write it. No opinions, no collaborators. |
+| `ModMetadataRepository` | `services/mod_metadata_repository.dart` | The **rules** — legacy migration, what "no character" means on disk, which image paths are storable, and (planned) the origin block + its backfill. |
+| `ModManagerService` | `services/mod_manager_service.dart` | Assembles a `ModInfo` from the above plus link state and config. Delegates; holds no metadata logic. |
+
+Everything the repository needs is injected — the mods path, the legacy image
+path, and the `config.json` tag mirror (as the narrow `ModCharacterTagStore`
+role, *not* the whole `ConfigService`, which writes to real app-data on
+construction). So the rules are testable against a temp dir with no app state:
+see `test/mod_metadata_repository_test.dart`. Keep it that way — the riskiest
+planned logic (the `source_url` → `mod_id` parse, the confidence tiers) lands in
+`loadOrMigrate()`, and [`../BUGS & TODO.md`](../BUGS%20&%20TODO.md) §9 requires
+it under test.
 
 ```
 <mod folder>/
@@ -88,22 +103,31 @@ modelled by `ModMetadata` (`lib/models/mod_metadata.dart`).
   imported (`.zzz-mod-manager/images/01.png`) or a file the mod author shipped
   (`Preview.png`). On load they're resolved to absolute paths and **silently
   dropped if the file no longer exists**, so a stale entry degrades rather than
-  erroring. `saveModMetadata()` discards any path that resolves outside the mod
+  erroring. `ModMetadataRepository.save()` discards any path that resolves outside the mod
   folder — call `ModMetadataService.importImageFile()` first to bring it inside.
 - **Imported images are named `NN.<ext>`**, numbered by
   `_nextImageIndex()` (max existing number + 1). The extension follows the source
   file, so the gallery is a mix of `.png`/`.jpg`.
 - **`character_id` empty or `"unknown"` is normalised to `null` on save.** Treat
-  "no character" as absence, never as the literal string `unknown` on disk.
+  "no character" as absence, never as the literal string `unknown` on disk. This
+  holds on *every* route in: `ModMetadataRepository.save()`, `setCharacter()` (which also
+  drops the `config.json` mirror rather than storing the placeholder), and the
+  legacy migration, which maps a `config.json` value of `"unknown"` to absence
+  instead of copying it into a new sidecar. The placeholder is a **runtime**
+  convention — `_buildModInfo()` substitutes it for the UI — and it must not
+  round-trip back to disk from there.
 - **A missing cover doesn't mean no image.** When `images` yields nothing,
   `_buildModInfo()` falls back to scanning the folder for
   `AppConstants.imageFileNames` (`Preview.png`, `preview.png`, `thumbnail.png`,
-  `icon.png`). That fallback is **runtime-only and never persisted** — which is
-  why a mod can display a thumbnail while its `images` array is empty.
+  `icon.png`), which is why a mod can display a thumbnail while its `images`
+  array is empty on disk. The fallback is resolved at scan time, but it is **not**
+  purely runtime: `_findModImage()` returns a path *inside* the mod folder, so the
+  next metadata save relativises it to `Preview.png` and writes it into `images`.
+  In other words the array is empty only until the user's first edit.
 
 ### Save semantics: three classes of field
 
-`ModManagerService.saveModMetadata()` builds the sidecar **from scratch** out of
+`ModMetadataRepository.save()` builds the sidecar **from scratch** out of
 the in-memory `ModInfo` rather than patching the existing file. That is
 deliberate and must stay: `copyWith`-style merging can't tell "unchanged" from
 "the user cleared this field", so merging would make emptying a description or URL
@@ -117,44 +141,114 @@ from `ModInfo`:
 |---|---|---|
 | **User-editable** | `description`, `source_url`, `tags`, `character_id`, `images` | Replaced wholesale from `ModInfo` — clearing must work |
 | **Machine-owned** | `schema_version` (today), planned `origin` | Carried over from the file on disk, never sourced from `ModInfo` |
-| **Unknown / future** | any key this build doesn't recognise | Should be passed through verbatim — **not yet implemented** |
+| **Unknown / future** | any key this build doesn't recognise | Passed through verbatim via `ModMetadata.extra` |
 
-`schema_version` is already handled the machine-owned way, via
-`existing?.schemaVersion`. It's just the only such field today, so the pattern
-reads like a one-off rather than a rule.
+All three are handled by one method, `ModMetadata.replaceUserFields()`, which is
+what `ModMetadataRepository.save()` calls on the copy read from disk:
 
-#### The failure mode, concretely
+```dart
+final existing = await _metadataService.read(modFolder);
+final metadata = (existing ?? const ModMetadata()).replaceUserFields(
+  description: …, sourceUrl: …, tags: …, characterId: …, images: …,
+);
+```
 
-If a machine-owned field is added to `ModMetadata` but not handled, it is
-destroyed by an **unrelated** user action — which makes it look like data vanishes
-at random:
+It replaces every user-editable field wholesale (so clearing still works) and
+carries `schemaVersion` + `extra` over from `this`. The design does the
+remembering for you, in both directions:
+
+- **Every parameter is required**, so adding a user-editable field is a *compile
+  error* at each save site — which is what you want, since a forgotten one is
+  erased on the first edit.
+- **The method never touches machine-owned fields**, so adding one (the origin
+  block) needs no change here at all.
+
+### Unknown keys: `extra` and `knownKeys`
+
+`ModMetadata.knownKeys` is the set of keys this build understands.
+`fromJson` routes everything else into `Map<String, dynamic> extra`, and `toJson`
+re-emits those entries **after** the known keys — so a file this build wrote
+comes back out unchanged, byte for byte.
+
+That ordering is a convenience, not a contract: a *newer* build's file with its
+own keys interleaved mid-object gets them collected to the end on the next save.
+Harmless, but don't build anything that depends on key order.
+
+Two rules:
+
+- **Adding a typed field means adding its key to `knownKeys`.** Miss it and the
+  field round-trips through `extra` *as well*, shadowing the typed one. The test
+  `knownKeys matches the full set of typed keys` guards this by asserting set
+  *equality* against a fully-populated fixture — a subset check would not, since
+  most keys are emitted conditionally and a new field left null emits nothing.
+  The fixture is therefore part of the guard: **add the new key there too**, or
+  the test is blind to it.
+- **`toJson` filters `extra` against `knownKeys`, not against what it just
+  emitted.** This is load-bearing, not belt-and-braces: three known keys are
+  written conditionally (`if (description != null)`), so filtering the other way
+  would let a stale `extra['description']` reappear in the output precisely when
+  the user *cleared* the description — resurrecting the field the
+  full-replacement design exists to let them delete.
+
+`extra` is opaque: never inspected. It is also `Map.unmodifiable` on every path
+it arrives through (`fromJson`, `copyWith`, and the const default), so mutating
+it throws rather than quietly editing a map shared with another instance.
+
+#### Consequence: an inbound sidecar's unknown keys now persist
+
+This cuts both ways, and the second edge matters for the origin block.
+`_copyDirectory()` copies a source folder's `.zzz-mod-manager/` in wholesale, so
+a mod folder from Discord or a friend arrives carrying **someone else's**
+sidecar. Previously the first metadata edit silently stripped anything this build
+didn't recognise — which accidentally scrubbed a foreign `origin` block. Now it
+is preserved faithfully, forever.
+
+Nothing reads `origin` yet, so there is no live risk. But it means
+[`../BUGS & TODO.md`](../BUGS%20&%20TODO.md) §3's rule — *drop the inbound
+`origin` block entirely on any ingest we didn't download ourselves
+(`imported_folder`, `imported_archive`)* — went from prudent to **load-bearing**,
+and has to land in the same change as the origin write side. Without it, a
+stranger's folder asserts `exact` confidence we never established, on the one
+tier gated for unattended auto-update.
+
+#### The failure mode this prevents
+
+Before `replaceUserFields` and `extra` landed, a machine-owned or unrecognised
+field was destroyed by an **unrelated** user action — which made it look like data
+vanished at random. Kept here because it's the reason the rules above exist:
 
 1. A mod is installed from the marketplace; the sidecar gets an `origin` block. ✅
 2. A scan runs. `_buildModInfo()` builds a `ModInfo`, which has no `origin` field,
    so it isn't carried into memory. Disk is still intact.
 3. A week later the user edits the mod's **description**.
-4. `saveModMetadata()` constructs a fresh `ModMetadata` from `ModInfo`. There is no
+4. The save path constructs a fresh `ModMetadata` from `ModInfo`. There is no
    `origin` to pass, so it's absent.
 5. `write()` overwrites `metadata.json`. **The origin block is gone** and the mod
    silently reverts to untracked.
 
-#### The trap when reading the code
+#### Known gap: a corrupt sidecar is still replaced wholesale
 
-```dart
-// mod_manager_service.dart, saveModMetadata()
-final existing = await _metadataService.read(modFolder);
-```
+`read()` returns `null` for both "no file" and "unparseable file", so a corrupt
+`metadata.json` is overwritten entirely on the next save — unknown keys included.
+Unlike the case above this destroys *everything*, not just the tail.
 
-This looks like the existing sidecar is being preserved. It isn't — `existing` is
-used for `schemaVersion` and nothing else. Don't assume any other field survives.
+Not fixed, deliberately: a real fix needs a policy decision (refuse the write and
+surface an error? side-copy to `metadata.corrupt-<ts>.json`?) and changing
+`read()`'s signature, which ripples into `loadOrMigrate()` — it reads
+`null` as "migrate me" — and `autoTagAllMods()`. Half-fixing it on a read path,
+by writing a backup file during a scan, is worse than leaving it documented. The
+behaviour is pinned by a test so it stays deliberate.
 
 #### Rules when adding a field
 
 - **User-editable field?** Add it to `ModMetadata`, `ModInfo`, *and*
-  `saveModMetadata()`. Miss the last one and the first metadata edit erases it.
-- **Machine-owned field?** Add it to `ModMetadata` and carry it from `existing` in
-  `saveModMetadata()`. Do **not** route it through `ModInfo` — that's what makes it
-  vulnerable to step 4 above.
+  `ModMetadata.knownKeys`, then add the parameter to `replaceUserFields()`. The
+  last step breaks the build at every save site until each one passes it — which
+  is the point.
+- **Machine-owned field?** Add it to `ModMetadata` and `knownKeys`, and carry it
+  in `replaceUserFields()`'s body alongside `schemaVersion` and `extra`. Do
+  **not** route it through `ModInfo` — that's what makes it vulnerable to step 4
+  above. Save sites need no change.
 
 ### Never-recreate rule
 
@@ -168,8 +262,8 @@ Preserve this guard in any new write path.
 
 A mod with nothing worth saving should get **no `.zzz-mod-manager` directory at
 all**. Users who never touch metadata shouldn't find new files appearing inside
-their mods. `_loadOrMigrateMetadata()` enforces this by writing only when it
-actually migrated something.
+their mods. `ModMetadataRepository.loadOrMigrate()` enforces this by writing only when
+`!metadata.isEmpty` — i.e. only when it actually migrated something.
 
 ---
 
@@ -189,24 +283,23 @@ Easy to confuse, since their fields overlap almost entirely:
 the sidecar, the filesystem (active-link state, image existence), and
 `config.json` (favourites, legacy character tag).
 
-### Vestigial code — don't assume it's load-bearing
+`ModInfo` has **no** `toJson`/`fromJson`, and must not gain them. It is a runtime
+view, not a storage format: it holds absolute image paths and per-install state
+(`is_active`, `is_favorite`, `keybinds`), all of which violate the split rule in
+[§1](#the-split-rule). The only mod-level persistence is the sidecar, and
+`ModMetadata` is its shape. (A dead pair did exist here; it was deleted precisely
+because someone fixing the save path could have mistaken it for the sidecar
+format.)
 
-Both of these have an agreed disposition recorded in
-[`../BUGS & TODO.md`](../BUGS%20&%20TODO.md) §8, to be done alongside the next
-change that touches the same file. Until then:
+`ModMetadata.isEmpty` is what enforces the "don't write empty sidecars" rule in
+`ModMetadataRepository.loadOrMigrate()`. Note it counts unknown keys as content — they're
+someone else's data, and dropping them is what `extra` exists to prevent.
 
-- **`ModInfo.toJson()` / `ModInfo.fromJson()` are never called** — not in `lib/`,
-  not in tests. `ModInfo` is a runtime view, **not** a storage format; the only
-  mod-level persistence is the sidecar. **Slated for deletion.** Never reach for
-  `ModInfo.toJson()` when writing a sidecar: it emits absolute image paths and
-  per-install state (`is_active`, `is_favorite`, `keybinds`), all of which violate
-  the split rule in [§1](#the-split-rule).
-- **`ModMetadata.isEmpty` is never called in `lib/`**, though it *is* tested
-  (`test/mod_metadata_service_test.dart:38`). The "don't write empty sidecars" rule
-  is currently enforced by a parallel `hasLegacyData` bool in
-  `_loadOrMigrateMetadata()`. **Slated to be wired up** in place of that flag —
-  the two are equivalent, since `description`/`source_url`/`tags` are always empty
-  in that code path.
+One remaining vestigial pair, recorded so it isn't rediscovered:
+`KeybindInfo.toJson`/`fromJson` and `CharacterKeybinds.toJson`/`fromJson` have no
+callers anywhere. Keybinds are parsed from `.ini` files at scan time and never
+persisted. Harmless — unlike `ModInfo.toJson`, there's no sidecar to confuse them
+with — but deletable in any pass that touches `models/keybind_info.dart`.
 
 ---
 
@@ -232,17 +325,19 @@ The write direction is the dangerous one. Because saves replace the file
 ([§2](#save-semantics-three-classes-of-field)), a build will *strip* any key it
 doesn't recognise.
 
-**Decided: `fromJson`/`toJson` must round-trip unknown keys verbatim.** A sidecar
-is an interchange format, so the correct posture is "don't care what else is in
-there, as long as the keys we need are present". Not yet implemented.
+**`fromJson`/`toJson` round-trip unknown keys verbatim**, via `ModMetadata.extra`
+— see [§2](#unknown-keys-extra-and-knownkeys). A sidecar is an interchange format,
+so the posture is "don't care what else is in there, as long as the keys we need
+are present". That is what makes a purely additive field backward-safe in *both*
+directions, not just the read one.
 
 Two limits worth being explicit about:
 
 - **The fix is forward-only.** Builds already released will keep stripping unknown
-  keys, and nothing can change that retroactively. So the exposure window shrinks
-  the sooner this lands — it should precede any field that's expensive to
-  reconstruct (the planned origin block qualifies: a stripped `origin` means the
-  user has to identify the mod and version again by hand).
+  keys, and nothing can change that retroactively. This is why it landed *before*
+  any field that's expensive to reconstruct (the planned origin block qualifies: a
+  stripped `origin` means the user has to identify the mod and version again by
+  hand).
 - **The residual risk after the fix** is confined to folders touched by an
   already-published build — a user who downgrades, or who shares a mod folder with
   someone running an older version. Bounded, and not worth engineering around
@@ -251,7 +346,8 @@ Two limits worth being explicit about:
 ### The migration hook
 
 Migrations run **lazily, per mod, during a normal folder scan** — in
-`ModManagerService._loadOrMigrateMetadata()`. There is no migration pass over the
+`ModMetadataRepository.loadOrMigrate()`, reached from
+`ModManagerService._buildModInfo()`. There is no migration pass over the
 whole library and no version-upgrade step at startup.
 
 The existing precedent migrates pre-sidecar storage:
@@ -299,7 +395,7 @@ imports the JSON back into SharedPreferences.
 | `theme` | `theme` | |
 | `language` | `language` | Locale code (`en`, `uk`) |
 | `sort_mode` | `sort_mode` | Parsed into `ModSort`; falls back to `added` |
-| `mod_character_tags` | `mod_character_tags` | JSON-encoded string in SharedPreferences, real object in the file. **Legacy** — superseded by the sidecar's `character_id`, still written by `setModCharacter()` for backward compatibility |
+| `mod_character_tags` | `mod_character_tags` | JSON-encoded string in SharedPreferences, real object in the file. **Legacy** — superseded by the sidecar's `character_id`, still mirrored by `ModMetadataRepository.setCharacter()` for backward compatibility |
 | `first_run` | `first_run` | Bool; always serialised as `false` by `_saveToFile()` |
 
 > ⚠ **The recurring mistake.** Adding a setting means touching **three** places:
@@ -324,7 +420,14 @@ the offline backfill and status UI around it.
 
 That work is specified in [`../BUGS & TODO.md`](../BUGS%20&%20TODO.md) §3 and §7,
 including the confidence tiers, what each tier is allowed to trigger, and the
-reasoning behind the safety gates. **None of it is implemented yet.**
+reasoning behind the safety gates. **The origin block itself is not implemented
+yet.**
+
+Its prerequisite is, though: the sidecar now round-trips unknown keys and
+preserves machine-owned ones across a save ([§2](#save-semantics-three-classes-of-field)),
+so an `origin` block written by a future build survives contact with this one.
+That had to land first, because the fix is forward-only
+([§4](#when-to-bump-it)).
 
 When it lands: fold the field reference into [§2](#2-metadatajson--the-per-mod-sidecar)
 of this document and the rationale into a decision record here, so this file stays

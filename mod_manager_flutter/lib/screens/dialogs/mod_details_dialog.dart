@@ -27,7 +27,7 @@ void showModDetailsDialog(
       .where((kb) => kb.keyValue != null && kb.keyValue!.isNotEmpty)
       .toList();
   final hasCharacter =
-      mod.characterId.isNotEmpty && mod.characterId != 'unknown';
+      !isUnassignedCharacterId(mod.characterId);
   final hasUrl = mod.sourceUrl != null && mod.sourceUrl!.isNotEmpty;
 
   // Inline description editing state, kept for the dialog's lifetime. The

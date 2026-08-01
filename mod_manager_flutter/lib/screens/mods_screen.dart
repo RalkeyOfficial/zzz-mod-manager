@@ -161,7 +161,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         // names whose id differs from the spoken form (e.g. "Zhu Yuan" vs the
         // id "zhuyuan") still resolve instead of dropping into Unknown.
         String charId = oldMod.characterId;
-        if (charId.isEmpty || charId == 'unknown') {
+        if (isUnassignedCharacterId(charId)) {
           charId = detectCharacterId(oldMod.name) ?? charId;
         }
 
@@ -380,7 +380,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     // Normalize the character the same way loadMods does (explicit pick wins,
     // else fall back to name-based auto-detection).
     var charId = updated.characterId;
-    if (charId.isEmpty || charId == 'unknown') {
+    if (isUnassignedCharacterId(charId)) {
       charId = detectCharacterId(updated.name) ?? charId;
     }
     // Rebuild explicitly (not copyWith) so cleared fields — a removed cover or

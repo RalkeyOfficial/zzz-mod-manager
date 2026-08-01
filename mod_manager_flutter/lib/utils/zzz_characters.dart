@@ -223,6 +223,23 @@ const Map<String, String> _legacyCharacterIds = {
 String canonicalCharacterId(String id) =>
     _legacyCharacterIds[id.toLowerCase()] ?? id;
 
+/// The placeholder id meaning "no character assigned".
+///
+/// It is a **runtime/display convention only** — `_buildModInfo()` substitutes
+/// it so the UI always has a string to work with. It must never reach disk:
+/// "no character" is stored as *absence*, in the sidecar and in `config.json`
+/// alike (see `docs/metadata-schema.md` §2). Normalise with
+/// [storedCharacterId] before persisting anything.
+const String unknownCharacterId = 'unknown';
+
+/// True when [id] means "untagged" — null, empty, or [unknownCharacterId].
+bool isUnassignedCharacterId(String? id) =>
+    id == null || id.isEmpty || id == unknownCharacterId;
+
+/// Normalises a character id **for storage**, collapsing every "untagged"
+/// spelling to null so the placeholder never round-trips onto disk.
+String? storedCharacterId(String? id) => isUnassignedCharacterId(id) ? null : id;
+
 /// The character with this id, or null if unknown.
 CharacterData? characterById(String id) =>
     _charactersById[canonicalCharacterId(id).toLowerCase()];

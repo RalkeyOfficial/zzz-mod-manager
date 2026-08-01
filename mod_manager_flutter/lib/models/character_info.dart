@@ -76,42 +76,6 @@ class ModInfo {
     this.keybinds,
   });
 
-  factory ModInfo.fromJson(Map<String, dynamic> json) {
-    return ModInfo(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      characterId: json['character_id'] as String? ?? '',
-      isActive: json['is_active'] as bool,
-      imagePath: json['image_path'] as String?,
-      description: json['description'] as String?,
-      sourceUrl: json['source_url'] as String?,
-      tags: (json['tags'] as List?)?.map((e) => e.toString()).toList() ?? const [],
-      images: (json['images'] as List?)?.map((e) => e.toString()).toList() ?? const [],
-      isFavorite: json['is_favorite'] as bool? ?? false,
-      keybinds: json['keybinds'] != null
-          ? (json['keybinds'] as List)
-              .map((e) => KeybindInfo.fromJson(e as Map<String, dynamic>))
-              .toList()
-          : null,
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'character_id': characterId,
-      'is_active': isActive,
-      'image_path': imagePath,
-      'description': description,
-      'source_url': sourceUrl,
-      'tags': tags,
-      'images': images,
-      'is_favorite': isFavorite,
-      'keybinds': keybinds?.map((e) => e.toJson()).toList(),
-    };
-  }
-
   ModInfo copyWith({
     String? id,
     String? name,
