@@ -8,6 +8,7 @@ the root [`README.md`](../README.md).
 | Document | Covers |
 |---|---|
 | [`metadata-schema.md`](metadata-schema.md) | Every on-disk format: the per-mod `metadata.json` sidecar, `config.json`, the dual-storage pattern, schema versioning and the migration hook |
+| [`gamebanana-api.md`](gamebanana-api.md) | The remote API: which of the two APIs to use, browsing/filtering/sorting, the mod and file objects, NSFW handling, downloads, the category tree, and the gotchas |
 
 ## Related files outside this directory
 

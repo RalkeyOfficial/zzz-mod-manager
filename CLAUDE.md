@@ -125,8 +125,13 @@ hit should be an intentional one (historical changelog / dependency / generated)
 > [`docs/metadata-schema.md`](docs/metadata-schema.md) is the authoritative
 > reference for the on-disk formats (per-mod `metadata.json` sidecar,
 > `config.json`, schema versioning and the migration hook). Read it before
-> changing anything that persists. New developer docs go in `docs/`, not the
-> repo root.
+> changing anything that persists.
+> [`docs/gamebanana-api.md`](docs/gamebanana-api.md) is the equivalent reference for
+> the **remote** side — which of GameBanana's two APIs to use and why, browsing /
+> filtering / sorting, what every field means, NSFW handling, downloads, and the
+> category tree. Read it before writing any request; its surface is undocumented
+> upstream, so guessing costs more than looking. New developer docs go in `docs/`,
+> not the repo root.
 
 ### Layered structure (`lib/`)
 
