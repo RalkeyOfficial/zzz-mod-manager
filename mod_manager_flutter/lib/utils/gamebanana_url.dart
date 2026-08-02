@@ -17,6 +17,19 @@ const Set<String> _gameBananaHosts = {
   'www.gamebanana.com',
 };
 
+/// The value `ModOrigin.source` carries for a mod tracked on GameBanana.
+///
+/// Lives here rather than next to `ModOrigin` because `source` is a *service*
+/// discriminator that future-proofs for other sources — the model stays
+/// generic, and everything GameBanana-specific about identity is in this file,
+/// where offline code can reach it without the API client.
+///
+/// It has one write site today (the offline backfill). The point of naming it
+/// is the second one: when §1's browser supplies identity at ingest it must
+/// write the same string, and a typo there would create a silent second,
+/// unqueryable service rather than an error.
+const String gameBananaSource = 'gamebanana';
+
 /// Extracts the mod id from a GameBanana **mod page** url, or null.
 ///
 /// Accepted:

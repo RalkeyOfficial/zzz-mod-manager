@@ -137,9 +137,20 @@ UI, no badges, minimal styling.
   `replaceUserFields()` makes preservation structural: adding a machine-owned field
   needs no save-site change, adding a user-editable one is a compile error at every
   save site. Written up in `docs/metadata-schema.md` §2.
-- [ ] **§7 (offline backfill)** — schema v1 → v2 during the normal scan:
+- [x] **§7 (offline backfill)** — schema v1 → v2 during the normal scan:
   `source_url` → remote mod id, proxy install date. Local-only, no network, no
   UI. Without this, every pre-existing install is permanently invisible to §4.
+  **Done.** `services/origin_backfill.dart` holds the decisions (pure, with the
+  one filesystem walk injected as an `InstallDateProbe`);
+  `utils/install_date_proxy.dart` is that walk. One correction to what this doc
+  assumed, applied — see §7.3: it is a **sibling** of the legacy migration, not
+  an extension of it. Measured on a real 23-mod library: **23 of 23 recovered
+  identity**, first scan 30 ms including all 23 writes, second scan 7 ms with
+  zero writes. Two limits worth knowing before building on it: sibling groups
+  are unrecoverable (see §7.3), and the backfill helps the *legacy* library
+  only — nothing in the install path writes `source_url`, so a mod downloaded
+  through today's marketplace has neither identity nor a url to derive one
+  from, and stays untracked until §1 supplies the id at ingest.
 - [ ] **§1 (plain)** — results grid + mod detail screens, both platforms; remove
   the `_isWebViewSupported => _isWindows` gate and the Downloads-folder watcher.
 - [ ] **§6 (as needed)** — the NSFW/content-filter toggle (§1) is the only new key
@@ -524,7 +535,7 @@ rather than collapsed into one enum:
 
 | | Recoverable offline? |
 |---|---|
-| **Which remote mod is this?** (identity) | **Often yes.** `source_url` already exists and is user-editable; parsing `gamebanana.com/mods/<id>` recovers identity for free. |
+| **Which remote mod is this?** (identity) | **Often yes.** `source_url` already exists and is user-editable; parsing `gamebanana.com/mods/<id>` recovers identity for free. Now measured, and the estimate was if anything low: **23 of 23** mods in a real library, since the edit dialog is where people paste the mod page. |
 | **Which file/version is installed?** | **Almost never.** The archive is deleted after extraction (§5), so GameBanana's per-file md5 has nothing local left to match against. |
 
 ### 7.2 Confidence-tiered origin block
@@ -579,18 +590,42 @@ rather than collapsed into one enum:
 
 ### 7.3 Offline backfill (schema v1 → v2)
 
-Hooks into the existing lazy per-mod migration in
-`ModManagerService._loadOrMigrateMetadata()` — the same pattern already used for
-the legacy character tag and app-data images. Strictly local: scans run offline
-on every launch.
+**Shipped.** Documented in [`docs/metadata-schema.md`](docs/metadata-schema.md)
+§4, which is now authoritative for how it behaves. Kept here for the reasoning.
 
-- [ ] Parse `source_url` for `gamebanana.com/mods/<id>` → `mod_id` at `inferred`.
+> **The "schema v1 → v2" in the heading oversells it.** Only a mod that actually
+> gets an origin block is stamped v2; a legacy sidecar with no GameBanana url
+> stays v1 forever, correctly, per the don't-litter rule. So this is not a
+> library-wide format migration and `schema_version` is **not** a swept marker —
+> a `1` means only "no origin block has ever been written here". Don't read it
+> as "the backfill hasn't seen this mod yet"; it has, and found nothing.
+
+Hooks into the existing lazy per-mod migration in
+`ModMetadataRepository.loadOrMigrate()` (this doc said
+`ModManagerService._loadOrMigrateMetadata()`; that method has since moved and
+been renamed). Strictly local: scans run offline on every launch.
+
+> **Correction (applied): it is a *sibling* of the legacy migration, not an
+> extension of it** — "the same pattern already used for the legacy character
+> tag and app-data images" is the wrong mental model and costs a wrong turn.
+> `loadOrMigrate` **returns early the moment a sidecar exists**, and the legacy
+> path it falls through to is the one where there is *no* sidecar. But
+> `source_url` only exists **inside** the sidecar. So the legacy branch can
+> never have a url to parse, and a backfill chained onto it would be dead code
+> that fires zero times. The backfill belongs on the *early-return* branch — the
+> mods that already have a sidecar.
+
+- [x] Parse `source_url` for `gamebanana.com/mods/<id>` → `mod_id` at `inferred`.
   Highest-yield recovery by far. `/dl/<fileid>` is **not** handled here (per §3
   that field is mod-page-only, and resolving a file id needs the API anyway).
-- [ ] `installed_at` = **oldest file mtime in the mod folder**, with
+- [x] `installed_at` = **oldest file mtime in the mod folder**, with
   `installed_at_is_proxy: true`. Folder mtime/ctime are both bumped by `.ini`
   edits, so they skew *later* than the true install and would hide updates; the
   oldest contained file is the earliest defensible proxy.
+  One refinement found while building it: **our own `.zzz-mod-manager/` is
+  excluded from the walk.** It can't drag the minimum earlier, but a mod folder
+  holding nothing else would report *our* sidecar's write time as an install
+  date — a confident-looking number that means nothing.
   - **How good that proxy is depends on how the mod got there**, and the two cases
     are far apart. Imported *through the app*: good — `_extractZip` writes fresh
     files and `_copyDirectory` then copies via `File.copy`, which doesn't carry
@@ -603,10 +638,9 @@ on every launch.
     early", but a wall of false positives is its own kind of broken. Clamp the
     baseline (no earlier than the mod's upstream `_tsDateAdded`, or than the app's
     first-run date), and state in the confirmation how many mods it is about to flag.
-  - Side benefit: `ModSort.added` (`state_providers.dart:150`) is currently just
-    scan order — this finally gives it a real timestamp. Note it will visibly reorder
-    existing users' libraries the first time it runs.
-- [ ] Nothing found → **write no origin block at all.** Absence means untracked;
+  - Side benefit, **not taken** — the date is now recorded but nothing reads it;
+    filed below as its own item rather than counted as part of this one.
+- [x] Nothing found → **write no origin block at all.** Absence means untracked;
   re-sniffing costs one string parse. Preserves the existing "don't litter every
   mod folder with empty sidecars" rule — a user who never opens the marketplace
   should see no new files. Only an explicit user decision (`tracking: "off"`)
@@ -616,6 +650,44 @@ on every launch.
   Mods embed ZZMI/game versions and author-side numbering that are
   indistinguishable from mod versions, and a wrong stored version is worse than
   none. Surface detected tokens in the resolve dialog to help the user choose.
+
+#### Filed by the backfill (found while building it, deliberately not built)
+
+- [ ] **`ModSort.added` still sorts by scan order.** `installed_at` now exists on
+  every backfilled mod, so the sort finally *can* have a real timestamp — but
+  wiring it is UI work and the backfill was scoped local-only. Two things to
+  handle when it lands: it visibly reorders existing libraries the first time it
+  runs, and it must fall back gracefully for mods with **no** origin block at
+  all, which is most of a library that has never had a `source_url` pasted in.
+- [ ] **Nothing writes `source_url` on install — only the edit dialog does.**
+  Verified: `edit_mod_dialog.dart` is the field's sole write site, so a mod
+  downloaded through today's marketplace gets neither a remote id (the webview
+  yields a CDN url) nor a url the backfill could derive one from. The backfill
+  therefore rescues the *legacy* library while leaving fresh downloads
+  untracked, which is the opposite of the intuition. §1 fixes this properly by
+  supplying the id at ingest; until then, consider having the marketplace record
+  the mod-page url it already knows.
+- [ ] **A backfilled sibling group can't be reconstructed, and two mods sharing a
+  `mod_id` must not be read as one.** `origin.ingest.sibling_group` is what makes
+  §4's "an update acts on the whole sibling group at once" work, and nothing on
+  disk records that two folders came from one archive — so the backfill leaves it
+  null, honestly. But mods sharing a `mod_id` are *common*: two occurrences in a
+  real 23-mod library (two variants of one mod, installed as separate folders).
+  §4 and §7.6 must treat "same `mod_id`, no group" as **independent mods that
+  happen to share a page**, not as a group to rewrite together.
+- [ ] **Re-decide the `ModInfo` origin ban in M2 rather than inheriting it.**
+  §3's correction says the origin block must not go on `ModInfo`, because a
+  later unrelated edit would rebuild the sidecar from the runtime view and erase
+  it. That was true when written — and the prerequisite that shipped since has
+  made it unreachable: `save()` calls `replaceUserFields()` on the copy read
+  from disk, `origin` is carried from there, and there is no parameter through
+  which a `ModInfo` field could reach it. Meanwhile `_buildModInfo` reads every
+  sidecar and then discards the block, so §7.4's status slot and §7.6's badges —
+  both rendered from `ModInfo` — would have to re-read all 80 sidecars to draw
+  data the scan already held. Weigh that cost against the ban deliberately; a
+  **read-only** field carrying an already-parsed value is not the hazard the ban
+  was written for. Note §8's related hygiene note is still void for its own
+  separate reason (`ModInfo` must not gain `toJson`/`fromJson`).
 
 ### 7.4 Visual status — one slot, three states
 

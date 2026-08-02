@@ -50,7 +50,8 @@ three layers, split by responsibility:
 | Layer | File | Owns |
 |---|---|---|
 | `ModMetadataService` | `services/mod_metadata_service.dart` | Where a sidecar lives and how to read/write it. No opinions, no collaborators. |
-| `ModMetadataRepository` | `services/mod_metadata_repository.dart` | The **rules** — legacy migration, what "no character" means on disk, which image paths are storable, and recording the origin block (its offline backfill is still planned). |
+| `ModMetadataRepository` | `services/mod_metadata_repository.dart` | The **rules** — legacy migration, what "no character" means on disk, which image paths are storable, and recording the origin block. |
+| `OriginBackfill` | `services/origin_backfill.dart` | *Whether* an existing mod's origin can be derived offline, and what it should say. Pure; its one piece of I/O is injected. |
 | `ModManagerService` | `services/mod_manager_service.dart` | Assembles a `ModInfo` from the above plus link state and config. Delegates; holds no metadata logic. |
 
 Everything the repository needs is injected — the mods path, the legacy image
@@ -58,9 +59,10 @@ path, and the `config.json` tag mirror (as the narrow `ModCharacterTagStore`
 role, *not* the whole `ConfigService`, which writes to real app-data on
 construction). So the rules are testable against a temp dir with no app state:
 see `test/mod_metadata_repository_test.dart`. Keep it that way — the riskiest
-planned logic (the `source_url` → `mod_id` parse, the confidence tiers) lands in
-`loadOrMigrate()`, and must ship under test. Those are pure functions with no
-network and no UI, so there is no excuse for them to be untested.
+logic (the `source_url` → `mod_id` parse, the confidence tiers) reaches disk
+through `loadOrMigrate()`, and ships under test. The decisions themselves are
+pushed one level further out into `OriginBackfill`, which has no filesystem
+dependency at all: see `test/origin_backfill_test.dart`.
 
 ```
 <mod folder>/
@@ -460,18 +462,123 @@ Migrations run **lazily, per mod, during a normal folder scan** — in
 `ModManagerService._buildModInfo()`. There is no migration pass over the
 whole library and no version-upgrade step at startup.
 
-The existing precedent migrates pre-sidecar storage:
+Two pieces of catch-up work hang off it, and the important thing to understand
+is that they are **siblings on opposite branches**, not one pipeline:
 
-1. Read the sidecar. If present, use it and stop.
-2. Otherwise gather legacy data: the character tag from `config.json`, and
+```
+read sidecar
+├── present  → origin backfill        (§7 of the plan — needs source_url)
+└── absent   → legacy migration       (pre-sidecar storage)
+```
+
+**Legacy migration** — the older precedent, for storage that predates the
+sidecar entirely:
+
+1. Read the sidecar. If present, this branch is not taken.
+2. Gather legacy data: the character tag from `config.json`, and
    `<appData>/mod_images/<mod>.png` if it exists.
-3. Write the sidecar **only if** something was actually found (`hasLegacyData`).
+3. Write the sidecar **only if** something was actually found (`!metadata.isEmpty`).
 4. Either way, return usable values in memory — a read-only or unwritable mod
    folder must not break the app.
+
+**Origin backfill** — for a mod that *has* a sidecar but predates the origin
+block. It parses the existing `source_url` for a `gamebanana.com/mods/<id>` link
+and records the mod id at `inferred`, plus an install-date proxy. Decisions live
+in `OriginBackfill`; see [The origin backfill](#the-origin-backfill) below.
+
+**The branch is the whole design, and getting it backwards makes the backfill
+dead code.** `source_url` only exists *in* the sidecar, so the legacy-migration
+branch — reached precisely when there is no sidecar — builds its metadata from a
+config character tag and an app-data image, and can never have a url to parse.
+A backfill chained after the legacy migration would sit where `sourceUrl` is
+null by construction and never fire once.
 
 Follow this shape for new migrations. Two properties matter: it's **idempotent**
 (re-running is harmless) and it's **offline** (scans happen on every launch with
 no network, so a migration must never require a request).
+
+### The origin backfill
+
+Recovers, from data already on disk, what an existing mod's origin block *would*
+have said. Split across two units so the decisions are testable with no
+filesystem: `OriginBackfill` (pure, plus one injected `InstallDateProbe`) and
+`utils/install_date_proxy.dart` (the one real filesystem walk).
+
+Two rules govern every decision:
+
+- **It never displaces something better** — which is narrower than "it only
+  fills absence", and the difference matters. A stored `mod_id` at `exact` or
+  `user` is never overruled: those came from a download, a checksum match, or
+  the user confirming it, none of which came from `source_url`. But an id at any
+  weaker tier — including our own earlier backfill — **follows the url**, because
+  that is where it came from. Otherwise a user who pasted the wrong mod page once
+  is stuck with it: correcting the url would be a silent no-op, and until the
+  resolve dialog ships there is no other way to fix the binding. A `tracking:
+  off` mod is skipped entirely — "not from GameBanana / it's my own" is a
+  decision the user made, and a stale `source_url` is exactly why they might
+  have made it.
+- **Re-pointing at a different mod clears what described the old one.**
+  `file_id`, `version`, `version_label` and `baseline_remote_date` mean something
+  only relative to one mod page, so carrying them across a rebind would leave a
+  block asserting that mod B ships file 555 of mod A. `remote_missing` resets for
+  the same reason. `archive_md5` **survives**: it is a fact about the archive we
+  extracted, not about which remote mod we currently believe it to be, so it can
+  still be matched against the new mod's published checksums.
+- **Nothing derivable means nothing written.** No empty sidecar, no "already
+  swept" marker. Re-sniffing on the next scan costs one string parse, and it
+  keeps the don't-litter rule intact.
+
+What it writes, and what it deliberately doesn't:
+
+| Field | Value | Why |
+|---|---|---|
+| `source` | `gamebanana` | The only service the parser understands. |
+| `mod_id` | from `source_url` | `/mods/<id>` and `/mods/download/<id>` only. A `/dl/<id>` link is a **file** id in a different id space and yields null. |
+| `mod_id_confidence` | `inferred` | It came from a free-form text field, so it may be a wrong paste or a different mod. May badge and suggest; never drives an unattended overwrite, and must be confirmed once before any update acts on it. |
+| `installed_at` | oldest file mtime | With `installed_at_is_proxy: true`. |
+| `provenance` | `imported_folder` | Genuinely unknown for a legacy mod — it may have been downloaded by an old build, imported, or hand-copied. Takes the least-privileged of the three, matching `OriginProvenance.parse`'s own fallback. It is not the auto-update gate, so understating it costs nothing. |
+| `file_id`, `version`, `version_confidence` | **not written** | Identity and version are separate unknowns. The archive is deleted after extraction, so nothing local remains to match against the per-file checksums the remote publishes. Sniffing a version out of folder names or `.ini` comments is deliberately not done: mods embed ZZMI and game versions indistinguishable from mod versions, and a wrong stored version is worse than none. |
+| `ingest.sibling_group` | **not written** | Unrecoverable — see the known limit below. |
+
+**The install-date proxy, and how much to trust it.** Folder mtime and ctime are
+both bumped by an `.ini` edit, so they skew *later* than the true install and
+would hide updates; the oldest contained file is the earliest defensible answer.
+Our own `.zzz-mod-manager/` is excluded — it was written by us, often long after
+the install, and a folder holding nothing else would otherwise report our own
+write time as an install date. How good the proxy is depends on how the mod got
+there: imported *through the app* it is good (`_extractZip` writes fresh files
+and `_copyDirectory` uses `File.copy`, neither carrying source timestamps over,
+so mtimes land near import time), but hand-placed in `modsPath` (`cp -p`, the
+user's own 7-Zip run, a synced folder) the author's build timestamps survive and
+it can read *years* early. That is what `installed_at_is_proxy` is for; anything
+comparing dates must read it.
+
+**Cost.** Measured on a real 23-mod / 748-file library: a first scan that
+backfills all 23 mods takes **30 ms** end to end, a subsequent scan **7 ms** with
+zero writes (the re-read below accounts for ~3 ms of the first figure). The folder walk alone is ~10 ms for the library, ~0.45 ms per mod.
+Crucially it is a **one-time cost per mod**, not per scan — once a block is
+written the mod no longer qualifies and is never walked again — and it runs only
+*after* an id has been recovered, so an untracked mod costs one string parse and
+no I/O at all. The one exception is a folder whose write *fails* (read-only, an
+odd network share), which would otherwise be re-walked on every scan forever to
+re-attempt a write that cannot work; `ModMetadataRepository` remembers those for
+the session, deliberately not across restarts, since a folder that becomes
+writable should be retried.
+
+**The write re-reads first.** The folder walk is an `await`, and a scan runs
+after every toggle and rename, so a user confirming the edit dialog can land a
+`save()` inside that window. The backfill therefore re-reads the sidecar
+immediately before writing and re-checks its decision against what came back,
+contributing only the machine-owned key to whatever is on disk *now*. Writing
+back the copy read before the walk would quietly revert the user's description
+and tags — the one class of damage this whole file exists to prevent.
+
+**Known limit: sibling groups can't be recovered.** One archive can install as
+several mod folders, and `origin.ingest.sibling_group` is what ties them together
+so an update rewrites the group rather than one member. The backfill cannot
+reconstruct it — nothing on disk records that two folders came from one archive.
+Two mods sharing a `mod_id` after a backfill is therefore common and expected
+(observed twice in a 23-mod library), and must not be read as a group.
 
 ---
 
@@ -530,10 +637,13 @@ authoritative description. It shipped as **schema v2**; see
 [§4](#when-to-bump-it) for why the bump was taken even though the additive-field
 rule did not demand it.
 
-What remains planned is everything that *reads* it: the offline backfill that
-derives identity from an existing `source_url`, the status UI, and update
-checking. Two decisions recorded here because they constrain the format rather
-than merely the UI:
+**The offline backfill has shipped too** — it derives identity from an existing
+`source_url` during a normal scan, and is documented in
+[§4](#the-origin-backfill).
+
+What remains planned is everything that *reads* the block: the status UI, the
+per-mod resolve dialog, bulk resolution, and update checking. Two decisions
+recorded here because they constrain the format rather than merely the UI:
 
 - **Confidence and provenance are separate axes.** *Confidence* is how sure we are
   which remote file this is; *provenance* is where the folder came from
@@ -567,3 +677,10 @@ CDN url, which yields no mod id, so every block written today carries
 `provenance`, `ingest`, `installed_at` and `archive_md5` with both confidences at
 `unknown`. That is the honest output, not a bug — but it does mean "the mod
 carries an origin block" is not the same as "we know what it is".
+
+The backfill does not close that gap, and shouldn't be mistaken for closing it.
+It runs on `source_url`, which a fresh download doesn't set — so it rescues the
+*legacy* library (23 of 23 mods in a real one, since the edit dialog is where
+people paste the mod page) while a mod installed through today's marketplace
+stays identity-less until the native browser lands and supplies the id at
+ingest. The two paths are independent; neither is a substitute for the other.

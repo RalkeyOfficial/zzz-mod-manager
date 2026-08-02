@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Marketplace downloads now resume where they left off instead of starting over, survive the app being closed mid-download, and show a transfer rate and estimated time remaining.
 - Marketplace downloads can now be cancelled while in progress.
 - Mods now record where they came from (downloaded, imported archive, or imported folder) along with the archive's checksum, so a future release can tell you when an update is available.
+- Mods you already have are now linked back to their GameBanana page automatically, using the source URL already stored on them, so update checking will work for your existing library and not just for new installs. No new files appear in mods that have no source URL.
 
 ### Changed
 

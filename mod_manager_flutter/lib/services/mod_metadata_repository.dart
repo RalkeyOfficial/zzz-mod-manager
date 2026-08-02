@@ -6,6 +6,7 @@ import '../models/mod_origin.dart';
 import '../utils/path_helper.dart';
 import '../utils/zzz_characters.dart';
 import 'mod_metadata_service.dart';
+import 'origin_backfill.dart';
 
 /// The slice of `ConfigService` this repository needs: the legacy per-mod
 /// character tag mirror in `config.json`.
@@ -28,8 +29,8 @@ abstract class ModCharacterTagStore {
 /// - [ModMetadataService] knows where a sidecar lives and how to read/write it.
 ///   It has no opinions and no other collaborators.
 /// - **This class** owns the rules — legacy migration, what "no character"
-///   means on disk, which image paths are storable, and (soon) the origin block
-///   and its offline backfill.
+///   means on disk, which image paths are storable, recording the origin block
+///   and backfilling it offline.
 /// - `ModManagerService` assembles a `ModInfo` from this plus link state and
 ///   config, and does everything else about mods.
 ///
@@ -37,22 +38,36 @@ abstract class ModCharacterTagStore {
 /// configured library: pass a temp dir through [modsPath] and the whole class
 /// works against real files with no app state. That matters because the pieces
 /// most likely to be quietly wrong — the `source_url` → `mod_id` parse, the
-/// confidence tiers — land in [loadOrMigrate], and they need tests that don't
-/// require a running app.
+/// confidence tiers — reach disk through [loadOrMigrate], and they need tests
+/// that don't require a running app. The decisions themselves live one level
+/// further out still, in [OriginBackfill], which needs no filesystem at all.
 class ModMetadataRepository {
   final ModCharacterTagStore _tagStore;
   final ModMetadataService _service;
   final String? Function() _modsPath;
   final String Function() _legacyImagesPath;
+  final OriginBackfill _backfill;
+
+  /// Mod folders whose backfill write failed this session — a read-only folder,
+  /// or an odd network share. Without it the folder walk repeats on every
+  /// single scan to re-attempt a write that keeps failing, which is the one
+  /// case where the backfill stops being a once-per-mod cost.
+  ///
+  /// Deliberately not persisted: it is a fact about this run, not about the
+  /// mod. Surfacing it to the user is still open — see "a failed origin write
+  /// is a state, not a shrug" in the plan.
+  final Set<String> _unwritableBackfills = {};
 
   ModMetadataRepository(
     this._tagStore, {
     required String? Function() modsPath,
     ModMetadataService? service,
     String Function()? legacyImagesPath,
+    OriginBackfill? backfill,
   })  : _modsPath = modsPath,
         _service = service ?? ModMetadataService(),
-        _legacyImagesPath = legacyImagesPath ?? PathHelper.getModImagesPath;
+        _legacyImagesPath = legacyImagesPath ?? PathHelper.getModImagesPath,
+        _backfill = backfill ?? const OriginBackfill();
 
   /// The raw sidecar I/O layer. Exposed because the edit dialog imports gallery
   /// images directly through it.
@@ -67,14 +82,29 @@ class ModMetadataRepository {
     return root == null ? null : path.join(root, modName);
   }
 
-  /// Loads a mod's metadata sidecar. If none exists yet, migrates legacy
-  /// storage (character tag from config.json, pasted image from the app-data
-  /// `mod_images/` dir) into the mod folder and writes the sidecar once.
-  /// Best-effort: if the folder can't be written, returns the resolved values
-  /// in memory so the app still works.
+  /// Loads a mod's metadata sidecar, bringing it up to date on the way past.
+  ///
+  /// Two independent pieces of catch-up work hang off this, and they are
+  /// **siblings on opposite branches** rather than one pipeline:
+  ///
+  /// - A mod that *has* a sidecar may still predate the origin block, but it
+  ///   does carry a `source_url` — so it goes to [OriginBackfill].
+  /// - A mod that has *no* sidecar has no `source_url` either (the field only
+  ///   exists in the file that's missing), so there is nothing to backfill; what
+  ///   it may have is pre-sidecar storage — a character tag in config.json, an
+  ///   image in the app-data `mod_images/` dir — which the legacy migration
+  ///   below pulls into the mod folder and writes once.
+  ///
+  /// Reading that as one migration chained after another is the trap: the
+  /// backfill would sit on a branch where `source_url` is null by construction
+  /// and never fire at all.
+  ///
+  /// Best-effort on both paths: if the folder can't be written, the resolved
+  /// values still come back in memory so the app works against a read-only
+  /// library.
   Future<ModMetadata> loadOrMigrate(String modName, String modFolder) async {
     final existing = await _service.read(modFolder);
-    if (existing != null) return existing;
+    if (existing != null) return _backfillOrigin(modFolder, existing);
 
     // No sidecar yet — gather legacy data to migrate. config.json may hold the
     // runtime "unknown" placeholder; that means "untagged", so it migrates to
@@ -101,6 +131,59 @@ class ModMetadataRepository {
       await _service.write(modFolder, metadata);
     }
     return metadata;
+  }
+
+  /// Derives an origin block for an already-sidecar'd mod that predates one,
+  /// and persists it. Returns the metadata to use either way.
+  ///
+  /// Writes **only** when something was actually derived, which is what keeps
+  /// this off the hot path: an untracked mod costs one string parse per scan
+  /// and no I/O, and a mod that has been backfilled once no longer qualifies,
+  /// so the folder walk never runs for it again.
+  Future<ModMetadata> _backfillOrigin(
+    String modFolder,
+    ModMetadata existing,
+  ) async {
+    try {
+      if (_unwritableBackfills.contains(modFolder)) return existing;
+
+      final modId = OriginBackfill.recoverableModId(existing);
+      if (modId == null) return existing;
+
+      final installedAt = await _backfill.probeInstallDate(modFolder);
+
+      // Re-read before writing, and re-check the decision against what came
+      // back. The probe above walks the whole mod folder, and that await is a
+      // window the rest of the app runs inside: a scan is kicked off after
+      // every toggle and rename, so the user confirming the edit dialog can
+      // land a `save()` mid-walk. Writing back the copy read *before* the walk
+      // would then quietly revert their description and tags — the one class of
+      // damage this file exists to prevent. Contributing only the machine-owned
+      // key to whatever is on disk now costs one extra read, once per mod.
+      final fresh = await _service.read(modFolder) ?? existing;
+      if (OriginBackfill.recoverableModId(fresh) != modId) return fresh;
+
+      final updated = fresh.withOrigin(
+        OriginBackfill.merge(
+          existing: fresh.origin,
+          modId: modId,
+          installedAt: installedAt,
+        ),
+      );
+
+      // Best-effort, like the legacy migration: an unwritable folder still
+      // yields the derived identity in memory. But remember the failure, or
+      // every subsequent scan re-walks the entire mod tree to re-attempt a
+      // write that cannot succeed. Session-scoped on purpose — a folder that
+      // becomes writable should be retried, just not on every rescan.
+      if (!await _service.write(modFolder, updated)) {
+        _unwritableBackfills.add(modFolder);
+      }
+      return updated;
+    } catch (e) {
+      print('ModMetadataRepository: origin backfill failed in $modFolder: $e');
+      return existing;
+    }
   }
 
   /// Persists editable metadata for a mod into its in-folder sidecar. Image
@@ -154,8 +237,10 @@ class ModMetadataRepository {
   /// those travelling with a shared folder is the entire point of a sidecar.
   ///
   /// Returns false when the mod folder is missing or unwritable. Callers should
-  /// surface that once rather than silently retrying, since nothing re-attempts
-  /// it — origin is written at ingest and never during a scan.
+  /// surface that once rather than silently retrying: nothing re-attempts *this*
+  /// write, and the scan-time backfill is no substitute for it — that path only
+  /// ever recovers identity from a `source_url`, so a mod whose origin failed to
+  /// persist here loses its provenance, ingest shape and archive hash for good.
   Future<bool> recordOrigin(String modName, ModOrigin origin) async {
     try {
       final modFolder = _folderOf(modName);

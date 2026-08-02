@@ -67,11 +67,19 @@ class ModMetadata {
   /// Strictly, `origin` is an additive key and older builds tolerate it (they
   /// round-trip unrecognised keys through [extra] rather than stripping them),
   /// so nothing *breaks* without a bump. It is here because the version earns
-  /// its keep as a statement about what wrote the file: with it, a sidecar
-  /// saying `1` means "written before origin existed" and one saying `2` with no
-  /// `origin` means "written by a build that knows about origin — this mod is
-  /// genuinely untracked". Those are different facts, and only the version
-  /// distinguishes them.
+  /// its keep as a statement about what wrote the file: a sidecar saying `2`
+  /// with no `origin` means "written by a build that knows about origin — this
+  /// mod is genuinely untracked", which is a different fact from a file that
+  /// predates the concept, and only the version distinguishes them.
+  ///
+  /// **The converse does not hold, so don't read it backwards.**
+  /// [replaceUserFields] carries the on-disk version across a save, so this
+  /// build editing a legacy mod's description rewrites the file still stamped
+  /// `1`. A `1` therefore means only "no origin block has ever been written
+  /// here" — *not* "this build has never seen this mod", and in particular not
+  /// "the offline backfill hasn't swept it yet". The backfill leaves a v1 file
+  /// at v1 whenever it finds nothing derivable, which is the common case for a
+  /// mod with no `source_url`.
   ///
   /// The rest of this release's metadata work — notably the offline backfill —
   /// lands as **2** as well. Version numbers describe formats users can actually
