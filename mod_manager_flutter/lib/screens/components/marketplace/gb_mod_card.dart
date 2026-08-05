@@ -76,8 +76,15 @@ class _GbModCardState extends State<GbModCard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              AspectRatio(
-                aspectRatio: 16 / 9,
+              // Expanded, not AspectRatio(16/9). A width-derived cover height means
+              // a narrower card gets *less* room for a text block that needs the
+              // same amount, so the text overflows the bottom below ~179px — and
+              // the same squeeze happens at any width once the OS text scale grows
+              // the title. Letting the cover absorb the leftover space instead
+              // makes vertical overflow impossible: the text always gets what it
+              // needs and the cover simply gets shorter. Requires the tile to have
+              // a bounded height, which is why the grid sets `mainAxisExtent`.
+              Expanded(
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
@@ -189,15 +196,29 @@ class _GbModCardState extends State<GbModCard> {
       if (mod.viewCount case final n?) (Icons.visibility_outlined, n),
       if (mod.postCount case final n?) (Icons.mode_comment_outlined, n),
     ];
-    return Row(
-      children: [
-        for (final (icon, count) in entries) ...[
-          Icon(icon, size: 12, color: scheme.onSurfaceVariant),
-          const SizedBox(width: 2),
-          Text(_compact(count), style: style),
-          const SizedBox(width: 8),
+    if (entries.isEmpty) return const SizedBox.shrink();
+
+    // FittedBox because this row's slot is not a fixed width and its content is
+    // not a fixed length: cards reflow at a 300px max extent down to an 800px
+    // minimum window, the app has its own zoom scale, and a count can reach
+    // "1.2M". Scaling down keeps every digit readable, where clipping would hide
+    // content and a plain Row overflows — which is what it did.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: AlignmentDirectional.centerStart,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final (index, (icon, count)) in entries.indexed) ...[
+            // Between items only. A trailing gap after the last entry pushed the
+            // row 8px wider than its content for no visual benefit.
+            if (index > 0) const SizedBox(width: 8),
+            Icon(icon, size: 12, color: scheme.onSurfaceVariant),
+            const SizedBox(width: 2),
+            Text(_compact(count), style: style),
+          ],
         ],
-      ],
+      ),
     );
   }
 

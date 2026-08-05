@@ -128,6 +128,23 @@ GameBanana hosts is reached via "open in browser".
 - `_sText` is HTML while every description this app renders is markdown, so it goes
   through `utils/html_to_markdown.dart` — shared with the description editors'
   paste-as-markdown so the two can't drift.
+- **The grid sets `mainAxisExtent`, not `childAspectRatio`, and `GbModCard`'s cover
+  is an `Expanded`.** These two go together and are load-bearing. An aspect ratio
+  makes the tile *shorter as it gets narrower* while the text block under the cover
+  needs a constant height, so the card overflowed its bottom below ~179px wide —
+  and tile width ranges over roughly 150–300px with window and sidebar state. A
+  fixed tile height decouples them: the text always gets its room and the cover
+  absorbs the remainder, which also survives the OS text scale growing the title.
+  Covered by `test/gb_mod_card_test.dart` across the whole width range.
+
+Widget tests here need `test/support/localized_harness.dart` rather than a plain
+`MaterialApp`. `AppLocalizations.delegate` loads its JSON from the asset bundle
+asynchronously, and **`pumpAndSettle` does not wait for real async I/O** — it returns
+once no frames are scheduled, which is long before a bundle read finishes. The
+result is a `Localizations` that renders an empty box forever with *no exception*, so
+every `find` returns nothing and every "did it overflow?" assertion passes
+vacuously. The harness preloads via `runAsync` and injects a `SynchronousFuture`;
+call `expectBuilt(...)` after pumping so that failure mode can never be silent again.
 
 ### The download layer (`services/download/`)
 

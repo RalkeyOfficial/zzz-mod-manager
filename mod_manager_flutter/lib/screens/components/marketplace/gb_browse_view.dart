@@ -86,9 +86,18 @@ class _Results extends ConsumerWidget {
               maxCrossAxisExtent: 300,
               mainAxisSpacing: 14,
               crossAxisSpacing: 14,
-              // Cover (16:9) plus roughly 92px of text block. Tuned to the
-              // widest card so a two-line title never overflows.
-              childAspectRatio: 0.86,
+              // A fixed height rather than `childAspectRatio`, deliberately. With
+              // an aspect ratio the tile gets *shorter as it gets narrower*, while
+              // the text block below the cover needs a constant ~107px — so the
+              // card overflowed its bottom below ~179px wide. Tile width here
+              // ranges over roughly 150–300px depending on window and sidebar
+              // state, which left only ~20px of margin.
+              //
+              // Fixing the height decouples the two: the text block always has the
+              // same room and the cover (an Expanded in GbModCard) takes whatever
+              // is left, so its aspect varies with width instead of the layout
+              // breaking. 240 gives a 16:9-ish cover at a typical ~245px tile.
+              mainAxisExtent: 240,
             ),
             itemCount: visible.length,
             itemBuilder: (context, index) {

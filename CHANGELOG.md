@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Marketplace mod cards no longer overflow their layout: the stats row could run past the right edge, and at narrower window widths the text under the cover image could run past the bottom. Cards now stay correct at every width the grid produces.
 - Certificate validation is no longer disabled when downloading mods.
 - Installing a mod no longer risks deleting the folder its archive was sitting in.
 - A failed or interrupted marketplace download no longer leaves a partial file and an open file handle behind.
