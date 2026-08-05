@@ -36,6 +36,11 @@ class GbDetailView extends ConsumerStatefulWidget {
 }
 
 class _GbDetailViewState extends ConsumerState<GbDetailView> {
+  /// Width the gallery strip requests, and therefore the width the hero uses as its
+  /// stand-in. One constant so the two cannot drift apart — if they did, the
+  /// placeholder would silently become an extra download instead of a cache hit.
+  static const int _stripImageWidth = 100;
+
   int _galleryIndex = 0;
   bool _revealed = false;
   bool _showArchived = false;
@@ -215,6 +220,12 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
               revealed: _revealed,
               minWidth: 800,
               fit: BoxFit.contain,
+              // Deliberately the same width the strip below requests, so this is a
+              // cache hit rather than a second download: the small copy fills the
+              // frame the instant you switch, and the 800px version fades in over
+              // it. Without it, changing preview image left the area blank for the
+              // length of a download.
+              placeholderMinWidth: _stripImageWidth,
             ),
           ),
         ),
@@ -247,7 +258,7 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
                       revealed: _revealed,
                       width: 92,
                       height: 52,
-                      minWidth: 100,
+                      minWidth: _stripImageWidth,
                     ),
                   ),
                 );

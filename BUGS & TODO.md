@@ -665,6 +665,39 @@ update is **not** a re-run of the import path.
   exists. Verified the marketplace side was already doing the right thing —
   **all 20 captured covers carry `_sFile220`**, so the grid fetches the small variant
   rather than the original.
+- [x] **The detail gallery loads progressively instead of going blank.** Switching
+  preview image left the frame empty for the length of an 800px download, even though
+  the strip underneath had already fetched a small copy of that exact image. The hero
+  now renders the small one immediately and cross-fades the large one in over it.
+  The mechanism worth preserving: the placeholder asks for **exactly the width the
+  strip asks for** (one shared `_stripImageWidth` constant), because
+  `ResizeImage(NetworkImage(url), width: n)` is precisely what `Image.network`'s
+  `cacheWidth` builds — so identical arguments mean an `ImageCache` hit rather than a
+  second download. Get that width wrong and the "optimisation" costs a request; a
+  test asserts the key equality rather than just that a placeholder exists.
+  Skipped when it would resolve to the same file as the target (fading an image into
+  itself buys nothing), and the blur treatment still wraps the result — a test covers
+  that too, since losing it would un-blur adult content.
+  Implemented as **two plain `Image` layers in a `Stack`, with no cross-fade** — the
+  small copy underneath, the large one painting straight over it. The stand-in carries
+  a **small blur, scaled to how far it is stretched** (half a source block, so 100px
+  in an 800px frame gets sigma 4, floored at 1.5): nearest-neighbour blocks read as
+  "broken" where a slightly soft image reads as "still loading". Only the stand-in is
+  blurred — softening the sharp image would defeat downloading it — and both widths
+  are known up front, so the sigma needs no layout pass.
+  **Do not reach for `FadeInImage` here.** It was the first attempt and was wrong
+  twice: it animates the swap (not wanted), and it hard-codes
+  `gaplessPlayback: true` while never resetting its internal `targetLoaded` flag, so
+  its *documented* behaviour on a provider change is to keep showing the previously
+  loaded image. That made things worse than the original bug — not blank while
+  loading but **the wrong image** while loading, with the selected thumbnail and the
+  preview disagreeing. A plain `Image` defaults to `gaplessPlayback: false`, which
+  clears on a new url and lets the layer beneath show through, so no keys are needed.
+  Worth knowing how that slipped through: the first attempt's tests only ever built
+  the widget **once**, and a switch is the only thing that exercises the behaviour.
+  The tests now pump image A then image B.
+  Biggest win is the case with no published `_sFile800`: the hero then falls back to
+  the full-resolution original, the slowest download of all.
   - [ ] **Still worth doing: generate thumbnails for local covers on import.**
     `cacheWidth` bounds *memory* only. The files are still stored verbatim (measured:
     3.8 MB PNGs, 2560px wide), so every cold load reads and decodes a full-size

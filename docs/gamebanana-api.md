@@ -443,9 +443,11 @@ over 20 mods):
   gallery at a large size will fall through to the full-resolution original
   regularly — which is a multi-megabyte download and a multi-megapixel decode.
 
-Two practical consequences: pick the variant by the size you will *display*, and
-bound the decode independently, because the url you get back is not always the size
-you asked for.
+Three practical consequences: pick the variant by the size you will *display*; bound
+the decode independently, because the url you get back is not always the size you
+asked for; and note that **the ladder makes progressive loading nearly free** — a
+small variant already on screen elsewhere can stand in for a larger one while it
+downloads, provided both requests are built identically so they share a cache entry.
 
 ---
 
