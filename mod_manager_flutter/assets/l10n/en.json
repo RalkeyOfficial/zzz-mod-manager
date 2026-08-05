@@ -95,7 +95,10 @@
     "period_allTime": "Best of all time",
     "carousel_prev": "Previous",
     "carousel_next": "Next",
-    "carousel_position": "{index} / {total}"
+    "carousel_position": "{index} / {total}",
+    "first_released": "First released {date}",
+    "last_updated": "Last updated {date}",
+    "never_updated": "Never updated since release"
   },
   "mods": {
     "all": "ALL",
@@ -416,5 +419,14 @@
       "back": "Back",
       "finish": "Finish"
     }
+  },
+  "time": {
+    "just_now": "just now",
+    "minutes": "{n}m",
+    "hours": "{n}h",
+    "days": "{n}d",
+    "weeks": "{n}w",
+    "months": "{n}mo",
+    "years": "{n}y"
   }
 }

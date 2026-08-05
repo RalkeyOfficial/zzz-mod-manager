@@ -28,6 +28,13 @@ void main() {
     String name = 'Remielle Black & White - OG Variety Pack',
     String? category = 'Alexandrina Sebastiane',
     GbVisibility visibility = GbVisibility.show,
+    DateTime? added,
+    DateTime? updated,
+    bool withDates = true,
+    // An explicit flag, because `updated: null` cannot express "no update date"
+    // against a `??` default — it just gets the default, which quietly made this
+    // helper unable to set up the very case it was asked to.
+    bool neverUpdated = false,
   }) {
     return GbMod(
       idRow: 1,
@@ -38,8 +45,25 @@ void main() {
       visibility: visibility,
       submitter: const GbSubmitter(idRow: 2, name: 'Outbreaksurvivler'),
       subCategory: category == null ? null : GbCategoryRef(name: category),
+      // Relative to the real clock, since the card reads DateTime.now(). Ages are
+      // chosen far from a bucket boundary so these can't flake as time passes.
+      dateAdded: withDates
+          ? (added ?? DateTime.now().subtract(const Duration(days: 800)))
+          : null,
+      dateUpdated: (!withDates || neverUpdated)
+          ? null
+          : (updated ?? DateTime.now().subtract(const Duration(days: 3))),
     );
   }
+
+  /// Every tooltip message currently in the tree.
+  ///
+  /// `find.byTooltip` matches literally, and the update tooltip carries today's
+  /// date — so it is checked by prefix instead.
+  Iterable<String> tooltipMessages(WidgetTester tester) => tester
+      .widgetList<Tooltip>(find.byType(Tooltip))
+      .map((t) => t.message)
+      .whereType<String>();
 
   /// The grid's `mainAxisExtent`. Kept in sync with `gb_browse_view.dart`.
   const gridTileHeight = 240.0;
@@ -137,5 +161,117 @@ void main() {
   testWidgets('shows the specific category, not a raw id', (tester) async {
     await pumpCard(tester, width: 300, card: mod());
     expect(find.text('Alexandrina Sebastiane'), findsOneWidget);
+  });
+
+  group('release and update ages', () {
+    testWidgets('shows both, compactly', (tester) async {
+      await pumpCard(tester, width: 300, card: mod());
+      // 800 days -> "2y" released, 3 days -> "3d" updated.
+      expect(find.text('2y'), findsOneWidget);
+      expect(find.text('3d'), findsOneWidget);
+    });
+
+    testWidgets('each carries the absolute date in a tooltip', (tester) async {
+      // A relative age alone loses information; the exact date stays reachable.
+      // A fixed date so the expected string is exact. The card renders it in local
+      // time, so compare against the same conversion rather than hardcoding a day
+      // that shifts with the machine's timezone.
+      final added = DateTime.utc(2024, 7, 14, 12);
+      final local = added.toLocal();
+      final expected = '${local.year}-'
+          '${local.month.toString().padLeft(2, '0')}-'
+          '${local.day.toString().padLeft(2, '0')}';
+
+      await pumpCard(tester, width: 300, card: mod(added: added));
+
+      expect(find.byTooltip('First released $expected'), findsOneWidget);
+      expect(tooltipMessages(tester).any((m) => m.startsWith('Last updated ')),
+          isTrue);
+    });
+
+    testWidgets('a never-updated mod shows only the release age',
+        (tester) async {
+      // `_tsDateUpdated` is null when a mod was never updated — a zero timestamp
+      // means "never", not 1970.
+      await pumpCard(
+        tester,
+        width: 300,
+        card: mod(
+          added: DateTime.now().subtract(const Duration(days: 800)),
+          neverUpdated: true,
+        ),
+      );
+      expect(find.text('2y'), findsOneWidget);
+      final tooltips = tooltipMessages(tester);
+      expect(tooltips.any((m) => m.startsWith('First released ')), isTrue);
+      expect(tooltips.any((m) => m.startsWith('Last updated ')), isFalse);
+    });
+
+    testWidgets('an update date that merely echoes the release is not repeated',
+        (tester) async {
+      // Some records report the two as identical; showing the same figure twice
+      // reads as a rendering bug.
+      final same = DateTime.now().subtract(const Duration(days: 400));
+      await pumpCard(
+        tester,
+        width: 300,
+        card: mod(added: same, updated: same),
+      );
+      expect(find.text('1y'), findsOneWidget);
+    });
+
+    testWidgets('a mod with no dates at all renders nothing extra',
+        (tester) async {
+      await pumpCard(tester, width: 300, card: mod(withDates: false));
+      expect(tester.takeException(), isNull);
+      expect(find.byIcon(Icons.schedule), findsNothing);
+      expect(find.byIcon(Icons.autorenew), findsNothing);
+    });
+
+    testWidgets('the extra line does not overflow any card width',
+        (tester) async {
+      // The dates add a fourth line to the text block, which eats into the cover's
+      // share of a fixed-height tile. This is the assertion that the block still
+      // fits.
+      for (final width in <double>[140, 180, 233, 275, 320]) {
+        await pumpCard(tester, width: width, card: mod());
+        expect(tester.takeException(), isNull, reason: 'at ${width}px');
+      }
+    });
+  });
+
+  group('the category badge sits at the bottom-right', () {
+    /// The card's inner content edge: 300px wide less the 10px right padding.
+    const contentRight = 300.0 - 10.0;
+
+    testWidgets('a short label is flush right, not mid-card', (tester) async {
+      // The regression this pins: with a loose `Flexible`, the badge sized to its
+      // own text and the slack fell to its right, parking a short badge against the
+      // middle of the card instead of its edge.
+      await pumpCard(tester, width: 300, card: mod(category: 'UI'));
+
+      final badge = tester.getRect(find.text('UI'));
+      final card = tester.getRect(find.byType(GbModCard));
+
+      expect(badge.right, moreOrLessEquals(card.left + contentRight, epsilon: 8),
+          reason: 'badge should hug the right content edge');
+      // Well past halfway is the cheap check that it is not in the middle.
+      expect(badge.left, greaterThan(card.left + card.width * 0.6));
+    });
+
+    testWidgets('a long label still ends at the right edge', (tester) async {
+      await pumpCard(tester, width: 300, card: mod());
+      final badge = tester.getRect(find.text('Alexandrina Sebastiane'));
+      final card = tester.getRect(find.byType(GbModCard));
+      expect(badge.right, lessThanOrEqualTo(card.left + contentRight + 1));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('stats stay on the left', (tester) async {
+      await pumpCard(tester, width: 300, card: mod(category: 'UI'));
+      final stats = tester.getRect(find.text('298.0k'));
+      final card = tester.getRect(find.byType(GbModCard));
+      expect(stats.left, lessThan(card.left + card.width * 0.3));
+    });
   });
 }

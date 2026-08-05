@@ -363,7 +363,7 @@ we actually care about:
 | `_sVersion` | both | Author's version string (`"v3.1.0"`, `"1.1"`). Free-form: **not** semver, sometimes absent. |
 | `_sText` | profile | Description, **HTML** (not markdown). |
 | `_tsDateAdded` | both | First published. |
-| `_tsDateUpdated` | both | Last content update — the comparator for "is there something new". |
+| `_tsDateUpdated` | both | Last content update — the comparator for "is there something new". **Null on a mod that has never been updated** (a `_ts` of `0` means never), so it is not a safe stand-in for `_tsDateAdded`. The two routinely differ by a lot: the captured listing has mods added in 2024 and updated the same week it was taken. |
 | `_tsDateModified` | both | Last *any* edit (including trivial ones). Noisier than `_tsDateUpdated`. |
 | `_aSubmitter` | both | `_idRow`, `_sName`, `_sProfileUrl`, `_sAvatarUrl`. |
 | `_aRootCategory` | list | The **top-level** category only — for a skin that is the bland "Character Skins". |

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../models/gamebanana/gb_mod.dart';
 import '../../../services/gamebanana/content_filter.dart';
+import '../../../utils/relative_time.dart';
 import 'gb_thumbnail.dart';
 
 /// One mod in the results grid: cover, name, author, stats, category badge.
@@ -128,16 +129,31 @@ class _GbModCardState extends State<GbModCard> {
                         color: scheme.onSurfaceVariant,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 5),
+                    _Dates(mod: mod),
+                    const SizedBox(height: 6),
+                    // Two equal halves with their contents pushed to the outer
+                    // edges: stats left, category badge hard right.
+                    //
+                    // The badge half is `Expanded` + `Align`, not a bare
+                    // `Flexible`. A loose `Flexible` sizes itself to the badge, so
+                    // the leftover space in that half fell to its *right* and the
+                    // badge sat against the middle of the card rather than its
+                    // right edge. `Expanded` claims the half, `Align` puts the
+                    // badge at the end of it, and the badge still shrinks (its
+                    // label is one ellipsised line) when a category name is long.
                     Row(
                       children: [
                         Expanded(child: _stats(context, mod)),
                         if (mod.displayCategory?.name case final category?)
-                          Flexible(
-                            child: _badge(
-                              context,
-                              category,
-                              scheme.primary,
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: _badge(
+                                context,
+                                category,
+                                scheme.primary,
+                              ),
                             ),
                           ),
                       ],
@@ -257,5 +273,108 @@ class _GbModCardState extends State<GbModCard> {
     if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
     if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}k';
     return '$n';
+  }
+}
+
+/// "First released N ago · last updated N ago", the pair GameBanana shows.
+///
+/// Both dates rather than one because they routinely disagree by a lot — the
+/// captured listing has mods added in 2024 and updated last week — and which one
+/// matters depends on the question. "Is this maintained?" is the update date;
+/// "is this an old classic or brand new?" is the release date.
+class _Dates extends StatelessWidget {
+  const _Dates({required this.mod});
+
+  final GbMod mod;
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = context.loc;
+    final scheme = Theme.of(context).colorScheme;
+    final style = TextStyle(fontSize: 10, color: scheme.onSurfaceVariant);
+
+    final added = mod.dateAdded;
+    // `_tsDateUpdated` is the *content* update, and it is null on a mod that has
+    // never been updated (a zero timestamp means "never", not 1970). Treating a
+    // non-later value as absent also covers a mod whose update date merely echoes
+    // its release date, which would otherwise render the same figure twice.
+    final updated = mod.dateUpdated;
+    final hasUpdate =
+        updated != null && added != null && updated.isAfter(added);
+
+    if (added == null && !hasUpdate) return const SizedBox.shrink();
+
+    // `DateTime.now()` is read here rather than injected: this is a label that is
+    // rebuilt whenever the card is, and the arithmetic it feeds is unit-tested
+    // separately with an injected clock (`relative_time_test.dart`).
+    final now = DateTime.now().toUtc();
+
+    return Row(
+      children: [
+        if (added != null)
+          Flexible(
+            child: _entry(
+              context,
+              icon: Icons.schedule,
+              label: _ago(loc, added, now),
+              tooltip: loc.t('marketplace.first_released',
+                  params: {'date': _absolute(added)}),
+              style: style,
+            ),
+          ),
+        if (added != null && hasUpdate) const SizedBox(width: 10),
+        if (hasUpdate)
+          Flexible(
+            child: _entry(
+              context,
+              icon: Icons.autorenew,
+              label: _ago(loc, updated, now),
+              tooltip: loc.t('marketplace.last_updated',
+                  params: {'date': _absolute(updated)}),
+              style: style,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _entry(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String tooltip,
+    required TextStyle style,
+  }) {
+    // The tooltip carries the absolute date, so "2y" is never the only thing the
+    // user can find out.
+    return Tooltip(
+      message: tooltip,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: style.color),
+          const SizedBox(width: 3),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: style,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _ago(AppLocalizations loc, DateTime instant, DateTime now) {
+    final age = relativeAge(instant, now: now);
+    return loc.t('time.${age.unit.l10nKey}', params: {'n': '${age.count}'});
+  }
+
+  static String _absolute(DateTime date) {
+    final d = date.toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${d.year}-${two(d.month)}-${two(d.day)}';
   }
 }
