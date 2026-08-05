@@ -18,11 +18,26 @@ class ConfigService implements ModCharacterTagStore {
   static const String _keyFirstRun = 'first_run';
   static const String _keySortMode = 'sort_mode';
   static const String _keyContentFilter = 'content_filter';
+  static const String _keyMarketplaceSort = 'marketplace_sort';
 
   final SharedPreferences _prefs;
   File? _configFile;
 
-  ConfigService(this._prefs) {
+  /// [configFile] overrides where `config.json` lives.
+  ///
+  /// Exists so the dual-storage round-trip can be tested against a temp
+  /// directory. Without it a test would have to write over the *real*
+  /// `<appData>/config.json` — which is both destructive and the reason this class
+  /// had no tests at all, despite `_saveToFile` being the documented place people
+  /// forget to update (miss it and a setting works all session, then vanishes on
+  /// restart, with no error).
+  ConfigService(this._prefs, {File? configFile}) {
+    if (configFile != null) {
+      _configFile = configFile;
+      final parent = configFile.parent;
+      if (!parent.existsSync()) parent.createSync(recursive: true);
+      return;
+    }
     _initConfigFile();
   }
 
@@ -61,6 +76,13 @@ class ConfigService implements ModCharacterTagStore {
   /// `ContentFilterMode.parse` is where that rule lives. Defaults to `blur`,
   /// which honours GameBanana's own hint.
   String get contentFilter => _prefs.getString(_keyContentFilter) ?? 'blur';
+
+  /// The marketplace browse sort, as a `GbModSort` **name** (not its wire value).
+  ///
+  /// Empty when never chosen, so the caller applies its own default rather than
+  /// this layer having to know what that is. Parsed by `GbModSort.byName`, which
+  /// degrades an unrecognised value to null.
+  String get marketplaceSort => _prefs.getString(_keyMarketplaceSort) ?? '';
   
   Map<String, String> get modCharacterTags {
     final json = _prefs.getString(_keyModCharacterTags);
@@ -274,6 +296,16 @@ class ConfigService implements ModCharacterTagStore {
     }
   }
 
+  Future<bool> setMarketplaceSort(String sortName) async {
+    try {
+      await _prefs.setString(_keyMarketplaceSort, sortName);
+      await _saveToFile();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<bool> setFirstRunComplete() async {
     try {
       await _prefs.setBool(_keyFirstRun, false);
@@ -313,6 +345,9 @@ class ConfigService implements ModCharacterTagStore {
       if (config.containsKey('content_filter')) {
         await _prefs.setString(_keyContentFilter, config['content_filter']);
       }
+      if (config.containsKey('marketplace_sort')) {
+        await _prefs.setString(_keyMarketplaceSort, config['marketplace_sort']);
+      }
       if (config.containsKey('mod_character_tags')) {
         await _prefs.setString(_keyModCharacterTags, jsonEncode(config['mod_character_tags']));
       }
@@ -343,6 +378,7 @@ class ConfigService implements ModCharacterTagStore {
         'language': language,
         'sort_mode': sortMode,
         'content_filter': contentFilter,
+        'marketplace_sort': marketplaceSort,
         'mod_character_tags': modCharacterTags,
         'first_run': false,
       };

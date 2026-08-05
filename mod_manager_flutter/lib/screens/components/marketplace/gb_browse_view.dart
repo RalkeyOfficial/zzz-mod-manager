@@ -402,8 +402,13 @@ class _SortMenu extends ConsumerWidget {
       tooltip: loc.t('marketplace.sort'),
       icon: Icon(Icons.sort, color: enabled ? null : Theme.of(context).disabledColor),
       initialValue: query.sort,
-      onSelected: (sort) => ref.read(marketplaceQueryProvider.notifier).state =
-          query.refine(sort: sort),
+      // Both, in this order: the query so the grid refetches now, and config so the
+      // choice is still there next launch.
+      onSelected: (sort) {
+        ref.read(marketplaceQueryProvider.notifier).state =
+            query.refine(sort: sort);
+        ApiService.setMarketplaceSort(sort);
+      },
       itemBuilder: (context) => [
         for (final sort in GbModSort.values)
           PopupMenuItem(

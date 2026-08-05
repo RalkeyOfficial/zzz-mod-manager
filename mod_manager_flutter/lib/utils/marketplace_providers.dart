@@ -33,20 +33,9 @@ class MarketplaceQuery {
     this.mode = MarketplaceMode.browse,
     this.text = '',
     this.categoryId,
-    this.sort = defaultSort,
+    this.sort = kDefaultMarketplaceSort,
     this.page = 1,
   });
-
-  /// Recently **updated**, not recently submitted.
-  ///
-  /// `Generic_Newest` sorts by `_tsDateAdded`, which hides actively-maintained
-  /// mods: one submitted in May and updated today sorts to May, over 420 mods
-  /// deep. GameBanana's own game feed surfaces updates too — a mod in exactly
-  /// that situation sits 3rd on the site while being invisible here — so
-  /// defaulting to submission date made the app look like it was missing mods
-  /// that were actually present. `Generic_Newest` is still offered in the sort
-  /// menu for anyone who genuinely wants first-published order.
-  static const GbModSort defaultSort = GbModSort.latestModified;
 
   final MarketplaceMode mode;
 
@@ -113,8 +102,15 @@ class MarketplaceQuery {
 }
 
 /// What the results grid is currently asking for.
-final marketplaceQueryProvider =
-    StateProvider<MarketplaceQuery>((ref) => const MarketplaceQuery());
+///
+/// Starts on the user's saved sort (`marketplaceSortProvider`, hydrated from
+/// config at startup) rather than a hardcoded one, which is what makes the choice
+/// survive a restart. Read, not watched: this is a starting value, and re-creating
+/// the whole query — losing the current page and category — because a preference
+/// changed would be wrong.
+final marketplaceQueryProvider = StateProvider<MarketplaceQuery>((ref) {
+  return MarketplaceQuery(sort: ref.read(marketplaceSortProvider));
+});
 
 /// One page of results for the current query.
 ///

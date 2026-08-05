@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/character_info.dart';
 import '../services/api_service.dart';
 import '../services/download/download_service.dart';
+import '../models/gamebanana/gb_enums.dart';
 import '../services/gamebanana/content_filter.dart';
 import '../services/gamebanana/gamebanana_client.dart';
 import '../services/mod_manager_service.dart';
@@ -102,6 +103,26 @@ final autoRefreshProvider = StateProvider<bool>((ref) => false);
 /// hint — the API filters nothing itself, so this is the only filter there is.
 final contentFilterProvider =
     StateProvider<ContentFilterMode>((ref) => ContentFilterMode.blur);
+
+/// The marketplace browse sort the user last chose.
+///
+/// Here rather than in `marketplace_providers.dart` for the same reason as the
+/// content filter: it is a **persisted preference**, hydrated from `config.json` in
+/// `ApiService.initialize`, not part of a browsing session. `MarketplaceQuery` reads
+/// it for its starting sort, so the two are distinct on purpose — this is "what the
+/// user prefers", the query's `sort` is "what is applied right now".
+final marketplaceSortProvider =
+    StateProvider<GbModSort>((ref) => kDefaultMarketplaceSort);
+
+/// The sort a fresh install starts on: newest submissions first.
+///
+/// Worth knowing what this trades away — `Generic_Newest` orders by
+/// `_tsDateAdded`, so a mod published long ago and updated an hour ago sorts to its
+/// *original* date and sinks far down the list. "Recently updated"
+/// (`GbModSort.latestModified`) is the sort for that, and GameBanana's own site
+/// surfaces updates too, so the two views differ. This only decides the *first*
+/// run, since the choice is persisted from then on.
+const GbModSort kDefaultMarketplaceSort = GbModSort.newest;
 
 // View mode: grid or carousel
 final isGridViewProvider = StateProvider<bool>((ref) => true);

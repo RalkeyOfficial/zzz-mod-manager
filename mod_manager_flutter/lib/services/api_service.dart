@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/character_info.dart';
 import 'config_service.dart';
+import '../models/gamebanana/gb_enums.dart';
 import 'gamebanana/content_filter.dart';
 import 'mod_manager_service.dart';
 import 'platform_service_factory.dart';
@@ -36,6 +37,12 @@ class ApiService {
       // degrade to `blur`, never to `show`.
       _container!.read(contentFilterProvider.notifier).state =
           ContentFilterMode.parse(_configService!.contentFilter);
+      // `byName` returns null for a value this build doesn't know, so a config
+      // written by a version offering a different sort falls back rather than
+      // failing startup.
+      _container!.read(marketplaceSortProvider.notifier).state =
+          GbModSort.byName(_configService!.marketplaceSort) ??
+              kDefaultMarketplaceSort;
     }
 
     if (_modManager == null) {
@@ -187,6 +194,16 @@ class ApiService {
     await initialize();
     await _configService!.setContentFilter(mode.wire);
     _container?.read(contentFilterProvider.notifier).state = mode;
+  }
+
+  /// Persists the marketplace browse sort so the next launch starts on it.
+  ///
+  /// Stores the enum `name`, not the GameBanana `_sSort` string — see
+  /// `GbModSort.byName`.
+  static Future<void> setMarketplaceSort(GbModSort sort) async {
+    await initialize();
+    await _configService!.setMarketplaceSort(sort.name);
+    _container?.read(marketplaceSortProvider.notifier).state = sort;
   }
 
   static Future<String> updateConfig({

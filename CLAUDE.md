@@ -93,9 +93,16 @@ mistake.
 > Developer documentation lives in **`docs/`** — start at
 > [`docs/README.md`](docs/README.md). In particular,
 > [`docs/metadata-schema.md`](docs/metadata-schema.md) is the authoritative
-> reference for the on-disk formats (per-mod `metadata.json` sidecar,
-> `config.json`, schema versioning and the migration hook). Read it before
-> changing anything that persists.
+> reference for data about a **mod** — the per-mod `metadata.json` sidecar, its
+> `origin` block, schema versioning and the migration hook — and
+> [`docs/configuration.md`](docs/configuration.md) for the app's **own settings**
+> (`config.json`, the dual-storage pattern, adding a setting). Read the relevant
+> one before changing anything that persists.
+>
+> **Each doc owns one subject.** A fact that doesn't fit any of them wants a new
+> file, not the nearest existing one — the scope line at the top of each doc is
+> what decides. Notably: the remote API doc describes GameBanana's protocol, not
+> our client; our architecture lives in the `CLAUDE.md` files.
 > [`docs/gamebanana-api.md`](docs/gamebanana-api.md) is the equivalent reference for
 > the **remote** side — which of GameBanana's two APIs to use and why, browsing /
 > filtering / sorting, what every field means, NSFW handling, downloads, and the

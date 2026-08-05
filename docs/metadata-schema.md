@@ -1,10 +1,17 @@
-# Metadata & persistence schema
+# Mod metadata schema
 
-Reference for every piece of data the app writes to disk: what the fields mean,
-which file owns them, and the rules you must follow when changing them.
+Reference for the data the app records **about a mod**: the per-mod
+`metadata.json` sidecar, its `origin` block, what every field means, and the rules
+you must follow when changing the format.
 
 **This documents what the code does today.** Where behaviour is planned but not
 implemented, it says so — nothing here describes a format that doesn't exist yet.
+
+> Scope: mod-owned data. The app's *own* settings — `config.json`, the
+> SharedPreferences mirror, the dual-storage pattern — are
+> [`configuration.md`](configuration.md). The dividing line is ownership rather than
+> file format: if deleting it would lose information about a mod, it is here; if it
+> would only reset a preference, it is there.
 
 Related: [`../CLAUDE.md`](../CLAUDE.md) for the service/layer architecture.
 
@@ -17,8 +24,8 @@ Four storage surfaces, three of them current:
 | Surface | Path | Owns |
 |---|---|---|
 | **Per-mod sidecar** | `<mod>/.zzz-mod-manager/metadata.json` | Everything *intrinsic* to a mod: description, source URL, tags, character, gallery images |
-| **App config file** | `<appData>/config.json` | Everything *per-install*: folder paths, which mods are active, favourites, theme, language, sort mode |
-| **SharedPreferences** | platform-managed | A mirror of `config.json` — see [§5](#5-configjson-and-the-dual-storage-pattern) |
+| **App config file** | `<appData>/config.json` | Everything *per-install*: folder paths, which mods are active, favourites, theme, language, sort modes — documented in [`configuration.md`](configuration.md) |
+| **SharedPreferences** | platform-managed | A mirror of `config.json`, see [`configuration.md`](configuration.md) |
 | **Legacy image dir** | `<appData>/mod_images/<mod>.png` | *Deprecated.* Read once and migrated into the sidecar, never written to |
 
 `<appData>` resolves via `PathHelper.getAppDataPath()`:
@@ -582,56 +589,7 @@ Two mods sharing a `mod_id` after a backfill is therefore common and expected
 
 ---
 
-## 5. `config.json` and the dual-storage pattern
-
-`ConfigService` writes **every setting twice**: through `SharedPreferences` *and*
-into `<appData>/config.json`. The JSON file is the portable/inspectable copy;
-SharedPreferences is what the app actually reads at runtime. `loadFromFile()`
-imports the JSON back into SharedPreferences.
-
-```json
-{
-  "mods_path": "/home/user/mods",
-  "save_mods_path": "/path/to/ZZMI/Mods",
-  "active_mods": ["Ellen Swimsuit"],
-  "favorite_mods": ["Ellen Swimsuit"],
-  "theme": "dark",
-  "language": "en",
-  "sort_mode": "added",
-  "content_filter": "blur",
-  "mod_character_tags": { "Ellen Swimsuit": "ellen" },
-  "first_run": false
-}
-```
-
-| Key | SharedPreferences key | Notes |
-|---|---|---|
-| `mods_path` | `mods_path` | The library — where mod folders live |
-| `save_mods_path` | `save_mods_path` | The game's mods folder, where links are created |
-| `active_mods` | `active_mods` | String list of mod folder names |
-| `favorite_mods` | `favorite_mods` | String list of mod folder names |
-| `theme` | `theme` | |
-| `language` | `language` | Locale code (`en`, `uk`) |
-| `sort_mode` | `sort_mode` | Parsed into `ModSort`; falls back to `added` |
-| `content_filter` | `content_filter` | Marketplace adult-content treatment: `blur` (default) \| `show` \| `hide`. Stored as a raw string and parsed by `ContentFilterMode.parse`, which **degrades anything unrecognised to `blur`** — the only value that is wrong in neither direction (see below) |
-| `mod_character_tags` | `mod_character_tags` | JSON-encoded string in SharedPreferences, real object in the file. **Legacy** — superseded by the sidecar's `character_id`, still mirrored by `ModMetadataRepository.setCharacter()` for backward compatibility |
-| `first_run` | `first_run` | Bool; always serialised as `false` by `_saveToFile()` |
-
-> ⚠ **The recurring mistake.** Adding a setting means touching **three** places:
-> the getter/setter pair, *and* the map inside `_saveToFile()`, *and* the parsing
-> in `loadFromFile()`. Miss `_saveToFile()` and the setting works all session then
-> vanishes on restart — with no error.
-
-### Naming note
-
-`mods_path` is the **library** and `save_mods_path` is the **game folder**, which
-reads backwards from how the UI labels them ("SaveMods folder" is presented to
-users as their library). Don't rename these keys casually — they're on disk in
-every existing install — but do expect the confusion when reading the code.
-
----
-
-## 6. Planned changes
+## 5. Planned changes
 
 **The origin block has shipped** — its write side, its field reference and the
 rules around it are documented in [§2](#the-origin-block), which is now the

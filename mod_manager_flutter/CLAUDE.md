@@ -5,9 +5,11 @@ Architecture notes for the app itself. Loads when working on files under
 changelog, the non-negotiables) live in the [root `CLAUDE.md`](../CLAUDE.md).
 
 > [`../docs/metadata-schema.md`](../docs/metadata-schema.md) is the authoritative
-> reference for the on-disk formats (per-mod `metadata.json` sidecar,
-> `config.json`, schema versioning and the migration hook). Read it before
-> changing anything that persists.
+> reference for data about a **mod** (the per-mod `metadata.json` sidecar, its
+> `origin` block, schema versioning and the migration hook), and
+> [`../docs/configuration.md`](../docs/configuration.md) for the app's **own
+> settings** (`config.json`, the dual-storage pattern, adding a setting). Read the
+> relevant one before changing anything that persists.
 > [`../docs/gamebanana-api.md`](../docs/gamebanana-api.md) is the equivalent
 > reference for the **remote** side. Read it before writing any request; its
 > surface is undocumented upstream, so guessing costs more than looking.
@@ -45,8 +47,10 @@ The most important architectural decision is the **platform abstraction**:
     `Platform.isX` for these operations in business logic — add a method to
     `PlatformService` and implement it in both subclasses.**
 - `ConfigService` — persistence. **Dual storage**: writes through both
-  `SharedPreferences` and a JSON `config.json` in the app-data dir. When changing
-  a setting, update both the getter and the `_saveToFile()` map.
+  `SharedPreferences` and a JSON `config.json` in the app-data dir. Adding a
+  setting means the getter/setter, the `_saveToFile()` map **and** the
+  `loadFromFile()` parse — see [`../docs/configuration.md`](../docs/configuration.md),
+  which also covers the `configFile:` test seam.
 - `IniParserService` — parses mod `.ini` files into keybinds.
 - `ArchiveService` — extracts imported `.zip` (in-process via `archive` package)
   and `.rar`/`.7z` (shells out to an external `7z`/`7za`/`7zr` binary, which must
@@ -124,7 +128,7 @@ GameBanana hosts is reached via "open in browser".
   intercept a CDN url, so every origin block it wrote had both confidences at
   `unknown`; a native download knows mod id, file id, version and variant label
   before the first byte and writes them at `exact`. See
-  `../docs/metadata-schema.md` §6.
+  `../docs/metadata-schema.md` §5.
 - `_sText` is HTML while every description this app renders is markdown, so it goes
   through `utils/html_to_markdown.dart` — shared with the description editors'
   paste-as-markdown so the two can't drift.

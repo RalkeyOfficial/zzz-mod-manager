@@ -617,6 +617,21 @@ update is **not** a re-run of the import path.
   probably belongs in app-data rather than config.
 - [ ] Key for §4.2: backup retention (count or age), once a cap is chosen.
 
+- [x] **The marketplace sort and content filter persist between sessions.**
+  `marketplace_sort` (a `GbModSort` **Dart name**, not the `_sSort` wire value — an
+  upstream rename must not invalidate saved settings) joins `content_filter` through
+  the dual-storage pattern. The sort *preference* is a separate provider from the
+  active query's `sort`: the query **reads** it as a starting value rather than
+  watching it, since re-creating the query on a preference change would throw away
+  the current page and category.
+  Also closed a longer-standing gap while here: `ConfigService` had **no tests at
+  all**, because a test would have written over the user's real
+  `<appData>/config.json`. A `configFile:` seam fixes that, and
+  `test/config_service_test.dart` now round-trips through a temp file and asserts
+  every key `_saveToFile()` writes is read back by `loadFromFile()` — the
+  three-place rule enforced instead of remembered. Verified it catches the mistake:
+  deleting one line from the `_saveToFile` map fails two tests.
+
 ### Filed by §1 (found while building the native browser)
 
 - [x] **Featured "best of" carousel on the unfiltered view.** Not in the original
@@ -664,8 +679,12 @@ update is **not** a re-run of the import path.
   academic: it is how the gap was found. A mod submitted in May but updated the same
   day sat 3rd on the site and **>420 mods deep** under our original
   `Generic_Newest` default, which reads as "the marketplace is missing mods".
-  Mitigated by defaulting to `Generic_LatestModified` (that mod lands on page 1), but
-  the orderings still differ. Options if it matters later: use `Game/<id>/Subfeed`
+  ~~Mitigated by defaulting to `Generic_LatestModified` (that mod lands on page 1)~~
+  — **the default is `Generic_Newest` again**, by request, now that the sort choice
+  persists: the default only decides a *fresh install*, so the cost of the wrong one
+  dropped sharply. "Recently updated" is one click away and remembered thereafter.
+  The orderings still differ from the site's. Options if it matters later: use
+  `Game/<id>/Subfeed`
   for the unfiltered view (it matches the site closely — but accepts no filters and
   no sort, so it cannot be the only path), or accept the difference and say so in the
   UI. Written up in [`docs/gamebanana-api.md`](docs/gamebanana-api.md) §4. Partly

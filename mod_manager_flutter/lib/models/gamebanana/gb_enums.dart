@@ -55,6 +55,24 @@ enum GbModSort {
 
   /// The literal string sent as `_sSort`.
   final String wireValue;
+
+  /// Looks a sort up by its Dart [name], for reading a persisted preference.
+  ///
+  /// Matches on [name] rather than [wireValue] because the stored value is *ours*,
+  /// in our own config file — pinning it to GameBanana's protocol string would mean
+  /// an upstream rename silently invalidated everyone's saved setting.
+  ///
+  /// Returns null for anything unrecognised so the caller applies its own default.
+  /// That matters both ways round: a hand-edited config and a value written by a
+  /// build that offered a sort this one doesn't must both degrade to the default
+  /// rather than throw on startup.
+  static GbModSort? byName(Object? name) {
+    if (name is! String) return null;
+    for (final sort in GbModSort.values) {
+      if (sort.name == name) return sort;
+    }
+    return null;
+  }
 }
 
 /// The `_sSort` vocabulary accepted by `Mod/Categories`.

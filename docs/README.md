@@ -7,7 +7,8 @@ the root [`README.md`](../README.md).
 
 | Document | Covers |
 |---|---|
-| [`metadata-schema.md`](metadata-schema.md) | Every on-disk format: the per-mod `metadata.json` sidecar, `config.json`, the dual-storage pattern, schema versioning and the migration hook |
+| [`metadata-schema.md`](metadata-schema.md) | Data about a **mod**: the per-mod `metadata.json` sidecar, its `origin` block, schema versioning and the migration hook |
+| [`configuration.md`](configuration.md) | The app's **own settings**: `config.json`, the SharedPreferences mirror, the dual-storage pattern, and how to add a setting |
 | [`gamebanana-api.md`](gamebanana-api.md) | The remote API: which of the two APIs to use, browsing/filtering/sorting, the mod and file objects, NSFW handling, downloads, the category tree, and the gotchas |
 
 ## Related files outside this directory
