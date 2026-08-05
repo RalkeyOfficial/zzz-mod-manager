@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -45,10 +46,17 @@ void main() {
     List<GbTopSub>? subs,
     ContentFilterMode filter = ContentFilterMode.blur,
     void Function(int)? onOpenMod,
+    Duration? autoAdvance,
   }) async {
     await pumpLocalized(
       tester,
-      GbTopSubsCarousel(onOpenMod: onOpenMod ?? (_) {}),
+      // Auto-advance off by default: it would walk the carousel forward while
+      // `pumpAndSettle` settles, so "the first card is showing" would be racing a
+      // timer. The auto-advance group below opts back in explicitly.
+      GbTopSubsCarousel(
+        onOpenMod: onOpenMod ?? (_) {},
+        autoAdvanceInterval: autoAdvance,
+      ),
       overrides: [
         topSubsProvider.overrideWith((ref) async => subs ?? captured),
         contentFilterProvider.overrideWith((ref) => filter),
@@ -160,6 +168,158 @@ void main() {
     });
   });
 
+  group('auto-advance', () {
+    List<GbTopSub> three() => [
+          sub(1, GbTopSubPeriod.today, name: 'First'),
+          sub(2, GbTopSubPeriod.week, name: 'Second'),
+          sub(3, GbTopSubPeriod.month, name: 'Third'),
+        ];
+
+    /// Long enough that `pumpAndSettle` during setup can't reach it, short enough
+    /// to step through in a test.
+    const interval = Duration(seconds: 3);
+
+    testWidgets('advances on its own after the interval', (tester) async {
+      await pump(
+        tester,
+        filter: ContentFilterMode.show,
+        subs: three(),
+        autoAdvance: interval,
+      );
+      expect(find.text('First'), findsOneWidget);
+
+      await tester.pump(interval);
+      await tester.pumpAndSettle();
+      expect(find.text('Second'), findsOneWidget);
+
+      await tester.pump(interval);
+      await tester.pumpAndSettle();
+      expect(find.text('Third'), findsOneWidget);
+    });
+
+    testWidgets('wraps at the end, unlike the arrows', (tester) async {
+      // The arrows clamp so a disabled arrow can mark the end of the list. An
+      // auto-advance that clamped would stop dead at the last card, which is not
+      // "auto" — so the two navigations differ on purpose.
+      await pump(
+        tester,
+        filter: ContentFilterMode.show,
+        subs: three(),
+        autoAdvance: interval,
+      );
+
+      for (var i = 0; i < 3; i++) {
+        await tester.pump(interval);
+        await tester.pumpAndSettle();
+      }
+      expect(find.text('First'), findsOneWidget,
+          reason: 'three advances from card 1 of 3 lands back on card 1');
+    });
+
+    testWidgets('does not advance while the pointer is over it', (tester) async {
+      await pump(
+        tester,
+        filter: ContentFilterMode.show,
+        subs: three(),
+        autoAdvance: interval,
+      );
+
+      final pointer = TestPointer(1, PointerDeviceKind.mouse);
+      await tester.sendEventToBinding(
+        pointer.hover(tester.getCenter(find.byType(PageView))),
+      );
+      await tester.pumpAndSettle();
+
+      // Well past two intervals: without the pause this would be two cards on.
+      await tester.pump(interval * 3);
+      await tester.pumpAndSettle();
+      expect(find.text('First'), findsOneWidget,
+          reason: 'hovering must hold the current card');
+    });
+
+    testWidgets('resumes once the pointer leaves', (tester) async {
+      await pump(
+        tester,
+        filter: ContentFilterMode.show,
+        subs: three(),
+        autoAdvance: interval,
+      );
+
+      final pointer = TestPointer(1, PointerDeviceKind.mouse);
+      await tester.sendEventToBinding(
+        pointer.hover(tester.getCenter(find.byType(PageView))),
+      );
+      await tester.pump(interval * 2);
+      expect(find.text('First'), findsOneWidget);
+
+      // Below the carousel, which sits in the top 250px of the surface — (5, 5)
+      // looks "far away" but is still inside it, so onExit would never fire.
+      final below = tester.getRect(find.byType(PageView)).bottom + 200;
+      await tester.sendEventToBinding(pointer.hover(Offset(600, below)));
+      await tester.pumpAndSettle();
+
+      await tester.pump(interval);
+      await tester.pumpAndSettle();
+      expect(find.text('Second'), findsOneWidget,
+          reason: 'the rotation should pick back up after the cursor leaves');
+    });
+
+    testWidgets('a manual step resets the dwell', (tester) async {
+      // Otherwise a card chosen with the arrow could slide away a moment later,
+      // having inherited the tail of the previous interval.
+      await pump(
+        tester,
+        filter: ContentFilterMode.show,
+        subs: three(),
+        autoAdvance: interval,
+      );
+
+      await tester.pump(interval - const Duration(milliseconds: 500));
+      await tester.tap(find.byTooltip('Next'));
+      await tester.pumpAndSettle();
+      expect(find.text('Second'), findsOneWidget);
+
+      // The old interval's remainder must not fire.
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(find.text('Second'), findsOneWidget,
+          reason: 'the dwell restarted, so it is too early to advance');
+
+      await tester.pump(interval);
+      await tester.pumpAndSettle();
+      expect(find.text('Third'), findsOneWidget);
+    });
+
+    testWidgets('a single card never advances', (tester) async {
+      await pump(
+        tester,
+        filter: ContentFilterMode.show,
+        subs: [sub(1, GbTopSubPeriod.today, name: 'Only')],
+        autoAdvance: interval,
+      );
+      await tester.pump(interval * 3);
+      await tester.pumpAndSettle();
+      expect(find.text('Only'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a collapsed carousel does not tick into a dead controller',
+        (tester) async {
+      // With everything filtered out the PageView is gone, leaving the controller
+      // attached to nothing while the timer keeps firing. Without the `hasClients`
+      // guard this throws.
+      await pump(
+        tester,
+        subs: [sub(1, GbTopSubPeriod.today, visibility: GbVisibility.hide)],
+        filter: ContentFilterMode.hide,
+        autoAdvance: interval,
+      );
+      await tester.pump(interval * 3);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+  });
+
   group('content filter', () {
     testWidgets('collapses entirely when everything is hidden', (tester) async {
       await pump(
@@ -213,7 +373,7 @@ void main() {
       // the grid below owns the loading and error states.
       await pumpLocalized(
         tester,
-        GbTopSubsCarousel(onOpenMod: (_) {}),
+        GbTopSubsCarousel(onOpenMod: (_) {}, autoAdvanceInterval: null),
         overrides: [
           topSubsProvider.overrideWith((ref) => Future.error('boom')),
           contentFilterProvider.overrideWith((ref) => ContentFilterMode.blur),

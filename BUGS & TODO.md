@@ -640,6 +640,23 @@ update is **not** a re-run of the import path.
   around "one card visible", and that assertion is now what keeps it a carousel.
   Arrows **clamp rather than wrap**: a disabled arrow states where the list ends,
   where looping back to the start reads as a glitch.
+  **Auto-advances every 6s, paused while the pointer is over it.** Three decisions
+  worth keeping: auto-advance **wraps** where the arrows clamp (clamping would stop
+  it dead at the last card, which is not "auto"); the dwell **restarts on every**
+  page change whatever caused it, so a card reached with an arrow isn't shown for a
+  sliver of an interval; and the interval is an **injectable widget parameter** —
+  tests must pass `null`, because an auto-advancing widget makes `pumpAndSettle`
+  walk the carousel forward while it settles, so any "the first card is showing"
+  assertion would silently race a timer. A `hasClients` guard on the tick is
+  load-bearing rather than defensive: when the content filter hides everything the
+  `PageView` is gone while the timer keeps firing.
+  It **scrolls away with the grid rather than being pinned**, which is why the grid
+  is a `SliverGrid` inside a shared `CustomScrollView` rather than a `GridView`: two
+  nested scrollables would either fight or need the carousel at a fixed height, and
+  neither scrolls naturally. The carousel sits outside the results' loading/error
+  branch so it doesn't flicker in and out with the listing it loads independently
+  of. The **pager stays pinned** below the scroll view — paging is navigation, and
+  hunting for it at the bottom of a long grid gets worse the longer the page is.
 - [ ] **We cannot reproduce GameBanana's default ordering, and users will compare.**
   The site defaults to its own "ripe" ranking, which **neither API exposes**: every
   plausible `_sSort` alias is rejected, and the legacy Core API — authoritative,

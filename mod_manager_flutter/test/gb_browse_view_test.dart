@@ -9,7 +9,11 @@ import 'package:mod_manager_flutter/models/gamebanana/gb_submitter.dart';
 import 'package:mod_manager_flutter/screens/components/marketplace/gb_browse_view.dart';
 import 'package:mod_manager_flutter/screens/components/marketplace/gb_category_panel.dart';
 import 'package:mod_manager_flutter/screens/components/marketplace/gb_mod_card.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gb_top_sub.dart';
+import 'package:mod_manager_flutter/screens/components/marketplace/gb_top_subs_carousel.dart';
+import 'package:mod_manager_flutter/services/gamebanana/content_filter.dart';
 import 'package:mod_manager_flutter/utils/marketplace_providers.dart';
+import 'package:mod_manager_flutter/utils/state_providers.dart';
 
 import 'support/localized_harness.dart';
 
@@ -63,9 +67,21 @@ void main() {
     node(30395, 'UI'),
   ];
 
+  final topSubs = [
+    GbTopSub(
+      idRow: 900,
+      period: GbTopSubPeriod.today,
+      name: 'Top Today',
+      imageUrl: 'https://example.invalid/900.jpg',
+      visibility: GbVisibility.show,
+      likeCount: 500,
+    ),
+  ];
+
   List<Override> overrides({
     GbPage<GbMod>? results,
     List<GbCategoryNode>? rootNodes,
+    List<GbTopSub>? featured,
   }) =>
       [
         marketplaceResultsProvider
@@ -75,6 +91,10 @@ void main() {
         categoryChildrenProvider.overrideWith(
           (ref, arg) async => [node(30341, 'Ellen Joe'), node(30579, 'Miyabi')],
         ),
+        // Without this the carousel would reach for the real network client and
+        // silently render nothing — so every assertion about it would be vacuous.
+        topSubsProvider.overrideWith((ref) async => featured ?? topSubs),
+        contentFilterProvider.overrideWith((ref) => ContentFilterMode.show),
       ];
 
   Future<void> pumpBrowse(
@@ -171,6 +191,75 @@ void main() {
     // 800px is the app's minimum window width; the panel takes a fixed 232 of it.
     await pumpBrowse(tester, size: const Size(800, 600));
     expect(tester.takeException(), isNull);
+  });
+
+  group('the featured carousel scrolls away with the grid', () {
+    /// Enough cards that the content genuinely overflows an 800px-tall viewport.
+    final manyResults = GbPage<GbMod>(
+      records: [for (var i = 1; i <= 24; i++) mod(i, 'Mod $i')],
+      recordCount: 240,
+      perPage: 30,
+    );
+
+    testWidgets('is not pinned — scrolling moves it up', (tester) async {
+      // The behaviour this pins: the carousel used to be a sibling *above* the
+      // grid's own scroll view, so it stayed put no matter how far you scrolled.
+      // It now shares one CustomScrollView with the grid.
+      await pumpBrowse(tester, extra: overrides(results: manyResults));
+
+      final before = tester.getRect(find.byType(GbTopSubsCarousel)).top;
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -200));
+      await tester.pumpAndSettle();
+
+      final carousel = find.byType(GbTopSubsCarousel);
+      if (carousel.evaluate().isEmpty) return; // scrolled clean out of the tree
+
+      // A generous threshold on purpose: `tester.drag` loses the touch-slop
+      // distance, so the scroll offset is close to but never exactly the drag. What
+      // matters is that it moved a long way, not by how much.
+      expect(tester.getRect(carousel).top, lessThan(before - 100),
+          reason: 'the carousel should move with the content, not stay pinned');
+    });
+
+    testWidgets('scrolls fully out of view when dragged far', (tester) async {
+      await pumpBrowse(tester, extra: overrides(results: manyResults));
+      expect(find.byType(GbTopSubsCarousel), findsOneWidget);
+
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -600));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      final carousel = find.byType(GbTopSubsCarousel);
+      if (carousel.evaluate().isNotEmpty) {
+        // Still built (slivers keep a cache) but pushed above the viewport.
+        expect(tester.getRect(carousel).bottom, lessThan(0));
+      }
+    });
+
+    testWidgets('the pager stays reachable without scrolling', (tester) async {
+      // Deliberately *not* in the scroll view: paging is navigation, and hunting
+      // for it at the bottom of a long grid would be worse the longer the page is.
+      await pumpBrowse(tester, extra: overrides(results: manyResults));
+      final pagerBefore = tester.getRect(find.text('Page 1 of 8')).top;
+
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Page 1 of 8'), findsOneWidget);
+      expect(tester.getRect(find.text('Page 1 of 8')).top,
+          moreOrLessEquals(pagerBefore, epsilon: 0.5));
+    });
+
+    testWidgets('is absent once a category is selected', (tester) async {
+      await pumpBrowse(tester, extra: overrides(results: manyResults));
+      expect(find.byType(GbTopSubsCarousel), findsOneWidget);
+
+      await tester.tap(find.text('Other/Misc'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(GbTopSubsCarousel), findsNothing,
+          reason: 'a game-wide best-of list is not about a filtered view');
+    });
   });
 
   testWidgets('an empty result set renders an empty state, not a crash',

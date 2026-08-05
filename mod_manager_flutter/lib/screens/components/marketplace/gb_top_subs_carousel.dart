@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
@@ -23,9 +24,23 @@ import '../../../utils/state_providers.dart';
 /// searches, a fixed game-wide list is no longer about what they are looking at, and
 /// it costs vertical space the grid wants.
 class GbTopSubsCarousel extends ConsumerStatefulWidget {
-  const GbTopSubsCarousel({super.key, required this.onOpenMod});
+  const GbTopSubsCarousel({
+    super.key,
+    required this.onOpenMod,
+    this.autoAdvanceInterval = defaultAutoAdvanceInterval,
+  });
 
   final void Function(int modId) onOpenMod;
+
+  /// How long each card is shown before advancing, or **null to never advance**.
+  ///
+  /// Injectable for two reasons. Tests need it off, because an auto-advancing
+  /// widget makes `pumpAndSettle` walk the carousel forward while it settles — so
+  /// any test asserting "the first card is showing" would be racing the timer. And
+  /// it is the knob to turn if the dwell time feels wrong.
+  final Duration? autoAdvanceInterval;
+
+  static const Duration defaultAutoAdvanceInterval = Duration(seconds: 6);
 
   @override
   ConsumerState<GbTopSubsCarousel> createState() => _GbTopSubsCarouselState();
@@ -33,6 +48,7 @@ class GbTopSubsCarousel extends ConsumerStatefulWidget {
 
 class _GbTopSubsCarouselState extends ConsumerState<GbTopSubsCarousel> {
   static const double _height = 250;
+  static const Duration _slideDuration = Duration(milliseconds: 260);
 
   final PageController _controller = PageController();
   int _index = 0;
@@ -42,10 +58,77 @@ class _GbTopSubsCarouselState extends ConsumerState<GbTopSubsCarousel> {
   /// handing its consent to whatever slid into that slot.
   final Set<int> _revealed = <int>{};
 
+  Timer? _autoAdvance;
+
+  /// How many cards are currently on screen, so the timer can wrap without
+  /// reaching back into `build`'s locals.
+  int _count = 0;
+
+  /// True while the pointer is over the carousel.
+  bool _hovered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _restartAutoAdvance();
+  }
+
+  @override
+  void didUpdateWidget(GbTopSubsCarousel old) {
+    super.didUpdateWidget(old);
+    if (old.autoAdvanceInterval != widget.autoAdvanceInterval) {
+      _restartAutoAdvance();
+    }
+  }
+
   @override
   void dispose() {
+    // Before the controller: a tick that landed after disposal would call
+    // animateToPage on a dead controller.
+    _autoAdvance?.cancel();
     _controller.dispose();
     super.dispose();
+  }
+
+  /// (Re)starts the dwell timer from zero.
+  ///
+  /// Called after **every** page change, whoever caused it — arrow, drag or the
+  /// timer itself — so a card the user just navigated to gets a full interval
+  /// rather than the remainder of the previous one.
+  void _restartAutoAdvance() {
+    _autoAdvance?.cancel();
+    final interval = widget.autoAdvanceInterval;
+    if (interval == null || _hovered) return;
+    _autoAdvance = Timer.periodic(interval, (_) => _advanceAutomatically());
+  }
+
+  void _advanceAutomatically() {
+    // `hasClients` is not defensive habit: when the content filter hides every
+    // entry this widget collapses to a `SizedBox`, the PageView goes away, and the
+    // controller is left attached to nothing while the timer keeps ticking.
+    if (!mounted || !_controller.hasClients || _count < 2) return;
+
+    // Wraps, unlike the arrows. The arrows clamp because a disabled arrow tells the
+    // user where the list ends; an auto-advance that clamped would simply stop
+    // forever at the last card, which is not "auto" at all.
+    final next = (_index + 1) % _count;
+    _controller.animateToPage(
+      next,
+      duration: _slideDuration,
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _setHovered(bool hovered) {
+    if (_hovered == hovered) return;
+    _hovered = hovered;
+    // Paused rather than merely skipped on tick: the point is that the card under
+    // the cursor stays put for as long as the user is reading it.
+    if (hovered) {
+      _autoAdvance?.cancel();
+    } else {
+      _restartAutoAdvance();
+    }
   }
 
   void _step(int delta, int count) {
@@ -56,7 +139,7 @@ class _GbTopSubsCarouselState extends ConsumerState<GbTopSubsCarousel> {
     if (target == _index) return;
     _controller.animateToPage(
       target,
-      duration: const Duration(milliseconds: 260),
+      duration: _slideDuration,
       curve: Curves.easeOutCubic,
     );
   }
@@ -87,52 +170,67 @@ class _GbTopSubsCarouselState extends ConsumerState<GbTopSubsCarousel> {
     if (visible.isEmpty) return const SizedBox.shrink();
 
     final count = visible.length;
+    // Kept on the state so the timer can wrap without reaching into these locals.
+    _count = count;
     // The visible set can shrink under us when the filter changes, leaving the
     // controller past the end.
     final index = _index.clamp(0, count - 1);
 
-    return SizedBox(
-      height: _height,
-      child: Stack(
-        children: [
-          PageView.builder(
-            controller: _controller,
-            itemCount: count,
-            onPageChanged: (i) => setState(() => _index = i),
-            itemBuilder: (context, i) {
-              final entry = visible[i];
-              return _Card(
-                sub: entry.sub,
-                period: entry.period,
-                treatment: entry.treatment,
-                revealed: _revealed.contains(entry.sub.idRow),
-                onReveal: () =>
-                    setState(() => _revealed.add(entry.sub.idRow)),
-                onOpen: () => widget.onOpenMod(entry.sub.idRow),
-              );
-            },
-          ),
-          _Arrow(
-            alignment: Alignment.centerLeft,
-            icon: Icons.chevron_left,
-            tooltip: context.loc.t('marketplace.carousel_prev'),
-            onPressed: index > 0 ? () => _step(-1, count) : null,
-          ),
-          _Arrow(
-            alignment: Alignment.centerRight,
-            icon: Icons.chevron_right,
-            tooltip: context.loc.t('marketplace.carousel_next'),
-            onPressed: index < count - 1 ? () => _step(1, count) : null,
-          ),
-          Positioned(
-            right: 14,
-            bottom: 12,
-            // Also decoration — it must not swallow clicks meant for the card.
-            child: IgnorePointer(
-              child: _Counter(index: index + 1, total: count),
+    return MouseRegion(
+      // Hovering pauses the rotation. Anyone with the pointer over the carousel is
+      // reading or about to click, and sliding the target out from under them is the
+      // single most annoying thing an auto-advancing carousel can do.
+      onEnter: (_) => _setHovered(true),
+      onExit: (_) => _setHovered(false),
+      child: SizedBox(
+        height: _height,
+        child: Stack(
+          children: [
+            PageView.builder(
+              controller: _controller,
+              itemCount: count,
+              onPageChanged: (i) {
+                setState(() => _index = i);
+                // Whatever moved the page — arrow, drag, or the timer — the dwell
+                // starts over, so a card the user chose isn't shown for a sliver of
+                // an interval before sliding away.
+                _restartAutoAdvance();
+              },
+              itemBuilder: (context, i) {
+                final entry = visible[i];
+                return _Card(
+                  sub: entry.sub,
+                  period: entry.period,
+                  treatment: entry.treatment,
+                  revealed: _revealed.contains(entry.sub.idRow),
+                  onReveal: () =>
+                      setState(() => _revealed.add(entry.sub.idRow)),
+                  onOpen: () => widget.onOpenMod(entry.sub.idRow),
+                );
+              },
             ),
-          ),
-        ],
+            _Arrow(
+              alignment: Alignment.centerLeft,
+              icon: Icons.chevron_left,
+              tooltip: context.loc.t('marketplace.carousel_prev'),
+              onPressed: index > 0 ? () => _step(-1, count) : null,
+            ),
+            _Arrow(
+              alignment: Alignment.centerRight,
+              icon: Icons.chevron_right,
+              tooltip: context.loc.t('marketplace.carousel_next'),
+              onPressed: index < count - 1 ? () => _step(1, count) : null,
+            ),
+            Positioned(
+              right: 14,
+              bottom: 12,
+              // Also decoration — it must not swallow clicks meant for the card.
+              child: IgnorePointer(
+                child: _Counter(index: index + 1, total: count),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -214,12 +312,15 @@ class _Card extends StatelessWidget {
     final url = sub.imageUrl ?? sub.thumbnailUrl;
 
     Widget placeholder() => ColoredBox(
-          color: scheme.surfaceContainerHighest,
-          child: Center(
-            child: Icon(Icons.image_not_supported_outlined,
-                size: 32, color: scheme.onSurface.withValues(alpha: 0.3)),
-          ),
-        );
+      color: scheme.surfaceContainerHighest,
+      child: Center(
+        child: Icon(
+          Icons.image_not_supported_outlined,
+          size: 32,
+          color: scheme.onSurface.withValues(alpha: 0.3),
+        ),
+      ),
+    );
 
     if (url == null || url.isEmpty) return placeholder();
 
@@ -314,8 +415,12 @@ class _Caption extends StatelessWidget {
               const SizedBox(width: 12),
             ],
             if (sub.likeCount case final likes?) ...[
-              const Icon(Icons.favorite_outline,
-                  size: 12, color: Color(0xE6FFFFFF), shadows: _shadows),
+              const Icon(
+                Icons.favorite_outline,
+                size: 12,
+                color: Color(0xE6FFFFFF),
+                shadows: _shadows,
+              ),
               const SizedBox(width: 4),
               Text(
                 _compact(likes),
@@ -417,8 +522,10 @@ class _Counter extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
-        context.loc.t('marketplace.carousel_position',
-            params: {'index': '$index', 'total': '$total'}),
+        context.loc.t(
+          'marketplace.carousel_position',
+          params: {'index': '$index', 'total': '$total'},
+        ),
         style: const TextStyle(
           color: Color(0xFFFFFFFF),
           fontSize: 11,
@@ -459,10 +566,7 @@ class _Arrow extends StatelessWidget {
             onPressed: onPressed,
             tooltip: enabled ? tooltip : null,
             iconSize: 26,
-            icon: Icon(
-              icon,
-              color: Color(enabled ? 0xFFFFFFFF : 0x66FFFFFF),
-            ),
+            icon: Icon(icon, color: Color(enabled ? 0xFFFFFFFF : 0x66FFFFFF)),
           ),
         ),
       ),

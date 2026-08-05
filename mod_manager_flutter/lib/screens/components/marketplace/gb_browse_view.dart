@@ -74,23 +74,56 @@ class GbBrowseView extends ConsumerWidget {
               Expanded(
                 child: Column(
                   children: [
-                    // Only on the unfiltered "All" view: a fixed game-wide
-                    // "best of" list stops being about what the user is looking
-                    // at the moment they filter or search, and the grid wants
-                    // the vertical space back.
-                    if (isAllView) GbTopSubsCarousel(onOpenMod: onOpenMod),
                     Expanded(
-                      child: results.when(
-                        loading: () =>
-                            const Center(child: CircularProgressIndicator()),
-                        error: (error, _) => _ErrorState(error: error),
-                        data: (page) => _Results(
-                          page: page,
-                          filter: filter,
-                          onOpenMod: onOpenMod,
-                        ),
+                      // One scroll view holding the carousel *and* the grid, so
+                      // the carousel scrolls away with the content instead of
+                      // being pinned above it. That is the reason the grid is a
+                      // `SliverGrid` here rather than a `GridView`: two nested
+                      // scrollables would either fight or need a fixed-height
+                      // carousel, and neither scrolls naturally.
+                      child: CustomScrollView(
+                        slivers: [
+                          // Only on the unfiltered "All" view: a fixed game-wide
+                          // "best of" list stops being about what the user is
+                          // looking at the moment they filter or search.
+                          //
+                          // Outside the `results.when` below on purpose — the
+                          // carousel loads independently of the listing, so it
+                          // stays put while the grid is loading, erroring or
+                          // empty rather than flickering in and out with it.
+                          if (isAllView)
+                            SliverToBoxAdapter(
+                              child: GbTopSubsCarousel(onOpenMod: onOpenMod),
+                            ),
+                          ...results.when(
+                            loading: () => const [
+                              SliverFillRemaining(
+                                hasScrollBody: false,
+                                child: Center(
+                                    child: CircularProgressIndicator()),
+                              ),
+                            ],
+                            error: (error, _) => [
+                              SliverFillRemaining(
+                                hasScrollBody: false,
+                                child: _ErrorState(error: error),
+                              ),
+                            ],
+                            data: (page) => _resultSlivers(
+                              context,
+                              page: page,
+                              filter: filter,
+                              onOpenMod: onOpenMod,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
+                    // Stays put below the scroll view: paging is navigation, and
+                    // having to scroll to the bottom to reach it would be worse
+                    // the longer the page is.
+                    if (results.valueOrNull case final page?)
+                      _Pager(page: page),
                   ],
                 ),
               ),
@@ -103,80 +136,84 @@ class GbBrowseView extends ConsumerWidget {
   }
 }
 
-class _Results extends ConsumerWidget {
-  const _Results({
-    required this.page,
-    required this.filter,
-    required this.onOpenMod,
-  });
+/// The grid (or an empty state) as **slivers**, so they share one scroll view with
+/// the carousel above them.
+///
+/// A function rather than a widget: its whole job is to contribute slivers to a
+/// caller's `CustomScrollView`, and a widget returning a sliver cannot be dropped
+/// into a box context by mistake — whereas a `List<Widget>` of slivers spread with
+/// `...` reads exactly as what it is at the call site.
+List<Widget> _resultSlivers(
+  BuildContext context, {
+  required GbPage<GbMod> page,
+  required ContentFilterMode filter,
+  required void Function(int modId) onOpenMod,
+}) {
+  final loc = context.loc;
 
-  final GbPage<GbMod> page;
-  final ContentFilterMode filter;
-  final void Function(int modId) onOpenMod;
+  // The filter is applied here rather than in the provider so that switching it is
+  // instant and re-uses the fetched page instead of issuing a request.
+  final visible = <(GbMod, ContentTreatment)>[
+    for (final mod in page.records)
+      if (contentTreatment(mod.effectiveVisibility, filter)
+          case final treatment when treatment != ContentTreatment.omit)
+        (mod, treatment),
+  ];
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final loc = context.loc;
-
-    // The filter is applied here rather than in the provider so that switching
-    // it is instant and re-uses the fetched page instead of issuing a request.
-    final visible = <(GbMod, ContentTreatment)>[
-      for (final mod in page.records)
-        if (contentTreatment(mod.effectiveVisibility, filter)
-            case final treatment when treatment != ContentTreatment.omit)
-          (mod, treatment),
-    ];
-
-    if (visible.isEmpty) {
-      // Two genuinely different empty states. "Your filter hid all of these" is
-      // actionable; "there is nothing here" is not, and showing the wrong one
-      // sends the user hunting for a mod that was never in the results.
-      final hiddenByFilter = page.records.isNotEmpty;
-      return _EmptyState(
-        message: loc.t(hiddenByFilter
-            ? 'marketplace.empty_filtered'
-            : 'marketplace.empty_results'),
-        icon: hiddenByFilter ? Icons.visibility_off_outlined : Icons.search_off,
-      );
-    }
-
-    return Column(
-      children: [
-        Expanded(
-          child: GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 300,
-              mainAxisSpacing: 14,
-              crossAxisSpacing: 14,
-              // A fixed height rather than `childAspectRatio`, deliberately. With
-              // an aspect ratio the tile gets *shorter as it gets narrower*, while
-              // the text block below the cover needs a constant ~107px — so the
-              // card overflowed its bottom below ~179px wide. Tile width here
-              // ranges over roughly 150–300px depending on window and sidebar
-              // state, which left only ~20px of margin.
-              //
-              // Fixing the height decouples the two: the text block always has the
-              // same room and the cover (an Expanded in GbModCard) takes whatever
-              // is left, so its aspect varies with width instead of the layout
-              // breaking. 240 gives a 16:9-ish cover at a typical ~245px tile.
-              mainAxisExtent: 240,
-            ),
-            itemCount: visible.length,
-            itemBuilder: (context, index) {
-              final (mod, treatment) = visible[index];
-              return GbModCard(
-                mod: mod,
-                treatment: treatment,
-                onOpen: () => onOpenMod(mod.idRow),
-              );
-            },
-          ),
+  if (visible.isEmpty) {
+    // Two genuinely different empty states. "Your filter hid all of these" is
+    // actionable; "there is nothing here" is not, and showing the wrong one sends
+    // the user hunting for a mod that was never in the results.
+    final hiddenByFilter = page.records.isNotEmpty;
+    return [
+      SliverFillRemaining(
+        hasScrollBody: false,
+        child: _EmptyState(
+          message: loc.t(hiddenByFilter
+              ? 'marketplace.empty_filtered'
+              : 'marketplace.empty_results'),
+          icon:
+              hiddenByFilter ? Icons.visibility_off_outlined : Icons.search_off,
         ),
-        _Pager(page: page),
-      ],
-    );
+      ),
+    ];
   }
+
+  return [
+    SliverPadding(
+      padding: const EdgeInsets.all(16),
+      sliver: SliverGrid(
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 300,
+          mainAxisSpacing: 14,
+          crossAxisSpacing: 14,
+          // A fixed height rather than `childAspectRatio`, deliberately. With an
+          // aspect ratio the tile gets *shorter as it gets narrower*, while the
+          // text block below the cover needs a constant height — so the card
+          // overflowed its bottom below ~179px wide. Tile width here ranges over
+          // roughly 150–300px depending on window and sidebar state, which left
+          // only ~20px of margin.
+          //
+          // Fixing the height decouples the two: the text block always has the
+          // same room and the cover (an Expanded in GbModCard) takes whatever is
+          // left, so its aspect varies with width instead of the layout breaking.
+          // 240 gives a 16:9-ish cover at a typical ~245px tile.
+          mainAxisExtent: 240,
+        ),
+        delegate: SliverChildBuilderDelegate(
+          childCount: visible.length,
+          (context, index) {
+            final (mod, treatment) = visible[index];
+            return GbModCard(
+              mod: mod,
+              treatment: treatment,
+              onOpen: () => onOpenMod(mod.idRow),
+            );
+          },
+        ),
+      ),
+    ),
+  ];
 }
 
 class _Pager extends ConsumerWidget {
