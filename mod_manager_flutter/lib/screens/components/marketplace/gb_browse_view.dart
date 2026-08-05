@@ -7,6 +7,7 @@ import '../../../services/api_service.dart';
 import '../../../services/gamebanana/content_filter.dart';
 import '../../../utils/marketplace_providers.dart';
 import '../../../utils/state_providers.dart';
+import 'gb_category_panel.dart';
 import 'gb_mod_card.dart';
 
 /// The results grid: search box + sort + category/character filters over a grid
@@ -21,18 +22,62 @@ class GbBrowseView extends ConsumerWidget {
     final results = ref.watch(marketplaceResultsProvider);
     final filter = ref.watch(contentFilterProvider);
 
+    final scheme = Theme.of(context).colorScheme;
+
+    // Categories live in a column on the right, the way GameBanana's own site
+    // presents them, rather than as a horizontal chip strip across the top.
+    //
+    // Laid out as two bands rather than two columns: the top band holds the filter
+    // controls *and* the categories header side by side, so they share one height
+    // and one continuous bottom border no matter what either contains. Nesting the
+    // header inside the right-hand column instead would mean matching its padding
+    // to the filter bar's by hand — which is how they came to disagree, and would
+    // break again the moment the filter bar gained its second line while searching.
     return Column(
       children: [
-        const _FilterBar(),
-        Expanded(
-          child: results.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, _) => _ErrorState(error: error),
-            data: (page) => _Results(
-              page: page,
-              filter: filter,
-              onOpenMod: onOpenMod,
+        Container(
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerLow,
+            border: Border(
+              bottom: BorderSide(
+                color: scheme.outlineVariant.withValues(alpha: 0.4),
+              ),
             ),
+          ),
+          // IntrinsicHeight is required, not decorative. `stretch` makes the Row
+          // pass a *tight* cross-axis constraint to its children — and this Row
+          // sits directly in a Column, so its incoming maxHeight is unbounded.
+          // Without IntrinsicHeight the two cells are handed an infinite height.
+          // IntrinsicHeight resolves the band to the tallest child's natural
+          // height (the filter bar) first, which is exactly the height wanted.
+          child: const IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: _FilterBar()),
+                GbCategoryPanelHeader(),
+              ],
+            ),
+          ),
+        ),
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: results.when(
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (error, _) => _ErrorState(error: error),
+                  data: (page) => _Results(
+                    page: page,
+                    filter: filter,
+                    onOpenMod: onOpenMod,
+                  ),
+                ),
+              ),
+              const GbCategoryList(),
+            ],
           ),
         ),
       ],
@@ -198,17 +243,28 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
     final query = ref.watch(marketplaceQueryProvider);
     final isSearching = query.mode == MarketplaceMode.search;
 
-    return Container(
+    // Picking a category exits search mode (search cannot take a category filter),
+    // so the box has to stop showing a term that is no longer being applied.
+    //
+    // Through `ref.listen`, never inline in build. `_search.clear()` notifies the
+    // controller's listeners, one of which is the TextField built right below it —
+    // so clearing during build scheduled another build, every frame, forever. That
+    // showed up as an endless `!semantics.parentDataDirty` assertion rather than as
+    // anything mentioning the controller. `ref.listen`'s callback runs *after* the
+    // provider changes, outside the build phase, which is where a mutation like
+    // this belongs.
+    ref.listen(marketplaceQueryProvider, (previous, next) {
+      final leftSearch = next.mode == MarketplaceMode.browse && next.text.isEmpty;
+      if (leftSearch && _search.text.isNotEmpty) _search.clear();
+    });
+
+    // Padding only — the background and the bottom border belong to the shared
+    // band in GbBrowseView, so this cell and the categories header beside it can't
+    // end up with different heights or a broken divider line.
+    return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        border: Border(
-          bottom: BorderSide(
-            color: scheme.outlineVariant.withValues(alpha: 0.4),
-          ),
-        ),
-      ),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Row(
             children: [
@@ -269,11 +325,6 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
                   ),
                 ],
               ),
-            )
-          else
-            const Padding(
-              padding: EdgeInsets.only(top: 8),
-              child: _CategoryChips(),
             ),
         ],
       ),
@@ -342,65 +393,6 @@ class _ContentFilterMenu extends ConsumerWidget {
   }
 }
 
-class _CategoryChips extends ConsumerWidget {
-  const _CategoryChips();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final loc = context.loc;
-    final query = ref.watch(marketplaceQueryProvider);
-    final categories = ref.watch(marketplaceCategoriesProvider);
-
-    void select(int? id) =>
-        ref.read(marketplaceQueryProvider.notifier).state = query.refine(
-          categoryId: id,
-          clearCategory: id == null,
-        );
-
-    return SizedBox(
-      height: 34,
-      child: categories.when(
-        // A thin strip, not a blocking spinner: the grid beside it is already
-        // loading and two spinners read as two failures.
-        loading: () => const SizedBox.shrink(),
-        // Silent on error. The category list fails exactly when the listing
-        // request beside it fails, and that error is already on screen; a second
-        // message here would just be the same outage twice.
-        error: (_, __) => const SizedBox.shrink(),
-        data: (data) => ListView(
-          scrollDirection: Axis.horizontal,
-          children: [
-            FilterChip(
-              label: Text(loc.t('marketplace.filter_all')),
-              selected: query.categoryId == null,
-              onSelected: (_) => select(null),
-            ),
-            const SizedBox(width: 6),
-            for (final node in data.roots) ...[
-              FilterChip(
-                label: Text(node.name ?? '#${node.idRow}'),
-                selected: query.categoryId == node.idRow,
-                onSelected: (_) => select(node.idRow),
-              ),
-              const SizedBox(width: 6),
-            ],
-            if (data.characters.isNotEmpty) ...[
-              const VerticalDivider(width: 12),
-              for (final node in data.characters) ...[
-                FilterChip(
-                  label: Text(node.name ?? '#${node.idRow}'),
-                  selected: query.categoryId == node.idRow,
-                  onSelected: (_) => select(node.idRow),
-                ),
-                const SizedBox(width: 6),
-              ],
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 class _EmptyState extends StatelessWidget {
   const _EmptyState({required this.message, required this.icon});

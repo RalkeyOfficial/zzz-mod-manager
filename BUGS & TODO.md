@@ -244,7 +244,16 @@ they earn priority.
   recorded as `imported_archive`, never `downloaded`.
 - [x] **Results grid screen**: search box + category/character filters → grid of
   mod cards (thumbnail, name, author, likes/views, category badge).
-  **Done.** One correction applied: the card shows likes / views / **posts**, not
+  **Done.** The category filter is a **vertical panel on the right with expandable
+  roots and their icons**, mirroring GameBanana's own layout — *not* the horizontal
+  chip strip built first. That strip listed the ~60 children of Character Skins
+  inline, so the character you wanted was essentially always off-screen behind a
+  horizontal scroll with no cue how far. Children now load on expand, so opening the
+  panel costs one request rather than four, and only one root is open at a time
+  (two open branches recreate the wall of entries).
+  Categories are **fetched, never hardcoded** — GameBanana gains a category with
+  every new character, so a local copy is exactly what goes stale.
+  One correction applied: the card shows likes / views / **posts**, not
   downloads — `_nDownloadCount` is absent from listing responses entirely, so a
   download count on a card could only ever render a misleading `0`. Also, the badge
   reads the *specific* category (`_aSubCategory`, usually the character — "Ellen
@@ -609,6 +618,23 @@ update is **not** a re-run of the import path.
 - [ ] Key for §4.2: backup retention (count or age), once a cap is chosen.
 
 ### Filed by §1 (found while building the native browser)
+
+- [ ] **We cannot reproduce GameBanana's default ordering, and users will compare.**
+  The site defaults to its own "ripe" ranking, which **neither API exposes**: every
+  plausible `_sSort` alias is rejected, and the legacy Core API — authoritative,
+  since it enumerates its own sorts — offers only `id`, `name`, `udate`. This is not
+  academic: it is how the gap was found. A mod submitted in May but updated the same
+  day sat 3rd on the site and **>420 mods deep** under our original
+  `Generic_Newest` default, which reads as "the marketplace is missing mods".
+  Mitigated by defaulting to `Generic_LatestModified` (that mod lands on page 1), but
+  the orderings still differ. Options if it matters later: use `Game/<id>/Subfeed`
+  for the unfiltered view (it matches the site closely — but accepts no filters and
+  no sort, so it cannot be the only path), or accept the difference and say so in the
+  UI. Written up in [`docs/gamebanana-api.md`](docs/gamebanana-api.md) §4.
+- [ ] **`Generic_Newest` vs `Generic_LatestModified` affects §4's update check too.**
+  `_tsDateAdded` is first-published and `_tsDateUpdated` is the real content update —
+  §4's date-fallback comparator must use the latter. Noted here because the same
+  confusion already cost one bug in the browse view.
 
 - [ ] **The content filter has no Settings-tab entry.** The key and the decision logic
   shipped with M1, and the control lives in the marketplace toolbar where it is first

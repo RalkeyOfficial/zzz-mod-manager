@@ -82,7 +82,10 @@
     "badge_obsolete": "застарілий",
     "obsolete_notice": "Автор позначив цей мод як заміщений. Він досі існує та завантажується.",
     "remote_missing": "Цей мод більше не доступний публічно на GameBanana.",
-    "updated_on": "оновлено {date}"
+    "updated_on": "оновлено {date}",
+    "categories": "Категорії",
+    "expand_category": "Показати підкатегорії",
+    "collapse_category": "Приховати підкатегорії"
   },
   "mods": {
     "all": "УСІ",

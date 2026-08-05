@@ -82,7 +82,10 @@
     "badge_obsolete": "obsolete",
     "obsolete_notice": "The author flagged this mod as superseded. It still exists and still downloads.",
     "remote_missing": "This mod is no longer publicly available on GameBanana.",
-    "updated_on": "updated {date}"
+    "updated_on": "updated {date}",
+    "categories": "Categories",
+    "expand_category": "Show subcategories",
+    "collapse_category": "Hide subcategories"
   },
   "mods": {
     "all": "ALL",

@@ -33,9 +33,20 @@ class MarketplaceQuery {
     this.mode = MarketplaceMode.browse,
     this.text = '',
     this.categoryId,
-    this.sort = GbModSort.newest,
+    this.sort = defaultSort,
     this.page = 1,
   });
+
+  /// Recently **updated**, not recently submitted.
+  ///
+  /// `Generic_Newest` sorts by `_tsDateAdded`, which hides actively-maintained
+  /// mods: one submitted in May and updated today sorts to May, over 420 mods
+  /// deep. GameBanana's own game feed surfaces updates too — a mod in exactly
+  /// that situation sits 3rd on the site while being invisible here — so
+  /// defaulting to submission date made the app look like it was missing mods
+  /// that were actually present. `Generic_Newest` is still offered in the sort
+  /// menu for anyone who genuinely wants first-published order.
+  static const GbModSort defaultSort = GbModSort.latestModified;
 
   final MarketplaceMode mode;
 
@@ -133,40 +144,43 @@ final modProfileProvider = FutureProvider.family<GbMod, int>((ref, modId) {
   return ref.watch(gameBananaClientProvider).modProfile(modId);
 });
 
-/// The mod categories offered in the filter bar: the game's root categories
-/// followed by the children of Character Skins (the live character roster).
+/// The game's root mod categories — Character Skins, Bangboo Skins, Other/Misc,
+/// UI — as the top level of the filter tree.
 ///
-/// One provider rather than two because the filter bar needs them together, and
-/// there is no useful intermediate state where roots have loaded but characters
-/// have not.
+/// Fetched, never hardcoded. GameBanana is the authority on what categories exist
+/// and it gains new ones (notably new characters) with every game patch, so a
+/// local copy is exactly the thing that goes stale.
 ///
-/// **No offline fallback to the local roster, deliberately.** The doc's earlier
-/// plan was to fall back to `utils/zzz_characters.dart`, but that roster carries
-/// no GameBanana category ids, and an id is the only thing `Generic_Category`
-/// accepts — a name is not a filter value here. A local list could therefore
-/// only render chips that cannot filter. It would also never help: this request
-/// fails exactly when the listing request beside it fails, so the screen already
-/// has one honest error state covering both.
-final marketplaceCategoriesProvider =
-    FutureProvider<MarketplaceCategories>((ref) async {
-  final client = ref.watch(gameBananaClientProvider);
-  final roots = await client.categories();
-  final characters = await client.categories(
-    categoryId: AppConstants.gameBananaCharacterSkinsCategoryId,
-  );
-  return MarketplaceCategories(roots: roots, characters: characters);
+/// **No offline fallback to the local roster, deliberately.**
+/// `utils/zzz_characters.dart` carries no GameBanana category ids, and an id is
+/// the only thing `Generic_Category` accepts — a name is not a filter value here,
+/// so a local list could only render entries that cannot filter. It would also
+/// never help: this request fails exactly when the listing request beside it
+/// fails, so the screen already has one honest error state covering both.
+final rootCategoriesProvider = FutureProvider<List<GbCategoryNode>>((ref) {
+  return ref.watch(gameBananaClientProvider).categories();
 });
 
-/// The filter bar's two category groups.
-class MarketplaceCategories {
-  const MarketplaceCategories({required this.roots, required this.characters});
+/// The children of one category, fetched **on expand** rather than up front.
+///
+/// Lazy because the tree is lopsided: Character Skins has ~60 children (the live
+/// character roster) and Bangboo Skins ~22, while Other/Misc and UI have one
+/// each. Loading every branch eagerly would issue four requests to populate a
+/// panel where the user typically opens one. `.family` keys the cache by id, so
+/// collapsing and re-expanding costs nothing.
+final categoryChildrenProvider =
+    FutureProvider.family<List<GbCategoryNode>, int>((ref, categoryId) {
+  return ref
+      .watch(gameBananaClientProvider)
+      .categories(categoryId: categoryId);
+});
 
-  /// Character Skins, Bangboo Skins, Other/Misc, UI.
-  final List<GbCategoryNode> roots;
-
-  /// The children of Character Skins — in practice the character roster.
-  final List<GbCategoryNode> characters;
-}
+/// Which root category is expanded in the filter panel, or null for none.
+///
+/// Single-open rather than a set: with ~60 children under Character Skins, two
+/// open branches turn the panel back into the unusable wall of entries it
+/// replaced.
+final expandedCategoryProvider = StateProvider<int?>((ref) => null);
 
 /// The mod whose detail view is open, or null while browsing.
 ///

@@ -1,0 +1,187 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gb_category.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gb_enums.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gb_page.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gb_submitter.dart';
+import 'package:mod_manager_flutter/screens/components/marketplace/gb_browse_view.dart';
+import 'package:mod_manager_flutter/screens/components/marketplace/gb_category_panel.dart';
+import 'package:mod_manager_flutter/screens/components/marketplace/gb_mod_card.dart';
+import 'package:mod_manager_flutter/utils/marketplace_providers.dart';
+
+import 'support/localized_harness.dart';
+
+/// Coverage for the results grid and its category panel, with every provider
+/// faked so nothing touches the network.
+///
+/// These exist because two bugs shipped past a green suite and a clean analyze,
+/// both only reachable by actually laying this widget out:
+///
+/// 1. A `TextEditingController.clear()` called inside `build()`. It notified the
+///    `TextField` built beneath it, scheduling another build every frame — an
+///    endless loop that surfaced as `!semantics.parentDataDirty` and never
+///    mentioned the controller.
+/// 2. `CrossAxisAlignment.stretch` on a `Row` sitting directly in a `Column`.
+///    `stretch` passes a tight cross-axis constraint, and the incoming maxHeight
+///    was unbounded, so both cells were handed an infinite height.
+///
+/// A rebuild loop fails as a `pumpAndSettle` timeout; a bad constraint fails as a
+/// thrown layout error. Neither needs a specific assertion — the widget merely has
+/// to be laid out, which is what nothing did before.
+void main() {
+  GbMod mod(int id, String name) => GbMod(
+        idRow: id,
+        name: name,
+        likeCount: 298,
+        viewCount: 2903,
+        postCount: 9,
+        visibility: GbVisibility.show,
+        submitter: const GbSubmitter(idRow: 1, name: 'someone'),
+        subCategory: const GbCategoryRef(name: 'Ellen Joe'),
+      );
+
+  GbCategoryNode node(int id, String name, {int children = 0}) =>
+      GbCategoryNode(
+        idRow: id,
+        name: name,
+        itemCount: 4589,
+        categoryCount: children,
+      );
+
+  final page = GbPage<GbMod>(
+    records: [mod(1, 'First Mod'), mod(2, 'Second Mod')],
+    recordCount: 60,
+    perPage: 30,
+  );
+
+  final roots = [
+    node(30305, 'Character Skins', children: 60),
+    node(30702, 'Bangboo Skins', children: 22),
+    node(29874, 'Other/Misc'),
+    node(30395, 'UI'),
+  ];
+
+  List<Override> overrides({
+    GbPage<GbMod>? results,
+    List<GbCategoryNode>? rootNodes,
+  }) =>
+      [
+        marketplaceResultsProvider
+            .overrideWith((ref) async => results ?? page),
+        rootCategoriesProvider
+            .overrideWith((ref) async => rootNodes ?? roots),
+        categoryChildrenProvider.overrideWith(
+          (ref, arg) async => [node(30341, 'Ellen Joe'), node(30579, 'Miyabi')],
+        ),
+      ];
+
+  Future<void> pumpBrowse(
+    WidgetTester tester, {
+    List<Override>? extra,
+    Size size = const Size(1200, 800),
+  }) async {
+    await pumpLocalized(
+      tester,
+      GbBrowseView(onOpenMod: (_) {}),
+      overrides: extra ?? overrides(),
+      surfaceSize: size,
+    );
+    expectBuilt(GbBrowseView);
+  }
+
+  testWidgets('lays out without throwing or looping', (tester) async {
+    await pumpBrowse(tester);
+    expect(tester.takeException(), isNull);
+    expect(find.byType(GbModCard), findsNWidgets(2));
+    expect(find.text('First Mod'), findsOneWidget);
+  });
+
+  testWidgets('renders the category panel header and roots', (tester) async {
+    await pumpBrowse(tester);
+    expect(find.byType(GbCategoryPanelHeader), findsOneWidget);
+    expect(find.byType(GbCategoryList), findsOneWidget);
+    expect(find.text('Categories'), findsOneWidget);
+    expect(find.text('All'), findsOneWidget);
+    for (final name in ['Character Skins', 'Bangboo Skins', 'Other/Misc', 'UI']) {
+      expect(find.text(name), findsOneWidget, reason: name);
+    }
+  });
+
+  testWidgets('the header cell and the filter bar share one band height',
+      (tester) async {
+    // The alignment the layout is supposed to guarantee, asserted rather than
+    // eyeballed: equal heights, and the category list starting exactly where the
+    // band ends. Fixed paddings tuned by hand are what this replaced.
+    await pumpBrowse(tester);
+
+    final header = tester.getRect(find.byType(GbCategoryPanelHeader));
+    final list = tester.getRect(find.byType(GbCategoryList));
+
+    expect(list.top, moreOrLessEquals(header.bottom, epsilon: 1.0),
+        reason: 'the category list must start where the header band ends');
+    expect(header.width, kCategoryPanelWidth);
+    expect(list.width, kCategoryPanelWidth);
+    // The panel occupies the right edge, with the grid to its left.
+    expect(header.right, moreOrLessEquals(list.right, epsilon: 0.5));
+  });
+
+  testWidgets('the search field does not fight the query state', (tester) async {
+    // Types a search, submits, then selects a category — which leaves search mode.
+    // The controller is cleared from a listener rather than during build; doing it
+    // in build looped forever, so settling here is the assertion.
+    await pumpBrowse(tester);
+
+    await tester.enterText(find.byType(TextField), 'ellen');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Other/Misc'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('ellen'), findsNothing,
+        reason: 'leaving search mode should clear the box');
+  });
+
+  testWidgets('expanding a root loads and shows its children', (tester) async {
+    await pumpBrowse(tester);
+
+    // Scoped to the panel in both directions: 'Ellen Joe' is also the mod cards'
+    // category badge, so an unscoped finder matches before anything is expanded
+    // and would make this assert the opposite of what it means to.
+    Finder inPanel(String text) => find.descendant(
+          of: find.byType(GbCategoryList),
+          matching: find.text(text),
+        );
+
+    expect(inPanel('Ellen Joe'), findsNothing,
+        reason: 'children load on expand, not up front');
+
+    await tester.tap(find.byTooltip('Show subcategories').first);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(inPanel('Ellen Joe'), findsOneWidget);
+    expect(inPanel('Miyabi'), findsOneWidget);
+  });
+
+  testWidgets('survives a narrow window', (tester) async {
+    // 800px is the app's minimum window width; the panel takes a fixed 232 of it.
+    await pumpBrowse(tester, size: const Size(800, 600));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('an empty result set renders an empty state, not a crash',
+      (tester) async {
+    await pumpBrowse(
+      tester,
+      extra: overrides(
+        results: const GbPage<GbMod>(records: [], recordCount: 0, perPage: 30),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    expect(find.byType(GbModCard), findsNothing);
+  });
+}

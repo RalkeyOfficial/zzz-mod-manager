@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/l10n/app_localizations.dart';
 
@@ -20,11 +21,18 @@ import 'package:mod_manager_flutter/l10n/app_localizations.dart';
 /// Always assert something is actually on screen after pumping — see
 /// [expectBuilt] — so a future harness regression fails loudly instead of quietly
 /// making tests meaningless.
+/// [overrides] wraps the tree in a `ProviderScope`, for widgets that read Riverpod
+/// providers — pass fakes so nothing reaches the network.
 Future<void> pumpLocalized(
   WidgetTester tester,
   Widget child, {
   Locale locale = const Locale('en'),
+  List<Override>? overrides,
+  Size surfaceSize = const Size(1200, 800),
 }) async {
+  await tester.binding.setSurfaceSize(surfaceSize);
+  addTearDown(() => tester.binding.setSurfaceSize(null));
+
   AppLocalizations? loaded;
   await tester.runAsync(() async {
     final localizations = AppLocalizations(locale);
@@ -33,14 +41,18 @@ Future<void> pumpLocalized(
   });
   assert(loaded != null, 'localizations failed to load for $locale');
 
-  await tester.pumpWidget(
-    MaterialApp(
-      locale: locale,
-      localizationsDelegates: [_PreloadedLocalizations(loaded!)],
-      supportedLocales: [locale],
-      home: Scaffold(body: child),
-    ),
+  final app = MaterialApp(
+    locale: locale,
+    localizationsDelegates: [_PreloadedLocalizations(loaded!)],
+    supportedLocales: [locale],
+    home: Scaffold(body: child),
   );
+
+  await tester.pumpWidget(
+    overrides == null ? app : ProviderScope(overrides: overrides, child: app),
+  );
+  // A rebuild loop shows up here as a pumpAndSettle timeout rather than as a
+  // failed expectation, which is the point of settling instead of pumping once.
   await tester.pumpAndSettle();
 }
 

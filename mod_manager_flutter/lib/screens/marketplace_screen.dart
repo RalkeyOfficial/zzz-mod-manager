@@ -58,24 +58,23 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   Widget build(BuildContext context) {
     final openModId = ref.watch(marketplaceOpenModProvider);
 
-    return ClipRRect(
-      borderRadius: const BorderRadius.only(
-        topLeft: Radius.circular(16),
-        topRight: Radius.circular(16),
-      ),
-      child: openModId == null
-          ? GbBrowseView(
-              onOpenMod: (modId) =>
-                  ref.read(marketplaceOpenModProvider.notifier).state = modId,
-            )
-          : GbDetailView(
-              modId: openModId,
-              onBack: () =>
-                  ref.read(marketplaceOpenModProvider.notifier).state = null,
-              onDownload: _handleDownload,
-              onOpenInBrowser: _openInBrowser,
-            ),
-    );
+    // No ClipRRect / rounded top corners here. The rounding was inherited from the
+    // webview era, where it softened the edge of an embedded web page; on a
+    // full-bleed grid it just cuts the corners off the layout. With no radius there
+    // is nothing to clip either, so the wrapper goes entirely rather than becoming
+    // a no-op clip.
+    return openModId == null
+        ? GbBrowseView(
+            onOpenMod: (modId) =>
+                ref.read(marketplaceOpenModProvider.notifier).state = modId,
+          )
+        : GbDetailView(
+            modId: openModId,
+            onBack: () =>
+                ref.read(marketplaceOpenModProvider.notifier).state = null,
+            onDownload: _handleDownload,
+            onOpenInBrowser: _openInBrowser,
+          );
   }
 
   Future<void> _openInBrowser(String url) async {

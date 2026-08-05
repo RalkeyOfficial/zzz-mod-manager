@@ -234,6 +234,43 @@ Rejected (don't guess): `Generic_LatestAdded`, `Generic_Alphabetical`,
 `Generic_Featured`, `Generic_Random`, `Generic_MostFollowed`, `Generic_MostPosts`,
 and every lowercase form (`new`, `popular`, `updated`, …).
 
+#### `Generic_Newest` is *submitted*, not *updated* — and it hides live mods
+
+The single most misleading pair here. `Generic_Newest` orders by `_tsDateAdded`
+(first published), so a mod submitted months ago and updated an hour ago sorts to
+its **original** date. Measured on ZZZ: a mod submitted 2026-05-10 and updated
+2026-08-05 was **more than 420 mods deep** under `Generic_Newest`, while
+`Generic_LatestModified` put it on page 1. Anything that means "what's new" for a
+user wants `Generic_LatestModified`.
+
+#### There is no "ripe" sort, and this is the gap that will confuse you
+
+GameBanana's **website defaults to its own "ripe" ranking**, which is not exposed by
+either API:
+
+- Every plausible alias is rejected with `UNKNOWN_SORT` — `Generic_Ripe`, `Ripe`,
+  `Generic_MostRipe`, `Generic_Ripest`, `Generic_Hot`, `Generic_Trending`,
+  `Generic_Popular`, `Generic_Best`, `Generic_Relevance`.
+- The legacy Core API is authoritative here rather than guesswork, since it
+  enumerates its own sorts ([§10](#10-the-legacy-core-api)):
+  `Core/List/Section/AllowedSorts?itemtype=Mod` returns exactly
+  **`["id", "name", "udate"]`**. No ripeness, no popularity blend.
+
+So **a listing built on `Mod/Index` can never reproduce the order the user sees on
+the site**, and a mod that looks prominent there can look absent in a client. Expect
+this comparison to be made, because it is the obvious one.
+
+The closest reachable approximations:
+
+| Want | Use | Caveat |
+|---|---|---|
+| What the site shows by default | `Game/<id>/Subfeed` | Mixes new + updated, but accepts **no filters and no sort** |
+| Actively-maintained mods | `Mod/Index` + `Generic_LatestModified` | Sortable and filterable; ordering differs from the site |
+
+For reference, the same mod that was 420-deep under `Generic_Newest` sat **3rd in
+`Subfeed`** — which is why the site felt like it was showing something the API
+wasn't.
+
 ### `_aFilters` on `Mod/Index`
 
 | Filter | Value | Notes |
@@ -596,7 +633,11 @@ Documented at <https://api.gamebanana.com/>. Weaker for browsing (3 sorts, 1 fil
 but genuinely useful for two things.
 
 **It describes itself.** These endpoints answer "what can I ask for?" authoritatively,
-which is something apiv11 can't do:
+which is something apiv11 can't do — and that is genuinely load-bearing, not trivia.
+`AllowedSorts` is what settled that no "ripe"/popularity sort exists at all
+([§4](#4-sorting-and-filtering)); brute-forcing apiv11 could only ever show that the
+nine names *tried* were wrong. When the question is "does this parameter value
+exist", ask here first.
 
 ```bash
 curl 'https://api.gamebanana.com/Core/Item/Data/AllowedItemTypes'
@@ -629,6 +670,10 @@ Collected so nobody rediscovers them:
 
 - **`_nPerpage` limits differ per endpoint** — 50 on `Index`/`Subfeed` (hard error
   above), **15 on Search, silently**. Always read `_aMetadata._nPerpage` back.
+- **`Generic_Newest` sorts by *submission* date, so actively-updated mods sink.** And
+  the site's default "ripe" order is not available on either API, so a client's
+  listing cannot match what the user sees on gamebanana.com
+  ([§4](#4-sorting-and-filtering)).
 - **`Mod/Categories` fails without `_sSort`**, because its internal default is a value
   it rejects. Send `a_to_z` or `count`.
 - **`_csvProperties` only works on `Multi`.** `Index` ignores it.

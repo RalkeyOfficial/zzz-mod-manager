@@ -153,28 +153,40 @@ class _GbModCardState extends State<GbModCard> {
   }
 
   Widget _revealOverlay(BuildContext context, AppLocalizations loc) {
-    final scheme = Theme.of(context).colorScheme;
+    // Fixed white, **not** a theme colour. This sits on an always-dark scrim over
+    // an arbitrary image, so it is not the theme's surface — `onInverseSurface`
+    // resolved to dark grey and vanished against the typical dark cover. The
+    // scrim + shadow give it contrast over a light image too, which is the case a
+    // plain white label would fail.
+    const label = Color(0xFFFFFFFF);
+    const shadows = [Shadow(color: Color(0xCC000000), blurRadius: 4)];
+
     return Positioned.fill(
       child: Material(
-        color: Colors.black.withValues(alpha: 0.35),
+        color: Colors.black.withValues(alpha: 0.55),
         child: InkWell(
           onTap: () => setState(() => _revealed = true),
           child: Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.visibility_off_outlined,
-                    color: scheme.onInverseSurface, size: 22),
+                const Icon(
+                  Icons.visibility_off_outlined,
+                  color: label,
+                  size: 22,
+                  shadows: shadows,
+                ),
                 const SizedBox(height: 4),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Text(
                     loc.t('marketplace.content_reveal'),
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: scheme.onInverseSurface,
+                    style: const TextStyle(
+                      color: label,
                       fontSize: 11,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
+                      shadows: shadows,
                     ),
                   ),
                 ),
