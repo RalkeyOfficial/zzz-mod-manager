@@ -598,6 +598,7 @@ imports the JSON back into SharedPreferences.
   "theme": "dark",
   "language": "en",
   "sort_mode": "added",
+  "content_filter": "blur",
   "mod_character_tags": { "Ellen Swimsuit": "ellen" },
   "first_run": false
 }
@@ -612,6 +613,7 @@ imports the JSON back into SharedPreferences.
 | `theme` | `theme` | |
 | `language` | `language` | Locale code (`en`, `uk`) |
 | `sort_mode` | `sort_mode` | Parsed into `ModSort`; falls back to `added` |
+| `content_filter` | `content_filter` | Marketplace adult-content treatment: `blur` (default) \| `show` \| `hide`. Stored as a raw string and parsed by `ContentFilterMode.parse`, which **degrades anything unrecognised to `blur`** — the only value that is wrong in neither direction (see below) |
 | `mod_character_tags` | `mod_character_tags` | JSON-encoded string in SharedPreferences, real object in the file. **Legacy** — superseded by the sidecar's `character_id`, still mirrored by `ModMetadataRepository.setCharacter()` for backward compatibility |
 | `first_run` | `first_run` | Bool; always serialised as `false` by `_saveToFile()` |
 
@@ -671,16 +673,34 @@ contact with a build that predates it. That had to come first because the fix is
 forward-only ([§4](#when-to-bump-it)) — a released build will keep stripping keys
 it doesn't know, and nothing can change that retroactively.
 
-Still unresolved, and worth stating so it isn't mistaken for an oversight:
-**identity is not yet obtainable at download time.** The marketplace intercepts a
-CDN url, which yields no mod id, so every block written today carries
-`provenance`, `ingest`, `installed_at` and `archive_md5` with both confidences at
-`unknown`. That is the honest output, not a bug — but it does mean "the mod
-carries an origin block" is not the same as "we know what it is".
+**Identity at download time: now resolved.** This section previously recorded a
+gap — the marketplace was a webview, it intercepted a CDN url, and so every
+origin block it wrote carried `provenance`, `ingest`, `installed_at` and
+`archive_md5` with *both* confidences at `unknown`. The native GameBanana browser
+closed it. A download now starts from a chosen row of a chosen mod's file list,
+so `source`, `mod_id`, `file_id`, `version` and `version_label` are all known
+before the first byte, and the block lands with both confidences at **`exact`**.
 
-The backfill does not close that gap, and shouldn't be mistaken for closing it.
-It runs on `source_url`, which a fresh download doesn't set — so it rescues the
-*legacy* library (23 of 23 mods in a real one, since the edit dialog is where
-people paste the mod page) while a mod installed through today's marketplace
-stays identity-less until the native browser lands and supplies the id at
-ingest. The two paths are independent; neither is a substitute for the other.
+That tier is the honest one, not an optimistic one: the user picked this file of
+this mod and we fetched exactly that file id. Nothing is inferred. Note the
+consequence — `exact` is the one tier eligible for unattended auto-update, so
+in-app downloads are the path that makes future auto-update possible at all,
+which is the self-healing property the plan relies on.
+
+Two things this does **not** change:
+
+- **Manual imports still land at `unknown`,** correctly. A dragged-in folder or a
+  hand-supplied archive carries no remote identity; its route to `exact` is an
+  `archive_md5` match at resolution time, not the install path.
+- **The backfill is still the only thing that rescues the legacy library,** and it
+  is independent of the above. It runs on `source_url`, recovering identity at
+  `inferred` for mods that predate any of this (23 of 23 in a real library, since
+  the edit dialog is where people paste the mod page). Neither path substitutes
+  for the other.
+
+One asymmetry worth knowing: a marketplace install writes remote identity into
+the `origin` block but **does not** write `source_url`, which stays a
+user-editable field. So a freshly downloaded mod has a `mod_id` and no url, while
+a backfilled legacy mod has a url and a derived `mod_id`. Anything that wants "a
+link to the mod page" should build it from `origin.mod_id` rather than expecting
+`source_url` to be populated.

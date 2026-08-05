@@ -17,6 +17,7 @@ class ConfigService implements ModCharacterTagStore {
   static const String _keyFavoriteMods = 'favorite_mods';
   static const String _keyFirstRun = 'first_run';
   static const String _keySortMode = 'sort_mode';
+  static const String _keyContentFilter = 'content_filter';
 
   final SharedPreferences _prefs;
   File? _configFile;
@@ -51,6 +52,15 @@ class ConfigService implements ModCharacterTagStore {
   String get language => _prefs.getString(_keyLanguage) ?? 'en';
   String get sortMode => _prefs.getString(_keySortMode) ?? 'added';
   bool get isFirstRun => _prefs.getBool(_keyFirstRun) ?? true;
+
+  /// How the marketplace treats mods GameBanana flags as adult — the wire value
+  /// of a `ContentFilterMode` (`blur` | `show` | `hide`).
+  ///
+  /// Stored as a raw string and parsed by the caller, deliberately: an
+  /// unrecognised value must degrade to `blur` rather than fail the read, and
+  /// `ContentFilterMode.parse` is where that rule lives. Defaults to `blur`,
+  /// which honours GameBanana's own hint.
+  String get contentFilter => _prefs.getString(_keyContentFilter) ?? 'blur';
   
   Map<String, String> get modCharacterTags {
     final json = _prefs.getString(_keyModCharacterTags);
@@ -254,6 +264,16 @@ class ConfigService implements ModCharacterTagStore {
     }
   }
 
+  Future<bool> setContentFilter(String mode) async {
+    try {
+      await _prefs.setString(_keyContentFilter, mode);
+      await _saveToFile();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<bool> setFirstRunComplete() async {
     try {
       await _prefs.setBool(_keyFirstRun, false);
@@ -290,6 +310,9 @@ class ConfigService implements ModCharacterTagStore {
       if (config.containsKey('sort_mode')) {
         await _prefs.setString(_keySortMode, config['sort_mode']);
       }
+      if (config.containsKey('content_filter')) {
+        await _prefs.setString(_keyContentFilter, config['content_filter']);
+      }
       if (config.containsKey('mod_character_tags')) {
         await _prefs.setString(_keyModCharacterTags, jsonEncode(config['mod_character_tags']));
       }
@@ -319,6 +342,7 @@ class ConfigService implements ModCharacterTagStore {
         'theme': theme,
         'language': language,
         'sort_mode': sortMode,
+        'content_filter': contentFilter,
         'mod_character_tags': modCharacterTags,
         'first_run': false,
       };

@@ -14,6 +14,18 @@ class AppConstants {
   /// to it: <https://gamebanana.com/games/19567>.
   static const int gameBananaGameId = 19567;
 
+  /// GameBanana's "Character Skins" root category for ZZZ.
+  ///
+  /// Its ~60 children are effectively the live character roster, which is what
+  /// the marketplace's character filter is built from — fetched at runtime
+  /// rather than hardcoded, because new characters arrive with every game patch.
+  /// Note the local roster in `utils/zzz_characters.dart` carries **no**
+  /// GameBanana ids, so it cannot substitute for this list as a filter source.
+  static const int gameBananaCharacterSkinsCategoryId = 30305;
+
+  /// The GameBanana source name recorded in a mod's origin block.
+  static const String gameBananaSourceName = 'gamebanana';
+
   // UI Scaling
   static const double minScale = 0.8;
   static const double maxScale = 1.5;

@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:flutter_inappwebview_windows/flutter_inappwebview_windows.dart';
 import 'package:window_manager/window_manager.dart';
 import 'dart:io';
 import 'core/constants.dart';
@@ -19,10 +17,9 @@ import 'l10n/app_localizations.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  if (!kIsWeb && Platform.isWindows) {
-    InAppWebViewPlatform.instance = WindowsInAppWebViewPlatform();
-  }
-
+  // No webview platform to register any more: the marketplace is a native
+  // GameBanana browser on both platforms, which is what removed the last
+  // Windows-only initialisation step here.
   await windowManager.ensureInitialized();
 
   WindowOptions windowOptions = WindowOptions(

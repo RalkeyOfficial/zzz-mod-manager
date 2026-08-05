@@ -3,8 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/character_info.dart';
 import '../services/api_service.dart';
 import '../services/download/download_service.dart';
+import '../services/gamebanana/content_filter.dart';
 import '../services/gamebanana/gamebanana_client.dart';
 import '../services/mod_manager_service.dart';
+
+// The marketplace's own browsing state (query, results, categories, open mod)
+// lives in `marketplace_providers.dart` — one screen's session rather than
+// app-wide state, and keeping it there is what stops this registry sprawling.
 
 // API Service Provider
 final modManagerServiceProvider = FutureProvider<ModManagerService>((ref) async {
@@ -88,6 +93,15 @@ final isDarkModeProvider = StateProvider<bool>((ref) => true);
 // Settings providers
 final modsPathProvider = StateProvider<String>((ref) => '');
 final autoRefreshProvider = StateProvider<bool>((ref) => false);
+
+/// How the marketplace presents mods GameBanana flags as adult.
+///
+/// App-wide (hence here rather than in `marketplace_providers.dart`) and
+/// hydrated from `config.json` in `ApiService.initialize`. Defaults to
+/// [ContentFilterMode.blur], which honours GameBanana's own `_sInitialVisibility`
+/// hint — the API filters nothing itself, so this is the only filter there is.
+final contentFilterProvider =
+    StateProvider<ContentFilterMode>((ref) => ContentFilterMode.blur);
 
 // View mode: grid or carousel
 final isGridViewProvider = StateProvider<bool>((ref) => true);

@@ -42,6 +42,7 @@ class GbMod {
     this.postCount,
     this.submitter,
     this.category,
+    this.subCategory,
     this.rootCategory,
     this.tags = const [],
     this.images = const [],
@@ -100,6 +101,15 @@ class GbMod {
   /// `_aCategory` — the mod's own (often sub-) category. Profile responses.
   final GbCategoryRef? category;
 
+  /// `_aSubCategory` — the specific category on **listing** responses, and the
+  /// only place a listing names it.
+  ///
+  /// Worth parsing because for ZZZ this is usually the *character* ("Ellen Joe")
+  /// while [rootCategory] is only ever the bland parent ("Character Skins").
+  /// Absent on mods filed directly under a root category, so it is not a
+  /// replacement for [rootCategory] — see [displayCategory].
+  final GbCategoryRef? subCategory;
+
   /// `_aRootCategory` — the top-level category. Listing responses.
   final GbCategoryRef? rootCategory;
 
@@ -152,8 +162,12 @@ class GbMod {
   /// treated as [GbVisibility.warn] rather than assumed safe.
   GbVisibility get effectiveVisibility => visibility ?? GbVisibility.warn;
 
-  /// The category to display — the specific one when we have it, else the root.
-  GbCategoryRef? get displayCategory => category ?? rootCategory;
+  /// The category to display, most specific first.
+  ///
+  /// The three spellings are populated by different responses — [category] by a
+  /// profile, [subCategory] by a listing — so this is what lets one card widget
+  /// render a record from either without knowing where it came from.
+  GbCategoryRef? get displayCategory => category ?? subCategory ?? rootCategory;
 
   /// The cover image, if the response carried a gallery.
   GbImage? get coverImage => images.isEmpty ? null : images.first;
@@ -186,6 +200,7 @@ class GbMod {
       postCount: gbInt(json['_nPostCount']),
       submitter: GbSubmitter.fromJson(json['_aSubmitter']),
       category: GbCategoryRef.fromJson(json['_aCategory']),
+      subCategory: GbCategoryRef.fromJson(json['_aSubCategory']),
       rootCategory: GbCategoryRef.fromJson(json['_aRootCategory']),
       tags: gbStrings(json['_aTags']),
       images: preview == null

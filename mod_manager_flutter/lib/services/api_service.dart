@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/character_info.dart';
 import 'config_service.dart';
+import 'gamebanana/content_filter.dart';
 import 'mod_manager_service.dart';
 import 'platform_service_factory.dart';
 
@@ -31,6 +32,10 @@ class ApiService {
             (e) => e.name == _configService!.sortMode,
             orElse: () => ModSort.added,
           );
+      // Parsed rather than looked up: an unrecognised stored value has to
+      // degrade to `blur`, never to `show`.
+      _container!.read(contentFilterProvider.notifier).state =
+          ContentFilterMode.parse(_configService!.contentFilter);
     }
 
     if (_modManager == null) {
@@ -175,6 +180,13 @@ class ApiService {
   static Future<void> saveSortMode(ModSort sort) async {
     await initialize();
     await _configService!.setSortMode(sort.name);
+  }
+
+  /// Persists the marketplace content filter and applies it immediately.
+  static Future<void> setContentFilter(ContentFilterMode mode) async {
+    await initialize();
+    await _configService!.setContentFilter(mode.wire);
+    _container?.read(contentFilterProvider.notifier).state = mode;
   }
 
   static Future<String> updateConfig({

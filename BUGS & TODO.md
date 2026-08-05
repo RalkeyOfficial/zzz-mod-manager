@@ -124,9 +124,15 @@ UI, no badges, minimal styling.
   otherwise M1's own format needs migrating later.
   **Done**, on every ingest path, with the drop-inbound-origin rule enforced by
   construction. Two corrections to what this doc assumed, both applied — see
-  below: it ships as **schema v2** and **`ModInfo` gains nothing**. Note the honest limit: the
-  webview yields a CDN url and no mod id, so today every block lands with both
-  confidences `unknown`. Identity arrives with §1.
+  below: it ships as **schema v2** and **`ModInfo` gains nothing**. ~~Note the honest
+  limit: the webview yields a CDN url and no mod id, so today every block lands with
+  both confidences `unknown`.~~ **That limit is now closed** — §1's native browser
+  supplies `source`, `mod_id`, `file_id`, `version` and `version_label` before the
+  first byte is fetched, so an in-app download writes both confidences at **`exact`**.
+  That is the honest tier, not an optimistic one: the user picked this row of this
+  mod's file list and we fetched exactly that file id. Manual imports still land at
+  `unknown`, correctly — their route to `exact` is an `archive_md5` match at
+  resolution time (§7.8), not the install path.
 - [x] **§3 (prerequisite)** — make the sidecar **round-trip unknown keys** and
   treat machine-owned fields (`origin`, `schema_version`) as preserved-from-disk
   rather than sourced from `ModInfo`. Must land **before** anything writes an origin
@@ -151,14 +157,39 @@ UI, no badges, minimal styling.
   only — nothing in the install path writes `source_url`, so a mod downloaded
   through today's marketplace has neither identity nor a url to derive one
   from, and stays untracked until §1 supplies the id at ingest.
-- [ ] **§1 (plain)** — results grid + mod detail screens, both platforms; remove
+- [x] **§1 (plain)** — results grid + mod detail screens, both platforms; remove
   the `_isWebViewSupported => _isWindows` gate and the Downloads-folder watcher.
-- [ ] **§6 (as needed)** — the NSFW/content-filter toggle (§1) is the only new key
+  **Done.** `screens/components/marketplace/` holds the grid (search, sort,
+  root-category + 60-character filter chips, paging) and the detail view (gallery,
+  description, file list, "open in browser"). The webview gate, the Linux
+  open-in-browser view, the Downloads watcher and `flutter_inappwebview` itself
+  are all gone — including the `Platform.isWindows` webview registration in
+  `main()`. Verified against the live API: 5194 records / 866 pages, 4 roots + 60
+  characters, search capped at 15 as documented, profile → file list → `/dl/<id>`.
+  Two corrections to what this doc assumed, both applied — see §1 below: the
+  **default-selection rule cannot have a "highest version" branch**, and the
+  **category filter has no offline fallback**.
+- [x] **§6 (as needed)** — the NSFW/content-filter toggle (§1) is the only new key
   M1 actually needs. *Not* a download-directory key: §5 fixes that to
   `<appData>/downloads` and explicitly defers making it configurable.
+  **Done.** `content_filter` (`blur` | `show` | `hide`, default `blur`) through the
+  dual-storage pattern, with the decision itself in a pure unit
+  (`services/gamebanana/content_filter.dart`). The control sits in the marketplace
+  toolbar, where it is first needed; **surfacing it in the Settings tab is still
+  open** and filed under §6 below rather than counted here.
 
 Exit criteria: on Linux *and* Windows, search a ZZZ mod in-app → open detail →
 download → it installs, auto-tags, and carries an origin block.
+
+**M1 is code-complete.** Verified on Linux end to end against the live API: the grid
+renders with character-accurate badges and the blur overlay, the category chips are the
+live 4 roots + 60 characters, search pages at the documented cap of 15, and a profile
+resolves to a file list whose rows carry real `/dl/<fileid>` urls, sizes, md5s and
+`clean` AV results. The origin block now lands at `exact` on both axes.
+**Not yet verified on Windows** — there is no Windows machine in this environment. The
+implementation is shared with no platform branch (junction-vs-symlink and
+`openUrlInBrowser` already go through `PlatformService`), so the risk is low, but the
+exit criterion says "Linux *and* Windows" and only one of those was actually run.
 
 ### M2 — Smart installs (read the origin block)
 
@@ -201,19 +232,52 @@ they earn priority.
 
 ## 1. Marketplace — native GameBanana browser
 
-- [ ] Remove the Linux/Windows split in `marketplace_screen.dart` (the
+- [x] Remove the Linux/Windows split in `marketplace_screen.dart` (the
   `_isWebViewSupported => _isWindows` gate, the Linux "open in browser" view, the
   Downloads-folder watcher) in favour of the native browser.
-- [ ] **Results grid screen**: search box + category/character filters → grid of
+  **Done**, and the `flutter_inappwebview` dependency is dropped with it. Worth
+  recording *why* the watcher was never salvageable rather than merely
+  platform-specific: it could only observe a file appearing in a folder, so it knew
+  no mod id, no file id and no version; it guessed "download finished" by polling
+  for a stable file size — a guess about someone else's browser; and any unrelated
+  archive the user downloaded was a false positive. Its installs were correctly
+  recorded as `imported_archive`, never `downloaded`.
+- [x] **Results grid screen**: search box + category/character filters → grid of
   mod cards (thumbnail, name, author, likes/views, category badge).
-- [ ] **Mod detail screen**: gallery images, description, author, category, and a
+  **Done.** One correction applied: the card shows likes / views / **posts**, not
+  downloads — `_nDownloadCount` is absent from listing responses entirely, so a
+  download count on a card could only ever render a misleading `0`. Also, the badge
+  reads the *specific* category (`_aSubCategory`, usually the character — "Ellen
+  Joe") rather than the bland root ("Character Skins"); that field was missing from
+  the wire model and is now parsed. Both written up in
+  [`docs/gamebanana-api.md`](docs/gamebanana-api.md) §5.
+- [x] **Mod detail screen**: gallery images, description, author, category, and a
   **file list** (each file = version label + upload date + size + download button).
-  - **Default-selection rule**: the download button auto-selects a file **only**
-    when there is a single clear highest version and **no competing variants**.
-    When variants exist or the choice is ambiguous, do **not** default — the user
-    must pick. This same rule feeds "installed file id" (§3).
-- [ ] "Open in browser" escape hatch on each mod (for content we don't render).
-- [ ] **NSFW / content filter — ours to implement, and not a login problem.**
+  **Done**, plus `_sAvResult` verbatim per §2 (a real safety signal, unlike an md5
+  match) and an archived-files toggle per §7.6. `_sText` is HTML and is converted to
+  markdown through `utils/html_to_markdown.dart`, shared with the editors'
+  paste-as-markdown so the two conversions cannot drift.
+  - ~~**Default-selection rule**: the download button auto-selects a file **only**
+    when there is a single clear highest version and **no competing variants**.~~
+    **Correction (applied): the "single clear highest version" half of that
+    conjunction is not computable, so the rule reduces to "exactly one file".** The
+    *intent* stands untouched — never default when ambiguous — but the mechanism
+    assumed comparable versions, and real data says otherwise: `_sVersion` is free-form,
+    not semver, and is routinely null on **every** file of a mod with the version
+    written into `_sDescription` — the field that is otherwise the variant marker (one
+    captured profile: ten files, all `_sVersion: null`, labelled "v3.4", "v3.3", …).
+    Upload date is no substitute either: another captured profile publishes a "Main
+    file" at 7.7 beside two patchers at 1.0 and three unversioned *demos*, where
+    newest-upload picks a demo the moment one is uploaded last. So version and variant
+    are not separably readable per file, and any multi-file default is a guess — which
+    §"Locked decisions" forbids from driving anything. Implemented in
+    `services/gamebanana/file_selection.dart` (pure, tested against both captured
+    profiles); the UI says *why* the user must choose instead of showing an inert
+    button. Measured consequences are in
+    [`docs/gamebanana-api.md`](docs/gamebanana-api.md) §6.
+- [x] "Open in browser" escape hatch on each mod (for content we don't render).
+  **Done**, via `PlatformService.openUrlInBrowser` — never a `Platform.isX` branch.
+- [x] **NSFW / content filter — ours to implement, and not a login problem.**
   Verified anonymously against the live API (§2): adult mods are returned to
   unauthenticated callers like any other, and their files download without a session.
   GameBanana ships the *rendering hint* instead — `_sInitialVisibility` is
@@ -222,10 +286,30 @@ they earn priority.
   moves the filter to us. Honour the hint by default (blur + reveal-on-click for
   `warn`/`hide`, which is what the site itself does) and put the toggle in Settings
   (§6). Previously filed under backlog as though it needed an account.
+  **Done**, and the hint mix is not marginal: a live 6-record page returned three
+  `show`, one `warn`, two `hide`. Reveal-on-click is per card and deliberately not
+  persisted — clicking through one blur is consent for that mod, not a settings
+  change. Two API facts that shaped it, now in
+  [`docs/gamebanana-api.md`](docs/gamebanana-api.md) §7: listing records **do** carry
+  `_sInitialVisibility` (so filtering needs no extra request, and an absent value
+  failing closed to `warn` would blur the whole grid rather than un-blur it), but
+  they **don't** carry `_aContentRatings` — so a card can flag a mod while only the
+  detail view can name "Skimpy Attire".
 - [ ] "Already installed" / "update available" indicators on cards & detail,
   driven by the per-mod origin data (see §3). In the **library**, this indicator
   shares a single status slot with the unknown-origin states — see §7.4.
-- [ ] Decide empty/error/loading states and offline behaviour.
+- [x] Decide empty/error/loading states and offline behaviour.
+  **Done for M1's two screens** (M4's item covers polish beyond this). Decisions
+  worth keeping: *no results* and *everything on this page was hidden by your
+  content filter* are separate empty states, because only the second is actionable
+  and showing the wrong one sends the user hunting for a mod that was never there;
+  offline gets its own wording rather than a stack-trace-shaped message, since it is
+  the most common failure and not a bug; and the category strip stays **silent** on
+  error rather than reporting the same outage twice — it fails exactly when the
+  listing beside it fails.
+  - Consequence of filtering client-side, worth knowing before building on the
+    pager: `_nRecordCount` counts **remote** records, so in `hide` mode a page can
+    legitimately render far fewer cards than the page count implies.
 
 ## 2. GameBanana API layer (the keystone)
 
@@ -262,8 +346,18 @@ probing, which is one more reason to keep our client tiny.
   what the category/character filter is built from. It returns a **bare array**
   and *requires* `_sSort` (its own internal default is a value it rejects). One
   knock-on this doc never budgeted: the filter list is therefore a network call,
-  so it wants a cached provider plus an offline fallback to the hardcoded
-  `utils/zzz_characters.dart` roster.
+  so it wants a cached provider ~~plus an offline fallback to the hardcoded
+  `utils/zzz_characters.dart` roster~~.
+  **Correction (applied): there is no offline fallback, and the hardcoded roster
+  cannot be one.** Two independent reasons, recorded so it isn't attempted again.
+  (1) That roster carries **no GameBanana category ids**, and `Generic_Category`
+  accepts an id and nothing else — `Generic_Name` exists but rejects plain strings —
+  so a local name list can only render chips that cannot filter. (2) It would never
+  help regardless: the categories request fails exactly when the listing request
+  beside it fails, so there is no state where the chips are reachable but results
+  aren't. One error state for the screen covers both honestly. A genuinely offline
+  character filter would need the fetched id↔name mapping **persisted** — a cache,
+  not a static roster. (Live check: still exactly 60 children of `30305`.)
   `GET /apiv11/Util/Search/Results?_sModelName=Mod&_sSearchString=…&_idGameRow=19567`
   (search — the server caps `_nPerpage` at 15 **silently, with no error**, so the
   client doesn't expose the knob at all and reads `_aMetadata._nPerpage` back;
@@ -514,6 +608,30 @@ update is **not** a re-run of the import path.
   probably belongs in app-data rather than config.
 - [ ] Key for §4.2: backup retention (count or age), once a cap is chosen.
 
+### Filed by §1 (found while building the native browser)
+
+- [ ] **The content filter has no Settings-tab entry.** The key and the decision logic
+  shipped with M1, and the control lives in the marketplace toolbar where it is first
+  needed — but §1 said "put the toggle in Settings (§6)" and that half is not done.
+  Belongs with M4's "surface all new settings in the Settings tab"; noted here so it
+  isn't assumed shipped because the *key* is.
+- [ ] **Three marketplace l10n keys are dead and predate M1**:
+  `download_progress_unknown`, `install_7zip_missing`, `install_extract_failed`. All
+  three exist in `en.json`/`uk.json` with no reference anywhere in `lib/`. Left alone
+  because they were already dead before this work and deleting a translated string is
+  not something to do as a drive-by — but either the messages should be wired up (the
+  7-Zip one in particular looks like it *should* be reachable from `ArchiveService`) or
+  the keys should go.
+- [ ] **The results grid has no infinite scroll and no result-count display.** Paging
+  is prev/next with "Page N of M", which is honest but tedious across 866 pages. Also
+  worth showing `_nRecordCount` so the user knows the search narrowed anything.
+  Deliberately plain per M1; revisit with M4's polish.
+- [ ] **Images are fetched with `Image.network` and cached only in memory.** Fine and
+  measured-adequate for a browsing session — Flutter's `ImageCache` de-duplicates and
+  holds decoded frames — but thumbnails are re-fetched from scratch after a restart. No
+  dependency was added for this on purpose; revisit only if it is ever observed to be
+  slow rather than assumed to be.
+
 ## 7. Unknown origin — backfill, warnings, and resolution
 
 The origin block (§3) is written at **install time**. Everything that predates it
@@ -659,7 +777,7 @@ been renamed). Strictly local: scans run offline on every launch.
   handle when it lands: it visibly reorders existing libraries the first time it
   runs, and it must fall back gracefully for mods with **no** origin block at
   all, which is most of a library that has never had a `source_url` pasted in.
-- [ ] **Nothing writes `source_url` on install — only the edit dialog does.**
+- [x] **Nothing writes `source_url` on install — only the edit dialog does.**
   Verified: `edit_mod_dialog.dart` is the field's sole write site, so a mod
   downloaded through today's marketplace gets neither a remote id (the webview
   yields a CDN url) nor a url the backfill could derive one from. The backfill
@@ -667,6 +785,14 @@ been renamed). Strictly local: scans run offline on every launch.
   untracked, which is the opposite of the intuition. §1 fixes this properly by
   supplying the id at ingest; until then, consider having the marketplace record
   the mod-page url it already knows.
+  **Resolved by the proper fix, not the workaround.** §1 now supplies `mod_id` at
+  `exact` directly, so the interim idea of recording a url to re-derive an id from is
+  moot and was deliberately not built — `source_url` stays a purely user-facing field
+  per §3. This leaves a documented asymmetry rather than a gap: a fresh download has a
+  `mod_id` and no `source_url`, while a backfilled legacy mod has a `source_url` and a
+  derived `mod_id`. **Anything wanting "a link to the mod page" must build it from
+  `origin.mod_id`** rather than expecting `source_url` to be set — filed as its own
+  item below, since nothing does that yet.
 - [ ] **A backfilled sibling group can't be reconstructed, and two mods sharing a
   `mod_id` must not be read as one.** `origin.ingest.sibling_group` is what makes
   §4's "an update acts on the whole sibling group at once" work, and nothing on
@@ -675,6 +801,12 @@ been renamed). Strictly local: scans run offline on every launch.
   real 23-mod library (two variants of one mod, installed as separate folders).
   §4 and §7.6 must treat "same `mod_id`, no group" as **independent mods that
   happen to share a page**, not as a group to rewrite together.
+- [ ] **No UI links to a mod's GameBanana page from `origin.mod_id`.** The detail
+  screen has "open in browser" for a mod you're *browsing*, but a mod already in the
+  library has no equivalent, even when its origin block knows exactly which page it
+  came from. The edit dialog shows `source_url`, which a downloaded mod never has (see
+  the resolved item above). Cheap and squarely M2's territory, since that's where the
+  library starts reading the origin block.
 - [ ] **Re-decide the `ModInfo` origin ban in M2 rather than inheriting it.**
   §3's correction says the origin block must not go on `ModInfo`, because a
   later unrelated edit would rebuild the sidecar from the runtime view and erase
@@ -864,12 +996,19 @@ work that already opens the same file, so they cost nothing extra.
 ## 9. Cross-cutting work (easy to forget, not optional)
 
 - [ ] **Localization is a per-screen tax.** Every surface here needs keys in **both**
-  `assets/l10n/en.json` and `uk.json`: §1's two screens, §7.4's status slot and
+  `assets/l10n/en.json` and `uk.json`: ~~§1's two screens,~~ §7.4's status slot and
   tooltips, §7.5's resolve dialog, §7.6's bulk screen, §4's post-update report. It's
   the most repetitive cost in the plan and it currently appears in no milestone —
   budget it per milestone instead of discovering it at the end. The confidence wording
   in particular ("possibly outdated", "matches your folder name") is user-facing copy
   that has to be translated, not English interpolated into a string.
+  **§1's share is paid**: 42 new keys in both locales, 14 webview-era keys removed, en
+  and uk verified key-for-key identical. The tax estimate was accurate — this was the
+  single most repetitive part of the work. A check worth reusing for the remaining
+  screens: extract every `loc.t('…')` literal from `lib/` and diff it against both JSON
+  files in each direction, which catches both a missing translation and a key left
+  behind by deleted UI (it found one: `marketplace.search`, orphaned when the search
+  button became submit-on-enter).
 - [ ] **Name the tests, because the risky parts are pure functions.** The pieces most
   likely to be quietly wrong need no network and no UI: `source_url` → `mod_id`
   parsing (§7.3); the confidence state machine and what each tier permits (§7.2); the
@@ -878,6 +1017,16 @@ work that already opens the same file, so they cost nothing extra.
   (§7.6); and the sidecar unknown-key round-trip (M1). Fixtures beat mocks — a couple
   of real `ProfilePage` responses checked into `test/` keep the client honest when the
   API shifts under it.
+  **The fixtures-beat-mocks call paid off concretely in §1**, and it is worth saying how,
+  because it argues for keeping the habit: the file-selection rule was *designed* around
+  what two real captured profiles do (ten files with `_sVersion: null`; a main file
+  beside patchers and demos), and those same fixtures are now the tests. A
+  hand-written mock would have encoded the assumption the plan started with — tidy
+  `_sVersion` strings to compare — and the rule would have shipped confidently wrong.
+  Suite is 372 tests, all offline. Add for §1: the content-filter matrix (including that
+  an unrecognised setting degrades to `blur`), and that listing fixtures carry
+  `_sInitialVisibility` at all — that last one is a canary, since if the field ever
+  disappears upstream the filter silently blurs the entire grid.
 - [ ] **One seam for offline tests.** Keep HTTP behind a single injectable interface
   in §2, or every test above needs a network to run.
 

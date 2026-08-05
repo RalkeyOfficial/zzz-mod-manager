@@ -89,6 +89,45 @@ costs more than looking.
 - `utils/gamebanana_url.dart` — pure `source_url` → mod-id parsing, kept outside
   the client because the offline metadata backfill runs it during a normal scan
   with no network. A `/dl/<id>` link is a *file* id and correctly yields null.
+- `content_filter.dart` — pure (visibility hint, user setting) → show / blur /
+  omit. The API filters nothing itself, so **this is the entire NSFW filter**.
+  Default is `blur` (reveal on click), which is what the site does and the only
+  value that is wrong in neither direction: `show` would un-blur adult content on
+  a corrupt setting, `hide` would silently empty the grid. `ContentFilterMode.parse`
+  degrades anything unrecognised to `blur` for that reason. Applied to
+  already-fetched records, so toggling it re-filters without a request — and the
+  pager therefore counts *remote* records, not visible ones.
+- `file_selection.dart` — pure default-download-selection rule. Preselects a file
+  **only when the mod publishes exactly one**; anything else returns no default
+  with a reason the UI shows. That is not laziness: `../docs/gamebanana-api.md` §6
+  measured that `_sVersion` is routinely null on *every* file with the version
+  written into `_sDescription` (the variant field), and that a mod's current files
+  are often a main file plus patchers plus demos. There is no orderable version and
+  no reliable "main file" marker, so any multi-file default would be a guess — and
+  guesses may inform, never drive.
+
+### The marketplace screens (`screens/components/marketplace/`)
+
+A **native** GameBanana browser, identical on both platforms, replacing an
+embedded webview on Windows and an open-your-real-browser-plus-Downloads-watcher
+fallback on Linux. Two screens only — results grid and mod detail; everything else
+GameBanana hosts is reached via "open in browser".
+
+- State lives in `utils/marketplace_providers.dart`, not the central
+  `state_providers.dart` registry: it is one screen's browsing session rather than
+  app-wide state. The content filter *is* app-wide and stays in the registry,
+  hydrated from config in `ApiService.initialize`.
+- Browse and search are **separate modes** because they are separate endpoints with
+  different capabilities — search takes text but supports neither category filter
+  nor sort, so the sort control is disabled rather than silently ignored.
+- **This is where remote identity reaches the origin block.** The webview could only
+  intercept a CDN url, so every origin block it wrote had both confidences at
+  `unknown`; a native download knows mod id, file id, version and variant label
+  before the first byte and writes them at `exact`. See
+  `../docs/metadata-schema.md` §6.
+- `_sText` is HTML while every description this app renders is markdown, so it goes
+  through `utils/html_to_markdown.dart` — shared with the description editors'
+  paste-as-markdown so the two can't drift.
 
 ### The download layer (`services/download/`)
 

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:html2md/html2md.dart' as html2md;
 import '../services/api_service.dart';
+import 'html_to_markdown.dart';
 
 /// Wraps a description [field] with the markdown editing shortcuts:
 /// Ctrl/Cmd+V pastes rich text as markdown; Ctrl/Cmd+B/I/E wrap the selection
@@ -291,18 +291,9 @@ Future<void> _smartPasteMarkdown(TextEditingController controller) async {
   String toInsert;
   final html = await ApiService.getClipboardHtml();
   if (html != null && html.trim().isNotEmpty) {
-    // ATX headers (`## x`) and `-` bullets match how the description is
-    // written by hand; fenced code blocks render better than indented.
-    toInsert = html2md
-        .convert(
-          html,
-          styleOptions: {
-            'headingStyle': 'atx',
-            'bulletListMarker': '-',
-            'codeBlockStyle': 'fenced',
-          },
-        )
-        .trim();
+    // Shared with the GameBanana import path, which converts the same way: the
+    // style options are the house style for descriptions, not a paste detail.
+    toInsert = htmlToMarkdown(html);
   } else {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     toInsert = data?.text ?? '';

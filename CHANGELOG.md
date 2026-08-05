@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The Marketplace is now a built-in GameBanana browser, working the same way on Linux and Windows: search or browse ZZZ mods, filter by category or character, sort, then open a mod to see its screenshots, description and full file list and download from there. Linux no longer has to send you to an external browser.
+- Mods flagged as adult content on GameBanana are blurred until you click to reveal them, with a Marketplace toolbar setting to show them unblurred or hide them entirely. Your choice is remembered.
+- The mod detail view shows each file's name, size, upload date and GameBanana's own virus-scan result, and can list older superseded versions.
 - Groundwork for the native GameBanana marketplace: a read-only API client for browsing, searching and reading mod details, covered by tests that run without a network. Nothing user-visible yet — the marketplace still uses the existing browser flow.
 - Marketplace downloads now resume where they left off instead of starting over, survive the app being closed mid-download, and show a transfer rate and estimated time remaining.
 - Marketplace downloads can now be cancelled while in progress.
@@ -17,7 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Mods downloaded through the Marketplace now record exactly which mod and which file they came from, so update checking will work for them without any guesswork. Previously a download could only record that it happened.
+- When a mod offers several files, the app no longer tries to guess which one you want — it asks, and says why. GameBanana authors routinely put version numbers in the file's label rather than its version field, so "the newest" or "the highest version" would have picked a demo or a patcher instead of the mod.
 - Downloaded archives now always land in the app's own downloads folder and are deleted once installed; an archive that fails to extract is kept, and the app tells you where to find it.
+
+### Removed
+
+- The embedded webview (Windows) and the Downloads-folder watcher (Linux) are gone, replaced by the built-in browser above. The watcher could only notice a file appearing and had to guess when your browser had finished writing it, so it also picked up unrelated downloads and could never tell which mod a file belonged to.
 
 ### Fixed
 

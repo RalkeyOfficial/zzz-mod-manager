@@ -276,15 +276,50 @@ we actually care about:
 | `_tsDateUpdated` | both | Last content update — the comparator for "is there something new". |
 | `_tsDateModified` | both | Last *any* edit (including trivial ones). Noisier than `_tsDateUpdated`. |
 | `_aSubmitter` | both | `_idRow`, `_sName`, `_sProfileUrl`, `_sAvatarUrl`. |
-| `_aRootCategory` / `_aCategory` | list / profile | Category, with `_sName`, `_sProfileUrl`, `_sIconUrl`. |
+| `_aRootCategory` | list | The **top-level** category only — for a skin that is the bland "Character Skins". |
+| `_aSubCategory` | list | The **specific** category, and the only place a listing names it. For ZZZ this is usually the *character* ("Ellen Joe"). Absent on mods filed directly under a root. |
+| `_aCategory` | profile | The profile's spelling of the specific category. Carries `_idRow`; the two listing spellings do not (see [below](#three-spellings-of-category)). |
 | `_aTags` | both | Author tags. Often empty — don't rely on it for character detection. |
 | `_aPreviewMedia._aImages[]` | both | Gallery. See below. |
-| `_nLikeCount`, `_nViewCount`, `_nDownloadCount`, `_nPostCount` | both | Stats for the card. |
+| `_nLikeCount`, `_nViewCount`, `_nPostCount` | both | Stats for the card. |
+| `_nDownloadCount` | **profile only** | **Not on listing records.** A card cannot show a download count — see below. |
 | `_bHasFiles` | list | Whether anything is downloadable. |
 | `_bIsObsolete` | both | Author flagged it superseded — **not** the same as gone. |
 | `_bIsPrivate`, `_bIsTrashed`, `_bIsWithheld` | profile | Upstream removal states. Read these instead of inferring from a 404. |
 | `_bHasUpdates`, `_nUpdatesCount` | profile | Whether `Mod/<id>/Updates` has anything. |
-| `_sInitialVisibility`, `_aContentRatings` | both | Content gating hints — [§7](#7-nsfw-and-content-ratings). |
+| `_sInitialVisibility` | both | Content gating hint — [§7](#7-nsfw-and-content-ratings). |
+| `_bHasContentRatings` | list | Boolean flag. Listings carry **this and not the ratings map**. |
+| `_aContentRatings` | profile | The reasons map. **Absent from listings**, and absent entirely on unrated mods. |
+
+### Which fields a listing actually omits
+
+Re-checked against a live `Mod/Index` page and the captured fixtures, because getting
+this wrong shows up as a card rendering a confident zero:
+
+- **`_nDownloadCount` is profile-only.** Build cards on likes / views / posts. Model
+  the counters as nullable and omit what you weren't given — "0 downloads" on a mod
+  with 40 000 downloads is worse than no number.
+- **`_aContentRatings` is profile-only.** A listing gets `_bHasContentRatings`, a bare
+  boolean, so a **card can flag a mod but cannot say why**; only the detail view can
+  name "Skimpy Attire". Don't design a card that promises the reason.
+- **`_aArchivedFiles` is omitted, not empty,** when a mod has no superseded files. So
+  `null` and `[]` genuinely both occur and mean different things (see
+  [§6](#6-files--_afiles-and-_aarchivedfiles)).
+
+### Three spellings of "category"
+
+One concept, three keys, and no response carries more than two of them:
+
+| Response | Specific category | Parent |
+|---|---|---|
+| `Mod/Index`, `Util/Search/Results` | `_aSubCategory` | `_aRootCategory` |
+| `Mod/<id>/ProfilePage` | `_aCategory` | `_aSuperCategory` |
+
+Only the profile's `_aCategory` includes `_idRow`. On a listing, **the id exists solely
+inside `_sProfileUrl`** (`https://gamebanana.com/mods/cats/30341`), so recovering it
+means parsing that url — which matters because the id is the only thing the
+`Generic_Category` filter accepts. Code that wants "the most useful category label"
+should try specific-then-parent rather than picking one key.
 
 ### Images
 
@@ -325,11 +360,42 @@ downloadable**.
 | `_sAvState` / `_sAvResult` | Virus scan (`done` / `clean`). |
 | `_sAnalysisState` / `_sAnalysisResult` / `_sAnalysisResultVerbose` | Preliminary content analysis (`done` / `ok` / human-readable). |
 
-Two consequences worth internalising:
+### `_sVersion` and `_sDescription` are not reliably version-vs-variant
+
+The table above describes what the two fields *mean*. What authors actually do with
+them is looser, and anything that compares versions has to be built for the looser
+reality. Measured across the captured profiles and a live one:
+
+- **`_sVersion` is frequently null — including on *every* file of a mod.** One captured
+  profile publishes ten current files, all with `_sVersion: null`, whose
+  `_sDescription` values are `"v3.4"`, `"v3.3"`, `"v3.2"` … The version is there; it is
+  just in the field nominally reserved for the variant label.
+- **So `_sDescription` cannot be read as "variant" on its own.** In the same corpus it
+  holds a genuine variant marker (`"Full Mod"`), a role marker
+  (`"RabbitFX Fixer EXE Version"`, `"Glow demo"`), *and* a version (`"v3.4"`) — with
+  nothing in the response distinguishing the three.
+- **A mod's current files are often not one release.** Another captured profile offers,
+  simultaneously: a `"Main file"` at 7.7, two patcher utilities at 1.0, and three
+  unversioned demo archives. "The newest file" and "the highest version" are both wrong
+  answers to "what should I install" there.
+
+Two consequences, and they are the reason this section exists:
+
+- **Do not order files by version string.** There is no ordering to take a maximum over
+  — the strings are free-form, absent, or in the other field. Upload date is not a
+  substitute: it picks the demo whenever a demo was uploaded last.
+- **Never auto-select a file when a mod publishes more than one.** There is no field
+  combination that reliably identifies "the main one", so the choice belongs to the
+  user.
+
+Two further consequences worth internalising:
 
 - **Always look at `_aArchivedFiles` too.** An old local install matches a superseded
   file far more often than the current one, so ignoring it throws away the best
-  chance of identifying what a user actually has.
+  chance of identifying what a user actually has. Note the key is **absent** rather
+  than `[]` when there is nothing archived, so "no archived files" and "didn't ask for
+  archived files" are distinguishable — and must be distinguished, or an update check
+  concludes a mod has no files from a response it never asked.
 - **`_sMd5Checksum` is a matching key, not a trust signal.** It identifies *which*
   file something is; it doesn't make it safe. md5 is cryptographically broken. If you
   want to show the user a safety indicator, show `_sAvResult` — that one actually
@@ -355,7 +421,24 @@ expects the client to honour it:
 
 So the filter is **ours to implement**, client-side, on every listing we render. For
 ZZZ specifically this is not an edge case: in a sample of 45 recent submissions, 25
-carried content ratings.
+carried content ratings, and a live 6-record `Mod/Index` page returned three `show`,
+one `warn` and two `hide`.
+
+Three properties of the hint that shape any client-side filter:
+
+- **`_sInitialVisibility` is on listing records**, not just profiles, so a listing can be
+  filtered with no extra request.
+- **`_aContentRatings` is not** ([§5](#5-the-mod-object)). A listing knows *that* a mod
+  is flagged (`_bHasContentRatings`) but not *why*, so only a detail view can name
+  "Skimpy Attire".
+- **An absent `_sInitialVisibility` should be treated as `warn`, not `show`.** The field
+  is present on every record observed so far, but failing the other way means the day it
+  disappears upstream, adult content silently un-blurs.
+
+Since the API returns flagged mods regardless, any filter necessarily runs on
+already-fetched records — so `_nRecordCount` and the page count describe the **remote**
+result set, not what survives filtering. A page can legitimately render fewer items than
+the pager implies.
 
 ---
 
@@ -451,15 +534,16 @@ Consequences for the download manager:
   and will break — don't build on it. Recorded only so the cause isn't
   re-investigated.)*
 
-### A note on the client itself
+### Backpressure matters at these transfer sizes
 
-The current inline downloader (`marketplace_screen.dart`, `_downloadToTemporaryFile`)
-calls `sink.add(chunk)` without awaiting it and never pauses the subscription, so
-nothing throttles the socket when the disk falls behind. In practice this was benign
-— writing to local disk at 20 MB/s, peak RSS was identical (217 MB) with and without
-backpressure. Forcing a deliberately slow consumer did separate them (+57 MB vs
-+15 MB above baseline), so it's a latent risk rather than an observed failure. The
-fix is free when the code moves into a service: `sub.pause(sink.addStream(...))`.
+Measured, because the failure mode is invisible on fast storage. A reader that pipes the
+response body to disk without awaiting the write and without pausing the subscription
+buffers whatever the disk can't keep up with. Writing to local disk at 20 MB/s that made
+no difference — peak RSS was identical (217 MB) either way — but against a deliberately
+slow consumer the two diverged (+57 MB vs +15 MB above baseline).
+
+With files reaching 1.24 GB and nodes that serve at 0.08 MB/s, that is a real exposure
+on slow or contended storage rather than a theoretical one.
 
 ---
 
@@ -495,7 +579,14 @@ Joe" (`30341`), "Hoshimi Miyabi" (`30579`), "Anby Demara" (`30336`) and so on, e
 with a live mod count. That makes it the natural backing for a character filter, and
 a cross-check against our hardcoded roster in `utils/zzz_characters.dart`. Fetch it at
 runtime and cache it — new characters appear with every game patch, and a hardcoded
-copy is exactly what goes stale.
+copy is exactly what goes stale. (Confirmed live: still exactly 60 children.)
+
+> **A local list of character *names* cannot drive this filter.** `Generic_Category`
+> accepts a category id and nothing else — `Generic_Name` exists but rejects plain
+> strings ([§4](#4-sorting-and-filtering)). So filtering by character requires the ids
+> from this endpoint; a name list can only produce filter values the API refuses.
+> Filtering offline therefore means **persisting the fetched id↔name mapping**, not
+> keeping a static roster.
 
 ---
 
@@ -546,6 +637,18 @@ Collected so nobody rediscovers them:
 - **Some endpoints return a bare array** (`Multi`, `Mod/Categories`) instead of the
   `_aMetadata`/`_aRecords` envelope. Don't write one generic response parser and
   assume it fits all.
+- **Listing records omit `_nDownloadCount` and `_aContentRatings`.** Both are
+  profile-only, so a card can neither show a download count nor explain *why* a mod is
+  flagged ([§5](#5-the-mod-object)).
+- **"Category" has three key names** and no response carries more than two; only the
+  profile's `_aCategory` has an `_idRow`, and a listing hides the id inside
+  `_sProfileUrl` ([below](#three-spellings-of-category)).
+- **`_sVersion` is often null on every file of a mod, with the version written into
+  `_sDescription`** — the field that otherwise means "variant". Never sort files by
+  version string, and never auto-pick among several files
+  ([§6](#6-files--_afiles-and-_aarchivedfiles)).
+- **`_aArchivedFiles` is absent rather than `[]`** when nothing is archived, so null
+  ("not requested") and empty ("none exist") are both real and mean different things.
 - **`_sText` is HTML**, while our own sidecar descriptions are markdown. Convert on
   import; don't dump raw HTML into a markdown widget.
 - **`_ts…` of `0` means never.** `_nStatus` is a string.
