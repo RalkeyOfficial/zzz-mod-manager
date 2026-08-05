@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -41,9 +42,22 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
   /// placeholder would silently become an extra download instead of a cache hit.
   static const int _stripImageWidth = 100;
 
+  /// Vertical space reserved below the thumbnails for the horizontal scrollbar.
+  static const double _stripScrollbarLane = 12;
+
+  /// Owned here rather than created in `build`: a `Scrollbar` and its `ListView`
+  /// must share one controller, and a fresh one per build would detach the thumb.
+  final ScrollController _stripScroll = ScrollController();
+
   int _galleryIndex = 0;
   bool _revealed = false;
   bool _showArchived = false;
+
+  @override
+  void dispose() {
+    _stripScroll.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -66,16 +80,17 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
 
   Widget _header(BuildContext context, AppLocalizations loc, GbMod? mod) {
     final scheme = Theme.of(context).colorScheme;
-    final url = mod?.profileUrl ??
-        'https://gamebanana.com/mods/${widget.modId}';
+    final url =
+        mod?.profileUrl ?? 'https://gamebanana.com/mods/${widget.modId}';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerLow,
         border: Border(
-          bottom:
-              BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+          bottom: BorderSide(
+            color: scheme.outlineVariant.withValues(alpha: 0.4),
+          ),
         ),
       ),
       child: Row(
@@ -91,10 +106,9 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
               mod?.name ?? loc.t('marketplace.loading'),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w700),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
           ),
           // The escape hatch for everything this screen deliberately doesn't
@@ -117,16 +131,22 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
       padding: const EdgeInsets.all(16),
       children: [
         if (mod.isRemoteMissing)
-          _notice(context, loc.t('marketplace.remote_missing'),
-              Theme.of(context).colorScheme.error),
+          _notice(
+            context,
+            loc.t('marketplace.remote_missing'),
+            Theme.of(context).colorScheme.error,
+          ),
         if (mod.isObsolete)
           // Explicitly *not* the same thing as removed: the mod still exists and
           // still downloads, its author just flagged it superseded.
-          _notice(context, loc.t('marketplace.obsolete_notice'),
-              Theme.of(context).colorScheme.tertiary),
+          _notice(
+            context,
+            loc.t('marketplace.obsolete_notice'),
+            Theme.of(context).colorScheme.tertiary,
+          ),
         if (treatment != ContentTreatment.show && !_revealed)
           _contentWarning(context, loc, mod),
-        _gallery(context, mod, treatment),
+        _gallery(context, loc, mod, treatment),
         const SizedBox(height: 16),
         _meta(context, loc, mod),
         const SizedBox(height: 16),
@@ -142,10 +162,9 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
         if (mod.text case final html? when html.trim().isNotEmpty) ...[
           Text(
             loc.t('marketplace.description'),
-            style: Theme.of(context)
-                .textTheme
-                .titleSmall
-                ?.copyWith(fontWeight: FontWeight.w700),
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 8),
           // `_sText` is HTML while every description this app renders is
@@ -162,7 +181,10 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
   }
 
   Widget _contentWarning(
-      BuildContext context, AppLocalizations loc, GbMod mod) {
+    BuildContext context,
+    AppLocalizations loc,
+    GbMod mod,
+  ) {
     final scheme = Theme.of(context).colorScheme;
     // Unlike a card, the detail response carries `_aContentRatings`, so this can
     // name the reasons instead of just flagging.
@@ -189,9 +211,13 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 if (reasons.isNotEmpty)
-                  Text(reasons,
-                      style: TextStyle(
-                          fontSize: 11, color: scheme.onSurfaceVariant)),
+                  Text(
+                    reasons,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -204,7 +230,12 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
     );
   }
 
-  Widget _gallery(BuildContext context, GbMod mod, ContentTreatment treatment) {
+  Widget _gallery(
+    BuildContext context,
+    AppLocalizations loc,
+    GbMod mod,
+    ContentTreatment treatment,
+  ) {
     if (mod.images.isEmpty) return const SizedBox.shrink();
     final index = _galleryIndex.clamp(0, mod.images.length - 1);
 
@@ -214,55 +245,112 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
           borderRadius: BorderRadius.circular(12),
           child: AspectRatio(
             aspectRatio: 16 / 9,
-            child: GbThumbnail(
-              image: mod.images[index],
-              treatment: treatment,
-              revealed: _revealed,
-              minWidth: 800,
-              fit: BoxFit.contain,
-              // Deliberately the same width the strip below requests, so this is a
-              // cache hit rather than a second download: the small copy fills the
-              // frame the instant you switch, and the 800px version fades in over
-              // it. Without it, changing preview image left the area blank for the
-              // length of a download.
-              placeholderMinWidth: _stripImageWidth,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                GbThumbnail(
+                  image: mod.images[index],
+                  treatment: treatment,
+                  revealed: _revealed,
+                  minWidth: 800,
+                  fit: BoxFit.contain,
+                  // Deliberately the same width the strip below requests, so this
+                  // is a cache hit rather than a second download: the small copy
+                  // fills the frame the instant you switch, and the 800px version
+                  // paints over it. Without it, changing preview image left the
+                  // area blank for the length of a download.
+                  placeholderMinWidth: _stripImageWidth,
+                ),
+                if (mod.images.length > 1) ...[
+                  // Clamped with a disabled state at each end, matching the "best
+                  // of" carousel — one navigation idiom for the whole screen.
+                  _GalleryArrow(
+                    alignment: Alignment.centerLeft,
+                    icon: Icons.chevron_left,
+                    tooltip: loc.t('marketplace.previous'),
+                    onPressed: index > 0
+                        ? () => setState(() => _galleryIndex = index - 1)
+                        : null,
+                  ),
+                  _GalleryArrow(
+                    alignment: Alignment.centerRight,
+                    icon: Icons.chevron_right,
+                    tooltip: loc.t('marketplace.next'),
+                    onPressed: index < mod.images.length - 1
+                        ? () => setState(() => _galleryIndex = index + 1)
+                        : null,
+                  ),
+                ],
+              ],
             ),
           ),
         ),
         if (mod.images.length > 1) ...[
           const SizedBox(height: 8),
           SizedBox(
-            height: 56,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: mod.images.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 6),
-              itemBuilder: (context, i) {
-                final selected = i == index;
-                return InkWell(
-                  onTap: () => setState(() => _galleryIndex = i),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: selected
-                            ? Theme.of(context).colorScheme.primary
-                            : Colors.transparent,
-                        width: 2,
+            // Taller than the thumbnails so the scrollbar has its own lane instead
+            // of sitting on top of them.
+            height: 52 + 4 + _stripScrollbarLane,
+            child: ScrollConfiguration(
+              // Flutter's desktop scroll behaviour deliberately leaves the mouse out
+              // of `dragDevices`, which is why this strip could only be moved with
+              // shift+scroll. Adding it back makes click-and-drag work.
+              //
+              // Scoped to this strip rather than the screen: the page around it is a
+              // vertical `ListView` containing selectable description text, and
+              // mouse-dragging *that* would fight text selection.
+              behavior: ScrollConfiguration.of(context).copyWith(
+                dragDevices: const {
+                  PointerDeviceKind.touch,
+                  PointerDeviceKind.mouse,
+                  PointerDeviceKind.trackpad,
+                  PointerDeviceKind.stylus,
+                },
+                // Suppressed so it doesn't fight the explicit Scrollbar below, which
+                // owns the same controller.
+                scrollbars: false,
+              ),
+              child: Scrollbar(
+                controller: _stripScroll,
+                // Always visible: a strip that scrolls with no indication that it
+                // scrolls is the problem being fixed, so hover-to-discover is not
+                // good enough.
+                thumbVisibility: true,
+                child: ListView.separated(
+                  controller: _stripScroll,
+                  scrollDirection: Axis.horizontal,
+                  // Keeps the thumbnails clear of the scrollbar lane.
+                  padding: const EdgeInsets.only(bottom: _stripScrollbarLane),
+                  itemCount: mod.images.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 6),
+                  itemBuilder: (context, i) {
+                    final selected = i == index;
+                    return InkWell(
+                      onTap: () => setState(() => _galleryIndex = i),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: selected
+                                ? Theme.of(context).colorScheme.primary
+                                : Colors.transparent,
+                            width: 2,
+                          ),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: GbThumbnail(
+                          image: mod.images[i],
+                          treatment: treatment,
+                          revealed: _revealed,
+                          width: 92,
+                          height: 52,
+                          minWidth: _stripImageWidth,
+                        ),
                       ),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: GbThumbnail(
-                      image: mod.images[i],
-                      treatment: treatment,
-                      revealed: _revealed,
-                      width: 92,
-                      height: 52,
-                      minWidth: _stripImageWidth,
-                    ),
-                  ),
-                );
-              },
+                    );
+                  },
+                ),
+              ),
             ),
           ),
         ],
@@ -289,8 +377,7 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
         if (mod.dateUpdated ?? mod.dateAdded case final date?)
           _pair(
             Icons.schedule,
-            loc.t('marketplace.updated_on',
-                params: {'date': _date(date)}),
+            loc.t('marketplace.updated_on', params: {'date': _date(date)}),
             style,
           ),
         if (mod.likeCount case final n?)
@@ -342,19 +429,23 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(isNetwork ? Icons.wifi_off : Icons.error_outline,
-                size: 40, color: scheme.error),
+            Icon(
+              isNetwork ? Icons.wifi_off : Icons.error_outline,
+              size: 40,
+              color: scheme.error,
+            ),
             const SizedBox(height: 12),
             Text(
-              loc.t(isNetwork
-                  ? 'marketplace.error_offline'
-                  : 'marketplace.error_generic'),
+              loc.t(
+                isNetwork
+                    ? 'marketplace.error_offline'
+                    : 'marketplace.error_generic',
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
             FilledButton.icon(
-              onPressed: () =>
-                  ref.invalidate(modProfileProvider(widget.modId)),
+              onPressed: () => ref.invalidate(modProfileProvider(widget.modId)),
               icon: const Icon(Icons.refresh, size: 16),
               label: Text(loc.t('marketplace.retry')),
             ),
@@ -368,5 +459,49 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
     final d = date.toLocal();
     String two(int n) => n.toString().padLeft(2, '0');
     return '${d.year}-${two(d.month)}-${two(d.day)}';
+  }
+}
+
+/// A circular overlay arrow for stepping through the gallery.
+///
+/// Its own widget rather than an inline `IconButton` so the disabled look — the one
+/// thing that tells the user they are at an end — is defined once for both sides.
+/// Deliberately the same treatment as the "best of" carousel's arrows: literal black
+/// and white, because these sit over arbitrary artwork rather than a themed surface.
+class _GalleryArrow extends StatelessWidget {
+  const _GalleryArrow({
+    required this.alignment,
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final Alignment alignment;
+  final IconData icon;
+  final String tooltip;
+
+  /// Null disables the arrow, which is how the ends of the list are communicated.
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null;
+    return Align(
+      alignment: alignment,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Material(
+          color: Color(enabled ? 0xB3000000 : 0x4D000000),
+          shape: const CircleBorder(),
+          clipBehavior: Clip.antiAlias,
+          child: IconButton(
+            onPressed: onPressed,
+            tooltip: enabled ? tooltip : null,
+            iconSize: 22,
+            icon: Icon(icon, color: Color(enabled ? 0xFFFFFFFF : 0x66FFFFFF)),
+          ),
+        ),
+      ),
+    );
   }
 }

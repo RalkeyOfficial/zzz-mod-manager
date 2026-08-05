@@ -93,13 +93,13 @@
     "period_sixMonths": "Best of 6 months",
     "period_year": "Best of this year",
     "period_allTime": "Best of all time",
-    "carousel_prev": "Previous",
-    "carousel_next": "Next",
     "carousel_position": "{index} / {total}",
     "first_released": "First released {date}",
     "last_updated": "Last updated {date}",
     "never_updated": "Never updated since release",
-    "refreshing": "Refreshing…"
+    "refreshing": "Refreshing…",
+    "previous": "Previous",
+    "next": "Next"
   },
   "mods": {
     "all": "ALL",

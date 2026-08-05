@@ -696,6 +696,21 @@ update is **not** a re-run of the import path.
   Worth knowing how that slipped through: the first attempt's tests only ever built
   the widget **once**, and a switch is the only thing that exercises the behaviour.
   The tests now pump image A then image B.
+- [x] **Gallery navigation: arrows on the preview, and a strip you can drag.**
+  Prev/next arrows over the large preview, clamping with a disabled state at each end
+  — the same idiom as the "best of" carousel, so the screen has one navigation
+  language. Hidden entirely for a single-image mod.
+  The thumbnail strip previously moved **only** with shift+scroll, because Flutter's
+  desktop `ScrollBehavior` deliberately leaves `PointerDeviceKind.mouse` out of
+  `dragDevices`. Adding it back enables click-and-drag, and an always-visible
+  `Scrollbar` makes the scrollability discoverable at all — hover-to-reveal is no use
+  when the complaint is "I did not know it scrolled".
+  **The override is scoped to the strip, not the screen**: the page around it is a
+  vertical `ListView` holding selectable description text, and mouse-dragging that
+  would fight text selection. A test asserts the override contains exactly one
+  scrollable for that reason.
+  This closed a real coverage gap — `GbDetailView` had **no tests at all**, which is
+  how both earlier gallery bugs reached the user.
   Biggest win is the case with no published `_sFile800`: the hero then falls back to
   the full-resolution original, the slowest download of all.
   - [ ] **Still worth doing: generate thumbnails for local covers on import.**

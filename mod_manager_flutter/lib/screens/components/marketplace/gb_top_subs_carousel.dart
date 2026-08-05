@@ -212,13 +212,13 @@ class _GbTopSubsCarouselState extends ConsumerState<GbTopSubsCarousel> {
             _Arrow(
               alignment: Alignment.centerLeft,
               icon: Icons.chevron_left,
-              tooltip: context.loc.t('marketplace.carousel_prev'),
+              tooltip: context.loc.t('marketplace.previous'),
               onPressed: index > 0 ? () => _step(-1, count) : null,
             ),
             _Arrow(
               alignment: Alignment.centerRight,
               icon: Icons.chevron_right,
-              tooltip: context.loc.t('marketplace.carousel_next'),
+              tooltip: context.loc.t('marketplace.next'),
               onPressed: index < count - 1 ? () => _step(1, count) : null,
             ),
             Positioned(

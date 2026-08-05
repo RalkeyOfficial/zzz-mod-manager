@@ -93,13 +93,13 @@
     "period_sixMonths": "Найкраще за 6 місяців",
     "period_year": "Найкраще за рік",
     "period_allTime": "Найкраще за весь час",
-    "carousel_prev": "Попередній",
-    "carousel_next": "Наступний",
     "carousel_position": "{index} / {total}",
     "first_released": "Перший випуск {date}",
     "last_updated": "Останнє оновлення {date}",
     "never_updated": "Не оновлювався з моменту випуску",
-    "refreshing": "Оновлення…"
+    "refreshing": "Оновлення…",
+    "previous": "Попередній",
+    "next": "Наступний"
   },
   "mods": {
     "all": "УСІ",
