@@ -650,6 +650,28 @@ update is **not** a re-run of the import path.
   carousel's windows turn over daily, so neither is what someone pressing refresh
   above the grid is asking about.
 
+- [x] **Marketplace previews stopped re-downloading on every tab switch.** Reported
+  as "the images re-fetch and go empty for half a second". The cause was **not** in
+  the marketplace: `ImageCache` is bounded by *decoded* bytes (100 MiB) and is shared
+  app-wide, and the mods library rendered its covers with **no `cacheWidth`** — so
+  they decoded at native size. Measured on the real library: 49 covers = **213 MB
+  decoded**, single images at 14 MB, meaning roughly **seven mod cards evicted the
+  entire cache**. Opening the Mods tab flushed every marketplace thumbnail; coming
+  back re-downloaded them. Fixed by decoding covers at card size (`640` for a 320px
+  card) in **both** card render paths — `ModCardWidget` and the inline one in
+  `mods_screen.dart` — plus the 56px thumbnail strip in the details dialog. The large
+  viewer and the zoomable full-screen view are deliberately left unbounded.
+  No second cache was added: the fix was to stop flooding the one that already
+  exists. Verified the marketplace side was already doing the right thing —
+  **all 20 captured covers carry `_sFile220`**, so the grid fetches the small variant
+  rather than the original.
+  - [ ] **Still worth doing: generate thumbnails for local covers on import.**
+    `cacheWidth` bounds *memory* only. The files are still stored verbatim (measured:
+    3.8 MB PNGs, 2560px wide), so every cold load reads and decodes a full-size
+    screenshot from disk. A cached thumbnail beside the original would cut disk reads
+    and startup decode cost. New feature, not a bug fix — hence filed rather than
+    folded in.
+
 ### Filed by §1 (found while building the native browser)
 
 - [x] **Featured "best of" carousel on the unfiltered view.** Not in the original

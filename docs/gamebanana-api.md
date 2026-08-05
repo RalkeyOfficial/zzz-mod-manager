@@ -433,6 +433,20 @@ Only `_sFile` and `_sFile100` are guaranteed; **the larger variants may be missi
 on any given image, so fall back down the ladder rather than assuming `_sFile530`
 exists.
 
+How often that matters, measured across the captured listings (132 gallery images
+over 20 mods):
+
+- **Every cover — the first image — carried `_sFile220`** (20 of 20). So a results
+  grid can rely on getting a genuinely small file for its cards.
+- **112 of 132 images overall had only `_sFile` and `_sFile100`.** The misses are
+  concentrated in *secondary* gallery images, so anything walking a mod's whole
+  gallery at a large size will fall through to the full-resolution original
+  regularly — which is a multi-megabyte download and a multi-megapixel decode.
+
+Two practical consequences: pick the variant by the size you will *display*, and
+bound the decode independently, because the url you get back is not always the size
+you asked for.
+
 ---
 
 ## 6. Files — `_aFiles` and `_aArchivedFiles`

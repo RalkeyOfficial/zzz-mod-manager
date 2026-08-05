@@ -53,6 +53,13 @@ class GbThumbnail extends StatelessWidget {
             width: width,
             height: height,
             fit: fit,
+            // Bounded because `urlAtLeast` can legitimately hand back the
+            // **full-size** image: only `_sFile` and `_sFile100` are guaranteed to
+            // exist, so a gallery image missing the 220/530/800 variants falls back
+            // to the original. Without this, one such mod in the grid decodes a
+            // multi-megapixel bitmap for a 245px card — the same ImageCache flooding
+            // the local covers were causing.
+            cacheWidth: minWidth,
             // No loading spinner per tile: a grid of them flickering is worse
             // than tiles that simply fill in. The container behind is already
             // the right size and colour, so nothing reflows.

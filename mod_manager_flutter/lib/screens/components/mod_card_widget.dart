@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import '../../core/constants.dart';
 import '../../models/character_info.dart';
 
 class ModCardWidget extends StatefulWidget {
@@ -92,6 +93,12 @@ class _ModCardWidgetState extends State<ModCardWidget> {
               Image.file(
                 File(mod.imagePath!),
                 fit: BoxFit.cover,
+                // Decode to the card's size rather than the file's. Without this a
+                // 2560px screenshot is held as 14 MB of pixels to fill a 320px
+                // card, and a handful of them evict the whole shared ImageCache —
+                // including the marketplace's previews. See
+                // AppConstants.modCardDecodeWidth for the measurements.
+                cacheWidth: AppConstants.modCardDecodeWidth,
                 key: ValueKey('${mod.id}_${mod.imagePath}'),
               )
             else

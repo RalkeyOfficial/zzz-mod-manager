@@ -50,6 +50,20 @@ class AppConstants {
 
   // Mod Card Dimensions
   static const double modCardWidth = 320;
+
+  /// Width to decode mod cover images at, for [modCardWidth]-wide cards.
+  ///
+  /// 2× the card so it stays sharp on a hi-DPI display, and **far** below what
+  /// these files actually are. `ImageCache` is bounded by *decoded* bytes (100 MiB
+  /// by default), and a cover is a full screenshot: measured on a real library,
+  /// 49 covers came to **213 MB decoded at native size** — over twice the limit,
+  /// with single images at 14 MB, so about seven cards could evict everything else.
+  ///
+  /// That cache is shared with the marketplace's network thumbnails, which is how
+  /// this became visible: opening the Mods tab flushed them, and returning to the
+  /// marketplace re-downloaded every preview. Decoding at display size instead
+  /// takes those same 49 covers to roughly 5 MB.
+  static const int modCardDecodeWidth = 640;
   static const double modCardBorderRadius = 12;
   static const double modCardBorderWidthActive = 2;
   static const double modCardBorderWidthInactive = 1;

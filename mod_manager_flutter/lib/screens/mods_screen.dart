@@ -1218,6 +1218,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                           File(mod.imagePath!),
                           fit: BoxFit.cover,
                           width: double.infinity,
+                          // Same reason as ModCardWidget: this is the other card
+                          // render path, and leaving it unbounded would keep the
+                          // ImageCache-flooding bug alive in whichever view uses it.
+                          cacheWidth: AppConstants.modCardDecodeWidth,
                         )
                       : Container(
                           color: Colors.grey.withOpacity(0.1),

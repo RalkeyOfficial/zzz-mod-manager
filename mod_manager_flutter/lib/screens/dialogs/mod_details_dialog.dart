@@ -459,6 +459,11 @@ Widget _detailGallery(
                           child: Image.file(
                             File(mod.images[i]),
                             fit: BoxFit.contain,
+                            // A 56px strip has no use for a 2560px decode. The
+                            // large viewer above and the zoomable full-screen view
+                            // are deliberately left unbounded — those genuinely
+                            // want the pixels.
+                            cacheWidth: 128,
                             errorBuilder: (_, __, ___) =>
                                 _detailImagePlaceholder(52),
                           ),
