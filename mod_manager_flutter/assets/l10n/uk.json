@@ -98,7 +98,8 @@
     "carousel_position": "{index} / {total}",
     "first_released": "Перший випуск {date}",
     "last_updated": "Останнє оновлення {date}",
-    "never_updated": "Не оновлювався з моменту випуску"
+    "never_updated": "Не оновлювався з моменту випуску",
+    "refreshing": "Оновлення…"
   },
   "mods": {
     "all": "УСІ",

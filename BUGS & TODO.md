@@ -632,6 +632,24 @@ update is **not** a re-run of the import path.
   three-place rule enforced instead of remembered. Verified it catches the mistake:
   deleting one line from the `_saveToFile` map fails two tests.
 
+- [x] **The refresh button re-fetches for real, and shows that it is working.**
+  Reported as "no animation, just silence" — but the silence was the smaller half.
+  `ref.invalidate` re-ran the provider, the client's 10-minute response cache
+  answered from memory, and the byte-identical page came back: **for up to ten
+  minutes the button could not do anything at all.** Fixed by routing the action
+  through `fetchMarketplaceResults(..., refresh: true)`, which is extracted so the
+  provider and the refresh share one request builder; the bypass stays scoped to the
+  explicit action, since making every read skip the cache would defeat having one.
+  Feedback is a spinning icon with a **minimum duration** — a warm CDN answers in
+  tens of milliseconds, so without a floor the icon turns for one frame and the click
+  still looks ignored. Disabled while running so presses can't stack, and re-enabled
+  on failure (the grid owns the error state). Order matters: the network call happens
+  *before* invalidating, so the grid keeps showing the old page instead of flashing a
+  spinner over content about to be replaced by something nearly identical.
+  Scoped to the results deliberately — the category tree is structural and the
+  carousel's windows turn over daily, so neither is what someone pressing refresh
+  above the grid is asking about.
+
 ### Filed by §1 (found while building the native browser)
 
 - [x] **Featured "best of" carousel on the unfiltered view.** Not in the original

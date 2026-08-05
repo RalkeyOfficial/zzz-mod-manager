@@ -355,12 +355,7 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
               const SizedBox(width: 6),
               const _ContentFilterMenu(),
               const SizedBox(width: 6),
-              IconButton(
-                tooltip: loc.t('marketplace.reload'),
-                icon: const Icon(Icons.refresh),
-                onPressed: () =>
-                    ref.invalidate(marketplaceResultsProvider),
-              ),
+              const _RefreshButton(),
             ],
           ),
           if (isSearching)
@@ -382,6 +377,82 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// The refresh button, which spins while the request is in flight.
+///
+/// The spin is not decoration. Refresh previously gave no signal whatsoever — and
+/// worse, no *result*, because it re-read the client's 10-minute cache and got the
+/// identical page back (see `refreshMarketplaceResults`). Now that it genuinely
+/// re-fetches, the animation is what tells the user the click landed, since a
+/// listing that has not changed upstream looks exactly the same afterwards.
+class _RefreshButton extends ConsumerStatefulWidget {
+  const _RefreshButton();
+
+  @override
+  ConsumerState<_RefreshButton> createState() => _RefreshButtonState();
+}
+
+class _RefreshButtonState extends ConsumerState<_RefreshButton>
+    with SingleTickerProviderStateMixin {
+  /// One full turn per revolution.
+  late final AnimationController _spin = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
+
+  /// Keep spinning at least this long, even when the response beats it.
+  ///
+  /// The point of the whole change: a warm CDN answers in tens of milliseconds, so
+  /// without a floor the icon would turn for a frame or two and the click would look
+  /// ignored again — the exact complaint, just faster.
+  static const Duration _minimumSpin = Duration(milliseconds: 650);
+
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _spin.dispose();
+    super.dispose();
+  }
+
+  Future<void> _refresh() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    _spin.repeat();
+
+    final stopwatch = Stopwatch()..start();
+    try {
+      await refreshMarketplaceResults(ref);
+    } catch (_) {
+      // Swallowed here on purpose: invalidating the provider surfaces the failure
+      // through the grid's own error state, which is where the user is looking.
+      // Re-throwing would only produce an unhandled async error.
+    } finally {
+      final remaining = _minimumSpin - stopwatch.elapsed;
+      if (remaining > Duration.zero) await Future<void>.delayed(remaining);
+      if (mounted) {
+        _spin.stop();
+        _spin.value = 0;
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = context.loc;
+    return IconButton(
+      // Disabled while running, so a second press can't stack another request —
+      // and the greyed-out state is itself a signal that something is happening.
+      onPressed: _busy ? null : _refresh,
+      tooltip: loc.t(_busy ? 'marketplace.refreshing' : 'marketplace.reload'),
+      icon: RotationTransition(
+        turns: _spin,
+        child: const Icon(Icons.refresh),
       ),
     );
   }

@@ -98,7 +98,8 @@
     "carousel_position": "{index} / {total}",
     "first_released": "First released {date}",
     "last_updated": "Last updated {date}",
-    "never_updated": "Never updated since release"
+    "never_updated": "Never updated since release",
+    "refreshing": "Refreshing…"
   },
   "mods": {
     "all": "ALL",

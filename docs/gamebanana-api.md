@@ -112,6 +112,12 @@ lists them explicitly.
 
 - Responses carry `cache-control: public, max-age=600`. **Mirror that 10-minute TTL**
   in our own cache rather than inventing one.
+  - Consequence worth designing for: with a client-side cache honouring that TTL, a
+    **user-initiated "refresh" must be able to bypass it**. Otherwise re-issuing the
+    same request answers from memory and the user gets the byte-identical page back
+    for up to ten minutes — a refresh control that cannot refresh. Keep the bypass
+    scoped to the explicit action; making every read skip the cache defeats the point
+    of having one.
 - **No published rate limit** — no `RateLimit-*`, no `Retry-After` on normal
   responses. 30 concurrent requests in a burst all returned `200` with no throttling.
   That is *not* a licence to hammer it: treat backoff as reactive (on `429`/`503`),

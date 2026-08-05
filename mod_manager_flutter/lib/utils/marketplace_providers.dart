@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/constants.dart';
 import '../models/gamebanana/gamebanana.dart';
+import '../services/gamebanana/gamebanana_client.dart';
 import 'state_providers.dart';
 
 /// Which listing the results grid is showing.
@@ -121,16 +122,50 @@ final marketplaceQueryProvider = StateProvider<MarketplaceQuery>((ref) {
 final marketplaceResultsProvider = FutureProvider<GbPage<GbMod>>((ref) async {
   final query = ref.watch(marketplaceQueryProvider);
   final client = ref.watch(gameBananaClientProvider);
+  return fetchMarketplaceResults(client, query);
+});
 
+/// Runs one query against the client.
+///
+/// Extracted from the provider so the **refresh** action can issue the identical
+/// request with the cache bypassed. Without that, refresh was a no-op: invalidating
+/// the provider re-ran this, the client's 10-minute response cache answered from
+/// memory, and the byte-identical page came back — so for up to ten minutes the
+/// button could not do anything at all, however hard it was pressed.
+Future<GbPage<GbMod>> fetchMarketplaceResults(
+  GameBananaClient client,
+  MarketplaceQuery query, {
+  bool refresh = false,
+}) {
   if (query.mode == MarketplaceMode.search) {
-    return client.searchMods(query.text, page: query.page);
+    return client.searchMods(query.text, page: query.page, refresh: refresh);
   }
   return client.browseMods(
     categoryId: query.categoryId,
     sort: query.sort,
     page: query.page,
+    refresh: refresh,
   );
-});
+}
+
+/// Forces a network re-fetch of the current query and swaps the result in.
+///
+/// Two steps, one request: the first call goes to the network and repopulates the
+/// client's cache, then invalidating the provider makes it re-read that now-fresh
+/// entry (an instant cache hit). Doing it in this order means the grid keeps showing
+/// the old page while the request is in flight, rather than flashing a spinner over
+/// content that is about to be replaced by something nearly identical.
+///
+/// Deliberately scoped to the results. The category tree is structural and rarely
+/// changes, and the carousel's windows turn over daily — neither is what someone
+/// pressing refresh above the grid is asking about, and dropping their cached
+/// responses would cost requests for no visible gain.
+Future<void> refreshMarketplaceResults(WidgetRef ref) async {
+  final query = ref.read(marketplaceQueryProvider);
+  final client = ref.read(gameBananaClientProvider);
+  await fetchMarketplaceResults(client, query, refresh: true);
+  ref.invalidate(marketplaceResultsProvider);
+}
 
 /// Full detail for one mod, by id.
 ///

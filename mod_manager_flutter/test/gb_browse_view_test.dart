@@ -13,8 +13,10 @@ import 'package:mod_manager_flutter/models/gamebanana/gb_top_sub.dart';
 import 'package:mod_manager_flutter/screens/components/marketplace/gb_top_subs_carousel.dart';
 import 'package:mod_manager_flutter/services/gamebanana/content_filter.dart';
 import 'package:mod_manager_flutter/utils/marketplace_providers.dart';
+import 'package:mod_manager_flutter/services/gamebanana/gamebanana_client.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
+import 'support/fake_http_transport.dart';
 import 'support/localized_harness.dart';
 
 /// Coverage for the results grid and its category panel, with every provider
@@ -259,6 +261,127 @@ void main() {
 
       expect(find.byType(GbTopSubsCarousel), findsNothing,
           reason: 'a game-wide best-of list is not about a filtered view');
+    });
+  });
+
+  group('the refresh button', () {
+    /// A real client over a fake transport, so "did it hit the network" is
+    /// observable. `marketplaceResultsProvider` is deliberately *not* overridden
+    /// here — the point is to exercise the real path the button drives.
+    const body = '{"_aMetadata":{"_nRecordCount":1,"_nPerpage":30},'
+        '"_aRecords":[{"_idRow":1,"_sName":"Only Mod"}]}';
+
+    Future<FakeHttpTransport> pumpWithRealClient(WidgetTester tester) async {
+      final transport = FakeHttpTransport()..stubAnything(body: body);
+      final client = GameBananaClient(transport: transport);
+      await pumpLocalized(
+        tester,
+        GbBrowseView(onOpenMod: (_) {}),
+        overrides: [
+          gameBananaClientProvider.overrideWithValue(client),
+          rootCategoriesProvider.overrideWith((ref) async => roots),
+          topSubsProvider.overrideWith((ref) async => topSubs),
+          contentFilterProvider.overrideWith((ref) => ContentFilterMode.show),
+        ],
+      );
+      expectBuilt(GbBrowseView);
+      return transport;
+    }
+
+    testWidgets('actually re-fetches over the network', (tester) async {
+      // The bug: `invalidate` alone re-read the client's 10-minute cache, so the
+      // button could not change anything for ten minutes. A request count is the
+      // only assertion that catches that — the old code returned valid data.
+      final transport = await pumpWithRealClient(tester);
+      final before = transport.callCount;
+      expect(before, greaterThan(0), reason: 'the initial listing was fetched');
+
+      await tester.tap(find.byIcon(Icons.refresh));
+      await tester.pumpAndSettle();
+
+      expect(transport.callCount, greaterThan(before),
+          reason: 'refresh must bypass the cache and ask again');
+    });
+
+    testWidgets('spins and disables itself while in flight', (tester) async {
+      final transport = await pumpWithRealClient(tester);
+
+      IconButton button() => tester.widget<IconButton>(
+            find.ancestor(
+              of: find.byIcon(Icons.refresh),
+              matching: find.byType(IconButton),
+            ),
+          );
+
+      expect(button().onPressed, isNotNull);
+      expect(button().tooltip, 'Refresh');
+
+      await tester.tap(find.byIcon(Icons.refresh));
+      await tester.pump(); // let setState land, before the minimum spin elapses
+
+      expect(button().onPressed, isNull,
+          reason: 'disabled while running, so presses cannot stack');
+      expect(button().tooltip, 'Refreshing…');
+      expect(find.byType(RotationTransition), findsWidgets);
+
+      await tester.pumpAndSettle();
+      expect(button().onPressed, isNotNull, reason: 're-enabled when done');
+      expect(button().tooltip, 'Refresh');
+      expect(transport.callCount, greaterThan(1));
+    });
+
+    testWidgets('keeps spinning long enough to be seen', (tester) async {
+      // Without a floor, a warm CDN answers in milliseconds, the icon turns for a
+      // frame, and the click looks ignored — the original complaint, just faster.
+      final transport = await pumpWithRealClient(tester);
+      await tester.tap(find.byIcon(Icons.refresh));
+
+      // The request resolves almost immediately against the fake transport.
+      await tester.pump(const Duration(milliseconds: 200));
+
+      IconButton button() => tester.widget<IconButton>(
+            find.ancestor(
+              of: find.byIcon(Icons.refresh),
+              matching: find.byType(IconButton),
+            ),
+          );
+      expect(button().onPressed, isNull,
+          reason: 'still spinning 200ms in, despite the response being instant');
+
+      await tester.pumpAndSettle();
+      expect(button().onPressed, isNotNull);
+      expect(transport.callCount, greaterThan(1));
+    });
+
+    testWidgets('a failed refresh re-enables the button', (tester) async {
+      // The grid owns the error state; the button must not be left dead.
+      final transport = FakeHttpTransport()..stubAnything(body: body);
+      final client = GameBananaClient(transport: transport, maxRetries: 0);
+      await pumpLocalized(
+        tester,
+        GbBrowseView(onOpenMod: (_) {}),
+        overrides: [
+          gameBananaClientProvider.overrideWithValue(client),
+          rootCategoriesProvider.overrideWith((ref) async => roots),
+          topSubsProvider.overrideWith((ref) async => topSubs),
+          contentFilterProvider.overrideWith((ref) => ContentFilterMode.show),
+        ],
+      );
+
+      // Every further request fails.
+      transport.stubAnything(statusCode: 500, body: '{}');
+
+      await tester.tap(find.byIcon(Icons.refresh));
+      await tester.pumpAndSettle();
+
+      final button = tester.widget<IconButton>(
+        find.ancestor(
+          of: find.byIcon(Icons.refresh),
+          matching: find.byType(IconButton),
+        ),
+      );
+      expect(button.onPressed, isNotNull,
+          reason: 'a failure must not leave refresh permanently disabled');
     });
   });
 
