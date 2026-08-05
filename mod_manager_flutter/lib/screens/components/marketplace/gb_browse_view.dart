@@ -9,6 +9,7 @@ import '../../../utils/marketplace_providers.dart';
 import '../../../utils/state_providers.dart';
 import 'gb_category_panel.dart';
 import 'gb_mod_card.dart';
+import 'gb_top_subs_carousel.dart';
 
 /// The results grid: search box + sort + category/character filters over a grid
 /// of mod cards, with paging.
@@ -21,6 +22,12 @@ class GbBrowseView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final results = ref.watch(marketplaceResultsProvider);
     final filter = ref.watch(contentFilterProvider);
+    final query = ref.watch(marketplaceQueryProvider);
+
+    // "All" means browsing with no category — not merely page 1, so the carousel
+    // doesn't vanish and re-appear as the user pages through the grid.
+    final isAllView =
+        query.mode == MarketplaceMode.browse && query.categoryId == null;
 
     final scheme = Theme.of(context).colorScheme;
 
@@ -65,15 +72,26 @@ class GbBrowseView extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
-                child: results.when(
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
-                  error: (error, _) => _ErrorState(error: error),
-                  data: (page) => _Results(
-                    page: page,
-                    filter: filter,
-                    onOpenMod: onOpenMod,
-                  ),
+                child: Column(
+                  children: [
+                    // Only on the unfiltered "All" view: a fixed game-wide
+                    // "best of" list stops being about what the user is looking
+                    // at the moment they filter or search, and the grid wants
+                    // the vertical space back.
+                    if (isAllView) GbTopSubsCarousel(onOpenMod: onOpenMod),
+                    Expanded(
+                      child: results.when(
+                        loading: () =>
+                            const Center(child: CircularProgressIndicator()),
+                        error: (error, _) => _ErrorState(error: error),
+                        data: (page) => _Results(
+                          page: page,
+                          filter: filter,
+                          onOpenMod: onOpenMod,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const GbCategoryList(),

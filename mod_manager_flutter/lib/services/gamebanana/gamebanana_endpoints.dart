@@ -61,6 +61,14 @@ class GameBananaEndpoints {
     });
   }
 
+  /// `Game/<id>/TopSubs` — the game's "best of period" list, which is what the
+  /// featured carousel is built from.
+  ///
+  /// Takes **no parameters at all**: `_nPerpage` and `_sPeriod` are both ignored
+  /// (verified — it returns the same 21 entries regardless), so the shape is
+  /// fixed at 3 submissions × 7 windows. Returns a **bare array**.
+  Uri topSubs() => _uri('Game/$gameId/TopSubs', const {});
+
   /// `Mod/<id>/ProfilePage` — everything the detail screen needs in one call.
   Uri modProfile(int modId) => _uri('Mod/$modId/ProfilePage', const {});
 

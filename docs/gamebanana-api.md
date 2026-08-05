@@ -130,6 +130,7 @@ lists them explicitly.
 | `GET /apiv11/Mod/Categories?_idCategoryRow=<id>&_sSort=…` | **Subcategories** of a category |
 | `GET /apiv11/Mod/Index?_aFilters[…]&_sSort=…` | Filtered, sorted mod list — the browse workhorse |
 | `GET /apiv11/Game/<gameId>/Subfeed` | The game's activity feed (newest-ish, unfiltered) |
+| `GET /apiv11/Game/<gameId>/TopSubs` | **"Best of period" — 3 mods × 7 time windows.** See [§3.1](#31-top-submissions--gameidtopsubs) |
 | `GET /apiv11/Util/Search/Results?_sModelName=Mod&_sSearchString=…` | Text search |
 | `GET /apiv11/Mod/<id>/ProfilePage` | Everything for a mod detail screen, in one call |
 | `GET /apiv11/Mod/<id>/DownloadPage` | Just the file lists — cheap, for update checks |
@@ -153,6 +154,49 @@ not enough for a detail view.
 
 `Game/<id>/Subfeed` is the site's activity feed: no filters, no sort control. Fine for
 a "what's new" strip; use `Index` for anything the user controls.
+
+### 3.1 Top submissions — `Game/<id>/TopSubs`
+
+Undocumented even by the standards of the rest of apiv11 — it appears in no field
+list and was found by probing route names. It is the **only** way to get
+period-ranked "best of" data, and worth knowing about before anyone tries to
+synthesise it:
+
+```bash
+curl 'https://gamebanana.com/apiv11/Game/19567/TopSubs'
+```
+
+Returns a **bare array** of exactly **21 entries: three for each of seven windows**,
+each tagged with `_sPeriod`:
+
+`today` · `week` · `month` · `3month` · `6month` · `year` · `alltime`
+
+- **Takes no parameters.** `_nPerpage` and `_sPeriod` are both ignored — the same
+  21 entries come back regardless (see the silent-parameter gotcha in
+  [§11](#11-gotchas)).
+- **This cannot be built from `Mod/Index`.** There is no date-window filter, and
+  the like counts everywhere else are *lifetime* totals, so "best of this week" is
+  not derivable from any other endpoint.
+- `cache-control: public, max-age=600`, same as everything else.
+- **`content-type: text/html`** despite the body being JSON. Parse by content, not
+  by header.
+
+Its entry shape is its **own**, not a subset of the mod object:
+
+| Field | Notes |
+|---|---|
+| `_idRow` | A normal mod id — opens through `Mod/<id>/ProfilePage` like anything else |
+| `_sPeriod` | The window this entry won |
+| `_sName`, `_sProfileUrl` | |
+| `_sImageUrl`, `_sThumbnailUrl` | **Finished urls** (800px / 220px), *not* the `_aPreviewMedia` base-plus-variants ladder — there is no size to negotiate |
+| `_sInitialVisibility` | Present on every entry, so the NSFW filter still applies |
+| `_aSubmitter`, `_nLikeCount`, `_nPostCount` | |
+| `_aRootCategory` | Root only — **no `_aSubCategory`**, so an entry cannot show a character name |
+| `_sDescription` | A short tagline, present on only a minority (3 of 21 captured) |
+
+One practical warning: for ZZZ this list skews heavily adult — **20 of 21 captured
+entries were `warn`/`hide`**. A client that omits flagged mods will show almost
+nothing here, so it needs to collapse gracefully rather than render empty headings.
 
 ### Search — `Util/Search/Results`
 
@@ -251,14 +295,23 @@ either API:
 - Every plausible alias is rejected with `UNKNOWN_SORT` — `Generic_Ripe`, `Ripe`,
   `Generic_MostRipe`, `Generic_Ripest`, `Generic_Hot`, `Generic_Trending`,
   `Generic_Popular`, `Generic_Best`, `Generic_Relevance`.
-- The legacy Core API is authoritative here rather than guesswork, since it
-  enumerates its own sorts ([§10](#10-the-legacy-core-api)):
+- The legacy Core API has no such sort either:
   `Core/List/Section/AllowedSorts?itemtype=Mod` returns exactly
-  **`["id", "name", "udate"]`**. No ripeness, no popularity blend.
+  **`["id", "name", "udate"]`** ([§10](#10-the-legacy-core-api)).
 
-So **a listing built on `Mod/Index` can never reproduce the order the user sees on
-the site**, and a mod that looks prominent there can look absent in a client. Expect
-this comparison to be made, because it is the obvious one.
+> **Honesty about the strength of that second point.** The Core API enumerates
+> *its own* surface, not apiv11's — apiv11 has seven `Generic_*` sorts that appear
+> nowhere in that list. So it is corroboration, **not proof**: apiv11 has no
+> discovery endpoint, so "no ripe sort exists there" rests on nine rejected guesses.
+> (An earlier revision of this file overstated it as settled. It isn't.)
+
+So **a listing built on `Mod/Index` cannot reproduce the order the user sees on the
+site**, and a mod that looks prominent there can look absent in a client. Expect this
+comparison to be made, because it is the obvious one.
+
+What *is* available is period-ranked "best of" data, from a different endpoint
+entirely — [`Game/<id>/TopSubs`](#31-top-submissions--gameidtopsubs). That is not a
+sort you can apply to a listing, but it covers the "what's hot" case directly.
 
 The closest reachable approximations:
 
@@ -632,12 +685,13 @@ copy is exactly what goes stale. (Confirmed live: still exactly 60 children.)
 Documented at <https://api.gamebanana.com/>. Weaker for browsing (3 sorts, 1 filter),
 but genuinely useful for two things.
 
-**It describes itself.** These endpoints answer "what can I ask for?" authoritatively,
-which is something apiv11 can't do — and that is genuinely load-bearing, not trivia.
-`AllowedSorts` is what settled that no "ripe"/popularity sort exists at all
-([§4](#4-sorting-and-filtering)); brute-forcing apiv11 could only ever show that the
-nine names *tried* were wrong. When the question is "does this parameter value
-exist", ask here first.
+**It describes itself.** These endpoints answer "what can I ask for?" — for *this*
+API, which is the important caveat. apiv11 has no equivalent, and the two surfaces do
+not overlap: `AllowedSorts` here returns `["id", "name", "udate"]` while apiv11
+accepts seven `Generic_*` aliases that appear in no such list, and `AllowedFilters`
+returns only `["userid"]` against apiv11's three filters. So this is a useful
+cross-check and a weak one — do **not** read an absence here as proof of absence in
+apiv11 ([§4](#4-sorting-and-filtering) flags exactly that trap).
 
 ```bash
 curl 'https://api.gamebanana.com/Core/Item/Data/AllowedItemTypes'
@@ -668,8 +722,16 @@ Other bits it offers: `Core/List/New` (newest submissions), `Core/Member/Identif
 
 Collected so nobody rediscovers them:
 
+- **Unrecognised top-level parameters are silently ignored, not rejected.** This is
+  the most dangerous gotcha here, because it makes a *successful* response look like
+  confirmation. `_sPeriod`, `_nPeriod`, `_sTimePeriod`, `_sRange` and `_sDateRange`
+  all returned `200` on `Mod/Index` with byte-identical results — the parameters do
+  not exist. Only `_aFilters[…]` keys are validated (`UNKNOWN_FILTER`), and only
+  `_sSort` values (`UNKNOWN_SORT`). **Never conclude a parameter works because the
+  request succeeded** — change it and check the results actually differ.
 - **`_nPerpage` limits differ per endpoint** — 50 on `Index`/`Subfeed` (hard error
-  above), **15 on Search, silently**. Always read `_aMetadata._nPerpage` back.
+  above), **15 on Search, silently**. Always read `_aMetadata._nPerpage` back. Some
+  endpoints (`TopSubs`) ignore it entirely.
 - **`Generic_Newest` sorts by *submission* date, so actively-updated mods sink.** And
   the site's default "ripe" order is not available on either API, so a client's
   listing cannot match what the user sees on gamebanana.com

@@ -175,6 +175,17 @@ final categoryChildrenProvider =
       .categories(categoryId: categoryId);
 });
 
+/// The game's "best of period" submissions, behind the featured carousel.
+///
+/// Its own provider rather than part of the results query: it does not depend on
+/// the query at all (no filters, no sort, no paging — the endpoint takes no
+/// parameters), so tying it to `marketplaceQueryProvider` would refetch it on
+/// every page turn and filter change for no reason. The client's response cache
+/// honours the endpoint's own `max-age=600`.
+final topSubsProvider = FutureProvider<List<GbTopSub>>((ref) {
+  return ref.watch(gameBananaClientProvider).topSubs();
+});
+
 /// Which root category is expanded in the filter panel, or null for none.
 ///
 /// Single-open rather than a set: with ~60 children under Character Skins, two

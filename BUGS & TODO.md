@@ -619,6 +619,27 @@ update is **not** a re-run of the import path.
 
 ### Filed by §1 (found while building the native browser)
 
+- [x] **Featured "best of" carousel on the unfiltered view.** Not in the original
+  plan; asked for after using the browser. It turns out the API has a dedicated
+  endpoint for exactly this — **`Game/<id>/TopSubs`**, undocumented and found by
+  probing route names, returning 3 mods × 7 windows (today, week, month, 3month,
+  6month, year, alltime) each tagged with `_sPeriod`. Worth recording that this is
+  **not synthesisable** from `Mod/Index`: there is no date-window filter and every
+  like count elsewhere is a lifetime total, so "best of this week" has no other
+  source. Its entry shape is its own (finished image urls rather than the
+  `_aPreviewMedia` ladder, no `_aSubCategory`), so it gets its own DTO rather than
+  being forced into `GbMod`. Shown only on the "All" view, since a fixed game-wide
+  list stops describing what the user is looking at once they filter. Note the
+  content skew: **20 of 21 captured entries are `warn`/`hide`**, so the carousel has
+  to collapse rather than render an empty frame — covered by a test.
+  Documented in [`docs/gamebanana-api.md`](docs/gamebanana-api.md) §3.1.
+  Presented as a **real carousel** — one large card at a time, arrows to step, the
+  cover full-bleed with the title and period badge layered over it. The first
+  attempt was a horizontally scrolling strip of small tiles showing all 21 at once,
+  which is a different thing entirely; noted because the tests had to be rewritten
+  around "one card visible", and that assertion is now what keeps it a carousel.
+  Arrows **clamp rather than wrap**: a disabled arrow states where the list ends,
+  where looping back to the start reads as a glitch.
 - [ ] **We cannot reproduce GameBanana's default ordering, and users will compare.**
   The site defaults to its own "ripe" ranking, which **neither API exposes**: every
   plausible `_sSort` alias is rejected, and the legacy Core API — authoritative,
@@ -630,7 +651,20 @@ update is **not** a re-run of the import path.
   the orderings still differ. Options if it matters later: use `Game/<id>/Subfeed`
   for the unfiltered view (it matches the site closely — but accepts no filters and
   no sort, so it cannot be the only path), or accept the difference and say so in the
-  UI. Written up in [`docs/gamebanana-api.md`](docs/gamebanana-api.md) §4.
+  UI. Written up in [`docs/gamebanana-api.md`](docs/gamebanana-api.md) §4. Partly
+  softened by the `TopSubs` carousel above, which covers the "what's hot" case the
+  site's default ordering was serving — but the *listing* order still differs.
+  - **Correction to how that was originally concluded.** An earlier note here said
+    the legacy Core API's self-describing `AllowedSorts` "settled" it. That was
+    overstated: the Core API enumerates *its own* surface, and apiv11 accepts seven
+    sorts that appear in no such list. It is corroboration, not proof — apiv11 has
+    no discovery endpoint, so the claim rests on rejected guesses. Worth keeping in
+    mind before treating any Core API absence as authoritative for apiv11.
+- [ ] **Unrecognised top-level query params are silently ignored by apiv11.** Only
+  `_aFilters[…]` keys and `_sSort` values are validated; a bogus `_sPeriod`,
+  `_sRange` etc. returns `200` with unchanged results. So a successful response is
+  **not** evidence a parameter works — five invented period params all "succeeded"
+  while doing nothing. Any future probing must diff the results, not the status code.
 - [ ] **`Generic_Newest` vs `Generic_LatestModified` affects §4's update check too.**
   `_tsDateAdded` is first-published and `_tsDateUpdated` is the real content update —
   §4's date-fallback comparator must use the latter. Noted here because the same

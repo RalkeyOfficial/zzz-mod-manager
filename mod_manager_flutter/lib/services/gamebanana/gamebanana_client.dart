@@ -106,6 +106,16 @@ class GameBananaClient {
     return parseEnvelope(body, GbMod.fromJson);
   }
 
+  /// The game's "best of period" submissions via `Game/<id>/TopSubs` — three
+  /// mods for each of seven windows (today … all time).
+  ///
+  /// Entries whose `_sPeriod` we don't recognise are dropped rather than
+  /// mislabelled, so this can return fewer than 21.
+  Future<List<GbTopSub>> topSubs({bool refresh = false}) async {
+    final body = await _fetch(_endpoints.topSubs(), refresh: refresh);
+    return parseBareList(body, GbTopSub.fromJson);
+  }
+
   /// Full mod detail via `Mod/<id>/ProfilePage` — one request fills the whole
   /// detail screen, including the file list and gallery.
   Future<GbMod> modProfile(int modId, {bool refresh = false}) async {

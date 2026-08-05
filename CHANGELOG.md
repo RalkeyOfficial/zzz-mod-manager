@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - The Marketplace is now a built-in GameBanana browser, working the same way on Linux and Windows: search or browse ZZZ mods, filter by category or character, sort, then open a mod to see its screenshots, description and full file list and download from there. Linux no longer has to send you to an external browser.
+- A "best of" carousel above the Marketplace grid steps through GameBanana's top three mods for each of seven periods — today, this week, this month, 3 and 6 months, this year, and all time. Each card shows the mod's cover full-width with its title over the top; click it to open the mod.
 - Mods flagged as adult content on GameBanana are blurred until you click to reveal them, with a Marketplace toolbar setting to show them unblurred or hide them entirely. Your choice is remembered.
 - The mod detail view shows each file's name, size, upload date and GameBanana's own virus-scan result, and can list older superseded versions. When a mod offers more than one file, you choose which to download.
 - Marketplace downloads now resume where they left off instead of starting over, survive the app being closed mid-download, and show a transfer rate and estimated time remaining.

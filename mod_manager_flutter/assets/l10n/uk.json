@@ -85,7 +85,17 @@
     "updated_on": "оновлено {date}",
     "categories": "Категорії",
     "expand_category": "Показати підкатегорії",
-    "collapse_category": "Приховати підкатегорії"
+    "collapse_category": "Приховати підкатегорії",
+    "period_today": "Найкраще за сьогодні",
+    "period_week": "Найкраще за тиждень",
+    "period_month": "Найкраще за місяць",
+    "period_threeMonths": "Найкраще за 3 місяці",
+    "period_sixMonths": "Найкраще за 6 місяців",
+    "period_year": "Найкраще за рік",
+    "period_allTime": "Найкраще за весь час",
+    "carousel_prev": "Попередній",
+    "carousel_next": "Наступний",
+    "carousel_position": "{index} / {total}"
   },
   "mods": {
     "all": "УСІ",
