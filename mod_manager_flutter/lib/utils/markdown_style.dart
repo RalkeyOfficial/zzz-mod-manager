@@ -64,6 +64,12 @@ abstract final class MarkdownScale {
   /// Link colour, fixed rather than themed so a link is recognisable as one in
   /// both light and dark mode.
   static const Color link = Color(0xFF6366F1);
+
+  /// Widest a column of description text should get before it stops being
+  /// comfortable to read — the eye loses the start of the next line on a long
+  /// measure, and a maximised desktop window is very long indeed. Also what a
+  /// GameBanana description is used to: the site renders one at ~522px.
+  static const double readingWidth = 600;
 }
 
 /// Builds the app-wide markdown style sheet from the ambient theme.

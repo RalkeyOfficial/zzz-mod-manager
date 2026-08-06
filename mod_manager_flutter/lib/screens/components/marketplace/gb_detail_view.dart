@@ -7,6 +7,7 @@ import '../../../models/gamebanana/gamebanana.dart';
 import '../../../services/gamebanana/content_filter.dart';
 import '../../../utils/html_to_markdown.dart';
 import '../../../utils/markdown_description.dart';
+import '../../../utils/markdown_style.dart';
 import '../../../utils/marketplace_providers.dart';
 import '../../../utils/state_providers.dart';
 import 'gb_file_list.dart';
@@ -159,23 +160,40 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
           onDownload: (file) => widget.onDownload(mod, file),
         ),
         const SizedBox(height: 20),
-        if (mod.text case final html? when html.trim().isNotEmpty) ...[
-          Text(
-            loc.t('marketplace.description'),
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+        if (mod.text case final html? when html.trim().isNotEmpty)
+          // Prose is capped at a readable measure and centred, rather than
+          // running the full width of a maximised window. It also matches the
+          // shape the description was written for — GameBanana lays one out in
+          // a ~522px column, so line breaks and inline images land where the
+          // author saw them. The heading is inside the cap so it stays aligned
+          // with the text it labels.
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: MarkdownScale.readingWidth,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    loc.t('marketplace.description'),
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // `_sText` is HTML while every description this app renders
+                  // is markdown, so it is converted rather than dumped into
+                  // the markdown widget — which would show literal tags.
+                  buildDescriptionMarkdown(
+                    context,
+                    htmlToMarkdown(html),
+                    onLaunchUrl: widget.onOpenInBrowser,
+                  ),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(height: 8),
-          // `_sText` is HTML while every description this app renders is
-          // markdown, so it is converted rather than dumped into the markdown
-          // widget — which would show literal tags.
-          buildDescriptionMarkdown(
-            context,
-            htmlToMarkdown(html),
-            onLaunchUrl: widget.onOpenInBrowser,
-          ),
-        ],
       ],
     );
   }

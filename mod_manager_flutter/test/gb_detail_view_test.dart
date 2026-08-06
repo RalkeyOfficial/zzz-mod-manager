@@ -1,12 +1,13 @@
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_enums.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_image.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/screens/components/marketplace/gb_detail_view.dart';
 import 'package:mod_manager_flutter/services/gamebanana/content_filter.dart';
+import 'package:mod_manager_flutter/utils/markdown_style.dart';
 import 'package:mod_manager_flutter/utils/marketplace_providers.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
@@ -19,23 +20,27 @@ import 'support/localized_harness.dart';
 /// moved with shift+scroll. Both are only reachable by driving the thing.
 void main() {
   GbImage image(String name) => GbImage.fromJson({
-        '_sBaseUrl': 'https://images.gamebanana.com/img/ss/mods',
-        '_sFile': '$name.jpg',
-        '_sFile100': '100-_$name.jpg',
-        '_sFile220': '220-_$name.jpg',
-        '_sFile800': '800-_$name.jpg',
-      })!;
+    '_sBaseUrl': 'https://images.gamebanana.com/img/ss/mods',
+    '_sFile': '$name.jpg',
+    '_sFile100': '100-_$name.jpg',
+    '_sFile220': '220-_$name.jpg',
+    '_sFile800': '800-_$name.jpg',
+  })!;
 
   GbMod mod({int imageCount = 4}) => GbMod(
-        idRow: 700727,
-        name: 'A Mod',
-        text: 'Some description',
-        visibility: GbVisibility.show,
-        files: const [],
-        images: [for (var i = 0; i < imageCount; i++) image('img$i')],
-      );
+    idRow: 700727,
+    name: 'A Mod',
+    text: 'Some description',
+    visibility: GbVisibility.show,
+    files: const [],
+    images: [for (var i = 0; i < imageCount; i++) image('img$i')],
+  );
 
-  Future<void> pumpDetail(WidgetTester tester, {int imageCount = 4}) async {
+  Future<void> pumpDetail(
+    WidgetTester tester, {
+    int imageCount = 4,
+    Size surfaceSize = const Size(1200, 800),
+  }) async {
     await pumpLocalized(
       tester,
       GbDetailView(
@@ -44,9 +49,11 @@ void main() {
         onDownload: (_, __) {},
         onOpenInBrowser: (_) {},
       ),
+      surfaceSize: surfaceSize,
       overrides: [
-        modProfileProvider(700727)
-            .overrideWith((ref) async => mod(imageCount: imageCount)),
+        modProfileProvider(
+          700727,
+        ).overrideWith((ref) async => mod(imageCount: imageCount)),
         contentFilterProvider.overrideWith((ref) => ContentFilterMode.show),
       ],
     );
@@ -66,11 +73,9 @@ void main() {
     fail('no 800px hero image found');
   }
 
-  IconButton arrow(WidgetTester tester, IconData icon) => tester.widget<IconButton>(
-        find.ancestor(
-          of: find.byIcon(icon),
-          matching: find.byType(IconButton),
-        ),
+  IconButton arrow(WidgetTester tester, IconData icon) =>
+      tester.widget<IconButton>(
+        find.ancestor(of: find.byIcon(icon), matching: find.byType(IconButton)),
       );
 
   group('gallery arrows', () {
@@ -96,16 +101,22 @@ void main() {
       // where looping silently reads as a glitch.
       await pumpDetail(tester, imageCount: 2);
 
-      expect(arrow(tester, Icons.chevron_left).onPressed, isNull,
-          reason: 'nothing before the first preview');
+      expect(
+        arrow(tester, Icons.chevron_left).onPressed,
+        isNull,
+        reason: 'nothing before the first preview',
+      );
       expect(arrow(tester, Icons.chevron_right).onPressed, isNotNull);
 
       await tester.tap(find.byIcon(Icons.chevron_right));
       await tester.pumpAndSettle();
 
       expect(arrow(tester, Icons.chevron_left).onPressed, isNotNull);
-      expect(arrow(tester, Icons.chevron_right).onPressed, isNull,
-          reason: 'nothing after the last preview');
+      expect(
+        arrow(tester, Icons.chevron_right).onPressed,
+        isNull,
+        reason: 'nothing after the last preview',
+      );
     });
 
     testWidgets('are absent for a single-image mod', (tester) async {
@@ -140,8 +151,11 @@ void main() {
       await pumpDetail(tester);
       final bar = tester.widget<Scrollbar>(find.byType(Scrollbar));
       expect(bar.thumbVisibility, isTrue);
-      expect(bar.controller, isNotNull,
-          reason: 'the bar and the list must share one controller');
+      expect(
+        bar.controller,
+        isNotNull,
+        reason: 'the bar and the list must share one controller',
+      );
     });
 
     testWidgets('accepts mouse dragging', (tester) async {
@@ -151,17 +165,21 @@ void main() {
       await pumpDetail(tester);
 
       final config = tester.widget<ScrollConfiguration>(
-        find.ancestor(
-          of: find.byType(Scrollbar),
-          matching: find.byType(ScrollConfiguration),
-        ).first,
+        find
+            .ancestor(
+              of: find.byType(Scrollbar),
+              matching: find.byType(ScrollConfiguration),
+            )
+            .first,
       );
       final devices = config.behavior.dragDevices;
       expect(devices, contains(PointerDeviceKind.mouse));
       expect(devices, contains(PointerDeviceKind.touch));
     });
 
-    testWidgets('the mouse-drag override covers only the strip', (tester) async {
+    testWidgets('the mouse-drag override covers only the strip', (
+      tester,
+    ) async {
       // Scoped deliberately: the page is a vertical ListView holding selectable
       // description text, and mouse-dragging *that* would fight text selection. So
       // the override must contain exactly one scrollable — the strip — and not the
@@ -195,13 +213,53 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(controller.offset, greaterThan(100),
-          reason: 'dragging with a mouse must scroll the strip');
+      expect(
+        controller.offset,
+        greaterThan(100),
+        reason: 'dragging with a mouse must scroll the strip',
+      );
     });
 
     testWidgets('is absent for a single-image mod', (tester) async {
       await pumpDetail(tester, imageCount: 1);
       expect(find.byType(Scrollbar), findsNothing);
+    });
+  });
+
+  group('the description column', () {
+    testWidgets('stops at a readable measure and stays centred', (
+      tester,
+    ) async {
+      // A maximised window is far wider than anyone can comfortably read
+      // across, and GameBanana itself lays a description out in a ~522px
+      // column — so the text it was written for is this shape, not the window's.
+      await pumpDetail(tester, surfaceSize: const Size(1400, 2400));
+
+      final description = tester.getRect(find.byType(MarkdownBody));
+      expect(description.width, MarkdownScale.readingWidth);
+      expect(description.center.dx, 1400 / 2);
+    });
+
+    testWidgets('gives way on a window narrower than the cap', (tester) async {
+      // The cap is a maximum, not a width: below it the column must still fit
+      // the window rather than overflow it.
+      await pumpDetail(tester, surfaceSize: const Size(420, 2400));
+
+      final description = tester.getRect(find.byType(MarkdownBody));
+      expect(description.width, lessThan(MarkdownScale.readingWidth));
+      expect(description.left, greaterThanOrEqualTo(0));
+      expect(description.right, lessThanOrEqualTo(420));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the heading stays aligned with the text it labels', (
+      tester,
+    ) async {
+      await pumpDetail(tester, surfaceSize: const Size(1400, 2400));
+
+      final heading = tester.getRect(find.text('Description'));
+      final description = tester.getRect(find.byType(MarkdownBody));
+      expect(heading.left, description.left);
     });
   });
 }
