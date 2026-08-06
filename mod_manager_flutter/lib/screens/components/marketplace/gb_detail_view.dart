@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../models/gamebanana/gamebanana.dart';
 import '../../../services/gamebanana/content_filter.dart';
+import '../../../services/installed_mods_index.dart';
 import '../../../utils/html_to_markdown.dart';
 import '../../../utils/markdown_description.dart';
 import '../../../utils/markdown_style.dart';
@@ -127,10 +128,29 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
   Widget _body(BuildContext context, AppLocalizations loc, GbMod mod) {
     final filter = ref.watch(contentFilterProvider);
     final treatment = contentTreatment(mod.effectiveVisibility, filter);
+    final installed = ref.watch(installedModsIndexProvider).valueOrNull ??
+        InstalledModsIndex.empty;
+    final installedAs = installed.installsOfMod(mod.idRow);
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        // Mod-level, so it is true even when *which* file is unknown — which is
+        // the normal state for a library that predates this (nothing local
+        // survives to identify a file). The file list below adds the per-row
+        // answer when there is one.
+        if (installedAs.isNotEmpty)
+          _notice(
+            context,
+            loc.t('marketplace.installed_as',
+                params: {'mods': installedAs.join(', ')}),
+            // `primary`, matching the card's badge. One colour per meaning across
+            // the marketplace, so "you already have this" doesn't change hue
+            // depending on which screen you are looking at. Note the consequence
+            // for M3: "update available" therefore has to differ by hue rather
+            // than by being the louder of the two.
+            Theme.of(context).colorScheme.primary,
+          ),
         if (mod.isRemoteMissing)
           _notice(
             context,
@@ -158,6 +178,15 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
           onToggleArchived: () =>
               setState(() => _showArchived = !_showArchived),
           onDownload: (file) => widget.onDownload(mod, file),
+          // Deliberately keyed on the file, not the mod: a mod being in the
+          // library says nothing about which of its files you hold. Archived
+          // rows go through the same lookup, which is where a banked hash pays
+          // off most — an old install matches a superseded file more often than
+          // the current one.
+          matchInstalled: (file) => installed.matchFile(
+            fileId: file.idRow,
+            md5: file.md5Checksum,
+          ),
         ),
         const SizedBox(height: 20),
         if (mod.text case final html? when html.trim().isNotEmpty)

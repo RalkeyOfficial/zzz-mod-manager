@@ -195,10 +195,33 @@ exit criterion says "Linux *and* Windows" and only one of those was actually run
 
 Goal: make the data recorded in M1 pay off in the UI.
 
-- [ ] **§3 (read side)** — "already installed" detection; file-hash dedup.
+- [x] **§3 (read side)** — "already installed" detection; file-hash dedup.
+  **Done.** `services/installed_mods_index.dart` is the pure read model (mod id /
+  file id / archive md5 → mod folders), fed by `installedModsIndexProvider`. The
+  origin block now reaches `ModInfo`, so this costs no extra sidecar reads.
+  Two corrections applied — see §3 and §7.3: **the `ModInfo` origin ban is lifted
+  for a read-only field** (a test pins that nothing can write it back), and **the
+  index cannot derive from `charactersProvider`**, which is stale exactly when the
+  badges are on screen because `ModsScreen` is disposed. It re-snapshots per
+  marketplace open instead: 4 ms warm, 12 ms cold for 23 mods.
+  Measured limit worth knowing before building on it: **23 of 23 real mods have a
+  `mod_id`, none has a `file_id` or an `archive_md5`.** Mod-level answers work on a
+  legacy library today; every file-level one is inert until mods are installed by
+  this build or resolved by hand (§7.5), so hash dedup fires for nothing in an
+  existing library.
 - [ ] **§3** — auto-populate metadata (description, images, tags, character) from
   the API on install instead of leaving it blank.
-- [ ] **§1** — "already installed" / "update available" indicators on cards + detail.
+- [x] **§1** — "already installed" indicators on cards + detail.
+  **Done.** A filled "In library" badge on the card, a notice on the detail view,
+  and a per-row marker in the file list. The badge names the *folders* — one mod
+  page is often several — and rows separate "installed" (a recorded `file_id`) from
+  "you have this" (a hash match), which per §7.8 must never read as verification.
+  A full-width cover strip was built as an alternative and lost a side-by-side
+  comparison. Design rules, including why a border and a dimmed card were rejected,
+  are in [`mod_manager_flutter/CLAUDE.md`](mod_manager_flutter/CLAUDE.md).
+  - [ ] **"Update available" is not part of this** — needs §4, lands with M3. Same
+    slot, and it must differ from "installed" by **hue rather than volume**, since
+    that now takes `primary`.
 - [ ] **§7** — the mod-card **status slot** (§7.4), the **"needs attention"**
   filter, and the per-mod **resolve dialog** (§7.5). This is where "the user can
   take action" actually lands; it needs §2's client and §1's file-list widget.
@@ -465,11 +488,17 @@ The block:
   rule is the only thing left standing between a stranger's sidecar and a claim
   of `exact` confidence. See [`docs/metadata-schema.md`](docs/metadata-schema.md)
   §2.
-- [ ] **Define what "already installed" means** before §1 renders a badge for it: per
+- [x] **Define what "already installed" means** before §1 renders a badge for it: per
   `mod_id` (this mod is in your library, maybe a different file) or per `file_id`
   (this exact file)? They differ constantly — two skins of one mod are two folders.
   Decision: badge on `mod_id`, and on the detail screen additionally mark *which* rows
   of the file list are installed.
+  **Implemented as decided**, and the "differ constantly" claim is now measured
+  rather than asserted: two of a real library's 23 mods share a `mod_id` with a
+  sibling folder (checked against the live API — `675945` is one mod page whose
+  three published files include the two variants installed locally). The badge
+  therefore names every matching folder instead of rendering a singular
+  "installed".
 - [ ] **A failed origin write is a state, not a shrug.** `ModMetadataService.write()`
   returns `false` on a read-only folder or an odd network share, and nothing looks at
   the result today. A mod whose origin can't persist would re-resolve forever with no
@@ -479,6 +508,37 @@ The block:
   what each one is allowed to drive.
 - [ ] Auto-populate metadata (description, images, tags, character) from the API
   on marketplace install instead of leaving it blank.
+
+### Filed by the read side (found while building it, deliberately not built)
+
+- [ ] **`modsProvider` in `state_providers.dart` is dead and now misleading.**
+  Declared as `StateProvider<List<ModInfo>>` and never read or written by
+  anything — the flat mod list actually lives inside `charactersProvider`'s "all"
+  group. It looked like the obvious home for the library snapshot the read side
+  needed, and it is not one: nothing populates it. Left alone rather than fixed as
+  a drive-by, but it should either become the real flat list (with `_buildGroups`
+  deriving from it) or go.
+- [ ] **Nothing keeps the library list live across a tab switch.** `ModsScreen` is
+  a keyed child of an `AnimatedSwitcher` with no keep-alive, so it is disposed on
+  every tab change and `initState` re-scans on the way back. The read side works
+  around it by taking its own snapshot and invalidating it when the marketplace
+  opens — which is correct and cheap, but two independent readers of the same
+  library is a shape worth revisiting if a third appears (§7.4's status slot is
+  rendered from `charactersProvider`, so it will not need one).
+- [ ] **A file-list row overflows at a 2× OS text scale**, and has since before any
+  of this: at that scale the row's outer layout — the scan-result chip plus the
+  Download button, neither of which can shrink — exceeds a minimum-width window on
+  its own, with no badges involved. Measured at 530px and 600px, chips or not. The
+  *label* half of the row is now safe — it became a `Wrap` when a second chip
+  landed there and broke it at 1.3× — so what is left is the trailing controls.
+  Filed rather than fixed: making the button shrink or move below the label is a
+  layout decision for the row as a whole, not a drive-by.
+- [ ] **A failed origin write is still not surfaced for the *backfill* path.** §3
+  already files this for ingest, and that half is done — `takeOriginWriteFailures`
+  is drained and reported. The scan-time backfill has its own equivalent
+  (`_unwritableBackfills`, session-scoped) and nothing shows it, so a mod in a
+  read-only folder silently never gains an identity and now silently never gets a
+  badge either. Same fix shape, different source.
 
 ## 4. Mod updating
 
@@ -991,7 +1051,7 @@ been renamed). Strictly local: scans run offline on every launch.
   came from. The edit dialog shows `source_url`, which a downloaded mod never has (see
   the resolved item above). Cheap and squarely M2's territory, since that's where the
   library starts reading the origin block.
-- [ ] **Re-decide the `ModInfo` origin ban in M2 rather than inheriting it.**
+- [x] **Re-decide the `ModInfo` origin ban in M2 rather than inheriting it.**
   §3's correction says the origin block must not go on `ModInfo`, because a
   later unrelated edit would rebuild the sidecar from the runtime view and erase
   it. That was true when written — and the prerequisite that shipped since has
@@ -1004,10 +1064,24 @@ been renamed). Strictly local: scans run offline on every launch.
   **read-only** field carrying an already-parsed value is not the hazard the ban
   was written for. Note §8's related hygiene note is still void for its own
   separate reason (`ModInfo` must not gain `toJson`/`fromJson`).
+  **Re-decided: the ban is lifted for a read-only `origin` field, and kept for
+  everything else.** The reasoning above held up exactly as written — the hazard
+  was a *mechanism* (`save()` rebuilding the sidecar from the runtime view) and
+  that mechanism no longer exists, since `save()` and `setCharacter()` both call
+  `replaceUserFields()` on the copy read from disk and it takes no `origin`
+  parameter. There is no route in, and a test asserts it: saving a `ModInfo`
+  carrying a forged block at `exact` confidence leaves the file untouched. What
+  tipped the balance is the cost the ban implied — every badge re-reading every
+  sidecar to redraw what the scan had just parsed and discarded.
+  Written up in [`docs/metadata-schema.md`](docs/metadata-schema.md) §3, which is
+  now authoritative. `toJson`/`fromJson` on `ModInfo` stay banned for their own
+  unrelated reason.
 
 ### 7.4 Visual status — one slot, three states
 
-- [ ] The mod card gets a **single status slot**, not stacking badges. It renders
+- [ ] The mod card gets a **single status slot**, not stacking badges. The data it
+  needs is now in hand: `ModInfo` carries the origin block (see §7.3's re-decided
+  ban), so the slot reads `mod.origin` and costs no I/O at all. It renders
   exactly one of:
   - **Amber / actionable** — identity known, version unknown. We can query for
     updates but can't judge them, and one click fixes it. Tooltip: "installed
@@ -1134,8 +1208,32 @@ file the user has, which is the one path to exactness for hand-imported mods.
   `version` at `exact` confidence and skips the "which file?" picker entirely.
   Compare against **`_aArchivedFiles` as well as `_aFiles`** — an old install matches
   a superseded file more often than the current one (§7.6).
-- [ ] **Bonus, purely local:** match a new import's hash against already-banked
+  **Half of this shipped with the read side, and it is the *display* half only.**
+  The detail view's file list already marks a row whose published md5 matches a
+  banked one — including archived rows, same lookup — so the user is told. What is
+  still open is the part that **writes**: no path yet promotes `file_id` /
+  `version` to `exact` from that match, because that is the resolve dialog's and
+  the bulk pass's job and neither exists. Don't read the marker as evidence the
+  confidence upgrade happened.
+- [x] **Bonus, purely local:** match a new import's hash against already-banked
   ones → "you already have this as `<folder>`". No network, no GameBanana.
+  **Done**, as a gate both ingest paths run before installing
+  (`confirmArchiveNotDuplicate`) — the marketplace's download-and-install and the
+  mods tab's drag-drop / file-picker import. Per archive rather than per drop:
+  recognising one archive in a multi-archive drop says nothing about the others,
+  so declining skips that archive's folders and leaves the rest alone. It is a
+  question, not a refusal — the same archive legitimately becomes a second folder,
+  and re-installing is how a user repairs one they broke.
+  Two things found while wiring it. The check runs **after extraction**, since
+  that is where the hash exists for a manually supplied archive; nothing is in the
+  library yet, so the cost of declining is a discarded temp dir. And the gate
+  *created* a reachable path through a shape that had been safe by accident: the
+  mods tab's `folderPaths.isEmpty` early return sits before the temp-cleanup
+  closure is even declared, which was fine only because extracted folders and
+  importable folders were previously the same set. Declining every archive in a
+  drop breaks that, so the closure moved above the return, and that branch now
+  stays silent instead of reporting "no mod folders found" — a different and false
+  claim. No changelog entry: introduced and fixed inside one unreleased change.
 
 Known limits — worth writing down so nothing is built to depend on this:
 
@@ -1193,12 +1291,19 @@ work that already opens the same file, so they cost nothing extra.
   files in each direction, which catches both a missing translation and a key left
   behind by deleted UI (it found one: `marketplace.search`, orphaned when the search
   button became submit-on-enter).
+  **M2's read side added 10 keys** in both locales — the two badges, the two
+  per-row markers with their tooltips, and the duplicate-archive dialog. Confirms
+  the estimate again: the wording *is* the work here, since "installed" and
+  "byte-identical to" are the whole distinction between a record and a hash match.
 - [ ] **Name the tests, because the risky parts are pure functions.** The pieces most
   likely to be quietly wrong need no network and no UI: `source_url` → `mod_id`
   parsing (§7.3); the confidence state machine and what each tier permits (§7.2); the
   `.ini` conservative merge (§4), which is the highest-risk piece in the whole plan
   since it edits user data; hash → file matching across `_aFiles` + `_aArchivedFiles`
-  (§7.6); and the sidecar unknown-key round-trip (M1). Fixtures beat mocks — a couple
+  (§7.6 — the *lookup* half is now covered by `test/installed_mods_index_test.dart`,
+  including that a file-id match and a hash match stay distinguishable; the half
+  that writes `exact` confidence from a hit is still unwritten and untested); and
+  the sidecar unknown-key round-trip (M1). Fixtures beat mocks — a couple
   of real `ProfilePage` responses checked into `test/` keep the client honest when the
   API shifts under it.
   **The fixtures-beat-mocks call paid off concretely in §1**, and it is worth saying how,
@@ -1207,7 +1312,7 @@ work that already opens the same file, so they cost nothing extra.
   beside patchers and demos), and those same fixtures are now the tests. A
   hand-written mock would have encoded the assumption the plan started with — tidy
   `_sVersion` strings to compare — and the rule would have shipped confidently wrong.
-  Suite is 372 tests, all offline. Add for §1: the content-filter matrix (including that
+  Suite is 567 tests, all offline. Add for §1: the content-filter matrix (including that
   an unrecognised setting degrades to `blur`), and that listing fixtures carry
   `_sInitialVisibility` at all — that last one is a canary, since if the field ever
   disappears upstream the filter silently blurs the entire grid.

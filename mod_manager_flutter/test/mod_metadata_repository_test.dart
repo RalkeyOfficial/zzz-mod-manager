@@ -644,6 +644,54 @@ void main() {
       expect((raw['origin'] as Map)['archive_md5'], 'aaaa');
     });
 
+    test('an origin forged on ModInfo in memory can never reach disk', () async {
+      // `ModInfo` now carries the origin block, so the library UI can draw status
+      // badges from the scan it already did instead of re-reading every sidecar.
+      // This is precisely the hazard the old "origin must not go on ModInfo" ban
+      // was written for, so it gets a test rather than a promise: the save path
+      // rebuilds the sidecar from the copy on **disk** via replaceUserFields,
+      // which takes no origin parameter — so there is no route in.
+      makeMod('Tracked');
+      await repo.recordOrigin('Tracked', origin());
+
+      await repo.save(ModInfo(
+        id: 'Tracked',
+        name: 'Tracked',
+        characterId: 'ellen',
+        isActive: false,
+        description: 'my notes',
+        origin: const ModOrigin(
+          provenance: OriginProvenance.downloaded,
+          source: 'gamebanana',
+          modId: 424242,
+          modIdConfidence: OriginConfidence.exact,
+          fileId: 1,
+          versionConfidence: OriginConfidence.exact,
+        ),
+      ));
+
+      final written = sidecarOf('Tracked')!['origin'] as Map;
+      expect(written['provenance'], 'imported_archive');
+      expect(written['archive_md5'], 'aaaa');
+      expect(written.containsKey('mod_id'), isFalse);
+      expect(written.containsKey('mod_id_confidence'), isFalse);
+      expect(ModOrigin.fromJson(written)!.allowsUnattendedUpdate, isFalse);
+    });
+
+    test('the stored origin block is readable back in memory', () async {
+      // The other half of that trade: the block has to come *out* of a normal
+      // scan, because `_buildModInfo` reads it from here and nothing else does.
+      makeMod('Tracked');
+      await repo.recordOrigin('Tracked', origin());
+
+      final loaded = await repo.loadOrMigrate(
+        'Tracked',
+        path.join(modsDir.path, 'Tracked'),
+      );
+      expect(loaded.origin?.archiveMd5, 'aaaa');
+      expect(loaded.origin?.provenance, OriginProvenance.importedArchive);
+    });
+
     test('returns false when no library is configured', () async {
       final orphan = ModMetadataRepository(config, modsPath: () => null);
       expect(await orphan.recordOrigin('Any', origin()), isFalse);

@@ -24,6 +24,7 @@ import 'components/install_result_snackbars.dart';
 import 'components/marketplace/gb_browse_view.dart';
 import 'components/marketplace/gb_detail_view.dart';
 import 'dialogs/download_progress_dialog.dart';
+import 'dialogs/duplicate_archive_dialog.dart';
 import 'dialogs/import_selection_dialog.dart';
 
 /// The marketplace: a **native** GameBanana browser, identical on Linux and
@@ -53,6 +54,34 @@ class MarketplaceScreen extends ConsumerStatefulWidget {
 
 class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   AppLocalizations get loc => context.loc;
+
+  /// Whether this screen has taken its library snapshot yet. One per `State`,
+  /// which is one per marketplace open — the tabs are keyed children of an
+  /// `AnimatedSwitcher` with no keep-alive, so a new `State` *is* the event.
+  bool _librarySnapshotTaken = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_librarySnapshotTaken) return;
+    _librarySnapshotTaken = true;
+
+    // Re-snapshot the library every time this screen opens. `ModsScreen` is
+    // disposed while this one is up and nothing else keeps the snapshot current,
+    // so a mod imported or deleted over there would otherwise leave the "in
+    // library" badges describing a library that no longer exists. One scan,
+    // single-digit milliseconds; see `installedModsIndexProvider`.
+    //
+    // **Here and not in `initState`.** `WidgetRef.invalidate` is the one member of
+    // `ref` that resolves its container with `listen: true`, which registers an
+    // inherited-widget dependency — and doing that during `initState` throws.
+    // (`read`, `refresh` and `listenManual` use `listen: false` specifically so
+    // they *can* be called there; `invalidate` does not.) `didChangeDependencies`
+    // runs after `initState` and before the first build, so the snapshot is still
+    // refreshed before anything watches it. The flag is what keeps it to once —
+    // this also fires on a theme or locale change.
+    ref.invalidate(installedModsIndexProvider);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -169,6 +198,11 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       );
       if (!mounted) return;
       showInstallResult(context, installResult);
+      // The library just changed, and the badges on the grid behind this dialog
+      // are rendered from that snapshot. Invalidate rather than patch: the mod
+      // folder's final name is decided by the import (dedup, the combined-name
+      // dialog), so re-reading is the only way to be right about it.
+      ref.invalidate(installedModsIndexProvider);
     } on DownloadCancelledException {
       closeDialog();
       if (!mounted) return;
@@ -299,6 +333,13 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       // (or vice versa), so pass the archive base name as an extra detection hint.
       final archiveBaseName = path.basenameWithoutExtension(archiveFile.path);
 
+      final archiveMd5 = extractionResult.archiveMd5 ?? knownMd5;
+      if (!mounted) return InstallResult.cancelled();
+      if (!await confirmArchiveNotDuplicate(context, ref, archiveMd5)) {
+        await _cleanupExtractedFolders(directoriesToImport);
+        return InstallResult.cancelled();
+      }
+
       // When an archive expands to more than one top-level folder (e.g. a mod
       // folder next to a `previews` folder), let the user choose which folders
       // to install and whether they become separate mods or one combined mod.
@@ -323,11 +364,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       // known once extraction has run. Every folder came out of this one
       // archive, so one seed covers all of them; `archiveMd5` is null-or-exact
       // and a null merely costs the fast path at resolution time.
-      final effectiveSeed = _seedFor(
-        mod,
-        file,
-        archiveMd5: extractionResult.archiveMd5 ?? knownMd5,
-      );
+      final effectiveSeed = _seedFor(mod, file, archiveMd5: archiveMd5);
 
       final ModManagerService modManager =
           await ApiService.getModManagerService();

@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Marketplace downloads can now be cancelled while in progress.
 - Mods now record where they came from, so a future release can tell you when an update is available. A Marketplace download records exactly which mod and which file it was; an archive or folder you import yourself records how it arrived and, for archives, its checksum.
 - Mods you already have are now linked back to their GameBanana page automatically, using the source URL already stored on them, so update checking will work for your existing library and not just for new installs. No new files appear in mods that have no source URL.
+- The Marketplace now marks mods you already have. Cards and the mod page show which of your mod folders came from that page — several, when you have installed more than one variant — and the file list marks the exact file you installed, or notes when a file is byte-identical to an archive you installed.
+- Installing an archive you have installed before now asks first, naming the mods it produced, instead of quietly making a second copy. Applies to Marketplace downloads and to archives you import yourself. It can only recognise archives this version installed, and never a re-packed copy of the same mod.
 
 ### Changed
 

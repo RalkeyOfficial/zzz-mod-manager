@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import 'keybind_info.dart';
+import 'mod_origin.dart';
 
 /// Модель даних для персонажа (also used for non-character categories, which
 /// carry an [icon] instead of an [iconPath] portrait asset).
@@ -62,6 +63,25 @@ class ModInfo {
   final bool isFavorite;
   final List<KeybindInfo>? keybinds;
 
+  /// Where this mod came from, as read from its sidecar — **read-only here.**
+  ///
+  /// Machine-owned, and this is the one field on `ModInfo` that never travels
+  /// back to disk. The save path reads the sidecar and calls
+  /// [ModMetadata.replaceUserFields], which carries `origin` over from the file
+  /// and takes no `origin` parameter, so there is no route by which a value set
+  /// here could be persisted. Mutate it in memory and the change is simply lost
+  /// on the next scan.
+  ///
+  /// That distinction is why carrying it here is safe. An earlier decision
+  /// banned `origin` from `ModInfo` outright, because at the time `save()` built
+  /// a fresh `ModMetadata` out of the runtime view — so an unrelated description
+  /// edit rebuilt the sidecar without the block and silently erased it. That
+  /// hole was closed structurally before anything wrote an origin block; the
+  /// remaining alternative was for every status badge to re-read all ~80
+  /// sidecars to redraw data the scan had already parsed and thrown away. See
+  /// `docs/metadata-schema.md` §3.
+  final ModOrigin? origin;
+
   ModInfo({
     required this.id,
     required this.name,
@@ -74,6 +94,7 @@ class ModInfo {
     this.images = const [],
     this.isFavorite = false,
     this.keybinds,
+    this.origin,
   });
 
   ModInfo copyWith({
@@ -88,6 +109,7 @@ class ModInfo {
     List<String>? images,
     bool? isFavorite,
     List<KeybindInfo>? keybinds,
+    ModOrigin? origin,
   }) {
     return ModInfo(
       id: id ?? this.id,
@@ -101,6 +123,10 @@ class ModInfo {
       images: images ?? this.images,
       isFavorite: isFavorite ?? this.isFavorite,
       keybinds: keybinds ?? this.keybinds,
+      // Carried, not clearable — the mods screen rebuilds mods through
+      // `copyWith` on every editorial action, and dropping the block there would
+      // make a mod's status slot flicker to "untracked" until the next scan.
+      origin: origin ?? this.origin,
     );
   }
 }

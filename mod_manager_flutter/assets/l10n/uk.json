@@ -99,7 +99,17 @@
     "never_updated": "Не оновлювався з моменту випуску",
     "refreshing": "Оновлення…",
     "previous": "Попередній",
-    "next": "Наступний"
+    "next": "Наступний",
+    "badge_installed": "У бібліотеці",
+    "installed_as": "У вашій бібліотеці як {mods}",
+    "badge_file_installed": "встановлено",
+    "file_installed_as": "Це саме той файл, який ви встановили як {mods}",
+    "badge_file_same": "уже є",
+    "file_same_as": "Побайтово ідентичний архіву, який ви встановили як {mods}",
+    "duplicate_archive_title": "Цей архів у вас уже є",
+    "duplicate_archive_message": "Цей архів побайтово ідентичний тому, який ви встановили як {mods}. Все одно встановити ще раз?",
+    "duplicate_archive_skip": "Не встановлювати",
+    "duplicate_archive_install": "Все одно встановити"
   },
   "mods": {
     "all": "УСІ",

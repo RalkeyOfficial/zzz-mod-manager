@@ -19,11 +19,21 @@ class GbModCard extends StatefulWidget {
     required this.mod,
     required this.treatment,
     required this.onOpen,
+    this.installedAs = const <String>[],
   });
 
   final GbMod mod;
   final ContentTreatment treatment;
   final VoidCallback onOpen;
+
+  /// Mod folders in the local library that came from this remote mod, or empty.
+  ///
+  /// A list rather than a bool because one GameBanana page routinely becomes
+  /// several folders — two variants of one mod installed side by side — and the
+  /// honest badge names them instead of implying there is one. The badge is keyed
+  /// on the *mod*, not the file: which file is installed is a separate and much
+  /// less knowable question, answered per-row in the detail view's file list.
+  final List<String> installedAs;
 
   @override
   State<GbModCard> createState() => _GbModCardState();
@@ -105,6 +115,13 @@ class _GbModCardState extends State<GbModCard> {
                           scheme.tertiary,
                         ),
                       ),
+                    // The status slot. Last in the Stack so it paints over the
+                    // reveal overlay: whether you already own a mod is not adult
+                    // content, and making the user click through a blur to find
+                    // out would be an odd trade. Top-right, opposite `obsolete`,
+                    // because a mod can be both.
+                    if (_statusSlot(context, loc) case final slot?)
+                      Positioned(top: 6, right: 6, child: slot),
                   ],
                 ),
               ),
@@ -164,6 +181,50 @@ class _GbModCardState extends State<GbModCard> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// The card's **single status slot**, or null when there is nothing to say.
+  ///
+  /// One slot rendering exactly one state, never a stack of badges — the same rule
+  /// the library card follows, and for the same reason: a card that can show three
+  /// things at once shows none of them. **"Update available" belongs here** as a
+  /// second branch when it lands, so precedence between the two is one decision in
+  /// one place rather than a second badge somewhere else on the card.
+  ///
+  /// A filled pill rather than the alternative that was actually built and
+  /// compared: a full-width strip along the bottom of the cover, which lost a
+  /// side-by-side review. Worth recording so it isn't re-proposed as an obvious
+  /// improvement — and worth recording what it means, since the two options put
+  /// the emphasis in different places. The strip was noticeable through *shape*
+  /// (full width, bringing its own background) and paid for it by covering a slice
+  /// of the artwork; this pill is noticeable through *fill* — opaque and
+  /// saturated, which is why [_badge] has a `filled` mode at all — and occludes
+  /// almost nothing.
+  ///
+  /// Consequence to carry into M3: "you already have this" now occupies `primary`,
+  /// here and on the detail view's notice and file-row chips alike, so
+  /// "update available" has to differ by **hue at similar weight** rather than by
+  /// being the louder of the two. `tertiary` is already spoken for by the
+  /// `obsolete` badge a few lines above, so that pick wants making against a real
+  /// screen rather than in advance.
+  Widget? _statusSlot(BuildContext context, AppLocalizations loc) {
+    if (widget.installedAs.isEmpty) return null;
+
+    return Tooltip(
+      // The folders go in the tooltip rather than inline: at the narrow end of the
+      // grid the pill has room for two or three words, and a truncated folder name
+      // is worse than none.
+      message: loc.t(
+        'marketplace.installed_as',
+        params: {'mods': widget.installedAs.join(', ')},
+      ),
+      child: _badge(
+        context,
+        loc.t('marketplace.badge_installed'),
+        Theme.of(context).colorScheme.primary,
+        filled: true,
       ),
     );
   }
@@ -250,19 +311,33 @@ class _GbModCardState extends State<GbModCard> {
     );
   }
 
-  Widget _badge(BuildContext context, String label, Color color) {
+  /// A small pill. [filled] paints it opaque, for a badge sitting over cover
+  /// artwork rather than a themed surface — a 15%-alpha fill is legible against
+  /// `surfaceContainerLow` and illegible against a screenshot.
+  Widget _badge(
+    BuildContext context,
+    String label,
+    Color color, {
+    bool filled = false,
+  }) {
+    final foreground =
+        filled ? Theme.of(context).colorScheme.onPrimary : color;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
+        color: filled ? color : color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
+        border: Border.all(color: color.withValues(alpha: filled ? 1 : 0.4)),
       ),
       child: Text(
         label,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600),
+        style: TextStyle(
+          fontSize: 10,
+          color: foreground,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }

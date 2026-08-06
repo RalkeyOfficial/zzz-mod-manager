@@ -65,6 +65,16 @@ The most important architectural decision is the **platform abstraction**:
   setting means the getter/setter, the `_saveToFile()` map **and** the
   `loadFromFile()` parse — see [`../docs/configuration.md`](../docs/configuration.md),
   which also covers the `configFile:` test seam.
+- `InstalledModsIndex` (`services/installed_mods_index.dart`) — pure read model
+  over an already-scanned `List<ModInfo>`, answering "do I already have this
+  remote mod / file?" by `mod_id`, `file_id` and `archive_md5`. Reached through
+  `installedModsIndexProvider`, which takes its own library snapshot rather than
+  deriving from `charactersProvider`: the tabs are keyed children of an
+  `AnimatedSwitcher` with no keep-alive, so `ModsScreen` is *disposed* while the
+  marketplace is up and that list goes stale exactly when the badges are visible.
+  The marketplace invalidates it on open and after each install. See
+  `../docs/metadata-schema.md` §3 for what it can and cannot answer — notably that
+  file-level knowledge is absent for any library that predates the origin block.
 - `IniParserService` — parses mod `.ini` files into keybinds.
 - `ArchiveService` — extracts imported `.zip` (in-process via `archive` package)
   and `.rar`/`.7z` (shells out to an external `7z`/`7za`/`7zr` binary, which must
@@ -143,6 +153,40 @@ GameBanana hosts is reached via "open in browser".
   `unknown`; a native download knows mod id, file id, version and variant label
   before the first byte and writes them at `exact`. See
   `../docs/metadata-schema.md` §5.
+- **`ref.invalidate` cannot be called from `initState`, unlike the rest of `ref`.**
+  `MarketplaceScreen` re-snapshots the library when it opens, and that call lives in
+  `didChangeDependencies` behind a once-per-`State` flag. `WidgetRef.invalidate`
+  resolves its container with `listen: true`, which registers an inherited-widget
+  dependency — forbidden during `initState`, and it throws for every mount, taking
+  the whole tab down. `read`, `refresh` and `listenManual` use `listen: false`
+  specifically so they *can* be called there; `invalidate` does not, and nothing in
+  its signature says so. `didChangeDependencies` still runs before the first build,
+  so nothing observes a stale snapshot. Covered by `test/marketplace_screen_test.dart`.
+- **It is also the first place that *reads* it.** Cards and the detail view badge
+  mods already in the library, file rows mark the one you installed, and both
+  ingest paths run `confirmArchiveNotDuplicate` (`dialogs/duplicate_archive_dialog.dart`)
+  before installing an archive whose hash is already banked. The badge is keyed on
+  the mod and the row marker on the file, because those are different questions with
+  very different availability — see `../docs/metadata-schema.md` §3.
+- **`GbModCard` has one status slot.** `_statusSlot` returns at most one badge,
+  never a stack — the same rule the library card follows, since a card that can
+  show three things at once shows none of them. **"Update available" belongs in
+  that method** as a second branch when it lands, so precedence between the two
+  states is one decision in one place rather than a second badge elsewhere on the
+  card. It renders a **filled** pill top-right, opposite `obsolete` and above the
+  reveal overlay (owning a mod is not adult content, so it must read before the
+  blur is lifted).
+  - The alternative was built and lost a side-by-side comparison: a full-width
+    strip along the bottom of the cover. Recorded so it isn't re-proposed as an
+    obvious improvement. The two put the emphasis in different places — the strip
+    was noticeable through *shape* and paid by covering a slice of artwork; the
+    pill is noticeable through *fill*, which is the whole reason `_badge` has a
+    `filled` mode, and occludes almost nothing.
+  - **"You already have this" is `primary` everywhere** — the card badge, the
+    detail view's notice, the file-row chips — so it doesn't change hue between
+    screens. The consequence for M3 is worth knowing in advance: "update available"
+    has to differ by **hue at similar weight** rather than by being the louder of
+    the two, and `tertiary` is already spoken for by the `obsolete` badge.
 - `_sText` is HTML while every description this app renders is markdown, so it goes
   through `utils/html_to_markdown.dart` — shared with the description editors'
   paste-as-markdown so the two can't drift.

@@ -5,6 +5,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../models/gamebanana/gamebanana.dart';
 import '../../../services/api_service.dart';
 import '../../../services/gamebanana/content_filter.dart';
+import '../../../services/installed_mods_index.dart';
 import '../../../utils/marketplace_providers.dart';
 import '../../../utils/state_providers.dart';
 import 'gb_category_panel.dart';
@@ -23,6 +24,10 @@ class GbBrowseView extends ConsumerWidget {
     final results = ref.watch(marketplaceResultsProvider);
     final filter = ref.watch(contentFilterProvider);
     final query = ref.watch(marketplaceQueryProvider);
+    // While the library snapshot loads, `empty` means "nothing is known to be
+    // installed" — no badge, rather than a badge that might be wrong.
+    final installed = ref.watch(installedModsIndexProvider).valueOrNull ??
+        InstalledModsIndex.empty;
 
     // "All" means browsing with no category — not merely page 1, so the carousel
     // doesn't vanish and re-appear as the user pages through the grid.
@@ -114,6 +119,7 @@ class GbBrowseView extends ConsumerWidget {
                               page: page,
                               filter: filter,
                               onOpenMod: onOpenMod,
+                              installed: installed,
                             ),
                           ),
                         ],
@@ -148,6 +154,7 @@ List<Widget> _resultSlivers(
   required GbPage<GbMod> page,
   required ContentFilterMode filter,
   required void Function(int modId) onOpenMod,
+  required InstalledModsIndex installed,
 }) {
   final loc = context.loc;
 
@@ -208,6 +215,7 @@ List<Widget> _resultSlivers(
               mod: mod,
               treatment: treatment,
               onOpen: () => onOpenMod(mod.idRow),
+              installedAs: installed.installsOfMod(mod.idRow),
             );
           },
         ),

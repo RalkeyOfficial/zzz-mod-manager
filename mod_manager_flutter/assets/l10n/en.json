@@ -99,7 +99,17 @@
     "never_updated": "Never updated since release",
     "refreshing": "Refreshing…",
     "previous": "Previous",
-    "next": "Next"
+    "next": "Next",
+    "badge_installed": "In library",
+    "installed_as": "In your library as {mods}",
+    "badge_file_installed": "installed",
+    "file_installed_as": "This is the file you installed as {mods}",
+    "badge_file_same": "you have this",
+    "file_same_as": "Byte-identical to the archive you installed as {mods}",
+    "duplicate_archive_title": "You already have this archive",
+    "duplicate_archive_message": "This archive is byte-identical to the one you installed as {mods}. Install it again anyway?",
+    "duplicate_archive_skip": "Don't install",
+    "duplicate_archive_install": "Install anyway"
   },
   "mods": {
     "all": "ALL",

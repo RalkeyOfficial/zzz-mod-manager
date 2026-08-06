@@ -29,6 +29,7 @@ import 'components/mods_grouped_view.dart';
 import 'components/own_scroll_controller.dart';
 import 'dialogs/rename_mod_dialog.dart';
 import 'dialogs/delete_mod_dialog.dart';
+import 'dialogs/duplicate_archive_dialog.dart';
 import 'dialogs/import_selection_dialog.dart';
 import 'dialogs/keybinds_dialog.dart';
 import 'dialogs/mod_context_menu.dart';
@@ -1364,6 +1365,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       // Same shape and the same reason: one drop can mix folders from several
       // archives with folders dragged in directly, so provenance is per-folder.
       final originSeeds = <String, ModOriginSeed>{};
+      // Set when an archive was recognised as one already in the library and the
+      // user chose not to install it again. Distinguishes "you declined" from
+      // "there was nothing here" once the folder list comes out empty.
+      var declinedDuplicate = false;
 
       for (final file in files) {
         // Перевіряємо чи це архів
@@ -1397,8 +1402,22 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
           final result = await ArchiveService.extractArchive(archiveFile: file);
 
           if (result.success && result.extractedFolders != null) {
-            folderPaths.addAll(result.extractedFolders!);
+            // Per archive, not per drop: one drop can mix several archives, and
+            // recognising one of them as a duplicate says nothing about the rest.
+            // Declining drops this archive's folders and leaves the others alone;
+            // its temp dir is cleaned up with the others below, since it is
+            // registered for cleanup either way.
+            if (!mounted) return;
             tempFoldersToCleanup.addAll(result.extractedFolders!);
+            if (!await confirmArchiveNotDuplicate(
+              context,
+              ref,
+              result.archiveMd5,
+            )) {
+              declinedDuplicate = true;
+              continue;
+            }
+            folderPaths.addAll(result.extractedFolders!);
             successfullyExtractedArchives.add(archiveFile.path);
             final archiveBaseName = path.basenameWithoutExtension(
               archiveFile.path,
@@ -1430,20 +1449,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         }
       }
 
-      if (folderPaths.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(loc.t('mods.snackbar.import_no_folders')),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-        return;
-      }
-
-      // Deletes the temp extract dirs (zzz_archive_extract_*). Used both when
-      // the user cancels the selection dialog and on the normal paths below.
+      // Deletes the temp extract dirs (zzz_archive_extract_*). Declared before
+      // the early return below, not after it: an archive the user declined as a
+      // duplicate was already extracted, so that return path has temp dirs to
+      // clean up too.
       Future<void> cleanupTempFolders() async {
         for (final tempPath in tempFoldersToCleanup) {
           try {
@@ -1458,6 +1467,22 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
             print('ModsScreen: temp cleanup error $tempPath: $e');
           }
         }
+      }
+
+      if (folderPaths.isEmpty) {
+        await cleanupTempFolders();
+        // Nothing to say when the user just declined every duplicate — they were
+        // asked and answered. "No mod folders found" would be a different claim
+        // entirely, and a false one.
+        if (mounted && !declinedDuplicate) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(loc.t('mods.snackbar.import_no_folders')),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
       }
 
       // Default combined name: the shared originating archive name when all

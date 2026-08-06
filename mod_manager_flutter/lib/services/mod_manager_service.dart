@@ -161,6 +161,10 @@ class ModManagerService {
       tags: metadata.tags,
       images: images,
       isFavorite: favoriteSet.contains(modName),
+      // The sidecar was already read and parsed above, so carrying the origin
+      // block into the runtime view costs nothing. It is read-only there: the
+      // save path rebuilds the sidecar from the copy on disk, never from here.
+      origin: metadata.origin,
     );
   }
 

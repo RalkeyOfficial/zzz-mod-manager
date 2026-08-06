@@ -171,8 +171,12 @@ rather than reinterpreting this field.
 
 - **`source_url` is mod-page-only.** Don't write machine handles, direct
   `/dl/<fileid>` links, or API URLs into it — it's a human-facing field shown as a
-  clickable link and editable as free text. Machine identifiers get their own
-  fields when the origin block lands (planned — see [§6](#6-planned-changes)).
+  clickable link and editable as free text. Machine identifiers have their own
+  fields in the [`origin` block](#the-origin-block). Note the asymmetry that
+  creates and don't rely on this field being set: a marketplace install writes
+  `origin.mod_id` and *no* `source_url`, while a backfilled legacy mod has the url
+  and a `mod_id` derived from it — so anything wanting a link to the mod page
+  builds it from `origin.mod_id`.
 - **`images` entries are relative paths, always.** Two valid shapes: a file we
   imported (`.zzz-mod-manager/images/01.png`) or a file the mod author shipped
   (`Preview.png`). On load they're resolved to absolute paths and **silently
@@ -378,6 +382,85 @@ One remaining vestigial pair, recorded so it isn't rediscovered:
 callers anywhere. Keybinds are parsed from `.ini` files at scan time and never
 persisted. Harmless — unlike `ModInfo.toJson`, there's no sidecar to confuse them
 with — but deletable in any pass that touches `models/keybind_info.dart`.
+
+### `ModInfo.origin` is read-only, and why that was allowed
+
+`ModInfo` carries the `origin` block, and **nothing may write it back**. It is
+populated in `_buildModInfo()` from the sidecar that was read there anyway, so
+carrying it costs no extra I/O, and it is the only field on the runtime view with
+a one-way contract: set it in memory and the value is simply lost on the next
+scan.
+
+An earlier decision banned `origin` from `ModInfo` outright. That ban was correct
+when written, and the hazard it named is the one walked through in
+[§2](#the-failure-mode-this-prevents): `save()` used to build a fresh
+`ModMetadata` out of the runtime view, so an unrelated description edit rebuilt
+the sidecar with no origin block and silently erased it. What changed is the
+mechanism, not the danger. `save()` now reads the sidecar and calls
+`replaceUserFields()` on *that* copy; the method carries `origin` over from disk
+and **takes no `origin` parameter**, so there is no route through which a value
+set on `ModInfo` could be persisted. `setCharacter()` goes the same way.
+
+The alternative was worse than it sounds: every status badge is rendered from
+`ModInfo`, so keeping the block out of it meant re-reading and re-parsing every
+sidecar in the library to draw data the scan had already parsed and thrown away.
+
+Two rules keep this safe, and both are pinned by tests in
+`test/mod_metadata_repository_test.dart`:
+
+- **An origin forged on `ModInfo` can never reach disk.** The test writes a real
+  origin block, then saves a `ModInfo` carrying a *different* one at `exact`
+  confidence, and asserts the file still holds the original.
+- **Adding a user-editable field still goes through `replaceUserFields()`**, i.e.
+  the compile-error mechanism in
+  [§2](#save-semantics-three-classes-of-field) is untouched. `origin` is not an
+  exception to that rule; it is on the other side of it.
+
+### The installed-mods index
+
+`services/installed_mods_index.dart` is the read model built on top of the above:
+given an already-scanned `List<ModInfo>`, it answers "is this remote mod / file
+already in the library?". Pure — no filesystem, no network — so the questions are
+unit-tested rather than clicked (`test/installed_mods_index_test.dart`).
+
+It indexes three keys because they answer three different questions, and the
+distinction is the locked decision about what may be claimed where:
+
+| Key | Question | Where it surfaces |
+|---|---|---|
+| `origin.mod_id` | "this mod is in your library", possibly as a different file | badge on the marketplace card, notice on the detail view |
+| `origin.file_id` | "this exact file is what you installed" | per-row marker in the file list |
+| `origin.archive_md5` | "the archive you installed was byte-identical to this published file" | per-row marker, and the duplicate-import gate |
+
+Three properties are load-bearing rather than incidental:
+
+- **Every lookup returns *all* matching folders.** One GameBanana page becoming
+  two mod folders is common, not an edge case — two occurrences in a real 23-mod
+  library. Returning the first would under-report the library, and §4 must not
+  read a shared `mod_id` as a sibling *group* either (see [the backfill's known
+  limit](#the-origin-backfill)).
+- **`tracking: "off"` is excluded from the identity keys but not from the hash
+  key.** That setting is the user saying "not from GameBanana / it's my own", and
+  a stale `source_url` is exactly why they might have said it — so a leftover mod
+  id must not badge somebody else's mod page. A hash is a fact about bytes on
+  disk rather than a claim about which remote mod they are, so local dedup keeps
+  working for a mod declared local.
+- **A file-id match and a hash match stay distinguishable.** The first is a record
+  of what we installed; the second says only that the bytes matched. They are
+  worded differently in the UI for the reason `archive_md5` carries its own
+  warning in [§2](#the-origin-block): a match is a matching key and never
+  verification.
+
+**What this can actually answer today, measured rather than assumed.** In a real
+23-mod library, all 23 mods carry a `mod_id` (recovered offline from
+`source_url`) and **none** carries a `file_id` or an `archive_md5` — the archive
+is deleted after extraction, so nothing local survives to match a published
+checksum. So the mod-level answer works for a legacy library from the first
+launch, while the file-level ones are inert until mods are installed by a build
+that records them, or until the resolve flow fills them in. Nothing may be built
+on file-level knowledge being present. (Checked against the live API: those
+backfilled ids resolve to real mods whose names match the local folders, and each
+publishes 3–4 files — which is the ambiguity the file-level marker exists for.)
 
 ---
 
@@ -601,9 +684,16 @@ rule did not demand it.
 `source_url` during a normal scan, and is documented in
 [§4](#the-origin-backfill).
 
-What remains planned is everything that *reads* the block: the status UI, the
-per-mod resolve dialog, bulk resolution, and update checking. Two decisions
-recorded here because they constrain the format rather than merely the UI:
+**The first reader has shipped too** — "already installed" detection, described in
+[§3](#the-installed-mods-index): the marketplace reads the library's origin blocks
+to badge mods it already has, mark which rows of a file list are installed, and
+ask before re-installing an archive it recognises rather than quietly making a
+second copy.
+
+What remains planned is the rest of what reads the block: the library-side status
+slot and "needs attention" filter, the per-mod resolve dialog, bulk resolution,
+and update checking. Two decisions recorded here because they constrain the format
+rather than merely the UI:
 
 - **Confidence and provenance are separate axes.** *Confidence* is how sure we are
   which remote file this is; *provenance* is where the folder came from

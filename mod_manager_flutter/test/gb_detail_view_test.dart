@@ -2,11 +2,15 @@ import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_enums.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_image.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
+import 'package:mod_manager_flutter/models/mod_origin.dart';
+import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/components/marketplace/gb_detail_view.dart';
 import 'package:mod_manager_flutter/services/gamebanana/content_filter.dart';
+import 'package:mod_manager_flutter/services/installed_mods_index.dart';
 import 'package:mod_manager_flutter/utils/markdown_style.dart';
 import 'package:mod_manager_flutter/utils/marketplace_providers.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
@@ -40,6 +44,11 @@ void main() {
     WidgetTester tester, {
     int imageCount = 4,
     Size surfaceSize = const Size(1200, 800),
+    // Overridden rather than left to load: unoverridden it reaches for
+    // `ApiService`, which needs a real `SharedPreferences` and so resolves to an
+    // error — silently, as an unread `AsyncValue`. Every "no badge" assertion
+    // would then pass for the wrong reason.
+    InstalledModsIndex installed = InstalledModsIndex.empty,
   }) async {
     await pumpLocalized(
       tester,
@@ -55,6 +64,7 @@ void main() {
           700727,
         ).overrideWith((ref) async => mod(imageCount: imageCount)),
         contentFilterProvider.overrideWith((ref) => ContentFilterMode.show),
+        installedModsIndexProvider.overrideWith((ref) async => installed),
       ],
     );
     expectBuilt(GbDetailView);
@@ -260,6 +270,42 @@ void main() {
       final heading = tester.getRect(find.text('Description'));
       final description = tester.getRect(find.byType(MarkdownBody));
       expect(heading.left, description.left);
+    });
+  });
+
+  group('the "in your library" notice', () {
+    testWidgets('is absent for a mod the library does not have',
+        (tester) async {
+      await pumpDetail(tester);
+      expect(find.textContaining('In your library'), findsNothing);
+    });
+
+    testWidgets('names the folders, at mod level', (tester) async {
+      // Mod level on purpose: for a library that predates the origin block this
+      // is the *only* answer available — nothing local survives extraction to
+      // identify which file was installed — so the screen must be able to say
+      // "you have this mod" without pretending to know which file.
+      await pumpDetail(
+        tester,
+        installed: InstalledModsIndex.fromMods([
+          ModInfo(
+            id: 'Remielle Swim',
+            name: 'Remielle Swim',
+            characterId: 'unknown',
+            isActive: false,
+            origin: const ModOrigin(
+              provenance: OriginProvenance.importedFolder,
+              source: 'gamebanana',
+              modId: 700727,
+              modIdConfidence: OriginConfidence.inferred,
+            ),
+          ),
+        ]),
+      );
+      expect(
+        find.text('In your library as Remielle Swim'),
+        findsOneWidget,
+      );
     });
   });
 }

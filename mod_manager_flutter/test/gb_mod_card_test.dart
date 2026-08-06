@@ -5,6 +5,7 @@ import 'package:mod_manager_flutter/models/gamebanana/gb_enums.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_submitter.dart';
 import 'package:mod_manager_flutter/screens/components/marketplace/gb_mod_card.dart';
+import 'package:mod_manager_flutter/screens/components/marketplace/gb_thumbnail.dart';
 import 'package:mod_manager_flutter/services/gamebanana/content_filter.dart';
 
 import 'support/localized_harness.dart';
@@ -74,6 +75,8 @@ void main() {
     required GbMod card,
     double height = gridTileHeight,
     ContentTreatment treatment = ContentTreatment.show,
+    List<String> installedAs = const <String>[],
+    VoidCallback? onOpen,
   }) async {
     await pumpLocalized(
       tester,
@@ -87,7 +90,8 @@ void main() {
           child: GbModCard(
             mod: card,
             treatment: treatment,
-            onOpen: () {},
+            onOpen: onOpen ?? () {},
+            installedAs: installedAs,
           ),
         ),
       ),
@@ -161,6 +165,98 @@ void main() {
   testWidgets('shows the specific category, not a raw id', (tester) async {
     await pumpCard(tester, width: 300, card: mod());
     expect(find.text('Alexandrina Sebastiane'), findsOneWidget);
+  });
+
+  group('the status slot', () {
+    testWidgets('is absent for a mod the library does not have',
+        (tester) async {
+      // The default, and the state every card is in while the library snapshot is
+      // still loading. Silence is the only safe answer there.
+      await pumpCard(tester, width: 300, card: mod());
+      expect(find.text('In library'), findsNothing);
+    });
+
+    testWidgets('names the folders it matched', (tester) async {
+      // Plural because it genuinely is: one GameBanana page routinely becomes two
+      // folders (two variants installed side by side), so the tooltip lists them
+      // instead of implying there is one. They are in the tooltip rather than
+      // inline because the strip has room for two or three words at the narrow end
+      // of the grid.
+      await pumpCard(
+        tester,
+        width: 300,
+        card: mod(),
+        installedAs: const ['Shortcake-JuFufu', 'Shortcake-JuFufu (NSFW)'],
+      );
+      expect(find.text('In library'), findsOneWidget);
+      expect(
+        find.byTooltip(
+          'In your library as Shortcake-JuFufu, Shortcake-JuFufu (NSFW)',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('sits inside the cover, opposite the obsolete badge',
+        (tester) async {
+      // Where it is *is* the design: over the artwork so it reads on a blurred
+      // card, and top-right so it can coexist with `obsolete` on the left rather
+      // than the two fighting for one corner.
+      await pumpCard(
+        tester,
+        width: 300,
+        card: mod(),
+        installedAs: const ['Ellen'],
+      );
+
+      final cover = tester.getRect(find.byType(GbThumbnail));
+      final pill = tester.getRect(find.byTooltip('In your library as Ellen'));
+
+      expect(pill.right, lessThanOrEqualTo(cover.right));
+      expect(pill.top, greaterThanOrEqualTo(cover.top));
+      expect(pill.center.dx, greaterThan(cover.center.dx),
+          reason: 'top-right, clear of the obsolete badge on the left');
+    });
+
+    testWidgets('survives the narrowest tile the grid produces',
+        (tester) async {
+      // A layout claim either way, and this card has overflowed before.
+      await pumpCard(
+        tester,
+        width: 140,
+        card: mod(),
+        installedAs: const ['Ellen'],
+      );
+      expect(tester.takeException(), isNull);
+      expect(find.text('In library'), findsOneWidget);
+    });
+
+    testWidgets('paints over the reveal overlay rather than under it',
+        (tester) async {
+      // Whether you already own a mod is not adult content, so it must be readable
+      // before the blur is lifted. Driven rather than merely found: the reveal
+      // overlay fills the cover, so if the badge were behind it, a tap on the badge
+      // would land on the overlay and lift the blur. Being on top means the card
+      // stays blurred and the tap falls through to "open this mod" instead.
+      var opened = 0;
+      await pumpCard(
+        tester,
+        width: 275,
+        card: mod(visibility: GbVisibility.warn),
+        treatment: ContentTreatment.blur,
+        installedAs: const ['Ellen'],
+        onOpen: () => opened++,
+      );
+      expect(find.text('Click to reveal'), findsOneWidget);
+      expect(find.text('In library'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('In your library as Ellen'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Click to reveal'), findsOneWidget,
+          reason: 'tapping the badge must not lift the blur');
+      expect(opened, 1, reason: 'the tap should reach the card itself');
+    });
   });
 
   group('release and update ages', () {
