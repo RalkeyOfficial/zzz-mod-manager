@@ -24,6 +24,20 @@ changelog, the non-negotiables) live in the [root `CLAUDE.md`](../CLAUDE.md).
 - **`utils/state_providers.dart`** — **central Riverpod provider registry**. All
   app state (current tab, characters, mods, theme, locale, activation mode, etc.)
   is declared here. Add new global state as a provider here, not ad-hoc.
+- **`utils/markdown_style.dart`** — the one definition of how rendered markdown
+  looks (`buildMarkdownStyleSheet` plus the `MarkdownScale` tokens it derives
+  from). Every description surface goes through `utils/markdown_description.dart`,
+  which builds from it, so a second style sheet anywhere is a bug. Note the
+  library's own quirks it works around: a `hr` builder is ignored (the widget
+  overwrites it, so the rule is shaped entirely by `horizontalRuleDecoration`),
+  `fitContent` must be `false` or every block shrink-wraps to its text, and a
+  fenced block reuses the inline `code` style — including its chip background —
+  unless a `syntaxHighlighter` cancels it. Vertical rhythm is also split in two
+  on purpose: `blockSpacing` is the gap between *any* two blocks, while
+  `pPadding` tops paragraphs up to a full blank line apart. `<br><br>` (how
+  GameBanana writes a paragraph break) must look like the empty line a browser
+  shows, and a run of blank lines keeps its height instead of collapsing —
+  markdown would otherwise flatten `<br>`×6 to the same break as `<br>`×2.
 - **`core/constants.dart`** — `AppConstants`, including `appVersion`, the single
   source for everything that *says* the version (UI badge, GameBanana User-Agent).
 

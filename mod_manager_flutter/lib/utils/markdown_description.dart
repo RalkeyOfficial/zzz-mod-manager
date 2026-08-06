@@ -2,64 +2,60 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
 
+import 'markdown_style.dart';
+
 /// Renders a mod [description] as markdown for the details dialog. [onLaunchUrl]
 /// is invoked when a link (in the body or inside an alert) is tapped.
 ///
-/// Adds two ZZZ-specific extensions on top of standard markdown:
+/// The look comes from [buildMarkdownStyleSheet] — shared with every other
+/// markdown surface, including the alert bodies below, so nothing here can
+/// drift into a second style.
+///
+/// Adds three ZZZ-specific extensions on top of standard markdown:
 /// - a run of `>` is treated as a single blockquote level
 ///   ([_FlatBlockquoteSyntax]) so decorative `>>>>> ... <<<<<` lines survive;
 /// - GitHub-style alerts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`,
 ///   `[!CAUTION]`, plus a non-standard `[!INFO]` alias of note) render as
-///   coloured callouts ([_AlertElementBuilder]).
+///   coloured callouts ([_AlertElementBuilder]);
+/// - a run of blank lines keeps its height ([_BlankRunSyntax]) instead of
+///   collapsing to a single paragraph break.
 Widget buildDescriptionMarkdown(
   BuildContext context,
   String description, {
   required void Function(String href) onLaunchUrl,
 }) {
-  final styleSheet = MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-    p: const TextStyle(fontSize: 13),
-    a: const TextStyle(
-      fontSize: 13,
-      color: Color(0xFF6366F1),
-      decoration: TextDecoration.underline,
-    ),
-    // A `>` at the start of a line is markdown blockquote syntax. Keep the
-    // text readable (inherit the body color) with a subtle accent bar
-    // instead of the default washed-out, heavily padded box.
-    blockquote: TextStyle(
-      fontSize: 13,
-      color: Theme.of(context).textTheme.bodyMedium?.color,
-    ),
-    blockquotePadding: const EdgeInsets.fromLTRB(12, 4, 8, 4),
-    blockquoteDecoration: BoxDecoration(
-      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.05),
-      borderRadius: BorderRadius.circular(4),
-      border: const Border(
-        left: BorderSide(color: Color(0xFF6366F1), width: 3),
-      ),
-    ),
-  );
+  final styleSheet = buildMarkdownStyleSheet(context);
 
   return MarkdownBody(
     data: description,
     selectable: true,
     shrinkWrap: true,
+    // Blocks span the full width instead of hugging their text. The default
+    // (`fitContent: true`) shrink-wraps every block, which leaves a quote or a
+    // code fence as a small box floating mid-paragraph rather than a band.
+    fitContent: false,
     // Render single newlines as line breaks instead of collapsing them into
     // spaces (matches what users type in the plain-text editor).
     softLineBreak: true,
     // Alerts must be tried before the flat blockquote so `> [!WARNING]` wins
     // over the generic `>` handling.
-    blockSyntaxes: const [_AlertBlockSyntax(), _FlatBlockquoteSyntax()],
+    blockSyntaxes: const [
+      _AlertBlockSyntax(),
+      _FlatBlockquoteSyntax(),
+      _BlankRunSyntax(),
+    ],
     builders: {
       'alert': _AlertElementBuilder(
         onTapLink: onLaunchUrl,
         styleSheet: styleSheet,
       ),
+      'spacer': _SpacerElementBuilder(),
     },
     onTapLink: (text, href, title) {
       if (href != null) onLaunchUrl(href);
     },
     styleSheet: styleSheet,
+    syntaxHighlighter: MarkdownCodeBlockHighlighter(styleSheet),
   );
 }
 
@@ -89,6 +85,75 @@ class _FlatBlockquoteSyntax extends md.BlockquoteSyntax {
       parser.document,
     ).parseLines(parentSyntax: this);
     return md.Element('blockquote', children);
+  }
+}
+
+/// Preserves the height of a run of blank lines as a `spacer` element.
+///
+/// Markdown collapses any number of blank lines into one paragraph break, but
+/// authors use them as spacing — and GameBanana descriptions especially so,
+/// because their editor writes runs of `<br>` which `htmlToMarkdown` turns
+/// into blank lines. Without this, `a<br><br><br><br>b` renders identically to
+/// `a<br><br>b` and a description loses the shape its author gave it.
+///
+/// The *first* blank line is the paragraph break itself and is left to the
+/// normal block spacing, so only the surplus becomes a spacer — meaning
+/// ordinary hand-written markdown (one blank line between paragraphs) is
+/// untouched. [_SpacerElementBuilder] turns the count into height.
+class _BlankRunSyntax extends md.BlockSyntax {
+  const _BlankRunSyntax();
+
+  static final _blank = RegExp(r'^[ \t]*$');
+
+  @override
+  RegExp get pattern => _blank;
+
+  // Only a *run* is interesting. A lone blank line is left to the built-in
+  // `EmptyBlockSyntax`, which handles the paragraph break and the parser
+  // bookkeeping that goes with it.
+  @override
+  bool canParse(md.BlockParser parser) {
+    if (!_blank.hasMatch(parser.current.content)) return false;
+    final next = parser.peek(1);
+    return next != null && _blank.hasMatch(next.content);
+  }
+
+  @override
+  md.Node parse(md.BlockParser parser) {
+    var lines = 0;
+    while (!parser.isDone && _blank.hasMatch(parser.current.content)) {
+      lines++;
+      parser.advance();
+    }
+    // The blank lines still ended a block, and the parser uses this to decide
+    // list tightness and to close setext headings.
+    parser.encounteredBlankLine = true;
+
+    return md.Element.empty('spacer')..attributes['lines'] = '${lines - 1}';
+  }
+}
+
+/// Renders a `spacer` (see [_BlankRunSyntax]) as vertical space, clamped to
+/// [MarkdownScale.maxBlankLines].
+class _SpacerElementBuilder extends MarkdownElementBuilder {
+  @override
+  bool isBlockElement() => true;
+
+  @override
+  Widget visitElementAfterWithContext(
+    BuildContext context,
+    md.Element element,
+    TextStyle? preferredStyle,
+    TextStyle? parentStyle,
+  ) {
+    final requested = int.tryParse(element.attributes['lines'] ?? '') ?? 0;
+    final lines = requested.clamp(0, MarkdownScale.maxBlankLines);
+    // A spacer is a block, so it sits between *two* block gaps where the
+    // paragraph break it extends only had one. Give that extra gap back, and
+    // the run occupies exactly the height its blank lines asked for.
+    return SizedBox(
+      height: lines * MarkdownScale.blankLine - MarkdownScale.gap,
+    );
   }
 }
 
@@ -194,7 +259,7 @@ class _AlertElementBuilder extends MarkdownElementBuilder {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
         color: spec.color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(6),
@@ -207,12 +272,13 @@ class _AlertElementBuilder extends MarkdownElementBuilder {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(spec.icon, size: 16, color: spec.color),
+              Icon(spec.icon, size: 18, color: spec.color),
               const SizedBox(width: 6),
               Text(
                 spec.title,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: MarkdownScale.body,
+                  height: 1.25,
                   fontWeight: FontWeight.w600,
                   color: spec.color,
                 ),
@@ -225,13 +291,16 @@ class _AlertElementBuilder extends MarkdownElementBuilder {
               data: body,
               selectable: true,
               shrinkWrap: true,
+              fitContent: false,
               softLineBreak: true,
               // Allow runs of `>` inside an alert body, but not nested alerts.
-              blockSyntaxes: const [_FlatBlockquoteSyntax()],
+              blockSyntaxes: const [_FlatBlockquoteSyntax(), _BlankRunSyntax()],
+              builders: {'spacer': _SpacerElementBuilder()},
               onTapLink: (text, href, title) {
                 if (href != null) onTapLink(href);
               },
               styleSheet: styleSheet,
+              syntaxHighlighter: MarkdownCodeBlockHighlighter(styleSheet),
             ),
           ],
         ],

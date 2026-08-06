@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Mod descriptions are easier to read: body text is larger, lines are more generously spaced, and headings, lists, quotes, code, tables and horizontal rules now follow one consistent style everywhere a description is shown. A `---` divider is a hairline instead of a thick bar.
+- Descriptions keep the spacing their author gave them. Blank lines between paragraphs are a full line tall rather than a hairline gap, and a run of several — which is how GameBanana descriptions space out sections, images and dividers — stays as tall as it looked on the site instead of collapsing to a single break.
 - Downloaded archives now always land in the app's own downloads folder and are deleted once installed; an archive that fails to extract is kept, and the app tells you where to find it.
 
 ### Removed
