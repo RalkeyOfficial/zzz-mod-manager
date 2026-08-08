@@ -7,6 +7,7 @@ import 'package:window_manager/window_manager.dart';
 import 'dart:io';
 import 'core/constants.dart';
 import 'screens/mods_screen.dart';
+import 'screens/components/sidebar_nav_item.dart';
 import 'screens/settings_screen.dart';
 import 'screens/welcome_screen.dart';
 import 'screens/marketplace_screen.dart';
@@ -433,40 +434,34 @@ class _MainScreenState extends ConsumerState<MainScreen>
                                 child: FadeInAnimation(child: widget),
                               ),
                               children: [
-                                _buildNavItem(
-                                  context: context,
+                                SidebarNavItem(
                                   icon: Icons.dashboard_rounded,
                                   label: loc.t('navigation.mods'),
                                   isActive: currentTab == 0,
-                                  onTap: () =>
-                                      ref
-                                              .read(tabIndexProvider.notifier)
-                                              .state =
-                                          0,
+                                  collapsed: isSidebarCollapsed,
+                                  onTap: () => ref
+                                      .read(tabIndexProvider.notifier)
+                                      .state = 0,
                                 ),
                                 const SizedBox(height: 8),
-                                _buildNavItem(
-                                  context: context,
+                                SidebarNavItem(
                                   icon: Icons.store_mall_directory_rounded,
                                   label: loc.t('navigation.marketplace'),
                                   isActive: currentTab == 1,
-                                  onTap: () =>
-                                      ref
-                                              .read(tabIndexProvider.notifier)
-                                              .state =
-                                          1,
+                                  collapsed: isSidebarCollapsed,
+                                  onTap: () => ref
+                                      .read(tabIndexProvider.notifier)
+                                      .state = 1,
                                 ),
                                 const SizedBox(height: 8),
-                                _buildNavItem(
-                                  context: context,
+                                SidebarNavItem(
                                   icon: Icons.settings_rounded,
                                   label: loc.t('navigation.settings'),
                                   isActive: currentTab == 2,
-                                  onTap: () =>
-                                      ref
-                                              .read(tabIndexProvider.notifier)
-                                              .state =
-                                          2,
+                                  collapsed: isSidebarCollapsed,
+                                  onTap: () => ref
+                                      .read(tabIndexProvider.notifier)
+                                      .state = 2,
                                 ),
                               ],
                             ),
@@ -695,94 +690,6 @@ class _MainScreenState extends ConsumerState<MainScreen>
             color: isDarkMode
                 ? Colors.white.withValues(alpha: 0.7)
                 : Colors.black.withValues(alpha: 0.7),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNavItem({
-    required BuildContext context,
-    required IconData icon,
-    required String label,
-    required bool isActive,
-    required VoidCallback onTap,
-  }) {
-    final isSidebarCollapsed = ref.watch(sidebarCollapsedProvider);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Tooltip(
-        message: isSidebarCollapsed ? label : '',
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: onTap,
-              borderRadius: BorderRadius.circular(12),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                padding: EdgeInsets.symmetric(
-                  horizontal: isSidebarCollapsed ? 12 : 16,
-                  vertical: 14,
-                ),
-                decoration: BoxDecoration(
-                  gradient: isActive
-                      ? const LinearGradient(
-                          colors: [Color(0xFF0EA5E9), Color(0xFF06B6D4)],
-                        )
-                      : null,
-                  color: isActive ? null : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: isActive
-                      ? [
-                          BoxShadow(
-                            color: const Color(0xFF0EA5E9).withValues(alpha: 0.4),
-                            blurRadius: 12,
-                            spreadRadius: 1,
-                            offset: const Offset(0, 4),
-                          ),
-                        ]
-                      : null,
-                ),
-                child: Row(
-                  mainAxisAlignment: isSidebarCollapsed
-                      ? MainAxisAlignment.center
-                      : MainAxisAlignment.start,
-                  children: [
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      child: AnimatedScale(
-                        scale: isActive ? 1.1 : 1.0,
-                        duration: const Duration(milliseconds: 200),
-                        child: Icon(
-                          icon,
-                          size: 22,
-                          color: isActive ? Colors.white : Colors.grey[600],
-                        ),
-                      ),
-                    ),
-                    if (!isSidebarCollapsed) ...[
-                      const SizedBox(width: 14),
-                      AnimatedDefaultTextStyle(
-                        duration: const Duration(milliseconds: 300),
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: isActive
-                              ? FontWeight.w600
-                              : FontWeight.w500,
-                          color: isActive ? Colors.white : Colors.grey[600],
-                          letterSpacing: 0.3,
-                        ),
-                        child: Text(label),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
           ),
         ),
       ),

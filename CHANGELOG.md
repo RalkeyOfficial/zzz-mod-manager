@@ -45,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Collapsing or expanding the sidebar no longer causes an exception across the navigation buttons. A label that does not yet fit the sidebar's animating width now shortens with an ellipsis instead of spilling out of it.
 - Mod cover images are decoded at the size they are shown rather than their full resolution, cutting the app's image memory dramatically — a 49-cover library previously held over 200 MB of decoded image data, enough that scrolling the library could push other images out of memory and force them to reload.
 - Certificate validation is no longer disabled when downloading mods.
 - Installing a mod no longer risks deleting the folder its archive was sitting in.
