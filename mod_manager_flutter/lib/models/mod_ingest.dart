@@ -45,6 +45,25 @@ class ModIngest {
   bool get isEmpty =>
       folders.isEmpty && siblingGroup == null && mode == IngestMode.separate;
 
+  /// Value equality, so [ModOrigin] can have it — see the note there.
+  @override
+  bool operator ==(Object other) =>
+      other is ModIngest &&
+      other.mode == mode &&
+      other.siblingGroup == siblingGroup &&
+      _sameFolders(other.folders);
+
+  bool _sameFolders(List<String> other) {
+    if (other.length != folders.length) return false;
+    for (var i = 0; i < folders.length; i++) {
+      if (other[i] != folders[i]) return false;
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode => Object.hash(mode, siblingGroup, Object.hashAll(folders));
+
   Map<String, dynamic> toJson() => <String, dynamic>{
         'mode': mode.wire,
         if (folders.isNotEmpty) 'folders': folders,

@@ -5,6 +5,7 @@ import '../../core/constants.dart';
 import '../../l10n/app_localizations.dart';
 import '../../services/api_service.dart';
 import '../../utils/state_providers.dart';
+import 'mod_status_slot.dart';
 
 /// Search + sort + tag-filter + favorites toolbar shown above the mods grid.
 ///
@@ -98,6 +99,8 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
                 const SizedBox(width: 8),
                 _buildTagFilterButton(tags),
               ],
+              const SizedBox(width: 8),
+              _buildNeedsAttentionToggle(),
               const SizedBox(width: 8),
               _buildFavoritesToggle(),
             ],
@@ -332,6 +335,45 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
           ),
         );
       },
+    );
+  }
+
+  /// Enumerates the mods whose origin isn't fully known.
+  ///
+  /// Carries the count because the answer is usually zero or "most of the
+  /// library", and both are worth knowing *before* pressing: a legacy library
+  /// says 47 and a fully-resolved one says nothing at all. Hidden entirely at
+  /// zero rather than shown disabled — a control that can never do anything is
+  /// noise in a toolbar that already has four.
+  Widget _buildNeedsAttentionToggle() {
+    final count = ref.watch(modsNeedingAttentionCountProvider);
+    final active = ref.watch(modNeedsAttentionOnlyProvider);
+    if (count == 0 && !active) return const SizedBox.shrink();
+
+    return Tooltip(
+      message: loc.t('mods.toolbar.needs_attention'),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () =>
+            ref.read(modNeedsAttentionOnlyProvider.notifier).state = !active,
+        child: _toolbarButton(
+          active: active,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.priority_high,
+                size: 18,
+                color: active ? ModStatusSlot.amber : null,
+              ),
+              if (count > 0) ...[
+                const SizedBox(width: 4),
+                Text('$count', style: const TextStyle(fontSize: 13)),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 

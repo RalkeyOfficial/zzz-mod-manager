@@ -81,6 +81,45 @@ int? gameBananaModIdFromUrl(String? url) {
   return (id == null || id <= 0) ? null : id;
 }
 
+/// Extracts the **file** id from a GameBanana download link, or null.
+///
+/// Accepted: `https://gamebanana.com/dl/1701141` and the mod-manager form
+/// `https://gamebanana.com/mmdl/1701141`, with the same scheme/host tolerance as
+/// [gameBananaModIdFromUrl].
+///
+/// **This cannot be turned into a mod id.** Probed against the live API
+/// (2026-08-08): `apiv11 File/<id>` returns the file record — name, size, date,
+/// md5, scan results, even its archive tree — and carries no owning mod
+/// anywhere; `_sProfileUrl` on a File comes back as the broken
+/// `https://gamebanana.com//<id>`, and the legacy Core API's `File` fields list
+/// offers nothing better. So a `/dl/` link is only useful **once the mod is
+/// already known**, where it picks a row out of that mod's file list. Never
+/// write it to `source_url`, which stays mod-page-only.
+int? gameBananaFileIdFromUrl(String? url) {
+  final trimmed = url?.trim();
+  if (trimmed == null || trimmed.isEmpty) return null;
+
+  final normalized = trimmed.contains('://') ? trimmed : 'https://$trimmed';
+
+  final Uri uri;
+  try {
+    uri = Uri.parse(normalized);
+  } on FormatException {
+    return null;
+  }
+
+  if (!_gameBananaHosts.contains(uri.host.toLowerCase())) return null;
+
+  final segments =
+      uri.pathSegments.where((segment) => segment.isNotEmpty).toList();
+  if (segments.length != 2) return null;
+  final prefix = segments.first.toLowerCase();
+  if (prefix != 'dl' && prefix != 'mmdl') return null;
+
+  final id = int.tryParse(segments[1]);
+  return (id == null || id <= 0) ? null : id;
+}
+
 /// Whether [url] points at GameBanana at all.
 ///
 /// Useful for deciding whether a stored `source_url` is even worth trying to

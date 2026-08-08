@@ -265,6 +265,68 @@ class ModMetadataRepository {
     }
   }
 
+  /// Applies a resolved origin decision to a mod that already exists.
+  ///
+  /// The counterpart of [recordOrigin]: that one *replaces* the block because
+  /// the mod is being created and any inbound block is a stranger's claim, while
+  /// this one **amends** it, so everything the resolve dialog isn't deciding
+  /// about — the archive hash, the ingest shape, the provenance — survives.
+  ///
+  /// [update] receives the block **freshly read from disk**, not the one the
+  /// dialog was opened with. The dialog is long-lived by nature: it fetches a
+  /// mod page and waits for a human, and a scan is kicked off after every toggle
+  /// and rename, so the sidecar can be rewritten inside that window — the same
+  /// hazard the backfill and the autofill re-read for, and the same fix.
+  /// Returning **null from [update] abandons the write**, which is how a
+  /// decision that no longer makes sense against what came back (the folder was
+  /// rebound to a different mod meanwhile) declines to clobber it.
+  ///
+  /// Returns false when the folder is missing, unwritable, or the decision was
+  /// abandoned. Callers surface that rather than retrying: nothing re-attempts
+  /// this write, and the scan-time backfill is no substitute — it only ever
+  /// recovers identity from a `source_url`, at a weaker confidence than anything
+  /// decided here.
+  Future<bool> updateOrigin(
+    String modName,
+    ModOrigin? Function(ModOrigin? current) update,
+  ) async {
+    try {
+      final modFolder = _folderOf(modName);
+      if (modFolder == null) return false;
+      final existing = await _service.read(modFolder) ?? const ModMetadata();
+      final next = update(existing.origin);
+      if (next == null) return false;
+      return await _service.write(modFolder, existing.withOrigin(next));
+    } catch (e) {
+      print('ModMetadataRepository: failed to update origin for $modName: $e');
+      return false;
+    }
+  }
+
+  /// The install-date proxy for a mod folder — the oldest file inside it.
+  ///
+  /// Exposed because the resolve dialog needs it for a mod that has **no origin
+  /// block at all**: the offline backfill only probes a folder it can recover an
+  /// identity for, so a mod that never had a `source_url` has no `installed_at`
+  /// to rank files against or to use as an "assume current" baseline.
+  ///
+  /// Remember what the number is worth before building on it. For a mod imported
+  /// through the app it lands at roughly import time, because extraction writes
+  /// fresh files. For one placed in the library by hand (`cp -p`, the user's own
+  /// 7-Zip run, a synced folder) the author's build timestamps survive and it
+  /// can read *years* early — which is exactly why the "assume current" baseline
+  /// is clamped against the mod's own creation date.
+  Future<DateTime?> installDateProxy(String modName) async {
+    final modFolder = _folderOf(modName);
+    if (modFolder == null) return null;
+    try {
+      return await _backfill.probeInstallDate(modFolder);
+    } catch (e) {
+      print('ModMetadataRepository: install-date probe failed for $modName: $e');
+      return null;
+    }
+  }
+
   /// Fills the blanks in freshly-installed mods' sidecars from the mod page they
   /// came from — description, tags, character and gallery.
   ///

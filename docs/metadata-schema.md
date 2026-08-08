@@ -508,6 +508,18 @@ Two rules keep this safe, and both are pinned by tests in
   [§2](#save-semantics-three-classes-of-field) is untouched. `origin` is not an
   exception to that rule; it is on the other side of it.
 
+**The cost this did have, and it was not free.** Putting the block on the runtime
+view means the mods screen's rescan guard has to *notice* it. That guard
+(`utils/mod_group_diff.dart`) is a hand-written field comparison protecting
+`charactersProvider` from being rewritten on every scan, and `origin` was not in
+it — so a mod resolved through the resolve dialog was written to disk correctly,
+re-read correctly, judged unchanged, and went on rendering its old status badge
+until the tab was switched away and back. Nothing threw and no test failed.
+`ModOrigin` therefore has full value equality, so the guard compares the block as
+a whole and a *new origin field* is covered the day it is added. **Nothing else
+on `ModInfo` has that protection**: any other field a surface starts rendering
+must be added to that list by hand.
+
 ### The installed-mods index
 
 `services/installed_mods_index.dart` is the read model built on top of the above:
@@ -764,7 +776,128 @@ Two mods sharing a `mod_id` after a backfill is therefore common and expected
 
 ---
 
-## 5. Planned changes
+## 5. Resolving an unknown origin
+
+The backfill ([§4](#the-origin-backfill)) recovers identity where a `source_url`
+happens to hold one. Everything it cannot recover — and everything a manual
+import will keep producing forever — is resolved *by the user*, through the
+per-mod resolve dialog (`screens/dialogs/resolve_origin_dialog.dart`).
+
+**"Origin unknown" is a permanent state, not a migration to be finished.** Legacy
+libraries, drag-dropped folders, mods from sites we don't browse: all of them are
+legitimately untracked, so the model gives that a first-class tier, the library
+card gives it a visible status, and the resolution flow stays in the UI rather
+than being a one-time wizard.
+
+### The status slot: one slot, three states
+
+`services/origin_status.dart` folds an `origin` block into the single thing a
+library card may render. It is a pure function, and the "needs attention" filter
+in the mods toolbar is built from the *same* function — so the badge and the
+filter cannot disagree about which mods are which.
+
+| Status | When | How it looks |
+|---|---|---|
+| **`versionUnknown`** | `mod_id` known, `version_confidence` is `unknown` | Amber, actionable. We can query the file list but can't judge what comes back, and one pass through the dialog fixes it. |
+| **`untracked`** | no `origin` block, or no `mod_id` | A muted dot. **Informational, never alarming** — most of a pre-origin library looks like this, and badging all of it loudly trains the user to stop seeing the slot. |
+| **`none`** | version known at any tier, `tracking: "off"`, or `remote_missing` | Nothing at all. |
+
+Two of those rows are decisions rather than mechanics:
+
+- **`tracking: "off"` and `remote_missing` both silence the slot**, for different
+  reasons. The first is the user's explicit "not from GameBanana / it's my own",
+  and the promise attached to it is permanence. The second is different: the
+  amber state's entire offer is *click to set the version*, which means reading a
+  mod page that is private, trashed or withheld — offering an action that cannot
+  complete is worse than staying quiet. Nothing writes `remote_missing` yet;
+  when the bulk pass does, it wants its own wording ("source no longer
+  available") rather than one of the three states here.
+- **Only `unknown` is actionable.** `assumed_latest` is the user having already
+  answered "I don't know which, I got it around then", and `inferred` is a guess
+  we recorded and label as one. Re-ambering either would make the dialog
+  impossible to finish.
+
+The **filter** deliberately keeps both non-empty states, where the badge treats
+them very differently: the badge asks "how loudly should this card speak", the
+filter asks "show me what I could act on", and the dialog acts on an untracked
+mod perfectly well. (What untracked mods get no access to is *bulk* resolution —
+a separate rule, about fuzzy name matching being unsafe to rubber-stamp.)
+
+### What the dialog is allowed to write
+
+The decisions live in `services/origin_resolution.dart`, pure and separate from
+the dialog, because what is easy to get wrong is not the layout but *what each
+answer may claim*.
+
+| Answer | Writes |
+|---|---|
+| Confirm / pick a mod page | `mod_id` at **`user`**. Rebinding to a *different* mod clears `file_id`, `version`, `version_label`, `baseline_remote_date` and `remote_missing`, and keeps `archive_md5`. |
+| Pick a file | `file_id`, `version` (`_sVersion`), `version_label` (`_sDescription`) at **`user`** — or at **`exact`** when the row was matched by a banked `archive_md5`. |
+| "I don't know which" | `version_confidence: assumed_latest` and `baseline_remote_date`. No file, no version. |
+| "Not from GameBanana / it's my own" | `tracking: "off"`. Identity is left in place, so turning it back on is an undo. |
+
+Rules worth knowing before changing any of it:
+
+- **Confirming raises `inferred` to `user`, and nothing raises anything to
+  `exact` except a checksum match.** An `inferred` identity came from a free-form
+  text field a human typed and could be a wrong paste; the user looking at the
+  mod page and saying yes is exactly what `user` means. `exact` stays reserved
+  for "we downloaded it" and "its bytes matched the published md5".
+- **A suggestion is never preselected.** Candidate rows are ranked with a stated
+  reason — banked hash, folder-name match, newest file that already existed at
+  install time — and the reason is *shown*, because a ranking with no visible
+  reason is indistinguishable from a ranking with a wrong one. Only two things
+  start out selected: a hash match (which is exact) and a mod that publishes
+  exactly one file (where there is nothing to guess between).
+- **Both `_aFiles` and `_aArchivedFiles` are ranked.** An old install matches a
+  superseded file far more often than the current one, and they arrive in the
+  same response.
+- **The date candidate is the newest file that already existed**, not the nearest
+  in absolute terms: a file uploaded *after* the install cannot be the installed
+  one.
+- **The "assume current" baseline is clamped to the mod's own creation date.**
+  `installed_at` is frequently a proxy taken from the oldest file in the folder,
+  and for a library placed on disk by hand (`cp -p`, the user's own 7-Zip run, a
+  synced folder) the author's build timestamps survive and it can read *years*
+  early. Unclamped, that flags every file the mod ever published.
+- **`tracking: "off"` is the one decision that writes a sidecar into a folder
+  that had none**, deliberately breaking the don't-litter rule
+  ([§2](#dont-litter-empty-sidecars)): absence means "not looked at yet", which
+  is precisely what the user is switching off.
+
+### The write path
+
+`ModMetadataRepository.updateOrigin(modName, update)` **amends** the block, where
+`recordOrigin` replaces it — so the archive hash, the ingest shape and the
+provenance survive a decision that was only about identity and version.
+
+`update` receives the block **freshly read from disk**, not the one the dialog was
+opened with. That is not defensive habit: this dialog fetches a mod page and then
+waits for a human, and a scan is kicked off after every toggle and rename, so the
+sidecar genuinely can be rewritten inside that window — the same hazard the
+backfill and the autofill re-read for. Returning **null from `update` abandons the
+write**, which is how a decision that no longer makes sense against what came
+back (the folder was rebound to a different mod meanwhile) declines to clobber it
+rather than attaching a `file_id` to somebody else's mod.
+
+A failed write is reported, not swallowed: nothing re-attempts it, and the
+scan-time backfill is no substitute — it only ever recovers identity from a
+`source_url`, at a weaker confidence than anything decided here.
+
+### A pasted `/dl/` link cannot name a mod
+
+The dialog accepts a pasted URL. A **mod page** url resolves directly and skips
+the search. A `/dl/<fileid>` link is a *file* id in a different id space, and
+**neither API can say which mod owns it** — probed live (2026-08-08): apiv11's
+`File/<id>` returns the file record in full (name, size, date, md5, scan results,
+even its archive tree) with no owning mod anywhere, its `_sProfileUrl` comes back
+as the broken `https://gamebanana.com//<id>`, and the legacy Core API's
+self-describing field list for `File` offers nothing better. So the dialog says
+that instead of searching for the url as though it were a mod name.
+
+---
+
+## 6. Planned changes
 
 **The origin block has shipped** — its write side, its field reference and the
 rules around it are documented in [§2](#the-origin-block), which is now the
@@ -788,10 +921,14 @@ from knows all four. Documented in
 [§2](#autofill-at-install-what-a-mod-page-may-write), including the one rule that
 keeps it safe against an inbound sidecar: fill absence, never displace.
 
-What remains planned is the rest of what reads the block: the library-side status
-slot and "needs attention" filter, the per-mod resolve dialog, bulk resolution,
-and update checking. Two decisions recorded here because they constrain the format
-rather than merely the UI:
+**The library-side status slot, the "needs attention" filter and the per-mod
+resolve dialog have shipped** — documented in
+[§5](#5-resolving-an-unknown-origin), which is now authoritative for how an
+unknown origin is surfaced and what each answer is allowed to write.
+
+What remains planned is bulk resolution (one screen shared with the bulk update
+check) and update checking itself. Two decisions recorded here because they
+constrain the format rather than merely the UI:
 
 - **Confidence and provenance are separate axes.** *Confidence* is how sure we are
   which remote file this is; *provenance* is where the folder came from

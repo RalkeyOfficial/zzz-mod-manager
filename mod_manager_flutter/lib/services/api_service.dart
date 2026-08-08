@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/character_info.dart';
 import 'config_service.dart';
 import '../models/gamebanana/gb_enums.dart';
+import '../models/mod_origin.dart';
 import 'gamebanana/content_filter.dart';
 import 'mod_manager_service.dart';
 import 'platform_service_factory.dart';
@@ -237,6 +238,31 @@ class ApiService {
     } catch (e) {
       throw Exception('Помилка оновлення персонажа моду: $e');
     }
+  }
+
+  /// Amends a mod's origin block — the resolve dialog's write path.
+  ///
+  /// [update] is applied to the block **as it is on disk right now**, not the
+  /// one the caller last saw, and returning null from it abandons the write. See
+  /// `ModMetadataRepository.updateOrigin`.
+  ///
+  /// Returns false rather than throwing, unlike the neighbours above: every
+  /// caller's answer to a failed origin write is to tell the user once, and a
+  /// thrown exception here would have to be caught at each call site to say the
+  /// same thing.
+  static Future<bool> updateModOrigin(
+    String modId,
+    ModOrigin? Function(ModOrigin? current) update,
+  ) async {
+    await initialize();
+    return await _modManager!.updateModOrigin(modId, update);
+  }
+
+  /// An install-date proxy for a mod with no recorded install date — the oldest
+  /// file inside its folder. Can read years early for a hand-copied library.
+  static Future<DateTime?> installDateProxy(String modId) async {
+    await initialize();
+    return await _modManager!.installDateProxy(modId);
   }
 
   /// Drops cached keybinds for a mod (call after editing its .ini).

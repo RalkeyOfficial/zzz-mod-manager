@@ -11,6 +11,7 @@ import 'package:mod_manager_flutter/services/gamebanana/remote_mod_metadata.dart
 import 'package:mod_manager_flutter/services/http/image_fetcher.dart';
 import 'package:mod_manager_flutter/services/mod_metadata_repository.dart';
 import 'package:mod_manager_flutter/services/origin_backfill.dart';
+import 'package:mod_manager_flutter/services/origin_resolution.dart';
 
 /// In-memory stand-in for the `config.json` character-tag mirror.
 ///
@@ -741,6 +742,140 @@ void main() {
 
       expect(await repo.recordOrigin('Locked', origin()), isFalse);
     }, skip: Platform.isWindows ? 'chmod is POSIX-only' : false);
+  });
+
+  group('updateOrigin', () {
+    test('amends the block instead of replacing it', () async {
+      // The whole difference from recordOrigin: the resolve dialog decides about
+      // identity and version, and everything else — the archive hash, the ingest
+      // shape, the provenance — has to survive its decision.
+      makeMod('Legacy Mod');
+      await repo.recordOrigin(
+        'Legacy Mod',
+        const ModOrigin(
+          provenance: OriginProvenance.importedArchive,
+          archiveMd5: 'bbbb',
+          ingest: ModIngest(folders: ['Legacy Mod']),
+        ),
+      );
+
+      final ok = await repo.updateOrigin(
+        'Legacy Mod',
+        (current) => current!.copyWith(
+          modId: 555,
+          modIdConfidence: OriginConfidence.user,
+        ),
+      );
+
+      expect(ok, isTrue);
+      final block = sidecarOf('Legacy Mod')!['origin'] as Map;
+      expect(block['mod_id'], 555);
+      expect(block['mod_id_confidence'], 'user');
+      expect(block['archive_md5'], 'bbbb');
+      expect(block['provenance'], 'imported_archive');
+      expect((block['ingest'] as Map)['folders'], ['Legacy Mod']);
+    });
+
+    test('hands the update the block on disk, not the one held in memory',
+        () async {
+      // A dialog stays open across a network fetch and a human, and a scan is
+      // kicked off after every toggle and rename — so the sidecar genuinely can
+      // be rewritten inside that window.
+      makeMod('Raced Mod');
+      await repo.recordOrigin(
+        'Raced Mod',
+        const ModOrigin(provenance: OriginProvenance.importedFolder, modId: 1),
+      );
+
+      ModOrigin? seen;
+      await repo.updateOrigin('Raced Mod', (current) {
+        seen = current;
+        return current;
+      });
+
+      expect(seen!.modId, 1);
+    });
+
+    test('returning null abandons the write', () async {
+      // How a decision declines to clobber a block that was rebound underneath
+      // it: pickFile returns null when the mod id it was decided against is gone.
+      makeMod('Rebound Mod');
+      await repo.recordOrigin(
+        'Rebound Mod',
+        const ModOrigin(provenance: OriginProvenance.importedFolder, modId: 7),
+      );
+
+      expect(await repo.updateOrigin('Rebound Mod', (_) => null), isFalse);
+      expect((sidecarOf('Rebound Mod')!['origin'] as Map)['mod_id'], 7);
+    });
+
+    test('preserves user data and unknown keys around the amendment', () async {
+      makeMod('Shared Mod');
+      File(path.join(modsDir.path, 'Shared Mod', '.zzz-mod-manager', 'metadata.json'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync(jsonEncode({
+          'description': 'from the author',
+          'tags': ['ellen'],
+          'future_key': {'kept': true},
+        }));
+
+      await repo.updateOrigin(
+        'Shared Mod',
+        (current) => OriginResolution.bind(current, 900),
+      );
+
+      final raw = sidecarOf('Shared Mod')!;
+      expect(raw['description'], 'from the author');
+      expect(raw['tags'], ['ellen']);
+      expect(raw['future_key'], {'kept': true});
+      expect((raw['origin'] as Map)['mod_id'], 900);
+    });
+
+    test('writes a block for a mod that had no sidecar at all', () async {
+      // "Not from GameBanana / it's my own" is the one decision that must litter:
+      // absence means "not looked at yet", which is exactly what it switches off.
+      makeMod('My Own Mod');
+
+      final ok = await repo.updateOrigin(
+        'My Own Mod',
+        (current) => OriginResolution.stopTracking(current),
+      );
+
+      expect(ok, isTrue);
+      expect((sidecarOf('My Own Mod')!['origin'] as Map)['tracking'], 'off');
+    });
+
+    test('never recreates a mod folder that no longer exists', () async {
+      expect(
+        await repo.updateOrigin('Vanished', (c) => OriginResolution.bind(c, 1)),
+        isFalse,
+      );
+      expect(Directory(path.join(modsDir.path, 'Vanished')).existsSync(), isFalse);
+    });
+
+    test('returns false when no library is configured', () async {
+      final orphan = ModMetadataRepository(config, modsPath: () => null);
+      expect(
+        await orphan.updateOrigin('Any', (c) => OriginResolution.bind(c, 1)),
+        isFalse,
+      );
+    });
+  });
+
+  group('installDateProxy', () {
+    test('reports the oldest file in the folder', () async {
+      final dir = makeMod('Dated Mod');
+      final old = File(path.join(dir.path, 'mod.ini'))..writeAsStringSync('x');
+      final recent = File(path.join(dir.path, 'notes.txt'))..writeAsStringSync('y');
+      old.setLastModifiedSync(DateTime.utc(2024, 1, 2));
+      recent.setLastModifiedSync(DateTime.utc(2026, 5, 5));
+
+      expect(await repo.installDateProxy('Dated Mod'), DateTime.utc(2024, 1, 2));
+    });
+
+    test('is null for a folder that is not there', () async {
+      expect(await repo.installDateProxy('Vanished'), isNull);
+    });
   });
 
   group('applyRemoteMetadata', () {

@@ -34,9 +34,10 @@ class ModOriginSeed {
 
   /// Remote identity, when the caller had it.
   ///
-  /// All null today: the marketplace is still a webview, which intercepts a CDN
-  /// url and knows nothing else about the file. The native browser will supply
-  /// these, and nothing downstream changes when it does.
+  /// Filled by the native marketplace, which knows the mod id, file id, version
+  /// and variant label before the first byte is fetched and so writes both
+  /// confidences at `exact`. Null for a hand-supplied archive or folder, whose
+  /// route to `exact` is an `archive_md5` match at resolution time instead.
   final String? source;
   final int? modId;
   final OriginConfidence modIdConfidence;

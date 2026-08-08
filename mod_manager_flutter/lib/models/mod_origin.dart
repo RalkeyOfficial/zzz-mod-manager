@@ -99,6 +99,102 @@ class ModOrigin {
   /// Whether we know which remote mod this is at all.
   bool get hasIdentity => modId != null;
 
+  /// Value equality over **every** field, deliberately.
+  ///
+  /// It exists for one caller — the mods screen's "did anything actually
+  /// change?" guard, which decides whether a rescan is allowed to push new state
+  /// into `charactersProvider`. That guard used to compare `ModInfo` field by
+  /// hand-written field, and the origin block was simply missing from the list:
+  /// a mod resolved through the resolve dialog was re-read from disk correctly,
+  /// judged unchanged, and its card kept showing the amber "needs attention"
+  /// mark until the tab was switched away and back.
+  ///
+  /// So this is exhaustive rather than "the fields something renders today".
+  /// Narrowing it to the four the status slot happens to read would recreate the
+  /// same bug the first time anything renders a fifth.
+  @override
+  bool operator ==(Object other) =>
+      other is ModOrigin &&
+      other.source == source &&
+      other.modId == modId &&
+      other.modIdConfidence == modIdConfidence &&
+      other.fileId == fileId &&
+      other.version == version &&
+      other.versionLabel == versionLabel &&
+      other.versionConfidence == versionConfidence &&
+      other.provenance == provenance &&
+      other.ingest == ingest &&
+      other.installedAt == installedAt &&
+      other.installedAtIsProxy == installedAtIsProxy &&
+      other.baselineRemoteDate == baselineRemoteDate &&
+      other.archiveMd5 == archiveMd5 &&
+      other.tracking == tracking &&
+      other.remoteMissing == remoteMissing;
+
+  @override
+  int get hashCode => Object.hash(
+        source,
+        modId,
+        modIdConfidence,
+        fileId,
+        version,
+        versionLabel,
+        versionConfidence,
+        provenance,
+        ingest,
+        installedAt,
+        installedAtIsProxy,
+        baselineRemoteDate,
+        archiveMd5,
+        tracking,
+        remoteMissing,
+      );
+
+  /// Points this block at remote mod [modId] at [confidence], clearing whatever
+  /// only described the *previous* mod.
+  ///
+  /// **The clearing is the rule, and it lives here so there is one copy of it.**
+  /// A `file_id`, a version, a version label and a baseline date are meaningful
+  /// only relative to one mod page; carrying them across a rebind would leave a
+  /// block asserting that mod B ships file 555 of mod A — and `remote_missing`
+  /// was a fact about the old mod too. Two paths rebind (the offline backfill
+  /// when a corrected `source_url` names a different mod, and the resolve dialog
+  /// when the user says "no, it's this one"), and a rule this easy to get subtly
+  /// wrong must not be written twice.
+  ///
+  /// [archiveMd5] deliberately survives: the hash is a fact about the archive we
+  /// extracted, not about which remote mod we currently think it is. That is
+  /// exactly what lets a banked hash be matched against the *new* mod's
+  /// published checksums.
+  ///
+  /// Written out longhand rather than through [copyWith], which cannot express
+  /// clearing a field.
+  ModOrigin boundTo({
+    required int modId,
+    required OriginConfidence confidence,
+    required String source,
+  }) {
+    final rebinding = this.modId != null && this.modId != modId;
+    return ModOrigin(
+      source: source,
+      modId: modId,
+      modIdConfidence: confidence,
+      fileId: rebinding ? null : fileId,
+      version: rebinding ? null : version,
+      versionLabel: rebinding ? null : versionLabel,
+      versionConfidence:
+          rebinding ? OriginConfidence.unknown : versionConfidence,
+      provenance: provenance,
+      ingest: ingest,
+      installedAt: installedAt,
+      installedAtIsProxy: installedAtIsProxy,
+      baselineRemoteDate: rebinding ? null : baselineRemoteDate,
+      archiveMd5: archiveMd5,
+      tracking: tracking,
+      remoteMissing: rebinding ? false : remoteMissing,
+    );
+  }
+
   /// Emits only what differs from the read-side defaults.
   ///
   /// Absence already means "default" on read, so writing `"remote_missing":

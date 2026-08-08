@@ -16,6 +16,7 @@ void showModContextMenu(
   required VoidCallback onOpenLink,
   required VoidCallback onEditKeybinds,
   required VoidCallback onToggleFavorite,
+  required VoidCallback onResolveOrigin,
   required VoidCallback onDelete,
 }) {
   final loc = context.loc;
@@ -97,6 +98,19 @@ void showModContextMenu(
           ),
           onTap: () => Future.delayed(Duration.zero, onEditKeybinds),
         ),
+      // The second way into the resolve dialog. The status slot on the card is
+      // the first, but it is absent for a mod whose origin is fully known — and
+      // rebinding one that was resolved wrongly has to stay possible.
+      PopupMenuItem(
+        child: Row(
+          children: [
+            const Icon(Icons.sync_alt, size: 18),
+            const SizedBox(width: 8),
+            Text(loc.t('mods.context_menu.resolve_origin')),
+          ],
+        ),
+        onTap: () => Future.delayed(Duration.zero, onResolveOrigin),
+      ),
       PopupMenuItem(
         child: Row(
           children: [

@@ -92,6 +92,36 @@ void main() {
     });
   });
 
+  group('gameBananaFileIdFromUrl', () {
+    test('reads a download link', () {
+      expect(gameBananaFileIdFromUrl('https://gamebanana.com/dl/1701141'),
+          1701141);
+      expect(gameBananaFileIdFromUrl('gamebanana.com/mmdl/1701141'), 1701141);
+      expect(
+        gameBananaFileIdFromUrl('http://www.gamebanana.com/dl/1701141?x=1'),
+        1701141,
+      );
+    });
+
+    test('a mod page is not a file link, and vice versa', () {
+      // The two id spaces must never be read as each other: a file id used as a
+      // mod id binds a folder to an unrelated mod.
+      expect(gameBananaFileIdFromUrl('https://gamebanana.com/mods/531649'),
+          isNull);
+      expect(gameBananaModIdFromUrl('https://gamebanana.com/dl/1701141'),
+          isNull);
+    });
+
+    test('rejects other hosts and junk', () {
+      expect(gameBananaFileIdFromUrl('https://example.com/dl/1'), isNull);
+      expect(gameBananaFileIdFromUrl('https://gamebanana.com/dl/'), isNull);
+      expect(gameBananaFileIdFromUrl('https://gamebanana.com/dl/abc'), isNull);
+      expect(gameBananaFileIdFromUrl('https://gamebanana.com/dl/1/2'), isNull);
+      expect(gameBananaFileIdFromUrl(null), isNull);
+      expect(gameBananaFileIdFromUrl(''), isNull);
+    });
+  });
+
   group('isGameBananaUrl', () {
     test('is about the host only, not about identifying a mod', () {
       expect(isGameBananaUrl('https://gamebanana.com/dl/1770600'), isTrue);

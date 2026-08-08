@@ -131,34 +131,17 @@ class OriginBackfill {
         const ModOrigin(provenance: OriginProvenance.importedFolder);
 
     // Re-pointing the folder at a *different* mod invalidates everything that
-    // described the old one. A `file_id` and a version are meaningful only
-    // relative to one mod page, so carrying them across a rebind would leave a
-    // block asserting that mod B ships file 555 of mod A. `remote_missing` was
-    // a fact about the old mod too. Written out longhand rather than through
-    // `copyWith`, which cannot express clearing a field.
-    final rebinding = existing?.modId != null && existing!.modId != modId;
-
-    return ModOrigin(
-      source: gameBananaSource,
+    // described the old one — see [ModOrigin.boundTo], which owns that rule for
+    // both rebinding paths (this one and the resolve dialog).
+    final bound = base.boundTo(
       modId: modId,
-      modIdConfidence: OriginConfidence.inferred,
-      fileId: rebinding ? null : base.fileId,
-      version: rebinding ? null : base.version,
-      versionLabel: rebinding ? null : base.versionLabel,
-      versionConfidence:
-          rebinding ? OriginConfidence.unknown : base.versionConfidence,
-      provenance: base.provenance,
-      ingest: base.ingest,
+      confidence: OriginConfidence.inferred,
+      source: gameBananaSource,
+    );
+
+    return bound.copyWith(
       installedAt: resolvedAt,
       installedAtIsProxy: isProxy,
-      baselineRemoteDate: rebinding ? null : base.baselineRemoteDate,
-      // Survives a rebind on purpose: the hash is a fact about the archive we
-      // extracted, not about which remote mod we currently think it is. That
-      // is exactly what makes "bank now, cash in at resolution" work — it can
-      // still be matched against the *new* mod's published checksums.
-      archiveMd5: base.archiveMd5,
-      tracking: base.tracking,
-      remoteMissing: rebinding ? false : base.remoteMissing,
     );
   }
 }

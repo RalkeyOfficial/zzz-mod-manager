@@ -75,6 +75,20 @@ The most important architectural decision is the **platform abstraction**:
   The marketplace invalidates it on open and after each install. See
   `../docs/metadata-schema.md` §3 for what it can and cannot answer — notably that
   file-level knowledge is absent for any library that predates the origin block.
+- `modOriginStatus()` (`services/origin_status.dart`) — pure `ModOrigin?` → the
+  **one** thing a library card's status slot may render (amber "version
+  unknown", a muted "untracked" dot, or nothing). The mods toolbar's "needs
+  attention" filter is built from the same function, so the badge and the filter
+  cannot disagree about which mods are which. See
+  `../docs/metadata-schema.md` §5 for why `tracking: "off"` and `remote_missing`
+  both silence it, and why only `unknown` is treated as actionable.
+- `services/origin_resolution.dart` — pure decision logic behind the resolve
+  dialog: ranking a mod's published files against what is known locally (banked
+  archive hash → folder name → newest file that already existed at install
+  time), and the four transforms that produce the new origin block. Two rules
+  it exists to enforce: a *suggestion* is never preselected (only a hash match
+  and a single-file mod are), and confirming an identity raises it to `user`
+  while nothing but a checksum match ever reaches `exact`.
 - `planMetadataAutofill()` (`services/metadata_autofill.dart`) — pure
   (existing sidecar, what the mod page offers) → what may be written, and
   `services/gamebanana/remote_mod_metadata.dart` for the `GbMod` → domain half.
@@ -176,7 +190,8 @@ GameBanana hosts is reached via "open in browser".
   intercept a CDN url, so every origin block it wrote had both confidences at
   `unknown`; a native download knows mod id, file id, version and variant label
   before the first byte and writes them at `exact`. See
-  `../docs/metadata-schema.md` §5.
+  `../docs/metadata-schema.md` §2 (the origin block) — this pointed at §5 while
+  that section was "Planned changes"; §5 is now the resolve flow.
 - **It is also where a mod stops arriving blank.** After the import,
   `_installArchive` hands the profile to `applyRemoteMetadata`, which fills the
   description, gallery, tags and character the install would otherwise leave
@@ -237,6 +252,50 @@ result is a `Localizations` that renders an empty box forever with *no exception
 every `find` returns nothing and every "did it overflow?" assertion passes
 vacuously. The harness preloads via `runAsync` and injects a `SynchronousFuture`;
 call `expectBuilt(...)` after pumping so that failure mode can never be silent again.
+
+### The library's origin surfaces (`components/mod_status_slot.dart`, `dialogs/resolve_origin_dialog.dart`)
+
+What the *library* side does with the origin block. The rules about states and
+about what each answer may write are in `../docs/metadata-schema.md` §5; what
+follows is only what is specific to these widgets.
+
+- **A rescan only reaches the grid if `modGroupsChanged()` says so**
+  (`utils/mod_group_diff.dart`). A scan runs after every toggle, rename, edit and
+  import, so `ModsScreen` guards `charactersProvider` behind a field-by-field
+  comparison to avoid rebuilding the whole grid each time. **That list is
+  hand-written, and anything `ModInfo` gains that any surface renders has to be
+  added to it.** It has already failed once exactly this way: `origin` was
+  missing from it, so resolving a mod wrote the sidecar correctly, the rescan
+  re-read it correctly, the guard said "unchanged", and the amber mark stayed on
+  the card until the user switched tabs. Nothing threw. `origin` is now compared
+  through `ModOrigin`'s value equality — which is why that model has `==` at all
+  — so new *origin* fields are covered automatically; nothing else on `ModInfo`
+  is.
+- **`ModStatusSlot` sits bottom-left of the cover**, the one corner
+  `ModCardWidget` had free (top-left is details, top-right the enable switch,
+  bottom-right the source link and favourite). It keeps a constant footprint
+  across states so resolving a mod doesn't reflow the artwork under it, and it
+  uses a literal amber rather than a scheme colour — the card paints its palette
+  over *artwork*, so a themed colour would be the only thing on it that moved.
+  Passing no `onResolveOrigin` hides it, which is what the drag-feedback copy of
+  the card wants.
+- **The toolbar toggle carries a count and hides itself at zero.** The answer is
+  usually either nothing or most of the library, and both are worth knowing
+  before pressing rather than after landing on an empty grid.
+- **In the resolve dialog the content filter degrades `hide` to `blur`, never to
+  `omit`.** Dropping a flagged mod from a search the user is running to identify
+  a mod they *already own* would make that mod permanently unresolvable, with no
+  hint as to why.
+- **Both lists in the dialog are height-bounded and scroll inside themselves**,
+  so the two escape hatches underneath stay one click away. Not hypothetical: a
+  captured profile publishes six current files beside eight archived ones, and
+  every one is a row.
+- **`ResolveOriginGateway` is the local-side seam.** Calling `ApiService`
+  straight from a dialog is this codebase's convention (delete, rename and edit
+  all do) and the default keeps it — but `ApiService` lazily builds a
+  `ConfigService` that writes the developer's **real** `<appData>/config.json`,
+  so a widget test that merely mounted this dialog would clobber their library
+  paths and favourites.
 
 ### The download layer (`services/download/`)
 

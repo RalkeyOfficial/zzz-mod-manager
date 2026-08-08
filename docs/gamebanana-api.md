@@ -506,6 +506,35 @@ downloadable**.
 | `_sAvState` / `_sAvResult` | Virus scan (`done` / `clean`). |
 | `_sAnalysisState` / `_sAnalysisResult` / `_sAnalysisResultVerbose` | Preliminary content analysis (`done` / `ok` / human-readable). |
 
+### A file id cannot be turned back into a mod id
+
+`GET /apiv11/File/<id>` exists and returns the file record in full — `_sFile`,
+`_nFilesize`, `_tsDateAdded`, `_sMd5Checksum`, `_sDescription`, the AV and
+analysis verdicts, even `_aArchiveFileTree` listing everything inside the
+archive. What it does **not** return, anywhere, is the mod that owns it.
+
+Probed exhaustively (2026-08-08), because a user pasting a
+`gamebanana.com/dl/<fileid>` link is an obvious thing to want to support:
+
+- `File/<id>` — no mod field of any kind.
+- `File/Multi?_csvRowIds=…&_csvProperties=…` — accepts only `_idRow`,
+  `_sModelName` and `_sProfileUrl`. `_aSubmission`, `_aMod`, `_idModRow`,
+  `_aOwner` are all `UNKNOWN_PROPERTY`.
+- `File/<id>/ProfilePage` — `200`, a burst of PHP warnings, and a three-field
+  stub: `{_idRow, _nStatus, _bIsPrivate}`. A body, just a useless one — don't
+  re-probe it expecting a 500.
+- `_sProfileUrl` on a File comes back as the broken
+  `https://gamebanana.com//<id>` — the section prefix is missing, so it is not
+  a link to anything.
+- The legacy Core API's self-describing `Data/AllowedFields?itemtype=File` lists
+  nothing better; its `sModManagerDownloadUrl()` is just
+  `gamebanana.com/mmdl/<id>`, another file-id url.
+
+So `/dl/<fileid>` → mod is a dead end on both APIs. A file link is only useful
+**once the mod is already known**, where the id picks a row out of that mod's
+`_aFiles`/`_aArchivedFiles`. Anything that accepts a pasted url has to say so
+rather than searching for the url as though it were a mod name.
+
 ### `_sVersion` and `_sDescription` are not reliably version-vs-variant
 
 The table above describes what the two fields *mean*. What authors actually do with
@@ -812,6 +841,11 @@ Collected so nobody rediscovers them:
   ([§6](#6-files--_afiles-and-_aarchivedfiles)).
 - **`_aArchivedFiles` is absent rather than `[]`** when nothing is archived, so null
   ("not requested") and empty ("none exist") are both real and mean different things.
+- **A file id does not lead back to its mod.** `File/<id>` returns the whole file
+  record and no owner, `File/Multi` recognises no mod-shaped property, and a File's
+  `_sProfileUrl` is the broken `gamebanana.com//<id>`. A pasted `/dl/` link is only
+  resolvable once you already know the mod
+  ([§6](#a-file-id-cannot-be-turned-back-into-a-mod-id)).
 - **`_sText` is HTML**, while our own sidecar descriptions are markdown. Convert on
   import; don't dump raw HTML into a markdown widget.
 - **`_aTags` is strings on a listing and `{_sTitle, _sValue}` objects on a profile.**

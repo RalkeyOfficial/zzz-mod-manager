@@ -235,7 +235,8 @@
       "open_folder": "Open in file explorer",
       "favorite_add": "Add to favorites",
       "favorite_remove": "Remove from favorites",
-      "delete": "Delete"
+      "delete": "Delete",
+      "resolve_origin": "Update tracking…"
     },
     "details": {
       "keybinds": "Keybinds",
@@ -252,7 +253,8 @@
       "favorites_only": "Show favorites only",
       "match": "Match",
       "match_any": "Any",
-      "match_all": "All"
+      "match_all": "All",
+      "needs_attention": "Show only mods that need attention"
     },
     "sort": {
       "added": "Default",
@@ -284,6 +286,39 @@
       "error_no_dir": "Mod directory not found",
       "error_no_ini": "No INI file found",
       "error_save": "Error saving keybind: {message}"
+    },
+    "origin": {
+      "version_unknown_tooltip": "Installed version unknown — click to set it",
+      "untracked_tooltip": "Not tracked for updates — click to link it to a mod page"
+    },
+    "resolve": {
+      "title": "Update tracking for \"{mod}\"",
+      "identity_heading": "Which mod is this?",
+      "identity_change": "Change",
+      "open_page": "Open the mod page",
+      "search_hint": "Search GameBanana, or paste a mod page link",
+      "search_button": "Search",
+      "no_results": "No mods found. Try a different name, or paste the mod page link.",
+      "paste_is_file_link": "That link points at a file, not at a mod page. GameBanana cannot say which mod a file belongs to, so open the mod page and copy its address instead.",
+      "load_failed": "Couldn't reach GameBanana. Check your connection and try again.",
+      "file_heading": "Which file do you have?",
+      "no_files": "This mod page publishes no files.",
+      "settled": "Matched exactly: the archive you installed is byte-identical to this file.",
+      "reason_hash": "byte-identical to your archive",
+      "reason_folder": "matches your folder name",
+      "reason_date": "newest file that existed when you installed this",
+      "reason_only": "the only file published",
+      "also_fill_metadata": "Also fill in the description, images and tags this mod is missing",
+      "dont_know": "I don't know which file",
+      "dont_know_hint": "Records the date instead — you'll be told about anything published after {date}.",
+      "dont_know_unavailable": "Needs an install date, and none could be worked out for this mod.",
+      "not_gamebanana": "Not from GameBanana, or it's my own",
+      "not_gamebanana_hint": "Stops asking about this mod. You can turn it back on here later.",
+      "tracking_off": "You marked this mod as your own, so it isn't checked for updates.",
+      "resume_tracking": "Track this mod again",
+      "save": "Save",
+      "cancel": "Cancel",
+      "save_failed": "Couldn't save tracking data for \"{mod}\" — the folder may be read-only."
     }
   },
   "clipboard": {

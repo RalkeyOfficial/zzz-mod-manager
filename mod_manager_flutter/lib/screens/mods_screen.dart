@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
-import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,6 +16,7 @@ import '../services/archive_service.dart';
 import '../services/ingest_origin_builder.dart';
 import '../utils/state_providers.dart';
 import '../utils/categories.dart';
+import '../utils/mod_group_diff.dart';
 import '../utils/zzz_characters.dart';
 import '../l10n/app_localizations.dart';
 import 'components/mode_toggle_widget.dart';
@@ -35,6 +35,7 @@ import 'dialogs/keybinds_dialog.dart';
 import 'dialogs/mod_context_menu.dart';
 import 'dialogs/edit_mod_dialog.dart';
 import 'dialogs/mod_details_dialog.dart';
+import 'dialogs/resolve_origin_dialog.dart';
 import '../utils/url_utils.dart';
 
 class ModsScreen extends ConsumerStatefulWidget {
@@ -211,7 +212,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         previousSelectedId = previousCharacters[selectedIndex].id;
       }
 
-      if (_charactersActuallyChanged(characters)) {
+      if (modGroupsChanged(_lastCharactersState, characters)) {
         _lastCharactersState = List.from(characters);
         ref.read(charactersProvider.notifier).state = characters;
       }
@@ -672,11 +673,20 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     );
   }
 
+  /// Opens the resolve dialog and rescans if it wrote anything — the status
+  /// slot is drawn from `ModInfo.origin`, which only a scan refreshes.
+  Future<void> _resolveOrigin(ModInfo mod) async {
+    if (await showResolveOriginDialog(context, mod)) {
+      await loadMods(showLoading: false);
+    }
+  }
+
   void _showContextMenu(BuildContext context, ModInfo mod, Offset position) {
     showModContextMenu(
       context,
       mod,
       position,
+      onResolveOrigin: () => unawaited(_resolveOrigin(mod)),
       onDetails: () => _showModDetailsDialog(mod),
       onEdit: () => _showEditDialog(mod),
       onRename: () => showRenameModDialog(
@@ -1273,47 +1283,11 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
             onFavoriteToggle: () => _toggleFavorite(mod),
             onShowDetails: () => _showModDetailsDialog(mod),
             onOpenLink: () => openModLink(context, mod),
+            onResolveOrigin: () => unawaited(_resolveOrigin(mod)),
           ),
         ),
       ),
     );
-  }
-
-  bool _charactersActuallyChanged(List<CharacterInfo> newCharacters) {
-    if (_lastCharactersState == null) return true;
-    if (_lastCharactersState!.length != newCharacters.length) return true;
-
-    for (int i = 0; i < newCharacters.length; i++) {
-      final oldChar = _lastCharactersState![i];
-      final newChar = newCharacters[i];
-
-      if (oldChar.id != newChar.id ||
-          oldChar.name != newChar.name ||
-          oldChar.skins.length != newChar.skins.length) {
-        return true;
-      }
-
-      // Check if any mod states changed (including editable metadata, so edits
-      // to URL/description/tags/images refresh the in-memory state).
-      for (int j = 0; j < newChar.skins.length; j++) {
-        final oldMod = oldChar.skins[j];
-        final newMod = newChar.skins[j];
-        if (oldMod.id != newMod.id ||
-            oldMod.isActive != newMod.isActive ||
-            oldMod.name != newMod.name ||
-            oldMod.isFavorite != newMod.isFavorite ||
-            oldMod.characterId != newMod.characterId ||
-            oldMod.sourceUrl != newMod.sourceUrl ||
-            oldMod.description != newMod.description ||
-            oldMod.imagePath != newMod.imagePath ||
-            !listEquals(oldMod.tags, newMod.tags) ||
-            !listEquals(oldMod.images, newMod.images)) {
-          return true;
-        }
-      }
-    }
-
-    return false;
   }
 
   Future<void> _deactivateOtherModsForCharacter(

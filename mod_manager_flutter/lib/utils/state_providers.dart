@@ -8,6 +8,7 @@ import '../services/gamebanana/content_filter.dart';
 import '../services/gamebanana/gamebanana_client.dart';
 import '../services/installed_mods_index.dart';
 import '../services/mod_manager_service.dart';
+import '../services/origin_status.dart';
 
 // The marketplace's own browsing state (query, results, categories, open mod)
 // lives in `marketplace_providers.dart` — one screen's session rather than
@@ -179,20 +180,45 @@ final modTagFiltersProvider = StateProvider<Set<String>>((ref) => <String>{});
 final modTagMatchAllProvider = StateProvider<bool>((ref) => false);
 final modFavoritesOnlyProvider = StateProvider<bool>((ref) => false);
 
-/// Whether any filter (search / tags / favorites) is currently narrowing the
-/// list. Sort mode is not a filter.
+/// Show only mods whose origin isn't fully known — the "needs attention" filter.
+///
+/// A status dot on a card is *spatial*: to act on 80 mods you first have to be
+/// able to enumerate them. This is that, and it deliberately covers both
+/// non-empty states of the slot rather than only the amber one — see
+/// [modNeedsAttention] for why the badge and the filter answer different
+/// questions.
+final modNeedsAttentionOnlyProvider = StateProvider<bool>((ref) => false);
+
+/// Whether any filter (search / tags / favorites / needs-attention) is
+/// currently narrowing the list. Sort mode is not a filter.
 final modFiltersActiveProvider = Provider<bool>((ref) {
   return ref.watch(modSearchQueryProvider).isNotEmpty ||
       ref.watch(modTagFiltersProvider).isNotEmpty ||
-      ref.watch(modFavoritesOnlyProvider);
+      ref.watch(modFavoritesOnlyProvider) ||
+      ref.watch(modNeedsAttentionOnlyProvider);
 });
 
-/// Resets the mods search / tag / favorites filters (leaves the sort mode).
+/// Resets the mods search / tag / favorites / needs-attention filters (leaves
+/// the sort mode).
 void clearModFilters(WidgetRef ref) {
   ref.read(modSearchQueryProvider.notifier).state = '';
   ref.read(modTagFiltersProvider.notifier).state = <String>{};
   ref.read(modFavoritesOnlyProvider.notifier).state = false;
+  ref.read(modNeedsAttentionOnlyProvider.notifier).state = false;
 }
+
+/// How many mods in the current view would survive the needs-attention filter.
+///
+/// Shown on the toggle so pressing it is a decision rather than a guess: a zero
+/// says "nothing here to resolve" without the user having to press and land on
+/// an empty grid. Counted over the same list [visibleModsProvider] starts from,
+/// so it can't claim mods the view doesn't contain.
+final modsNeedingAttentionCountProvider = Provider<int>((ref) {
+  return ref
+      .watch(currentCharacterSkinsProvider)
+      .where(modInfoNeedsAttention)
+      .length;
+});
 
 /// Distinct tags present in the current view's mods (sorted), for the
 /// tag-filter dropdown.
@@ -212,6 +238,7 @@ final availableModTagsProvider = Provider<List<String>>((ref) {
 final visibleModsProvider = Provider<List<ModInfo>>((ref) {
   final query = ref.watch(modSearchQueryProvider).toLowerCase();
   final favoritesOnly = ref.watch(modFavoritesOnlyProvider);
+  final needsAttentionOnly = ref.watch(modNeedsAttentionOnlyProvider);
   final tagFilters = ref.watch(modTagFiltersProvider);
   final matchAll = ref.watch(modTagMatchAllProvider);
   final sort = ref.watch(modSortProvider);
@@ -223,6 +250,9 @@ final visibleModsProvider = Provider<List<ModInfo>>((ref) {
   }
   if (favoritesOnly) {
     result = result.where((m) => m.isFavorite);
+  }
+  if (needsAttentionOnly) {
+    result = result.where(modInfoNeedsAttention);
   }
   final activeTags = tagFilters.isEmpty
       ? const <String>{}

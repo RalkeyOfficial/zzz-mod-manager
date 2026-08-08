@@ -235,10 +235,43 @@ Goal: make the data recorded in M1 pay off in the UI.
   - [ ] **"Update available" is not part of this** — needs §4, lands with M3. Same
     slot, and it must differ from "installed" by **hue rather than volume**, since
     that now takes `primary`.
-- [ ] **§7** — the mod-card **status slot** (§7.4), the **"needs attention"**
+- [x] **§7** — the mod-card **status slot** (§7.4), the **"needs attention"**
   filter, and the per-mod **resolve dialog** (§7.5). This is where "the user can
   take action" actually lands; it needs §2's client and §1's file-list widget.
+  **Done.** Three pure units carry the decisions —
+  `services/origin_status.dart` (the one-slot fold, shared by the badge *and* the
+  filter so they cannot disagree), `services/origin_resolution.dart` (candidate
+  ranking with a stated reason, plus the four transforms an answer may write) and
+  `ModOrigin.boundTo` (what survives a rebind, now one copy shared with the
+  offline backfill instead of two). The surfaces are
+  `screens/components/mod_status_slot.dart`, a toolbar toggle carrying a live
+  count, and `screens/dialogs/resolve_origin_dialog.dart`; the write path is
+  `ModMetadataRepository.updateOrigin`, which **amends** rather than replaces and
+  re-reads before applying. Written up in
+  [`docs/metadata-schema.md`](docs/metadata-schema.md) §5, now authoritative.
+  Two corrections to what this doc assumed, both applied — see §7.4 and §7.5:
+  **a `/dl/` link cannot be resolved to a mod by either API**, and **the filter
+  covers the muted state too, not only the amber one**. Smoke-tested against the
+  real library on Linux: the toolbar reports 16 of the developer's own mods as
+  needing attention.
+  **Blocker found by using it, not by testing it, and worth recording as a
+  pattern.** Saving in the dialog left the amber mark on the card. Everything
+  underneath was correct — the sidecar was written, the rescan re-read it — but
+  `ModsScreen` guards `charactersProvider` behind a hand-written field-by-field
+  comparison, and `origin` had never been added to it (it went onto `ModInfo`
+  during M2's read side, where nothing yet depended on the guard seeing it). So
+  the guard said "unchanged" and the grid kept rendering the previous `ModInfo`.
+  Nothing threw, no test failed, and the whole feature looked broken from the one
+  place it is used. Fixed by giving `ModOrigin` real value equality and moving the
+  comparison out of the 2000-line screen into `utils/mod_group_diff.dart`, where
+  it is now tested — including that removing the `origin` line fails three tests.
+  The general lesson is filed below: **that list is a silent-staleness trap for
+  every future field on `ModInfo`**, and only `origin` is now self-maintaining.
 - [ ] **§7** — the zero-network **"assume current"** baseline action (§7.5).
+  The **per-mod** half shipped with the dialog above (the "I don't know which
+  file" escape hatch, with the §7.3 clamp applied). What is still open is the
+  *bulk* action — apply it to every tracked-but-versionless mod at once — and
+  the confirmation that states how many mods it is about to flag.
 
 ### M3 — Updating
 
@@ -1161,10 +1194,15 @@ been renamed). Strictly local: scans run offline on every launch.
 
 ### 7.4 Visual status — one slot, three states
 
-- [ ] The mod card gets a **single status slot**, not stacking badges. The data it
+- [x] The mod card gets a **single status slot**, not stacking badges. The data it
   needs is now in hand: `ModInfo` carries the origin block (see §7.3's re-decided
   ban), so the slot reads `mod.origin` and costs no I/O at all. It renders
   exactly one of:
+  **Done**, and the "costs no I/O" claim held — the slot is a pure fold of a
+  field the scan already parsed. Placement is **bottom-left of the cover**, the
+  one corner the card had free, at a constant footprint across states so
+  resolving a mod doesn't reflow the artwork. One correction applied, see the
+  `remote_missing` note below the list.
   - **Amber / actionable** — identity known, version unknown. We can query for
     updates but can't judge them, and one click fixes it. Tooltip: "installed
     version unknown — click to set". Opens §7.5.
@@ -1174,11 +1212,33 @@ been renamed). Strictly local: scans run offline on every launch.
   - **Accent / update available** — the §4 state. Must be clearly distinct from
     amber, or the two read as the same thing.
   - Nothing at all for fully-known origins and `tracking: "off"`.
-- [ ] **"Needs attention" filter** in the mods toolbar, alongside the tag filters.
+  - **Correction (applied): `remote_missing` also renders nothing**, and the
+    list above never said what to do with it. The amber state's entire offer is
+    "click to set the version", which means reading a mod page that is private,
+    trashed or withheld — offering an action that cannot complete is worse than
+    staying quiet. Nothing writes the flag today, so nothing is hidden by this
+    yet; §7.6 is what will set it, and it wants its own wording rather than one
+    of the three states here. Filed below as its own item.
+- [x] **"Needs attention" filter** in the mods toolbar, alongside the tag filters.
   A status dot is spatial; a library of 80 mods needs the state to be
   *enumerable* before anyone can act on it in bulk.
+  **Done**, and it carries a **count** and hides itself at zero: the answer is
+  usually either nothing or most of the library, and both are worth knowing
+  before pressing rather than after landing on an empty grid.
+  **Correction (applied): it keeps the muted state as well as the amber one.**
+  The badge and the filter answer different questions — the badge asks how loudly
+  a card should speak, where an untracked mod is deliberately quiet, while the
+  filter asks what the user could act on, and the resolve dialog acts on an
+  untracked mod perfectly well (seeded with the folder name). Excluding them
+  would leave a legacy library with an empty filter and no way to enumerate the
+  mods the filter exists to enumerate. What untracked mods still get no access to
+  is *bulk* resolution — that rule (§7.6) is about fuzzy name matching being
+  unsafe to rubber-stamp, not about which mods are listed here.
 - [ ] One-time dismissible nudge after the upgrade ("N mods aren't tracked for
-  updates"), re-openable from Settings. Not a modal wizard.
+  updates"), re-openable from Settings. Not a modal wizard. **Not built** — the
+  toolbar's count is a passive version of the same fact and was enough to ship
+  the filter, but it only appears once the user is already looking at the Mods
+  tab toolbar. Still worth doing; still needs the dismissed flag from §6.
 
 ### 7.5 Per-mod resolve dialog
 
@@ -1186,35 +1246,134 @@ One job: bind this folder to a remote mod + file. Reuses widgets §1 already
 builds (search result cards, the file list). Entry points: the status slot, the
 mod context menu, and the edit-mod dialog.
 
-- [ ] **Identify** — prefilled from the `source_url`-derived id; otherwise a
-  search box seeded with the folder name, or a pasted URL (a `/dl/` link is
-  accepted here and resolved via the API). Confirming sets `user` confidence.
-- [ ] **Pick the file** — skipped entirely when a **banked archive md5** (§7.8)
+- [x] **Identify** — prefilled from the `source_url`-derived id; otherwise a
+  search box seeded with the folder name, ~~or a pasted URL (a `/dl/` link is
+  accepted here and resolved via the API)~~. Confirming sets `user` confidence.
+  **Done**, with one correction. **A pasted `/dl/` link cannot be resolved via
+  the API — by either API.** Probed exhaustively against the live surface
+  (2026-08-08) because accepting one is an obvious thing to want:
+  `apiv11 File/<id>` returns the file record in full — name, size, date, md5,
+  AV verdict, even `_aArchiveFileTree` — and **carries no owning mod anywhere**;
+  `File/Multi` rejects `_aSubmission` / `_aMod` / `_idModRow` / `_aOwner` as
+  `UNKNOWN_PROPERTY`; a File's `_sProfileUrl` comes back as the broken
+  `https://gamebanana.com//<id>`; and the legacy Core API's self-describing
+  `AllowedFields` for `File` offers nothing better than another file-id url
+  (`/mmdl/<id>`). The *intent* stands — don't dead-end someone who pastes one —
+  so the dialog recognises the link and says why it can't work, instead of
+  searching for the url as though it were a mod name. A **mod page** url still
+  resolves directly and skips the search entirely. Written up in
+  [`docs/gamebanana-api.md`](docs/gamebanana-api.md) §6.
+  Worth knowing for §7.6: a `/dl/` link *is* usable once the mod is known, since
+  the file id can be matched against that mod's `_aFiles`/`_aArchivedFiles` — not
+  built here, filed below.
+- [x] **Pick the file** — skipped entirely when a **banked archive md5** (§7.8)
   matches one of the remote files: that's exact, so just show what it resolved to.
   Otherwise the remote file list, ranked by local hints: exact folder-name ↔
   archive-name match first, then upload date nearest `installed_at`; preselect when
   there is exactly one file. Always show *why* a row is suggested ("matches your
   folder name") — no silent magic.
-- [ ] **Two first-class escape hatches**, both one click:
+  **Done**, in `services/origin_resolution.dart`, tested against both captured
+  profiles. Two refinements the data forced:
+  - **"nearest `installed_at`" is the newest file that already *existed*,** not
+    the nearest in absolute terms. A file uploaded after the install cannot be
+    the installed one, so absolute distance can name a file that did not yet
+    exist. The rule came from that reasoning rather than from the data — worth
+    being precise about, because the first write-up here claimed the fixture
+    disproved absolute distance and the arithmetic did not support it. It can:
+    against `mod_profile_531649`, an install at **15:00** on 2026-05-08 has
+    nearest-distance picking v7.5 (56 min after) over v7.4 (151 min before),
+    where existed-first picks v7.4. That is the *only* window in this fixture
+    that separates them — at 13:00 or 14:00 both rules agree — and it is what
+    the test now uses.
+  - **The hash-matched row is preselected but the picker is not hidden.** The
+    rows stay so the user can see what it resolved to and disagree; what changes
+    is that they no longer have to decide. Folder-name matches are *shown with
+    their reason and left unselected* — a suggestion informs, it does not drive.
+- [x] **Two first-class escape hatches**, both one click:
   - *"I don't know which"* → `assumed_latest`, `baseline_remote_date =
     installed_at`. Don't flag anything uploaded before the install; do flag
     anything after. Requires zero knowledge from the user.
   - *"Not from GameBanana / it's my own"* → `tracking: "off"`; the status slot
     goes quiet permanently.
+  **Done**, and "one click" turned out to be load-bearing in a way the plan
+  didn't budget for: a captured profile lists **fourteen** files, so both lists
+  in the dialog are height-bounded and scroll inside themselves — otherwise the
+  hatches slide off the bottom and stop being escape hatches. §7.3's baseline
+  clamp is applied (no earlier than the mod's own `_tsDateAdded`), and the "I
+  don't know which" row is *disabled with a reason* when no install date can be
+  derived at all, since `assumed_latest` without a baseline compares against
+  nothing. `tracking: "off"` is reachable with no identity at all — for a legacy
+  library it is often the correct answer, so it cannot be gated behind finding a
+  mod page first — and it deliberately **keeps** the remote id, so turning
+  tracking back on is an undo rather than a second trip through the dialog.
 - [ ] **Zero-network "assume current" bulk action** — apply `assumed_latest` to
   every tracked-but-versionless mod at once, no API calls. Probably the highest
   value-per-line item here: it turns a dead 50-mod library into a working
   update-notification system immediately, with an honest caveat instead of a
   fabricated version string.
-- [ ] Free add-on from the same API response: an **"also fill in missing
+- [x] Free add-on from the same API response: an **"also fill in missing
   metadata"** checkbox (description, images, tags, character) for bare legacy
   imports. §3 wants this on install anyway.
+  **Done**, and it was exactly the UI work the note below predicted — no new
+  decision logic, the same `applyRemoteMetadata` call the install path uses.
+  Off by default and **best-effort**: it runs after the origin write and cannot
+  turn a successful resolve into a failed one, because the tracking data is what
+  the user came to set and a slow CDN node fetching a gallery is not a reason to
+  report failure.
   **The machinery for this now exists** and needs no new decision logic:
   `ModManagerService.applyRemoteMetadata(modNames, RemoteModMetadata.fromMod(profile))`
   takes any list of mods, and its fill-absence-never-displace rule is exactly what a
   legacy mod wants. What is missing is only the checkbox and the profile fetch — so
   this is UI work, not a second implementation. See
   [`docs/metadata-schema.md`](docs/metadata-schema.md) §2.
+
+#### Filed by the resolve dialog (found while building it, deliberately not built)
+
+- [ ] **`remote_missing` has no visible state, and now silences the slot.** §7.4's
+  three states have no room for "the mod page is gone", so `modOriginStatus`
+  treats the flag like `tracking: "off"` and renders nothing — correct today,
+  since nothing writes the flag, but it becomes a silent hole the moment §7.6
+  does. That state needs its own wording ("source no longer available"), and it
+  must stay distinct from `_bIsObsolete`, which means the mod still exists and its
+  author flagged it superseded.
+- [ ] **A `/dl/` link could still pick the *file*, once the mod is known.** The
+  identity step rejects one honestly (see above), but the file step has the mod's
+  `_aFiles` + `_aArchivedFiles` in hand, so a pasted file id is a direct row match
+  costing no request. Small, and it turns a dead end into a shortcut for exactly
+  the user who has the download link but not the page.
+- [ ] **Two constants hold the string `gamebanana`.** `gameBananaSource`
+  (`utils/gamebanana_url.dart`, where offline code can reach it) and
+  `AppConstants.gameBananaSourceName` (`core/constants.dart`, used by the
+  marketplace's ingest seed). They agree today; a typo in either would create a
+  silent second, unqueryable service rather than an error — which is the exact
+  failure `gameBananaSource`'s doc comment was written to prevent. One of them
+  should go.
+- [ ] **The resolve dialog cannot be reached from the edit-mod dialog.** §7.5
+  names three entry points; the status slot and the context menu are wired, the
+  edit dialog is not. That is the dialog where `source_url` is shown and edited,
+  so it is where a user most plausibly notices the binding is wrong.
+- [ ] **A keybind edit probably doesn't refresh the grid either — same guard,
+  same shape.** `modGroupsChanged` deliberately does **not** compare
+  `ModInfo.keybinds`, because they are re-parsed from `.ini` on every scan and
+  `KeybindInfo` has no value equality, so comparing them would report a change
+  every time and switch the guard off entirely. But the keybinds dialog's
+  `onSaved` calls `loadMods`, which means an edit whose only effect is on
+  keybinds hits exactly the failure the origin block just hit. Not verified by
+  clicking, and not fixed here: the fix is value equality on `KeybindInfo` plus a
+  decision about whether enrichment produces stable values, which is a keybinds
+  question rather than an origin one.
+- [ ] **The rescan guard's field list is a silent-staleness trap in general.**
+  `origin` is now self-maintaining (it is compared through `ModOrigin.==`), but
+  every other field on `ModInfo` is a line someone has to remember to add, and
+  forgetting it produces no error — just a surface that renders yesterday's data
+  until the tab is switched. The durable fix is value equality on `ModInfo`
+  itself, which needs the keybinds question above answered first.
+- [ ] **The dialog is per-mod only, by design, and that leaves the two-variant
+  case tedious.** Two folders from one mod page are common (measured: two in a
+  23-mod library), and each needs its own trip through the dialog even though the
+  identity step's answer is identical. §7.6's bulk screen is the proper fix;
+  noting it here so it isn't mistaken for something the per-mod dialog should
+  grow.
 
 ### 7.6 Bulk resolution = §4's "check all" screen
 
@@ -1296,13 +1455,17 @@ file the user has, which is the one path to exactness for hand-imported mods.
   `version` at `exact` confidence and skips the "which file?" picker entirely.
   Compare against **`_aArchivedFiles` as well as `_aFiles`** — an old install matches
   a superseded file more often than the current one (§7.6).
-  **Half of this shipped with the read side, and it is the *display* half only.**
-  The detail view's file list already marks a row whose published md5 matches a
-  banked one — including archived rows, same lookup — so the user is told. What is
-  still open is the part that **writes**: no path yet promotes `file_id` /
-  `version` to `exact` from that match, because that is the resolve dialog's and
-  the bulk pass's job and neither exists. Don't read the marker as evidence the
-  confidence upgrade happened.
+  ~~**Half of this shipped with the read side, and it is the *display* half only.**~~
+  **Both halves have shipped for the per-mod path.** The detail view's file list
+  marks a row whose published md5 matches a banked one — including archived rows,
+  same lookup — and the resolve dialog now **writes** the upgrade: a banked-hash
+  match preselects that row, is labelled "byte-identical to your archive", and
+  saving it records `file_id` / `version` / `version_label` at `exact`. Two
+  caveats stand. The *bulk* pass (§7.6) still doesn't exist, so this only fires
+  one mod at a time. And it fires for very few mods in practice: a real 23-mod
+  library banks **no** `archive_md5` at all, because the hash is recorded at
+  ingest and cannot be recovered from extracted files — so this pays off for mods
+  installed by this build onward, not for the legacy library it would help most.
 - [x] **Bonus, purely local:** match a new import's hash against already-banked
   ones → "you already have this as `<folder>`". No network, no GameBanana.
   **Done**, as a gate both ingest paths run before installing
@@ -1386,6 +1549,13 @@ work that already opens the same file, so they cost nothing extra.
   **The metadata autofill added 4 more** — one sentence plus the three field nouns it
   lists, kept as separate keys rather than an interpolated English list so the nouns
   are actually translated.
+  **§7.4 and §7.5 added 26** — two tooltips, a context-menu entry, a toolbar
+  tooltip and the resolve dialog's 22. The estimate holds again, and the same
+  observation as before: the *wording* is the work. Four of those keys are the
+  match reasons ("byte-identical to your archive", "newest file that existed when
+  you installed this"), which are the whole difference between a ranked list the
+  user can argue with and one they have to trust — and they are confidence copy,
+  so they have to be translated rather than interpolated.
 - [ ] **Name the tests, because the risky parts are pure functions.** The pieces most
   likely to be quietly wrong need no network and no UI: `source_url` → `mod_id`
   parsing (§7.3); the confidence state machine and what each tier permits (§7.2); the
@@ -1393,7 +1563,8 @@ work that already opens the same file, so they cost nothing extra.
   since it edits user data; hash → file matching across `_aFiles` + `_aArchivedFiles`
   (§7.6 — the *lookup* half is now covered by `test/installed_mods_index_test.dart`,
   including that a file-id match and a hash match stay distinguishable; the half
-  that writes `exact` confidence from a hit is still unwritten and untested); and
+  that writes `exact` confidence from a hit is now `origin_resolution_test.dart`,
+  which ranks against both captured profiles); and
   the sidecar unknown-key round-trip (M1). Fixtures beat mocks — a couple
   of real `ProfilePage` responses checked into `test/` keep the client honest when the
   API shifts under it.
@@ -1403,7 +1574,18 @@ work that already opens the same file, so they cost nothing extra.
   beside patchers and demos), and those same fixtures are now the tests. A
   hand-written mock would have encoded the assumption the plan started with — tidy
   `_sVersion` strings to compare — and the rule would have shipped confidently wrong.
-  Suite is 602 tests, all offline. The autofill's share is the pattern working again:
+  Suite is 678 tests, all offline. The §7.4/§7.5 share is the pattern once more,
+  and it is where the "nearest install date" rule's *only* discriminating case
+  lives: an install at 15:00 on 2026-05-08 is the one window in
+  `mod_profile_531649` where nearest-absolute-distance and
+  newest-that-already-existed disagree. Real timestamps are what make a case like
+  that findable at all — a hand-written fixture would have had round numbers and
+  the two rules would have agreed everywhere.
+  It also forced a seam that was worth having anyway
+  (`ResolveOriginGateway`): the dialog reaches `ApiService`, which builds a
+  `ConfigService` against the developer's **real** `<appData>/config.json`, so
+  mounting it in a test without one would have clobbered their library paths.
+  The autofill's share is the pattern working again:
   its two pure units are tested against real captured profiles, and the two rules most
   likely to be quietly wrong are pinned as *canaries* rather than examples — that all
   60 live character categories map to a roster id and none of the 4 roots do, and that

@@ -188,6 +188,19 @@ class ModManagerService {
   ) =>
       _metadata.applyRemoteMetadata(modNames, remote);
 
+  /// Amends an existing mod's origin block — the resolve dialog's write path.
+  /// Rules and re-read-before-write both live in [ModMetadataRepository].
+  Future<bool> updateModOrigin(
+    String modName,
+    ModOrigin? Function(ModOrigin? current) update,
+  ) =>
+      _metadata.updateOrigin(modName, update);
+
+  /// The oldest file mtime inside a mod folder, as an install-date proxy for a
+  /// mod that has no recorded install date. See [ModMetadataRepository].
+  Future<DateTime?> installDateProxy(String modName) =>
+      _metadata.installDateProxy(modName);
+
   ModMetadataService get metadataService => _metadata.service;
 
   /// Видаляє символічні посилання на моди, які більше не існують

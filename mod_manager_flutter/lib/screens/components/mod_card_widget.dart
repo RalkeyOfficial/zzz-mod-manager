@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../core/constants.dart';
 import '../../models/character_info.dart';
+import 'mod_status_slot.dart';
 
 class ModCardWidget extends StatefulWidget {
   final ModInfo mod;
@@ -10,6 +11,11 @@ class ModCardWidget extends StatefulWidget {
   final VoidCallback onShowDetails;
   final VoidCallback onOpenLink;
 
+  /// Opens the resolve dialog. Null hides the origin status slot entirely,
+  /// which is what the drag-feedback copy of the card wants — a badge you can
+  /// click on a ghost being dragged across the screen is not a badge.
+  final VoidCallback? onResolveOrigin;
+
   const ModCardWidget({
     super.key,
     required this.mod,
@@ -17,6 +23,7 @@ class ModCardWidget extends StatefulWidget {
     required this.onFavoriteToggle,
     required this.onShowDetails,
     required this.onOpenLink,
+    this.onResolveOrigin,
   });
 
   @override
@@ -136,6 +143,16 @@ class _ModCardWidgetState extends State<ModCardWidget> {
 
             // Top-right: enabled state.
             Positioned(top: 10, right: 10, child: _statusBadge(mod)),
+
+            // Bottom-left: the origin status slot. One slot, one state — see
+            // ModStatusSlot for why untracked whispers and only the actionable
+            // state speaks up.
+            if (widget.onResolveOrigin case final resolve?)
+              Positioned(
+                bottom: 8,
+                left: 8,
+                child: ModStatusSlot(mod: mod, onTap: resolve),
+              ),
 
             // Bottom-right: actions — open source link (if any) + favorite.
             Positioned(
