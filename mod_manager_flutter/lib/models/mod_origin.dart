@@ -30,6 +30,7 @@ class ModOrigin {
     this.archiveMd5,
     this.tracking = OriginTracking.auto,
     this.remoteMissing = false,
+    this.updatesDismissedUntil,
   });
 
   /// Which service, e.g. `gamebanana`. Null when the mod isn't tracked.
@@ -86,6 +87,19 @@ class ModOrigin {
   /// the author merely flagging it superseded.
   final bool remoteMissing;
 
+  /// "I have seen what this mod published up to here, and I don't want it."
+  ///
+  /// A **date rather than a file id**, so that it expires by itself: an update
+  /// check stays quiet about anything published at or before this instant, and
+  /// speaks again the moment the author publishes something newer. A dismissal
+  /// keyed on a file id would either be permanent or need re-dismissing per
+  /// variant, and neither is what "not this one" means.
+  ///
+  /// Deliberately *not* a `tracking: "off"`: that answer says the mod is not
+  /// from GameBanana at all and silences it forever. This one keeps the mod
+  /// tracked and keeps the next release loud.
+  final DateTime? updatesDismissedUntil;
+
   /// Whether an unattended update may overwrite this mod's files.
   ///
   /// Both axes must be exact: knowing the mod but not the file is not enough to
@@ -129,7 +143,8 @@ class ModOrigin {
       other.baselineRemoteDate == baselineRemoteDate &&
       other.archiveMd5 == archiveMd5 &&
       other.tracking == tracking &&
-      other.remoteMissing == remoteMissing;
+      other.remoteMissing == remoteMissing &&
+      other.updatesDismissedUntil == updatesDismissedUntil;
 
   @override
   int get hashCode => Object.hash(
@@ -148,6 +163,7 @@ class ModOrigin {
         archiveMd5,
         tracking,
         remoteMissing,
+        updatesDismissedUntil,
       );
 
   /// Points this block at remote mod [modId] at [confidence], clearing whatever
@@ -192,6 +208,9 @@ class ModOrigin {
       archiveMd5: archiveMd5,
       tracking: tracking,
       remoteMissing: rebinding ? false : remoteMissing,
+      // A dismissal is a statement about one mod page's releases, so it means
+      // nothing once the folder points at a different mod.
+      updatesDismissedUntil: rebinding ? null : updatesDismissedUntil,
     );
   }
 
@@ -220,6 +239,9 @@ class ModOrigin {
         if (archiveMd5 != null) 'archive_md5': archiveMd5,
         if (tracking != OriginTracking.auto) 'tracking': tracking.wire,
         if (remoteMissing) 'remote_missing': true,
+        if (updatesDismissedUntil != null)
+          'updates_dismissed_until':
+              updatesDismissedUntil!.toUtc().toIso8601String(),
       };
 
   /// Parses a stored block. **Never throws, for any input.**
@@ -254,6 +276,7 @@ class ModOrigin {
       archiveMd5: _string(raw['archive_md5']),
       tracking: OriginTracking.parse(raw['tracking']),
       remoteMissing: raw['remote_missing'] == true,
+      updatesDismissedUntil: _date(raw['updates_dismissed_until']),
     );
   }
 
@@ -273,6 +296,7 @@ class ModOrigin {
     String? archiveMd5,
     OriginTracking? tracking,
     bool? remoteMissing,
+    DateTime? updatesDismissedUntil,
   }) =>
       ModOrigin(
         source: source ?? this.source,
@@ -290,6 +314,27 @@ class ModOrigin {
         archiveMd5: archiveMd5 ?? this.archiveMd5,
         tracking: tracking ?? this.tracking,
         remoteMissing: remoteMissing ?? this.remoteMissing,
+        updatesDismissedUntil:
+            updatesDismissedUntil ?? this.updatesDismissedUntil,
+      );
+
+  /// Clears [updatesDismissedUntil], which [copyWith] cannot express.
+  ModOrigin withUpdatesUndismissed() => ModOrigin(
+        source: source,
+        modId: modId,
+        modIdConfidence: modIdConfidence,
+        fileId: fileId,
+        version: version,
+        versionLabel: versionLabel,
+        versionConfidence: versionConfidence,
+        provenance: provenance,
+        ingest: ingest,
+        installedAt: installedAt,
+        installedAtIsProxy: installedAtIsProxy,
+        baselineRemoteDate: baselineRemoteDate,
+        archiveMd5: archiveMd5,
+        tracking: tracking,
+        remoteMissing: remoteMissing,
       );
 
   static String? _string(Object? value) {

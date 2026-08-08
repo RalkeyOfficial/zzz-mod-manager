@@ -1,0 +1,652 @@
+{
+    "_aMetadata": {
+        "_nRecordCount": 2,
+        "_nPerpage": 5,
+        "_bIsComplete": true
+    },
+    "_aRecords": [
+        {
+            "_idRow": 354854,
+            "_nStatus": "0",
+            "_bIsPrivate": false,
+            "_bAccessorIsSubmitter": false,
+            "_bIsTrashed": false,
+            "_sName": "Version 1.5",
+            "_tsDateModified": 0,
+            "_tsDateAdded": 1753554603,
+            "_sProfileUrl": "https:\/\/gamebanana.com\/updates\/354854",
+            "_aPreviewMedia": {
+                "_aMetadata": {
+                    "_sSnippet": "As promised, she got her banner back a while ago and went back to give her this update.Sorry for the..."
+                }
+            },
+            "_nPostCount": 0,
+            "_sInitialVisibility": "show",
+            "_bHasFiles": false,
+            "_sText": "<p><span style=\"color: rgb(255, 255, 255); font-family: &quot;ABC Oracle Plus Variable&quot;, -apple-system, blinkmacsystemfont, &quot;Segoe UI&quot;, roboto, arial, sans-serif; font-size: 16px;\">As promised, she got her banner back a while ago and went back to give her this update.<\/span><br><span style=\"color: rgb(255, 255, 255); font-family: &quot;ABC Oracle Plus Variable&quot;, -apple-system, blinkmacsystemfont, &quot;Segoe UI&quot;, roboto, arial, sans-serif; font-size: 16px;\">Sorry for the late, hope you enjoy~<\/span><\/p>",
+            "_bShowRipePromo": false,
+            "_aSubmitter": {
+                "_idRow": 1751504,
+                "_sName": "Hazeker",
+                "_sUserTitle": "Imagine Dragon Girls...",
+                "_sHonoraryTitle": "",
+                "_tsJoinDate": 1601932596,
+                "_sAvatarUrl": "https:\/\/images.gamebanana.com\/img\/av\/5f7b8e7d02f3d.jpg",
+                "_sSigUrl": "",
+                "_sProfileUrl": "https:\/\/gamebanana.com\/members\/1751504",
+                "_sPointsUrl": "https:\/\/gamebanana.com\/members\/logs\/pointslog\/1751504",
+                "_sMedalsUrl": "https:\/\/gamebanana.com\/members\/stats\/medals\/1751504",
+                "_bIsOnline": false,
+                "_sLocation": "<a href=\"https:\/\/gamebanana.com\">Home<\/a> > <a href=\"https:\/\/gamebanana.com\/games\/19567\"><img src=\"https:\/\/images.gamebanana.com\/img\/ico\/games\/657d72ea51567.png\"\/><span>Zenless Zone Zero<\/span><\/a> > <a href=\"https:\/\/gamebanana.com\/questions\/games\/19567\">Questions<\/a> > <a href=\"https:\/\/gamebanana.com\/questions\/cats\/1981\">Other\/Misc<\/a> > <a href=\"https:\/\/gamebanana.com\/questions\/85619\">Mouse lag<\/a>",
+                "_sOnlineTitle": "",
+                "_sOfflineTitle": "",
+                "_nPoints": 1299964,
+                "_nPointsRank": 2,
+                "_aNormalMedals": [
+                    [
+                        "m_age_1.png",
+                        "One month a member",
+                        "normal",
+                        335023
+                    ],
+                    [
+                        "m_age_2.png",
+                        "6 months a member",
+                        "normal",
+                        378383
+                    ],
+                    [
+                        "m_age_3.png",
+                        "1 year a member",
+                        "normal",
+                        759967
+                    ],
+                    [
+                        "m_age_4.png",
+                        "2 years a member",
+                        "normal",
+                        776111
+                    ],
+                    [
+                        "features_1.png",
+                        "Submission featured",
+                        "normal",
+                        778967
+                    ],
+                    [
+                        "subscribers_1.png",
+                        "Reached 10 subscribers",
+                        "normal",
+                        779005
+                    ],
+                    [
+                        "thanks_recvd_1.png",
+                        "Received thanks 5 times",
+                        "normal",
+                        779734
+                    ],
+                    [
+                        "m_pr_1.png",
+                        "Reached 1,000 Points",
+                        "normal",
+                        780240
+                    ],
+                    [
+                        "m_pr_2.png",
+                        "Reached 2,500 Points",
+                        "normal",
+                        780241
+                    ],
+                    [
+                        "m_pr_3.png",
+                        "Reached 7,500 Points",
+                        "normal",
+                        814673
+                    ],
+                    [
+                        "mods1.png",
+                        "Submitted 5 Mods",
+                        "normal",
+                        857739
+                    ],
+                    [
+                        "m_pr_4.png",
+                        "Reached 25,000 Points",
+                        "normal",
+                        880812
+                    ],
+                    [
+                        "mods2.png",
+                        "Submitted 10 Mods",
+                        "normal",
+                        914481
+                    ],
+                    [
+                        "thanks_sent_1.png",
+                        "Thanked 5 submitters",
+                        "normal",
+                        961680
+                    ],
+                    [
+                        "m_age_5.png",
+                        "4 years a member",
+                        "normal",
+                        2318499
+                    ]
+                ],
+                "_aRareMedals": [
+                    [
+                        "subscribers_2.png",
+                        "Reached 50 subscribers",
+                        "rare",
+                        780817
+                    ],
+                    [
+                        "features_2.png",
+                        "10 submissions featured",
+                        "rare",
+                        841305
+                    ],
+                    [
+                        "thanks_recvd_2.png",
+                        "Received thanks 50 times",
+                        "rare",
+                        888235
+                    ],
+                    [
+                        "mods3.png",
+                        "Submitted 15 Mods",
+                        "rare",
+                        974018
+                    ],
+                    [
+                        "m_pr_5.png",
+                        "Reached 75,000 Points",
+                        "rare",
+                        1047391
+                    ],
+                    [
+                        "mods4.png",
+                        "Submitted 20 Mods",
+                        "rare",
+                        1176852
+                    ],
+                    [
+                        "m_pr_6.png",
+                        "Reached 200,000 Points",
+                        "rare",
+                        1687622
+                    ],
+                    [
+                        "mods5.png",
+                        "Submitted 50 Mods",
+                        "rare",
+                        2161341
+                    ],
+                    [
+                        "m_pr_7.png",
+                        "Reached 500,000 Points",
+                        "rare",
+                        2599641
+                    ],
+                    [
+                        "mods6.png",
+                        "Submitted 100 Mods",
+                        "rare",
+                        4706604
+                    ]
+                ],
+                "_aLegendaryMedals": [
+                    [
+                        "subscribers_3.png",
+                        "Reached 100 subscribers",
+                        "legendary",
+                        783420
+                    ],
+                    [
+                        "features_3.png",
+                        "30 submissions featured",
+                        "legendary",
+                        1077270
+                    ],
+                    [
+                        "thanks_recvd_3.png",
+                        "Received thanks 500 times",
+                        "legendary",
+                        1699732
+                    ],
+                    [
+                        "m_pr_8.png",
+                        "Reached 1,000,000 Points",
+                        "legendary",
+                        3849750
+                    ]
+                ],
+                "_bHasRipe": false,
+                "_nBuddyCount": 12,
+                "_nSubscriberCount": 19001,
+                "_aDonationMethods": [
+                    {
+                        "_sTitle": "Patreon Profile",
+                        "_sValue": "https:\/\/www.patreon.com\/HazekerMods",
+                        "_sInputType": "text",
+                        "_sInputPlaceholder": "Patreon Profile URL...",
+                        "_sIconClasses": "MiscIcon PatreonProfileIcon",
+                        "_aValidator": {
+                            "_regexValidPattern": "^https?\\:\\\/\\\/(www\\.)?patreon\\.com\\\/.+$",
+                            "_sWarningMessage": "URL looks incorrect - it should look like: https:\/\/patreon.com\/USERNAME"
+                        },
+                        "_sValueTemplate": "<a target=\"_blank\" href=\"%VALUE%\">Patreon Profile<\/a>",
+                        "_bIsUrl": true,
+                        "_sFormattedValue": "<a target=\"_blank\" href=\"https:\/\/www.patreon.com\/HazekerMods\">Patreon Profile<\/a>"
+                    },
+                    {
+                        "_sTitle": "Ko-fi Profile",
+                        "_sValue": "https:\/\/ko-fi.com\/hazeker",
+                        "_sInputType": "text",
+                        "_sInputPlaceholder": "Ko-fi Profile URL...",
+                        "_sIconClasses": "MiscIcon KofiIcon",
+                        "_aValidator": {
+                            "_regexValidPattern": "^https?\\:\\\/\\\/(www\\.)?ko\\-fi\\.com\\\/.+$",
+                            "_sWarningMessage": "URL looks incorrect - it should look like: https:\/\/ko-fi.com\/USERNAME"
+                        },
+                        "_sValueTemplate": "<a target=\"_blank\" href=\"%VALUE%\">Ko-fi Profile<\/a>",
+                        "_bIsUrl": true,
+                        "_sFormattedValue": "<a target=\"_blank\" href=\"https:\/\/ko-fi.com\/hazeker\">Ko-fi Profile<\/a>"
+                    }
+                ],
+                "_bAccessorIsBuddy": false,
+                "_bBuddyRequestExistsWithAccessor": false,
+                "_bAccessorIsSubscribed": false,
+                "_aSubjectShaper": {
+                    "_sBorderStyle": "Drop Shadow",
+                    "_sFont": "Verdana",
+                    "_sTextColor": "#33ccff",
+                    "_sTextHoverColor": "#57d5ff",
+                    "_sBorderColor": "#006ac7",
+                    "_sBorderHoverColor": "#bd5b00"
+                },
+                "_sSubjectShaperCssCode": "font-family:'Verdana';color:#33ccff;",
+                "_sUpicUrl": "https:\/\/images.gamebanana.com\/img\/upic\/66183b043bd2c.png",
+                "_aDefaultLicenseChecklist": [
+                    "yes",
+                    "ask",
+                    "ask",
+                    "ask",
+                    "ask",
+                    "ask",
+                    "no",
+                    "ask"
+                ],
+                "_sDefaultLicense": "",
+                "_sHdAvatarUrl": "https:\/\/images.gamebanana.com\/img\/av\/68f690ef21621.jpg"
+            },
+            "_bFollowLinks": true,
+            "_bIsSignificant": true,
+            "_aChangeLog": [
+                {
+                    "text": "Leotard, OG Dress and Tights added",
+                    "cat": "Addition"
+                },
+                {
+                    "text": "Wider variant options",
+                    "cat": "Overhaul"
+                },
+                {
+                    "text": "2.1 Compatible",
+                    "cat": "Refactor"
+                },
+                {
+                    "text": "Adjusted Textures and subtle proportion changes",
+                    "cat": "Adjustment"
+                },
+                {
+                    "text": "SlotFix applied (This may break textures for some people)",
+                    "cat": "Addition"
+                }
+            ],
+            "_aSubmission": {
+                "_sName": "Caesar King - Bottom Heavy",
+                "_sProfileUrl": "https:\/\/gamebanana.com\/mods\/549029",
+                "_sModelName": "Mod",
+                "_sDownloadUrl": "https:\/\/gamebanana.com\/mods\/download\/549029"
+            },
+            "_aFileRowIds": [
+                1484606,
+                1484607
+            ],
+            "_aFiles": [
+                {
+                    "_idRow": 1484606,
+                    "_sFile": "caesar_king_-_bottom_heavy.zip",
+                    "_nFilesize": 27690837,
+                    "_tsDateAdded": 1753498980,
+                    "_nDownloadCount": 4824,
+                    "_sDownloadUrl": "https:\/\/gamebanana.com\/dl\/1484606",
+                    "_sMd5Checksum": "179cb97cb7f8d08b37e9c2b36b3a3411",
+                    "_sAnalysisState": "done",
+                    "_sAnalysisResult": "ok",
+                    "_sAnalysisResultVerbose": "File passed preliminary analysis",
+                    "_sAvState": "done",
+                    "_sAvResult": "clean",
+                    "_bIsArchived": false,
+                    "_bHasContents": true,
+                    "_sDescription": "SFW Variants Only"
+                },
+                {
+                    "_idRow": 1484607,
+                    "_sFile": "caesar_king_-_bottom_heavy_nsfw__27517.zip",
+                    "_nFilesize": 26827271,
+                    "_tsDateAdded": 1753499106,
+                    "_nDownloadCount": 22209,
+                    "_sDownloadUrl": "https:\/\/gamebanana.com\/dl\/1484607",
+                    "_sMd5Checksum": "6ea0205fdef023b3eeeced1e469931e5",
+                    "_sAnalysisState": "done",
+                    "_sAnalysisResult": "ok",
+                    "_sAnalysisResultVerbose": "File passed preliminary analysis",
+                    "_sAvState": "done",
+                    "_sAvResult": "clean",
+                    "_bIsArchived": false,
+                    "_bHasContents": true,
+                    "_sDescription": "NSFW Variants Included"
+                }
+            ],
+            "_aAccess": {
+                "Update_Edit": false,
+                "Update_Trash": false
+            }
+        },
+        {
+            "_idRow": 303212,
+            "_nStatus": "0",
+            "_bIsPrivate": false,
+            "_bAccessorIsSubmitter": false,
+            "_bIsTrashed": false,
+            "_sName": "Full release | SFW Variants",
+            "_tsDateModified": 0,
+            "_tsDateAdded": 1731445826,
+            "_sProfileUrl": "https:\/\/gamebanana.com\/updates\/303212",
+            "_aPreviewMedia": {
+                "_aMetadata": {
+                    "_sSnippet": "SFW Variants finally released from Patreon, thank you all for your support~..."
+                }
+            },
+            "_nPostCount": 0,
+            "_sInitialVisibility": "show",
+            "_bHasFiles": false,
+            "_sText": "<p>SFW Variants finally released from Patreon, thank you all for your support~<\/p>",
+            "_bShowRipePromo": false,
+            "_aSubmitter": {
+                "_idRow": 1751504,
+                "_sName": "Hazeker",
+                "_sUserTitle": "Imagine Dragon Girls...",
+                "_sHonoraryTitle": "",
+                "_tsJoinDate": 1601932596,
+                "_sAvatarUrl": "https:\/\/images.gamebanana.com\/img\/av\/5f7b8e7d02f3d.jpg",
+                "_sSigUrl": "",
+                "_sProfileUrl": "https:\/\/gamebanana.com\/members\/1751504",
+                "_sPointsUrl": "https:\/\/gamebanana.com\/members\/logs\/pointslog\/1751504",
+                "_sMedalsUrl": "https:\/\/gamebanana.com\/members\/stats\/medals\/1751504",
+                "_bIsOnline": false,
+                "_sLocation": "<a href=\"https:\/\/gamebanana.com\">Home<\/a> > <a href=\"https:\/\/gamebanana.com\/games\/19567\"><img src=\"https:\/\/images.gamebanana.com\/img\/ico\/games\/657d72ea51567.png\"\/><span>Zenless Zone Zero<\/span><\/a> > <a href=\"https:\/\/gamebanana.com\/questions\/games\/19567\">Questions<\/a> > <a href=\"https:\/\/gamebanana.com\/questions\/cats\/1981\">Other\/Misc<\/a> > <a href=\"https:\/\/gamebanana.com\/questions\/85619\">Mouse lag<\/a>",
+                "_sOnlineTitle": "",
+                "_sOfflineTitle": "",
+                "_nPoints": 1299964,
+                "_nPointsRank": 2,
+                "_aNormalMedals": [
+                    [
+                        "m_age_1.png",
+                        "One month a member",
+                        "normal",
+                        335023
+                    ],
+                    [
+                        "m_age_2.png",
+                        "6 months a member",
+                        "normal",
+                        378383
+                    ],
+                    [
+                        "m_age_3.png",
+                        "1 year a member",
+                        "normal",
+                        759967
+                    ],
+                    [
+                        "m_age_4.png",
+                        "2 years a member",
+                        "normal",
+                        776111
+                    ],
+                    [
+                        "features_1.png",
+                        "Submission featured",
+                        "normal",
+                        778967
+                    ],
+                    [
+                        "subscribers_1.png",
+                        "Reached 10 subscribers",
+                        "normal",
+                        779005
+                    ],
+                    [
+                        "thanks_recvd_1.png",
+                        "Received thanks 5 times",
+                        "normal",
+                        779734
+                    ],
+                    [
+                        "m_pr_1.png",
+                        "Reached 1,000 Points",
+                        "normal",
+                        780240
+                    ],
+                    [
+                        "m_pr_2.png",
+                        "Reached 2,500 Points",
+                        "normal",
+                        780241
+                    ],
+                    [
+                        "m_pr_3.png",
+                        "Reached 7,500 Points",
+                        "normal",
+                        814673
+                    ],
+                    [
+                        "mods1.png",
+                        "Submitted 5 Mods",
+                        "normal",
+                        857739
+                    ],
+                    [
+                        "m_pr_4.png",
+                        "Reached 25,000 Points",
+                        "normal",
+                        880812
+                    ],
+                    [
+                        "mods2.png",
+                        "Submitted 10 Mods",
+                        "normal",
+                        914481
+                    ],
+                    [
+                        "thanks_sent_1.png",
+                        "Thanked 5 submitters",
+                        "normal",
+                        961680
+                    ],
+                    [
+                        "m_age_5.png",
+                        "4 years a member",
+                        "normal",
+                        2318499
+                    ]
+                ],
+                "_aRareMedals": [
+                    [
+                        "subscribers_2.png",
+                        "Reached 50 subscribers",
+                        "rare",
+                        780817
+                    ],
+                    [
+                        "features_2.png",
+                        "10 submissions featured",
+                        "rare",
+                        841305
+                    ],
+                    [
+                        "thanks_recvd_2.png",
+                        "Received thanks 50 times",
+                        "rare",
+                        888235
+                    ],
+                    [
+                        "mods3.png",
+                        "Submitted 15 Mods",
+                        "rare",
+                        974018
+                    ],
+                    [
+                        "m_pr_5.png",
+                        "Reached 75,000 Points",
+                        "rare",
+                        1047391
+                    ],
+                    [
+                        "mods4.png",
+                        "Submitted 20 Mods",
+                        "rare",
+                        1176852
+                    ],
+                    [
+                        "m_pr_6.png",
+                        "Reached 200,000 Points",
+                        "rare",
+                        1687622
+                    ],
+                    [
+                        "mods5.png",
+                        "Submitted 50 Mods",
+                        "rare",
+                        2161341
+                    ],
+                    [
+                        "m_pr_7.png",
+                        "Reached 500,000 Points",
+                        "rare",
+                        2599641
+                    ],
+                    [
+                        "mods6.png",
+                        "Submitted 100 Mods",
+                        "rare",
+                        4706604
+                    ]
+                ],
+                "_aLegendaryMedals": [
+                    [
+                        "subscribers_3.png",
+                        "Reached 100 subscribers",
+                        "legendary",
+                        783420
+                    ],
+                    [
+                        "features_3.png",
+                        "30 submissions featured",
+                        "legendary",
+                        1077270
+                    ],
+                    [
+                        "thanks_recvd_3.png",
+                        "Received thanks 500 times",
+                        "legendary",
+                        1699732
+                    ],
+                    [
+                        "m_pr_8.png",
+                        "Reached 1,000,000 Points",
+                        "legendary",
+                        3849750
+                    ]
+                ],
+                "_bHasRipe": false,
+                "_nBuddyCount": 12,
+                "_nSubscriberCount": 19001,
+                "_aDonationMethods": [
+                    {
+                        "_sTitle": "Patreon Profile",
+                        "_sValue": "https:\/\/www.patreon.com\/HazekerMods",
+                        "_sInputType": "text",
+                        "_sInputPlaceholder": "Patreon Profile URL...",
+                        "_sIconClasses": "MiscIcon PatreonProfileIcon",
+                        "_aValidator": {
+                            "_regexValidPattern": "^https?\\:\\\/\\\/(www\\.)?patreon\\.com\\\/.+$",
+                            "_sWarningMessage": "URL looks incorrect - it should look like: https:\/\/patreon.com\/USERNAME"
+                        },
+                        "_sValueTemplate": "<a target=\"_blank\" href=\"%VALUE%\">Patreon Profile<\/a>",
+                        "_bIsUrl": true,
+                        "_sFormattedValue": "<a target=\"_blank\" href=\"https:\/\/www.patreon.com\/HazekerMods\">Patreon Profile<\/a>"
+                    },
+                    {
+                        "_sTitle": "Ko-fi Profile",
+                        "_sValue": "https:\/\/ko-fi.com\/hazeker",
+                        "_sInputType": "text",
+                        "_sInputPlaceholder": "Ko-fi Profile URL...",
+                        "_sIconClasses": "MiscIcon KofiIcon",
+                        "_aValidator": {
+                            "_regexValidPattern": "^https?\\:\\\/\\\/(www\\.)?ko\\-fi\\.com\\\/.+$",
+                            "_sWarningMessage": "URL looks incorrect - it should look like: https:\/\/ko-fi.com\/USERNAME"
+                        },
+                        "_sValueTemplate": "<a target=\"_blank\" href=\"%VALUE%\">Ko-fi Profile<\/a>",
+                        "_bIsUrl": true,
+                        "_sFormattedValue": "<a target=\"_blank\" href=\"https:\/\/ko-fi.com\/hazeker\">Ko-fi Profile<\/a>"
+                    }
+                ],
+                "_bAccessorIsBuddy": false,
+                "_bBuddyRequestExistsWithAccessor": false,
+                "_bAccessorIsSubscribed": false,
+                "_aSubjectShaper": {
+                    "_sBorderStyle": "Drop Shadow",
+                    "_sFont": "Verdana",
+                    "_sTextColor": "#33ccff",
+                    "_sTextHoverColor": "#57d5ff",
+                    "_sBorderColor": "#006ac7",
+                    "_sBorderHoverColor": "#bd5b00"
+                },
+                "_sSubjectShaperCssCode": "font-family:'Verdana';color:#33ccff;",
+                "_sUpicUrl": "https:\/\/images.gamebanana.com\/img\/upic\/66183b043bd2c.png",
+                "_aDefaultLicenseChecklist": [
+                    "yes",
+                    "ask",
+                    "ask",
+                    "ask",
+                    "ask",
+                    "ask",
+                    "no",
+                    "ask"
+                ],
+                "_sDefaultLicense": "",
+                "_sHdAvatarUrl": "https:\/\/images.gamebanana.com\/img\/av\/68f690ef21621.jpg"
+            },
+            "_bFollowLinks": true,
+            "_bIsSignificant": true,
+            "_aSubmission": {
+                "_sName": "Caesar King - Bottom Heavy",
+                "_sProfileUrl": "https:\/\/gamebanana.com\/mods\/549029",
+                "_sModelName": "Mod",
+                "_sDownloadUrl": "https:\/\/gamebanana.com\/mods\/download\/549029"
+            },
+            "_aFileRowIds": [
+                1320921
+            ],
+            "_aAccess": {
+                "Update_Edit": false,
+                "Update_Trash": false
+            }
+        }
+    ]
+}

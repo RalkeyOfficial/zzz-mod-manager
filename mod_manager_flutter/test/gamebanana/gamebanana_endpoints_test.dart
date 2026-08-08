@@ -107,6 +107,14 @@ void main() {
       expect(endpoints.modDownloadPage(531649).toString(),
           'https://gamebanana.com/apiv11/Mod/531649/DownloadPage');
     });
+
+    test('updates feed takes no parameters', () {
+      // `_nPerpage` is left at the server's default of 5 deliberately: the
+      // question is always about the newest release, and a mod with fifty
+      // update posts would otherwise tempt a caller into paging all of them.
+      expect(endpoints.modUpdates(531649).toString(),
+          'https://gamebanana.com/apiv11/Mod/531649/Updates');
+    });
   });
 
   group('Mod/Categories', () {

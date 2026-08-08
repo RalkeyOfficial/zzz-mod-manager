@@ -1,6 +1,7 @@
 import '../models/character_info.dart';
 import '../models/mod_origin.dart';
 import '../models/origin_enums.dart';
+import 'update_check.dart';
 
 /// What a library mod's card says about its origin — **one slot, one state.**
 ///
@@ -40,6 +41,16 @@ enum ModOriginStatus {
   /// query this mod's file list, we just can't judge what came back, and one
   /// pass through the resolve dialog fixes it.
   versionUnknown,
+
+  /// The last update check found something newer published.
+  ///
+  /// **Never returned by [modOriginStatus]** — it is not a property of the
+  /// origin block at all, but of a check somebody ran against a mod page. It
+  /// lives in this enum rather than in one of its own because the card has
+  /// exactly *one* slot, and precedence between "you have not sorted this mod
+  /// out" and "this mod has an update" has to be a single decision in a single
+  /// place. [modSlotStatus] is that place.
+  updateAvailable,
 }
 
 /// The status to render for [origin].
@@ -83,7 +94,43 @@ ModOriginStatus modOriginStatus(ModOrigin? origin) {
     OriginConfidence.inferred =>
       ModOriginStatus.versionGuessed,
     OriginConfidence.user || OriginConfidence.exact => ModOriginStatus.none,
+    // Not reachable: `updateAvailable` is not a version confidence. The card's
+    // fold is [modSlotStatus].
   };
+}
+
+/// The **one** state a library card's slot renders, folding the origin block
+/// together with whatever the last update check said about this mod.
+///
+/// Precedence, and the reasons rather than the order:
+///
+/// - **Silence still wins first.** `tracking: "off"` and `remote_missing` are
+///   handled by [modOriginStatus] returning [ModOriginStatus.none], and an
+///   update verdict must not talk over either. In practice a check on such a
+///   mod cannot produce one — `checkForUpdate` short-circuits on both — so this
+///   is belt and braces rather than a live branch.
+/// - **An update beats every origin state.** The two overlap in exactly the
+///   cases worth thinking about: a mod tracked by date only can be flagged as
+///   *possibly* outdated, and a mod whose version was never recorded can still
+///   be identified by a banked archive hash. In both, "something newer is
+///   published" is the newer, more actionable fact, and the origin state it
+///   replaces is still one click away in the same dialog.
+/// - **[UpdateCheck.isGuess] does not get its own state.** It changes the
+///   *wording*, not the slot: a card has one mark and splitting it into
+///   "definitely" and "probably" would spend the library's whole visual budget
+///   on a distinction the tooltip can make in a sentence.
+ModOriginStatus modSlotStatus(ModOrigin? origin, UpdateCheck? update) {
+  // Narrowly the two silencing flags, **not** every route to
+  // [ModOriginStatus.none]: a mod whose file is recorded at `user` or `exact`
+  // also folds to `none`, and that is precisely the mod best placed to have a
+  // confirmed update. Short-circuiting on the state rather than on its cause
+  // would hide the strongest verdict this feature can produce.
+  if (origin != null &&
+      (origin.tracking == OriginTracking.off || origin.remoteMissing)) {
+    return ModOriginStatus.none;
+  }
+  if (update?.hasUpdate ?? false) return ModOriginStatus.updateAvailable;
+  return modOriginStatus(origin);
 }
 
 /// Whether the "needs attention" filter should keep this mod.
@@ -107,9 +154,17 @@ ModOriginStatus modOriginStatus(ModOrigin? origin) {
 /// (What untracked mods get no access to is *bulk* resolution — that is a
 /// separate rule, and it is about fuzzy name matching being unsafe to
 /// rubber-stamp, not about which mods are listed here.)
+/// [ModOriginStatus.updateAvailable] is out for a third reason again: it is not
+/// a state of the origin block, so [modOriginStatus] never returns it here.
+/// "Which mods have updates" is a different question with a different control,
+/// and folding it into this filter would make the count change whenever a check
+/// ran — a filter whose meaning depends on what the network last said.
 bool modNeedsAttention(ModOrigin? origin) => switch (modOriginStatus(origin)) {
       ModOriginStatus.untracked || ModOriginStatus.versionUnknown => true,
-      ModOriginStatus.versionGuessed || ModOriginStatus.none => false,
+      ModOriginStatus.versionGuessed ||
+      ModOriginStatus.updateAvailable ||
+      ModOriginStatus.none =>
+        false,
     };
 
 /// [modNeedsAttention] over a scanned mod. Convenience only — the decision is

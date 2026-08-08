@@ -1,0 +1,9 @@
+{
+    "_sErrorCode": "INPUT_ERRORS",
+    "_aErrorData": {
+        "_csvRowIds": {
+            "_sErrorCode": "NO_SUCH_RECORD",
+            "_sErrorMessage": "Record Mod.999999999 doesn't exist"
+        }
+    }
+}

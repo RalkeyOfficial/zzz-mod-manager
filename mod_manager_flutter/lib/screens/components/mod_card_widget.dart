@@ -16,6 +16,10 @@ class ModCardWidget extends StatefulWidget {
   /// click on a ghost being dragged across the screen is not a badge.
   final VoidCallback? onResolveOrigin;
 
+  /// Opens the update dialog. Only reachable while the slot is showing the blue
+  /// "update available" state, so it may be null wherever no check can run.
+  final VoidCallback? onShowUpdate;
+
   const ModCardWidget({
     super.key,
     required this.mod,
@@ -24,6 +28,7 @@ class ModCardWidget extends StatefulWidget {
     required this.onShowDetails,
     required this.onOpenLink,
     this.onResolveOrigin,
+    this.onShowUpdate,
   });
 
   @override
@@ -151,7 +156,11 @@ class _ModCardWidgetState extends State<ModCardWidget> {
               Positioned(
                 bottom: 8,
                 left: 8,
-                child: ModStatusSlot(mod: mod, onTap: resolve),
+                child: ModStatusSlot(
+                  mod: mod,
+                  onTap: resolve,
+                  onShowUpdate: widget.onShowUpdate,
+                ),
               ),
 
             // Bottom-right: actions — open source link (if any) + favorite.

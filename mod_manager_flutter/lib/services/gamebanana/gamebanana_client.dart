@@ -143,6 +143,42 @@ class GameBananaClient {
     return modProfile(modId, refresh: refresh);
   }
 
+  /// Many mods' chosen fields in one request via `Mod/Multi` — a **bare array**
+  /// carrying only [properties].
+  ///
+  /// The batch is all-or-nothing: a single id the server doesn't recognise
+  /// fails the whole request with a `400`. That is left to the caller rather
+  /// than absorbed here, because recovering from it means deciding what to do
+  /// with the ids that *were* fine, which is policy — see
+  /// `services/bulk_update_check.dart`.
+  ///
+  /// [maxBatch] is our cap, not the server's: 60 ids in one url were verified
+  /// to work, and 50 keeps the request comfortably inside that while matching
+  /// the page size every other endpoint here is limited to.
+  static const int maxBatch = 50;
+
+  Future<List<GbMod>> modsMulti(
+    List<int> modIds, {
+    required List<String> properties,
+    bool refresh = false,
+  }) async {
+    if (modIds.isEmpty) return const <GbMod>[];
+    final body = await _fetch(
+      _endpoints.modsMulti(modIds, properties),
+      refresh: refresh,
+    );
+    return parseBareList(body, GbMod.fromJson);
+  }
+
+  /// The mod's release feed via `Mod/<id>/Updates`, newest first.
+  ///
+  /// One request, and the newest page is all the update check needs — see
+  /// [GameBananaEndpoints.modUpdates].
+  Future<List<GbUpdate>> modUpdates(int modId, {bool refresh = false}) async {
+    final body = await _fetch(_endpoints.modUpdates(modId), refresh: refresh);
+    return parseEnvelope(body, GbUpdate.fromJson).records;
+  }
+
   /// The category tree via `Mod/Categories` — roots when [categoryId] is null,
   /// otherwise that category's children. Returns a **bare array**, not a page.
   ///

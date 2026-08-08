@@ -95,6 +95,12 @@ BulkAssumeCurrentPlan planBulkAssumeCurrent(Iterable<ModInfo> mods) {
       // every time the user looked at it.
       case ModOriginStatus.none:
       case ModOriginStatus.versionGuessed:
+      // Not reachable from `modOriginStatus`, which folds only the origin
+      // block — "an update is published" comes from a check nobody has run
+      // here. Listed rather than defaulted so that if this ever *does* become
+      // an origin state, the compiler asks what a bulk rewrite should do with
+      // it instead of quietly skipping it.
+      case ModOriginStatus.updateAvailable:
         continue;
       case ModOriginStatus.untracked:
         untracked.add(mod);

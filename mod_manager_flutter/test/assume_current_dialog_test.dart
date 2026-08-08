@@ -383,20 +383,25 @@ void main() {
     testWidgets('leaves no gap behind when the toolbar loses the "!" toggle',
         (tester) async {
       // Reported after the first real run: resolving the last mod removed the
-      // toggle but left both of its 8px spacers, so the sort dropdown and the
-      // favourites star sat 16px apart and the row read as though a button had
+      // toggle but left both of its 8px spacers, so the two controls either
+      // side of it sat 16px apart and the row read as though a button had
       // failed to render. The control and its spacer are conditional together
       // now — the same shape the tag filter already used.
-      double gapBetweenSortAndFavourites() {
+      //
+      // Measured against the update-check button rather than the favourites
+      // star, because that button now sits between the toggle and the star:
+      // what this test is about is the *hole the toggle leaves*, so it has to
+      // span the toggle's slot and nothing else.
+      double gapAfterSort() {
         Finder box(IconData icon) => find
             .ancestor(of: find.byIcon(icon), matching: find.byType(Container))
             .first;
-        return tester.getTopLeft(box(Icons.star_border)).dx -
+        return tester.getTopLeft(box(Icons.arrow_circle_up)).dx -
             tester.getTopRight(box(Icons.sort)).dx;
       }
 
       await pumpToolbar(tester, [mod('a', origin: origin())], filterOn: false);
-      final withToggle = gapBetweenSortAndFavourites();
+      final withToggle = gapAfterSort();
 
       await pumpToolbar(
         tester,
@@ -406,7 +411,7 @@ void main() {
       expect(find.byIcon(Icons.priority_high), findsNothing);
       // One gap where the toggle used to be, not two — and the same 8px the
       // toggle itself sits behind.
-      expect(gapBetweenSortAndFavourites(), 8);
+      expect(gapAfterSort(), 8);
       expect(withToggle, greaterThan(8));
     });
 

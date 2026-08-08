@@ -183,6 +183,17 @@ class GbMod {
     return [...?files, ...?archivedFiles];
   }
 
+  /// Only the files the mod **currently offers**.
+  ///
+  /// Not the same as [files], and the difference is a real trap: `ProfilePage`
+  /// splits current and superseded across `_aFiles` / `_aArchivedFiles`, but
+  /// `Mod/Multi` returns the **union** under `_aFiles` (measured: 14 entries
+  /// there against 6 + 8 on the same mod's profile). `GbFile.isArchived` is
+  /// populated by both and is the authority; which list an entry arrived in is
+  /// not. Anything asking "what could I install today?" wants this.
+  List<GbFile>? get currentFiles =>
+      allFiles?.where((f) => !f.isArchived).toList();
+
   static GbMod? fromJson(Map<String, dynamic> json) {
     final id = gbInt(json['_idRow']);
     if (id == null) return null;

@@ -76,6 +76,19 @@ class GameBananaEndpoints {
   /// an update check, but carries no `_idRow` of its own.
   Uri modDownloadPage(int modId) => _uri('Mod/$modId/DownloadPage', const {});
 
+  /// `Mod/<id>/Updates` — the author's release feed, newest first.
+  ///
+  /// Read for `_aFileRowIds`: **the files released together as one release.**
+  /// That is the only authoritative answer to "are these two files a new
+  /// version and an old one, or two variants of the same one?", which no amount
+  /// of comparing `_sVersion` and `_sDescription` can settle.
+  ///
+  /// No `_nPerpage`: the server's default of 5 is left alone deliberately. The
+  /// question is always about the *newest* release, so page one is where the
+  /// answer is, and a mod with 50 update posts (measured) would otherwise
+  /// tempt a caller into paging through all of them for nothing.
+  Uri modUpdates(int modId) => _uri('Mod/$modId/Updates', const {});
+
   /// `Mod/Categories` — the category tree. Returns a **bare array**.
   ///
   /// `_sSort` is always sent because the endpoint requires it: its own internal
@@ -98,8 +111,22 @@ class GameBananaEndpoints {
   /// `Mod/Multi` — many mods' chosen fields in one request. Returns a **bare
   /// array**, in the order the ids were given.
   ///
-  /// Not used yet; the bulk update pass is what needs it, and it turns an
-  /// 80-mod library from 80 requests into a couple.
+  /// What the bulk update check is built on: it turns an 80-mod library from 80
+  /// requests into two. Three properties of it shape every caller, all probed
+  /// against the live API rather than assumed:
+  ///
+  /// - **`_csvProperties` is a narrower set than a profile's fields.**
+  ///   `_aArchivedFiles` and `_bHasFiles` are rejected as `UNKNOWN_PROPERTY`;
+  ///   `_aFiles`, `_sVersion`, the four `_ts…` dates, the `_bIs…` flags,
+  ///   `_sProfileUrl` and `_aPreviewMedia` are accepted.
+  /// - **`_aFiles` here is the union of current *and* archived files**, unlike
+  ///   `ProfilePage` where the two are separate keys. `_bIsArchived` tells them
+  ///   apart — see [GbMod.currentFiles]. So losing `_aArchivedFiles` costs
+  ///   nothing.
+  /// - **One unknown id fails the whole batch** with a `400`
+  ///   (`_csvRowIds: NO_SUCH_RECORD`), naming only the first offender. A caller
+  ///   handing it ids parsed out of user-typed urls must expect that and
+  ///   recover per-id rather than reporting the batch as failed.
   Uri modsMulti(List<int> modIds, List<String> properties) {
     return _uri('Mod/Multi', {
       '_csvRowIds': modIds.join(','),

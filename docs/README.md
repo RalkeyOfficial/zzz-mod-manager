@@ -10,6 +10,7 @@ the root [`README.md`](../README.md).
 | [`metadata-schema.md`](metadata-schema.md) | The **file format** of a mod's `metadata.json` sidecar: every field, save and round-trip semantics, schema versioning and the migration hook |
 | [`origin-tracking.md`](origin-tracking.md) | What the app **knows about where a mod came from**: the confidence model, every route that writes an `origin` block, the offline backfill, the resolve flow, and the installed-mods index |
 | [`metadata-autofill.md`](metadata-autofill.md) | What a marketplace install **copies from a mod page** into the new mod: description, character, tags and gallery |
+| [`update-checks.md`](update-checks.md) | How the app decides a mod **has a newer version published**: the comparator, the confidence-aware verdicts, the whole-library pass and the two surfaces that show a result |
 | [`configuration.md`](configuration.md) | The app's **own settings**: `config.json`, the SharedPreferences mirror, the dual-storage pattern, and how to add a setting |
 | [`gamebanana-api.md`](gamebanana-api.md) | The **remote protocol**: which of the two APIs to use, browsing/filtering/sorting, the mod and file objects, NSFW handling, downloads, the category tree, and the gotchas |
 

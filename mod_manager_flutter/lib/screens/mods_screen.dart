@@ -35,6 +35,7 @@ import 'dialogs/keybinds_dialog.dart';
 import 'dialogs/mod_context_menu.dart';
 import 'dialogs/edit_mod_dialog.dart';
 import 'dialogs/mod_details_dialog.dart';
+import 'dialogs/mod_update_dialog.dart';
 import 'dialogs/resolve_origin_dialog.dart';
 import '../utils/url_utils.dart';
 
@@ -681,12 +682,21 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     }
   }
 
+  /// Opens the update dialog and rescans if it wrote anything — dismissing an
+  /// update lands in the origin block, which only a scan re-reads.
+  Future<void> _checkForUpdate(ModInfo mod) async {
+    if (await showModUpdateDialog(context, mod)) {
+      await loadMods(showLoading: false);
+    }
+  }
+
   void _showContextMenu(BuildContext context, ModInfo mod, Offset position) {
     showModContextMenu(
       context,
       mod,
       position,
       onResolveOrigin: () => unawaited(_resolveOrigin(mod)),
+      onCheckForUpdate: () => unawaited(_checkForUpdate(mod)),
       onDetails: () => _showModDetailsDialog(mod),
       onEdit: () => _showEditDialog(mod),
       onRename: () => showRenameModDialog(
@@ -1290,6 +1300,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
             onShowDetails: () => _showModDetailsDialog(mod),
             onOpenLink: () => openModLink(context, mod),
             onResolveOrigin: () => unawaited(_resolveOrigin(mod)),
+            onShowUpdate: () => unawaited(_checkForUpdate(mod)),
           ),
         ),
       ),

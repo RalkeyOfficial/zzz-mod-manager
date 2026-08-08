@@ -7,9 +7,11 @@ import '../models/gamebanana/gb_enums.dart';
 import '../services/gamebanana/content_filter.dart';
 import '../services/gamebanana/gamebanana_client.dart';
 import '../services/bulk_assume_current.dart';
+import '../services/bulk_update_check.dart';
 import '../services/installed_mods_index.dart';
 import '../services/mod_manager_service.dart';
 import '../services/origin_status.dart';
+import '../services/update_check.dart';
 
 // The marketplace's own browsing state (query, results, categories, open mod)
 // lives in `marketplace_providers.dart` — one screen's session rather than
@@ -82,8 +84,29 @@ final charactersProvider = StateProvider<List<CharacterInfo>>((ref) => []);
 // Selected character index
 final selectedCharacterIndexProvider = StateProvider<int>((ref) => 0);
 
-// Current mods list (all mods)
-final modsProvider = StateProvider<List<ModInfo>>((ref) => []);
+/// Every mod in the library, once each, regardless of which character group it
+/// is filed under.
+///
+/// Derived rather than stored. It was a `StateProvider` that nothing ever wrote
+/// to and nothing ever read — a declaration that *looked* like the library list
+/// while the real one lived inside [charactersProvider]'s groups, which is
+/// exactly the kind of thing someone reaches for and gets an empty list from.
+///
+/// Deduplicated by folder id because the grouping is not a partition: a mod
+/// appears under its character *and* under the "all" group. Anything asking a
+/// question about the whole library — the bulk update check, most obviously —
+/// wants this rather than [currentCharacterSkinsProvider], which is one tab's
+/// worth.
+final modsProvider = Provider<List<ModInfo>>((ref) {
+  final seen = <String>{};
+  final all = <ModInfo>[];
+  for (final character in ref.watch(charactersProvider)) {
+    for (final mod in character.skins) {
+      if (seen.add(mod.id)) all.add(mod);
+    }
+  }
+  return all;
+});
 
 // Search query provider
 final searchQueryProvider = StateProvider<String>((ref) => '');
@@ -196,7 +219,8 @@ final modFiltersActiveProvider = Provider<bool>((ref) {
   return ref.watch(modSearchQueryProvider).isNotEmpty ||
       ref.watch(modTagFiltersProvider).isNotEmpty ||
       ref.watch(modFavoritesOnlyProvider) ||
-      ref.watch(modNeedsAttentionOnlyProvider);
+      ref.watch(modNeedsAttentionOnlyProvider) ||
+      ref.watch(modUpdatesOnlyProvider);
 });
 
 /// Resets the mods search / tag / favorites / needs-attention filters (leaves
@@ -206,6 +230,7 @@ void clearModFilters(WidgetRef ref) {
   ref.read(modTagFiltersProvider.notifier).state = <String>{};
   ref.read(modFavoritesOnlyProvider.notifier).state = false;
   ref.read(modNeedsAttentionOnlyProvider.notifier).state = false;
+  ref.read(modUpdatesOnlyProvider.notifier).state = false;
 }
 
 /// How many mods in the current view would survive the needs-attention filter.
@@ -255,6 +280,12 @@ final visibleModsProvider = Provider<List<ModInfo>>((ref) {
   if (needsAttentionOnly) {
     result = result.where(modInfoNeedsAttention);
   }
+  if (ref.watch(modUpdatesOnlyProvider)) {
+    // Ignored updates fall out here without a second rule: `hasUpdate` is
+    // already false once a dismissal covers the finding.
+    final checks = ref.watch(modUpdateChecksProvider);
+    result = result.where((m) => checks[m.id]?.hasUpdate ?? false);
+  }
   final activeTags = tagFilters.isEmpty
       ? const <String>{}
       : tagFilters.intersection(ref.watch(availableModTagsProvider).toSet());
@@ -299,3 +330,89 @@ final visibleModsProvider = Provider<List<ModInfo>>((ref) {
 final bulkAssumeCurrentPlanProvider = Provider<BulkAssumeCurrentPlan>((ref) {
   return planBulkAssumeCurrent(ref.watch(visibleModsProvider));
 });
+
+// ── Update checks ───────────────────────────────────────────────────────────
+
+/// What the last update check concluded, per mod folder id.
+///
+/// **Session-scoped, and deliberately not persisted.** No check ever runs
+/// without an explicit press — no network on launch — so a verdict restored
+/// from disk would be an assertion about a mod page nobody has looked at since,
+/// on a screen whose whole job is to say what is true now. Emptying on restart
+/// costs one press and cannot be stale.
+///
+/// Keyed by folder id, which is also the rename key: renaming a mod orphans its
+/// verdict until the next check. That is the correct way round — the alternative
+/// is a verdict following a folder whose identity the rename may have been part
+/// of changing.
+final modUpdateChecksProvider =
+    StateProvider<Map<String, UpdateCheck>>((ref) => const {});
+
+/// What a "check all" would look up.
+///
+/// Built from the **whole library** ([modsProvider]) rather than from
+/// [visibleModsProvider], and that is a deliberate departure from where
+/// [bulkAssumeCurrentPlanProvider] gets its list. The rule those two follow is
+/// the same one: *a bulk control must act on the set the user can see*. What
+/// differs is the stake. "Assume current" **rewrites sidecars**, so acting past
+/// the edge of the grid is a silent change to mods the user never enumerated. A
+/// check writes nothing at all; its only effect is badges, and those are drawn
+/// across the whole library — so scoping it to one character tab would leave
+/// every other tab looking checked-and-clean when it was never asked about.
+final bulkUpdateCheckPlanProvider = Provider<BulkUpdateCheckPlan>((ref) {
+  return planBulkUpdateCheck(ref.watch(modsProvider));
+});
+
+/// How many mods **in the current view** the last check flagged.
+///
+/// Scoped exactly like [modsNeedingAttentionCountProvider], and for the same
+/// reason: it is the number on a control that *filters*, so it has to describe
+/// what pressing it would leave on screen. A library-wide number on a character
+/// tab would promise mods the filter cannot reach.
+///
+/// Note the asymmetry with [bulkUpdateCheckPlanProvider], which is deliberate:
+/// the **check** covers the whole library because its badges are drawn on every
+/// tab, while the **filter** covers this tab because that is all it can narrow.
+/// One control now does both, so the two numbers answer different halves of it —
+/// see the toolbar button for how that reads.
+///
+/// Counted over the mods rather than over the results map so a mod deleted since
+/// the check can't keep contributing to the number, and ignored updates fall out
+/// for free because [UpdateCheck.hasUpdate] is already false for them.
+final modsWithUpdatesCountProvider = Provider<int>((ref) {
+  final checks = ref.watch(modUpdateChecksProvider);
+  if (checks.isEmpty) return 0;
+  return ref
+      .watch(currentCharacterSkinsProvider)
+      .where((mod) => checks[mod.id]?.hasUpdate ?? false)
+      .length;
+});
+
+/// Whether **anywhere in the library** still has an update to show.
+///
+/// Deliberately library-wide where [modsWithUpdatesCountProvider] is
+/// view-scoped, and the two are not interchangeable. This one drives the
+/// filter switching *itself* off once there is nothing left to show, and doing
+/// that on the view-scoped count would turn the filter off merely because the
+/// user clicked a character tab with no updates of its own — a filter that
+/// vanishes when you look somewhere else.
+final libraryHasUpdatesProvider = Provider<bool>((ref) {
+  final checks = ref.watch(modUpdateChecksProvider);
+  if (checks.isEmpty) return false;
+  return ref
+      .watch(modsProvider)
+      .any((mod) => checks[mod.id]?.hasUpdate ?? false);
+});
+
+/// Show only mods the last check flagged.
+///
+/// No control of its own: the toolbar's update-check button carries it, acting
+/// as a filter toggle once a check has found something and as the check action
+/// before that. Session state like the results it reads, so it cannot outlive
+/// them.
+///
+/// **Switches itself off when the library runs out of updates** — see the
+/// toolbar, which owns that. Ignoring the last flagged mod otherwise leaves the
+/// grid filtered to nothing, which is the same "the reward for pressing the
+/// button is an empty grid" the bulk "assume current" action already avoids.
+final modUpdatesOnlyProvider = StateProvider<bool>((ref) => false);

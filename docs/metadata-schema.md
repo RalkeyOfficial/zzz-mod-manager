@@ -130,6 +130,7 @@ the common block is the four keys shown above rather than fifteen mostly-null on
 | `archive_md5` | md5 of the archive it was extracted from. |
 | `tracking` | `auto` \| `off` (the user declared the mod local). |
 | `remote_missing` | Gone upstream — read from the remote's explicit private/trashed/withheld flags, not inferred from a 404. |
+| `updates_dismissed_until` | "I have seen what this mod published up to here and I don't want it." A **date rather than a file id**, so it expires by itself the moment something newer appears; cleared when the folder is rebound to a different mod. Not the same as `tracking: "off"`, which silences the mod forever. See [`update-checks.md`](update-checks.md#4-dismissing-an-update). |
 
 Three rules are load-bearing rather than stylistic:
 

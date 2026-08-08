@@ -4,7 +4,7 @@ Architecture notes for the app itself. Loads when working on files under
 `mod_manager_flutter/`. Repo-wide rules (language policy, dev workflow,
 changelog, the non-negotiables) live in the [root `CLAUDE.md`](../CLAUDE.md).
 
-> Five reference docs live in [`../docs/`](../docs/README.md), each owning one
+> Six reference docs live in [`../docs/`](../docs/README.md), each owning one
 > subject. Read the relevant one before changing anything that persists or anything
 > that talks to GameBanana:
 >
@@ -13,6 +13,7 @@ changelog, the non-negotiables) live in the [root `CLAUDE.md`](../CLAUDE.md).
 > | [`metadata-schema.md`](../docs/metadata-schema.md) | The sidecar **file format** — fields, save semantics, versioning, the migration hook |
 > | [`origin-tracking.md`](../docs/origin-tracking.md) | **Where a mod came from** — the confidence model, the backfill, the resolve flow, the installed-mods index |
 > | [`metadata-autofill.md`](../docs/metadata-autofill.md) | What an install **copies from a mod page** |
+> | [`update-checks.md`](../docs/update-checks.md) | Whether a mod **has a newer version published** — the comparator, the verdicts, the bulk pass |
 > | [`configuration.md`](../docs/configuration.md) | The app's **own settings** |
 > | [`gamebanana-api.md`](../docs/gamebanana-api.md) | GameBanana's **remote protocol** — read it before writing any request; its surface is undocumented upstream, so guessing costs more than looking |
 
@@ -94,6 +95,33 @@ The most important architectural decision is the **platform abstraction**:
   two fields describe "you downloaded this" and "we guessed it from a link you
   pasted", and flattening them would tell the user their guesses are facts in
   the one dialog they open to find out which is which.
+- `checkForUpdate()` (`services/update_check.dart`) — pure (origin block, mod
+  page) → one verdict. Separate from any request because the hard part is not
+  fetching but *how strongly the answer may be stated*: GameBanana publishes no
+  orderable version, so `updateAvailable` is reserved for two provable cases (the
+  installed file has been archived, or a newer file wears the same variant label)
+  and everything else folds to `possiblyOutdated`. A guessed identity or a guessed
+  file caps the verdict on its own. `services/bulk_update_check.dart` is the
+  whole-library pass over `Mod/Multi`, with the fetch injected — including the
+  batch-halving recovery `Mod/Multi` forces, since one unrecognised id fails the
+  request for the other forty-nine. See `../docs/update-checks.md` for the
+  measurements behind the comparator, and for why a false "possibly outdated" is
+  the failure worth choosing.
+  **The accuracy comes from two suppressions, not from tuning the guesses.**
+  `ReleaseGroups` (from `Mod/<id>/Updates`'s `_aFileRowIds`) is the author's own
+  statement that two files shipped together, so they are variants and never
+  successors; and two still-offered files stamped with the same `_sVersion` are
+  the same version. Both can only ever turn a flag *off*, neither can change the
+  verdict once the installed file is archived, and absent data suppresses
+  nothing. That direction is the whole safety argument — a rule that could turn
+  a flag *on* would be inventing an update. They differ in reach: the
+  same-version rule is confined to the still-offered branch, while release
+  groups also filter which file gets *named* against an archived install, since
+  a sibling shipped alongside it is the old build of the other variant and
+  cannot be its replacement.
+  The bulk pass fetches release feeds **only for mods that flagged**: one request
+  per mod would undo what `Mod/Multi` buys, and a group can only help where there
+  is a flag to remove.
 - `services/origin_resolution.dart` — pure decision logic behind the resolve
   dialog: ranking a mod's published files against what is known locally (banked
   archive hash → folder name → newest file that already existed at install
@@ -301,6 +329,25 @@ follows is only what is specific to these widgets.
 - **The toolbar toggle carries a count and hides itself at zero.** The answer is
   usually either nothing or most of the library, and both are worth knowing
   before pressing rather than after landing on an empty grid.
+- **The update-check button is one control doing two jobs**: a bare icon runs
+  the check, a count filters the grid to what it found. A seventh toolbar
+  control was rejected for it — the rule that keeps the overload legible is
+  *the control does the only useful thing available*, and the count is the
+  visible signal for which mode it is in. The cost is that re-checking moves to
+  **check again** in the second row, beside the bulk "assume current" button and
+  for the same reason. Two scopes meet there deliberately: the *check* covers
+  the whole library (its badges are drawn on every tab, so scoping it to one
+  would leave the rest looking checked-and-clean), while the *filter* covers the
+  current view (that is all it can narrow). Its results are session state
+  (`modUpdateChecksProvider`) and never persisted — a verdict restored from disk
+  asserts something about a mod page nobody has looked at since.
+- **`modSlotStatus()` is where the card's one slot is decided**, folding the
+  origin block together with the session verdict, so precedence between "you have
+  not sorted this mod out" and "this mod has an update" is one decision in one
+  place. The short-circuit that silences the slot is narrowly `tracking: "off"`
+  and `remote_missing`, **not** every route to `none`: a mod recorded at `exact`
+  also folds to `none` and is precisely the mod best placed to have a *confirmed*
+  update.
 - **The bulk "assume current" button appears only once that filter is on**
   (`services/bulk_assume_current.dart`, `dialogs/assume_current_dialog.dart`).
   The filter is what turns the state from a dot on a card into a list, and this

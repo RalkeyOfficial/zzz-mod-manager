@@ -236,11 +236,37 @@ Returns `_aFiles` + `_aArchivedFiles` (plus `_bIsTrashed` / `_bIsWithheld`) and
 nothing else. Much cheaper than `ProfilePage` when all you need is "did the file list
 change?".
 
-### Changelogs — `Mod/<id>/Updates`
+### Releases and changelogs — `Mod/<id>/Updates`
 
-Paginated author update posts: `_idRow`, `_sName` (title), `_tsDateAdded`,
-`_sProfileUrl`, and the body in `_aPreviewMedia._aMetadata._sSnippet`. This is the
+Paginated author update posts: `_idRow`, `_sName` (title, often the closest thing to
+a real version number a mod page has — `Version 1.5`), `_tsDateAdded`, `_sProfileUrl`,
+and the body in `_aPreviewMedia._aMetadata._sSnippet` / `_sText`. This is the
 changelog to show before updating — no scraping needed.
+
+**`_aFileRowIds` is the field that matters most, and it is easy to miss.** It lists
+the files released *together* in that post, which is the only authoritative answer to
+a question no comparison of `_sVersion` and `_sDescription` can settle: are these two
+files a new version and an old one, or two variants of the same one? The author
+already grouped them. Two measured examples:
+
+```jsonc
+// mod 549029, "Version 1.5"
+"_aFileRowIds": [1484606, 1484607]   // SFW + NSFW, 90 seconds apart, one release
+// mod 675945, "Orginal Proportions added"
+"_aFileRowIds": [1701141, 1701140, 1701139, 1701164]  // four proportion variants
+```
+
+Three things to know:
+
+- **`_nPerpage` defaults to 5** and a busy mod can have 50 posts (measured on
+  `531649`). Page one is enough for an update check — the question is always about
+  the *newest* release — but don't assume the feed is complete.
+- `_aFiles` (full file records) is present on both the list route and
+  `Update/<id>/ProfilePage`. `_bHasFiles` is unreliable: it reads `false` on a record
+  whose `_aFileRowIds` names two files.
+- Record shapes differ between mods, so parse leniently: one captured feed carries
+  `_aChangeLog` (`[{text, cat}]`) and no `_sVersion`, another carries `_sVersion` and
+  no `_aChangeLog`.
 
 ### Bulk — `Mod/Multi`
 
@@ -251,13 +277,31 @@ curl 'https://gamebanana.com/apiv11/Mod/Multi?_csvRowIds=698834,605830\
 &_csvProperties=_idRow,_sName,_sVersion,_tsDateUpdated,_aFiles,_bIsObsolete'
 ```
 
-Returns a bare **array** (no `_aMetadata` wrapper) in the requested order. Two things
-to know:
+Returns a bare **array** (no `_aMetadata` wrapper) in the requested order. This is how
+a bulk "check all mods for updates" pass is built: batches of ids in a handful of
+requests instead of one request per mod. Four things to know, all measured rather than
+assumed, and the last two will bite:
 
 - `_csvProperties` is honoured **here but ignored by `Index`** — don't expect it to
   trim listing payloads.
-- This is how a bulk "check all mods for updates" pass should be built: batches of
-  ids in a handful of requests instead of one request per mod.
+- **`_csvProperties` accepts a narrower set than a profile carries.** `_aFiles`,
+  `_sVersion`, the `_ts…` dates, `_bIsObsolete` / `_bIsPrivate` / `_bIsTrashed` /
+  `_bIsWithheld`, `_sProfileUrl` and `_aPreviewMedia` all work. `_aArchivedFiles` and
+  `_bHasFiles` are rejected outright as `UNKNOWN_PROPERTY`.
+- **`_aFiles` here is the union of current *and* archived files**, unlike
+  `ProfilePage` where they are two separate keys. Measured on mod `531649`: 14 entries
+  from `Multi` against 6 + 8 from its profile, same ids. `_bIsArchived` is what tells
+  them apart, and it is populated in both responses — so read that flag, never the key
+  an entry arrived under. Losing `_aArchivedFiles` above therefore costs nothing.
+- **One unknown id fails the whole batch.** A `_csvRowIds` list containing a single id
+  the server doesn't recognise returns `400 INPUT_ERRORS` with
+  `_csvRowIds: NO_SUCH_RECORD`, and the message names only the *first* offender, so
+  there is nothing to skip and retry — only a range to narrow. Any caller handing it
+  ids parsed out of user-typed urls must expect this and recover per id (halving the
+  batch is what this app does). Distinguish it from a url-level error by which field
+  `_aErrorData` names: anything other than `_csvRowIds` will fail identically for
+  every subset.
+- 60 ids in one url were verified to work; this app caps a batch at 50.
 
 ---
 
@@ -499,7 +543,7 @@ downloadable**.
 | `_sDownloadUrl` | `https://gamebanana.com/dl/<fileid>`. |
 | `_sMd5Checksum` | **md5 of the archive as uploaded.** Lets you identify a file the user supplied by hand. |
 | `_nDownloadCount` | Popularity signal for picking the "main" file. |
-| `_bIsArchived` | `true` for entries in `_aArchivedFiles`. |
+| `_bIsArchived` | `true` for a superseded file. **This flag is the authority, not which array the entry came in** — `Mod/Multi` returns both kinds together under `_aFiles` ([§3](#bulk--modmulti)). |
 | `_sAvState` / `_sAvResult` | Virus scan (`done` / `clean`). |
 | `_sAnalysisState` / `_sAnalysisResult` / `_sAnalysisResultVerbose` | Preliminary content analysis (`done` / `ok` / human-readable). |
 

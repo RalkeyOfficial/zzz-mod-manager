@@ -17,6 +17,7 @@ void showModContextMenu(
   required VoidCallback onEditKeybinds,
   required VoidCallback onToggleFavorite,
   required VoidCallback onResolveOrigin,
+  required VoidCallback onCheckForUpdate,
   required VoidCallback onDelete,
 }) {
   final loc = context.loc;
@@ -97,6 +98,21 @@ void showModContextMenu(
             ],
           ),
           onTap: () => Future.delayed(Duration.zero, onEditKeybinds),
+        ),
+      // Offered only for a mod that can actually be looked up. A tracked mod
+      // whose page is gone still qualifies — the check is what says so — but a
+      // folder with no remote identity has nothing to check against, and the
+      // entry below it is the one that fixes that.
+      if (mod.origin?.hasIdentity ?? false)
+        PopupMenuItem(
+          child: Row(
+            children: [
+              const Icon(Icons.arrow_circle_up, size: 18),
+              const SizedBox(width: 8),
+              Text(loc.t('mods.context_menu.check_update')),
+            ],
+          ),
+          onTap: () => Future.delayed(Duration.zero, onCheckForUpdate),
         ),
       // The second way into the resolve dialog. The status slot on the card is
       // the first, but it is absent for a mod whose origin is fully known — and

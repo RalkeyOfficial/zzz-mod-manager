@@ -236,7 +236,8 @@
       "favorite_add": "Add to favorites",
       "favorite_remove": "Remove from favorites",
       "delete": "Delete",
-      "resolve_origin": "Update tracking…"
+      "resolve_origin": "Update tracking…",
+      "check_update": "Check for updates…"
     },
     "details": {
       "keybinds": "Keybinds",
@@ -255,7 +256,10 @@
       "match_any": "Any",
       "match_all": "All",
       "needs_attention": "Show only mods that need attention",
-      "assume_current": "Assume {count} are current"
+      "assume_current": "Assume {count} are current",
+      "check_updates": "Check {count} tracked mods for updates",
+      "show_updates": "Show only the {count} mods with updates",
+      "check_again": "Check again"
     },
     "sort": {
       "added": "Default",
@@ -291,7 +295,9 @@
     "origin": {
       "version_unknown_tooltip": "Installed version unknown — click to set it",
       "untracked_tooltip": "Not tracked for updates — click to link it to a mod page",
-      "version_guessed_tooltip": "Tracked by date only — no file recorded. Click to say which file you have."
+      "version_guessed_tooltip": "Tracked by date only — no file recorded. Click to say which file you have.",
+      "update_available_tooltip": "An update is published — click for details",
+      "possibly_outdated_tooltip": "Possibly outdated — click for details"
     },
     "resolve": {
       "title": "Update tracking for \"{mod}\"",
@@ -353,6 +359,47 @@
       "already_done_plural": "Those {count} mods were already sorted out — nothing to change.",
       "failed_single": "Couldn't save tracking data for 1 mod — its folder may be read-only.",
       "failed_plural": "Couldn't save tracking data for {count} mods — those folders may be read-only."
+    },
+    "update": {
+      "title": "Updates — {mod}",
+      "verdict_update": "An update is available",
+      "verdict_possibly": "Possibly outdated",
+      "verdict_current": "This is the latest file",
+      "verdict_version_unknown": "Can't tell — no installed version on record",
+      "verdict_untracked": "Not tracked for updates",
+      "verdict_tracking_off": "You marked this mod as your own",
+      "verdict_source_gone": "The mod page is no longer available",
+      "verdict_indeterminate": "The mod page listed no files",
+      "you_have": "You have",
+      "published": "Published",
+      "options_heading": "Published since yours",
+      "options_hint": "This mod offers more than one file. We've marked the one we'd pick — you know which variant you installed, so check it before downloading.",
+      "pick_variant": "matches your variant",
+      "pick_newest": "newest published",
+      "compared_against": "Compared against",
+      "unknown_file": "unknown",
+      "no_successor": "The file you installed is no longer offered, and nothing currently on the mod page is identifiably its replacement. Open the mod page to see what's there.",
+      "guess_caveat": "Update checks are a best guess, not a guarantee — GameBanana publishes no comparable version numbers, so this rests on file labels and upload dates.",
+      "manual_note": "Replacing a mod in place isn't available yet: installing from the marketplace adds a second mod folder alongside this one.",
+      "obsolete": "The author has flagged this mod as superseded. It still exists and still downloads.",
+      "untracked_hint": "Link this mod to a mod page first — use “Update tracking” from its right-click menu.",
+      "version_unknown_hint": "Record which file you installed and this check can judge what comes back.",
+      "check_failed": "Couldn't reach GameBanana. Check your connection and try again.",
+      "not_checked": "This mod hasn't been checked yet.",
+      "open_page": "Open mod page",
+      "open_marketplace": "View in marketplace",
+      "retry": "Try again",
+      "close": "Close",
+      "bulk_found_single": "1 mod has an update",
+      "bulk_found_plural": "{count} mods have updates",
+      "bulk_none": "No updates found",
+      "bulk_failed_single": "1 mod couldn't be checked",
+      "bulk_failed_plural": "{count} mods couldn't be checked",
+      "dismiss": "Ignore this update",
+      "undismiss": "Stop ignoring it",
+      "dismissed": "You're ignoring this update — the mark is gone from this mod's card. If the author publishes anything newer, it will show up again on its own.",
+      "dismiss_failed": "Couldn't save that for “{mod}” — the folder may be read-only.",
+      "release": "Release"
     }
   },
   "clipboard": {

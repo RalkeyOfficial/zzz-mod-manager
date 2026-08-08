@@ -232,9 +232,16 @@ Goal: make the data recorded in M1 pay off in the UI.
   A full-width cover strip was built as an alternative and lost a side-by-side
   comparison. Design rules, including why a border and a dimmed card were rejected,
   are in [`mod_manager_flutter/CLAUDE.md`](mod_manager_flutter/CLAUDE.md).
-  - [ ] **"Update available" is not part of this** — needs §4, lands with M3. Same
+  - [x] **"Update available" is not part of this** — needs §4, lands with M3. Same
     slot, and it must differ from "installed" by **hue rather than volume**, since
     that now takes `primary`.
+    **Done for the *library* card** (M3 below): a blue mark at the same weight as
+    amber, in the same one slot, with precedence folded in `modSlotStatus` so the
+    two can never stack. The **marketplace** card's half is *not* done — that is
+    `GbModCard._statusSlot`, a different widget answering a different question
+    ("does the mod you are browsing have a newer file than the one you own?"),
+    and it needs the check to have run for a mod the library index can name.
+    Filed as its own item under §1.
 - [x] **§7** — the mod-card **status slot** (§7.4), the **"needs attention"**
   filter, and the per-mod **resolve dialog** (§7.5). This is where "the user can
   take action" actually lands; it needs §2's client and §1's file-list widget.
@@ -348,8 +355,94 @@ Goal: make the data recorded in M1 pay off in the UI.
 
 Goal: the payoff feature. Needs §2 + §3 + §5 from M1/M2.
 
-- [ ] **§4** — manual update check (per-mod + bulk), version-string+label rule,
-  update badges, changelog display, backup/rollback, preserve user edits.
+- [x] **§4 (detection)** — manual update check (per-mod + bulk), version-string
+  +label rule, update badges.
+  **Done.** `services/update_check.dart` is the pure comparator (origin block +
+  mod page → one verdict) and `services/bulk_update_check.dart` the
+  whole-library pass over `Mod/Multi`; the surfaces are a toolbar button, a
+  right-click entry, a blue mark in the card's existing status slot and
+  `screens/dialogs/mod_update_dialog.dart`. Written up in
+  [`docs/update-checks.md`](docs/update-checks.md), now authoritative.
+  §4's clamp item and the `_tsDateUpdated` item below both landed with it.
+  **Three corrections to what this doc assumed, all applied — see §4 below:**
+  the version+label rule **cannot be a same-label rule alone** (real data makes
+  that a silent false "up to date"), `Mod/Multi` **cannot return
+  `_aArchivedFiles`** but folds them into `_aFiles` instead, and **one bad id
+  fails the whole batch**, which a legacy library of `inferred` ids will hit.
+  Measured against the developer's real 17-mod library, live: **one request,
+  982 ms**, 15 up to date (8 of them date-only guesses, labelled as such), 0
+  confirmed updates and 2 `possiblyOutdated` — both the predicted soft
+  false-positive, a mod whose author published a *different variant* after the
+  one installed. Injecting one dead id into the same batch cost **9 requests
+  and 1490 ms** and still answered every other mod, where without the halving
+  all seventeen would have come back unreachable.
+  **Two corrections after the first real use, both applied.**
+  - **The detection was wrong in a way no amount of label or date comparison
+    could fix**, and both live false positives were the same shape: a *different
+    variant* published after the installed one (`SFW Variants Only` beside
+    `NSFW Variants Included`; four proportion variants in one post). The fix is
+    not a better heuristic but a field this doc never mentioned —
+    **`Mod/<id>/Updates` carries `_aFileRowIds`, the files an author released
+    together**, which is the author's own statement that two files are variants
+    rather than successors. A second suppression covers what release groups
+    cannot: two still-offered files stamped with the **same `_sVersion`** are
+    the same version, which caught a `FULL MOD`/`NSFW MOD` pair posted nine days
+    apart in separate updates. Both suppressions can only ever turn a flag
+    *off*, neither can change the verdict once the installed file is archived
+    (the same-version rule is confined to the still-offered branch; release
+    groups still decide which file gets *named*), and
+    absent data suppresses nothing. Re-measured on the same library: **4 flags
+    before, 2 after**, 5 requests, 226 ms.
+    Worth recording what was *not* built, since it is the obvious next step and
+    is a trap: suppressing an unlabelled candidate against a labelled install
+    would clear the last variant-shaped false positive, and would also silence
+    an author who labelled one release and not the next — a false "up to date",
+    which is the failure this feature cannot afford. Filed below.
+  - **There was no way to ignore an update.** Added
+    `origin.updates_dismissed_until` and an "ignore this update" in the dialog:
+    a **date** rather than a file id, so it expires by itself the moment
+    something newer is published, and written as the date of the thing dismissed
+    rather than as "now" so nothing published mid-check is swallowed unseen. The
+    verdict is kept and only the badge goes quiet — the dialog is where someone
+    goes to change their mind.
+  **Two more corrections from pressing it, both reported and both real.**
+  - **The label said "Not now", which reads as a deferral.** It is permanent
+    until the author publishes something newer, so it says "Ignore this update"
+    and the undo says "Stop ignoring it". The confirmation line now also states
+    what visibly happened (the mark is gone from the card).
+  - **Pressing it appeared to do nothing, and the write had actually
+    succeeded** — a shape worth recording because it produced no error
+    anywhere. The dismissal was re-derived by re-folding the verdict against a
+    fetched mod page, and the dialog **opened from a card badge never fetches
+    one**: a verdict is already on record from the bulk pass, so re-asking would
+    spend a request to redraw the same sentence. The fold therefore returned
+    null, the store call no-opped, and the dialog, the card badge and the
+    toolbar count all kept showing the pre-dismissal state. Fixed by flipping
+    the flag on the verdict already in hand (`UpdateCheck.asDismissed`).
+    The general lesson: **a dialog with two entry points has two states, and
+    the cheaper one is the one that ships broken.** The only test covering the
+    button used the entry point that fetches, where a profile happens to exist;
+    a test now covers the badge path and was checked against the old code,
+    where it fails on exactly the symptom reported.
+  - **A mod with several new files named one and hid the rest.** Asked for
+    directly: *"does it automatically suggest the latest NSFW version even
+    though I am on an older SFW version, or does the user get to pick?"* The
+    answer measured out better than feared — where the author's labels are
+    stable the check already follows *your* variant, and the label match beats
+    recency, so an SFW install is offered the new SFW build even though the
+    NSFW one is two minutes newer. But when labels drift it names the newest,
+    which may be somebody else's variant, and when nothing matches it names
+    none. `UpdateCheck.newerFiles` now carries every candidate and the dialog
+    lists them, marking the one it would pick **and on what grounds** —
+    `matches your variant` against `newest published`, which are different
+    claims and must not render alike. Four scenarios are pinned as tests,
+    including that an old ignore never carries forward to the next release.
+  **Verified against the developer's real library** and by pressing it.
+- [ ] **§4 (applying)** — changelog display, backup/rollback, preserve user
+  edits. The other half of §4, and the half that touches a live install: §4.1's
+  deactivate → swap → reactivate dance, §4.2's backups, and the conservative
+  `.ini` merge. Nothing in the app can act on a found update today — the check's
+  dialog says so in one sentence and offers the mod page instead.
 - [ ] **§4 + §7** — the bulk "check all" results screen doubles as the bulk
   **resolution** screen (§7.6): per-row identity confirmation and inline version
   pickers. Verdict wording and auto-update gating become confidence-aware (§7.2).
@@ -447,6 +540,9 @@ they earn priority.
 - [ ] "Already installed" / "update available" indicators on cards & detail,
   driven by the per-mod origin data (see §3). In the **library**, this indicator
   shares a single status slot with the unknown-origin states — see §7.4.
+  **The library half is done** (M2's badge, M3's blue update mark, one slot
+  each). What is left is the *marketplace* card's "update available" branch —
+  `GbModCard._statusSlot`, which answers the mirrored question. Filed under §4.
 - [x] Decide empty/error/loading states and offline behaviour.
   **Done for M1's two screens** (M4's item covers polish beyond this). Decisions
   worth keeping: *no results* and *everything on this page was hidden by your
@@ -655,13 +751,23 @@ The block:
 
 ### Filed by the read side (found while building it, deliberately not built)
 
-- [ ] **`modsProvider` in `state_providers.dart` is dead and now misleading.**
+- [x] **`modsProvider` in `state_providers.dart` is dead and now misleading.**
   Declared as `StateProvider<List<ModInfo>>` and never read or written by
   anything — the flat mod list actually lives inside `charactersProvider`'s "all"
   group. It looked like the obvious home for the library snapshot the read side
   needed, and it is not one: nothing populates it. Left alone rather than fixed as
   a drive-by, but it should either become the real flat list (with `_buildGroups`
   deriving from it) or go.
+  **It is the real flat list now** — a derived `Provider` over
+  `charactersProvider`, deduplicated by folder id because the grouping is not a
+  partition (a mod appears under its character *and* under "all"). Taken as part
+  of §4's bulk check, which needed exactly this and would otherwise have added a
+  *second* provider beside the dead one, making the confusion worse rather than
+  better. **The direction is the opposite of what this item proposed**, and
+  deliberately: deriving the flat list from the groups is a ten-line provider,
+  where inverting `_buildGroups` to derive the groups from a stored flat list is
+  a change to the 2000-line screen that owns the scan. That inversion is *not*
+  done and is filed on its own below.
 - [ ] **Nothing keeps the library list live across a tab switch.** `ModsScreen` is
   a keyed child of an `AnimatedSwitcher` with no keep-alive, so it is disposed on
   every tab change and `initState` re-scans on the way back. The read side works
@@ -728,11 +834,31 @@ The block:
 
 ## 4. Mod updating
 
-- [ ] **Manual update check** — per-mod and bulk ("check all"). The bulk results
+- [x] **Manual update check** — per-mod and bulk ("check all"). The bulk results
   screen is also the bulk-resolution surface for unknown origins — see §7.6.
-- [ ] Update rule: prioritise version string + version label; fall back to upload
+  **The check is done; the results *screen* is not.** Bulk reports through a
+  snackbar and the card badges, which is enough to act on a finding but is not
+  the per-row confirmation surface §7.6 describes. That screen stays filed
+  there, unchanged.
+- [x] Update rule: prioritise version string + version label; fall back to upload
   date / hash. Best-effort suggestion, clearly labelled as such.
-- [ ] **The update check must clamp `baseline_remote_date` when it compares.**
+  **Done, with one correction that changes the mechanism while keeping the
+  intent.** "Version string + version label" cannot be a *same-label* rule on
+  its own: authors use `_sDescription` as the variant marker on some pages
+  (`Main file`, `Glow demo`) and as the **version** on others (`v3.4`, `v3.3`,
+  … — ten current files, none archived). Against the second, a same-label rule
+  finds no successor for an installed `v3.0` and reports it **up to date**,
+  which is the one failure this feature cannot afford. So the rule is three
+  ordered questions, not one: *is your file still offered* (a fact, no version
+  involved) → *is there a newer file with the same label* (`updateAvailable`) →
+  *is there anything newer at all* (`possiblyOutdated`). The label ranks the
+  candidate; it never suppresses the verdict. Measured consequences are in
+  [`docs/update-checks.md`](docs/update-checks.md) §3.
+  The hash fallback is in and is read-only: a banked `archive_md5` identifies
+  the installed file when no `file_id` is recorded, but **the check never writes
+  what it learns** — recording it is a resolution, and resolutions belong to
+  §7.5's dialog and §7.6's pass, not to asking a question.
+- [x] **The update check must clamp `baseline_remote_date` when it compares.**
   A baseline written by the *per-mod* dialog is clamped to the mod's own
   `_tsDateAdded`; one written by the zero-network **bulk** action (§7.5) cannot
   be, because the clamp needs the mod page. So stored baselines are a mix of
@@ -742,10 +868,22 @@ The block:
   fact about the mod page, not about the sidecar. Small, but it has to land with
   the comparator itself, since an unclamped baseline on a hand-copied library
   can predate the mod's existence.
-- [ ] **Confidence-aware verdicts.** With a guessed installed version, the
+- [x] **Confidence-aware verdicts.** With a guessed installed version, the
   strongest claim available is "possibly outdated" — never a bare version
   comparison. Auto-update is gated to exact confidence only (§7.2).
-- [ ] **Update badges** on mod cards in the library.
+  **Done**, and one thing this line left implicit is now explicit: the cap
+  applies to a guessed **identity** as well as a guessed version. An `inferred`
+  `mod_id` came from a free-form field a human typed, so if it names the wrong
+  mod every file compared belongs to a mod the user does not own — the verdict
+  is no stronger than the weaker of the two axes. It also survives onto a
+  *clean* answer: "probably nothing new" is not "nothing new". (The auto-update
+  gate itself is M4 and untouched; `ModOrigin.allowsUnattendedUpdate` still owns
+  it.)
+- [x] **Update badges** on mod cards in the library. **Done**, in the *existing*
+  status slot rather than beside it — `modSlotStatus` folds the origin block and
+  the session verdict so the card still shows exactly one mark. Blue at the same
+  weight as amber, per M2's note that the two must differ by hue rather than
+  volume. The **marketplace** card's equivalent is separate and still open (§1).
 - [ ] **Opt-in auto-update** (global and/or per-mod), with notification. Eligible
   only at `exact` confidence (§7.2) — which includes hash-matched hand-imported mods,
   not just ones we downloaded. **Signed off:** a checksum match and our own download
@@ -773,6 +911,151 @@ The block:
   what changed, and what couldn't be matched — never a silent uncertain merge.
   Not foolproof (identifiers/names can change, keybinds can be added/removed), so
   the report + backup are how the user recovers.
+
+### Filed by the update check (found while building it, deliberately not built)
+
+- [ ] **A found update cannot be acted on.** The dialog lists the newer files and
+  then offers a mod page and a marketplace shortcut, because installing from
+  the marketplace creates a **second mod folder** rather than replacing the
+  first — §4.1's deactivate → swap → reactivate path does not exist yet. The
+  dialog says so in one sentence rather than implying otherwise, which is
+  honest but is not the feature. This is §4's "applying" half above, listed
+  here too because it is the first thing a user will ask for after seeing a
+  blue badge.
+- [ ] **The options list has no per-row download**, so choosing a file means
+  going to the marketplace and finding it again. `GbFileList` already renders
+  exactly those rows *with* download buttons and takes an `onDownload`
+  callback — but wiring it here means reaching the download-extract-import
+  pipeline, which lives inside `marketplace_screen`'s state rather than in a
+  service. Extracting that is the same piece of work the item above needs, and
+  doing it once serves both.
+- [ ] **The marketplace card still has no "update available" state.**
+  `GbModCard._statusSlot` gained the "in library" badge in M2 and the app
+  `CLAUDE.md` reserves that method's second branch for this. It is a different
+  question from the library card's — *does the mod you are browsing publish
+  something newer than the folder you own?* — and it needs the installed-mods
+  index to name the folder before a verdict can be looked up for it. Small, and
+  it closes §1's last unchecked indicator.
+- [x] **There is no "has an update" filter.** The `!` toggle enumerates mods
+  whose *origin* is incomplete and deliberately ignores update state (its
+  meaning would otherwise change every time a check ran). So a 200-mod library
+  can be told that 14 mods have updates and then has to find them by scrolling.
+  ~~The natural home is a second toggle beside the check button rather than a
+  sixth filter~~, and it needs no new decision logic — `UpdateCheck.hasUpdate`
+  already answers it.
+  **Done, and the correction is the interesting half: a second toggle was
+  rejected outright.** Asked for after using it, in exactly the terms this item
+  predicted — "128 mods, 3 have an update, you have to search for it". A
+  seventh toolbar control that means nothing until a check has run is a
+  permanent cost for an occasional state, so the **check button carries both
+  jobs**: bare icon runs the check, a count filters the grid to what it found.
+  The rule keeping that legible is *the control does the only useful thing
+  available*, and the count is the visible signal for which mode it is in — no
+  hidden state, and every launch starts in check mode because the results are
+  session-scoped. Re-checking moves to a **check again** in the second row,
+  which is not a new idiom either: the bulk "assume current" button already
+  lives there, and for the same reason.
+  Two scopes meet in the one button, deliberately: the *check* is library-wide
+  (its badges are drawn on every tab), the *filter* is view-scoped (that is all
+  it can narrow). The consequence was raised before building and accepted:
+  updates on other character tabs are reachable from "All", not from a tab with
+  none of its own.
+  Two things the tests had to force out. **The filter switches itself off once
+  the library has no updates left** — asked for directly, and the same rule the
+  bulk "assume current" action already follows; the subtlety is that it keys on
+  the *library* rather than on the view-scoped count beside it, or clicking a
+  character tab with none of its own would make the filter evaporate. And the
+  second row can now
+  carry **three** buttons — but only via a mod identified by a banked archive
+  hash, which is the one way a mod can need attention *and* have an update at
+  once; a test pumps that at 480px, since that row is where the last overflow
+  bug came from.
+  Written up in [`docs/update-checks.md`](docs/update-checks.md) §6.
+- [ ] **`remote_missing` is now *detected* and still never written.**
+  `checkForUpdate` returns `sourceGone` from the remote's explicit
+  `_bIsPrivate` / `_bIsTrashed` / `_bIsWithheld` flags, and the bulk pass
+  returns it for an id the server refuses outright — but nothing persists it to
+  the sidecar. Deliberate rather than forgotten: §7.4 currently *silences* the
+  status slot for a `remote_missing` mod, so writing the flag today would make
+  the mod go quiet permanently with no wording explaining why, which is exactly
+  the "silent hole" already filed under §7.5. The two have to land together —
+  the state needs its own wording ("source no longer available") before
+  anything writes it.
+- [ ] **Verdicts are session state, and that is a decision worth revisiting
+  once, not a gap.** Nothing is persisted, so the badges are empty on every
+  launch until a check is pressed. That is right on the merits — a verdict
+  restored from disk asserts something about a mod page nobody has looked at
+  since — but the *user-visible* consequence is that the feature looks off
+  until they find the button. The fix if it is ever wanted is a nudge or an
+  opt-in check-on-launch (M4's auto-update territory), **not** caching the
+  verdict.
+- [ ] **The per-mod check fetches a whole `ProfilePage` when `DownloadPage`
+  would do.** `Mod/<id>/DownloadPage` returns `_aFiles` + `_aArchivedFiles`
+  plus the upstream-gone flags and nothing else — everything the comparator
+  reads except `_tsDateAdded` (the baseline clamp) and `_tsDateUpdated`. Not
+  taken: the dialog would then need a second request for the two dates, and the
+  profile is very often already in the client's ten-minute cache from the
+  marketplace. Worth measuring before assuming either way.
+- [ ] **The batch bisect could ask the error which id was bad.** A
+  `NO_SUCH_RECORD` response names the offending id in `_sErrorMessage`
+  (`Record Mod.999999999 doesn't exist`), so a parser could drop it and retry
+  once instead of halving. Not taken because it trades a structural recovery
+  for a string-format dependency on server English, and the message names only
+  the *first* bad id anyway — several dead ids would still need several round
+  trips. Revisit only if the request count is ever measured as a problem.
+- [ ] **`_buildGroups` still owns the scan, and the flat list is derived from
+  it.** `modsProvider` is now real (see the read side's filed item above) but in
+  the *opposite* direction from what that item proposed: groups are built by the
+  screen and the flat list falls out of them. Inverting it — scan into a flat
+  list, derive the character groups — is the tidier shape and is what would let
+  the library live outside `ModsScreen`'s lifecycle, which is a third filed item
+  ("nothing keeps the library list live across a tab switch"). All three are one
+  piece of work whenever it is done.
+- [ ] **`Mod/<id>/Updates` is read, but only for `_aFileRowIds` and `_sName`.**
+  §4's "changelog display before updating" wants `_sText` / `_aChangeLog`, which
+  are parsed by nothing. The DTO deliberately stops at what has a reader — the
+  `_aTags` bug is what an unread field costs. Belongs with the applying half: a
+  changelog is what you read *before pressing update*, and there is nothing to
+  press yet.
+- [x] **The last variant-shaped false positive is not removable by anything the
+  author stated, and four candidate rules were measured and rejected.** Filed as
+  *resolved* rather than open because the answer is "don't", and the measurement
+  behind it is the deliverable — the temptation to fill this gap is strong and
+  the next person needs the numbers, not the conclusion.
+  Corpus: **300 ZZZ mods**, their current files and their update posts, with
+  `_aFileRowIds` as ground truth for "released together". The headline is that
+  **only 27% of newer-than file pairs have both files named in a post at all**,
+  so the authoritative signal genuinely cannot cover most cases.
+  Filename matching is **anti-correlated** (stem-prefix 13/106 vs 38/277;
+  stem-equality 0/106 vs 5/277) — GameBanana's random `_xxxxx` suffix makes
+  stems unstable, which is exactly the fuzzy-matching trap `origin_resolution`
+  already refuses. "Candidate unlabelled while mine is labelled" is a coin flip
+  (8/106 vs 6/277). Identical file size never fires.
+  Two rules *did* measure well and were rejected on grounds the numbers cannot
+  see, which is the part worth keeping:
+  - A **1 h co-publication window** agrees with the author's own grouping on
+    85/106 known co-releases against 2/277 cross-post pairs, on a flat plateau
+    from 15 min to 2 h (cliff at 24 h). Its contribution *over* release groups
+    and same-version is 99 pairs, and all 99 rest on "an author does not upload
+    twice in a session for two different reasons" — which one hotfix published
+    minutes after a broken file breaks, silently. No data can confirm that
+    assumption, only fail to contradict it.
+  - **"A file that already existed when you installed cannot be an update"** is
+    causal, threshold-free, and clears both remaining false positives outright
+    (their candidates predate the installs by 11 months and 2 months). It rests
+    on `installed_at`, a **proxy** for anything this build did not install — and
+    a plain `cp -r` resets every mtime, making the proxy read *late*, after
+    which every published file predates it and the feature goes silently quiet.
+    That is the hazard §7.3 already names as the reason the proxy uses the
+    oldest *contained file* rather than the folder's mtime. Building a
+    suppression on that date reintroduces it.
+  The line held: **a rule may turn a flag off only if the author stated the
+  fact.** Written up in
+  [`docs/update-checks.md`](docs/update-checks.md) §3, which is now the place to
+  read before proposing a fifth rule.
+- [ ] **`_bHasFiles` on an update record is unreliable** — it reads `false` on a
+  record whose `_aFileRowIds` names two files (measured on `549029`). Nothing
+  reads it; noted so nothing starts to.
 
 ### 4.1 How an update is actually applied
 
@@ -1045,10 +1328,15 @@ update is **not** a re-run of the import path.
   `_sRange` etc. returns `200` with unchanged results. So a successful response is
   **not** evidence a parameter works — five invented period params all "succeeded"
   while doing nothing. Any future probing must diff the results, not the status code.
-- [ ] **`Generic_Newest` vs `Generic_LatestModified` affects §4's update check too.**
+- [x] **`Generic_Newest` vs `Generic_LatestModified` affects §4's update check too.**
   `_tsDateAdded` is first-published and `_tsDateUpdated` is the real content update —
   §4's date-fallback comparator must use the latter. Noted here because the same
   confusion already cost one bug in the browse view.
+  **Applied.** The date fallback reads `_tsDateUpdated`, and a test pins the
+  third field it must *not* read: `_tsDateModified` is bumped by cosmetic edits,
+  so a mod whose only later timestamp is that one stays "up to date". Note where
+  `_tsDateAdded` is still correct and load-bearing — it is the mod's **creation**
+  date, which is what the `assumed_latest` baseline clamps to.
 
 - [ ] **The content filter has no Settings-tab entry.** The key and the decision logic
   shipped with M1, and the control lives in the marketplace toolbar where it is first
@@ -1630,6 +1918,18 @@ One screen, two jobs, and nothing that goes stale once libraries are migrated.
     mods' chosen fields — `_aFiles` included — in a single request. An 80-mod library
     becomes a couple of calls rather than 80, which changes this from "a queue that
     needs careful throttling" into "two requests and a progress bar".
+    **Built, by §4's bulk check — reuse it rather than re-deriving it.** Three
+    corrections to what this bullet assumes, all measured against the live API
+    and written up in [`docs/gamebanana-api.md`](docs/gamebanana-api.md) §3:
+    **`_aArchivedFiles` is not a requestable property here** (it is rejected as
+    `UNKNOWN_PROPERTY`), which costs nothing because **`_aFiles` on this
+    endpoint is the union of current and archived files** — 14 entries against a
+    profile's 6 + 8, told apart by `_bIsArchived`, which is therefore the
+    authority rather than which key an entry arrived under. And **one
+    unrecognised id fails the whole batch** with a `400` naming only the first
+    offender, which a library of `inferred` ids will hit; `runBulkUpdateCheck`
+    recovers by halving, and the guard that keeps that bounded is checking
+    *which field* `_aErrorData` names.
 
 ### 7.7 Self-healing (why none of this has to be perfect)
 
@@ -1764,6 +2064,13 @@ work that already opens the same file, so they cost nothing extra.
   entirely *caveat* copy (what is not being invented, why a date can read early,
   why untracked mods are excluded), which is the difference between a bulk
   rewrite the user consented to and one they clicked through.
+  **§4's update check added 32** — two card tooltips, a context-menu entry, a
+  toolbar tooltip, and the update dialog's 28. The pattern holds a fifth time,
+  and more starkly: **eight of the twenty-eight are the eight verdicts**, and getting
+  those wordings right *is* the feature — "an update is available" and "possibly
+  outdated" are the whole confidence model rendered as two sentences, and the
+  caveat under them ("a best guess, not a guarantee — GameBanana publishes no
+  comparable version numbers") is what stops a heuristic reading as a fact.
   **§7.4 and §7.5 added 26** — two tooltips, a context-menu entry, a toolbar
   tooltip and the resolve dialog's 22. The estimate holds again, and the same
   observation as before: the *wording* is the work. Four of those keys are the
@@ -1789,7 +2096,15 @@ work that already opens the same file, so they cost nothing extra.
   beside patchers and demos), and those same fixtures are now the tests. A
   hand-written mock would have encoded the assumption the plan started with — tidy
   `_sVersion` strings to compare — and the rule would have shipped confidently wrong.
-  Suite is 746 tests, all offline. The §7.4/§7.5 share is the pattern once more,
+  Suite is 793 tests, all offline. §4's share is the pattern once more and it
+  changed the design rather than confirming it: the comparator was *written*
+  against two real captured profiles that disagree about what `_sDescription`
+  means, and the second of them is what killed the same-label rule the plan
+  proposed — a hand-written fixture with tidy version strings would have made
+  that rule look obviously correct. Two canaries came out of it: that
+  `Mod/Multi` folds archived files into `_aFiles` (six current out of fourteen,
+  matching the profile's six exactly), and that `_tsDateModified` never drives a
+  verdict. The §7.4/§7.5 share is the pattern once more,
   and it is where the "nearest install date" rule's *only* discriminating case
   lives: an install at 15:00 on 2026-05-08 is the one window in
   `mod_profile_531649` where nearest-absolute-distance and

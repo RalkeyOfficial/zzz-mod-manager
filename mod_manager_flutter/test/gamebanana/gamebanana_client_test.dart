@@ -3,6 +3,7 @@ import 'package:mod_manager_flutter/models/gamebanana/gamebanana.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_client.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_endpoints.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_response_cache.dart';
+import 'package:mod_manager_flutter/services/bulk_update_check.dart';
 
 import '../support/fake_http_transport.dart';
 import '../support/fixtures.dart';
@@ -339,6 +340,76 @@ void main() {
 
       // If the failed future stuck around, this would resolve to the failure.
       expect((await client.modProfile(1)).idRow, 1);
+    });
+  });
+
+  group('the two batch endpoints, which parse differently', () {
+    // `Mod/Multi` returns a **bare array** and `Mod/<id>/Updates` an
+    // **envelope**, so they go through `parseBareList` and `parseEnvelope`
+    // respectively. Swapping them is the one mistake `gb_page.dart` exists to
+    // throw loudly on, and nothing else in the suite would catch it.
+    test('modsMulti parses a bare array', () async {
+      transport.stub(
+        endpoints.modsMulti(const [531649, 528481, 541825], updateCheckProperties),
+        body: loadGbFixture('mod_multi_files'),
+      );
+
+      final records = await buildClient().modsMulti(
+        const [531649, 528481, 541825],
+        properties: updateCheckProperties,
+      );
+
+      expect(records.map((m) => m.idRow), [531649, 528481, 541825]);
+      // The union of current and archived, which is this endpoint's own shape.
+      expect(records.first.files, hasLength(14));
+      expect(records.first.currentFiles, hasLength(6));
+    });
+
+    test('modsMulti asks for nothing when given no ids', () async {
+      expect(
+        await buildClient().modsMulti(const [], properties: const ['_idRow']),
+        isEmpty,
+      );
+      expect(transport.callCount, 0);
+    });
+
+    test('modUpdates parses an envelope and reads the released file ids',
+        () async {
+      transport.stub(endpoints.modUpdates(549029),
+          body: loadGbFixture('mod_updates_549029'));
+
+      final updates = await buildClient().modUpdates(549029);
+
+      expect(updates, hasLength(2));
+      expect(updates.first.name, 'Version 1.5');
+      // The field the whole variant-suppression rule rests on.
+      expect(updates.first.fileRowIds, {1484606, 1484607});
+    });
+
+    test('an unknown id fails the whole batch, and says which field', () async {
+      // Captured from the live API. The recovery in `bulk_update_check.dart`
+      // branches on *which* field `_aErrorData` names — anything but
+      // `_csvRowIds` means our url is wrong and every split would fail
+      // identically — so the shape of this body is load-bearing.
+      transport.stub(
+        endpoints.modsMulti(const [531649, 999999999], const ['_idRow']),
+        statusCode: 400,
+        body: loadGbFixture('error_no_such_record'),
+      );
+
+      await expectLater(
+        buildClient()
+            .modsMulti(const [531649, 999999999], properties: const ['_idRow']),
+        throwsA(
+          isA<GbApiException>()
+              .having((e) => e.code, 'code', 'INPUT_ERRORS')
+              .having(
+                (e) => e.fieldErrors['_csvRowIds']?.code,
+                'offending field',
+                'NO_SUCH_RECORD',
+              ),
+        ),
+      );
     });
   });
 

@@ -21,8 +21,12 @@ import 'package:mod_manager_flutter/l10n/app_localizations.dart';
 /// Always assert something is actually on screen after pumping — see
 /// [expectBuilt] — so a future harness regression fails loudly instead of quietly
 /// making tests meaningless.
-/// [overrides] wraps the tree in a `ProviderScope`, for widgets that read Riverpod
-/// providers — pass fakes so nothing reaches the network.
+/// The tree is **always** wrapped in a `ProviderScope`, whether or not
+/// [overrides] are given. It used to be conditional, which turned any widget
+/// that gained a `ref` into a `Bad state: No ProviderScope found` in every test
+/// that had no reason to pass overrides — a failure about the harness, not
+/// about the widget. Pass [overrides] to substitute fakes so nothing reaches
+/// the network.
 Future<void> pumpLocalized(
   WidgetTester tester,
   Widget child, {
@@ -49,7 +53,7 @@ Future<void> pumpLocalized(
   );
 
   await tester.pumpWidget(
-    overrides == null ? app : ProviderScope(overrides: overrides, child: app),
+    ProviderScope(overrides: overrides ?? const [], child: app),
   );
   // A rebuild loop shows up here as a pumpAndSettle timeout rather than as a
   // failed expectation, which is the point of settling instead of pumping once.

@@ -91,7 +91,7 @@ mistake.
 ## Architecture
 
 > Developer documentation lives in **`docs/`** — start at
-> [`docs/README.md`](docs/README.md), which indexes all five. Read the relevant one
+> [`docs/README.md`](docs/README.md), which indexes all six. Read the relevant one
 > before changing anything that persists or anything that talks to GameBanana:
 >
 > | Doc | Owns |
@@ -99,6 +99,7 @@ mistake.
 > | [`docs/metadata-schema.md`](docs/metadata-schema.md) | The **file format** of a mod's `metadata.json` sidecar — fields, save semantics, versioning, the migration hook |
 > | [`docs/origin-tracking.md`](docs/origin-tracking.md) | What we know about **where a mod came from** — the confidence model, the backfill, the resolve flow |
 > | [`docs/metadata-autofill.md`](docs/metadata-autofill.md) | What an install **copies from a mod page** — description, character, tags, gallery |
+> | [`docs/update-checks.md`](docs/update-checks.md) | Whether a mod **has a newer version** — the comparator, the confidence-aware verdicts, the bulk pass |
 > | [`docs/configuration.md`](docs/configuration.md) | The app's **own settings** — `config.json`, the dual-storage pattern, adding a setting |
 > | [`docs/gamebanana-api.md`](docs/gamebanana-api.md) | GameBanana's **remote protocol** — which of the two APIs and why, browsing/filtering/sorting, every field, NSFW, downloads, the category tree |
 >
