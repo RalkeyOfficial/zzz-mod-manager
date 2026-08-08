@@ -84,6 +84,7 @@ class ConfigService implements ModCharacterTagStore {
   /// degrades an unrecognised value to null.
   String get marketplaceSort => _prefs.getString(_keyMarketplaceSort) ?? '';
   
+  @override
   Map<String, String> get modCharacterTags {
     final json = _prefs.getString(_keyModCharacterTags);
     if (json == null) return {};
@@ -177,6 +178,7 @@ class ConfigService implements ModCharacterTagStore {
     }
   }
 
+  @override
   Future<bool> setModCharacterTag(String modId, String characterId) async {
     try {
       final tags = modCharacterTags;
@@ -189,6 +191,7 @@ class ConfigService implements ModCharacterTagStore {
     }
   }
 
+  @override
   Future<bool> removeModCharacterTag(String modId) async {
     try {
       final tags = modCharacterTags;

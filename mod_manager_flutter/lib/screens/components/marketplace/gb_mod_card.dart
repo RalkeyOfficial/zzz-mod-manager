@@ -386,18 +386,17 @@ class _Dates extends StatelessWidget {
 
     return Row(
       children: [
-        if (added != null)
-          Flexible(
-            child: _entry(
-              context,
-              icon: Icons.schedule,
-              label: _ago(loc, added, now),
-              tooltip: loc.t('marketplace.first_released',
-                  params: {'date': _absolute(added)}),
-              style: style,
-            ),
+        Flexible(
+          child: _entry(
+            context,
+            icon: Icons.schedule,
+            label: _ago(loc, added, now),
+            tooltip: loc.t('marketplace.first_released',
+                params: {'date': _absolute(added)}),
+            style: style,
           ),
-        if (added != null && hasUpdate) const SizedBox(width: 10),
+        ),
+        if (hasUpdate) const SizedBox(width: 10),
         if (hasUpdate)
           Flexible(
             child: _entry(

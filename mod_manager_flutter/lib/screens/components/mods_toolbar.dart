@@ -124,12 +124,12 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
       decoration: BoxDecoration(
-        color: active ? const Color(0xFF0EA5E9).withOpacity(0.12) : null,
+        color: active ? const Color(0xFF0EA5E9).withValues(alpha: 0.12) : null,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: active
-              ? const Color(0xFF0EA5E9).withOpacity(0.6)
-              : Colors.grey.withOpacity(0.4),
+              ? const Color(0xFF0EA5E9).withValues(alpha: 0.6)
+              : Colors.grey.withValues(alpha: 0.4),
         ),
       ),
       child: child,

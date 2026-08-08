@@ -62,15 +62,15 @@ class AddModCard extends ConsumerWidget {
               end: Alignment.bottomRight,
               colors: isDragging
                   ? [
-                      const Color(0xFF0EA5E9).withOpacity(0.3),
-                      const Color(0xFF06B6D4).withOpacity(0.3),
+                      const Color(0xFF0EA5E9).withValues(alpha: 0.3),
+                      const Color(0xFF06B6D4).withValues(alpha: 0.3),
                     ]
                   : [
                       isDarkMode
-                          ? const Color(0xFF1F2937).withOpacity(0.5)
+                          ? const Color(0xFF1F2937).withValues(alpha: 0.5)
                           : const Color(0xFFF9FAFB),
                       isDarkMode
-                          ? const Color(0xFF111827).withOpacity(0.5)
+                          ? const Color(0xFF111827).withValues(alpha: 0.5)
                           : const Color(0xFFF3F4F6),
                     ],
             ),
@@ -78,15 +78,15 @@ class AddModCard extends ConsumerWidget {
               color: isDragging
                   ? const Color(0xFF0EA5E9)
                   : isDarkMode
-                  ? Colors.white.withOpacity(0.1)
-                  : Colors.black.withOpacity(0.08),
+                  ? Colors.white.withValues(alpha: 0.1)
+                  : Colors.black.withValues(alpha: 0.08),
               width: isDragging ? 2.5 : 2,
               strokeAlign: BorderSide.strokeAlignInside,
             ),
             boxShadow: isDragging
                 ? [
                     BoxShadow(
-                      color: const Color(0xFF0EA5E9).withOpacity(0.3),
+                      color: const Color(0xFF0EA5E9).withValues(alpha: 0.3),
                       blurRadius: 20,
                       spreadRadius: 2,
                     ),
@@ -94,8 +94,8 @@ class AddModCard extends ConsumerWidget {
                 : [
                     BoxShadow(
                       color: isDarkMode
-                          ? Colors.black.withOpacity(0.2)
-                          : Colors.grey.withOpacity(0.1),
+                          ? Colors.black.withValues(alpha: 0.2)
+                          : Colors.grey.withValues(alpha: 0.1),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -111,10 +111,10 @@ class AddModCard extends ConsumerWidget {
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     color: isDragging
-                        ? const Color(0xFF0EA5E9).withOpacity(0.2)
+                        ? const Color(0xFF0EA5E9).withValues(alpha: 0.2)
                         : (isDarkMode
-                              ? Colors.white.withOpacity(0.05)
-                              : Colors.black.withOpacity(0.03)),
+                              ? Colors.white.withValues(alpha: 0.05)
+                              : Colors.black.withValues(alpha: 0.03)),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
@@ -123,8 +123,8 @@ class AddModCard extends ConsumerWidget {
                     color: isDragging
                         ? const Color(0xFF0EA5E9)
                         : (isDarkMode
-                              ? Colors.white.withOpacity(0.6)
-                              : Colors.black.withOpacity(0.4)),
+                              ? Colors.white.withValues(alpha: 0.6)
+                              : Colors.black.withValues(alpha: 0.4)),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -138,8 +138,8 @@ class AddModCard extends ConsumerWidget {
                     color: isDragging
                         ? const Color(0xFF0EA5E9)
                         : (isDarkMode
-                              ? Colors.white.withOpacity(0.7)
-                              : Colors.black.withOpacity(0.6)),
+                              ? Colors.white.withValues(alpha: 0.7)
+                              : Colors.black.withValues(alpha: 0.6)),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -153,8 +153,8 @@ class AddModCard extends ConsumerWidget {
                     style: TextStyle(
                       fontSize: 12,
                       color: isDarkMode
-                          ? Colors.white.withOpacity(0.5)
-                          : Colors.black.withOpacity(0.4),
+                          ? Colors.white.withValues(alpha: 0.5)
+                          : Colors.black.withValues(alpha: 0.4),
                     ),
                   ),
                 ),

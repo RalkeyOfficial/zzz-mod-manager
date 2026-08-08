@@ -10,7 +10,6 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../core/constants.dart';
 import '../models/gamebanana/gamebanana.dart';
 import '../services/gamebanana/gamebanana_client.dart';
 import 'state_providers.dart';

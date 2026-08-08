@@ -45,9 +45,7 @@ class ApiService {
               kDefaultMarketplaceSort;
     }
 
-    if (_modManager == null) {
-      _modManager = ModManagerService(_configService!, _container!);
-    }
+    _modManager ??= ModManagerService(_configService!, _container!);
   }
 
   static Future<List<ModInfo>> getMods() async {

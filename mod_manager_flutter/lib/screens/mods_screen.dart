@@ -735,7 +735,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF0EA5E9).withOpacity(0.3),
+                          color: const Color(0xFF0EA5E9).withValues(alpha: 0.3),
                           blurRadius: 20,
                           spreadRadius: 5,
                         ),
@@ -824,8 +824,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
               border: Border(
                 bottom: BorderSide(
                   color: isDarkMode
-                      ? Colors.white.withOpacity(0.1)
-                      : Colors.black.withOpacity(0.05),
+                      ? Colors.white.withValues(alpha: 0.1)
+                      : Colors.black.withValues(alpha: 0.05),
                 ),
               ),
             ),
@@ -852,7 +852,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                         decoration: BoxDecoration(
                           color: const Color(
                             AppConstants.activeModBorderColor,
-                          ).withOpacity(0.1),
+                          ).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(
                             AppConstants.smallPadding,
                           ),
@@ -942,7 +942,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                     decoration: BoxDecoration(
                       color: const Color(
                         AppConstants.activeModCountColor,
-                      ).withOpacity(0.1),
+                      ).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(
                         AppConstants.smallPadding,
                       ),
@@ -1200,7 +1200,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
               BoxShadow(
                 color: const Color(
                   AppConstants.activeModBorderColor,
-                ).withOpacity(0.3),
+                ).withValues(alpha: 0.3),
                 blurRadius: AppConstants.modCardBlurRadiusActive,
                 spreadRadius: AppConstants.modCardSpreadRadiusActive,
               ),
@@ -1225,7 +1225,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                           cacheWidth: AppConstants.modCardDecodeWidth,
                         )
                       : Container(
-                          color: Colors.grey.withOpacity(0.1),
+                          color: Colors.grey.withValues(alpha: 0.1),
                           child: Icon(
                             Icons.image_not_supported,
                             size: 32,
@@ -1775,10 +1775,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF0EA5E9).withOpacity(0.1),
+                      color: const Color(0xFF0EA5E9).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: const Color(0xFF0EA5E9).withOpacity(0.3),
+                        color: const Color(0xFF0EA5E9).withValues(alpha: 0.3),
                       ),
                     ),
                     child: Column(
@@ -1908,10 +1908,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFF0EA5E9).withOpacity(0.1),
+                color: const Color(0xFF0EA5E9).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: const Color(0xFF0EA5E9).withOpacity(0.3),
+                  color: const Color(0xFF0EA5E9).withValues(alpha: 0.3),
                 ),
               ),
               child: Row(

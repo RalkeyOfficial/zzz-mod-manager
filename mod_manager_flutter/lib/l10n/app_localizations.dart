@@ -38,7 +38,7 @@ class AppLocalizations {
       var value = current;
       if (params != null) {
         params.forEach((placeholder, replacement) {
-          value = value.replaceAll('{${placeholder}}', replacement);
+          value = value.replaceAll('{$placeholder}', replacement);
         });
       }
       return value;

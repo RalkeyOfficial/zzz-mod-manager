@@ -175,7 +175,7 @@ class _CategoryPickerDialogState extends State<_CategoryPickerDialog> {
   Widget _categoryChip(CategoryData cat) {
     final selected = cat.id == widget.currentId;
     return Material(
-      color: selected ? _accent.withOpacity(0.12) : Colors.transparent,
+      color: selected ? _accent.withValues(alpha: 0.12) : Colors.transparent,
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
@@ -185,7 +185,7 @@ class _CategoryPickerDialogState extends State<_CategoryPickerDialog> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: selected ? _accent : Colors.grey.withOpacity(0.4),
+              color: selected ? _accent : Colors.grey.withValues(alpha: 0.4),
               width: selected ? 1.5 : 1,
             ),
           ),
@@ -221,7 +221,7 @@ class _CategoryPickerDialogState extends State<_CategoryPickerDialog> {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: selected ? _accent : Colors.grey.withOpacity(0.35),
+                  color: selected ? _accent : Colors.grey.withValues(alpha: 0.35),
                   width: selected ? 2.5 : 1,
                 ),
               ),
@@ -230,7 +230,7 @@ class _CategoryPickerDialogState extends State<_CategoryPickerDialog> {
                   'assets/characters/${getCharacterAssetName(id)}.png',
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => Container(
-                    color: Colors.grey.withOpacity(0.15),
+                    color: Colors.grey.withValues(alpha: 0.15),
                     child: Icon(
                       Icons.person,
                       size: 28,

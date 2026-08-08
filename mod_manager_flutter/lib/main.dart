@@ -134,8 +134,8 @@ class _MyAppState extends ConsumerState<MyApp> {
         cardTheme: CardThemeData(
           elevation: isDarkMode ? 8 : 4,
           shadowColor: isDarkMode
-              ? Colors.black.withOpacity(0.3)
-              : Colors.black.withOpacity(0.1),
+              ? Colors.black.withValues(alpha: 0.3)
+              : Colors.black.withValues(alpha: 0.1),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -144,7 +144,7 @@ class _MyAppState extends ConsumerState<MyApp> {
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
             elevation: 4,
-            shadowColor: const Color(0xFF0EA5E9).withOpacity(0.3),
+            shadowColor: const Color(0xFF0EA5E9).withValues(alpha: 0.3),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
@@ -156,16 +156,16 @@ class _MyAppState extends ConsumerState<MyApp> {
             borderRadius: BorderRadius.circular(8),
             borderSide: BorderSide(
               color: isDarkMode
-                  ? Colors.white.withOpacity(0.1)
-                  : Colors.black.withOpacity(0.1),
+                  ? Colors.white.withValues(alpha: 0.1)
+                  : Colors.black.withValues(alpha: 0.1),
             ),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
             borderSide: BorderSide(
               color: isDarkMode
-                  ? Colors.white.withOpacity(0.1)
-                  : Colors.black.withOpacity(0.1),
+                  ? Colors.white.withValues(alpha: 0.1)
+                  : Colors.black.withValues(alpha: 0.1),
             ),
           ),
           focusedBorder: OutlineInputBorder(
@@ -297,16 +297,16 @@ class _MainScreenState extends ConsumerState<MainScreen>
                       border: Border(
                         right: BorderSide(
                           color: isDarkMode
-                              ? Colors.white.withOpacity(0.05)
-                              : Colors.black.withOpacity(0.03),
+                              ? Colors.white.withValues(alpha: 0.05)
+                              : Colors.black.withValues(alpha: 0.03),
                           width: 1,
                         ),
                       ),
                       boxShadow: [
                         BoxShadow(
                           color: isDarkMode
-                              ? Colors.black.withOpacity(0.3)
-                              : Colors.black.withOpacity(0.05),
+                              ? Colors.black.withValues(alpha: 0.3)
+                              : Colors.black.withValues(alpha: 0.05),
                           blurRadius: 15,
                           offset: const Offset(2, 0),
                         ),
@@ -378,7 +378,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
                                         BoxShadow(
                                           color: const Color(
                                             0xFF0EA5E9,
-                                          ).withOpacity(0.3),
+                                          ).withValues(alpha: 0.3),
                                           blurRadius: 15,
                                           spreadRadius: 2,
                                         ),
@@ -484,13 +484,13 @@ class _MainScreenState extends ConsumerState<MainScreen>
                               ),
                               decoration: BoxDecoration(
                                 color: isDarkMode
-                                    ? Colors.white.withOpacity(0.05)
-                                    : Colors.black.withOpacity(0.03),
+                                    ? Colors.white.withValues(alpha: 0.05)
+                                    : Colors.black.withValues(alpha: 0.03),
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
                                   color: isDarkMode
-                                      ? Colors.white.withOpacity(0.1)
-                                      : Colors.black.withOpacity(0.05),
+                                      ? Colors.white.withValues(alpha: 0.1)
+                                      : Colors.black.withValues(alpha: 0.05),
                                 ),
                               ),
                               child: Text(
@@ -558,27 +558,27 @@ class _MainScreenState extends ConsumerState<MainScreen>
             end: Alignment.bottomRight,
             colors: isDarkMode
                 ? [
-                    const Color(0xFF1A1A1A).withOpacity(0.95),
-                    const Color(0xFF0F0F0F).withOpacity(0.95),
+                    const Color(0xFF1A1A1A).withValues(alpha: 0.95),
+                    const Color(0xFF0F0F0F).withValues(alpha: 0.95),
                   ]
                 : [
-                    Colors.white.withOpacity(0.95),
-                    const Color(0xFFF5F5F5).withOpacity(0.95),
+                    Colors.white.withValues(alpha: 0.95),
+                    const Color(0xFFF5F5F5).withValues(alpha: 0.95),
                   ],
           ),
           border: Border(
             bottom: BorderSide(
               color: isDarkMode
-                  ? Colors.white.withOpacity(0.05)
-                  : Colors.black.withOpacity(0.03),
+                  ? Colors.white.withValues(alpha: 0.05)
+                  : Colors.black.withValues(alpha: 0.03),
               width: 1,
             ),
           ),
           boxShadow: [
             BoxShadow(
               color: isDarkMode
-                  ? Colors.black.withOpacity(0.3)
-                  : Colors.black.withOpacity(0.05),
+                  ? Colors.black.withValues(alpha: 0.3)
+                  : Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 2),
             ),
@@ -604,7 +604,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
                 borderRadius: BorderRadius.circular(6),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF0EA5E9).withOpacity(0.3),
+                    color: const Color(0xFF0EA5E9).withValues(alpha: 0.3),
                     blurRadius: 8,
                     spreadRadius: 1,
                   ),
@@ -685,16 +685,16 @@ class _MainScreenState extends ConsumerState<MainScreen>
         child: InkWell(
           onTap: onPressed,
           hoverColor: isClose
-              ? Colors.red.withOpacity(0.8)
+              ? Colors.red.withValues(alpha: 0.8)
               : (isDarkMode
-                    ? Colors.white.withOpacity(0.1)
-                    : Colors.black.withOpacity(0.05)),
+                    ? Colors.white.withValues(alpha: 0.1)
+                    : Colors.black.withValues(alpha: 0.05)),
           child: Icon(
             icon,
             size: 16,
             color: isDarkMode
-                ? Colors.white.withOpacity(0.7)
-                : Colors.black.withOpacity(0.7),
+                ? Colors.white.withValues(alpha: 0.7)
+                : Colors.black.withValues(alpha: 0.7),
           ),
         ),
       ),
@@ -739,7 +739,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
                   boxShadow: isActive
                       ? [
                           BoxShadow(
-                            color: const Color(0xFF0EA5E9).withOpacity(0.4),
+                            color: const Color(0xFF0EA5E9).withValues(alpha: 0.4),
                             blurRadius: 12,
                             spreadRadius: 1,
                             offset: const Offset(0, 4),

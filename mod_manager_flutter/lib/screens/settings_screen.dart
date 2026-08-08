@@ -122,7 +122,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
             color: Theme.of(context).cardColor,
             border: Border(
               bottom: BorderSide(
-                color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
+                color: isDarkMode ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
               ),
             ),
           ),
@@ -159,7 +159,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
                                 shape: BoxShape.circle,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: const Color(0xFF0EA5E9).withOpacity(0.3),
+                                    color: const Color(0xFF0EA5E9).withValues(alpha: 0.3),
                                     blurRadius: 20,
                                     spreadRadius: 5,
                                   ),
@@ -251,7 +251,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
                               onChanged: (value) {
                                 ref.read(isDarkModeProvider.notifier).state = value;
                               },
-                              activeColor: const Color(0xFF0EA5E9),
+                              activeThumbColor: const Color(0xFF0EA5E9),
                             ),
                             isDarkMode: isDarkMode,
                           ),
@@ -277,10 +277,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
                           Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF0EA5E9).withOpacity(0.05),
+                              color: const Color(0xFF0EA5E9).withValues(alpha: 0.05),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: const Color(0xFF0EA5E9).withOpacity(0.1),
+                                color: const Color(0xFF0EA5E9).withValues(alpha: 0.1),
                               ),
                             ),
                             child: Row(
@@ -470,10 +470,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFF8B5CF6).withOpacity(0.1),
+              color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: const Color(0xFF8B5CF6).withOpacity(0.3),
+                color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
               ),
             ),
             child: Row(
@@ -628,10 +628,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF8B5CF6).withOpacity(0.1),
+                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: const Color(0xFF8B5CF6).withOpacity(0.3),
+                        color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
                       ),
                     ),
                     child: Column(
@@ -861,13 +861,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: autoF10Enabled 
-            ? const Color(0xFF10B981).withOpacity(0.1)
-            : const Color(0xFFEF4444).withOpacity(0.1),
+            ? const Color(0xFF10B981).withValues(alpha: 0.1)
+            : const Color(0xFFEF4444).withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: autoF10Enabled 
-              ? const Color(0xFF10B981).withOpacity(0.3)
-              : const Color(0xFFEF4444).withOpacity(0.3),
+              ? const Color(0xFF10B981).withValues(alpha: 0.3)
+              : const Color(0xFFEF4444).withValues(alpha: 0.3),
         ),
       ),
       child: Row(
@@ -882,7 +882,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: (autoF10Enabled ? const Color(0xFF10B981) : const Color(0xFFEF4444)).withOpacity(0.4),
+                  color: (autoF10Enabled ? const Color(0xFF10B981) : const Color(0xFFEF4444)).withValues(alpha: 0.4),
                   blurRadius: 8,
                   spreadRadius: 1,
                 ),
@@ -926,7 +926,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
             onChanged: (value) {
               ref.read(autoF10ReloadProvider.notifier).state = value;
             },
-            activeColor: const Color(0xFF10B981),
+            activeThumbColor: const Color(0xFF10B981),
             inactiveThumbColor: const Color(0xFFEF4444),
           ),
         ],
@@ -1138,13 +1138,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide(
-                      color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1),
+                      color: isDarkMode ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.1),
                     ),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide(
-                      color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1),
+                      color: isDarkMode ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.1),
                     ),
                   ),
                   focusedBorder: OutlineInputBorder(
@@ -1186,7 +1186,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.05),
+          color: isDarkMode ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
         ),
       ),
       child: Row(

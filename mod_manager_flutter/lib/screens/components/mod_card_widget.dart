@@ -11,13 +11,13 @@ class ModCardWidget extends StatefulWidget {
   final VoidCallback onOpenLink;
 
   const ModCardWidget({
-    Key? key,
+    super.key,
     required this.mod,
     required this.isDarkMode,
     required this.onFavoriteToggle,
     required this.onShowDetails,
     required this.onOpenLink,
-  }) : super(key: key);
+  });
 
   @override
   State<ModCardWidget> createState() => _ModCardWidgetState();
@@ -171,7 +171,7 @@ class _ModCardWidgetState extends State<ModCardWidget> {
       decoration: BoxDecoration(
         color: active
             ? const Color(0xFF10B981)
-            : Colors.black.withOpacity(0.45),
+            : Colors.black.withValues(alpha: 0.45),
         borderRadius: BorderRadius.circular(11),
         boxShadow: [
           BoxShadow(
@@ -199,7 +199,7 @@ class _ModCardWidgetState extends State<ModCardWidget> {
             size: 12,
             color: active
                 ? const Color(0xFF10B981)
-                : Colors.black.withOpacity(0.45),
+                : Colors.black.withValues(alpha: 0.45),
           ),
         ),
       ),
@@ -210,14 +210,14 @@ class _ModCardWidgetState extends State<ModCardWidget> {
   /// tapping it doesn't also trigger the card-body toggle.
   Widget _circleButton(IconData icon, VoidCallback onTap) {
     return Material(
-      color: Colors.black.withOpacity(0.35),
+      color: Colors.black.withValues(alpha: 0.35),
       shape: const CircleBorder(),
       child: InkWell(
         onTap: onTap,
         customBorder: const CircleBorder(),
         child: Padding(
           padding: const EdgeInsets.all(6),
-          child: Icon(icon, size: 18, color: Colors.white.withOpacity(0.85)),
+          child: Icon(icon, size: 18, color: Colors.white.withValues(alpha: 0.85)),
         ),
       ),
     );
@@ -225,7 +225,7 @@ class _ModCardWidgetState extends State<ModCardWidget> {
 
   Widget _favoriteButton(ModInfo mod) {
     return Material(
-      color: Colors.black.withOpacity(0.35),
+      color: Colors.black.withValues(alpha: 0.35),
       shape: const CircleBorder(),
       child: InkWell(
         onTap: widget.onFavoriteToggle,
@@ -237,7 +237,7 @@ class _ModCardWidgetState extends State<ModCardWidget> {
             size: 18,
             color: mod.isFavorite
                 ? const Color(0xFFFACC15)
-                : Colors.white.withOpacity(0.85),
+                : Colors.white.withValues(alpha: 0.85),
           ),
         ),
       ),
@@ -310,9 +310,9 @@ class _ModCardWidgetState extends State<ModCardWidget> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: base.withOpacity(0.12),
+        color: base.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: base.withOpacity(0.3)),
+        border: Border.all(color: base.withValues(alpha: 0.3)),
       ),
       child: Text(
         label,
@@ -320,8 +320,8 @@ class _ModCardWidgetState extends State<ModCardWidget> {
           fontSize: 10,
           fontWeight: FontWeight.w500,
           color: widget.isDarkMode
-              ? Colors.white.withOpacity(0.85)
-              : Colors.black.withOpacity(0.7),
+              ? Colors.white.withValues(alpha: 0.85)
+              : Colors.black.withValues(alpha: 0.7),
         ),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,

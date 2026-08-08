@@ -435,7 +435,7 @@ Widget _editImageThumb(
               onTap: isCover ? null : onSetCover,
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.25),
+                  color: Colors.black.withValues(alpha: 0.25),
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
                     color: isCover

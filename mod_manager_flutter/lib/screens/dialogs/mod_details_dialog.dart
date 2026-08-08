@@ -354,7 +354,7 @@ Widget _detailGallery(
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        color: Colors.black.withOpacity(0.2),
+        color: Colors.black.withValues(alpha: 0.2),
         alignment: Alignment.center,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -407,7 +407,7 @@ Widget _detailGallery(
                     onTap: () => _showImageLightbox(context, mod.images[safe]),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.25),
+                        color: Colors.black.withValues(alpha: 0.25),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: const Color(0xFF334155),
@@ -446,7 +446,7 @@ Widget _detailGallery(
                         child: Container(
                           width: 56,
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.25),
+                            color: Colors.black.withValues(alpha: 0.25),
                             borderRadius: BorderRadius.circular(6),
                             border: Border.all(
                               color: isSelected
@@ -488,7 +488,7 @@ void _showImageLightbox(BuildContext context, String imagePath) {
     context: context,
     barrierDismissible: true,
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-    barrierColor: Colors.black.withOpacity(0.85),
+    barrierColor: Colors.black.withValues(alpha: 0.85),
     transitionDuration: const Duration(milliseconds: 150),
     pageBuilder: (context, _, __) {
       return GestureDetector(
@@ -520,7 +520,7 @@ Widget _detailImagePlaceholder(double height) {
     height: height.isFinite ? height : null,
     width: double.infinity,
     alignment: Alignment.center,
-    color: Colors.black.withOpacity(0.2),
+    color: Colors.black.withValues(alpha: 0.2),
     child: Icon(Icons.broken_image_outlined, color: Colors.grey[600]),
   );
 }
@@ -543,8 +543,8 @@ Widget _detailKeybindChip(KeybindInfo keybind) {
     decoration: BoxDecoration(
       gradient: LinearGradient(
         colors: [
-          const Color(0xFF1E293B).withOpacity(0.8),
-          const Color(0xFF0F172A).withOpacity(0.9),
+          const Color(0xFF1E293B).withValues(alpha: 0.8),
+          const Color(0xFF0F172A).withValues(alpha: 0.9),
         ],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,

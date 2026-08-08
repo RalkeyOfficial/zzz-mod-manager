@@ -17,13 +17,13 @@ class CharacterCardsListWidget extends ConsumerStatefulWidget {
   final Map<String, String> modCharacterTags;
 
   const CharacterCardsListWidget({
-    Key? key,
+    super.key,
     required this.characters,
     required this.selectedIndex,
     required this.onCharacterSelected,
     required this.onCharacterTagSaved,
     required this.modCharacterTags,
-  }) : super(key: key);
+  });
 
   @override
   ConsumerState<CharacterCardsListWidget> createState() =>
@@ -215,7 +215,7 @@ class _CharacterCardsListWidgetState
                           ? const Color(AppConstants.activeModCountColor)
                           : isSelected
                           ? const Color(AppConstants.activeModBorderColor)
-                          : Colors.grey.withOpacity(0.3),
+                          : Colors.grey.withValues(alpha: 0.3),
                       width: isHovering
                           ? AppConstants.characterCardBorderWidthHover
                           : isSelected
@@ -227,7 +227,7 @@ class _CharacterCardsListWidgetState
                             BoxShadow(
                               color: const Color(
                                 AppConstants.activeModCountColor,
-                              ).withOpacity(0.4),
+                              ).withValues(alpha: 0.4),
                               blurRadius: AppConstants.characterCardBlurRadius,
                               spreadRadius:
                                   AppConstants.characterCardSpreadRadiusHover,
@@ -238,7 +238,7 @@ class _CharacterCardsListWidgetState
                             BoxShadow(
                               color: const Color(
                                 AppConstants.activeModBorderColor,
-                              ).withOpacity(0.4),
+                              ).withValues(alpha: 0.4),
                               blurRadius:
                                   AppConstants.characterCardBlurRadius + 5,
                               spreadRadius: AppConstants
@@ -247,7 +247,7 @@ class _CharacterCardsListWidgetState
                             BoxShadow(
                               color: const Color(
                                 AppConstants.activeModBorderColor,
-                              ).withOpacity(0.2),
+                              ).withValues(alpha: 0.2),
                               blurRadius:
                                   AppConstants.characterCardBlurRadius + 10,
                               spreadRadius:
@@ -277,7 +277,7 @@ class _CharacterCardsListWidgetState
                             character.iconPath!,
                             fit: BoxFit.cover,
                             errorBuilder: (_, __, ___) => Container(
-                              color: Colors.grey.withOpacity(0.2),
+                              color: Colors.grey.withValues(alpha: 0.2),
                               child: Icon(
                                 Icons.person,
                                 size: AppConstants.characterCardWidth * 0.5,
@@ -287,7 +287,7 @@ class _CharacterCardsListWidgetState
                           )
                         : character.icon != null
                         ? Container(
-                            color: Colors.grey.withOpacity(0.15),
+                            color: Colors.grey.withValues(alpha: 0.15),
                             child: Icon(
                               character.icon,
                               size: AppConstants.characterCardWidth * 0.5,
@@ -295,7 +295,7 @@ class _CharacterCardsListWidgetState
                             ),
                           )
                         : Container(
-                            color: Colors.grey.withOpacity(0.2),
+                            color: Colors.grey.withValues(alpha: 0.2),
                             child: Icon(
                               Icons.person,
                               size: AppConstants.characterCardWidth * 0.5,

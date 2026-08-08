@@ -59,8 +59,8 @@ void showKeybindsDialog(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        const Color(0xFF1E293B).withOpacity(0.8),
-                        const Color(0xFF0F172A).withOpacity(0.9),
+                        const Color(0xFF1E293B).withValues(alpha: 0.8),
+                        const Color(0xFF0F172A).withValues(alpha: 0.9),
                       ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -92,7 +92,7 @@ void showKeybindsDialog(
                           color: const Color(0xFF0F172A),
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(
-                            color: const Color(0xFFFBBF24).withOpacity(0.3),
+                            color: const Color(0xFFFBBF24).withValues(alpha: 0.3),
                             width: 1.5,
                           ),
                         ),
@@ -200,7 +200,7 @@ void showEditKeybindDialog(
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFF1E293B).withOpacity(0.5),
+              color: const Color(0xFF1E293B).withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(6),
               border: Border.all(color: const Color(0xFF334155)),
             ),

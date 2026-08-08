@@ -37,7 +37,7 @@ class AutoF10Toggle extends ConsumerWidget {
                     (autoF10Enabled
                             ? const Color(0xFF10B981)
                             : const Color(0xFFEF4444))
-                        .withOpacity(0.4),
+                        .withValues(alpha: 0.4),
                 blurRadius: 12,
                 spreadRadius: 1,
                 offset: const Offset(0, 4),
@@ -80,7 +80,7 @@ class F10ReloadButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF0EA5E9).withOpacity(0.3),
+              color: const Color(0xFF0EA5E9).withValues(alpha: 0.3),
               blurRadius: 8,
               spreadRadius: 1,
             ),
@@ -145,7 +145,7 @@ class RefreshModsButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF6366F1).withOpacity(0.3),
+              color: const Color(0xFF6366F1).withValues(alpha: 0.3),
               blurRadius: 8,
               spreadRadius: 1,
             ),

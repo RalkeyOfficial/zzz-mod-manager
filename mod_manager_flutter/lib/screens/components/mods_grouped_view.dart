@@ -183,11 +183,11 @@ class _ModsGroupedViewState extends ConsumerState<ModsGroupedView> {
   }) {
     final isDarkMode = ref.read(isDarkModeProvider);
     final lineColor = isDarkMode
-        ? Colors.white.withOpacity(0.15)
-        : Colors.black.withOpacity(0.12);
+        ? Colors.white.withValues(alpha: 0.15)
+        : Colors.black.withValues(alpha: 0.12);
     final textColor = isDarkMode
-        ? Colors.white.withOpacity(0.85)
-        : Colors.black.withOpacity(0.72);
+        ? Colors.white.withValues(alpha: 0.85)
+        : Colors.black.withValues(alpha: 0.72);
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: AppConstants.smallPadding,
