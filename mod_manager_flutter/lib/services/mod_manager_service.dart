@@ -5,11 +5,13 @@ import '../models/character_info.dart';
 import '../models/mod_origin.dart';
 import '../models/mod_origin_seed.dart';
 import '../models/keybind_info.dart';
-import '../core/constants.dart';
+import '../utils/shipped_preview.dart';
 import '../utils/state_providers.dart';
 import '../utils/zzz_characters.dart';
 import 'config_service.dart';
+import 'gamebanana/remote_mod_metadata.dart';
 import 'ingest_origin_builder.dart';
+import 'metadata_autofill.dart';
 import 'mod_metadata_repository.dart';
 import 'mod_metadata_service.dart';
 import 'platform_service.dart';
@@ -176,6 +178,15 @@ class ModManagerService {
   /// and mirrors it into config.json for backward compatibility.
   Future<bool> setModCharacter(String modName, String characterId) =>
       _metadata.setCharacter(modName, characterId);
+
+  /// Fills the blanks in freshly-installed mods' metadata from the mod page they
+  /// came from. Rules and I/O both live in [ModMetadataRepository]; this is the
+  /// public entry point, like [saveModMetadata].
+  Future<RemoteMetadataFill> applyRemoteMetadata(
+    Iterable<String> modNames,
+    RemoteModMetadata remote,
+  ) =>
+      _metadata.applyRemoteMetadata(modNames, remote);
 
   ModMetadataService get metadataService => _metadata.service;
 
@@ -383,19 +394,14 @@ class ModManagerService {
     return await _platformService.openFolderInFileManager(modDir.path);
   }
 
+  /// The author-shipped preview image (`Preview.png`, …) for a mod, if any.
+  ///
+  /// Shared with the marketplace metadata autofill through
+  /// [findShippedPreview] — both need the same answer, and the autofill needs it
+  /// so a remote gallery never displaces an author's own preview.
   Future<String?> _findModImage(String modName) async {
     try {
-      final modPath = path.join(modsPath!, modName);
-      final modDir = Directory(modPath);
-      if (!await modDir.exists()) return null;
-
-      for (final imageName in AppConstants.imageFileNames) {
-        final imagePath = path.join(modPath, imageName);
-        final imageFile = File(imagePath);
-        if (await imageFile.exists()) return imagePath;
-      }
-
-      return null;
+      return await findShippedPreview(path.join(modsPath!, modName));
     } catch (e) {
       return null;
     }

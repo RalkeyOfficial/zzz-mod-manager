@@ -40,7 +40,7 @@ class GameBananaClient {
         _endpoints = endpoints ?? GameBananaEndpoints(gameId: gameId),
         _errors = errorMapper,
         _sleep = sleep ?? Future.delayed,
-        _userAgent = userAgent ?? 'zzz-mod-manager/${AppConstants.appVersion}';
+        _userAgent = userAgent ?? AppConstants.httpUserAgent;
 
   final HttpTransport _transport;
   final GameBananaResponseCache _cache;

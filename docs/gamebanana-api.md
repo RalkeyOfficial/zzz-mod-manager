@@ -375,7 +375,7 @@ we actually care about:
 | `_aRootCategory` | list | The **top-level** category only — for a skin that is the bland "Character Skins". |
 | `_aSubCategory` | list | The **specific** category, and the only place a listing names it. For ZZZ this is usually the *character* ("Ellen Joe"). Absent on mods filed directly under a root. |
 | `_aCategory` | profile | The profile's spelling of the specific category. Carries `_idRow`; the two listing spellings do not (see [below](#three-spellings-of-category)). |
-| `_aTags` | both | Author tags. Often empty — don't rely on it for character detection. |
+| `_aTags` | both | Author tags. **Two different wire shapes** — see below. Often empty; don't rely on it for character detection. |
 | `_aPreviewMedia._aImages[]` | both | Gallery. See below. |
 | `_nLikeCount`, `_nViewCount`, `_nPostCount` | both | Stats for the card. |
 | `_nDownloadCount` | **profile only** | **Not on listing records.** A card cannot show a download count — see below. |
@@ -417,6 +417,32 @@ means parsing that url — which matters because the id is the only thing the
 `Generic_Category` filter accepts. Code that wants "the most useful category label"
 should try specific-then-parent rather than picking one key.
 
+**Under Character Skins, the category name is the character's full in-world name** —
+"Ellen Joe", "Anby Demara", "Von Lycaon", "Soldier 0 Anby" — not a short name and not
+an id. That makes it the most reliable statement of *which character a mod is for*
+that the API offers: the author picked it from a list, where `_sName` and `_aTags` are
+free text. The names it is **not** are just as important, because they must not be
+read as characters: the four roots ("Character Skins", "Bangboo Skins", "Other/Misc",
+"UI") and the 22 children of Bangboo Skins ("Avocaboo", "Eous", "Sharkboo", …).
+
+### `_aTags` has two shapes
+
+The same field, spelled differently by endpoint — and the string form is the *only*
+one a listing sends, so code written against a listing reads a profile's tags as
+**empty** rather than failing:
+
+| Response | Shape |
+|---|---|
+| `Mod/Index`, `Util/Search/Results` | flattened strings: `"Software Used: Blender"` |
+| `Mod/<id>/ProfilePage` | objects: `{"_sTitle": "Software Used", "_sValue": "Blender"}` |
+
+What the values actually *are* is worth knowing before treating them as keywords.
+Authors fill both halves freely, so a tag is two loosely-related fragments —
+`{"Ellen", "Chained school uniforms"}`, `{"cheongsam", "ellen"}` — and the single
+most common title is `Software Used`, naming the author's toolchain rather than the
+mod. Measured over the captured listings: **4 of 20 records carry any tag at all, and
+3 of the 6 distinct values are the `Software Used` family.**
+
 ### Images
 
 `_aPreviewMedia._aImages[]` gives a base url plus pre-rendered sizes; join them
@@ -441,7 +467,15 @@ over 20 mods):
 - **112 of 132 images overall had only `_sFile` and `_sFile100`.** The misses are
   concentrated in *secondary* gallery images, so anything walking a mod's whole
   gallery at a large size will fall through to the full-resolution original
-  regularly — which is a multi-megabyte download and a multi-megapixel decode.
+  regularly.
+- Two whole galleries measured image by image (`Content-Length` on every url):
+  **15 images = 2.3 MB, 26 images = 5.5 MB**, i.e. ~115–310 KB each. So
+  "full-resolution original" here means *web-compressed jpeg*, not a raw
+  screenshot — the **decode** is multi-megapixel and needs bounding, but the
+  **download** is small next to a 21.9 MB median mod archive
+  ([§8](#8-downloading-a-file)). Don't reach for a size negotiation to save
+  bandwidth that isn't being spent; the cover is the only image a smaller rung
+  even exists for.
 
 Three practical consequences: pick the variant by the size you will *display*; bound
 the decode independently, because the url you get back is not always the size you
@@ -780,6 +814,10 @@ Collected so nobody rediscovers them:
   ("not requested") and empty ("none exist") are both real and mean different things.
 - **`_sText` is HTML**, while our own sidecar descriptions are markdown. Convert on
   import; don't dump raw HTML into a markdown widget.
+- **`_aTags` is strings on a listing and `{_sTitle, _sValue}` objects on a profile.**
+  A parser that handles only the string form returns a profile's tags as *empty*
+  rather than throwing, which is invisible until someone counts
+  ([§5](#_atags-has-two-shapes)).
 - **`_ts…` of `0` means never.** `_nStatus` is a string.
 - **A root-category filter includes subcategories**, so counts won't exactly match
   `_nItemCount` (4591 vs 4589 for ZZZ Character Skins — close, not equal).

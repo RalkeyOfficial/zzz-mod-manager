@@ -16,6 +16,8 @@ import '../services/archive_service.dart';
 import '../services/download/download_exceptions.dart';
 import '../services/download/download_progress.dart';
 import '../services/download/download_request.dart';
+import '../services/gamebanana/remote_mod_metadata.dart';
+import '../services/metadata_autofill.dart';
 import '../services/mod_manager_service.dart';
 import '../services/platform_service_factory.dart';
 import '../utils/marketplace_providers.dart';
@@ -389,6 +391,21 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         return InstallResult.warning(loc.t('marketplace.install_duplicate'));
       }
 
+      // The mod page we downloaded from knows everything a fresh install
+      // otherwise lacks — description, gallery, tags, and which character it is
+      // filed under. Fill only what is still blank (an archive can arrive
+      // carrying the author's own sidecar, and that text is better than ours).
+      // After the import, deliberately: the folders have to exist, and the
+      // name-based character detection above has already had its say.
+      final fill = await modManager.applyRemoteMetadata(
+        importedMods,
+        RemoteModMetadata.fromMod(mod),
+      );
+      // Same shape as the import's own auto-tags, so one summary covers both:
+      // a character recovered from the mod's category is the same fact as one
+      // recovered from its folder name, just from a better source.
+      autoTags.addAll(fill.characterTags);
+
       final tagSummary = autoTags.entries
           .map((entry) => '${entry.key} → ${entry.value}')
           .join(', ');
@@ -397,13 +414,30 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       // strong sign the mod is incomplete (e.g. a broken multi-folder archive).
       final noIni = await ArchiveService.modsWithoutIni(modsPath, importedMods);
 
-      // Drained, so it is reported exactly once: nothing re-attempts an origin
-      // write, because it happens at ingest and never during a scan.
+      // Drained, so it is reported at most once: nothing re-attempts an origin
+      // write, because it happens at ingest and never during a scan. Drained
+      // *before* the mounted check below on purpose — if this screen is gone the
+      // message is lost, which is better than leaving the names queued for the
+      // next install to blame on the wrong archive.
       final originFailures = modManager.takeOriginWriteFailures();
+
+      // Every `loc.t` below reads an inherited widget through `context`, and the
+      // autofill above is the first await in this method that can run for
+      // *seconds* — up to one 20s image timeout on a degraded CDN node. No modal
+      // barrier is up by then (the download dialog closed when the bytes landed),
+      // so the user can switch to the Mods tab, and the tabs are keyed
+      // `AnimatedSwitcher` children with no keep-alive: this screen is disposed
+      // and the lookup is invalid. Success, not `cancelled()` — the mod is
+      // installed and its metadata is filled; the only thing lost is the sentence
+      // describing it, and the caller is unmounted too so it would show nothing
+      // either way.
+      if (!mounted) return InstallResult.success(importedMods);
 
       final messages = <String>[
         if (tagSummary.isNotEmpty)
           loc.t('marketplace.install_tags', params: {'tags': tagSummary}),
+        if (_metadataSummary(fill) case final summary?)
+          loc.t('marketplace.install_metadata', params: {'fields': summary}),
         if (noIni.isNotEmpty)
           loc.t('mods.snackbar.import_no_ini', params: {'mods': noIni.join(', ')}),
         if (originFailures.isNotEmpty)
@@ -418,6 +452,25 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         await _safeDeleteArchive(archiveFile);
       }
     }
+  }
+
+  /// Names what the mod page filled in, or null when it filled in nothing.
+  ///
+  /// Names, not counts. `fill.images` is a count of image *files* summed over
+  /// every mod the archive became, so one 8-shot gallery installed as two mods
+  /// is 16 — a number the user would read as the size of one gallery. The other
+  /// two fields never carried a number either, so dropping it also makes the
+  /// sentence consistent with itself.
+  ///
+  /// The character is deliberately absent: it is reported through the same
+  /// auto-tag line as folder-name detection, because it is the same fact.
+  String? _metadataSummary(RemoteMetadataFill fill) {
+    final fields = <String>[
+      if (fill.descriptions > 0) loc.t('marketplace.metadata_description'),
+      if (fill.images > 0) loc.t('marketplace.metadata_images'),
+      if (fill.tagSets > 0) loc.t('marketplace.metadata_tags'),
+    ];
+    return fields.isEmpty ? null : fields.join(', ');
   }
 
   /// Deletes the temp extract dirs (`zzz_archive_extract_*`) that hold the given

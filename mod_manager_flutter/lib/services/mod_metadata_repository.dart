@@ -4,7 +4,11 @@ import '../models/character_info.dart';
 import '../models/mod_metadata.dart';
 import '../models/mod_origin.dart';
 import '../utils/path_helper.dart';
+import '../utils/shipped_preview.dart';
 import '../utils/zzz_characters.dart';
+import 'gamebanana/remote_mod_metadata.dart';
+import 'http/image_fetcher.dart';
+import 'metadata_autofill.dart';
 import 'mod_metadata_service.dart';
 import 'origin_backfill.dart';
 
@@ -64,10 +68,18 @@ class ModMetadataRepository {
     ModMetadataService? service,
     String Function()? legacyImagesPath,
     OriginBackfill? backfill,
+    ImageFetcher? imageFetcher,
   })  : _modsPath = modsPath,
         _service = service ?? ModMetadataService(),
         _legacyImagesPath = legacyImagesPath ?? PathHelper.getModImagesPath,
-        _backfill = backfill ?? const OriginBackfill();
+        _backfill = backfill ?? const OriginBackfill(),
+        _imageFetcher = imageFetcher;
+
+  /// Fetches preview images for [applyRemoteMetadata]. Built on first use so a
+  /// repository that never autofills — every test of the rules above, and every
+  /// launch of a user who doesn't open the marketplace — opens no http client.
+  ImageFetcher? _imageFetcher;
+  ImageFetcher get _fetcher => _imageFetcher ??= HttpImageFetcher();
 
   /// The raw sidecar I/O layer. Exposed because the edit dialog imports gallery
   /// images directly through it.
@@ -251,6 +263,183 @@ class ModMetadataRepository {
       print('ModMetadataRepository: failed to record origin for $modName: $e');
       return false;
     }
+  }
+
+  /// Fills the blanks in freshly-installed mods' sidecars from the mod page they
+  /// came from — description, tags, character and gallery.
+  ///
+  /// Every decision about *whether* a field may be written lives in
+  /// [planMetadataAutofill], which fills absence and never displaces; this method
+  /// is the I/O around it. Best-effort throughout: a mod arrives installed and
+  /// working, so nothing here may turn a successful install into a failure.
+  ///
+  /// [modNames] is a list because one archive can install as several mods, and
+  /// they all came from the same page. **Each image is fetched once and written
+  /// into every folder that wants it** — five sibling folders must not mean five
+  /// downloads of the same screenshot.
+  Future<RemoteMetadataFill> applyRemoteMetadata(
+    Iterable<String> modNames,
+    RemoteModMetadata remote,
+  ) async {
+    if (remote.isEmpty) return const RemoteMetadataFill();
+
+    // Pass 1: plan, so nothing is fetched for a mod that has a gallery already.
+    final targets = <String, ({String folder, String? preview})>{};
+    final wanted = <Uri>{};
+    for (final modName in modNames) {
+      try {
+        final folder = _folderOf(modName);
+        if (folder == null) continue;
+        // Up front, not left to the write to reject: a mod renamed or deleted
+        // out from under us would otherwise download a whole gallery before the
+        // ghost-folder guard turned the write away.
+        if (!await Directory(folder).exists()) continue;
+        final shipped = await findShippedPreview(folder);
+        final preview =
+            shipped == null ? null : path.relative(shipped, from: folder);
+        final plan = planMetadataAutofill(
+          existing: await _service.read(folder) ?? const ModMetadata(),
+          remote: remote,
+          shippedPreview: preview,
+        );
+        if (plan.isEmpty) continue;
+        targets[modName] = (folder: folder, preview: preview);
+        wanted.addAll(plan.imageUrls);
+      } catch (e) {
+        print('ModMetadataRepository: autofill planning failed for $modName: $e');
+      }
+    }
+    if (targets.isEmpty) return const RemoteMetadataFill();
+
+    // Pass 2: fetch. Concurrent rather than serial — these are latency-bound
+    // few-hundred-KB GETs, and a serial walk would multiply one unlucky node's
+    // timeout by the length of the gallery.
+    //
+    // Each fetch is guarded here rather than trusted to guard itself, which makes
+    // this method's best-effort promise structural instead of dependent on one
+    // implementation's discipline: [ImageFetcher] is an injected interface whose
+    // "returns null on failure" contract is only a doc comment, and `Future.wait`
+    // rejects on the *first* error while discarding every other result — so a
+    // single throwing fetch would cost the whole gallery and escape the install.
+    final ordered = wanted.toList();
+    final fetched = await Future.wait(ordered.map((url) async {
+      try {
+        return await _fetcher.fetch(url);
+      } catch (e) {
+        print('ModMetadataRepository: image fetch threw for $url: $e');
+        return null;
+      }
+    }));
+    final bytes = <Uri, List<int>>{};
+    for (var i = 0; i < ordered.length; i++) {
+      final data = fetched[i];
+      if (data != null && data.isNotEmpty) bytes[ordered[i]] = data;
+    }
+
+    // Pass 3: write.
+    final characterTags = <String, String>{};
+    final unwritable = <String>[];
+    var descriptions = 0;
+    var tagSets = 0;
+    var images = 0;
+
+    for (final entry in targets.entries) {
+      final modName = entry.key;
+      final folder = entry.value.folder;
+      try {
+        // Re-read and re-decide against what is on disk *now*. The fetch above
+        // is a network await, and a scan is kicked off after every toggle and
+        // rename, so a `save()` can land inside that window — the same hazard
+        // the origin backfill re-reads for, and the same fix.
+        final fresh = await _service.read(folder) ?? const ModMetadata();
+        final plan = planMetadataAutofill(
+          existing: fresh,
+          remote: remote,
+          shippedPreview: entry.value.preview,
+        );
+        if (plan.isEmpty) continue;
+
+        var galleryImages = fresh.images;
+        var storedImages = 0;
+        if (plan.imageUrls.isNotEmpty) {
+          final stored = <String>[
+            if (plan.shippedPreview case final shipped?) shipped,
+          ];
+          for (final url in plan.imageUrls) {
+            final data = bytes[url];
+            if (data == null) continue;
+            final rel = await _service.addImageBytes(
+              folder,
+              data,
+              extension: _imageExtension(url),
+            );
+            if (rel == null) continue;
+            stored.add(rel);
+            storedImages++;
+          }
+          // Only take the new list when something remote actually landed:
+          // otherwise this would write a lone `Preview.png` entry that the scan
+          // already resolves by itself.
+          if (storedImages > 0) galleryImages = stored;
+        }
+
+        // Nothing survived — every image the plan wanted failed to arrive, and
+        // it wanted nothing else. Writing here would leave an *empty* sidecar in
+        // a folder that had none, breaking the don't-litter rule for no gain.
+        if (plan.description == null &&
+            plan.tags == null &&
+            plan.characterId == null &&
+            storedImages == 0) {
+          continue;
+        }
+
+        final metadata = fresh.replaceUserFields(
+          description: plan.description ?? fresh.description,
+          sourceUrl: fresh.sourceUrl,
+          tags: plan.tags ?? fresh.tags,
+          characterId: plan.characterId ?? fresh.characterId,
+          images: galleryImages,
+        );
+        if (!await _service.write(folder, metadata)) {
+          unwritable.add(modName);
+          print('ModMetadataRepository: could not autofill metadata for $modName');
+          continue;
+        }
+
+        // Counted after the write, not before: these numbers are reported to the
+        // user, so they have to describe what is on disk.
+        if (plan.description != null) descriptions++;
+        if (plan.tags != null) tagSets++;
+        images += storedImages;
+        if (plan.characterId case final characterId?) {
+          characterTags[modName] = characterId;
+          // Keep the legacy config.json mirror in step, exactly as
+          // setCharacter() does — otherwise the two disagree for this one path.
+          await _tagStore.setModCharacterTag(modName, characterId);
+        }
+      } catch (e) {
+        print('ModMetadataRepository: autofill failed for $modName: $e');
+      }
+    }
+
+    return RemoteMetadataFill(
+      characterTags: characterTags,
+      descriptions: descriptions,
+      tagSets: tagSets,
+      images: images,
+      unwritable: unwritable,
+    );
+  }
+
+  /// The stored file's extension, from the remote url.
+  ///
+  /// GameBanana serves `.jpg` for almost everything, but the extension decides
+  /// how the file is decoded later, so it is read rather than assumed. Anything
+  /// that isn't a short alphanumeric suffix falls back to `png`, which is what
+  /// [ModMetadataService.addImageBytes] defaults to.
+  static String _imageExtension(Uri url) {
+    final ext = path.extension(url.path).replaceFirst('.', '').toLowerCase();
+    return RegExp(r'^[a-z0-9]{1,5}$').hasMatch(ext) ? ext : 'png';
   }
 
   /// Sets a mod's character assignment in the in-folder sidecar (rename-safe),

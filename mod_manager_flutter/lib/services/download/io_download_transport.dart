@@ -15,7 +15,7 @@ import 'download_transport.dart';
 class IoDownloadTransport implements DownloadTransport {
   IoDownloadTransport({HttpClient? client, String? userAgent})
       : _client = client ?? HttpClient(),
-        _userAgent = userAgent ?? 'zzz-mod-manager/${AppConstants.appVersion}' {
+        _userAgent = userAgent ?? AppConstants.httpUserAgent {
     // Must stay false. With auto-uncompress on, Dart adds `accept-encoding:
     // gzip` and transparently inflates the body — at which point `Content-Length`
     // describes the compressed size while the bytes we write are the inflated

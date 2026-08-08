@@ -75,6 +75,19 @@ The most important architectural decision is the **platform abstraction**:
   The marketplace invalidates it on open and after each install. See
   `../docs/metadata-schema.md` §3 for what it can and cannot answer — notably that
   file-level knowledge is absent for any library that predates the origin block.
+- `planMetadataAutofill()` (`services/metadata_autofill.dart`) — pure
+  (existing sidecar, what the mod page offers) → what may be written, and
+  `services/gamebanana/remote_mod_metadata.dart` for the `GbMod` → domain half.
+  One rule, and it is a safety rule rather than a courtesy: **fill absence, never
+  displace.** A mod folder can arrive carrying somebody else's sidecar, whose
+  user-facing fields this format deliberately keeps, so "already set" usually
+  means "the author wrote this". Applied by
+  `ModMetadataRepository.applyRemoteMetadata()`, which is also where the "fetch
+  each image once even when the archive became five mods" and "re-read before
+  writing" parts live. See `../docs/metadata-schema.md` §2 for the measurements
+  behind the four decisions inside it (why the character comes from the
+  *category*, why `Software Used` tags are dropped, why a shipped `Preview.png`
+  keeps the cover slot, and why the gallery is capped at ten).
 - `IniParserService` — parses mod `.ini` files into keybinds.
 - `ArchiveService` — extracts imported `.zip` (in-process via `archive` package)
   and `.rar`/`.7z` (shells out to an external `7z`/`7za`/`7zr` binary, which must
@@ -95,11 +108,22 @@ costs more than looking.
   downloads need streamed bodies, `Range` resume and socket backpressure, and
   belong to a separate downloader with its own client.
 - `HttpTransport` (`services/http/`) — **the single seam** between our network
-  code and the outside world, with `PackageHttpTransport` over `package:http` as
-  the real implementation. Every GameBanana test injects a fake through it and
-  runs with no network; if a test here ever needs connectivity, the seam is in
-  the wrong place. Note `http.Client` exposes no `badCertificateCallback`, so
-  the old inline download code's blanket SSL bypass cannot be inherited here.
+  code and the outside world for JSON, with `PackageHttpTransport` over
+  `package:http` as the real implementation. Every GameBanana test injects a fake
+  through it and runs with no network; if a test here ever needs connectivity, the
+  seam is in the wrong place. Note `http.Client` exposes no
+  `badCertificateCallback`, so the old inline download code's blanket SSL bypass
+  cannot be inherited here.
+  - `ImageFetcher` (`services/http/image_fetcher.dart`) is a **second, tiny**
+    seam beside it rather than a `bytes` method on it: `HttpTransport.body` is a
+    decoded `String` precisely because everything above it is JSON, and widening
+    that interface would put a binary body on the one type every GameBanana test
+    fakes. It is not the file downloader either — that exists for
+    hundred-megabyte archives and earns its ranges, resume and backpressure,
+    where a preview image is ~115–310 KB and wants a plain GET with a timeout.
+    `fetch` returns **null** on any failure, because every caller's answer is
+    "skip this image": a gallery one short beats an install that reports failure
+    after the mod is already in place.
 - `GameBananaEndpoints` — pure `Uri` builders, kept separate so request shapes
   can be asserted with no transport. Browse is built on `Mod/Index` (not
   `Subfeed`, which supports neither filters nor sort).
@@ -153,6 +177,12 @@ GameBanana hosts is reached via "open in browser".
   `unknown`; a native download knows mod id, file id, version and variant label
   before the first byte and writes them at `exact`. See
   `../docs/metadata-schema.md` §5.
+- **It is also where a mod stops arriving blank.** After the import,
+  `_installArchive` hands the profile to `applyRemoteMetadata`, which fills the
+  description, gallery, tags and character the install would otherwise leave
+  empty. A character recovered from the mod's *category* is reported through the
+  same auto-tag line as one recovered from its folder name, because it is the
+  same fact from a better source.
 - **`ref.invalidate` cannot be called from `initState`, unlike the rest of `ref`.**
   `MarketplaceScreen` re-snapshots the library when it opens, and that call lives in
   `didChangeDependencies` behind a once-per-`State` flag. `WidgetRef.invalidate`

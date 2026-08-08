@@ -101,15 +101,35 @@ void main() {
     });
   });
 
-  group('gbStrings', () {
-    test('reads bare strings, as _aTags actually arrives', () {
-      expect(gbStrings(['cheongsam: ellen', 'Software Used: Blender']),
+  group('gbTags', () {
+    test('reads the flattened strings a listing sends', () {
+      expect(gbTags(['cheongsam: ellen', 'Software Used: Blender']),
           ['cheongsam: ellen', 'Software Used: Blender']);
     });
 
+    test('reads the objects a ProfilePage sends, flattened the same way', () {
+      // The shape difference between the two endpoints is the whole reason this
+      // helper exists: reading only the string form left a profile's tags empty,
+      // silently, because both captured profile fixtures happen to have none.
+      expect(
+        gbTags([
+          {'_sTitle': 'Software Used', '_sValue': 'Blender'},
+          {'_sTitle': 'Ellen', '_sValue': 'Chained school uniforms'},
+        ]),
+        ['Software Used: Blender', 'Ellen: Chained school uniforms'],
+      );
+    });
+
+    test('tolerates a half-filled pair, and drops an empty one', () {
+      expect(gbTags([{'_sTitle': 'Ellen'}]), ['Ellen']);
+      expect(gbTags([{'_sValue': 'swimsuit'}]), ['swimsuit']);
+      expect(gbTags([{'_sTitle': '', '_sValue': null}]), isEmpty);
+      expect(gbTags([<String, dynamic>{}]), isEmpty);
+    });
+
     test('drops empties and non-strings', () {
-      expect(gbStrings(['a', '', null, 3, '  b  ']), ['a', 'b']);
-      expect(gbStrings(null), isEmpty);
+      expect(gbTags(['a', '', null, 3, '  b  ']), ['a', 'b']);
+      expect(gbTags(null), isEmpty);
     });
   });
 

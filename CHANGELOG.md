@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mods you already have are now linked back to their GameBanana page automatically, using the source URL already stored on them, so update checking will work for your existing library and not just for new installs. No new files appear in mods that have no source URL.
 - The Marketplace now marks mods you already have. Cards and the mod page show which of your mod folders came from that page — several, when you have installed more than one variant — and the file list marks the exact file you installed, or notes when a file is byte-identical to an archive you installed.
 - Installing an archive you have installed before now asks first, naming the mods it produced, instead of quietly making a second copy. Applies to Marketplace downloads and to archives you import yourself. It can only recognise archives this version installed, and never a re-packed copy of the same mod.
+- Mods installed from the Marketplace arrive with their description and screenshots (up to ten) already filled in from their GameBanana page, and are tagged with the character the mod is filed under there — which catches mods whose folder name gives nothing away. Anything the mod folder already carried is kept, including a preview image shipped inside the archive, which stays the cover.
 
 ### Changed
 

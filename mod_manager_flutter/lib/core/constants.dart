@@ -10,6 +10,11 @@ class AppConstants {
   /// means updating this alongside `pubspec.yaml` — see CLAUDE.md's checklist.
   static const String appVersion = '2.2.2';
 
+  /// What we identify ourselves as on every outbound request — the JSON client,
+  /// the file downloader and the preview-image fetcher alike. One string, so a
+  /// version bump can't leave one of them claiming the old release.
+  static const String httpUserAgent = 'zzz-mod-manager/$appVersion';
+
   /// Zenless Zone Zero's game id on GameBanana. Every remote request is scoped
   /// to it: <https://gamebanana.com/games/19567>.
   static const int gameBananaGameId = 19567;

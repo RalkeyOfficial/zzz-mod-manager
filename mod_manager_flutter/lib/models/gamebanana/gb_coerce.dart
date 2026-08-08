@@ -74,16 +74,43 @@ List<Map<String, dynamic>> gbObjects(Object? value) {
 Map<String, dynamic>? gbObject(Object? value) =>
     value is Map<String, dynamic> ? value : null;
 
-/// Reads an `_a…` array of plain strings, e.g. `_aTags`.
+/// Reads `_aTags`, which arrives in **two different shapes** depending on the
+/// endpoint — and that is the whole reason this is not just [gbObjects] or a
+/// plain string list:
 ///
-/// Tags come back as bare strings (`"cheongsam: ellen"`), not objects — unlike
-/// most `_a…` fields, which is why this exists separately from [gbObjects].
-List<String> gbStrings(Object? value) {
+/// - a **listing** (`Mod/Index`, `Util/Search/Results`) sends bare strings that
+///   are already flattened: `"Software Used: Blender"`;
+/// - a **profile** (`Mod/<id>/ProfilePage`) sends objects:
+///   `{"_sTitle": "Software Used", "_sValue": "Blender"}`.
+///
+/// Both are normalised to the listing's flattened `"title: value"` spelling, so
+/// `GbMod.tags` has one shape whichever response it was parsed from. Getting
+/// this wrong was silent rather than loud: reading only the string form made a
+/// profile's tags come back **empty**, and both captured profile fixtures happen
+/// to have no tags at all, so nothing failed.
+List<String> gbTags(Object? value) {
   if (value is! List) return const [];
-  return <String>[
-    for (final entry in value)
-      if (gbString(entry) case final text?) text,
-  ];
+  final tags = <String>[];
+  for (final entry in value) {
+    // Listing form.
+    if (gbString(entry) case final flat?) {
+      tags.add(flat);
+      continue;
+    }
+    // Profile form. Either half may be missing; a pair with neither is dropped.
+    final object = gbObject(entry);
+    if (object == null) continue;
+    final title = gbString(object['_sTitle']);
+    final label = gbString(object['_sValue']);
+    final joined = switch ((title, label)) {
+      (final t?, final v?) => '$t: $v',
+      (final t?, null) => t,
+      (null, final v?) => v,
+      _ => null,
+    };
+    if (joined != null) tags.add(joined);
+  }
+  return tags;
 }
 
 /// Reads a `code -> label` map, e.g. `_aContentRatings`

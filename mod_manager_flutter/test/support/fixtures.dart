@@ -8,8 +8,8 @@ import 'dart:io';
 /// that nobody can look up. Re-capture with curl if the API shifts; don't
 /// hand-edit them to make a test pass.
 ///
-/// Captured 2026-08-01, pretty-printed for reviewability — only whitespace
-/// differs from the wire bytes.
+/// Captured 2026-08-01 (`mod_profile_tagged` on 2026-08-08), pretty-printed for
+/// reviewability — only whitespace differs from the wire bytes.
 String loadFixture(String relativePath) {
   final file = File('test/fixtures/$relativePath');
   if (!file.existsSync()) {

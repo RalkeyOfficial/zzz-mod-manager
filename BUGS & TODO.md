@@ -209,8 +209,21 @@ Goal: make the data recorded in M1 pay off in the UI.
   legacy library today; every file-level one is inert until mods are installed by
   this build or resolved by hand (§7.5), so hash dedup fires for nothing in an
   existing library.
-- [ ] **§3** — auto-populate metadata (description, images, tags, character) from
+- [x] **§3** — auto-populate metadata (description, images, tags, character) from
   the API on install instead of leaving it blank.
+  **Done.** Two pure units — `services/gamebanana/remote_mod_metadata.dart` (what the
+  page is worth) and `services/metadata_autofill.dart` (what may be written) — with
+  the I/O in `ModMetadataRepository.applyRemoteMetadata()`. One rule governs it and it
+  is a safety rule, not a courtesy: **fill absence, never displace.** An inbound
+  sidecar's user-facing fields are deliberately kept (§3), so "already set" usually
+  means "the author wrote this". Written up in
+  [`docs/metadata-schema.md`](docs/metadata-schema.md) §2. Measured end to end against
+  the live API: 827 ms to fill two sibling mods with the same 8-image gallery — 8
+  downloads, 16 files, 882 KB per folder.
+  Three corrections to what this doc assumed, all applied — see §2 and §3 below:
+  **`_aTags` has two wire shapes and we were reading only one**, **the character comes
+  from the *category*, not from names or tags**, and **the images are the only part
+  that costs anything, and the cost is not where it was assumed to be**.
 - [x] **§1** — "already installed" indicators on cards + detail.
   **Done.** A filled "In library" badge on the card, a notice on the detail view,
   and a per-row marker in the file list. The badge names the *folders* — one mod
@@ -506,8 +519,35 @@ The block:
   read-only") instead of silently retrying every scan.
 - [ ] Every field above carries a **confidence** — see §7.2 for the tiers and
   what each one is allowed to drive.
-- [ ] Auto-populate metadata (description, images, tags, character) from the API
+- [x] Auto-populate metadata (description, images, tags, character) from the API
   on marketplace install instead of leaving it blank.
+  **Done** — see M2's entry above for the shape and
+  [`docs/metadata-schema.md`](docs/metadata-schema.md) §2 for the rules. Three
+  corrections to what this line assumed:
+  - **`_aTags` arrives in two different shapes and the client read only one.** A
+    listing sends flattened strings (`"Software Used: Blender"`); a
+    `ProfilePage` sends objects (`{_sTitle, _sValue}`). `gbStrings` handled only
+    the string form, so **a profile's tags parsed as empty** — silently, and
+    invisibly, because both captured profile fixtures happen to have no tags at
+    all. Fixed (`gbTags`, both shapes normalised to the listing spelling) and
+    pinned by a newly captured fixture, `mod_profile_tagged`. Worth noting the
+    field was dead until this item: `GbMod.tags` had no reader anywhere.
+  - **Tags are not the keyword list this line implies, and are imported
+    selectively.** Authors fill both halves freely, so a tag is two loosely
+    related fragments — `{"Ellen", "Chained school uniforms"}`, `{"cheongsam",
+    "ellen"}` — and the single commonest title is `Software Used`, naming the
+    author's toolchain rather than the mod. Measured: **4 of 20 captured records
+    carry any tag, and 3 of the 6 distinct values are that family.** They are
+    dropped, because `tags` is *structural* here (it drives the toolbar's filter
+    chips) so noise costs more than it would in a description.
+  - **The character comes from the mod's *category*, which is exact rather than a
+    guess.** Under Character Skins the category is the character's full in-world
+    name, chosen from a list — and all **60** children resolve to a roster id
+    while **none** of the 4 roots or the 22 Bangboo categories falsely matches
+    one. A test pins that 60/0 result as a canary. Folder-name detection still
+    runs first and still wins (it is per-folder, so it is the only signal that can
+    differ between siblings from one archive); the category fills the case names
+    cannot answer, `bikini` or `mod v2`.
 
 ### Filed by the read side (found while building it, deliberately not built)
 
@@ -539,6 +579,48 @@ The block:
   (`_unwritableBackfills`, session-scoped) and nothing shows it, so a mod in a
   read-only folder silently never gains an identity and now silently never gets a
   badge either. Same fix shape, different source.
+
+### Filed by the metadata autofill (found while building it, deliberately not built)
+
+- [ ] **The install is silent between the download finishing and the result.** The
+  progress dialog closes the moment the bytes are in, and extract → duplicate check
+  → folder-selection → import → autofill all run behind nothing at all. That was
+  already the shape before this change, but the autofill lengthens the quiet window:
+  typically ~830 ms, and up to one 20 s per-image timeout when a CDN node is
+  degraded (§0 measured one serving at 0.08 MB/s). Filed rather than fixed because
+  the fix is a decision about the whole install flow — most likely keeping the same
+  dialog open through an "installing" phase — not a spinner bolted onto one step.
+  Belongs with M4's "empty/error/loading states".
+- [ ] **A mod page's tags are now parsed but still shown nowhere.** `GbMod.tags` had
+  no reader at all before the autofill, which is why the two-shape parsing bug
+  (§3 above) could sit there unnoticed. The autofill stores them on install; the
+  detail view still doesn't display them, so a mod you *browse* shows no tags while
+  the same mod once *installed* does. Cheap, and it would make the parse
+  self-evidently correct instead of only test-correct.
+- [ ] **A truncated gallery doesn't say it was truncated.** `RemoteModMetadata.maxImages`
+  is 10 and real galleries reach 26+ (measured), so a mod can quietly arrive with 10
+  of its 26 screenshots. The install message names "preview images" without a count
+  — deliberately, since the only number available is a *cross-mod file total* rather
+  than a gallery length — so nothing currently claims the gallery is complete either.
+  What is missing is the other half: a way to say "10 of 26", or to pull the rest from
+  the mod page in the edit dialog. Not a silent cap on correctness (the mod page is
+  one click away), but the user has no way to know there is more.
+- [ ] **The install-summary merge rests on an unasserted invariant.**
+  `autoTags.addAll(fill.characterTags)` in `_installArchive` is correct only because
+  the two maps are disjoint by construction — the autofill assigns a character solely
+  when none is set, so folder-name detection and category detection can never both
+  claim one mod. Nothing pins that. If the category is ever allowed to *override* a
+  name match, the summary would report the category's answer while the sidecar keeps
+  the name's, and the two would disagree silently. The wiring has no widget test
+  either (it needs `ApiService`'s singletons and a configured library), which is
+  acceptable for UI plumbing but is why the invariant is worth writing down.
+- [ ] **An unwritable folder swallows the autofill too.**
+  `RemoteMetadataFill.unwritable` is returned and only logged, on the same grounds
+  as the two items above it: the origin write for the same folder already reports
+  the failure, so a second message would be noise. That reasoning stops holding the
+  moment the origin write succeeds and this one doesn't (a folder that becomes
+  read-only mid-install, an odd network share). Third instance of the same fix
+  shape — one place that reports "couldn't write to `<mod>`" for all of them.
 
 ## 4. Mod updating
 
@@ -1127,6 +1209,12 @@ mod context menu, and the edit-mod dialog.
 - [ ] Free add-on from the same API response: an **"also fill in missing
   metadata"** checkbox (description, images, tags, character) for bare legacy
   imports. §3 wants this on install anyway.
+  **The machinery for this now exists** and needs no new decision logic:
+  `ModManagerService.applyRemoteMetadata(modNames, RemoteModMetadata.fromMod(profile))`
+  takes any list of mods, and its fill-absence-never-displace rule is exactly what a
+  legacy mod wants. What is missing is only the checkbox and the profile fetch — so
+  this is UI work, not a second implementation. See
+  [`docs/metadata-schema.md`](docs/metadata-schema.md) §2.
 
 ### 7.6 Bulk resolution = §4's "check all" screen
 
@@ -1295,6 +1383,9 @@ work that already opens the same file, so they cost nothing extra.
   per-row markers with their tooltips, and the duplicate-archive dialog. Confirms
   the estimate again: the wording *is* the work here, since "installed" and
   "byte-identical to" are the whole distinction between a record and a hash match.
+  **The metadata autofill added 4 more** — one sentence plus the three field nouns it
+  lists, kept as separate keys rather than an interpolated English list so the nouns
+  are actually translated.
 - [ ] **Name the tests, because the risky parts are pure functions.** The pieces most
   likely to be quietly wrong need no network and no UI: `source_url` → `mod_id`
   parsing (§7.3); the confidence state machine and what each tier permits (§7.2); the
@@ -1312,7 +1403,12 @@ work that already opens the same file, so they cost nothing extra.
   beside patchers and demos), and those same fixtures are now the tests. A
   hand-written mock would have encoded the assumption the plan started with — tidy
   `_sVersion` strings to compare — and the rule would have shipped confidently wrong.
-  Suite is 567 tests, all offline. Add for §1: the content-filter matrix (including that
+  Suite is 602 tests, all offline. The autofill's share is the pattern working again:
+  its two pure units are tested against real captured profiles, and the two rules most
+  likely to be quietly wrong are pinned as *canaries* rather than examples — that all
+  60 live character categories map to a roster id and none of the 4 roots do, and that
+  a profile's tags parse at all (the shape difference that had silently returned empty).
+  Add for §1: the content-filter matrix (including that
   an unrecognised setting degrades to `blur`), and that listing fixtures carry
   `_sInitialVisibility` at all — that last one is a canary, since if the field ever
   disappears upstream the filter silently blurs the entire grid.

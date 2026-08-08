@@ -113,8 +113,12 @@ class GbMod {
   /// `_aRootCategory` — the top-level category. Listing responses.
   final GbCategoryRef? rootCategory;
 
-  /// `_aTags` — bare strings, frequently empty. Too unreliable for character
-  /// detection on its own.
+  /// `_aTags`, normalised to one flat `"title: value"` string per tag.
+  ///
+  /// Frequently empty (4 of 20 captured records carry any), and too unreliable
+  /// for character detection on its own — the category is what says which
+  /// character a mod is for. The wire shape differs between listing and profile
+  /// responses; [gbTags] absorbs that.
   final List<String> tags;
 
   /// `_aPreviewMedia._aImages` — the gallery. First entry is the cover.
@@ -202,7 +206,7 @@ class GbMod {
       category: GbCategoryRef.fromJson(json['_aCategory']),
       subCategory: GbCategoryRef.fromJson(json['_aSubCategory']),
       rootCategory: GbCategoryRef.fromJson(json['_aRootCategory']),
-      tags: gbStrings(json['_aTags']),
+      tags: gbTags(json['_aTags']),
       images: preview == null
           ? const []
           : <GbImage>[

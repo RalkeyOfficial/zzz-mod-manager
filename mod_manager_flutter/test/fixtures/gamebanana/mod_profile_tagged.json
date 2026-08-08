@@ -1,0 +1,800 @@
+{
+  "_idRow": 541825,
+  "_nStatus": "0",
+  "_bIsPrivate": false,
+  "_bAccessorIsSubmitter": false,
+  "_bIsTrashed": false,
+  "_bIsWithheld": false,
+  "_sName": "Jane Doe +Skin - H Redux (Bottom Heavy | Vanilla)",
+  "_sCommentsMode": "hidden",
+  "_tsDateModified": 1773262011,
+  "_tsDateAdded": 1726206576,
+  "_sProfileUrl": "https://gamebanana.com/mods/541825",
+  "_aPreviewMedia": {
+    "_aImages": [
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb84e0259.jpg",
+        "_sFile220": "220-90_69a7cb84e0259.jpg",
+        "_hFile220": 132,
+        "_wFile220": 220,
+        "_sFile530": "530-90_69a7cb84e0259.jpg",
+        "_hFile530": 318,
+        "_wFile530": 530,
+        "_sFile100": "100-90_69a7cb84e0259.jpg",
+        "_hFile100": 60,
+        "_wFile100": 100,
+        "_sFile800": "800-90_69a7cb84e0259.jpg",
+        "_hFile800": 480,
+        "_wFile800": 800
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb85722c2.jpg",
+        "_sFile100": "100-90_69a7cb85722c2.jpg",
+        "_hFile100": 66,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb820e421.jpg",
+        "_sFile100": "100-90_69a7cb820e421.jpg",
+        "_hFile100": 64,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb8683f33.jpg",
+        "_sFile100": "100-90_69a7cb8683f33.jpg",
+        "_hFile100": 75,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb86e9963.jpg",
+        "_sFile100": "100-90_69a7cb86e9963.jpg",
+        "_hFile100": 84,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb85a4513.jpg",
+        "_sFile100": "100-90_69a7cb85a4513.jpg",
+        "_hFile100": 163,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb8664d97.jpg",
+        "_sFile100": "100-90_69a7cb8664d97.jpg",
+        "_hFile100": 140,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb86f23f1.jpg",
+        "_sFile100": "100-90_69a7cb86f23f1.jpg",
+        "_hFile100": 74,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb8733399.jpg",
+        "_sFile100": "100-90_69a7cb8733399.jpg",
+        "_hFile100": 121,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb84e662a.jpg",
+        "_sFile100": "100-90_69a7cb84e662a.jpg",
+        "_hFile100": 52,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb858273d.jpg",
+        "_sFile100": "100-90_69a7cb858273d.jpg",
+        "_hFile100": 56,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sCaption": "Vanilla",
+        "_sFile": "69a7cb86b6ba1.jpg",
+        "_sFile100": "100-90_69a7cb86b6ba1.jpg",
+        "_hFile100": 80,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb86da239.jpg",
+        "_sFile100": "100-90_69a7cb86da239.jpg",
+        "_hFile100": 133,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb8738719.jpg",
+        "_sFile100": "100-90_69a7cb8738719.jpg",
+        "_hFile100": 113,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb8423aac.jpg",
+        "_sFile100": "100-90_69a7cb8423aac.jpg",
+        "_hFile100": 165,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb83c3fc4.jpg",
+        "_sFile100": "100-90_69a7cb83c3fc4.jpg",
+        "_hFile100": 155,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb8241d5b.jpg",
+        "_sFile100": "100-90_69a7cb8241d5b.jpg",
+        "_hFile100": 122,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sCaption": "Vanilla",
+        "_sFile": "69a7cb85c1323.jpg",
+        "_sFile100": "100-90_69a7cb85c1323.jpg",
+        "_hFile100": 154,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sCaption": "Vanilla",
+        "_sFile": "69a7cb872833c.jpg",
+        "_sFile100": "100-90_69a7cb872833c.jpg",
+        "_hFile100": 120,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb82ecc45.jpg",
+        "_sFile100": "100-90_69a7cb82ecc45.jpg",
+        "_hFile100": 73,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb8473ece.jpg",
+        "_sFile100": "100-90_69a7cb8473ece.jpg",
+        "_hFile100": 118,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb871bcd9.jpg",
+        "_sFile100": "100-90_69a7cb871bcd9.jpg",
+        "_hFile100": 100,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb81d698c.jpg",
+        "_sFile100": "100-90_69a7cb81d698c.jpg",
+        "_hFile100": 61,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb86f30ba.jpg",
+        "_sFile100": "100-90_69a7cb86f30ba.jpg",
+        "_hFile100": 135,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb84d20ac.jpg",
+        "_sFile100": "100-90_69a7cb84d20ac.jpg",
+        "_hFile100": 81,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb829d27b.jpg",
+        "_sFile100": "100-90_69a7cb829d27b.jpg",
+        "_hFile100": 93,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb8452b1f.jpg",
+        "_sFile100": "100-90_69a7cb8452b1f.jpg",
+        "_hFile100": 175,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb85921ae.jpg",
+        "_sFile100": "100-90_69a7cb85921ae.jpg",
+        "_hFile100": 76,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "69a7cb8029caf.jpg",
+        "_sFile100": "100-90_69a7cb8029caf.jpg",
+        "_hFile100": 103,
+        "_wFile100": 100
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sCaption": "Vanilla",
+        "_sFile": "69a7cb864a8a9.jpg",
+        "_sFile100": "100-90_69a7cb864a8a9.jpg",
+        "_hFile100": 144,
+        "_wFile100": 100
+      }
+    ]
+  },
+  "_nUpdatesCount": 5,
+  "_bHasUpdates": true,
+  "_tsDateUpdated": 1772634840,
+  "_nAllTodosCount": 0,
+  "_bHasTodos": false,
+  "_nPostCount": 213,
+  "_aTags": [
+    {
+      "_sTitle": "Software Used",
+      "_sValue": "Blender"
+    },
+    {
+      "_sTitle": "Software Used",
+      "_sValue": "Easy Paint Tool SAI"
+    },
+    {
+      "_sTitle": "Software Used",
+      "_sValue": "Paint.NET"
+    }
+  ],
+  "_bCreatedBySubmitter": true,
+  "_bIsPorted": false,
+  "_nThanksCount": 214,
+  "_aContentRatings": {
+    "sa": "Skimpy Attire",
+    "nu": "Full Nudity"
+  },
+  "_sInitialVisibility": "hide",
+  "_sDownloadUrl": "https://gamebanana.com/mods/download/541825",
+  "_nDownloadCount": 177700,
+  "_aArchivedFiles": [
+    {
+      "_idRow": 1344423,
+      "_sFile": "jane_doe_-_bottom_heavy_376e6.zip",
+      "_nFilesize": 37440877,
+      "_tsDateAdded": 1734556187,
+      "_nDownloadCount": 23786,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1344423",
+      "_sMd5Checksum": "736d10f16bdbbba49ee9dca62a809c1f",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": true,
+      "_bHasContents": true,
+      "_sDescription": "BROKEN || Full Version (SFW Variants Only)"
+    },
+    {
+      "_idRow": 1344424,
+      "_sFile": "jane_doe_-_default_heavy_3862b.zip",
+      "_nFilesize": 38639835,
+      "_tsDateAdded": 1734556191,
+      "_nDownloadCount": 4577,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1344424",
+      "_sMd5Checksum": "7845e4c95ea87bcc455494b82a32cc8d",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": true,
+      "_bHasContents": true,
+      "_sDescription": "BROKEN || DEFAULT/VANILLA PROPORTIONS Version! (SFW Variants Only)"
+    },
+    {
+      "_idRow": 1344425,
+      "_sFile": "jane_doe_-_bottom_heavy_nsfw__27fcb.zip",
+      "_nFilesize": 38374384,
+      "_tsDateAdded": 1734556192,
+      "_nDownloadCount": 42397,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1344425",
+      "_sMd5Checksum": "0ec52bc96572a6d57bcf649d579bc8c4",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": true,
+      "_bHasContents": true,
+      "_sDescription": "BROKEN || Full Version (NSFW Variants Included)"
+    },
+    {
+      "_idRow": 1344426,
+      "_sFile": "jane_doe_-_default_heavy_nsfw__73c5e.zip",
+      "_nFilesize": 38451526,
+      "_tsDateAdded": 1734556192,
+      "_nDownloadCount": 13007,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1344426",
+      "_sMd5Checksum": "1af9543817357ae557ebfabe524af324",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": true,
+      "_bHasContents": true,
+      "_sDescription": "BROKEN || DEFAULT/VANILLA PROPORTIONS Version! (NSFW Variants Included)"
+    }
+  ],
+  "_aFiles": [
+    {
+      "_idRow": 1639523,
+      "_sFile": "jane_doe_-_hazeker_redux.zip",
+      "_nFilesize": 33398138,
+      "_tsDateAdded": 1772604371,
+      "_nDownloadCount": 8039,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1639523",
+      "_sMd5Checksum": "633e574ef6316fed6813a6d51316e521",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": false,
+      "_bHasContents": true,
+      "_sVersion": "2.0",
+      "_sDescription": "SFW Variants Only"
+    },
+    {
+      "_idRow": 1645273,
+      "_sFile": "jane_doe_-_hazeker_redux_nsfw_.zip",
+      "_nFilesize": 33346163,
+      "_tsDateAdded": 1773261813,
+      "_nDownloadCount": 20596,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1645273",
+      "_sMd5Checksum": "4887c10072b3abe258b5d7028ff36602",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": false,
+      "_bHasContents": true,
+      "_sVersion": "2.0",
+      "_sDescription": "NSFW Variants Included"
+    },
+    {
+      "_idRow": 1639524,
+      "_sFile": "jane_swimsuit_-_hazeker_redux.zip",
+      "_nFilesize": 21541346,
+      "_tsDateAdded": 1772604424,
+      "_nDownloadCount": 3853,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1639524",
+      "_sMd5Checksum": "82016b1c47a6547f49709acbb0a50864",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": false,
+      "_bHasContents": true,
+      "_sVersion": "1.0",
+      "_sDescription": "Swimsuit | SFW Variants Only"
+    },
+    {
+      "_idRow": 1645272,
+      "_sFile": "jane_swimsuit_-_hazeker_redux_nsfw_.zip",
+      "_nFilesize": 21541674,
+      "_tsDateAdded": 1773261803,
+      "_nDownloadCount": 11121,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1645272",
+      "_sMd5Checksum": "7dc8601b44e08c3e8e7ed6be43fd381c",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": false,
+      "_bHasContents": true,
+      "_sVersion": "1.0",
+      "_sDescription": "Swimsuit | NSFW Variants Included"
+    }
+  ],
+  "_nSubscriberCount": 1613,
+  "_aContributingStudios": [],
+  "_sLicense": "<a rel=\"license\" href=\"http://creativecommons.org/licenses/by-nc-nd/4.0/\"><img alt=\"Creative Commons License\" style=\"border-width:0\" src=\"https://i.creativecommons.org/l/by-nc-nd/4.0/88x31.png\" /></a><br />This work is licensed under a <a rel=\"license\" href=\"http://creativecommons.org/licenses/by-nc-nd/4.0/\">Creative Commons Attribution-NonCommercial-NoDerivs 4.0 Unported License</a>.",
+  "_aLicenseChecklist": {
+    "yes": [
+      "Download and install this Mod"
+    ],
+    "ask": [
+      "Redistribute this Mod on other sites",
+      "Modify this Mod and distribute the modified Mod on GameBanana",
+      "Modify this Mod and distribute the modified Mod on another site",
+      "Use parts of this Mod in another Mod and distribute the Mod on GameBanana",
+      "Use parts of this Mod in another Mod and distribute the Mod on another site",
+      "Use this Mod or components of this Mod in adult/NSFW content"
+    ],
+    "no": [
+      "Use this Mod or components of this Mod commercially"
+    ]
+  },
+  "_bGenerateTableOfContents": false,
+  "_sText": "<span class=\"RedColor\"><i>>>Patreon Release<<</i></span><br><br><b>Any issues you find please let me know on <a href=\"https://gamebanana.com/linkfilter?url=https%3A%2F%2Fx.com%2FHazeker&follow=true\">Twitter DMs</a><br>or Discord -> @hazeker</b><br><br><span class=\"GreenColor\">Make sure to have both XXMI and ZZMI updated in case her textures show up broken,<br>if it still doesn't work, please refer to the AGMG server for help.</span><br><br><h1><i>2.6 Game Compatible | XXMI</i></h1><h1>----<br><br>////// Includes Variants! //////</h1><ul><li><br><b>Base Skin</b><br><br><ul><li><b>Switch Body Type |</b> CTRL + SHIFT + UP Arrow Key (↑)<br><br></li><li><b>Toggle Jacket & Switch Legwear |</b> CTRL + UP & DOWN Arrow keys (↑)(↓)<br><br></li><li><b>Toggle Shorts & Switch Shoes |</b> ALT + UP & DOWN Arrow keys (↑)(↓)<br><br></li><li><b>Toggle Leotard Nylon |</b> CTRL + RIGHT Arrow Key (→)<br><br></li><li><b>Toggle Gloves |</b> ALT + RIGHT Arrow Key (→)<br><br></li><li><b>Toggle Tail |</b> CTRL + ALT + UP Arrow Key (↑)<br><br></li><li><b>NSFW</b><br><strong>Toggle Leotard |</strong> SHIFT + UP Arrow Key (↑)<br><br></li></ul><b>Summer Skin</b><br><br><ul><li><b>Switch Body Type |</b> CTRL + SHIFT + UP Arrow Key (↑)<br><br></li><li><b>Toggle Skirt & Tail |</b> CTRL + UP & DOWN Arrow Keys (↑)(↓)<br><br></li><li class=\"SelectedElement\"><b>Toggle Nylon & Gloves |</b> ALT + UP & RIGHT Arrow Key (↑)(→)<br><br></li><li><b>NSFW</b><br><strong>Toggle Leotard |</strong> SHIFT + UP Arrow Key (↑)<br><br></li></ul></li></ul><br>----<br><br><a href=\"https://www.patreon.com/c/HazekerMods\" target=\"_blank\">Consider supporting if you like my work</a>",
+  "_bIsObsolete": false,
+  "_nLikeCount": 5614,
+  "_nViewCount": 694828,
+  "_sVersion": "2.0",
+  "_bAcceptsDonations": false,
+  "_bShowRipePromo": true,
+  "_aEmbeddables": {
+    "_sEmbeddableImageBaseUrl": "https://gamebanana.com/mods/embeddables/541825",
+    "_aVariants": [
+      "small",
+      "small_square",
+      "medium",
+      "medium_square",
+      "medium_square_minimal",
+      "large",
+      "large_minimal",
+      "large_square",
+      "large_minimal_square",
+      "thumbnail"
+    ]
+  },
+  "_aSubmitter": {
+    "_idRow": 1751504,
+    "_sName": "Hazeker",
+    "_sUserTitle": "Imagine Dragon Girls...",
+    "_sHonoraryTitle": "",
+    "_tsJoinDate": 1601932596,
+    "_sAvatarUrl": "https://images.gamebanana.com/img/av/5f7b8e7d02f3d.jpg",
+    "_sSigUrl": "",
+    "_sProfileUrl": "https://gamebanana.com/members/1751504",
+    "_sPointsUrl": "https://gamebanana.com/members/logs/pointslog/1751504",
+    "_sMedalsUrl": "https://gamebanana.com/members/stats/medals/1751504",
+    "_bIsOnline": false,
+    "_sLocation": "<a href=\"https://gamebanana.com\">Home</a> > <a href=\"https://gamebanana.com/games/19567\"><img src=\"https://images.gamebanana.com/img/ico/games/657d72ea51567.png\"/><span>Zenless Zone Zero</span></a> > <a href=\"https://gamebanana.com/questions/games/19567\">Questions</a> > <a href=\"https://gamebanana.com/questions/cats/1981\">Other/Misc</a> > <a href=\"https://gamebanana.com/questions/85619\">Mouse lag</a>",
+    "_sOnlineTitle": "",
+    "_sOfflineTitle": "",
+    "_nPoints": 1299729,
+    "_nPointsRank": 2,
+    "_aNormalMedals": [
+      [
+        "m_age_1.png",
+        "One month a member",
+        "normal",
+        335023
+      ],
+      [
+        "m_age_2.png",
+        "6 months a member",
+        "normal",
+        378383
+      ],
+      [
+        "m_age_3.png",
+        "1 year a member",
+        "normal",
+        759967
+      ],
+      [
+        "m_age_4.png",
+        "2 years a member",
+        "normal",
+        776111
+      ],
+      [
+        "features_1.png",
+        "Submission featured",
+        "normal",
+        778967
+      ],
+      [
+        "subscribers_1.png",
+        "Reached 10 subscribers",
+        "normal",
+        779005
+      ],
+      [
+        "thanks_recvd_1.png",
+        "Received thanks 5 times",
+        "normal",
+        779734
+      ],
+      [
+        "m_pr_1.png",
+        "Reached 1,000 Points",
+        "normal",
+        780240
+      ],
+      [
+        "m_pr_2.png",
+        "Reached 2,500 Points",
+        "normal",
+        780241
+      ],
+      [
+        "m_pr_3.png",
+        "Reached 7,500 Points",
+        "normal",
+        814673
+      ],
+      [
+        "mods1.png",
+        "Submitted 5 Mods",
+        "normal",
+        857739
+      ],
+      [
+        "m_pr_4.png",
+        "Reached 25,000 Points",
+        "normal",
+        880812
+      ],
+      [
+        "mods2.png",
+        "Submitted 10 Mods",
+        "normal",
+        914481
+      ],
+      [
+        "thanks_sent_1.png",
+        "Thanked 5 submitters",
+        "normal",
+        961680
+      ],
+      [
+        "m_age_5.png",
+        "4 years a member",
+        "normal",
+        2318499
+      ]
+    ],
+    "_aRareMedals": [
+      [
+        "subscribers_2.png",
+        "Reached 50 subscribers",
+        "rare",
+        780817
+      ],
+      [
+        "features_2.png",
+        "10 submissions featured",
+        "rare",
+        841305
+      ],
+      [
+        "thanks_recvd_2.png",
+        "Received thanks 50 times",
+        "rare",
+        888235
+      ],
+      [
+        "mods3.png",
+        "Submitted 15 Mods",
+        "rare",
+        974018
+      ],
+      [
+        "m_pr_5.png",
+        "Reached 75,000 Points",
+        "rare",
+        1047391
+      ],
+      [
+        "mods4.png",
+        "Submitted 20 Mods",
+        "rare",
+        1176852
+      ],
+      [
+        "m_pr_6.png",
+        "Reached 200,000 Points",
+        "rare",
+        1687622
+      ],
+      [
+        "mods5.png",
+        "Submitted 50 Mods",
+        "rare",
+        2161341
+      ],
+      [
+        "m_pr_7.png",
+        "Reached 500,000 Points",
+        "rare",
+        2599641
+      ],
+      [
+        "mods6.png",
+        "Submitted 100 Mods",
+        "rare",
+        4706604
+      ]
+    ],
+    "_aLegendaryMedals": [
+      [
+        "subscribers_3.png",
+        "Reached 100 subscribers",
+        "legendary",
+        783420
+      ],
+      [
+        "features_3.png",
+        "30 submissions featured",
+        "legendary",
+        1077270
+      ],
+      [
+        "thanks_recvd_3.png",
+        "Received thanks 500 times",
+        "legendary",
+        1699732
+      ],
+      [
+        "m_pr_8.png",
+        "Reached 1,000,000 Points",
+        "legendary",
+        3849750
+      ]
+    ],
+    "_bHasRipe": false,
+    "_nBuddyCount": 12,
+    "_nSubscriberCount": 18992,
+    "_aDonationMethods": [
+      {
+        "_sTitle": "Patreon Profile",
+        "_sValue": "https://www.patreon.com/HazekerMods",
+        "_sInputType": "text",
+        "_sInputPlaceholder": "Patreon Profile URL...",
+        "_sIconClasses": "MiscIcon PatreonProfileIcon",
+        "_aValidator": {
+          "_regexValidPattern": "^https?\\:\\/\\/(www\\.)?patreon\\.com\\/.+$",
+          "_sWarningMessage": "URL looks incorrect - it should look like: https://patreon.com/USERNAME"
+        },
+        "_sValueTemplate": "<a target=\"_blank\" href=\"%VALUE%\">Patreon Profile</a>",
+        "_bIsUrl": true,
+        "_sFormattedValue": "<a target=\"_blank\" href=\"https://www.patreon.com/HazekerMods\">Patreon Profile</a>"
+      },
+      {
+        "_sTitle": "Ko-fi Profile",
+        "_sValue": "https://ko-fi.com/hazeker",
+        "_sInputType": "text",
+        "_sInputPlaceholder": "Ko-fi Profile URL...",
+        "_sIconClasses": "MiscIcon KofiIcon",
+        "_aValidator": {
+          "_regexValidPattern": "^https?\\:\\/\\/(www\\.)?ko\\-fi\\.com\\/.+$",
+          "_sWarningMessage": "URL looks incorrect - it should look like: https://ko-fi.com/USERNAME"
+        },
+        "_sValueTemplate": "<a target=\"_blank\" href=\"%VALUE%\">Ko-fi Profile</a>",
+        "_bIsUrl": true,
+        "_sFormattedValue": "<a target=\"_blank\" href=\"https://ko-fi.com/hazeker\">Ko-fi Profile</a>"
+      }
+    ],
+    "_bAccessorIsBuddy": false,
+    "_bBuddyRequestExistsWithAccessor": false,
+    "_bAccessorIsSubscribed": false,
+    "_aSubjectShaper": {
+      "_sBorderStyle": "Drop Shadow",
+      "_sFont": "Verdana",
+      "_sTextColor": "#33ccff",
+      "_sTextHoverColor": "#57d5ff",
+      "_sBorderColor": "#006ac7",
+      "_sBorderHoverColor": "#bd5b00"
+    },
+    "_sSubjectShaperCssCode": "font-family:'Verdana';color:#33ccff;",
+    "_sUpicUrl": "https://images.gamebanana.com/img/upic/66183b043bd2c.png",
+    "_aDefaultLicenseChecklist": [
+      "yes",
+      "ask",
+      "ask",
+      "ask",
+      "ask",
+      "ask",
+      "no",
+      "ask"
+    ],
+    "_sDefaultLicense": "",
+    "_sHdAvatarUrl": "https://images.gamebanana.com/img/av/68f690ef21621.jpg"
+  },
+  "_bFollowLinks": true,
+  "_aGame": {
+    "_idRow": 19567,
+    "_sName": "Zenless Zone Zero",
+    "_sAbbreviation": "ZZZ",
+    "_sProfileUrl": "https://gamebanana.com/games/19567",
+    "_sIconUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png",
+    "_sBannerUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png",
+    "_nSubscriberCount": 99262,
+    "_bHasSubmissionQueue": false,
+    "_bAccessorIsSubscribed": false
+  },
+  "_aCategory": {
+    "_idRow": 30580,
+    "_sName": "Jane Doe",
+    "_sModelName": "ModCategory",
+    "_sProfileUrl": "https://gamebanana.com/mods/cats/30580",
+    "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/6880216d8ef4e.png",
+    "_bIsObsolete": false
+  },
+  "_aSuperCategory": {
+    "_idRow": 30305,
+    "_sName": "Character Skins",
+    "_sModelName": "ModCategory",
+    "_sProfileUrl": "https://gamebanana.com/mods/cats/30305",
+    "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/66a1928c3e239.gif"
+  },
+  "_aCredits": [
+    {
+      "_sGroupName": "Key Authors",
+      "_aAuthors": [
+        {
+          "_sRole": "Custom Model & Textures",
+          "_idRow": 1751504,
+          "_sName": "Hazeker",
+          "_sUpicUrl": "https://images.gamebanana.com/img/upic/66183b043bd2c.png",
+          "_sProfileUrl": "https://gamebanana.com/members/1751504",
+          "_sAvatarUrl": "https://images.gamebanana.com/img/av/5f7b8e7d02f3d.jpg",
+          "_bIsOnline": false
+        }
+      ]
+    }
+  ],
+  "_bAdvancedRequirementsExist": false,
+  "_aRequirements": [
+    [
+      "XXMI",
+      "https://github.com/SpectrumQT/XXMI-Launcher"
+    ],
+    [
+      "Character Quality -> High",
+      ""
+    ],
+    [
+      "High-Precision Character Animation -> Disable",
+      ""
+    ]
+  ]
+}

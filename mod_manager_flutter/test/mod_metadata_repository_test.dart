@@ -1,11 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
+import 'package:mod_manager_flutter/services/gamebanana/remote_mod_metadata.dart';
+import 'package:mod_manager_flutter/services/http/image_fetcher.dart';
 import 'package:mod_manager_flutter/services/mod_metadata_repository.dart';
 import 'package:mod_manager_flutter/services/origin_backfill.dart';
 
@@ -33,6 +36,30 @@ class _FakeTagStore implements ModCharacterTagStore {
   }
 }
 
+/// In-memory stand-in for the preview-image fetcher.
+///
+/// Counts calls **per url**, because "one archive that became five mods must not
+/// download the same screenshot five times" is a property of the repository, not
+/// of the planner, and a count is the only way to see it.
+class _FakeImageFetcher implements ImageFetcher {
+  _FakeImageFetcher({this.failing = const {}});
+
+  /// Urls that answer with null, as an unreachable CDN node would.
+  final Set<String> failing;
+
+  final Map<String, int> calls = {};
+
+  int callsFor(String url) => calls[url] ?? 0;
+  int get totalCalls => calls.values.fold(0, (sum, n) => sum + n);
+
+  @override
+  Future<Uint8List?> fetch(Uri url) async {
+    calls['$url'] = callsFor('$url') + 1;
+    if (failing.contains('$url')) return null;
+    return Uint8List.fromList(utf8.encode('bytes of $url'));
+  }
+}
+
 /// Exercises the metadata *rules* — legacy migration, the "don't litter empty
 /// sidecars" guard, character normalisation on both storage surfaces.
 ///
@@ -44,6 +71,7 @@ void main() {
   late Directory modsDir;
   late Directory legacyImages;
   late _FakeTagStore config;
+  late _FakeImageFetcher images;
   late ModMetadataRepository repo;
 
   /// `<mod>/.zzz-mod-manager/metadata.json` as a raw map, or null if absent.
@@ -62,11 +90,13 @@ void main() {
     legacyImages = Directory(path.join(tmp.path, 'mod_images'))..createSync();
 
     config = _FakeTagStore();
+    images = _FakeImageFetcher();
 
     repo = ModMetadataRepository(
       config,
       modsPath: () => modsDir.path,
       legacyImagesPath: () => legacyImages.path,
+      imageFetcher: images,
     );
   });
 
@@ -711,5 +741,246 @@ void main() {
 
       expect(await repo.recordOrigin('Locked', origin()), isFalse);
     }, skip: Platform.isWindows ? 'chmod is POSIX-only' : false);
+  });
+
+  group('applyRemoteMetadata', () {
+    // Deliberately *not* named 01/02: `addImageBytes` numbers stored files
+    // sequentially, so urls that already matched its output would make the
+    // assertions below read as though remote filenames are preserved.
+    const coverUrl = 'https://images.gamebanana.com/img/ss/mods/cover.jpg';
+    const secondUrl = 'https://images.gamebanana.com/img/ss/mods/shot.jpg';
+
+    RemoteModMetadata remote({
+      String? description = 'Remote description',
+      List<String> tags = const ['Ellen: Chained school uniforms'],
+      String? characterId = 'ellen',
+      List<String> imageUrls = const [coverUrl, secondUrl],
+    }) =>
+        RemoteModMetadata(
+          description: description,
+          tags: tags,
+          characterId: characterId,
+          imageUrls: imageUrls.map(Uri.parse).toList(),
+        );
+
+    test('fills a bare mod\'s sidecar and stores the gallery', () async {
+      makeMod('Ellen Swimsuit');
+
+      final fill = await repo.applyRemoteMetadata(['Ellen Swimsuit'], remote());
+
+      final sidecar = sidecarOf('Ellen Swimsuit')!;
+      expect(sidecar['description'], 'Remote description');
+      expect(sidecar['tags'], ['Ellen: Chained school uniforms']);
+      expect(sidecar['character_id'], 'ellen');
+      expect(sidecar['images'], [
+        '.zzz-mod-manager/images/01.jpg',
+        '.zzz-mod-manager/images/02.jpg',
+      ]);
+      // The extension follows the url, because it is what decides how the file
+      // is decoded later.
+      expect(
+        File(path.join(modsDir.path, 'Ellen Swimsuit', '.zzz-mod-manager',
+                'images', '01.jpg'))
+            .existsSync(),
+        isTrue,
+      );
+
+      expect(fill.descriptions, 1);
+      expect(fill.tagSets, 1);
+      expect(fill.images, 2);
+      expect(fill.characterTags, {'Ellen Swimsuit': 'ellen'});
+      expect(fill.unwritable, isEmpty);
+    });
+
+    test('mirrors the character into config.json, like setCharacter does',
+        () async {
+      makeMod('Ellen Swimsuit');
+      await repo.applyRemoteMetadata(['Ellen Swimsuit'], remote());
+
+      // Otherwise this one path leaves the sidecar and the legacy mirror
+      // disagreeing about the same mod.
+      expect(config.tags['Ellen Swimsuit'], 'ellen');
+    });
+
+    test('fetches each image once, however many mods the archive became',
+        () async {
+      // The reason the fetch is a separate pass: five sibling folders from one
+      // archive all want the same page's gallery.
+      makeMod('Ellen A');
+      makeMod('Ellen B');
+      makeMod('Ellen C');
+
+      final fill =
+          await repo.applyRemoteMetadata(['Ellen A', 'Ellen B', 'Ellen C'], remote());
+
+      expect(images.callsFor(coverUrl), 1);
+      expect(images.callsFor(secondUrl), 1);
+      expect(images.totalCalls, 2);
+      // ...and every folder still got its own copy on disk.
+      expect(fill.images, 6);
+      for (final mod in ['Ellen A', 'Ellen B', 'Ellen C']) {
+        expect(sidecarOf(mod)!['images'], hasLength(2));
+      }
+    });
+
+    test('never displaces what the mod folder already carried', () async {
+      // A folder shared on Discord arrives with the author's own sidecar. Its
+      // user-facing fields are deliberately kept (only `origin` is dropped), so
+      // "already set" means "somebody wrote this" and it wins.
+      final dir = makeMod('Shared Mod');
+      Directory(path.join(dir.path, '.zzz-mod-manager')).createSync();
+      File(path.join(dir.path, '.zzz-mod-manager', 'metadata.json'))
+          .writeAsStringSync(jsonEncode({
+        'schema_version': 2,
+        'description': 'The author wrote this',
+        'tags': ['4k'],
+        'character_id': 'jane',
+        'images': ['Preview.png'],
+      }));
+
+      final fill = await repo.applyRemoteMetadata(['Shared Mod'], remote());
+
+      final sidecar = sidecarOf('Shared Mod')!;
+      expect(sidecar['description'], 'The author wrote this');
+      expect(sidecar['tags'], ['4k']);
+      expect(sidecar['character_id'], 'jane');
+      expect(sidecar['images'], ['Preview.png']);
+      expect(fill.isEmpty, isTrue);
+      expect(images.totalCalls, 0,
+          reason: 'nothing to store means nothing to download');
+    });
+
+    test('keeps a shipped Preview.png as the cover', () async {
+      final dir = makeMod('Shipped Preview');
+      File(path.join(dir.path, 'Preview.png')).writeAsBytesSync([1, 2, 3]);
+
+      await repo.applyRemoteMetadata(['Shipped Preview'], remote());
+
+      expect(sidecarOf('Shipped Preview')!['images'], [
+        'Preview.png',
+        '.zzz-mod-manager/images/01.jpg',
+        '.zzz-mod-manager/images/02.jpg',
+      ]);
+    });
+
+    test('preserves the origin block written moments earlier at ingest',
+        () async {
+      // The whole install sequence is: import -> recordOrigin -> autofill. If
+      // this rebuilt the sidecar from anything but the copy on disk, the block
+      // that makes the mod updatable would be gone before the user saw it.
+      makeMod('Ellen Swimsuit');
+      await repo.recordOrigin(
+        'Ellen Swimsuit',
+        const ModOrigin(
+          source: 'gamebanana',
+          modId: 531275,
+          modIdConfidence: OriginConfidence.exact,
+          provenance: OriginProvenance.downloaded,
+        ),
+      );
+
+      await repo.applyRemoteMetadata(['Ellen Swimsuit'], remote());
+
+      final origin = sidecarOf('Ellen Swimsuit')!['origin'] as Map;
+      expect(origin['mod_id'], 531275);
+      expect(origin['mod_id_confidence'], 'exact');
+    });
+
+    test('the stored extension follows the url, and falls back to png', () async {
+      // The extension decides how the file is decoded later, so it is read off
+      // the url rather than assumed — but a url can carry a query string, no
+      // extension at all, or a suffix that is plainly not one.
+      makeMod('Odd Urls');
+
+      await repo.applyRemoteMetadata(
+        ['Odd Urls'],
+        remote(
+          description: null,
+          tags: const [],
+          characterId: null,
+          imageUrls: const [
+            'https://images.gamebanana.com/x/a.JPG?v=2',
+            'https://images.gamebanana.com/x/b',
+            'https://images.gamebanana.com/x/c.notanextension',
+          ],
+        ),
+      );
+
+      // The first must not read `png`, or the assertion would pass on the
+      // fallback alone and prove nothing about the query or the case.
+      expect(sidecarOf('Odd Urls')!['images'], [
+        '.zzz-mod-manager/images/01.jpg', // query stripped, lower-cased
+        '.zzz-mod-manager/images/02.png', // no extension at all
+        '.zzz-mod-manager/images/03.png', // too long to be one
+      ]);
+    });
+
+    test('an unreachable image is skipped, not fatal', () async {
+      images = _FakeImageFetcher(failing: {coverUrl});
+      repo = ModMetadataRepository(
+        config,
+        modsPath: () => modsDir.path,
+        legacyImagesPath: () => legacyImages.path,
+        imageFetcher: images,
+      );
+      makeMod('Ellen Swimsuit');
+
+      final fill = await repo.applyRemoteMetadata(['Ellen Swimsuit'], remote());
+
+      expect(fill.images, 1);
+      expect(sidecarOf('Ellen Swimsuit')!['images'],
+          ['.zzz-mod-manager/images/01.jpg']);
+      // The free fields still landed — they never needed the network.
+      expect(fill.descriptions, 1);
+    });
+
+    test('writes nothing at all when every image fails and only images were missing',
+        () async {
+      images = _FakeImageFetcher(failing: {coverUrl});
+      repo = ModMetadataRepository(
+        config,
+        modsPath: () => modsDir.path,
+        legacyImagesPath: () => legacyImages.path,
+        imageFetcher: images,
+      );
+      final dir = makeMod('Shipped Preview');
+      File(path.join(dir.path, 'Preview.png')).writeAsBytesSync([1, 2, 3]);
+
+      final fill = await repo.applyRemoteMetadata(
+        ['Shipped Preview'],
+        remote(description: null, tags: const [], characterId: null,
+            imageUrls: const [coverUrl]),
+      );
+
+      // A lone `Preview.png` entry would be a pointless write, and it would
+      // freeze the gallery at one image — the scan already resolves it.
+      expect(fill.images, 0);
+      expect(sidecarOf('Shipped Preview'), isNull);
+    });
+
+    test('does nothing, and fetches nothing, for an empty remote', () async {
+      makeMod('Ellen Swimsuit');
+
+      final fill = await repo.applyRemoteMetadata(
+        ['Ellen Swimsuit'],
+        const RemoteModMetadata(),
+      );
+
+      expect(fill.isEmpty, isTrue);
+      expect(images.totalCalls, 0);
+      expect(sidecarOf('Ellen Swimsuit'), isNull,
+          reason: 'the don\'t-litter rule still holds');
+    });
+
+    test('skips a mod folder that does not exist, before downloading anything',
+        () async {
+      final fill = await repo.applyRemoteMetadata(['Vanished'], remote());
+
+      expect(fill.isEmpty, isTrue);
+      expect(Directory(path.join(modsDir.path, 'Vanished')).existsSync(), isFalse,
+          reason: 'the ghost-folder guard');
+      expect(images.totalCalls, 0,
+          reason: 'a whole gallery downloaded for a folder that is gone');
+    });
   });
 }
