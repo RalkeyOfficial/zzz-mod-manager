@@ -248,6 +248,13 @@ class OriginResolution {
   /// never be conflated: `_sVersion` is a per-file version, `_sDescription` is
   /// the author's variant label ("white hair ver"). Collapsing them would make
   /// two variants of one release look like two releases.
+  ///
+  /// **Re-picking the file already on record never lowers its tier.** Confirming
+  /// what we downloaded is [OriginConfidence.user]-grade evidence on its own, so
+  /// a naive `exact ? exact : user` would take a mod we fetched ourselves and
+  /// demote it to a guess — the one tier change that costs something, since
+  /// `exact` is what gates unattended updates. Harmless while nothing preselected
+  /// the recorded row; the moment the dialog does, pressing Save is enough.
   static ModOrigin? pickFile(
     ModOrigin? existing, {
     required int modId,
@@ -255,12 +262,19 @@ class OriginResolution {
     required bool exact,
   }) {
     if (existing == null || existing.modId != modId) return null;
+    final rePickingRecorded = existing.fileId == file.idRow;
     return existing.copyWith(
       fileId: file.idRow,
       version: file.version,
       versionLabel: file.description,
-      versionConfidence:
-          exact ? OriginConfidence.exact : OriginConfidence.user,
+      versionConfidence: exact ||
+              (rePickingRecorded &&
+                  existing.versionConfidence == OriginConfidence.exact)
+          ? OriginConfidence.exact
+          // Everything weaker becomes `user`, including a re-pick of an
+          // `inferred` row — the user looking at the list and choosing it is
+          // exactly the confirmation that tier is waiting for.
+          : OriginConfidence.user,
     );
   }
 
@@ -271,12 +285,24 @@ class OriginResolution {
   /// everything before. Requires zero knowledge from the user, which is what
   /// makes it the highest value-per-line answer in the dialog.
   ///
-  /// [remoteCreatedAt] clamps the baseline, and the clamp is load-bearing rather
-  /// than tidy. `installed_at` is frequently a **proxy** derived from the oldest
-  /// file in the folder, and for a library placed on disk by hand (`cp -p`, the
-  /// user's own 7-Zip run, a synced folder) the author's build timestamps
-  /// survive and that proxy can read *years* early. Left unclamped, a baseline
-  /// before the mod even existed flags every file it has ever published.
+  /// [remoteCreatedAt] clamps the baseline. `installed_at` is frequently a
+  /// **proxy** derived from the oldest file in the folder, and for a library
+  /// placed on disk by hand (`cp -p`, the user's own 7-Zip run, a synced folder)
+  /// the author's build timestamps survive and that proxy can read *years*
+  /// early — leaving a baseline that predates the mod's own existence.
+  ///
+  /// Two things about it that are easy to over- and under-read:
+  ///
+  /// - **Omitting it is legitimate, not an oversight.** It comes from the mod
+  ///   page, so a caller that makes no requests — the bulk "assume current"
+  ///   action — cannot supply one and writes an unclamped baseline deliberately.
+  ///   The update check clamps when it compares, which is the more correct home
+  ///   for the rule anyway: the clamp is a fact about the mod page.
+  /// - **It is a sanity floor, not a false-positive filter.** Every file a mod
+  ///   publishes is at or after the mod's own creation date (checked: 32 files
+  ///   across the three captured profiles, none earlier), so clamping there
+  ///   excludes only the file(s) uploaded at creation. What it prevents is the
+  ///   absurdity of "your install predates the mod", not a wall of flags.
   ///
   /// Returns null when no baseline can be derived at all; the caller must not
   /// offer the action in that state, since `assumed_latest` without a date is a

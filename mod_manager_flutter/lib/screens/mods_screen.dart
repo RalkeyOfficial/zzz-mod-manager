@@ -923,8 +923,14 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
           ),
           // Search / sort / tag-filter toolbar. Self-contained and
           // provider-driven, so a keystroke or filter toggle rebuilds only the
-          // toolbar, not the whole screen.
-          if (currentSkins.isNotEmpty) const ModsToolbar(),
+          // toolbar, not the whole screen. The callback is for the one thing it
+          // does that isn't filtering — the bulk "assume current" action writes
+          // sidecars, and the status slots are drawn from `ModInfo.origin`,
+          // which only a rescan refreshes.
+          if (currentSkins.isNotEmpty)
+            ModsToolbar(
+              onLibraryChanged: () => unawaited(loadMods(showLoading: false)),
+            ),
 
           // Counter for active mods
           if (currentSkins.isNotEmpty)

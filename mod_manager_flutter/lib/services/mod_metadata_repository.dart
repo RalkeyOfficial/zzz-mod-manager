@@ -314,8 +314,11 @@ class ModMetadataRepository {
   /// through the app it lands at roughly import time, because extraction writes
   /// fresh files. For one placed in the library by hand (`cp -p`, the user's own
   /// 7-Zip run, a synced folder) the author's build timestamps survive and it
-  /// can read *years* early — which is exactly why the "assume current" baseline
-  /// is clamped against the mod's own creation date.
+  /// can read *years* early — which is why the **per-mod resolve dialog** clamps
+  /// its "assume current" baseline against the mod's own creation date. The
+  /// bulk action cannot: it makes no requests, so it has no creation date to
+  /// clamp to and writes an unclamped baseline on purpose, leaving the clamp to
+  /// the update check that fetches the mod page anyway.
   Future<DateTime?> installDateProxy(String modName) async {
     final modFolder = _folderOf(modName);
     if (modFolder == null) return null;

@@ -76,12 +76,22 @@ The most important architectural decision is the **platform abstraction**:
   `../docs/metadata-schema.md` §3 for what it can and cannot answer — notably that
   file-level knowledge is absent for any library that predates the origin block.
 - `modOriginStatus()` (`services/origin_status.dart`) — pure `ModOrigin?` → the
-  **one** thing a library card's status slot may render (amber "version
-  unknown", a muted "untracked" dot, or nothing). The mods toolbar's "needs
-  attention" filter is built from the same function, so the badge and the filter
-  cannot disagree about which mods are which. See
-  `../docs/metadata-schema.md` §5 for why `tracking: "off"` and `remote_missing`
-  both silence it, and why only `unknown` is treated as actionable.
+  **one** thing a library card's status slot may render: amber "version
+  unknown", a muted clock for a version recorded only as a guess, a muted dot
+  for "untracked", or nothing. One rule covers all four — *the slot speaks
+  whenever tracking is less than complete, and how loudly depends on how cheaply
+  the user can act*. The mods toolbar's "needs attention" filter is built from
+  the same function, and `modNeedsAttention()` is where the two deliberately
+  come apart: a recorded guess is **shown but not counted**, or the bulk "assume
+  current" action's count would never drop. See `../docs/metadata-schema.md` §5
+  for that, for why `tracking: "off"` and `remote_missing` both silence the
+  slot, and for why the weak state is marked rather than the strong one.
+- `summarizeOrigin()` (`services/origin_summary.dart`) — pure `ModOrigin?` → the
+  two lines the resolve dialog shows about what is **already** recorded. Split
+  out because the risk is not the fold but the strength of the claim: the same
+  two fields describe "you downloaded this" and "we guessed it from a link you
+  pasted", and flattening them would tell the user their guesses are facts in
+  the one dialog they open to find out which is which.
 - `services/origin_resolution.dart` — pure decision logic behind the resolve
   dialog: ranking a mod's published files against what is known locally (banked
   archive hash → folder name → newest file that already existed at install
@@ -279,9 +289,24 @@ follows is only what is specific to these widgets.
   over *artwork*, so a themed colour would be the only thing on it that moved.
   Passing no `onResolveOrigin` hides it, which is what the drag-feedback copy of
   the card wants.
+  **The two muted states are told apart by shape, not colour** — a dot for
+  untracked, a clock for a version recorded only as a guess. Two muted colours
+  at 9–15px are indistinguishable, and stay so for anyone colourblind.
 - **The toolbar toggle carries a count and hides itself at zero.** The answer is
   usually either nothing or most of the library, and both are worth knowing
   before pressing rather than after landing on an empty grid.
+- **The bulk "assume current" button appears only once that filter is on**
+  (`services/bulk_assume_current.dart`, `dialogs/assume_current_dialog.dart`).
+  The filter is what turns the state from a dot on a card into a list, and this
+  action rewrites every mod on that list — so requiring the enumeration first
+  means the user has seen what they are about to act on. Its plan comes from
+  `visibleModsProvider`, the list the grid renders, **not** from the wider list
+  the `!` toggle counts: the two come apart as soon as a second filter is
+  active, and a control that rewrites more mods than it displays is exactly what
+  this placement exists to prevent. See `../docs/metadata-schema.md` §5 for the
+  four rules it enforces, notably that eligibility is re-checked against the
+  sidecar as freshly read — so a batch can't downgrade a mod resolved while it
+  ran, and a decline is reported as a decline rather than as a read-only folder.
 - **In the resolve dialog the content filter degrades `hide` to `blur`, never to
   `omit`.** Dropping a flagged mod from a search the user is running to identify
   a mod they *already own* would make that mod permanently unresolvable, with no
@@ -289,7 +314,19 @@ follows is only what is specific to these widgets.
 - **Both lists in the dialog are height-bounded and scroll inside themselves**,
   so the two escape hatches underneath stay one click away. Not hypothetical: a
   captured profile publishes six current files beside eight archived ones, and
-  every one is a row.
+  every one is a row. The file list's bound came down from 280 to 230 when the
+  identity card grew its "currently tracked" lines — anything new in this dialog
+  is paid for by the picker, which scrolls, never by the hatches, which have
+  nowhere to go. A test taps them at the minimum window size for that reason.
+- **The dialog states what is already recorded before offering to change it**,
+  and preselects the recorded file rather than leaving the answer invisible.
+  Every selected row carries a chip naming what put it there, so "on record" and
+  "our best guess" cannot be confused — the ambiguity worth removing is *what
+  selected this*, not *that something is selected*. `_hasSomethingToSave` asks
+  the write path (`OriginResolution.pickFile`) whether the result would differ
+  rather than re-deriving the rule, because the interesting cases are not
+  obvious: re-picking an `inferred` row looks like a no-op but is the
+  confirmation that tier waits for.
 - **`ResolveOriginGateway` is the local-side seam.** Calling `ApiService`
   straight from a dialog is this codebase's convention (delete, rename and edit
   all do) and the default keeps it — but `ApiService` lazily builds a

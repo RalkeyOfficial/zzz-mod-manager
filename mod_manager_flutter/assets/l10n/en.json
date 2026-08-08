@@ -254,7 +254,8 @@
       "match": "Match",
       "match_any": "Any",
       "match_all": "All",
-      "needs_attention": "Show only mods that need attention"
+      "needs_attention": "Show only mods that need attention",
+      "assume_current": "Assume {count} are current"
     },
     "sort": {
       "added": "Default",
@@ -289,7 +290,8 @@
     },
     "origin": {
       "version_unknown_tooltip": "Installed version unknown — click to set it",
-      "untracked_tooltip": "Not tracked for updates — click to link it to a mod page"
+      "untracked_tooltip": "Not tracked for updates — click to link it to a mod page",
+      "version_guessed_tooltip": "Tracked by date only — no file recorded. Click to say which file you have."
     },
     "resolve": {
       "title": "Update tracking for \"{mod}\"",
@@ -318,7 +320,39 @@
       "resume_tracking": "Track this mod again",
       "save": "Save",
       "cancel": "Cancel",
-      "save_failed": "Couldn't save tracking data for \"{mod}\" — the folder may be read-only."
+      "save_failed": "Couldn't save tracking data for \"{mod}\" — the folder may be read-only.",
+      "tracked_heading": "Currently tracked",
+      "tracked_id_downloaded": "You downloaded this mod from here.",
+      "tracked_id_confirmed": "You confirmed this is the right mod page.",
+      "tracked_id_inferred": "Worked out from the source link on this mod — not confirmed.",
+      "tracked_file_downloaded": "the file you downloaded",
+      "tracked_file_hash": "byte-identical to the archive you installed",
+      "tracked_file_chosen": "the file you chose",
+      "tracked_file_guessed": "our best guess, not confirmed",
+      "tracked_file_date_only": "No file recorded — anything published after {date} counts as an update.",
+      "tracked_file_none": "No version recorded yet.",
+      "on_record": "on record"
+    },
+    "assume_current": {
+      "title_single": "Assume this mod is up to date?",
+      "title_plural": "Assume {count} mods are up to date?",
+      "body": "Each of them records the date it was installed instead of a version. From then on you'll be told about files published after that date, and nothing published before it.",
+      "no_version": "No version number is invented — this stays an honest \"I don't know which file\", and you can still set the exact file for any mod later.",
+      "proxy_caveat": "Most install dates are worked out from the oldest file in the mod's folder. If you copied mods into your library by hand, that date can read early, so you may be told about updates you already have.",
+      "excluded_untracked_single": "1 more mod needs attention but isn't linked to a GameBanana page. It has to be linked on its own — a wrong match made in bulk could later overwrite a mod with a different mod's files.",
+      "excluded_untracked_plural": "{count} more mods need attention but aren't linked to a GameBanana page. Those have to be linked one at a time — a wrong match made in bulk could later overwrite a mod with a different mod's files.",
+      "excluded_undatable_single": "1 mod is skipped: no install date could be worked out for it, so there is nothing to compare against.",
+      "excluded_undatable_plural": "{count} mods are skipped: no install date could be worked out for them, so there is nothing to compare against.",
+      "confirm_single": "Mark 1 mod",
+      "confirm_plural": "Mark {count} mods",
+      "cancel": "Cancel",
+      "done_single": "1 mod now watches for files published after its install date.",
+      "done_plural": "{count} mods now watch for files published after their install date.",
+      "done_partial": "{count} mods updated. Couldn't save tracking data for {failed} — those folders may be read-only.",
+      "already_done_single": "That mod was already sorted out — nothing to change.",
+      "already_done_plural": "Those {count} mods were already sorted out — nothing to change.",
+      "failed_single": "Couldn't save tracking data for 1 mod — its folder may be read-only.",
+      "failed_plural": "Couldn't save tracking data for {count} mods — those folders may be read-only."
     }
   },
   "clipboard": {

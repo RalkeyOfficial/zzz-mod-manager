@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants.dart';
 import '../../l10n/app_localizations.dart';
 import '../../services/api_service.dart';
+import '../../services/bulk_assume_current.dart';
 import '../../utils/state_providers.dart';
+import '../dialogs/assume_current_dialog.dart';
 import 'mod_status_slot.dart';
 
 /// Search + sort + tag-filter + favorites toolbar shown above the mods grid.
@@ -14,7 +18,15 @@ import 'mod_status_slot.dart';
 /// piece of local state, kept in sync with [modSearchQueryProvider] so clearing
 /// the query from elsewhere (e.g. the "no results" screen) also clears the box.
 class ModsToolbar extends ConsumerStatefulWidget {
-  const ModsToolbar({super.key});
+  const ModsToolbar({super.key, this.onLibraryChanged, this.originWriter});
+
+  /// Called after the bulk "assume current" action wrote something, so the
+  /// screen can rescan — the status slot is drawn from `ModInfo.origin`, which
+  /// only a scan refreshes.
+  final VoidCallback? onLibraryChanged;
+
+  /// Injected only by tests — see [BulkOriginWriter].
+  final BulkOriginWriter? originWriter;
 
   @override
   ConsumerState<ModsToolbar> createState() => _ModsToolbarState();
@@ -22,6 +34,10 @@ class ModsToolbar extends ConsumerStatefulWidget {
 
 class _ModsToolbarState extends ConsumerState<ModsToolbar> {
   final TextEditingController _searchController = TextEditingController();
+
+  /// Set while a bulk run is in flight, so the button can't be pressed twice
+  /// into two overlapping passes over the same folders.
+  bool _assuming = false;
 
   // Anchored dropdown for the tag filter.
   final OverlayPortalController _tagMenuController = OverlayPortalController();
@@ -53,6 +69,8 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
     final tags = ref.watch(availableModTagsProvider);
     final searchQuery = ref.watch(modSearchQueryProvider);
     final isFiltering = ref.watch(modFiltersActiveProvider);
+    final needsAttentionCount = ref.watch(modsNeedingAttentionCountProvider);
+    final needsAttentionActive = ref.watch(modNeedsAttentionOnlyProvider);
     return Padding(
       padding: EdgeInsets.fromLTRB(
         AppConstants.defaultPadding,
@@ -99,23 +117,45 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
                 const SizedBox(width: 8),
                 _buildTagFilterButton(tags),
               ],
-              const SizedBox(width: 8),
-              _buildNeedsAttentionToggle(),
+              // The spacer is conditional together with the control, the same
+              // way the tag filter's is. A control that hides itself by
+              // returning an empty box leaves its gaps behind, and two 8px gaps
+              // between the sort dropdown and the favourites star read as a
+              // missing button — which is exactly what it is.
+              if (needsAttentionCount > 0 || needsAttentionActive) ...[
+                const SizedBox(width: 8),
+                _buildNeedsAttentionToggle(
+                  needsAttentionCount,
+                  needsAttentionActive,
+                ),
+              ],
               const SizedBox(width: 8),
               _buildFavoritesToggle(),
             ],
           ),
+          // A Wrap rather than a Row with a Spacer: both labels are whole words
+          // with nothing to ellipsise, so at the narrow end of the window (an
+          // 800px minimum, less the nav rail and the character panel) a Row
+          // overflows instead of degrading. The Wrap keeps them at opposite
+          // ends while they fit and stacks them when they don't.
           if (isFiltering)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: () => clearModFilters(ref),
-                icon: const Icon(Icons.clear, size: 16),
-                label: Text(loc.t('mods.toolbar.clear_filters')),
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  visualDensity: VisualDensity.compact,
-                ),
+            SizedBox(
+              width: double.infinity,
+              child: Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  TextButton.icon(
+                    onPressed: () => clearModFilters(ref),
+                    icon: const Icon(Icons.clear, size: 16),
+                    label: Text(loc.t('mods.toolbar.clear_filters')),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                  if (_buildAssumeCurrentButton() case final button?) button,
+                ],
               ),
             ),
         ],
@@ -345,11 +385,11 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
   /// says 47 and a fully-resolved one says nothing at all. Hidden entirely at
   /// zero rather than shown disabled — a control that can never do anything is
   /// noise in a toolbar that already has four.
-  Widget _buildNeedsAttentionToggle() {
-    final count = ref.watch(modsNeedingAttentionCountProvider);
-    final active = ref.watch(modNeedsAttentionOnlyProvider);
-    if (count == 0 && !active) return const SizedBox.shrink();
-
+  ///
+  /// **Whether to show it is decided by the caller**, not here, so the spacer
+  /// beside it disappears with it. Returning an empty box from a build method
+  /// hides the control and keeps its gaps.
+  Widget _buildNeedsAttentionToggle(int count, bool active) {
     return Tooltip(
       message: loc.t('mods.toolbar.needs_attention'),
       child: InkWell(
@@ -375,6 +415,79 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
         ),
       ),
     );
+  }
+
+  /// The zero-network "assume current" bulk action.
+  ///
+  /// **Offered only while the needs-attention filter is on**, and that is a
+  /// decision rather than a place to put a button. The filter is what turns the
+  /// state from a dot on a card into a list, and this action rewrites every mod
+  /// on that list at once — so requiring the enumeration first means the user
+  /// has *seen* what they are about to act on. It also keeps the default
+  /// toolbar, which already carries five controls, unchanged for the fully
+  /// resolved library where this can do nothing.
+  ///
+  /// It acts on exactly the mods **the grid is rendering** — its plan comes
+  /// from `visibleModsProvider`, not from the wider list the `!` toggle counts.
+  /// A control that rewrites a different set than the one on screen is the
+  /// quiet kind of wrong, and the two lists come apart as soon as a second
+  /// filter is active: search `ellen` with needs-attention on and the toggle
+  /// still says 12 while the grid shows 3. The button then says 3, and its
+  /// number differing from the toggle's is correct — they answer different
+  /// questions. With needs-attention as the only filter, which is what this was
+  /// designed around, they agree; on the "All" view that is the whole library.
+  /// Null when there is nothing to offer, so the caller leaves it out of the
+  /// row entirely rather than laying out an empty box — see
+  /// [_buildNeedsAttentionToggle] for the gap that costs.
+  Widget? _buildAssumeCurrentButton() {
+    if (!ref.watch(modNeedsAttentionOnlyProvider)) return null;
+    final plan = ref.watch(bulkAssumeCurrentPlanProvider);
+    if (!plan.hasWork) return null;
+
+    return TextButton.icon(
+      onPressed: _assuming ? null : () => unawaited(_runAssumeCurrent(plan)),
+      icon: const Icon(Icons.event_available, size: 16),
+      label: Text(
+        loc.t(
+          'mods.toolbar.assume_current',
+          params: {'count': '${plan.eligible.length}'},
+        ),
+      ),
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+  }
+
+  Future<void> _runAssumeCurrent(BulkAssumeCurrentPlan plan) async {
+    setState(() => _assuming = true);
+    try {
+      final outcome = await confirmAndApplyAssumeCurrent(
+        context,
+        plan,
+        writer: widget.originWriter ?? ApiService.updateModOrigin,
+      );
+      if (!mounted || outcome == null) return;
+      showAssumeCurrentOutcome(context, outcome);
+      // Unconditional, even when nothing was written. A run that only *declined*
+      // means the plan on screen was stale, and skipping the rescan there would
+      // leave the same stale plan behind a button that keeps offering the same
+      // work — a state that cannot correct itself.
+      widget.onLibraryChanged?.call();
+      // Everything this view had to offer is now resolved, so leaving the
+      // filter on would hand the user an empty grid as the reward for pressing
+      // the button. Computed from the plan rather than from the rescan, which
+      // is asynchronous and owned by the screen above.
+      if (plan.untracked.isEmpty &&
+          plan.undatable.isEmpty &&
+          outcome.written > 0 &&
+          outcome.failed == 0) {
+        ref.read(modNeedsAttentionOnlyProvider.notifier).state = false;
+      }
+    } finally {
+      if (mounted) setState(() => _assuming = false);
+    }
   }
 
   Widget _buildFavoritesToggle() {

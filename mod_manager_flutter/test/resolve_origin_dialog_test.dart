@@ -86,15 +86,26 @@ void main() {
     DateTime? installedAt,
     OriginConfidence modIdConfidence = OriginConfidence.inferred,
     OriginTracking tracking = OriginTracking.auto,
+    int? fileId,
+    String? version,
+    String? versionLabel,
+    OriginConfidence versionConfidence = OriginConfidence.unknown,
+    OriginProvenance provenance = OriginProvenance.importedFolder,
+    DateTime? baselineRemoteDate,
   }) =>
       ModOrigin(
         source: 'gamebanana',
         modId: modId,
         modIdConfidence: modIdConfidence,
-        provenance: OriginProvenance.importedFolder,
+        provenance: provenance,
         installedAt: installedAt,
         archiveMd5: archiveMd5,
         tracking: tracking,
+        fileId: fileId,
+        version: version,
+        versionLabel: versionLabel,
+        versionConfidence: versionConfidence,
+        baselineRemoteDate: baselineRemoteDate,
       );
 
   /// Mounts the dialog with a scripted transport. Nothing here reaches a
@@ -398,6 +409,173 @@ void main() {
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
       expect(gateway.filled, ['RabbitFX']);
+    });
+  });
+
+  group('what is already tracked', () {
+    // The reported gap: the dialog could not state its own subject's answer. It
+    // read `mod_id` to know what to fetch and `installed_at` to rank files, and
+    // never read `file_id`, `version_confidence` or `baseline_remote_date` at
+    // all — so a mod resolved months ago opened looking exactly like one never
+    // touched, and a library could only be told apart one dialog at a time.
+
+    testWidgets('a date-only mod says so, and quotes the recorded baseline',
+        (tester) async {
+      // Not the install date: `assumeCurrent` clamps the stored baseline to the
+      // mod's creation date, so the two legitimately differ and quoting the
+      // derived one would state a cutoff that is not in force.
+      await pumpDialog(
+        tester,
+        target: mod(
+          origin: tracked(
+            installedAt: DateTime.utc(2024, 1, 1),
+            baselineRemoteDate: DateTime.utc(2026, 6, 29),
+            versionConfidence: OriginConfidence.assumedLatest,
+          ),
+        ),
+      );
+      expect(find.textContaining('No file recorded'), findsOneWidget);
+      expect(find.textContaining('2026-06-29'), findsWidgets);
+      expect(find.textContaining('2024-01-01'), findsNothing);
+    });
+
+    testWidgets('a chosen file is named, marked on its row, and preselected',
+        (tester) async {
+      await pumpDialog(
+        tester,
+        target: mod(
+          origin: tracked(
+            fileId: 1492636,
+            versionLabel: 'Glow demo',
+            versionConfidence: OriginConfidence.user,
+          ),
+        ),
+      );
+      // Stated at the top...
+      expect(find.textContaining('the file you chose'), findsOneWidget);
+      // ...marked on the row it refers to...
+      expect(find.text('on record'), findsOneWidget);
+      // ...and selected, so the answer is visible rather than merely available.
+      expect(find.byIcon(Icons.radio_button_checked), findsOneWidget);
+    });
+
+    testWidgets('the two routes to exact are worded differently',
+        (tester) async {
+      await pumpDialog(
+        tester,
+        target: mod(
+          origin: tracked(
+            fileId: 1492636,
+            versionConfidence: OriginConfidence.exact,
+            provenance: OriginProvenance.downloaded,
+          ),
+        ),
+      );
+      expect(find.textContaining('the file you downloaded'), findsOneWidget);
+      // A checksum match is a match, never verification — so it must not borrow
+      // the wording of having obtained the file.
+      expect(find.textContaining('byte-identical'), findsNothing);
+    });
+
+    testWidgets('an unconfirmed identity is labelled as one', (tester) async {
+      await pumpDialog(tester, target: mod(origin: tracked()));
+      expect(find.textContaining('not confirmed'), findsOneWidget);
+    });
+
+    testWidgets('Save is dead when the preselected row is what is recorded',
+        (tester) async {
+      // The recorded row being preselected makes Save live the instant the
+      // dialog opens; pressing it would rewrite the block byte-for-byte, close,
+      // and trigger a rescan, which reads as though it did something.
+      //
+      // The block has to match the file *completely* for that to be true —
+      // including the variant label, which is what `_sDescription` carries.
+      // A record missing it is genuinely improvable, and Save stays live.
+      await pumpDialog(
+        tester,
+        target: mod(
+          origin: tracked(
+            fileId: 1492636,
+            versionLabel: 'Glow demo',
+            modIdConfidence: OriginConfidence.user,
+            versionConfidence: OriginConfidence.user,
+          ),
+        ),
+      );
+      final save = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Save'),
+      );
+      expect(save.onPressed, isNull);
+    });
+
+    testWidgets('re-saving a downloaded file does not demote it to a guess',
+        (tester) async {
+      // `exact` is the tier that gates unattended updates, and picking a row
+      // records `user` unless a hash matched — so confirming what we downloaded
+      // would have *lowered* it. Harmless while nothing preselected the recorded
+      // row; with the fix above, pressing Save was enough.
+      final gateway = await pumpDialog(
+        tester,
+        target: mod(
+          origin: tracked(
+            fileId: 1492636,
+            versionLabel: 'Glow demo',
+            modIdConfidence: OriginConfidence.inferred,
+            versionConfidence: OriginConfidence.exact,
+            provenance: OriginProvenance.downloaded,
+          ),
+        ),
+      );
+      // Identity is still `inferred`, so there is a real change to save.
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      expect(gateway.written?.versionConfidence, OriginConfidence.exact);
+      expect(gateway.written?.modIdConfidence, OriginConfidence.user);
+    });
+
+    testWidgets('re-picking a guessed row upgrades it to a confirmed one',
+        (tester) async {
+      // The other direction: `inferred` is waiting for exactly this, so the
+      // no-demotion rule must not freeze a weak tier in place.
+      final gateway = await pumpDialog(
+        tester,
+        target: mod(
+          origin: tracked(
+            fileId: 1492636,
+            versionLabel: 'Glow demo',
+            modIdConfidence: OriginConfidence.user,
+            versionConfidence: OriginConfidence.inferred,
+          ),
+        ),
+      );
+      await tester.tap(find.text('Glow demo'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      expect(gateway.written?.versionConfidence, OriginConfidence.user);
+    });
+
+    testWidgets('changing the mod stops describing the old one', (tester) async {
+      // After "Change" the card names a different mod, while the recorded file,
+      // version and baseline still belong to the previous one — showing them
+      // under the new name would attribute one mod's history to another.
+      await pumpDialog(
+        tester,
+        target: mod(
+          origin: tracked(
+            fileId: 1492636,
+            versionLabel: 'Glow demo',
+            versionConfidence: OriginConfidence.user,
+          ),
+        ),
+      );
+      expect(find.textContaining('the file you chose'), findsOneWidget);
+
+      await tester.tap(find.text('Change'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('the file you chose'), findsNothing);
     });
   });
 

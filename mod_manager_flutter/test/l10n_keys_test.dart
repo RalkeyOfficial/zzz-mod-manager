@@ -56,6 +56,10 @@ void main() {
   /// missing — e.g. renaming the `GbModSort` enum without renaming the keys.
   const interpolatedKeyPrefixes = <String>[
     'marketplace.sort_',
+    // Chosen at runtime by a `_single` / `_plural` suffix on the count.
+    'mods.assume_current.title_',
+    'mods.assume_current.confirm_',
+    'mods.assume_current.done_',
     'marketplace.content_filter_',
     'language_names.',
   ];
@@ -101,6 +105,23 @@ void main() {
           reason: 'no en.json keys under "$prefix"');
       expect(uk.keys.any((k) => k.startsWith(prefix)), isTrue,
           reason: 'no uk.json keys under "$prefix"');
+    }
+  });
+
+  test('every _single key has a _plural sibling, and the reverse', () {
+    // The count-dependent keys are assembled at runtime, so the call-site regex
+    // above cannot see them and a half-added pair would fail only when a user
+    // happened to have exactly one mod. This is the check that covers them.
+    for (final entry in {'en': en, 'uk': uk}.entries) {
+      for (final key in entry.value.keys) {
+        for (final (have, want) in [('_single', '_plural'), ('_plural', '_single')]) {
+          if (!key.endsWith(have)) continue;
+          final sibling =
+              '${key.substring(0, key.length - have.length)}$want';
+          expect(entry.value.containsKey(sibling), isTrue,
+              reason: '${entry.key}.json has $key but not $sibling');
+        }
+      }
     }
   });
 

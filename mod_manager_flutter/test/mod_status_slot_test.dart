@@ -47,6 +47,57 @@ void main() {
     expect(find.byIcon(Icons.circle), findsOneWidget);
   });
 
+  testWidgets('a recorded guess is a muted clock, not amber and not silent',
+      (tester) async {
+    // The gap this closes: a mod waved through by the bulk "assume current"
+    // action used to render exactly like one whose file the user had picked, so
+    // a library of seventeen could not be told apart without opening seventeen
+    // dialogs. It is quiet rather than amber because nothing is wrong — settling
+    // for a date is a legitimate answer — but it is not nothing either.
+    await pumpLocalized(
+      tester,
+      ModStatusSlot(
+        mod: mod(
+          origin: origin(
+            modId: 1,
+            versionConfidence: OriginConfidence.assumedLatest,
+          ),
+        ),
+        onTap: () {},
+      ),
+    );
+    expectBuilt(ModStatusSlot);
+    expect(find.byIcon(Icons.schedule), findsOneWidget);
+    expect(find.byIcon(Icons.priority_high), findsNothing);
+    expect(find.byIcon(Icons.circle), findsNothing);
+  });
+
+  testWidgets('the two quiet states differ by shape, not by colour',
+      (tester) async {
+    // Two muted colours at this size would be indistinguishable, and would stay
+    // indistinguishable for anyone colourblind. So the dot and the clock share
+    // one colour and carry the meaning in the glyph.
+    Color colourOf(IconData icon) =>
+        tester.widget<Icon>(find.byIcon(icon)).color!;
+
+    await pumpLocalized(tester, ModStatusSlot(mod: mod(), onTap: () {}));
+    final dot = colourOf(Icons.circle);
+
+    await pumpLocalized(
+      tester,
+      ModStatusSlot(
+        mod: mod(
+          origin: origin(
+            modId: 1,
+            versionConfidence: OriginConfidence.assumedLatest,
+          ),
+        ),
+        onTap: () {},
+      ),
+    );
+    expect(colourOf(Icons.schedule), dot);
+  });
+
   testWidgets('a resolved mod renders nothing at all', (tester) async {
     await pumpLocalized(
       tester,
@@ -59,6 +110,7 @@ void main() {
     );
     expect(find.byIcon(Icons.priority_high), findsNothing);
     expect(find.byIcon(Icons.circle), findsNothing);
+    expect(find.byIcon(Icons.schedule), findsNothing);
   });
 
   testWidgets('a mod the user declared their own stays silent', (tester) async {
@@ -73,10 +125,14 @@ void main() {
     expect(find.byIcon(Icons.circle), findsNothing);
   });
 
-  testWidgets('both visible states are tappable', (tester) async {
-    // The untracked one too: it is not an error, but it is the case a user may
-    // want to fix, and the context menu should not be the only way in.
-    for (final candidate in [origin(modId: 1), null]) {
+  testWidgets('every visible state is tappable', (tester) async {
+    // The quiet ones too: neither is an error, but each is a case a user may
+    // want to change, and the context menu should not be the only way in.
+    for (final candidate in [
+      origin(modId: 1),
+      origin(modId: 1, versionConfidence: OriginConfidence.assumedLatest),
+      null,
+    ]) {
       var taps = 0;
       await pumpLocalized(
         tester,
@@ -87,20 +143,27 @@ void main() {
     }
   });
 
-  testWidgets('both states occupy the same footprint', (tester) async {
-    // So resolving a mod doesn't reflow the artwork underneath the slot.
+  testWidgets('every state occupies the same footprint', (tester) async {
+    // So resolving a mod doesn't reflow the artwork underneath the slot — and
+    // the clock is a larger glyph than the dot, which is exactly the kind of
+    // thing that would have shifted it.
+    Size sizeOf(ModOrigin? candidate) => tester.getSize(find.byType(InkWell));
+
     await pumpLocalized(
       tester,
       Center(child: ModStatusSlot(mod: mod(), onTap: () {})),
     );
-    final muted = tester.getSize(find.byType(InkWell));
+    final muted = sizeOf(null);
 
-    await pumpLocalized(
-      tester,
-      Center(
-        child: ModStatusSlot(mod: mod(origin: origin(modId: 1)), onTap: () {}),
-      ),
-    );
-    expect(tester.getSize(find.byType(InkWell)), muted);
+    for (final candidate in [
+      origin(modId: 1),
+      origin(modId: 1, versionConfidence: OriginConfidence.assumedLatest),
+    ]) {
+      await pumpLocalized(
+        tester,
+        Center(child: ModStatusSlot(mod: mod(origin: candidate), onTap: () {})),
+      );
+      expect(sizeOf(candidate), muted);
+    }
   });
 }

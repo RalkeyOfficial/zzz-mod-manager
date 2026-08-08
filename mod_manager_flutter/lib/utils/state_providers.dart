@@ -6,6 +6,7 @@ import '../services/download/download_service.dart';
 import '../models/gamebanana/gb_enums.dart';
 import '../services/gamebanana/content_filter.dart';
 import '../services/gamebanana/gamebanana_client.dart';
+import '../services/bulk_assume_current.dart';
 import '../services/installed_mods_index.dart';
 import '../services/mod_manager_service.dart';
 import '../services/origin_status.dart';
@@ -275,4 +276,26 @@ final visibleModsProvider = Provider<List<ModInfo>>((ref) {
       break;
   }
   return list;
+});
+
+/// What the zero-network "assume current" bulk action would do to this view.
+///
+/// Built from [visibleModsProvider] — **the list the grid actually renders** —
+/// and not from the wider list [modsNeedingAttentionCountProvider] counts. The
+/// action rewrites every mod it covers, so the one property it cannot give up
+/// is that its number describes what is on screen. Sourcing it from the
+/// unfiltered view breaks that the moment two filters combine: search `ellen`
+/// with the needs-attention filter on and the grid shows three mods while the
+/// button offers to rewrite twelve.
+///
+/// The consequence to know: the button's count and the toolbar's `!` count are
+/// then allowed to differ, because they answer different questions — the toggle
+/// counts what the view *could* show, the button counts what it *is* showing.
+/// They agree whenever the needs-attention filter is the only one active, which
+/// is the case the button was designed around.
+///
+/// The eligible / untracked / undatable split is [planBulkAssumeCurrent]'s, and
+/// the confirmation names all three.
+final bulkAssumeCurrentPlanProvider = Provider<BulkAssumeCurrentPlan>((ref) {
+  return planBulkAssumeCurrent(ref.watch(visibleModsProvider));
 });

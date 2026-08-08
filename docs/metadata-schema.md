@@ -799,10 +799,28 @@ filter cannot disagree about which mods are which.
 | Status | When | How it looks |
 |---|---|---|
 | **`versionUnknown`** | `mod_id` known, `version_confidence` is `unknown` | Amber, actionable. We can query the file list but can't judge what comes back, and one pass through the dialog fixes it. |
-| **`untracked`** | no `origin` block, or no `mod_id` | A muted dot. **Informational, never alarming** — most of a pre-origin library looks like this, and badging all of it loudly trains the user to stop seeing the slot. |
-| **`none`** | version known at any tier, `tracking: "off"`, or `remote_missing` | Nothing at all. |
+| **`versionGuessed`** | `mod_id` known, version at `assumed_latest` or `inferred` | A muted **clock**. A version is on record but it is a guess. |
+| **`untracked`** | no `origin` block, or no `mod_id` | A muted **dot**. **Informational, never alarming** — most of a pre-origin library looks like this, and badging all of it loudly trains the user to stop seeing the slot. |
+| **`none`** | version at `user` or `exact`, `tracking: "off"`, or `remote_missing` | Nothing at all. |
 
-Two of those rows are decisions rather than mechanics:
+The rule the three states follow, in one line: **the slot speaks whenever
+tracking is less than complete, and how loudly depends on how cheaply the user
+can act.** Amber is the one that asks for something; the two muted states are
+statements of fact.
+
+`versionGuessed` exists because `assumed_latest` and `user` used to render
+identically, so a mod waved through by the bulk action was indistinguishable
+from one whose file the user had actually picked — across a whole library, with
+no way to tell but opening every dialog in turn. Two things about it:
+
+- **It marks the weak state, not the strong one.** Marking "properly linked"
+  instead was considered and rejected: those marks grow to cover every card as
+  the library is resolved and then are permanent noise, where these *shrink as
+  the user does the work*.
+- **The two muted states differ by shape, not colour.** Two muted colours at
+  9–15px are indistinguishable, and stay so for anyone colourblind.
+
+Three of those rows are decisions rather than mechanics:
 
 - **`tracking: "off"` and `remote_missing` both silence the slot**, for different
   reasons. The first is the user's explicit "not from GameBanana / it's my own",
@@ -817,11 +835,55 @@ Two of those rows are decisions rather than mechanics:
   we recorded and label as one. Re-ambering either would make the dialog
   impossible to finish.
 
-The **filter** deliberately keeps both non-empty states, where the badge treats
-them very differently: the badge asks "how loudly should this card speak", the
-filter asks "show me what I could act on", and the dialog acts on an untracked
-mod perfectly well. (What untracked mods get no access to is *bulk* resolution —
-a separate rule, about fuzzy name matching being unsafe to rubber-stamp.)
+The **filter** keeps `untracked` and `versionUnknown`, and this is the one place
+it and the badge deliberately come apart:
+
+- **Untracked mods are in**, though the badge keeps them quiet. The badge asks
+  "how loudly should this card speak", the filter asks "what have I not dealt
+  with", and the dialog acts on an untracked mod perfectly well. Excluding them
+  would leave a legacy library with an empty filter and no way to enumerate the
+  mods it exists to enumerate. (What they get no access to is *bulk* resolution
+  — a separate rule, about fuzzy name matching being unsafe to rubber-stamp.)
+- **`versionGuessed` is out.** The bulk "assume current" action turns amber mods
+  into guessed ones, and the count dropping is the entire visible proof that it
+  worked. Were guessed mods still counted, the number would sit unchanged while
+  the marks merely changed shape, which reads as a button that did nothing.
+
+### What the dialog says is already recorded
+
+Before offering to change anything, the dialog states the current answer — two
+lines inside the identity card, folded from the block by `summarizeOrigin()`
+(`services/origin_summary.dart`), plus an **on record** chip on the file row the
+block names.
+
+It had none of this: the dialog read `mod_id` to know what to fetch and
+`installed_at` to rank files, and never read `file_id`, `version_confidence` or
+`baseline_remote_date` at all. So it could not state its own subject's answer,
+and a resolved mod opened looking exactly like one never touched — with no row
+selected, because the recorded file was not among the things that preselected.
+
+Rules worth knowing:
+
+- **Two lines, because the block has two independent axes.** Knowing the mod
+  says nothing about knowing the file, and the same field reads very differently
+  at different tiers: "you confirmed this" and "worked out from the source link
+  — not confirmed" are the same `mod_id`.
+- **The recorded file is preselected, and every selection says why.** The
+  ambiguity worth removing is not *that* something is selected but *what put it
+  there*, so "on record" and "our best guess" carry different chips. This is
+  also why the recorded row is preselected ahead of a suggestion.
+- **The recorded baseline is quoted, never a recomputed one.** `assumeCurrent`
+  clamps the stored baseline to the mod's creation date, so it legitimately
+  differs from the install date the dialog would derive today; quoting the
+  derived one would state a cutoff that is not in force.
+- **The summary disappears after "Change".** `mod_id` then names a different mod
+  than the block does, and the recorded file, version and baseline all belong to
+  the previous one.
+- **The panel is inside the identity card, not beside it.** A second bordered
+  box cost about forty pixels and pushed the escape hatches below the fold,
+  which the rule below forbids. The file picker's height came down from 280 to
+  230 to pay for the two lines — that list scrolls inside itself and so loses no
+  content, while the hatches beneath it have nowhere to go.
 
 ### What the dialog is allowed to write
 
@@ -832,14 +894,21 @@ answer may claim*.
 | Answer | Writes |
 |---|---|
 | Confirm / pick a mod page | `mod_id` at **`user`**. Rebinding to a *different* mod clears `file_id`, `version`, `version_label`, `baseline_remote_date` and `remote_missing`, and keeps `archive_md5`. |
-| Pick a file | `file_id`, `version` (`_sVersion`), `version_label` (`_sDescription`) at **`user`** — or at **`exact`** when the row was matched by a banked `archive_md5`. |
+| Pick a file | `file_id`, `version` (`_sVersion`), `version_label` (`_sDescription`) at **`user`** — or at **`exact`** when the row was matched by a banked `archive_md5`, **or when the row picked is the one already recorded at `exact`**. |
 | "I don't know which" | `version_confidence: assumed_latest` and `baseline_remote_date`. No file, no version. |
 | "Not from GameBanana / it's my own" | `tracking: "off"`. Identity is left in place, so turning it back on is an undo. |
 
 Rules worth knowing before changing any of it:
 
+- **Re-picking the recorded file never lowers its tier.** Confirming a file we
+  downloaded ourselves is `user`-grade evidence on its own, so a plain
+  `exact ? exact : user` would demote it — and `exact` is the tier that gates
+  unattended updates. Harmless while nothing preselected the recorded row; the
+  moment the dialog does, pressing Save is enough. The rule is one-directional:
+  re-picking a row recorded at `inferred` still *raises* it to `user`, which is
+  precisely the confirmation that tier waits for.
 - **Confirming raises `inferred` to `user`, and nothing raises anything to
-  `exact` except a checksum match.** An `inferred` identity came from a free-form
+  `exact` except a checksum match** (or the no-demotion rule above). An `inferred` identity came from a free-form
   text field a human typed and could be a wrong paste; the user looking at the
   mod page and saying yes is exactly what `user` means. `exact` stays reserved
   for "we downloaded it" and "its bytes matched the published md5".
@@ -855,15 +924,85 @@ Rules worth knowing before changing any of it:
 - **The date candidate is the newest file that already existed**, not the nearest
   in absolute terms: a file uploaded *after* the install cannot be the installed
   one.
-- **The "assume current" baseline is clamped to the mod's own creation date.**
-  `installed_at` is frequently a proxy taken from the oldest file in the folder,
-  and for a library placed on disk by hand (`cp -p`, the user's own 7-Zip run, a
-  synced folder) the author's build timestamps survive and it can read *years*
-  early. Unclamped, that flags every file the mod ever published.
+- **The per-mod dialog's "assume current" baseline is clamped to the mod's own
+  creation date.** `installed_at` is frequently a proxy taken from the oldest
+  file in the folder, and for a library placed on disk by hand (`cp -p`, the
+  user's own 7-Zip run, a synced folder) the author's build timestamps survive
+  and it can read *years* early, leaving a baseline from before the mod existed.
+  Two qualifications, both easy to get wrong: the clamp is a **sanity floor, not
+  a false-positive filter** — every published file is at or after its mod's
+  creation date (checked: 32 files across the three captured profiles, none
+  earlier), so it excludes only the file uploaded at creation — and the **bulk
+  action does not apply it at all**, because the date comes from the mod page
+  and that action makes no requests. See
+  ["Assume current" in bulk](#assume-current-in-bulk).
 - **`tracking: "off"` is the one decision that writes a sidecar into a folder
   that had none**, deliberately breaking the don't-litter rule
   ([§2](#dont-litter-empty-sidecars)): absence means "not looked at yet", which
   is precisely what the user is switching off.
+
+### "Assume current" in bulk
+
+The same "I don't know which file — I got it around then" answer, applied to a
+whole view in one press. `services/bulk_assume_current.dart` holds the
+decisions; `screens/dialogs/assume_current_dialog.dart` is the confirmation and
+the write loop, offered from the mods toolbar.
+
+It makes **no requests at all**, which is what makes it worth having: it turns a
+legacy library from something that can never report an update into something
+that can, without a mod page, a version string, or a single answer from the
+user.
+
+Four rules, in the order they matter:
+
+- **It acts only on precise handles.** A mod with no `mod_id` is excluded, and
+  the confirmation says how many were excluded for that reason. Identifying one
+  means fuzzy-matching a folder name against a search, and a wrong match
+  rubber-stamped in bulk lets a later "update" overwrite a mod with a different
+  mod's files. That decision stays one-at-a-time and user-confirmed, forever.
+- **Eligibility is re-checked against the block as freshly read from disk.**
+  `bulkAssumeCurrent` is the transform handed to `updateOrigin`, and it returns
+  null — abandoning that one mod — for anything that is no longer
+  `versionUnknown`. Without it, a mod resolved *exactly* while the batch was
+  running would be **downgraded** to a guess, silently, in a pass nobody is
+  watching per-mod.
+  A decline is reported as a decline, never as a failure. `updateOrigin` answers
+  one bare `false` for "unwritable folder" and "the transform said no", so the
+  loop wraps the transform to tell them apart — otherwise the guard's own
+  correct behaviour surfaces as "those folders may be read-only". The reachable
+  case needs no concurrency at all: press the button, then press it again before
+  the rescan has refreshed the plan.
+- **The confirmation states the size first.** The answer is usually either
+  nothing or most of the library, and a user expecting the first who gets the
+  second has had dozens of mods rewritten on a press. It also names what it is
+  *not* touching (untracked mods, and mods with no derivable install date), so
+  "12 mods" can't be mistaken for "all of them".
+  That number is built from the list **the grid is rendering**, not from the
+  wider list the toolbar's `!` toggle counts: combine the needs-attention filter
+  with the search box and the two come apart, and a control that rewrites more
+  mods than it is showing is the failure this placement exists to avoid. The two
+  counts are therefore allowed to differ, and do so only when a second filter is
+  active.
+- **The baseline it writes is unclamped, and that is a deferred problem, not a
+  solved one.** The per-mod dialog clamps `baseline_remote_date` to the mod's
+  own `_tsDateAdded`, because a proxy install date taken from file timestamps
+  can read years early for a hand-copied library. That clamp needs the mod page,
+  which this action deliberately does not fetch — so **the update check must
+  clamp when it compares**, which is the more correct place for it anyway: the
+  clamp is a fact about the mod page, not about the sidecar. The confirmation
+  states the risk in the meantime.
+
+Nothing is probed for a missing install date, unlike the per-mod dialog. Every
+path that can derive one from a folder walk has already run one — the offline
+backfill probes every mod it gives an identity to, the ingest paths record an
+observed date, and the resolve dialog probes before it binds — so a tracked mod
+still missing the field is one whose walk found no files, and re-walking would
+return null again. Those mods are listed as skipped rather than dropped quietly.
+
+Measured against a mirror of a real library (17 mods with sidecars, 10 of them
+eligible): **13 ms** for the whole pass including all 10 rewrites, and a re-run
+is a 4 ms no-op because `assumed_latest` is no longer eligible. There is no
+progress UI and none is needed; the button simply disables while it runs.
 
 ### The write path
 
@@ -924,11 +1063,15 @@ keeps it safe against an inbound sidecar: fill absence, never displace.
 **The library-side status slot, the "needs attention" filter and the per-mod
 resolve dialog have shipped** — documented in
 [§5](#5-resolving-an-unknown-origin), which is now authoritative for how an
-unknown origin is surfaced and what each answer is allowed to write.
+unknown origin is surfaced and what each answer is allowed to write. **The
+zero-network bulk "assume current" action has shipped with them**, described in
+[§5](#assume-current-in-bulk).
 
-What remains planned is bulk resolution (one screen shared with the bulk update
-check) and update checking itself. Two decisions recorded here because they
-constrain the format rather than merely the UI:
+What remains planned is *remote* bulk resolution (one screen shared with the bulk
+update check — identity confirmation and per-row version pickers, which need the
+network the action above deliberately avoids) and update checking itself. Two
+decisions recorded here because they constrain the format rather than merely the
+UI:
 
 - **Confidence and provenance are separate axes.** *Confidence* is how sure we are
   which remote file this is; *provenance* is where the folder came from

@@ -267,11 +267,82 @@ Goal: make the data recorded in M1 pay off in the UI.
   it is now tested — including that removing the `origin` line fails three tests.
   The general lesson is filed below: **that list is a silent-staleness trap for
   every future field on `ModInfo`**, and only `origin` is now self-maintaining.
-- [ ] **§7** — the zero-network **"assume current"** baseline action (§7.5).
+- [x] **§7** — the zero-network **"assume current"** baseline action (§7.5).
   The **per-mod** half shipped with the dialog above (the "I don't know which
-  file" escape hatch, with the §7.3 clamp applied). What is still open is the
+  file" escape hatch, with the §7.3 clamp applied). What was still open is the
   *bulk* action — apply it to every tracked-but-versionless mod at once — and
   the confirmation that states how many mods it is about to flag.
+  **Done.** `services/bulk_assume_current.dart` is the pure half (a plan split
+  into eligible / untracked / undatable, plus the transform each write goes
+  through) and `screens/dialogs/assume_current_dialog.dart` is the confirmation
+  and the write loop; the button sits in the mods toolbar and appears **only
+  while the "needs attention" filter is on**, so the user has enumerated the
+  mods before rewriting them. It acts on exactly the set the count beside it
+  describes — the current view, which on "All" is the whole library — because a
+  control acting on a different set than the one on screen is the quiet kind of
+  wrong. Written up in
+  [`docs/metadata-schema.md`](docs/metadata-schema.md) §5.
+  Measured against a mirror of the developer's real library: 17 mods with
+  sidecars, **10 eligible**, 6 already resolved at `user` and 1 at `exact` from
+  the per-mod dialog's own smoke test, 0 untracked and 0 undatable. The whole
+  pass including all 10 rewrites is **13 ms**, and re-running it is a 4 ms
+  no-op — so there is no progress UI and none is warranted; the button just
+  disables while it runs.
+  One layout bug found by a test rather than by a user, which is the way round
+  this repo has not usually managed: the second toolbar row is `Clear filters`
+  and this button, and as a `Row` with a `Spacer` it **overflowed by 126px** at
+  the narrow end of the window. Neither label can ellipsise, so a `Row` that
+  doesn't fit degrades into a red stripe rather than into anything. It is a
+  `Wrap` with `spaceBetween` now — same look while they fit, stacked when they
+  don't — and the test pumps the toolbar at 480px with a three-digit count.
+  **Verified by pressing it, on the developer's real library.** All 10 eligible
+  mods went to `assumed_latest` with `baseline_remote_date == installed_at`, the
+  6 at `user` and 1 at `exact` were left alone by the re-check guard, and **no
+  `file_id` or `version` was invented on any of them** — identity, hash,
+  description and tags all survived. No write failed. On screen the amber marks
+  and the toolbar's `!` button both went away (the count reaching zero) and the
+  filter cleared itself rather than leaving an empty grid.
+  **And pressing it found a bug nothing else would have**, which is the argument
+  for doing this every time. With the count at zero the `!` toggle hid itself by
+  returning `SizedBox.shrink()` — but both of its 8px spacers stayed, so the
+  sort dropdown and the favourites star sat **16px** apart and the row read as a
+  button that had failed to render. It predates this work (the toggle shipped
+  with §7.4) and was simply unreachable until a library could reach zero. The
+  control and its spacer are conditional together now, the shape the tag filter
+  already used. Worth generalising: **a control that hides itself by returning
+  an empty box leaves its gaps behind** — the caller has to omit it. A test
+  measures the gap and was checked against the old code, where it reads 16.
+  **Two more corrections came out of review, both to claims this work made about
+  itself.**
+  - **The plan was built from the wrong list.** It came from
+    `currentCharacterSkinsProvider` — the view *before* search, tags and
+    favourites — while the grid renders `visibleModsProvider`. Search `ellen`
+    with the needs-attention filter on and the grid showed 3 mods while the
+    button offered to rewrite 12. The number was still honest (it is what got
+    written), but it contradicted the one property the placement argues for.
+    Now built from `visibleModsProvider`. The knock-on is worth stating rather
+    than hiding: the button's count and the `!` toggle's count may now differ,
+    because they answer different questions — what the view *is* showing versus
+    what it *could*. They agree whenever needs-attention is the only filter.
+  - **A declined write was reported as a read-only folder.** `updateOrigin`
+    answers one bare `false` for "unwritable" and "the transform said no", so
+    the guard that this whole item is built around surfaced its own correct
+    behaviour as a filesystem permission error. Reachable with no concurrency at
+    all: press the button, then press it again before the rescan has refreshed
+    the plan. The loop wraps the transform to tell the two apart and reports a
+    third outcome ("already sorted out"), and the rescan is now unconditional so
+    an all-declined run cannot leave the same stale plan on screen. The
+    identical conflation in the *per-mod* dialog is pre-existing and filed
+    separately below.
+  One correction to what this doc assumed, applied — see §7.3: **the clamp
+  cannot be applied here at all**, and the fallback this doc proposed for that
+  case is unusable. The deferred half is filed as its own item under §4.
+  The hazard worth recording, because it is invisible rather than obvious: the
+  plan is built from a scan and each write re-reads, so eligibility is
+  **re-checked against the fresh block** and abandons anything no longer
+  `versionUnknown`. Without that, a mod resolved exactly while the batch ran
+  would be silently *downgraded* to a guess, inside a pass nobody is watching
+  per-mod. A test walks all four resolved tiers to pin it.
 
 ### M3 — Updating
 
@@ -661,6 +732,16 @@ The block:
   screen is also the bulk-resolution surface for unknown origins — see §7.6.
 - [ ] Update rule: prioritise version string + version label; fall back to upload
   date / hash. Best-effort suggestion, clearly labelled as such.
+- [ ] **The update check must clamp `baseline_remote_date` when it compares.**
+  A baseline written by the *per-mod* dialog is clamped to the mod's own
+  `_tsDateAdded`; one written by the zero-network **bulk** action (§7.5) cannot
+  be, because the clamp needs the mod page. So stored baselines are a mix of
+  clamped and unclamped, and §4 must not assume otherwise — compare against
+  `max(baseline_remote_date, _tsDateAdded)`, using the profile it has already
+  fetched. This is the more correct home for the rule regardless: the clamp is a
+  fact about the mod page, not about the sidecar. Small, but it has to land with
+  the comparator itself, since an unclamped baseline on a hand-copied library
+  can predate the mod's existence.
 - [ ] **Confidence-aware verdicts.** With a guessed installed version, the
   strongest claim available is "possibly outdated" — never a bare version
   comparison. Auto-update is gated to exact confidence only (§7.2).
@@ -1113,8 +1194,35 @@ been renamed). Strictly local: scans run offline on every launch.
     `baseline_remote_date = installed_at`: on a hand-built legacy library it can flag
     nearly the whole library as possibly-updated on first run. Technically "erring
     early", but a wall of false positives is its own kind of broken. Clamp the
-    baseline (no earlier than the mod's upstream `_tsDateAdded`, or than the app's
-    first-run date), and state in the confirmation how many mods it is about to flag.
+    baseline (no earlier than the mod's upstream `_tsDateAdded`, ~~or than the app's
+    first-run date~~), and state in the confirmation how many mods it is about to flag.
+    **Correction (applied, and both halves of that sentence needed one.)** The
+    confirmation states the count, as asked. The clamp does not happen, and
+    neither proposed source works for a *bulk* action:
+    - `_tsDateAdded` is on the mod page, and this action's whole value is that it
+      makes **no requests**. So the bulk pass writes an unclamped baseline and the
+      update check has to clamp when it compares — which is the better place for
+      it anyway, since the clamp is a fact about the mod page rather than about
+      the sidecar. Filed as its own item under §4; the confirmation states the
+      risk in the meantime.
+    - **The app's first-run date is not a floor at all, and using one would be a
+      bug.** The app scans a `modsPath` the user may have been managing by hand
+      for years, so a mod legitimately predates the app's first run. Clamping to
+      it would push baselines *forward* and hide real updates — the opposite
+      failure from the one this bullet is guarding against, and the worse of the
+      two. (Nothing records a first-run date either, so it would also have to be
+      invented as "today" for every existing install, clamping every baseline to
+      now and making the action a no-op. `ConfigService` *does* hold a `first_run`
+      key, so grepping for one finds a hit — but it is a **bool**, not a
+      timestamp, so there is no date there either.)
+    - Worth noting how much the clamp buys even when it is available, since this
+      bullet reads as though it prevents the wall of false positives: every file
+      a mod publishes is at or after the mod's own creation date, so clamping to
+      that date only ever excludes the *original* file. It is a sanity clamp
+      against "your install is older than the mod itself", not a false-positive
+      filter. Checked rather than assumed, since it rests on `_tsDateAdded`
+      meaning "first published": **32 files across the three captured profiles,
+      none published before its own mod.**
   - Side benefit, **not taken** — the date is now recorded but nothing reads it;
     filed below as its own item rather than counted as part of this one.
 - [x] Nothing found → **write no origin block at all.** Absence means untracked;
@@ -1211,6 +1319,23 @@ been renamed). Strictly local: scans run offline on every launch.
     trains the user to ignore the slot entirely.
   - **Accent / update available** — the §4 state. Must be clearly distinct from
     amber, or the two read as the same thing.
+  - **Muted clock — tracked by date only** (`assumed_latest`, and `inferred`
+    when something starts writing it). **Added after using it**, and the
+    complaint that produced it is worth keeping: "you cannot differentiate
+    between a mod which has its identity/tracking filled out, and one where you
+    just marked the current date". Both rendered nothing, so a 17-mod library in
+    which 7 were properly pinned down could not be told apart without opening 17
+    dialogs — and the bulk action above is what creates that state ten at a
+    time. Quiet rather than amber because nothing is wrong: settling for a date
+    is a legitimate answer, and re-ambering it would undo the action's whole
+    point. Three decisions behind it, all in
+    [`docs/metadata-schema.md`](docs/metadata-schema.md) §5: it marks the
+    **weak** state rather than the strong one (marking "properly linked" grows
+    to cover every card and becomes permanent noise, where these shrink as the
+    user does the work); it is distinguished from the muted dot by **shape, not
+    colour**, which also survives colourblindness; and it is **shown but not
+    counted** by the "needs attention" filter, or the bulk action's count would
+    never drop and its marks would merely change shape.
   - Nothing at all for fully-known origins and `tracking: "off"`.
   - **Correction (applied): `remote_missing` also renders nothing**, and the
     list above never said what to do with it. The amber state's entire offer is
@@ -1306,11 +1431,28 @@ mod context menu, and the edit-mod dialog.
   library it is often the correct answer, so it cannot be gated behind finding a
   mod page first — and it deliberately **keeps** the remote id, so turning
   tracking back on is an undo rather than a second trip through the dialog.
-- [ ] **Zero-network "assume current" bulk action** — apply `assumed_latest` to
+- [x] **Zero-network "assume current" bulk action** — apply `assumed_latest` to
   every tracked-but-versionless mod at once, no API calls. Probably the highest
   value-per-line item here: it turns a dead 50-mod library into a working
   update-notification system immediately, with an honest caveat instead of a
   fabricated version string.
+  **Done** — see the M2 entry above for the shape and measurements, and
+  [`docs/metadata-schema.md`](docs/metadata-schema.md) §5 for the four rules.
+  Three things the plan didn't spell out, decided while building it:
+  - **It is offered only while the "needs attention" filter is on.** The filter
+    is what makes the state enumerable; this rewrites everything on that list,
+    so requiring the enumeration first means the user has seen what they are
+    acting on. It also keeps a control that can do nothing out of a toolbar that
+    already carries five.
+  - **Nothing is probed for a missing install date**, unlike the per-mod dialog.
+    Every path that can derive one from a folder walk has already run one, so a
+    tracked mod still missing the field is one whose walk found no files —
+    re-walking returns null again. Those are reported as skipped rather than
+    dropped quietly, which is why the plan has three groups and not two.
+  - **The filter switches itself off when the run leaves nothing behind.**
+    Otherwise the reward for pressing the button is an empty grid. Decided from
+    the plan (no untracked, no undatable, no failures) rather than from the
+    rescan, which is asynchronous and owned by the screen above.
 - [x] Free add-on from the same API response: an **"also fill in missing
   metadata"** checkbox (description, images, tags, character) for bare legacy
   imports. §3 wants this on install anyway.
@@ -1327,8 +1469,44 @@ mod context menu, and the edit-mod dialog.
   this is UI work, not a second implementation. See
   [`docs/metadata-schema.md`](docs/metadata-schema.md) §2.
 
+- [x] **The dialog states what is already recorded**, before offering to change
+  it. Not in the original plan and only obvious from using it: the dialog read
+  `mod_id` to know what to fetch and `installed_at` to rank files, and **never
+  read `file_id`, `version_confidence` or `baseline_remote_date` at all** — so
+  it could not answer the one question its own title asks, and a mod resolved
+  months ago opened identical to one never touched, with no row selected.
+  **Done.** `services/origin_summary.dart` is the pure fold (what each tier is
+  allowed to *sound* like is the risky part, not the layout); the dialog shows
+  two lines inside the identity card and an **on record** chip on the row the
+  block names, and preselects that row. Written up in
+  [`docs/metadata-schema.md`](docs/metadata-schema.md) §5.
+  Three things the implementation forced, each worth keeping:
+  - **Preselection was labelled, not removed.** The first idea was "never
+    preselect unless it is the recorded file", but the ambiguity is *what put
+    this row here*, not *that a row is here* — so every selected row now carries
+    a chip saying which, and the hash-match and single-file preselects survive.
+  - **It exposed a real confidence bug.** Picking a row records `user` unless a
+    hash matched, so re-confirming a file we *downloaded* demoted it from
+    `exact` — the tier that gates unattended updates. Harmless while nothing
+    preselected the recorded row; with the fix above, pressing Save was enough.
+    `pickFile` now never lowers a tier on a re-pick, while still raising
+    `inferred` → `user`, which is the confirmation that tier waits for. No
+    changelog entry: introduced and fixed inside one unreleased change.
+  - **A second panel broke the escape-hatch rule, and the tests caught it.** A
+    bordered box of its own cost ~40px and pushed "I don't know which" and "not
+    from GameBanana" below the fold — the one thing §7.5 says must never happen.
+    Folded into the identity card instead, and the file picker's height came
+    down 280 → 230 to pay for it: anything new in this dialog is paid for by the
+    list that scrolls, never by the hatches, which have nowhere to go.
+
 #### Filed by the resolve dialog (found while building it, deliberately not built)
 
+- [ ] **A "tracked by date only" filter, if the card marker turns out not to be
+  enough.** The new muted clock makes the state visible but not *enumerable* —
+  deliberately, since it is out of the "needs attention" count. At 17 mods
+  seeing them is enough; at 80 it may not be, and the natural home is a second
+  row on the `!` toggle rather than a sixth toolbar control. Filed rather than
+  built, to see whether it is actually wanted.
 - [ ] **`remote_missing` has no visible state, and now silences the slot.** §7.4's
   three states have no room for "the mod page is gone", so `modOriginStatus`
   treats the flag like `tracking: "off"` and renders nothing — correct today,
@@ -1341,6 +1519,38 @@ mod context menu, and the edit-mod dialog.
   `_aFiles` + `_aArchivedFiles` in hand, so a pasted file id is a direct row match
   costing no request. Small, and it turns a dead end into a shortcut for exactly
   the user who has the download link but not the page.
+- [ ] **The resolve dialog reports an abandoned write as a read-only folder.**
+  `ModMetadataRepository.updateOrigin` returns one bare `false` for three
+  different things — folder missing, write failed, and the transform declined —
+  and `mods.resolve.save_failed` renders all of them as "the folder may be
+  read-only". So the re-read guard doing exactly its job (the sidecar was
+  rebound while the dialog was open, so `pickFile` abandons rather than
+  attaching a `file_id` to somebody else's mod) tells the user they have a
+  filesystem permission problem. The **bulk** action hit the same conflation and
+  worked around it locally, by wrapping the transform so a decline is
+  distinguishable at the call site; the durable fix is for `updateOrigin` to
+  return a small result type instead of a bool, which would then serve both call
+  sites and let the workaround go. Filed rather than done: changing that
+  signature is a change to the per-mod dialog's behaviour, which is outside this
+  item.
+- [ ] **Two local-side write seams now exist, with the same signature.**
+  `ResolveOriginGateway.writeOrigin` and `BulkOriginWriter`
+  (`dialogs/assume_current_dialog.dart`) both wrap
+  `ApiService.updateModOrigin` for the same reason — a widget test that touched
+  the real `ApiService` would rewrite the developer's `<appData>/config.json` —
+  and both spell that rationale out. One shared typedef would stop them
+  drifting. Small, and it belongs with the item above, since fixing
+  `updateOrigin`'s return type has to touch both anyway.
+- [ ] **Ukrainian plurals are 1-vs-many, and the language has three forms.**
+  `AppLocalizations.t` has no plural machinery, so counted strings use a
+  `_single` / `_plural` key pair chosen in Dart — the pattern
+  `mods.import.success_single` established and the bulk action follows. That is
+  correct for English and correct for Ukrainian at 1 and at 5+, but **wrong for
+  2–4** ("2 модів" should be "2 моди"). Pre-existing and app-wide rather than
+  new, but now spread across a dozen more strings. The fix is a small plural
+  selector keyed on the locale, not another key per string. A test already pins
+  that every `_single` has a `_plural` sibling, which is the half that fails
+  silently.
 - [ ] **Two constants hold the string `gamebanana`.** `gameBananaSource`
   (`utils/gamebanana_url.dart`, where offline code can reach it) and
   `AppConstants.gameBananaSourceName` (`core/constants.dart`, used by the
@@ -1549,6 +1759,11 @@ work that already opens the same file, so they cost nothing extra.
   **The metadata autofill added 4 more** — one sentence plus the three field nouns it
   lists, kept as separate keys rather than an interpolated English list so the nouns
   are actually translated.
+  **The bulk "assume current" action added 12** — a button label and the
+  confirmation's eleven. Same observation a third time: the eleven are almost
+  entirely *caveat* copy (what is not being invented, why a date can read early,
+  why untracked mods are excluded), which is the difference between a bulk
+  rewrite the user consented to and one they clicked through.
   **§7.4 and §7.5 added 26** — two tooltips, a context-menu entry, a toolbar
   tooltip and the resolve dialog's 22. The estimate holds again, and the same
   observation as before: the *wording* is the work. Four of those keys are the
@@ -1574,7 +1789,7 @@ work that already opens the same file, so they cost nothing extra.
   beside patchers and demos), and those same fixtures are now the tests. A
   hand-written mock would have encoded the assumption the plan started with — tidy
   `_sVersion` strings to compare — and the rule would have shipped confidently wrong.
-  Suite is 678 tests, all offline. The §7.4/§7.5 share is the pattern once more,
+  Suite is 746 tests, all offline. The §7.4/§7.5 share is the pattern once more,
   and it is where the "nearest install date" rule's *only* discriminating case
   lives: an install at 15:00 on 2026-05-08 is the one window in
   `mod_profile_531649` where nearest-absolute-distance and

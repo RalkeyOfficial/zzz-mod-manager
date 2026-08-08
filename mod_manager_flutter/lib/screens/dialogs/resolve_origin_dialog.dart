@@ -11,6 +11,7 @@ import '../../services/gamebanana/content_filter.dart';
 import '../../services/gamebanana/file_selection.dart';
 import '../../services/gamebanana/remote_mod_metadata.dart';
 import '../../services/origin_resolution.dart';
+import '../../services/origin_summary.dart';
 import '../../utils/gamebanana_url.dart';
 import '../../utils/state_providers.dart';
 import '../../utils/url_utils.dart';
@@ -199,12 +200,36 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     }
   }
 
-  /// Preselects only what the resolution rule says may be preselected — a
-  /// banked-hash match or a mod with exactly one file. A merely *suggested* row
-  /// is left unselected on purpose: guesses may inform, never drive.
+  /// What the sidecar currently claims — the two lines in the identity card,
+  /// and the row the file list marks as "on record".
+  OriginSummary get _summary => summarizeOrigin(_origin);
+
+  /// Selects the row the block already names, or failing that whatever the
+  /// resolution rule says may be preselected — a banked-hash match or a mod
+  /// with exactly one file. A merely *suggested* row is left unselected on
+  /// purpose: guesses may inform, never drive.
+  ///
+  /// **The recorded file comes first, and it is not a suggestion.** Opening on
+  /// a mod the user had already resolved and selecting nothing left the dialog
+  /// unable to state its own subject's answer. The fix is to select it *and say
+  /// why*, rather than to stop selecting things: every selected row carries a
+  /// chip naming what put it there, so "on record" and "our best guess" cannot
+  /// be mistaken for one another — which is the real ambiguity, not the
+  /// selection itself.
   void _applyDefaultSelection() {
-    final resolution = _resolution;
-    final preselected = resolution.preselected;
+    if (_summary.fileId case final recorded?) {
+      for (final candidate in _resolution.candidates) {
+        if (candidate.file.idRow != recorded) continue;
+        setState(() {
+          _selectedFile = candidate.file;
+          // The recorded tier is preserved by `pickFile` rather than re-derived
+          // here; a hash match on the same row still reports itself as exact.
+          _selectionIsExact = candidate.isExact;
+        });
+        return;
+      }
+    }
+    final preselected = _resolution.preselected;
     if (preselected == null) return;
     setState(() {
       _selectedFile = preselected.file;
@@ -283,13 +308,37 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
 
   /// Whether Save would change anything on disk.
   ///
-  /// A file selection always counts, even when it names the `file_id` already on
-  /// record: that pick may be arriving at `exact` from a hash match where the
-  /// stored one was `user`, and the confidence is the point.
-  bool get _hasSomethingToSave =>
-      _identityNeedsWrite ||
-      _selectedFile != null ||
-      (_origin?.installedAt == null && _installedAt != null);
+  /// A file selection counts unless it re-states exactly what is already
+  /// recorded, at the same tier. That exception arrives with the recorded row
+  /// being preselected: without it Save is live the moment the dialog opens on
+  /// an already-resolved mod, and pressing it rewrites the block byte-for-byte,
+  /// closes and triggers a rescan — which reads as though it did something.
+  ///
+  /// **Asked of the write path rather than re-derived**, by running the same
+  /// transform Save would and comparing the result to what is on record. The
+  /// two must not be able to disagree, and the cases where they could are not
+  /// obvious ones: re-picking a row recorded at `inferred` looks like a no-op
+  /// but is the confirmation that tier is waiting for, while re-picking one
+  /// recorded at `exact` genuinely changes nothing. `ModOrigin` has value
+  /// equality already — it was added for the rescan guard — so this costs a
+  /// comparison.
+  bool get _hasSomethingToSave {
+    if (_identityNeedsWrite) return true;
+    if (_origin?.installedAt == null && _installedAt != null) return true;
+    if (_selectedFile case final file?) {
+      final origin = _origin;
+      final modId = _modId;
+      if (origin == null || modId == null) return true;
+      final next = OriginResolution.pickFile(
+        origin,
+        modId: modId,
+        file: file,
+        exact: _selectionIsExact,
+      );
+      return next != null && next != origin;
+    }
+    return false;
+  }
 
   Future<void> _save() async {
     final modId = _modId;
@@ -633,10 +682,25 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     ];
   }
 
+  /// The bound mod, and — while this dialog is still looking at the mod the
+  /// sidecar names — **what is currently recorded about it.**
+  ///
+  /// The summary lives inside this card rather than in a panel of its own, and
+  /// that is a constraint rather than a preference: a second bordered box cost
+  /// about forty pixels and pushed the two escape hatches below the fold, which
+  /// is the one thing this dialog must never do. Folded in it costs two lines,
+  /// and it reads better anyway — the mod's name and how we came to believe it
+  /// are one fact, not two.
   Widget _identityCard() {
     final profile = _profile;
     final modId = _modId!;
     final scheme = Theme.of(context).colorScheme;
+    // Only describe what is on disk while the dialog is still pointed at it.
+    // After "Change", `_modId` names a different mod than the block does, and
+    // the recorded file, version and baseline all belong to the old one — so
+    // showing them under the new mod's name would attribute one mod's history
+    // to another.
+    final summary = _modId == _origin?.modId ? _summary : OriginSummary.empty;
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -644,48 +708,127 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  loc.t('mods.resolve.identity_heading'),
-                  style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      loc.t(summary.isEmpty
+                          ? 'mods.resolve.identity_heading'
+                          : 'mods.resolve.tracked_heading'),
+                      style: TextStyle(
+                          fontSize: 11, color: scheme.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      profile?.name ?? '#$modId',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  profile?.name ?? '#$modId',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.open_in_new, size: 18),
+                tooltip: loc.t('mods.resolve.open_page'),
+                onPressed: () =>
+                    launchExternalUrl(context, gameBananaModUrl(modId)),
+              ),
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    _modId = null;
+                    _profile = null;
+                    _profileError = null;
+                    _selectedFile = null;
+                    _searchResults = null;
+                  });
+                  // Run the seeded search straight away, as opening on an
+                  // untracked mod does. Dropping back to an empty box with the
+                  // folder name already typed in it looks like a control that
+                  // did nothing.
+                  _search();
+                },
+                child: Text(loc.t('mods.resolve.identity_change')),
+              ),
+            ],
           ),
-          IconButton(
-            icon: const Icon(Icons.open_in_new, size: 18),
-            tooltip: loc.t('mods.resolve.open_page'),
-            onPressed: () =>
-                launchExternalUrl(context, gameBananaModUrl(modId)),
-          ),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _modId = null;
-                _profile = null;
-                _profileError = null;
-                _selectedFile = null;
-                _searchResults = null;
-              });
-              // Run the seeded search straight away, as opening on an untracked
-              // mod does. Dropping back to an empty box with the folder name
-              // already typed in it looks like a control that did nothing.
-              _search();
-            },
-            child: Text(loc.t('mods.resolve.identity_change')),
-          ),
+          if (!summary.isEmpty) ..._trackedLines(summary),
+        ],
+      ),
+    );
+  }
+
+  /// What the sidecar says **right now**, before anything here changes it.
+  ///
+  /// The statement the dialog was missing. Every other control is about what
+  /// the user is *going* to record, and with no statement of the current answer
+  /// a mod resolved months ago is indistinguishable from one never touched —
+  /// which was the reported problem, and is why a seventeen-mod library could
+  /// not be told apart without opening seventeen dialogs.
+  ///
+  /// Two lines, because the block has two independent axes that resolve
+  /// separately: knowing the mod says nothing about knowing the file.
+  List<Widget> _trackedLines(OriginSummary summary) {
+    final identity = switch (summary.identity) {
+      IdentitySummary.downloaded => loc.t('mods.resolve.tracked_id_downloaded'),
+      IdentitySummary.confirmed => loc.t('mods.resolve.tracked_id_confirmed'),
+      IdentitySummary.inferred => loc.t('mods.resolve.tracked_id_inferred'),
+      IdentitySummary.none => null,
+    };
+
+    final version = switch (summary.version) {
+      VersionSummary.downloaded =>
+        loc.t('mods.resolve.tracked_file_downloaded'),
+      // A matching key, never an integrity claim — the same phrasing the file
+      // list and the duplicate-archive prompt use, deliberately.
+      VersionSummary.checksumMatched =>
+        loc.t('mods.resolve.tracked_file_hash'),
+      VersionSummary.chosen => loc.t('mods.resolve.tracked_file_chosen'),
+      VersionSummary.guessed => loc.t('mods.resolve.tracked_file_guessed'),
+      VersionSummary.dateOnly => loc.t(
+          'mods.resolve.tracked_file_date_only',
+          // Straight from the block, not recomputed: the stored baseline is
+          // clamped to the mod's creation date, so a value derived here could
+          // quote a cutoff that is not the one in force.
+          params: {
+            'date':
+                summary.baseline == null ? '?' : _formatDate(summary.baseline!),
+          },
+        ),
+      VersionSummary.none => loc.t('mods.resolve.tracked_file_none'),
+    };
+
+    return [
+      const SizedBox(height: 6),
+      if (identity != null) _trackedLine(Icons.link, identity),
+      _trackedLine(
+        Icons.insert_drive_file_outlined,
+        // The recorded version string leads when there is one — it is the fact
+        // the user came for — with how we know it after.
+        summary.versionLabel == null
+            ? version
+            : '${summary.versionLabel} — $version',
+      ),
+    ];
+  }
+
+  Widget _trackedLine(IconData icon, String text) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 13, color: scheme.onSurfaceVariant),
+          const SizedBox(width: 6),
+          Expanded(child: Text(text, style: const TextStyle(fontSize: 12))),
         ],
       ),
     );
@@ -727,8 +870,14 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
         // stay **one click** away rather than sliding off the bottom. Not
         // hypothetical: a captured profile publishes six current files beside
         // eight archived ones, and every one of them is a row here.
+        //
+        // The bound came down from 280 when the identity card grew its two
+        // "currently tracked" lines, and that is the right trade rather than an
+        // arbitrary one: this list scrolls inside itself, so it loses no
+        // content, while the hatches beneath it have nowhere to go. A test taps
+        // them at the minimum window size for exactly this reason.
         ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 280),
+          constraints: const BoxConstraints(maxHeight: 230),
           child: ListView(
             shrinkWrap: true,
             padding: EdgeInsets.zero,
@@ -794,6 +943,17 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
                         if (candidate.file.isArchived)
                           _chip(loc.t('marketplace.badge_archived'),
                               scheme.onSurfaceVariant),
+                        // "This is the answer already on file" is a different
+                        // claim from "this is our best guess", and the row is
+                        // the only place the difference can be seen. Filled
+                        // rather than tinted, so it wins the glance against the
+                        // suggestion chip beside it.
+                        if (_summary.fileId == candidate.file.idRow)
+                          _chip(
+                            loc.t('mods.resolve.on_record'),
+                            scheme.onPrimary,
+                            background: scheme.primary,
+                          ),
                         // Always spelled out, never implied by position: a
                         // ranking with no stated reason cannot be argued with.
                         if (reason != null) _chip(reason, scheme.primary),
@@ -831,7 +991,11 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     // Offered only when a baseline can actually be derived: `assumed_latest`
     // with no date compares against nothing, so a disabled row with an
     // explanation beats a button that silently does nothing.
-    final baseline = _installedAt ?? _profile?.dateAdded;
+    // A baseline already on record wins over one derived here. The two can
+    // legitimately differ — `assumeCurrent` clamps against the mod's creation
+    // date, so a stored baseline is often *later* than the install date — and
+    // quoting the derived one would promise a cutoff that is not in force.
+    final baseline = _summary.baseline ?? _installedAt ?? _profile?.dateAdded;
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
@@ -872,10 +1036,10 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
 
   // -------------------------------------------------------------- fragments
 
-  Widget _chip(String label, Color color) => Container(
+  Widget _chip(String label, Color color, {Color? background}) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.14),
+          color: background ?? color.withValues(alpha: 0.14),
           borderRadius: BorderRadius.circular(6),
         ),
         child: Text(
