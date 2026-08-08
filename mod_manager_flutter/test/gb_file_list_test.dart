@@ -189,6 +189,52 @@ void main() {
       expect(find.textContaining(forbidden), findsNothing);
     }
   });
+
+  group('naming a file', () {
+    testWidgets('the filename titles the row and the author label sits under it',
+        (tester) async {
+      // Reported from real data. Mod 674675 publishes
+      // `seed_extra_toenails_texture.zip` described as "Put it in the folder
+      // with the mod (replace it)" — an *instruction*, which used to stand in
+      // the title where the filename belonged, leaving the filename nowhere on
+      // screen at all.
+      await pumpList(tester, files: [
+        const GbFile(
+          idRow: 1697000,
+          file: 'seed_extra_toenails_texture.zip',
+          description: 'Put it in the folder with the mod (replace it)',
+        ),
+      ]);
+
+      expect(find.text('seed_extra_toenails_texture.zip'), findsOneWidget);
+      expect(
+        find.text('Put it in the folder with the mod (replace it)'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the version joins the label rather than the title',
+        (tester) async {
+      await pumpList(tester, files: [
+        const GbFile(idRow: 1, file: 'v77.zip', version: '7.7',
+            description: 'Main file'),
+      ]);
+
+      expect(find.text('v77.zip'), findsOneWidget);
+      expect(find.text('7.7 · Main file'), findsOneWidget);
+    });
+
+    testWidgets('a file the author said nothing about gets no second line',
+        (tester) async {
+      // Null rather than empty, so no blank line is drawn.
+      await pumpList(tester, files: [
+        const GbFile(idRow: 1, file: 'exce_-_seed.zip'),
+      ]);
+
+      expect(find.text('exce_-_seed.zip'), findsOneWidget);
+      expect(find.text(''), findsNothing);
+    });
+  });
 }
 
 /// Builds the `ModInfo` shape the index reads, without dragging the whole runtime

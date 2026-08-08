@@ -149,15 +149,25 @@ void main() {
       // The mod page's name, so the identity card really resolved.
       expect(find.textContaining('RabbitFX'), findsWidgets);
       // Current files and archived ones both, because an old install matches a
-      // superseded file far more often than the current one.
-      expect(find.text('Main file'), findsWidgets);
-      expect(find.text('Glow demo'), findsOneWidget);
+      // superseded file far more often than the current one. The row is titled
+      // by its **filename**; the author's label is the greyed line under it,
+      // joined with the version — so it reads `7.7 · Main file`.
+      expect(find.text('v77.zip'), findsOneWidget);
+      expect(find.textContaining('Main file'), findsWidgets);
       // Ranked *and* explained — a ranking with no visible reason cannot be
       // argued with.
       expect(
         find.text('newest file that existed when you installed this'),
         findsOneWidget,
       );
+
+      // A row is three lines now rather than two, so fewer fit the bounded
+      // picker and the low-ranked ones are genuinely off-screen — that is what
+      // the list scrolling inside itself is for. Worth asserting rather than
+      // dropping: it is how "both kinds are listed" stays true.
+      await tester.drag(find.byType(ListView).last, const Offset(0, -260));
+      await tester.pumpAndSettle();
+      expect(find.text('Glow demo'), findsOneWidget);
     });
 
     testWidgets('a banked hash settles it and says so', (tester) async {
@@ -199,7 +209,7 @@ void main() {
         tester,
         target: mod(origin: tracked()),
       );
-      await tester.tap(find.text('Main file').first);
+      await tester.tap(find.text('v77.zip'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
@@ -220,7 +230,7 @@ void main() {
         ),
         gateway: gateway,
       );
-      await tester.tap(find.text('Main file').first);
+      await tester.tap(find.text('v77.zip'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
@@ -282,7 +292,7 @@ void main() {
         target: mod(origin: tracked()),
         gateway: gateway,
       );
-      await tester.tap(find.text('Main file').first);
+      await tester.tap(find.text('v77.zip'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
@@ -379,7 +389,7 @@ void main() {
       );
       expect(save.onPressed, isNull);
 
-      await tester.tap(find.text('Main file').first);
+      await tester.tap(find.text('v77.zip'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();

@@ -470,11 +470,14 @@ which arrives with nothing on record, and the card's blue badge, which arrives
 with a verdict from the last pass. The only difference is whether a request is
 made on open, so they are not two dialogs.
 
-It states both sides of the comparison with **version and label together**
-(`7.4 · Main file` against `7.7 · Main file`), where the marketplace file list
-shows the label alone. Those two rows sit directly above one another and are
-frequently the same variant, so the label by itself would render the before and
-after identically and leave the date as the only difference.
+It states both sides of the comparison as a **filename with the author's own
+words underneath** — `v74.zip` over a greyed `7.4 · Main file`, against `v77.zip`
+over `7.7 · Main file`. Those two rows sit directly above one another and are
+frequently the same variant, so the version has to be there or the before and
+after render identically with the date as the only difference.
+
+That naming rule is shared by every surface that shows a file — see
+[§7](#7-how-a-file-is-named).
 
 **There is no "update now" button, and its absence is deliberate rather than
 unfinished.** Replacing a mod folder in place has its own hazards — the folder is
@@ -562,3 +565,44 @@ Reusing `GbFileList` with its per-row download buttons would mean reaching the
 install pipeline, which lives in `marketplace_screen` and is not extracted —
 filed rather than done, and the reason the "view in marketplace" button is the
 action here.
+
+---
+
+## 7. How a file is named
+
+Every surface that lists a GameBanana file — the marketplace detail view, the
+resolve dialog's picker, the update dialog's comparison and its options list —
+names it the same way, from two pure helpers in
+`services/gamebanana/file_selection.dart`:
+
+```
+v77.zip                     ← fileDisplayName: the filename
+7.7 · Main file             ← fileDisplayDetail: version · description, greyed
+2026-06-19                  ← the row's own metadata
+```
+
+**The title is the filename, and this reverses an earlier decision.** It used to
+lead with `_sDescription`, on the reasoning that the description is what
+distinguishes rows in practice — which it often is. But that field is free text,
+not a name. A real captured file describes itself as *"Put it in the folder with
+the mod (replace it)"*: an instruction, standing where the file's identity
+should be, with the filename — the thing actually downloaded, and the only field
+guaranteed to exist beside the id — nowhere on screen at all.
+
+So the filename leads, and the author's words go on a greyed line beneath it.
+Three rules follow:
+
+- **`fileDisplayDetail` returns null when the author said nothing**, so the
+  caller draws no second line rather than an empty one.
+- **The version joins the detail, never the title.** `_sVersion` is a free-form
+  author string; it identifies a *release*, not a file, and it is routinely
+  absent.
+- **Neither is ever presented as a version.** `_sDescription` may be `Main
+  file`, `white hair ver` or `v3.4`, and the app cannot tell which — the whole
+  reason [§1](#1-why-this-is-a-suggestion-system) exists.
+
+The cost, since it is real: a row is three lines rather than two, so fewer fit
+the resolve dialog's height-bounded picker and more of it scrolls. That is the
+trade that dialog already makes explicitly — anything new in it is paid for by
+the list that scrolls, never by the escape hatches beneath, which have nowhere
+to go.

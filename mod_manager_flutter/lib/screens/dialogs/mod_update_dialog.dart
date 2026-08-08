@@ -430,6 +430,13 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
               Icons.inventory_2_outlined,
               loc.t('mods.update.you_have'),
               _installedDescription(check),
+              // Only when there is a published record to read it from. With the
+              // installed file gone from the page the headline already falls
+              // back to what the sidecar stored, and repeating it underneath
+              // would print the same words twice.
+              detail: check.installedFile == null
+                  ? null
+                  : _fileDetail(check.installedFile!),
             ),
             // One file gets a line; several get a list. A mod that ships an SFW
             // and an NSFW build together offers a *choice*, and the user knows
@@ -442,7 +449,8 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
                 _line(
                   Icons.arrow_circle_up,
                   loc.t('mods.update.published'),
-                  _fileDescription(candidate),
+                  _fileHeadline(candidate),
+                  detail: _fileDetail(candidate),
                 ),
               ],
               if (_releaseName(check.candidate) case final release?) ...[
@@ -574,7 +582,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Text(
-                  _fileLabel(file),
+                  fileDisplayName(file),
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 if (isPick)
@@ -591,6 +599,13 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
                   _chip(release, scheme.primary),
               ],
             ),
+            if (fileDisplayDetail(file) case final detail?)
+              Text(
+                detail,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+              ),
             if (file.dateAdded case final date?)
               Text(
                 _formatDate(date),
@@ -681,7 +696,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// exactly that case there is no published record left to describe. Saying
   /// "unknown" there would contradict the headline directly above it.
   String _installedDescription(UpdateCheck check) {
-    if (check.installedFile case final file?) return _fileDescription(file);
+    if (check.installedFile case final file?) return _fileHeadline(file);
     final origin = widget.mod.origin;
     final parts = [
       if (origin?.version case final v? when v.isNotEmpty) v,
@@ -702,35 +717,28 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     return null;
   }
 
-  /// Version **and** variant label, where the marketplace's file list shows
-  /// only the label.
-  ///
-  /// The "you have" and "published" lines sit directly above one another and
-  /// are frequently the same variant of the same mod — `Main file` against
-  /// `Main file` — so the label alone would render the before and after
-  /// identically and leave the date as the only difference. `7.4 · Main file`
-  /// against `7.7 · Main file` is the comparison the user opened this for.
-  /// Joined the same way the resolve dialog joins them, so one reads as the
-  /// other.
-  String _fileLabel(GbFile file) {
-    final version = file.version?.trim();
-    return version == null || version.isEmpty
-        ? fileDisplayLabel(file)
-        : '$version · ${fileDisplayLabel(file)}';
-  }
-
-  /// [_fileLabel] with the upload date appended, for the one-line form. The
-  /// option rows put the date on its own line instead, so they use the label.
-  String _fileDescription(GbFile file) {
+  /// The filename with its upload date, for the compact "you have" /
+  /// "published" pair. The author's own words go on the greyed line beneath —
+  /// see [_fileDetail].
+  String _fileHeadline(GbFile file) {
     final date = file.dateAdded;
     return date == null
-        ? _fileLabel(file)
-        : '${_fileLabel(file)} — ${_formatDate(date)}';
+        ? fileDisplayName(file)
+        : '${fileDisplayName(file)} — ${_formatDate(date)}';
   }
+
+  /// What the author said about the file, for the second line of those rows.
+  ///
+  /// It has to be *there*, not folded into the headline: those two rows sit
+  /// directly above one another and are frequently the same variant of the
+  /// same mod, so `7.4 · Main file` against `7.7 · Main file` is the comparison
+  /// the user opened the dialog for. What changed is only that it no longer
+  /// stands in for the filename.
+  String? _fileDetail(GbFile file) => fileDisplayDetail(file);
 
   // ---------------------------------------------------------------- fragments
 
-  Widget _line(IconData icon, String label, String value) {
+  Widget _line(IconData icon, String label, String value, {String? detail}) {
     final scheme = Theme.of(context).colorScheme;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -744,7 +752,26 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
             style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
           ),
         ),
-        Expanded(child: Text(value, style: const TextStyle(fontSize: 12))),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(value, style: const TextStyle(fontSize: 12)),
+              // The author's description, greyed and underneath, never standing
+              // in for the filename above it.
+              if (detail != null)
+                Text(
+                  detail,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+            ],
+          ),
+        ),
       ],
     );
   }

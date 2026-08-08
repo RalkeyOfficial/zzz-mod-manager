@@ -937,7 +937,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Text(
-                          fileDisplayLabel(candidate.file),
+                          fileDisplayName(candidate.file),
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                         if (candidate.file.isArchived)
@@ -959,6 +959,19 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
                         if (reason != null) _chip(reason, scheme.primary),
                       ],
                     ),
+                    // The author's label sits *under* the filename rather than
+                    // replacing it. It is free text and often a sentence, so
+                    // leading with it hid which file the row actually is.
+                    if (fileDisplayDetail(candidate.file) case final detail?)
+                      Text(
+                        detail,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
                     if (candidate.file.dateAdded case final date?)
                       Text(
                         _formatDate(date),

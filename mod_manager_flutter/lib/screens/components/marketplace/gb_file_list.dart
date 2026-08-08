@@ -193,7 +193,7 @@ class _FileRow extends StatelessWidget {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text(
-                      fileDisplayLabel(file),
+                      fileDisplayName(file),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodyMedium
@@ -205,6 +205,21 @@ class _FileRow extends StatelessWidget {
                     if (_installedChip(context, loc) case final chip?) chip,
                   ],
                 ),
+                // The author's own words get their own line, above the hard
+                // facts. It is free text and frequently a whole sentence — one
+                // captured file's is an instruction, "Put it in the folder with
+                // the mod (replace it)" — so appending it to the metadata line
+                // would push the size and date off the end.
+                if (fileDisplayDetail(file) case final detail?) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    detail,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style:
+                        TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                  ),
+                ],
                 const SizedBox(height: 2),
                 Text(
                   _subtitle(),
@@ -275,9 +290,10 @@ class _FileRow extends StatelessWidget {
   }
 
   /// Filename · size · upload date, skipping whatever the response omitted.
+  /// The hard facts, under whatever the author had to say. The filename is not
+  /// repeated here — it is the row's title now.
   String _subtitle() {
     final parts = <String>[
-      if (file.file case final name? when name.isNotEmpty) name,
       if (file.filesize case final bytes?) _size(bytes),
       if (file.dateAdded case final date?) _date(date),
     ];

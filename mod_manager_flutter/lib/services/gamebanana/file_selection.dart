@@ -77,21 +77,44 @@ FileDefault selectDefaultFile(List<GbFile>? files) {
   return const FileDefault(null, FileDefaultReason.ambiguous);
 }
 
-/// A short human label for one file, for the file-list rows.
+/// What a file row is **titled**: its filename.
 ///
-/// Prefers the author's free-text label (`_sDescription`) over `_sVersion`
-/// because that is what actually distinguishes rows in practice — see the
-/// ten-file case in [selectDefaultFile]. Falls back to the filename, which is
-/// the only field guaranteed to exist alongside the id.
+/// This used to lead with the author's `_sDescription`, and that was wrong in a
+/// way worth recording, because the reasoning behind it was not silly. The
+/// argument was that the description is what distinguishes rows in practice —
+/// and it often is. But it is free text, not a name: a real captured file
+/// carries `Put it in the folder with the mod (replace it)`, which is an
+/// *instruction*. Leading with it replaced the file's identity with commentary,
+/// and the filename — the thing actually downloaded, and the only field
+/// guaranteed to exist beside the id — disappeared from the UI entirely.
 ///
-/// Deliberately **not** presented as a version anywhere: it may be "Main file",
-/// "white hair ver" or "v3.4", and the app cannot tell which.
-String fileDisplayLabel(GbFile file) {
-  final label = file.description?.trim();
-  if (label != null && label.isNotEmpty) return label;
-  final version = file.version?.trim();
-  if (version != null && version.isNotEmpty) return version;
+/// So the filename leads and [fileDisplayDetail] carries the rest underneath.
+/// `_sVersion` is the fallback only because a file with neither is nameless.
+///
+/// Deliberately **not** presented as a version anywhere: `_sDescription` may be
+/// "Main file", "white hair ver" or "v3.4", and the app cannot tell which.
+String fileDisplayName(GbFile file) {
   final name = file.file?.trim();
   if (name != null && name.isNotEmpty) return name;
+  final version = file.version?.trim();
+  if (version != null && version.isNotEmpty) return version;
   return '#${file.idRow}';
+}
+
+/// The secondary line under [fileDisplayName] — the author's own description of
+/// the file, with its version string when it has one.
+///
+/// Null when the author said nothing, so the caller renders no second line
+/// rather than an empty one. Joined the same way the resolve dialog joins the
+/// recorded pair, so `7.7 · Main file` reads identically wherever it appears.
+///
+/// Never folded into the title: these two carry different kinds of claim. The
+/// title says *which file*, this says *what the author wants you to know about
+/// it* — and the second is sometimes a sentence.
+String? fileDisplayDetail(GbFile file) {
+  final parts = [
+    if (file.version?.trim() case final v? when v.isNotEmpty) v,
+    if (file.description?.trim() case final d? when d.isNotEmpty) d,
+  ];
+  return parts.isEmpty ? null : parts.join(' · ');
 }

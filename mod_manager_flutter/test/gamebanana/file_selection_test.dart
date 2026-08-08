@@ -104,23 +104,33 @@ void main() {
     });
   });
 
-  group('fileDisplayLabel', () {
-    test('prefers the author label over the version string', () {
-      // _sDescription is what actually distinguishes rows in the wild.
-      expect(
-        fileDisplayLabel(file(1, version: '1.0', label: 'Main file')),
-        'Main file',
-      );
+  group('how a file is named on screen', () {
+    test('the filename is the title, never the author label', () {
+      // This led with `_sDescription` and it was wrong: that field is free
+      // text, not a name. A real captured file's is the whole sentence "Put it
+      // in the folder with the mod (replace it)" — an instruction, standing
+      // where the file's identity should be, with the filename nowhere on
+      // screen.
+      final f = file(1, version: '1.0', label: 'Main file');
+      expect(fileDisplayName(f), 'f1.zip');
+      expect(fileDisplayDetail(f), '1.0 · Main file');
     });
 
-    test('falls back to the version, then the filename, then the id', () {
-      expect(fileDisplayLabel(file(1, version: '7.7')), '7.7');
-      expect(fileDisplayLabel(file(2)), 'f2.zip');
-      expect(fileDisplayLabel(const GbFile(idRow: 9)), '#9');
+    test('the title falls back to the version, then the id', () {
+      expect(fileDisplayName(GbFile(idRow: 1, version: '7.7')), '7.7');
+      expect(fileDisplayName(const GbFile(idRow: 9)), '#9');
     });
 
-    test('blank strings count as absent, not as a label', () {
-      expect(fileDisplayLabel(file(1, version: '1.0', label: '   ')), '1.0');
+    test('a file the author said nothing about has no second line', () {
+      // Null rather than empty, so the caller draws no line at all instead of
+      // a blank one.
+      expect(fileDisplayDetail(file(2)), isNull);
+      expect(fileDisplayDetail(file(2, label: '   ')), isNull);
+    });
+
+    test('either half alone is enough for the second line', () {
+      expect(fileDisplayDetail(file(1, version: '7.7')), '7.7');
+      expect(fileDisplayDetail(file(1, label: 'Main file')), 'Main file');
     });
   });
 }
