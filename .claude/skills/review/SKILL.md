@@ -65,12 +65,23 @@ file, not the nearest existing one.
 | File | Owns |
 |---|---|
 | `docs/gamebanana-api.md` | GameBanana's *remote* protocol only — endpoints, fields, filtering, downloads. **Not** our client, and not what we do with the response. |
-| `docs/metadata-schema.md` | Data about a **mod**: the `metadata.json` sidecar, its `origin` block, versioning, migration. |
+| `docs/metadata-schema.md` | The sidecar's **file format**: every field, save/round-trip semantics, versioning, the migration hook. |
+| `docs/origin-tracking.md` | What we **know about a mod's source**: the confidence model, every route that writes an `origin` block, the backfill, the resolve flow, the installed-mods index. |
+| `docs/metadata-autofill.md` | What an install **copies from a mod page**: description, character, tags, gallery. |
 | `docs/configuration.md` | The app's **own** settings: `config.json`, the SharedPreferences mirror. |
 | `CLAUDE.md` files | Our architecture and conventions. |
+| `CHANGELOG.md` | What has shipped. |
 
-The dividing line between the two data docs is *ownership*: if deleting it would
-lose information about a mod, it belongs to `metadata-schema.md`.
+Two dividing lines that are easy to get wrong:
+
+- **Mod data vs app settings is about *ownership***: if deleting it would lose
+  information about a mod it belongs to the mod docs, not `configuration.md`.
+- **Format vs policy**: what a field *is* on disk belongs to `metadata-schema.md`;
+  what the app *does* with it belongs to `origin-tracking.md` or a `CLAUDE.md`.
+
+Also flag **status logs in a reference doc** — a "what has shipped so far" or
+"planned changes" section is a changelog, and `CHANGELOG.md` owns that. A doc states
+what the code does now, in the present tense.
 
 **Plainly written.** Flag any sentence that only parses if you already know the
 thing it explains. Concretely:

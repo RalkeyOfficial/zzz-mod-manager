@@ -91,24 +91,26 @@ mistake.
 ## Architecture
 
 > Developer documentation lives in **`docs/`** — start at
-> [`docs/README.md`](docs/README.md). In particular,
-> [`docs/metadata-schema.md`](docs/metadata-schema.md) is the authoritative
-> reference for data about a **mod** — the per-mod `metadata.json` sidecar, its
-> `origin` block, schema versioning and the migration hook — and
-> [`docs/configuration.md`](docs/configuration.md) for the app's **own settings**
-> (`config.json`, the dual-storage pattern, adding a setting). Read the relevant
-> one before changing anything that persists.
+> [`docs/README.md`](docs/README.md), which indexes all five. Read the relevant one
+> before changing anything that persists or anything that talks to GameBanana:
+>
+> | Doc | Owns |
+> |---|---|
+> | [`docs/metadata-schema.md`](docs/metadata-schema.md) | The **file format** of a mod's `metadata.json` sidecar — fields, save semantics, versioning, the migration hook |
+> | [`docs/origin-tracking.md`](docs/origin-tracking.md) | What we know about **where a mod came from** — the confidence model, the backfill, the resolve flow |
+> | [`docs/metadata-autofill.md`](docs/metadata-autofill.md) | What an install **copies from a mod page** — description, character, tags, gallery |
+> | [`docs/configuration.md`](docs/configuration.md) | The app's **own settings** — `config.json`, the dual-storage pattern, adding a setting |
+> | [`docs/gamebanana-api.md`](docs/gamebanana-api.md) | GameBanana's **remote protocol** — which of the two APIs and why, browsing/filtering/sorting, every field, NSFW, downloads, the category tree |
+>
+> Read the API doc before writing any request; its surface is undocumented upstream,
+> so guessing costs more than looking.
 >
 > **Each doc owns one subject.** A fact that doesn't fit any of them wants a new
 > file, not the nearest existing one — the scope line at the top of each doc is
 > what decides. Notably: the remote API doc describes GameBanana's protocol, not
-> our client; our architecture lives in the `CLAUDE.md` files.
-> [`docs/gamebanana-api.md`](docs/gamebanana-api.md) is the equivalent reference for
-> the **remote** side — which of GameBanana's two APIs to use and why, browsing /
-> filtering / sorting, what every field means, NSFW handling, downloads, and the
-> category tree. Read it before writing any request; its surface is undocumented
-> upstream, so guessing costs more than looking. New developer docs go in `docs/`,
-> not the repo root.
+> our client; our architecture lives in the `CLAUDE.md` files, and what has shipped
+> lives in `CHANGELOG.md` rather than in a status section inside a reference. New
+> developer docs go in `docs/`, not the repo root.
 
 The app's internal architecture — layered structure of `lib/`, the service layer
 and platform abstraction, the GameBanana and download layers, how mods work,

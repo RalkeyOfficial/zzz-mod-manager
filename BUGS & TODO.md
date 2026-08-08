@@ -6,7 +6,7 @@ decisions made so far, not *how* to implement it. Items are grouped by area.
 
 > **This file is temporary.** As each area ships, its schema details and rationale
 > move into [`docs/`](docs/README.md) — the origin block and confidence model (§3,
-> §7) belong in [`docs/metadata-schema.md`](docs/metadata-schema.md). Don't let this
+> §7) belong in [`docs/origin-tracking.md`](docs/origin-tracking.md). Don't let this
 > document become the only written explanation of anything.
 
 ---
@@ -217,7 +217,7 @@ Goal: make the data recorded in M1 pay off in the UI.
   is a safety rule, not a courtesy: **fill absence, never displace.** An inbound
   sidecar's user-facing fields are deliberately kept (§3), so "already set" usually
   means "the author wrote this". Written up in
-  [`docs/metadata-schema.md`](docs/metadata-schema.md) §2. Measured end to end against
+  [`docs/metadata-autofill.md`](docs/metadata-autofill.md). Measured end to end against
   the live API: 827 ms to fill two sibling mods with the same 8-image gallery — 8
   downloads, 16 files, 882 KB per folder.
   Three corrections to what this doc assumed, all applied — see §2 and §3 below:
@@ -248,7 +248,7 @@ Goal: make the data recorded in M1 pay off in the UI.
   count, and `screens/dialogs/resolve_origin_dialog.dart`; the write path is
   `ModMetadataRepository.updateOrigin`, which **amends** rather than replaces and
   re-reads before applying. Written up in
-  [`docs/metadata-schema.md`](docs/metadata-schema.md) §5, now authoritative.
+  [`docs/origin-tracking.md`](docs/origin-tracking.md) §5 and §7, now authoritative.
   Two corrections to what this doc assumed, both applied — see §7.4 and §7.5:
   **a `/dl/` link cannot be resolved to a mod by either API**, and **the filter
   covers the muted state too, not only the amber one**. Smoke-tested against the
@@ -281,7 +281,7 @@ Goal: make the data recorded in M1 pay off in the UI.
   describes — the current view, which on "All" is the whole library — because a
   control acting on a different set than the one on screen is the quiet kind of
   wrong. Written up in
-  [`docs/metadata-schema.md`](docs/metadata-schema.md) §5.
+  [`docs/origin-tracking.md`](docs/origin-tracking.md) §6.
   Measured against a mirror of the developer's real library: 17 mods with
   sidecars, **10 eligible**, 6 already resolved at `user` and 1 at `exact` from
   the per-mod dialog's own smoke test, 0 untracked and 0 undatable. The whole
@@ -626,7 +626,7 @@ The block:
 - [x] Auto-populate metadata (description, images, tags, character) from the API
   on marketplace install instead of leaving it blank.
   **Done** — see M2's entry above for the shape and
-  [`docs/metadata-schema.md`](docs/metadata-schema.md) §2 for the rules. Three
+  [`docs/metadata-autofill.md`](docs/metadata-autofill.md) for the rules. Three
   corrections to what this line assumed:
   - **`_aTags` arrives in two different shapes and the client read only one.** A
     listing sends flattened strings (`"Software Used: Blender"`); a
@@ -1148,8 +1148,8 @@ rather than collapsed into one enum:
 
 ### 7.3 Offline backfill (schema v1 → v2)
 
-**Shipped.** Documented in [`docs/metadata-schema.md`](docs/metadata-schema.md)
-§4, which is now authoritative for how it behaves. Kept here for the reasoning.
+**Shipped.** Documented in [`docs/origin-tracking.md`](docs/origin-tracking.md)
+§3, which is now authoritative for how it behaves. Kept here for the reasoning.
 
 > **The "schema v1 → v2" in the heading oversells it.** Only a mod that actually
 > gets an origin block is stamped v2; a legacy sidecar with no GameBanana url
@@ -1329,7 +1329,7 @@ been renamed). Strictly local: scans run offline on every launch.
     time. Quiet rather than amber because nothing is wrong: settling for a date
     is a legitimate answer, and re-ambering it would undo the action's whole
     point. Three decisions behind it, all in
-    [`docs/metadata-schema.md`](docs/metadata-schema.md) §5: it marks the
+    [`docs/origin-tracking.md`](docs/origin-tracking.md) §4: it marks the
     **weak** state rather than the strong one (marking "properly linked" grows
     to cover every card and becomes permanent noise, where these shrink as the
     user does the work); it is distinguished from the muted dot by **shape, not
@@ -1437,7 +1437,7 @@ mod context menu, and the edit-mod dialog.
   update-notification system immediately, with an honest caveat instead of a
   fabricated version string.
   **Done** — see the M2 entry above for the shape and measurements, and
-  [`docs/metadata-schema.md`](docs/metadata-schema.md) §5 for the four rules.
+  [`docs/origin-tracking.md`](docs/origin-tracking.md) §6 for the four rules.
   Three things the plan didn't spell out, decided while building it:
   - **It is offered only while the "needs attention" filter is on.** The filter
     is what makes the state enumerable; this rewrites everything on that list,
@@ -1467,7 +1467,7 @@ mod context menu, and the edit-mod dialog.
   takes any list of mods, and its fill-absence-never-displace rule is exactly what a
   legacy mod wants. What is missing is only the checkbox and the profile fetch — so
   this is UI work, not a second implementation. See
-  [`docs/metadata-schema.md`](docs/metadata-schema.md) §2.
+  [`docs/metadata-autofill.md`](docs/metadata-autofill.md).
 
 - [x] **The dialog states what is already recorded**, before offering to change
   it. Not in the original plan and only obvious from using it: the dialog read
@@ -1479,7 +1479,7 @@ mod context menu, and the edit-mod dialog.
   allowed to *sound* like is the risky part, not the layout); the dialog shows
   two lines inside the identity card and an **on record** chip on the row the
   block names, and preselects that row. Written up in
-  [`docs/metadata-schema.md`](docs/metadata-schema.md) §5.
+  [`docs/origin-tracking.md`](docs/origin-tracking.md) §5.
   Three things the implementation forced, each worth keeping:
   - **Preselection was labelled, not removed.** The first idea was "never
     preselect unless it is the recorded file", but the ambiguity is *what put

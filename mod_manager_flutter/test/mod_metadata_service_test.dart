@@ -309,7 +309,7 @@ void main() {
     test('a corrupt sidecar is replaced wholesale on the next write', () async {
       // Known gap, pinned deliberately: read() conflates "missing" and
       // "corrupt" into a single null, so unknown keys in an unparseable file
-      // are lost. See docs/metadata-schema.md §4.
+      // are lost. See docs/metadata-schema.md §2.
       final file = File(path.join(tmp.path, '.zzz-mod-manager', 'metadata.json'))
         ..createSync(recursive: true)
         ..writeAsStringSync('{ not valid json, "vendor_x": {"id": 1}');

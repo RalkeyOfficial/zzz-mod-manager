@@ -4,15 +4,17 @@ Architecture notes for the app itself. Loads when working on files under
 `mod_manager_flutter/`. Repo-wide rules (language policy, dev workflow,
 changelog, the non-negotiables) live in the [root `CLAUDE.md`](../CLAUDE.md).
 
-> [`../docs/metadata-schema.md`](../docs/metadata-schema.md) is the authoritative
-> reference for data about a **mod** (the per-mod `metadata.json` sidecar, its
-> `origin` block, schema versioning and the migration hook), and
-> [`../docs/configuration.md`](../docs/configuration.md) for the app's **own
-> settings** (`config.json`, the dual-storage pattern, adding a setting). Read the
-> relevant one before changing anything that persists.
-> [`../docs/gamebanana-api.md`](../docs/gamebanana-api.md) is the equivalent
-> reference for the **remote** side. Read it before writing any request; its
-> surface is undocumented upstream, so guessing costs more than looking.
+> Five reference docs live in [`../docs/`](../docs/README.md), each owning one
+> subject. Read the relevant one before changing anything that persists or anything
+> that talks to GameBanana:
+>
+> | Doc | Owns |
+> |---|---|
+> | [`metadata-schema.md`](../docs/metadata-schema.md) | The sidecar **file format** — fields, save semantics, versioning, the migration hook |
+> | [`origin-tracking.md`](../docs/origin-tracking.md) | **Where a mod came from** — the confidence model, the backfill, the resolve flow, the installed-mods index |
+> | [`metadata-autofill.md`](../docs/metadata-autofill.md) | What an install **copies from a mod page** |
+> | [`configuration.md`](../docs/configuration.md) | The app's **own settings** |
+> | [`gamebanana-api.md`](../docs/gamebanana-api.md) | GameBanana's **remote protocol** — read it before writing any request; its surface is undocumented upstream, so guessing costs more than looking |
 
 ## Layered structure (`lib/`)
 
@@ -73,7 +75,7 @@ The most important architectural decision is the **platform abstraction**:
   `AnimatedSwitcher` with no keep-alive, so `ModsScreen` is *disposed* while the
   marketplace is up and that list goes stale exactly when the badges are visible.
   The marketplace invalidates it on open and after each install. See
-  `../docs/metadata-schema.md` §3 for what it can and cannot answer — notably that
+  `../docs/origin-tracking.md` §8 for what it can and cannot answer — notably that
   file-level knowledge is absent for any library that predates the origin block.
 - `modOriginStatus()` (`services/origin_status.dart`) — pure `ModOrigin?` → the
   **one** thing a library card's status slot may render: amber "version
@@ -83,7 +85,7 @@ The most important architectural decision is the **platform abstraction**:
   the user can act*. The mods toolbar's "needs attention" filter is built from
   the same function, and `modNeedsAttention()` is where the two deliberately
   come apart: a recorded guess is **shown but not counted**, or the bulk "assume
-  current" action's count would never drop. See `../docs/metadata-schema.md` §5
+  current" action's count would never drop. See `../docs/origin-tracking.md` §4
   for that, for why `tracking: "off"` and `remote_missing` both silence the
   slot, and for why the weak state is marked rather than the strong one.
 - `summarizeOrigin()` (`services/origin_summary.dart`) — pure `ModOrigin?` → the
@@ -108,7 +110,7 @@ The most important architectural decision is the **platform abstraction**:
   means "the author wrote this". Applied by
   `ModMetadataRepository.applyRemoteMetadata()`, which is also where the "fetch
   each image once even when the archive became five mods" and "re-read before
-  writing" parts live. See `../docs/metadata-schema.md` §2 for the measurements
+  writing" parts live. See `../docs/metadata-autofill.md` for the measurements
   behind the four decisions inside it (why the character comes from the
   *category*, why `Software Used` tags are dropped, why a shipped `Preview.png`
   keeps the cover slot, and why the gallery is capped at ten).
@@ -152,7 +154,11 @@ costs more than looking.
   can be asserted with no transport. Browse is built on `Mod/Index` (not
   `Subfeed`, which supports neither filters nor sort).
 - `GameBananaResponseCache` — in-memory, keyed by full `Uri`, TTL taken from the
-  server's own `cache-control: max-age` (default 10 min). Injected clock.
+  server's own `cache-control: max-age` (default 10 min). Injected clock. **A
+  user-initiated refresh has to be able to bypass it**: re-issuing the same request
+  otherwise answers from memory and hands back the byte-identical page for up to ten
+  minutes — a refresh control that cannot refresh. Keep the bypass scoped to that
+  explicit action; making every read skip the cache defeats the point of having one.
 - `GameBananaErrorMapper` — status + body → typed `GbException`. Backoff is
   **reactive** (429/503 only); a 400 is never retried, since it means our url is
   wrong.
@@ -200,8 +206,8 @@ GameBanana hosts is reached via "open in browser".
   intercept a CDN url, so every origin block it wrote had both confidences at
   `unknown`; a native download knows mod id, file id, version and variant label
   before the first byte and writes them at `exact`. See
-  `../docs/metadata-schema.md` §2 (the origin block) — this pointed at §5 while
-  that section was "Planned changes"; §5 is now the resolve flow.
+  `../docs/origin-tracking.md` §2 for every route that writes a block and the tier
+  each one may claim.
 - **It is also where a mod stops arriving blank.** After the import,
   `_installArchive` hands the profile to `applyRemoteMetadata`, which fills the
   description, gallery, tags and character the install would otherwise leave
@@ -222,7 +228,7 @@ GameBanana hosts is reached via "open in browser".
   ingest paths run `confirmArchiveNotDuplicate` (`dialogs/duplicate_archive_dialog.dart`)
   before installing an archive whose hash is already banked. The badge is keyed on
   the mod and the row marker on the file, because those are different questions with
-  very different availability — see `../docs/metadata-schema.md` §3.
+  very different availability — see `../docs/origin-tracking.md` §8.
 - **`GbModCard` has one status slot.** `_statusSlot` returns at most one badge,
   never a stack — the same rule the library card follows, since a card that can
   show three things at once shows none of them. **"Update available" belongs in
@@ -266,7 +272,7 @@ call `expectBuilt(...)` after pumping so that failure mode can never be silent a
 ### The library's origin surfaces (`components/mod_status_slot.dart`, `dialogs/resolve_origin_dialog.dart`)
 
 What the *library* side does with the origin block. The rules about states and
-about what each answer may write are in `../docs/metadata-schema.md` §5; what
+about what each answer may write are in `../docs/origin-tracking.md` §4–§5; what
 follows is only what is specific to these widgets.
 
 - **A rescan only reaches the grid if `modGroupsChanged()` says so**
@@ -303,7 +309,7 @@ follows is only what is specific to these widgets.
   `visibleModsProvider`, the list the grid renders, **not** from the wider list
   the `!` toggle counts: the two come apart as soon as a second filter is
   active, and a control that rewrites more mods than it displays is exactly what
-  this placement exists to prevent. See `../docs/metadata-schema.md` §5 for the
+  this placement exists to prevent. See `../docs/origin-tracking.md` §6 for the
   four rules it enforces, notably that eligibility is re-checked against the
   sidecar as freshly read — so a batch can't downgrade a mod resolved while it
   ran, and a decline is reported as a decline rather than as a read-only folder.
@@ -350,7 +356,17 @@ backpressure — `../docs/gamebanana-api.md` §8 has the measurements that shape
   `200` answering a ranged request means *restart*: appending it would
   concatenate two copies into a corrupt archive that still looks plausible.
 - **The timeout is a stall timeout, never a total duration.** A legitimate
-  transfer over a degraded CDN node runs ~25 minutes and must be allowed to.
+  transfer over a degraded CDN node runs ~25 minutes and must be allowed to. The
+  progress UI is built for the same reality: a rate and an ETA rather than just a
+  bar, cancellable and resumable throughout.
+- **Backpressure is load-bearing, and its failure mode is invisible on fast
+  storage.** A reader that pipes the response body to disk without awaiting the
+  write and without pausing the subscription buffers whatever the disk can't keep
+  up with. Measured against local disk at 20 MB/s it made no difference — peak RSS
+  identical at 217 MB either way — but against a deliberately slow consumer the two
+  diverged (+57 MB vs +15 MB above baseline). With files reaching 1.24 GB and CDN
+  nodes that serve at 0.08 MB/s, that is a real exposure on slow or contended
+  storage.
 - `services/archive_hash.dart` — md5 for archive fingerprinting. Free during a
   download (hashed in-stream), one extra read on manual import. A **matching
   key, never an integrity claim** — never render a match as "verified".

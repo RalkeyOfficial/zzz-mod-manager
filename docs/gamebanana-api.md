@@ -9,8 +9,11 @@ with no cookies and no account. Requests are plain `GET`s that return JSON. Exam
 use the ZZZ game id **`19567`**; a real mod (`698834`) and file (`1770600`) are used
 so you can paste any of them into a terminal.
 
-> This documents the *remote* API only. How we store what comes back is
-> [`metadata-schema.md`](metadata-schema.md).
+> Scope: the *remote* protocol only — what GameBanana serves and how to ask for it.
+> **Not** our client, which lives in
+> [`../mod_manager_flutter/CLAUDE.md`](../mod_manager_flutter/CLAUDE.md). How we store
+> what comes back is [`metadata-schema.md`](metadata-schema.md); what we record about
+> *which* remote file a local mod is, [`origin-tracking.md`](origin-tracking.md).
 
 ---
 
@@ -111,13 +114,7 @@ lists them explicitly.
 ### Caching and rate limits
 
 - Responses carry `cache-control: public, max-age=600`. **Mirror that 10-minute TTL**
-  in our own cache rather than inventing one.
-  - Consequence worth designing for: with a client-side cache honouring that TTL, a
-    **user-initiated "refresh" must be able to bypass it**. Otherwise re-issuing the
-    same request answers from memory and the user gets the byte-identical page back
-    for up to ten minutes — a refresh control that cannot refresh. Keep the bypass
-    scoped to the explicit action; making every read skip the cache defeats the point
-    of having one.
+  in a client cache rather than inventing one.
 - **No published rate limit** — no `RateLimit-*`, no `Retry-After` on normal
   responses. 30 concurrent requests in a burst all returned `200` with no throttling.
   That is *not* a licence to hammer it: treat backoff as reactive (on `429`/`503`),
@@ -694,31 +691,22 @@ The single biggest surprise of the measurement, and it shapes the whole retry de
 - Opening 4 parallel range connections recovered only ~2 MB/s in total, so the limit
   is not per-connection and multi-part downloading doesn't rescue it.
 
-Consequences for the download manager:
+What that means for anything downloading from here:
 
-- **Never use a total-duration timeout.** The 1.24 GB file over a degraded node
+- **A total-duration timeout is always wrong.** The 1.24 GB file over a degraded node
   needs ~25 minutes at best, and got worse while being measured. Any fixed ceiling
-  would cancel legitimate downloads. Use a **stall timeout** — abort only after N
-  seconds with *zero* bytes received — and let slow-but-moving transfers run.
-- Progress UI has to tolerate hour-long transfers: show a rate and an ETA, not just
-  a bar, and keep the download cancellable and resumable throughout.
-- Since a retry can't route around a bad node, retrying instantly and repeatedly
-  achieves nothing. Resume from the current offset and keep going.
+  would cancel legitimate downloads; only a **stall timeout** — N seconds with *zero*
+  bytes received — distinguishes a dead transfer from a slow one.
+- **Retrying cannot route around a bad node**, since node choice is deterministic per
+  filename. Resuming from the current offset is the only thing that makes progress.
 - *(Observation, not a recommendation: the same file fetched directly from another
   `filecacheNN` host is fast. Hard-coding node numbers is undocumented, discourteous
   and will break — don't build on it. Recorded only so the cause isn't
   re-investigated.)*
 
-### Backpressure matters at these transfer sizes
-
-Measured, because the failure mode is invisible on fast storage. A reader that pipes the
-response body to disk without awaiting the write and without pausing the subscription
-buffers whatever the disk can't keep up with. Writing to local disk at 20 MB/s that made
-no difference — peak RSS was identical (217 MB) either way — but against a deliberately
-slow consumer the two diverged (+57 MB vs +15 MB above baseline).
-
-With files reaching 1.24 GB and nodes that serve at 0.08 MB/s, that is a real exposure
-on slow or contended storage rather than a theoretical one.
+Our downloader's side of this — the stall timeout, resume policy and socket
+backpressure — is in
+[`../mod_manager_flutter/CLAUDE.md`](../mod_manager_flutter/CLAUDE.md).
 
 ---
 
@@ -834,7 +822,7 @@ Collected so nobody rediscovers them:
   flagged ([§5](#5-the-mod-object)).
 - **"Category" has three key names** and no response carries more than two; only the
   profile's `_aCategory` has an `_idRow`, and a listing hides the id inside
-  `_sProfileUrl` ([below](#three-spellings-of-category)).
+  `_sProfileUrl` ([§5](#three-spellings-of-category)).
 - **`_sVersion` is often null on every file of a mod, with the version written into
   `_sDescription`** — the field that otherwise means "variant". Never sort files by
   version string, and never auto-pick among several files

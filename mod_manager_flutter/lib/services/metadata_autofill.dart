@@ -81,6 +81,8 @@ class RemoteMetadataFill {
 
 /// Decides what a mod page may fill in on a mod we just installed.
 ///
+/// Documented in full in `docs/metadata-autofill.md`.
+///
 /// **One rule, applied per field: fill absence, never displace.** The reason is
 /// not politeness — a mod folder can arrive carrying somebody else's sidecar.
 /// `_copyDirectory` copies `.zzz-mod-manager/` wholesale, and

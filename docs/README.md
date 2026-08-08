@@ -7,9 +7,11 @@ the root [`README.md`](../README.md).
 
 | Document | Covers |
 |---|---|
-| [`metadata-schema.md`](metadata-schema.md) | Data about a **mod**: the per-mod `metadata.json` sidecar, its `origin` block, schema versioning and the migration hook |
+| [`metadata-schema.md`](metadata-schema.md) | The **file format** of a mod's `metadata.json` sidecar: every field, save and round-trip semantics, schema versioning and the migration hook |
+| [`origin-tracking.md`](origin-tracking.md) | What the app **knows about where a mod came from**: the confidence model, every route that writes an `origin` block, the offline backfill, the resolve flow, and the installed-mods index |
+| [`metadata-autofill.md`](metadata-autofill.md) | What a marketplace install **copies from a mod page** into the new mod: description, character, tags and gallery |
 | [`configuration.md`](configuration.md) | The app's **own settings**: `config.json`, the SharedPreferences mirror, the dual-storage pattern, and how to add a setting |
-| [`gamebanana-api.md`](gamebanana-api.md) | The remote API: which of the two APIs to use, browsing/filtering/sorting, the mod and file objects, NSFW handling, downloads, the category tree, and the gotchas |
+| [`gamebanana-api.md`](gamebanana-api.md) | The **remote protocol**: which of the two APIs to use, browsing/filtering/sorting, the mod and file objects, NSFW handling, downloads, the category tree, and the gotchas |
 
 ## Related files outside this directory
 
@@ -25,8 +27,15 @@ the root [`README.md`](../README.md).
   accumulated a dozen one-off markdown files and is no longer navigable.
 - **English only**, per the language rule in `CLAUDE.md`. Some older root-level
   documents are in Ukrainian (`*_UK.md`) and predate that rule.
-- **Document what the code does**, and mark anything planned clearly as planned. A
-  reference that quietly describes unbuilt behaviour is worse than no reference.
+- **One subject per document, and the scope line at the top is what decides.** A fact
+  that fits none of them wants a *new* file, not the nearest existing one. When a doc
+  starts needing a section about something its scope line doesn't name, that section
+  is the beginning of the next doc.
+- **Document what the code does, in the present tense.** Mark anything planned clearly
+  as planned, and only where it constrains what exists today. **No status logs** — a
+  "what has shipped so far" section is a changelog, and
+  [`../CHANGELOG.md`](../CHANGELOG.md) already owns that. A reference that quietly
+  describes unbuilt behaviour is worse than no reference.
 - **Every doc must stand on its own.** Don't cite temporary planning or scratch files
   for the substance of a claim — restate the rule or rationale here instead, quoting
   it if that's clearest. Planning files get deleted as their contents ship, taking
