@@ -44,11 +44,17 @@ decisions made so far, not *how* to implement it. Items are grouped by area.
   piece of origin data carries a confidence (§7.2). Anything short of `exact` can
   suggest, badge, and prompt — but never overwrite files unattended. Auto-update
   is gated on `exact` confidence, always.
-- **Updates must never silently destroy local edits.** Users edit `.ini` keybinds
-  and configs inside mod folders. Attempt to preserve those edits and re-apply
-  after an update — but treat it as **not foolproof**: keybind identifiers/names
-  can change between versions, and keybinds can be added or removed. When
-  preservation is uncertain, back up and inform the user rather than overwrite.
+- **An update overwrites, it never replaces.** New files are copied *over* the mod
+  folder; the folder is never emptied, moved or deleted. A mod folder frequently
+  holds files from a second download — a *patch mod*, or a hand-merge — and
+  replacing the folder destroys them. In the common case it destroys the mod
+  itself: see §4.1, which is the whole reasoning.
+- **An update always snapshots first, and never tries to reconstruct local
+  edits.** Users rebind keybinds inside mod folders, and an update that ships the
+  same `.ini` reverts them. That is **accepted loss**, recovered from the snapshot
+  (§4.2) — nothing re-applies it automatically. Re-applying was considered and
+  **rejected** in §4, recorded there so it isn't proposed again as an obvious
+  kindness.
 
 ---
 
@@ -438,11 +444,19 @@ Goal: the payoff feature. Needs §2 + §3 + §5 from M1/M2.
     claims and must not render alike. Four scenarios are pinned as tests,
     including that an old ignore never carries forward to the next release.
   **Verified against the developer's real library** and by pressing it.
-- [ ] **§4 (applying)** — changelog display, backup/rollback, preserve user
-  edits. The other half of §4, and the half that touches a live install: §4.1's
-  deactivate → swap → reactivate dance, §4.2's backups, and the conservative
-  `.ini` merge. Nothing in the app can act on a found update today — the check's
-  dialog says so in one sentence and offers the mod page instead.
+- [ ] **§4 (applying)** — changelog display, backup/rollback. The other half of
+  §4, and the half that touches a live install: §4.1's overwrite path, its
+  patch detection, and §4.2's backups. Nothing in the app can act on a found
+  update today — the check's dialog says so in one sentence and offers the mod
+  page instead.
+  **Mechanism settled:** the update **overwrites** — extract to temp, sanity-check,
+  copy over the live folder, never move or empty it. Replacing a folder destroys
+  patch mods and, in the common ordering, the mod itself. §4.1 carries the full
+  reasoning and the four things that ride along: exclude `.zzz-mod-manager/` from
+  the copy, offer to delete a stale `.ini` after an upstream rename, detect a patch
+  by the files its `.ini` asks for but does not ship, and treat reverted keybinds as
+  accepted loss with the snapshot as the recourse. The conservative `.ini` merge is
+  **out** (rejected in §4).
 - [ ] **§4 + §7** — the bulk "check all" results screen doubles as the bulk
   **resolution** screen (§7.6): per-row identity confirmation and inline version
   pickers. Verdict wording and auto-update gating become confidence-aware (§7.2).
@@ -904,20 +918,69 @@ The block:
 - [ ] **Changelog display** from GameBanana before updating.
 - [ ] **Backup / rollback** — snapshot the previous version before updating so a
   bad update is one click to revert.
-- [ ] **Preserve user edits across updates — conservative merge + report.** Always
-  snapshot the old folder first (non-negotiable). Then re-apply **only** edits that
-  match confidently (same `[Section]` + same key identifier); leave anything
-  uncertain to the new version. Show a post-update **report** of what carried over,
-  what changed, and what couldn't be matched — never a silent uncertain merge.
-  Not foolproof (identifiers/names can change, keybinds can be added/removed), so
-  the report + backup are how the user recovers.
+- **Preserving user `.ini` edits across an update — considered and rejected.**
+  Kept as a record so it isn't re-proposed. The plan was a conservative merge
+  (re-apply only edits matching on `[Section]` + key identifier) plus a
+  post-update report of what carried over. Three things sank it, in order of
+  weight:
+  - **There is no pristine baseline to diff against.** After install,
+    `modsPath/<mod>/*.ini` is the author's file *and* every later change to it,
+    with nothing marking which is which. So a merge compares
+    old-with-edits against new-shipped and reports every **author** change to a
+    keybind section as a user conflict.
+  - **Recording per-`.ini` hashes at ingest does not fix that**, which was the
+    obvious repair. A hash divergence cannot tell a hand-edited keybind from a
+    **patch mod applied into the folder** from a hand-merge of two mods — so the
+    report's headline would be a guess about *why* the file changed, which is the
+    one thing it existed to stop being.
+  - **The write side is where every hazard lives.** Putting a key back means
+    knowing whether the `.ini` still exists or was renamed, whether the keybind
+    still carries the same identifier, whether its other settings still make the
+    old key correct, and whether that key now collides with one the new version
+    added. Four guesses, and a wrong one writes a broken `.ini` into the folder —
+    strictly worse than a key the user retypes in thirty seconds.
+  - **The demand side is already met.** A reset keybind is low-harm and
+    self-announcing: the keybinds view (`keybinds_dialog.dart`) already renders
+    what the key *is now*, and muscle memory surfaces the change on first press.
+    The user does not need to be told what they once changed.
+  What survives is **read-only**: after an update, list the keybinds parsed out of
+  the snapshot ("before this update: Skin = F7"). `IniParserService.parseIniFile`
+  already turns a path into `List<KeybindInfo>`, so this is one existing call and a
+  list in the post-update summary — no matching, no conflict logic, no write path.
+  Ranked below everything in §4.1; drop it if it competes.
+  The snapshot above is what actually carries this, and rollback already required
+  it on its own grounds.
 
 ### Filed by the update check (found while building it, deliberately not built)
 
+- [ ] **A mixed folder makes us watch the wrong mod page, and we report it as
+  clean.** Live today, not introduced by §4.1. When a folder holds a patch plus the
+  base mod it patches, exactly one origin block describes it — and in the common
+  ordering (§4.1) that block names the **patch**. So `checkForUpdate()` compares
+  against the patch's published files and never looks at the base mod, which can go
+  three versions ahead while the card says nothing. That is a clean verdict about a
+  page nobody asked about, and §4 already names a false "up to date" as the one
+  failure this feature cannot afford.
+  - **Applying an update is not the broken part** — overwrite does the right thing
+    here, replacing the patch's files and leaving the base mod alone. The damage is
+    purely the missed base-mod releases.
+  - The detection signal is §4.1's dangling-reference scan: an `.ini` in the tracked
+    download that references files it does not ship is precisely the shape of "we are
+    tracking the patch, not the mod".
+  - **The destination is one folder carrying more than one origin block**, which is a
+    `docs/metadata-schema.md` + `docs/origin-tracking.md` change and its own piece of
+    work. Named now so §4.1 does not accrete workarounds pointing the other way.
+  - **The root cause is upstream of all of it: there is no "install this into that
+    mod's folder" operation.** Both install paths refuse a name collision
+    (`mod_manager_service.dart:499` skips, `:594` aborts), so every mixed folder in
+    existence was assembled by hand in a file manager and we are reduced to inferring
+    it afterwards from `.ini` contents. An explicit "apply as a patch to…" install
+    would make it a recorded fact at write time, and most of the detective work — and
+    the single-origin limitation above — would stop being necessary.
 - [ ] **A found update cannot be acted on.** The dialog lists the newer files and
   then offers a mod page and a marketplace shortcut, because installing from
-  the marketplace creates a **second mod folder** rather than replacing the
-  first — §4.1's deactivate → swap → reactivate path does not exist yet. The
+  the marketplace creates a **second mod folder** rather than updating the
+  first — §4.1's overwrite path does not exist yet. The
   dialog says so in one sentence rather than implying otherwise, which is
   honest but is not the feature. This is §4's "applying" half above, listed
   here too because it is the first thing a user will ask for after seeing a
@@ -1059,35 +1122,137 @@ The block:
 
 ### 4.1 How an update is actually applied
 
-Everything above is *when* to update and *what to preserve*. This is the part that
-touches a live install, and it's where this codebase's specific hazards live. An
-update is **not** a re-run of the import path.
+Everything above is *when* to update. This is the part that touches a live
+install, and it's where this codebase's specific hazards live. An update is
+**not** a re-run of the import path.
 
-- [ ] **Deactivate → swap → reactivate.** An installed mod is usually *active*, which
-  means `saveModsPath/<name>` is a symlink (Linux) or junction (Windows) pointing into
-  the very folder being replaced. Replace the folder underneath it and the link
-  dangles — then `_cleanupInvalidLinks()` prunes it on the next scan and the mod
-  silently switches itself off. `renameMod()`
-  (`mod_manager_service.dart:371`) already does the correct dance for exactly this
-  reason: remove the link, move the folder, recreate the link. Update follows it,
-  restores the previous active state, and fires the F10 reload when `autoF10Reload`
-  is on.
+**The mechanism is overwrite — extract to temp, then copy over the live folder.**
+Never empty it, never move it, never delete it. Everything below follows from that
+one decision, so the reasoning for it comes first.
+
+A mod folder is often **mixed**: it holds files from two downloads, because a *patch
+mod* was applied into it. Patches replace rather than add — a patch `.ini` carries the
+**same filename** as the mod's own and takes its place, and a patch asset likewise
+overwrites one of the mod's files. So a mixed folder looks completely ordinary from
+the outside: one `.ini`, every referenced file present, nothing extra.
+
+Replacing such a folder destroys the other download, and the common case is worse
+than losing a fix. The ordering that produces it is routine: a page looks like a
+normal mod, so it gets installed; the game shows nothing; the user reads the page
+properly, finds it is a patch, and drags the base mod's files in around it. The app
+now knows that folder as **the patch**. Replace it and what remains is a lone `.ini`
+with nothing to apply to — the mod is gone, not merely unfixed. Overwrite in the same
+situation copies the new patch file over the old one and touches nothing else, which
+is exactly right.
+
+- [ ] **Extract to temp, sanity-check, then copy over.** Not "unpack straight onto
+  the live folder". The crash-safety worry that made the old swap plan attractive —
+  a half-finished extraction leaving a folder holding two versions at once — is
+  answered by the temp step, not by the swap, so overwrite keeps that property for
+  free. `ArchiveService`
+  already extracts to `Directory.systemTemp.createTemp('zzz_archive_extract_')`
+  and `ArchiveService.containsIniFile` is the check, so a failed or half-finished
+  extraction never touches the installed mod. Only the final copy does, and
+  `_copyDirectory` (`mod_manager_service.dart:695`) already has precisely the
+  right semantics: `create(recursive: true)` no-ops on an existing directory and
+  `File.copy` overwrites, so colliding files are replaced and everything else is
+  left alone. The update path is mostly this existing code with one exclusion
+  added.
+- [ ] **Exclude `.zzz-mod-manager/` from that copy.** This **replaces** the older
+  "carry the sidecar across the swap" rule, which only made sense while there was a
+  swap to carry it across. The sidecar holds the description, user-imported gallery images, tags and the
+  origin block, and a download can legitimately contain a `.zzz-mod-manager/` of
+  its own the moment anyone shares a folder they managed with this app — so an
+  unfiltered copy overwrites the user's metadata with a stranger's, including the
+  origin block that decides which page we check. Note the *install* path already
+  handles the inbound-sidecar case deliberately and differently
+  (`mod_metadata_repository.dart:237` replaces a stranger's origin block by
+  construction while keeping their description and images on purpose); this is the
+  update-path equivalent, and it excludes rather than merges because there is
+  nothing here we want from the archive.
+- [ ] **The active link survives by construction — and that removes a whole
+  hazard.** The previous plan needed a deactivate → move → reactivate dance
+  because moving the folder dangles `saveModsPath/<name>` and
+  `_cleanupInvalidLinks()` then prunes it, silently switching the mod off.
+  Overwriting never moves the folder, so the link stays valid throughout and
+  nothing needs pruning. Deactivation is now only about **open file handles**
+  (below), not about link integrity. Still restore the previous active state and
+  fire the F10 reload when `autoF10Reload` is on.
 - [ ] **The folder name never changes.** The new archive's root folder is frequently
   named differently (`Ellen v2`), but `config.json` keys `active_mods`,
   `favorite_mods` and `mod_character_tags` by folder name. Keep the existing name;
-  record the new upstream name in the origin block if it's worth showing.
-- [ ] **`.zzz-mod-manager/` survives, always.** The sidecar sits *inside* the folder
-  being replaced — description, user-imported gallery images, tags, and the origin
-  block we just wrote. Carry the directory across the swap and merge new metadata into
-  it. The incoming archive's own sidecar, if it has one, does not win (same untrusted
-  -input rule as §3).
-- [ ] **Swap, don't overwrite.** Extract to a temp dir, sanity-check it
-  (`ArchiveService.containsIniFile`), then move the old folder aside and move the new
-  one in. Overwriting in place means a crash or a half-failed extract leaves a folder
-  holding two versions at once, with no way to tell which file came from where.
-- [ ] **Windows will refuse to delete files the game holds open.** ZZMI keeps handles
-  on loaded mods. Either require the game closed for an update, or handle the busy
-  error explicitly — failing silently halfway is the worst available outcome.
+  record the new upstream name in the origin block if it's worth showing. Trivially
+  satisfied by overwrite, which never names anything.
+- [ ] **Offer to delete a stale `.ini` when the new version renamed its own.**
+  After the copy, any `.ini` we did not just write is a leftover, and the loader
+  reads *every* `.ini` in the folder — so a v1 file beside a v2 file means
+  duplicate hotkeys and settings fighting each other, which presents as "the update
+  broke my mod". Default to **delete**, with the reason shown.
+  - It fires **only on an upstream rename**, which is uncommon. A patch `.ini`
+    shares the mod's filename, so an update overwrites it and it never appears
+    here. This is worth stating because the opposite was assumed at one point, and
+    it changes the design: this is an occasional prompt, not a routine screen that
+    needs a one-click bulk path.
+  - The residual cost is honest and small: if that stale file had been patched,
+    deleting it drops the patch. Keeping it is worse (two live `.ini` files), and
+    the snapshot still holds it.
+- [ ] **Detect a patch by the files its `.ini` asks for and does not ship.** An
+  `.ini` names the resources it needs; if those files are absent from the download,
+  it cannot stand alone, so it is a patch expecting a host. This is close to
+  definitional rather than heuristic — a patch `.ini` is a *full replacement* for
+  the mod's `.ini`, so it references everything the mod needs while shipping none of
+  it. Two uses, one implementation:
+  - **At install** — say so up front ("this looks like a patch for another mod")
+    instead of letting the user discover it when the game shows nothing.
+  - **Before an update** — if the *incoming* download has dangling references, the
+    folder we are about to write into must be mixed. Warn, and state that only part
+    of it is being replaced. This works on the **existing library** with no recorded
+    data and no extra request, because the new archive is already in hand. It is
+    also the only signal that can notice we are tracking the patch rather than the
+    mod — see the filed item in §4 about updates checking the wrong page.
+  - **Limitation, stated because it bounds the whole feature:** this cannot see a
+    mixed folder whose *tracked* download is the base mod with a patch applied on
+    top. Nothing is missing there, so nothing looks wrong. That direction is
+    accepted loss (§4) and is the milder one, since the base mod's update usually
+    contains the same fix.
+  - **Three ways to get this wrong.** An `.ini` can `include` another and can use
+    namespaces, so resolving each file in isolation makes a normal multi-`.ini` mod
+    look broken — follow those first. Entries with no `filename` at all are
+    run-time buffers, not missing files. And "two `.ini` files sharing no
+    resources" is **not** a mixed-folder signal: a single mod bundling three skins
+    looks exactly like that.
+  - `IniParserService` only understands keybind sections today (`_isKeybindSection`),
+    so resource parsing is new — but the file walking (`findIniFiles`) and section
+    handling are already there.
+- [ ] **Unused leftovers are acceptable; only `.ini` files are not.** Overwrite
+  leaves behind files the new version stopped shipping. For models and textures
+  that is wasted space and nothing more, because the loader only touches what an
+  `.ini` references. **Do not "solve" it by clearing all `.ini` files before
+  copying** — harmless on a folder with one `.ini`, destructive on a folder where
+  two are live (two mods merged by hand), and it buys only what the stale-`.ini`
+  prompt above already does with the user's consent. One asterisk worth checking
+  rather than assuming: shaders are picked up by filename convention from a shader
+  directory rather than by reference, so a mod shipping its own `ShaderFixes/` is
+  the one file class where a leftover can be live.
+- [ ] **Recording the file list an archive laid down — later, not now.** The
+  precise mechanism is to save each download's file list at install and, on update,
+  remove exactly those paths before writing the new ones. It needs no guessing and
+  it would make the overwritten-patch case detectable. It is **not a prerequisite**:
+  the data does not exist for a single currently-installed mod, which is the entire
+  library and every mixed folder in it. Reconstructing it by re-downloading the
+  *old* archive does not rescue it either — that is a second full transfer (§0:
+  22 MB median, 1.24 GB tail), and GameBanana deletes old file ids, so it is
+  unavailable exactly for the old mods most likely to have been patched. Add it
+  narrowly, alongside or after the above, so installs from that point on get the
+  precise path. Self-healing per §7.7.
+- [ ] **Windows will refuse to overwrite files the game holds open.** ZZMI keeps
+  handles on loaded mods, and overwrite runs into this exactly as replace would —
+  the deactivate step is no longer needed for link safety (above) but may still be
+  needed for this. Either require the game closed, or handle the busy error
+  explicitly. **Failing halfway is worse here than under the old swap plan**: a
+  partly-copied folder holds some new files and some old, and unlike a swap there
+  is no aside-folder to fall back to. The snapshot is the only recovery, which is
+  another reason it is taken unconditionally rather than only for auto-update.
 - [ ] **Never re-ask the import questions.** The install path prompts "which folders?
   separate or combined?" (`resolveImportSelection`); an update replays the recorded
   answer from `ingest` (§3). If the new archive's layout no longer matches what was
@@ -1108,6 +1273,21 @@ update is **not** a re-run of the import path.
   count cap is cheap for most libraries — but the tail reaches 1.24 GB, so the cap
   has to be **size-aware**, not purely count-based, or a handful of big mods quietly
   eats several GB.
+- [ ] **Retention has to outlive discovery, which is a stronger constraint than the
+  cap.** §4.1 makes the snapshot the recovery route for every loss the update path
+  deliberately accepts — reverted keybinds, an overwritten patch, any hand edit. None
+  of those announce themselves during the update. They surface the next time the user
+  launches the game and finds a hotkey dead or a texture back to default, which is
+  plausibly days and several further updates later. So "keep only the newest snapshot
+  per mod" throws away exactly the one they will come looking for: the **age floor
+  beats the count cap**, and where they conflict, age wins.
+- [ ] **Restorable from inside the app, or the whole design is paper.** §4 already
+  specifies one-click revert; this is the same requirement stated as a dependency,
+  because §4.1's accepted-loss decisions are only defensible while the recourse is
+  reachable. If restoring means finding `<appData>/backups/` in a file manager, then
+  "recoverable from the snapshot" is not a real answer to a user who has just lost a
+  mesh patch. There is **no snapshot/backup service in `lib/services/` yet**, so this
+  is ahead of us rather than a retrofit — cheaper to design in now.
 
 ## 5. Download manager
 
@@ -2081,8 +2261,9 @@ work that already opens the same file, so they cost nothing extra.
 - [ ] **Name the tests, because the risky parts are pure functions.** The pieces most
   likely to be quietly wrong need no network and no UI: `source_url` → `mod_id`
   parsing (§7.3); the confidence state machine and what each tier permits (§7.2); the
-  `.ini` conservative merge (§4), which is the highest-risk piece in the whole plan
-  since it edits user data; hash → file matching across `_aFiles` + `_aArchivedFiles`
+  dangling-`.ini`-reference scan (§4.1), which decides whether a folder is warned about
+  before being written to at
+  all; hash → file matching across `_aFiles` + `_aArchivedFiles`
   (§7.6 — the *lookup* half is now covered by `test/installed_mods_index_test.dart`,
   including that a file-id match and a hash match stay distinguishable; the half
   that writes `exact` confidence from a hit is now `origin_resolution_test.dart`,
