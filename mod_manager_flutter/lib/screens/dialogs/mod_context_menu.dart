@@ -18,7 +18,15 @@ void showModContextMenu(
   required VoidCallback onToggleFavorite,
   required VoidCallback onResolveOrigin,
   required VoidCallback onCheckForUpdate,
+  required VoidCallback onRestoreBackup,
   required VoidCallback onDelete,
+  /// Whether this mod has a pre-update snapshot to roll back to.
+  ///
+  /// Passed in rather than looked up here: the answer is one directory listing
+  /// of `<appData>/backups` for the whole library, and doing it per right-click
+  /// would be a filesystem call inside a menu builder. A permanently-present
+  /// entry that usually opens an empty dialog was the alternative.
+  bool hasBackups = false,
 }) {
   final loc = context.loc;
   showMenu(
@@ -113,6 +121,21 @@ void showModContextMenu(
             ],
           ),
           onTap: () => Future.delayed(Duration.zero, onCheckForUpdate),
+        ),
+      // Only where there is something to restore. A rollback is the recourse
+      // for every loss the update path deliberately accepts, so it has to be
+      // reachable from inside the app — but a mod that has never been updated
+      // has nothing to offer.
+      if (hasBackups)
+        PopupMenuItem(
+          child: Row(
+            children: [
+              const Icon(Icons.history, size: 18),
+              const SizedBox(width: 8),
+              Text(loc.t('mods.context_menu.restore_backup')),
+            ],
+          ),
+          onTap: () => Future.delayed(Duration.zero, onRestoreBackup),
         ),
       // The second way into the resolve dialog. The status slot on the card is
       // the first, but it is absent for a mod whose origin is fully known — and

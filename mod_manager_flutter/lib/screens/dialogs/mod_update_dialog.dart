@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,10 +11,13 @@ import '../../services/api_service.dart';
 import '../../services/gamebanana/file_selection.dart';
 import '../../services/update_check.dart';
 import '../../utils/gamebanana_url.dart';
+import '../../utils/html_to_markdown.dart';
+import '../../utils/markdown_description.dart';
 import '../../utils/marketplace_providers.dart';
 import '../../utils/state_providers.dart';
 import '../../utils/url_utils.dart';
 import '../components/mod_status_slot.dart';
+import 'apply_update_flow.dart';
 
 /// One mod's update verdict, and the honest set of things a user can do about
 /// it today.
@@ -22,15 +27,16 @@ import '../components/mod_status_slot.dart';
 /// with a verdict from the last bulk pass. The difference is only whether a
 /// request is made on open, so they are one dialog rather than two.
 ///
-/// **There is no "update now" button, and its absence is deliberate rather than
-/// unfinished-looking.** Replacing a mod folder in place is a separate piece of
-/// work with its own hazards (the folder is usually a live symlink target, the
-/// sidecar lives inside it, the user's `.ini` edits have to survive). Offering a
-/// button that silently installed a *second* copy alongside the first would be
-/// worse than offering none — so the marketplace shortcut below says exactly
-/// that in one sentence instead of implying otherwise.
-/// Returns true when it wrote to the sidecar, so the caller can rescan — a
-/// dismissal lands in the origin block, which only a scan re-reads.
+/// **The "Update" button writes over the installed folder**, through
+/// `apply_update_flow.dart` — download, extract to temp, snapshot, then
+/// overwrite. It is offered only where an update was actually found, and only
+/// once a file has been named: with several candidates the user picks the row
+/// first, because a ZZZ mod routinely ships an SFW and an NSFW build together
+/// and only they know which one they have.
+///
+/// Returns true when anything the library renders changed — a dismissal writes
+/// to the origin block and an applied update rewrites the folder, and both are
+/// only re-read by a scan.
 Future<bool> showModUpdateDialog(BuildContext context, ModInfo mod) async {
   return await showDialog<bool>(
         context: context,
@@ -79,6 +85,27 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   GbMod? _profile;
   ReleaseGroups _releases = ReleaseGroups.empty;
   List<GbUpdate> _updates = const <GbUpdate>[];
+
+  /// Whether the release feed has been asked for at all.
+  ///
+  /// Opened from a card badge this dialog fetches nothing — the bulk pass
+  /// already answered — so the notes are behind a button rather than costing a
+  /// request every time somebody looks at a verdict they have already seen.
+  bool _notesRequested = false;
+  bool _loadingNotes = false;
+
+  /// Whether the accordion is open. Starts closed even when a check has already
+  /// fetched the feed: the verdict is what the dialog is for, and release notes
+  /// are what you open when you have decided to care.
+  bool _notesOpen = false;
+
+  /// Which published file the update would install, when the user has chosen.
+  ///
+  /// Null means "whatever the check would pick". Only ever set by tapping a row,
+  /// and only offered when there is more than one — with a single candidate
+  /// there is nothing to choose between and a selection control would be a
+  /// question with one answer.
+  int? _chosenFileId;
 
   /// Mirrors the sidecar edit this dialog has made, so the verdict on screen
   /// tracks it without waiting for a rescan the caller owns.
@@ -130,6 +157,12 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     setState(() {
       _checking = true;
       _error = null;
+      // The list this selection indexed into is about to be replaced. Keeping
+      // it means a row the author has since archived falls back to the app's
+      // own candidate while still wearing the `your choice` chip — the app
+      // taking credit for a decision the user did not make, which is precisely
+      // what that chip exists to prevent.
+      _chosenFileId = null;
     });
     try {
       final client = ref.read(gameBananaClientProvider);
@@ -152,6 +185,8 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
         _profile = profile;
         _releases = ReleaseGroups.fromUpdates(updates);
         _updates = updates;
+        // The check already paid for the feed, so the notes are simply there.
+        _notesRequested = true;
       });
       _store(_fold());
     } catch (e) {
@@ -160,6 +195,35 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
         _error = e;
         _checking = false;
       });
+    }
+  }
+
+  /// Fetches the author's release feed for its **notes**, on demand.
+  ///
+  /// Separate from [_check] and deliberately not folded into it. The check reads
+  /// the same feed for `_aFileRowIds` and would happily hand over `_sText` too —
+  /// but the path that matters here is the one where no check ran, and spending
+  /// a request on every badge click to show a changelog nobody asked for is
+  /// exactly the cost that path exists to avoid.
+  Future<void> _loadNotes() async {
+    final modId = widget.mod.origin?.modId;
+    if (modId == null || _loadingNotes) return;
+    setState(() {
+      _loadingNotes = true;
+      _notesRequested = true;
+    });
+    try {
+      final updates = await ref.read(gameBananaClientProvider).modUpdates(modId);
+      if (!mounted) return;
+      setState(() {
+        _updates = updates;
+        _loadingNotes = false;
+      });
+    } catch (_) {
+      // A feed that won't load is not a failed anything: the verdict beside it
+      // is unaffected, and a mod with no update posts renders identically.
+      if (!mounted) return;
+      setState(() => _loadingNotes = false);
     }
   }
 
@@ -242,6 +306,53 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     _store(current.asDismissed(dismissed));
   }
 
+  /// The file the Update button would install.
+  ///
+  /// The user's tap wins; otherwise it is the check's own pick, which the list
+  /// already labels with the grounds it was chosen on. Null when the check named
+  /// nothing at all — the installed file is gone and none of the current files
+  /// is identifiably its replacement — and the button is absent rather than
+  /// disabled there, because the honest action then is the mod page.
+  GbFile? _fileToInstall(UpdateCheck? check) {
+    if (check == null) return null;
+    if (_chosenFileId case final id?) {
+      for (final file in check.newerFiles) {
+        if (file.idRow == id) return file;
+      }
+    }
+    return check.candidate ??
+        (check.newerFiles.length == 1 ? check.newerFiles.single : null);
+  }
+
+  /// Downloads the chosen file and writes it over this mod's folder.
+  ///
+  /// The dialog closes on success: everything on it — the verdict, the file
+  /// list, the dismissal state — describes a folder that no longer exists. The
+  /// session verdict is dropped for the same reason, so the card falls back to
+  /// "not checked since" instead of keeping a blue mark for an update that has
+  /// been taken.
+  Future<void> _applyUpdate(GbFile file) async {
+    final modId = widget.mod.origin?.modId;
+    if (modId == null) return;
+    setState(() => _writing = true);
+    final changed = await applyUpdateFlow(
+      context,
+      ref,
+      mod: widget.mod,
+      remoteModId: modId,
+      file: file,
+    );
+    if (!mounted) return;
+    setState(() {
+      _writing = false;
+      _wrote = _wrote || changed;
+    });
+    if (!changed) return;
+    final notifier = ref.read(modUpdateChecksProvider.notifier);
+    notifier.state = {...notifier.state}..remove(widget.mod.id);
+    if (mounted) Navigator.of(context).pop(true);
+  }
+
   /// Opens this mod's page in the in-app marketplace.
   ///
   /// Two lines because the marketplace already owns "show me mod N" as state —
@@ -256,6 +367,13 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   Widget build(BuildContext context) {
     final check = _stored;
     final modId = widget.mod.origin?.modId;
+    // An *ignored* update is still installable: the user waved the badge away,
+    // not the file. The dialog is where they come to change their mind, so the
+    // action has to be here rather than only while the mark is showing.
+    final hasFinding =
+        check != null && (check.hasUpdate || check.dismissed);
+    final installable =
+        modId == null || !hasFinding ? null : _fileToInstall(check);
 
     // Tapping the barrier or pressing Escape pops with **null**, which the
     // caller reads as "nothing was written" — so a dismissal saved and then
@@ -324,7 +442,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
             ),
           if (modId != null &&
               ((check?.hasUpdate ?? false) || (check?.dismissed ?? false)))
-            FilledButton(
+            TextButton(
               onPressed: _busy ? null : () => _openInMarketplace(modId),
               child: Text(loc.t('mods.update.open_marketplace')),
             )
@@ -332,6 +450,16 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
             TextButton(
               onPressed: () => Navigator.of(context).pop(_wrote),
               child: Text(loc.t('mods.update.close')),
+            ),
+          // The primary action, and the only one that touches the mod folder.
+          // Present only where a file could actually be named — with the
+          // installed file gone and nothing identifiable as its successor, the
+          // honest offer is the mod page, not a guess installed over a live mod.
+          if (installable case final file?)
+            FilledButton.icon(
+              onPressed: _busy ? null : () => _applyUpdate(file),
+              icon: const Icon(Icons.download_for_offline_outlined, size: 16),
+              label: Text(loc.t('mods.update_apply.action')),
             ),
         ],
       ),
@@ -477,6 +605,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
         ),
       ),
       if (check.newerFiles.length >= 2) ..._options(check),
+      ..._releaseNotes(check),
       // The caveat the locked decision requires, and it is placed *below* the
       // facts rather than above them: it qualifies the verdict, it is not the
       // verdict. Shown for every guessed answer, including the ones that came
@@ -486,14 +615,15 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
         const SizedBox(height: 10),
         Text(
           loc.t('mods.update.guess_caveat'),
-          style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(color: scheme.onSurfaceVariant),
         ),
       ],
       if (check.hasUpdate) ...[
         const SizedBox(height: 10),
         Text(
           loc.t('mods.update.manual_note'),
-          style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
         ),
       ],
     ];
@@ -523,12 +653,12 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
         loc.t('mods.update.options_heading'),
         style: Theme.of(
           context,
-        ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+        ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
       ),
       const SizedBox(height: 2),
       Text(
         loc.t('mods.update.options_hint'),
-        style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
       ),
       const SizedBox(height: 6),
       ConstrainedBox(
@@ -540,8 +670,15 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
             for (final file in check.newerFiles)
               _optionRow(
                 file,
-                isPick: file.idRow == check.candidate?.idRow,
-                matchesVariant: check.candidateMatchesVariant,
+                isPick: file.idRow == _fileToInstall(check)?.idRow,
+                // Only the check's *own* pick may claim grounds. Once the user
+                // has tapped a row the chip says so, rather than the app taking
+                // credit for their decision under a label it did not choose.
+                pickLabelKey: _chosenFileId != null
+                    ? 'mods.update.pick_chosen'
+                    : check.candidateMatchesVariant
+                        ? 'mods.update.pick_variant'
+                        : 'mods.update.pick_newest',
               ),
           ],
         ),
@@ -549,69 +686,245 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     ];
   }
 
+  /// What the author says changed — the thing you read *before* pressing
+  /// update.
+  ///
+  /// Scoped to releases published **after** the file you have, because that is
+  /// the question: a mod with forty update posts is not offering to tell you
+  /// about all of them, it is offering to tell you what you would be getting.
+  /// With no date to compare against (an `assumed_latest` install, or a page
+  /// whose files carry none) the whole feed is shown rather than nothing — an
+  /// over-long list is a worse answer than an empty one, but only slightly, and
+  /// silently hiding notes is worse than both.
+  ///
+  /// Two shapes, and they are complementary rather than alternatives:
+  /// `_aChangeLog` is the author's categorised bullet list and `_sText` is their
+  /// prose, and captured feeds carry each without the other. The prose is HTML,
+  /// so it goes through the same `htmlToMarkdown` a mod page's description does.
+  ///
+  /// **An accordion, not a section that appears and then cannot leave.** The
+  /// first version dropped the notes into the middle of the dialog with no
+  /// boundary around them and no way to put them away again, so an author's
+  /// three paragraphs pushed the verdict and the file list off the top of a
+  /// scroll view the user had not asked to grow. Collapsing is the fix, and it
+  /// also gives the section the edge it was missing — the header *is* the
+  /// separator.
+  List<Widget> _releaseNotes(UpdateCheck check) {
+    final modId = widget.mod.origin?.modId;
+    if (modId == null) return const [];
+
+    final since = check.comparedAgainst;
+    final relevant = [
+      for (final update in _updates)
+        if (update.hasNotes &&
+            (since == null || (update.dateAdded?.isAfter(since) ?? true)))
+          update,
+    ];
+    // Nothing to offer, and nothing to say about it: a mod with no update posts
+    // is ordinary, so an empty "Release notes" header would be noise.
+    if (_notesRequested && !_loadingNotes && relevant.isEmpty) {
+      return const [];
+    }
+
+    final scheme = Theme.of(context).colorScheme;
+    return [
+      const SizedBox(height: 14),
+      Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            InkWell(
+              // Expanding is also what *fetches* on the badge path, so one
+              // gesture does both and there is no separate "show notes" button
+              // that turns into a heading.
+              onTap: _busy || _loadingNotes
+                  ? null
+                  : () {
+                      if (!_notesRequested) {
+                        setState(() => _notesOpen = true);
+                        unawaited(_loadNotes());
+                      } else {
+                        setState(() => _notesOpen = !_notesOpen);
+                      }
+                    },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.notes_outlined, size: 20,
+                        color: scheme.onSurfaceVariant),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        loc.t('mods.update.notes_heading'),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    if (_loadingNotes)
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else
+                      Icon(
+                        _notesOpen ? Icons.expand_less : Icons.expand_more,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            if (_notesOpen && !_loadingNotes && relevant.isNotEmpty)
+              // Bounded and scrolling inside itself, the rule every list in
+              // these dialogs follows: the buttons underneath must stay one
+              // click away.
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 280),
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                  children: [
+                    for (final update in relevant) _releaseNote(update, scheme),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  Widget _releaseNote(GbUpdate update, ColorScheme scheme) {
+    final theme = Theme.of(context);
+    final prose = update.text == null ? '' : htmlToMarkdown(update.text!).trim();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                update.name ?? loc.t('mods.update.notes_untitled'),
+                style: theme.textTheme.bodyLarge
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              if (update.dateAdded case final date?)
+                Text(
+                  _formatDate(date),
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(color: scheme.onSurfaceVariant),
+                ),
+            ],
+          ),
+          for (final entry in update.changeLog)
+            Padding(
+              padding: const EdgeInsets.only(left: 4, top: 4),
+              child: Text(
+                entry.category == null
+                    ? '• ${entry.text}'
+                    : '• ${entry.text} (${entry.category})',
+                style: theme.textTheme.bodyLarge,
+              ),
+            ),
+          if (prose.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: buildDescriptionMarkdown(
+                context,
+                prose,
+                onLaunchUrl: (href) => launchExternalUrl(context, href),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// One candidate row. **Tappable**, because there is now something to do with
+  /// the answer: the row decides which file the Update button installs, and the
+  /// user is the only one who knows which variant they run.
+  ///
+  /// [isPick] is the row that would be used — the check's own choice until the
+  /// user overrides it — so the highlight moves with the tap rather than staying
+  /// on the suggestion.
   Widget _optionRow(
     GbFile file, {
     required bool isPick,
-    required bool matchesVariant,
+    required String pickLabelKey,
   }) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isPick
-                ? ModStatusSlot.updateBlue.withValues(alpha: 0.7)
-                : scheme.outlineVariant.withValues(alpha: 0.4),
-          ),
-          color: isPick
-              ? ModStatusSlot.updateBlue.withValues(alpha: 0.06)
-              : null,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // A Wrap, not a Row: the chips are short phrases with nothing to
-            // ellipsise, so in a Row the filename is the only thing that can
-            // give way and the row overflows once it has.
-            Wrap(
-              spacing: 6,
-              runSpacing: 2,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Text(
-                  fileDisplayName(file),
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                if (isPick)
-                  _chip(
-                    loc.t(
-                      matchesVariant
-                          ? 'mods.update.pick_variant'
-                          : 'mods.update.pick_newest',
-                    ),
-                    scheme.onPrimary,
-                    background: ModStatusSlot.updateBlue,
-                  ),
-                if (_releaseName(file) case final release?)
-                  _chip(release, scheme.primary),
-              ],
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap:
+            _busy ? null : () => setState(() => _chosenFileId = file.idRow),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isPick
+                  ? ModStatusSlot.updateBlue.withValues(alpha: 0.7)
+                  : scheme.outlineVariant.withValues(alpha: 0.4),
             ),
-            if (fileDisplayDetail(file) case final detail?)
-              Text(
-                detail,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+            color: isPick
+                ? ModStatusSlot.updateBlue.withValues(alpha: 0.06)
+                : null,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // A Wrap, not a Row: the chips are short phrases with nothing to
+              // ellipsise, so in a Row the filename is the only thing that can
+              // give way and the row overflows once it has.
+              Wrap(
+                spacing: 6,
+                runSpacing: 2,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    fileDisplayName(file),
+                    style: Theme.of(context).textTheme.bodyLarge
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  if (isPick)
+                    _chip(
+                      loc.t(pickLabelKey),
+                      scheme.onPrimary,
+                      background: ModStatusSlot.updateBlue,
+                    ),
+                  if (_releaseName(file) case final release?)
+                    _chip(release, scheme.primary),
+                ],
               ),
-            if (file.dateAdded case final date?)
-              Text(
-                _formatDate(date),
-                style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
-              ),
-          ],
+              if (fileDisplayDetail(file) case final detail?)
+                Text(
+                  detail,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                ),
+              if (file.dateAdded case final date?)
+                Text(
+                  _formatDate(date),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -625,7 +938,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     ),
     child: Text(
       label,
-      style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600),
+      style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w600),
     ),
   );
 
@@ -676,12 +989,13 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 20, color: colour),
+        Icon(icon, size: 24, color: colour),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             loc.t(key),
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            style: Theme.of(context).textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.w700),
           ),
         ),
       ],
@@ -743,20 +1057,20 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 14, color: scheme.onSurfaceVariant),
+        Icon(icon, size: 18, color: scheme.onSurfaceVariant),
         const SizedBox(width: 6),
         SizedBox(
-          width: 110,
+          width: 130,
           child: Text(
             label,
-            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
           ),
         ),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(value, style: const TextStyle(fontSize: 12)),
+              Text(value, style: Theme.of(context).textTheme.bodyLarge),
               // The author's description, greyed and underneath, never standing
               // in for the filename above it.
               if (detail != null)
@@ -764,10 +1078,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
                   detail,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: scheme.onSurfaceVariant,
-                  ),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
                 ),
             ],
           ),
@@ -787,12 +1098,12 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       ),
       child: Row(
         children: [
-          Icon(icon, size: 15, color: ModStatusSlot.amber),
+          Icon(icon, size: 20, color: ModStatusSlot.amber),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               message,
-              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
             ),
           ),
         ],

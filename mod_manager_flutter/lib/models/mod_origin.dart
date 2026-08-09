@@ -318,6 +318,59 @@ class ModOrigin {
             updatesDismissedUntil ?? this.updatesDismissedUntil,
       );
 
+  /// The block after this mod's files were **replaced in place** by a file the
+  /// app downloaded and wrote itself.
+  ///
+  /// Longhand rather than [copyWith] for the same reason [boundTo] is: the
+  /// interesting part is what gets *cleared*, and `copyWith` cannot express it.
+  /// Three fields go, and each one would otherwise be a lie about the folder as
+  /// it now stands:
+  ///
+  /// - **`baseline_remote_date`** — "I don't know which file, I got it around
+  ///   then". We now know exactly which file, so a date-based comparison would
+  ///   be a weaker answer sitting beside a stronger one.
+  /// - **`updates_dismissed_until`** — the user waved away an update and has now
+  ///   taken it. Keeping the dismissal would silence the *next* release too,
+  ///   since it is stored as a date at or after this file's.
+  /// - **`remote_missing`** — we just fetched the page and a file off it.
+  ///
+  /// [OriginProvenance.downloaded] is asserted rather than preserved, and that
+  /// is honest even for a folder originally imported by hand: whatever it was
+  /// before, the bytes in it now came from an archive this app fetched and
+  /// extracted. Both confidences reach `exact` on the same grounds a marketplace
+  /// install does — the user picked this row of this mod's file list and we
+  /// wrote exactly that file id — which is what makes the folder eligible for
+  /// unattended updates later.
+  ///
+  /// [tracking] survives untouched. It is the user's own statement about whether
+  /// this mod should be watched at all, and an update is not a reason to
+  /// overrule it.
+  ModOrigin updatedTo({
+    required String source,
+    required int modId,
+    required int fileId,
+    String? version,
+    String? versionLabel,
+    String? archiveMd5,
+    ModIngest? ingest,
+    required DateTime installedAt,
+  }) =>
+      ModOrigin(
+        source: source,
+        modId: modId,
+        modIdConfidence: OriginConfidence.exact,
+        fileId: fileId,
+        version: version,
+        versionLabel: versionLabel,
+        versionConfidence: OriginConfidence.exact,
+        provenance: OriginProvenance.downloaded,
+        ingest: ingest ?? this.ingest,
+        installedAt: installedAt,
+        // Observed, not proxied: we watched it happen.
+        archiveMd5: archiveMd5 ?? this.archiveMd5,
+        tracking: tracking,
+      );
+
   /// Clears [updatesDismissedUntil], which [copyWith] cannot express.
   ModOrigin withUpdatesUndismissed() => ModOrigin(
         source: source,

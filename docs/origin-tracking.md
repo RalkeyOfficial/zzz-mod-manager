@@ -13,7 +13,9 @@ implemented, it says so.
 > shape** (every field, its type, and how it survives a save) is
 > [`metadata-schema.md`](metadata-schema.md#the-origin-block). What an install fills
 > in *besides* origin — description, gallery, tags, character — is
-> [`metadata-autofill.md`](metadata-autofill.md). GameBanana's own protocol is
+> [`metadata-autofill.md`](metadata-autofill.md). Writing a newer download over an
+> installed mod — which is the other route that rewrites a block — is
+> [`applying-updates.md`](applying-updates.md). GameBanana's own protocol is
 > [`gamebanana-api.md`](gamebanana-api.md).
 
 Related: [`../CLAUDE.md`](../CLAUDE.md) for the service/layer architecture.
@@ -69,6 +71,7 @@ Three rules follow from the split, and they govern everything below:
 | **Imported folder** | `provenance: imported_folder`, `ingest`, `installed_at` | `unknown` on both |
 | **Offline backfill** ([§3](#3-the-offline-backfill)) | `source`, `mod_id`, `installed_at` | `inferred` identity, no version |
 | **Resolve dialog** ([§5](#5-the-resolve-dialog)) | identity and/or version, or `tracking: "off"` | `user`, or `exact` on a hash match |
+| **Applied update** ([`applying-updates.md`](applying-updates.md)) | `source`, `mod_id`, `file_id`, `version`, `version_label`, `provenance: downloaded`, `archive_md5`, `ingest`, `installed_at` | **`exact`** on both axes |
 
 A download starts from a chosen row of a chosen mod's file list, so mod id, file id,
 version and variant label are all known before the first byte. `exact` there is the
@@ -87,6 +90,18 @@ sidecar — a claim about a remote file we never made, on the field that gates
 unattended updates. The user-facing fields are kept, since those travelling is the
 whole point of a sidecar. This is enforced by construction rather than by a branch;
 see [`metadata-schema.md`](metadata-schema.md#the-origin-block) for how.
+
+**An applied update rewrites the block rather than amending it**, through
+`ModOrigin.updatedTo`. It reaches `exact` on the same grounds a download does — the
+user picked this row of this mod's file list and the app wrote exactly that file id —
+and `provenance` becomes `downloaded` even for a folder originally imported by hand,
+since the bytes in it now came from an archive this app fetched and extracted. Three
+fields are **cleared**, each of which would otherwise be a lie about the folder as it
+now stands: `baseline_remote_date` (a date-based guess beside an exact file id),
+`updates_dismissed_until` (the update was taken, and keeping it would silence the next
+release too) and `remote_missing`. `tracking` survives untouched — it is the user's
+own statement about whether the mod should be watched at all. `ingest` is refreshed
+from the layout the update actually used, which is how a pre-`ingest` mod gains one.
 
 **A marketplace install writes remote identity but *not* `source_url`**, which stays
 a user-editable field. So a freshly downloaded mod has a `mod_id` and no url, while a

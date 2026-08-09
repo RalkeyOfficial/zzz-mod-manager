@@ -386,6 +386,31 @@ void main() {
       expect(updates.first.fileRowIds, {1484606, 1484607});
     });
 
+    test('modUpdates reads the release notes in both shapes', () async {
+      transport.stub(endpoints.modUpdates(549029),
+          body: loadGbFixture('mod_updates_549029'));
+
+      final updates = await buildClient().modUpdates(549029);
+
+      // `_aChangeLog` is **the one object in this API with unprefixed keys** —
+      // bare `text` and `cat`, not `_sText` / `_sCat`. Reading them the usual
+      // way yields an empty changelog for every mod, silently, which is exactly
+      // how the `_aTags` two-shape bug went unnoticed.
+      expect(updates.first.changeLog, hasLength(5));
+      expect(
+        updates.first.changeLog.first.text,
+        'Leotard, OG Dress and Tights added',
+      );
+      expect(updates.first.changeLog.first.category, 'Addition');
+      // Prose and bullets are complementary, not alternatives: this record
+      // carries both, and the second one carries neither a changelog nor a
+      // version.
+      expect(updates.first.text, contains('she got her banner back'));
+      expect(updates.first.hasNotes, isTrue);
+      expect(updates.last.changeLog, isEmpty);
+      expect(updates.last.hasNotes, isTrue);
+    });
+
     test('an unknown id fails the whole batch, and says which field', () async {
       // Captured from the live API. The recovery in `bulk_update_check.dart`
       // branches on *which* field `_aErrorData` names — anything but

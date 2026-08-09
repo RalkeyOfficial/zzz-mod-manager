@@ -14,10 +14,15 @@ implemented, it says so.
 > nothing to it. GameBanana's own protocol — including the `Mod/Multi` quirks the
 > bulk pass is built around — is [`gamebanana-api.md`](gamebanana-api.md).
 >
-> **Applying** an update (replacing the folder, preserving `.ini` edits, backups
-> and rollback) is not built and is not described here. When it is, it wants its
-> own section below rather than a second doc: it is the other half of this
-> subject.
+> **Applying** an update — writing the newer download over the folder, patch
+> detection, snapshots and rollback — is
+> [`applying-updates.md`](applying-updates.md). An earlier version of this line
+> said it would want a section here rather than a second doc; that was wrong on
+> this directory's own rule, which is that the scope line decides. Nothing in the
+> applying half is about *turning identity into a verdict*: it is filesystem
+> semantics, and it shares no vocabulary with the comparator below. The two docs
+> meet at exactly one point — the Update button, described at the end of
+> [§6](#the-dialog).
 
 Related: [`../CLAUDE.md`](../CLAUDE.md) for the service/layer architecture.
 
@@ -479,13 +484,31 @@ after render identically with the date as the only difference.
 That naming rule is shared by every surface that shows a file — see
 [§7](#7-how-a-file-is-named).
 
-**There is no "update now" button, and its absence is deliberate rather than
-unfinished.** Replacing a mod folder in place has its own hazards — the folder is
-usually a live symlink target, the sidecar lives inside it, the user's `.ini`
-edits have to survive — and none of that is built. A button that silently
-installed a *second* copy alongside the first would be worse than none, so the
-marketplace shortcut says exactly that in one sentence instead of implying
-otherwise.
+**The "Update" button is the primary action, and it is the only control in this
+feature that touches a live install.** It downloads the file the list marks and
+writes it over the mod folder — see
+[`applying-updates.md`](applying-updates.md) for the mechanism, the snapshot and
+what the confirmation must say before any of it happens.
+
+Two rules about *when* it appears, and both are about not guessing on the user's
+behalf:
+
+- **Only where a file could actually be named.** With the installed file gone
+  from the page and nothing identifiably its successor, the check reports the
+  finding and names nothing; the honest offer there is the mod page, not a guess
+  installed over a live mod.
+- **An ignored update is still installable.** The user waved the badge away, not
+  the file, and this dialog is where they come to change their mind.
+
+With several candidates the rows are **tappable** and the selection decides what
+gets installed. The chip on the chosen row then says `your choice` rather than
+`matches your variant` or `newest published` — those are the app's grounds for
+its own pick, and reusing them for the user's would be taking credit for a
+decision it did not make.
+
+The marketplace shortcut stays beside it, demoted from the primary action: it
+installs a *second* mod folder alongside this one, which is occasionally what
+someone wants and is now clearly the other option rather than the only one.
 
 **There is no "check again", and a retry appears only after a failure.** The
 dialog has two entry points and neither leaves anything to press: arriving from
@@ -525,6 +548,38 @@ The dialog also names **the release** a candidate shipped in (`Version 1.5`),
 taken from the update post's `_sName`. Very often that is the only real version
 number a mod page has, since `_sVersion` on the files themselves is routinely
 null.
+
+**Release notes — what the author says changed — are shown for releases published
+after the file you have.** Two shapes, and they are complementary rather than
+alternatives: `_aChangeLog` is a categorised bullet list and `_sText` is prose,
+and captured feeds carry each without the other. The prose is HTML and goes
+through the same `htmlToMarkdown` a mod page's description does.
+
+`_aChangeLog` is **the one object in this API whose keys are not
+Hungarian-prefixed** — bare `text` and `cat`, not `_sText` / `_sCat`. Reading them
+the usual way yields an empty changelog for every mod, silently; that is exactly
+how the `_aTags` two-shape bug went unnoticed, so it is pinned by a fixture test.
+
+They live in a **collapsible section, closed by default**, whose header doubles
+as the divider — an earlier version dropped them into the middle of the dialog
+with no boundary and no way to put them away, so an author's three paragraphs
+pushed the verdict off the top of a scroll view nobody had asked to grow.
+
+The notes are **fetched on demand when that section is first opened**, so
+expanding it is also what fetches and one gesture does both — there is
+deliberately no separate "show notes" button that then turns into a heading. It
+matters on the card-badge path, which otherwise makes no request at all: the
+bulk pass has already answered, and spending one on every badge click to render
+a changelog nobody asked for is the cost that path exists to avoid. When the
+dialog *did* check on the way in, the feed was already fetched for
+[`ReleaseGroups`](#where-this-stops-and-why-it-stops-there) and opening the
+section costs nothing.
+
+Scoping them to releases newer than the installed file is the point: a mod with
+forty update posts is not offering to tell you about all of them, it is offering
+to tell you what you would be getting. With no date to compare against — an
+`assumed_latest` install, or a page whose files carry none — the whole feed is
+shown rather than nothing.
 
 ### One file gets a line; several get a list
 

@@ -20,6 +20,8 @@ class GbUpdate {
     this.dateAdded,
     this.fileRowIds = const {},
     this.isSignificant = false,
+    this.text,
+    this.changeLog = const <GbChangeLogEntry>[],
   });
 
   /// `_idRow` — the update post's id (`gamebanana.com/updates/<id>`).
@@ -45,6 +47,26 @@ class GbUpdate {
   /// separate a re-upload from a release if that is ever needed.
   final bool isSignificant;
 
+  /// `_sText` — the author's prose for the release, as **HTML**.
+  ///
+  /// Every description this app renders is markdown, so a caller has to run it
+  /// through `utils/html_to_markdown.dart` exactly like a mod page's `_sText`.
+  /// Kept raw here because a wire DTO converts nothing.
+  final String? text;
+
+  /// `_aChangeLog` — the author's structured bullet list, when they filled one
+  /// in.
+  ///
+  /// **Complementary to [text], not an alternative spelling of it.** The two
+  /// carry different content and each appears without the other: one captured
+  /// feed has five categorised bullets and no prose worth reading, another has
+  /// two paragraphs of prose and no bullets at all.
+  final List<GbChangeLogEntry> changeLog;
+
+  /// Whether this post says anything a user could read before updating.
+  bool get hasNotes =>
+      changeLog.isNotEmpty || (text?.trim().isNotEmpty ?? false);
+
   static GbUpdate? fromJson(Map<String, dynamic> json) {
     final id = gbInt(json['_idRow']);
     if (id == null) return null;
@@ -59,6 +81,37 @@ class GbUpdate {
             if (gbInt(entry) case final fileId?) fileId,
       },
       isSignificant: gbBool(json['_bIsSignificant']),
+      text: gbString(json['_sText']),
+      changeLog: <GbChangeLogEntry>[
+        if (json['_aChangeLog'] case final List<Object?> raw)
+          for (final entry in raw)
+            if (GbChangeLogEntry.fromJson(entry) case final parsed?) parsed,
+      ],
     );
+  }
+}
+
+/// One line of an author's changelog.
+///
+/// **The only object in this API whose keys are not Hungarian-prefixed.**
+/// Everything else on the wire is `_sName` / `_idRow` / `_aFiles`; these are
+/// bare `text` and `cat`. Recorded because it looks like a typo in the parser
+/// and is not — reading them as `_sText` / `_sCat` silently yields an empty
+/// changelog for every mod, which is exactly how `_aTags` went unnoticed.
+class GbChangeLogEntry {
+  const GbChangeLogEntry({required this.text, this.category});
+
+  final String text;
+
+  /// `cat` — the author's own bucket: `Addition`, `Adjustment`, `Refactor`,
+  /// `Overhaul`, `Removal`, `Fix`. Free-form in practice, so it is displayed
+  /// verbatim and never mapped to an icon or a colour.
+  final String? category;
+
+  static GbChangeLogEntry? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final text = gbString(raw['text']);
+    if (text == null || text.trim().isEmpty) return null;
+    return GbChangeLogEntry(text: text.trim(), category: gbString(raw['cat']));
   }
 }

@@ -100,6 +100,7 @@ mistake.
 > | [`docs/origin-tracking.md`](docs/origin-tracking.md) | What we know about **where a mod came from** — the confidence model, the backfill, the resolve flow |
 > | [`docs/metadata-autofill.md`](docs/metadata-autofill.md) | What an install **copies from a mod page** — description, character, tags, gallery |
 > | [`docs/update-checks.md`](docs/update-checks.md) | Whether a mod **has a newer version** — the comparator, the confidence-aware verdicts, the bulk pass |
+> | [`docs/applying-updates.md`](docs/applying-updates.md) | How an update **is written over an installed mod** — the overwrite, patch detection, the snapshot and rollback |
 > | [`docs/configuration.md`](docs/configuration.md) | The app's **own settings** — `config.json`, the dual-storage pattern, adding a setting |
 > | [`docs/gamebanana-api.md`](docs/gamebanana-api.md) | GameBanana's **remote protocol** — which of the two APIs and why, browsing/filtering/sorting, every field, NSFW, downloads, the category tree |
 >
@@ -132,3 +133,7 @@ Repeated here so they are never missed, even before opening the app source:
   render a match as "verified".
 - Download timeouts are **stall timeouts, never a total duration** — a legitimate
   transfer over a degraded CDN node runs ~25 minutes and must be allowed to.
+- **An update overwrites a mod folder; it never empties, moves or replaces it**, and
+  it **never writes without a snapshot first**. A mod folder frequently holds a
+  second download (a patch, or a hand-merge) that replacing would destroy — see
+  [`docs/applying-updates.md`](docs/applying-updates.md) §1.

@@ -13,19 +13,17 @@ import '../models/mod_origin_seed.dart';
 import '../models/origin_enums.dart';
 import '../services/api_service.dart';
 import '../services/archive_service.dart';
-import '../services/download/download_exceptions.dart';
-import '../services/download/download_progress.dart';
-import '../services/download/download_request.dart';
 import '../services/gamebanana/remote_mod_metadata.dart';
 import '../services/metadata_autofill.dart';
 import '../services/mod_manager_service.dart';
+import '../services/patch_scan.dart';
 import '../services/platform_service_factory.dart';
 import '../utils/marketplace_providers.dart';
 import '../utils/state_providers.dart';
 import 'components/install_result_snackbars.dart';
 import 'components/marketplace/gb_browse_view.dart';
 import 'components/marketplace/gb_detail_view.dart';
-import 'dialogs/download_progress_dialog.dart';
+import 'dialogs/download_with_progress.dart';
 import 'dialogs/duplicate_archive_dialog.dart';
 import 'dialogs/import_selection_dialog.dart';
 
@@ -129,102 +127,47 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   /// both confidences at `unknown`; here the mod id, file id, version and
   /// variant label are all known before a single byte is fetched, so the block
   /// lands at `exact` — the one tier that may drive an unattended update later.
+  ///
+  /// The transfer itself is [downloadFileWithProgress], shared with the update
+  /// path — closing the progress dialog exactly once, telling a cancellation
+  /// apart from a failure, disposing the notifier on every path. **Only the
+  /// download is shared.** What follows it is not: this imports the archive as a
+  /// *new* mod folder, while an update overwrites an existing one, and folding
+  /// those together is what would produce a shared "install" that quietly does
+  /// the wrong one.
   Future<void> _handleDownload(GbMod mod, GbFile file) async {
-    final url = Uri.tryParse(
-      file.downloadUrl ?? 'https://gamebanana.com/dl/${file.idRow}',
-    );
-    if (url == null) return;
-
     final choice = await _askDownloadChoice(file);
     if (choice == _DownloadChoice.cancel || !mounted) return;
 
     final scaffoldMessenger = ScaffoldMessenger.of(context);
-    final errorColor = Theme.of(context).colorScheme.error;
 
-    final handle = ref.read(downloadServiceProvider).start(
-          DownloadRequest(
-            url: url,
-            suggestedFilename: file.file,
-            fileId: file.idRow,
-            // `_nFilesize` is exactly the eventual Content-Length, so it is a
-            // reliable progress denominator from the first frame.
-            expectedSize: file.filesize,
-            expectedMd5: file.md5Checksum,
-          ),
-        );
+    // Null means cancelled or failed, and a snackbar has already said which.
+    final result = await downloadFileWithProgress(context, ref, file);
+    if (result == null || !mounted) return;
 
-    final progressNotifier = ValueNotifier<DownloadProgress>(
-      const DownloadProgress(state: DownloadState.connecting),
-    );
-    final progressSub =
-        handle.progress.listen((p) => progressNotifier.value = p);
-
-    var dialogClosed = false;
-    void closeDialog() {
-      if (dialogClosed) return;
-      dialogClosed = true;
-      Navigator.of(context, rootNavigator: true).pop();
-    }
-
-    unawaited(
-      showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => DownloadProgressDialog(
-          progress: progressNotifier,
-          onCancel: () => unawaited(handle.cancel(deletePartial: true)),
+    if (choice == _DownloadChoice.downloadOnly) {
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text(loc.t('marketplace.download_saved',
+              params: {'path': result.file.path})),
         ),
-      ),
-    );
-
-    try {
-      final result = await handle.done;
-      closeDialog();
-      if (!mounted) return;
-
-      if (choice == _DownloadChoice.downloadOnly) {
-        scaffoldMessenger.showSnackBar(
-          SnackBar(
-            content: Text(loc.t('marketplace.download_saved',
-                params: {'path': result.file.path})),
-          ),
-        );
-        return;
-      }
-
-      final installResult = await _installArchive(
-        result.file,
-        knownMd5: result.md5,
-        mod: mod,
-        file: file,
       );
-      if (!mounted) return;
-      showInstallResult(context, installResult);
-      // The library just changed, and the badges on the grid behind this dialog
-      // are rendered from that snapshot. Invalidate rather than patch: the mod
-      // folder's final name is decided by the import (dedup, the combined-name
-      // dialog), so re-reading is the only way to be right about it.
-      ref.invalidate(installedModsIndexProvider);
-    } on DownloadCancelledException {
-      closeDialog();
-      if (!mounted) return;
-      scaffoldMessenger.showSnackBar(
-        SnackBar(content: Text(loc.t('marketplace.download_cancelled'))),
-      );
-    } catch (e) {
-      closeDialog();
-      if (!mounted) return;
-      final message = e is DownloadStalledException
-          ? loc.t('marketplace.download_stalled')
-          : loc.t('marketplace.download_failed', params: {'message': '$e'});
-      scaffoldMessenger.showSnackBar(
-        SnackBar(backgroundColor: errorColor, content: Text(message)),
-      );
-    } finally {
-      closeDialog();
-      await progressSub.cancel();
-      progressNotifier.dispose();
+      return;
     }
+
+    final installResult = await _installArchive(
+      result.file,
+      knownMd5: result.md5,
+      mod: mod,
+      file: file,
+    );
+    if (!mounted) return;
+    showInstallResult(context, installResult);
+    // The library just changed, and the badges on the grid behind this dialog
+    // are rendered from that snapshot. Invalidate rather than patch: the mod
+    // folder's final name is decided by the import (dedup, the combined-name
+    // dialog), so re-reading is the only way to be right about it.
+    ref.invalidate(installedModsIndexProvider);
   }
 
   /// The origin seed for a file we picked ourselves off a mod page.
@@ -414,6 +357,15 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       // strong sign the mod is incomplete (e.g. a broken multi-folder archive).
       final noIni = await ArchiveService.modsWithoutIni(modsPath, importedMods);
 
+      // And the neighbouring case: an .ini that opens files this download does
+      // not contain is a *patch*, and needs the mod it patches installed into
+      // the same folder. Said now rather than left for the user to discover by
+      // launching the game and seeing nothing change.
+      final patches = await modsThatLookLikePatches(
+        modsPath,
+        importedMods.where((name) => !noIni.contains(name)),
+      );
+
       // Drained, so it is reported at most once: nothing re-attempts an origin
       // write, because it happens at ingest and never during a scan. Drained
       // *before* the mounted check below on purpose — if this screen is gone the
@@ -440,6 +392,9 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
           loc.t('marketplace.install_metadata', params: {'fields': summary}),
         if (noIni.isNotEmpty)
           loc.t('mods.snackbar.import_no_ini', params: {'mods': noIni.join(', ')}),
+        if (patches.isNotEmpty)
+          loc.t('mods.snackbar.import_patch',
+              params: {'mods': patches.join(', ')}),
         if (originFailures.isNotEmpty)
           loc.t('mods.snackbar.origin_write_failed',
               params: {'mods': originFailures.join(', ')}),

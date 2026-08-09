@@ -14,6 +14,7 @@ import '../models/mod_origin_seed.dart';
 import '../services/api_service.dart';
 import '../services/archive_service.dart';
 import '../services/ingest_origin_builder.dart';
+import '../services/patch_scan.dart';
 import '../utils/state_providers.dart';
 import '../utils/categories.dart';
 import '../utils/mod_group_diff.dart';
@@ -35,6 +36,7 @@ import 'dialogs/keybinds_dialog.dart';
 import 'dialogs/mod_context_menu.dart';
 import 'dialogs/edit_mod_dialog.dart';
 import 'dialogs/mod_details_dialog.dart';
+import 'dialogs/mod_backups_dialog.dart';
 import 'dialogs/mod_update_dialog.dart';
 import 'dialogs/resolve_origin_dialog.dart';
 import '../utils/url_utils.dart';
@@ -690,6 +692,14 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     }
   }
 
+  /// Opens the rollback list and rescans if anything was restored — the folder
+  /// itself changes, not just the sidecar.
+  Future<void> _restoreBackup(ModInfo mod) async {
+    if (await showModBackupsDialog(context, mod)) {
+      await loadMods(showLoading: false);
+    }
+  }
+
   void _showContextMenu(BuildContext context, ModInfo mod, Offset position) {
     showModContextMenu(
       context,
@@ -697,6 +707,12 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       position,
       onResolveOrigin: () => unawaited(_resolveOrigin(mod)),
       onCheckForUpdate: () => unawaited(_checkForUpdate(mod)),
+      onRestoreBackup: () => unawaited(_restoreBackup(mod)),
+      // `valueOrNull` rather than a `when`: the listing is one readdir and
+      // resolves long before a right-click, and a menu that waited on it would
+      // be a menu that sometimes did not open.
+      hasBackups:
+          ref.read(modBackupsProvider).valueOrNull?.contains(mod.id) ?? false,
       onDetails: () => _showModDetailsDialog(mod),
       onEdit: () => _showEditDialog(mod),
       onRename: () => showRenameModDialog(
@@ -727,6 +743,12 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     final selectedIndex = ref.watch(selectedCharacterIndexProvider);
     final currentSkins = ref.watch(currentCharacterSkinsProvider);
     final isDarkMode = ref.watch(isDarkModeProvider);
+
+    // Watched, not read on demand: the context menu asks whether this mod has a
+    // rollback to offer, and a `read` from inside the menu builder would start
+    // the listing at that moment and answer "no" the first time. Watching it
+    // here costs one rebuild when a single readdir resolves.
+    ref.watch(modBackupsProvider);
 
     // The aggregate "ALL" view groups its cards under per-character section
     // headers; every other tab is a single flat grid.
@@ -1660,6 +1682,30 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
               ),
               backgroundColor: Colors.orange,
               duration: const Duration(seconds: 6),
+            ),
+          );
+        }
+
+        // A folder whose .ini opens files it does not contain is a *patch* — it
+        // needs the mod it patches to already be installed here. Said now
+        // rather than left for the user to discover by launching the game and
+        // seeing nothing change. Only for mods that have an .ini at all, so it
+        // never doubles up with the warning above.
+        final patches = await modsThatLookLikePatches(
+          modsPath,
+          importedMods.where((name) => !noIni.contains(name)),
+        );
+        if (patches.isNotEmpty && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                loc.t(
+                  'mods.snackbar.import_patch',
+                  params: {'mods': patches.join(', ')},
+                ),
+              ),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 8),
             ),
           );
         }

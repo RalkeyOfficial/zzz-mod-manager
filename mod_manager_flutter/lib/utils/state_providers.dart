@@ -6,6 +6,7 @@ import '../services/download/download_service.dart';
 import '../models/gamebanana/gb_enums.dart';
 import '../services/gamebanana/content_filter.dart';
 import '../services/gamebanana/gamebanana_client.dart';
+import '../services/backup/snapshot_service.dart';
 import '../services/bulk_assume_current.dart';
 import '../services/bulk_update_check.dart';
 import '../services/installed_mods_index.dart';
@@ -416,3 +417,26 @@ final libraryHasUpdatesProvider = Provider<bool>((ref) {
 /// grid filtered to nothing, which is the same "the reward for pressing the
 /// button is an empty grid" the bulk "assume current" action already avoids.
 final modUpdatesOnlyProvider = StateProvider<bool>((ref) => false);
+
+/// Pre-update snapshots, in `<appData>/backups`.
+///
+/// One instance so the retention policy is stated once. Nothing here reads
+/// config, so it needs no async initialisation — the path comes from
+/// [PathHelper], the same way the downloads folder does.
+final snapshotServiceProvider = Provider<SnapshotService>(
+  (ref) => SnapshotService(),
+);
+
+/// Which mods have a snapshot to roll back to.
+///
+/// A single directory listing of `<appData>/backups` — the folder names *are*
+/// the answer, so this reads no manifests and walks no files. It exists so the
+/// context menu can offer "restore a previous version" only where there is one,
+/// rather than showing a permanently-present entry that usually opens an empty
+/// dialog.
+///
+/// Invalidated by whatever writes a snapshot; there is no watcher, because the
+/// only things that create one are inside this app.
+final modBackupsProvider = FutureProvider<Set<String>>((ref) async {
+  return ref.read(snapshotServiceProvider).modsWithSnapshots();
+});

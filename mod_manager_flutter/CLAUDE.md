@@ -14,6 +14,7 @@ changelog, the non-negotiables) live in the [root `CLAUDE.md`](../CLAUDE.md).
 > | [`origin-tracking.md`](../docs/origin-tracking.md) | **Where a mod came from** — the confidence model, the backfill, the resolve flow, the installed-mods index |
 > | [`metadata-autofill.md`](../docs/metadata-autofill.md) | What an install **copies from a mod page** |
 > | [`update-checks.md`](../docs/update-checks.md) | Whether a mod **has a newer version published** — the comparator, the verdicts, the bulk pass |
+> | [`applying-updates.md`](../docs/applying-updates.md) | How an update **is written over an installed mod** — overwrite, patch detection, snapshots, rollback |
 > | [`configuration.md`](../docs/configuration.md) | The app's **own settings** |
 > | [`gamebanana-api.md`](../docs/gamebanana-api.md) | GameBanana's **remote protocol** — read it before writing any request; its surface is undocumented upstream, so guessing costs more than looking |
 
@@ -122,6 +123,33 @@ The most important architectural decision is the **platform abstraction**:
   The bulk pass fetches release feeds **only for mods that flagged**: one request
   per mod would undo what `Mod/Multi` buys, and a group can only help where there
   is a flag to remove.
+- **`services/update_apply/` — writing a newer download over an installed mod.**
+  Read [`../docs/applying-updates.md`](../docs/applying-updates.md) before touching
+  any of it; the reasoning is longer than the code. `UpdateApplier` does the I/O and
+  the ordering (deactivate for open handles → snapshot → copy → resolve leftovers →
+  reactivate) and every decision is in a pure unit beside it: `update_layout.dart`
+  replays the recorded `ingest` and **stops and asks** rather than guessing,
+  `stale_ini.dart` decides which orphaned `.ini` describes the content just written,
+  and `../patch_detection.dart` over `../ini_resources.dart` answers whether a
+  download can stand on its own. The mechanism is **overwrite** — a mod folder often
+  holds a second download, and replacing it destroys that; in the common ordering it
+  destroys the mod itself. `ModActivationPort` is the seam, for the reason every
+  dialog-facing seam here exists: `ApiService` builds a `ConfigService` against the
+  developer's real `config.json`.
+- **`services/backup/` — the snapshot that makes all of the above defensible.**
+  `SnapshotService` writes `<appData>/backups/<mod>/<id>/{manifest.json, files/}`,
+  outside `modsPath` because anything inside a mod folder is reachable through the
+  active symlink and the loader would read the old `.ini` alongside the new one.
+  **No snapshot, no write** — the update path accepts losses it cannot distinguish
+  from intended changes, and every one of those is defensible only while the recourse
+  exists. `retention.dart` is pure with an injected clock: the **age floor beats the
+  count cap**, the budget is size-aware because the mod tail reaches 1.24 GB, and the
+  newest snapshot of a mod is never pruned — an irreducible overage is *reported*
+  rather than forced.
+- `services/folder_contents.dart` — the one walk of a mod-shaped folder, producing
+  the normalised path sets those pure units compare. `.zzz-mod-manager/` is excluded
+  throughout: a sidecar image counted as a shipped resource would make a patch look
+  complete.
 - `services/origin_resolution.dart` — pure decision logic behind the resolve
   dialog: ranking a mod's published files against what is known locally (banked
   archive hash → folder name → newest file that already existed at install
@@ -360,6 +388,37 @@ follows is only what is specific to these widgets.
   four rules it enforces, notably that eligibility is re-checked against the
   sidecar as freshly read — so a batch can't downgrade a mod resolved while it
   ran, and a decline is reported as a decline rather than as a read-only folder.
+- **The update dialog's primary action now writes to disk**, through
+  `dialogs/apply_update_flow.dart`. The orchestration is at the widget layer because
+  it is a conversation — download, show what is about to happen, write only on
+  consent — while every decision it rests on is in `services/update_apply/`.
+  `dialogs/update_confirm_dialog.dart` is the last screen before a live install is
+  touched, and everything on it is something that cannot be said afterwards: the
+  snapshot, the accepted keybind loss, a patch-shaped download, and the one question
+  it asks. It offers **no way to proceed** against an unreconcilable layout — an
+  "install anyway" there would invite the user to guess where the app refused to.
+  `dialogs/mod_backups_dialog.dart` is the rollback, reachable from the context menu
+  only for mods that have a snapshot (`modBackupsProvider`, one readdir for the whole
+  library).
+- **`components/dialog_section.dart` is where the update flow's dialogs get their
+  shape and their type sizes.** They were written as loose `Text` widgets with
+  hardcoded 10–12px sizes, and both complaints that produced were the same
+  complaint: nothing marked where one idea ended and the next began, and none of it
+  was readable. Sizes now come from the theme — `bodyLarge` (16) for anything meant
+  to be read, `bodyMedium` (14) for the line explaining it, `titleMedium` for a
+  heading — and a group of facts always arrives under a heading saying what the group
+  is for. `DialogNotice(emphasis: true)` is the one "read this" state and uses the
+  same literal amber as the card's status slot, so it means the same thing wherever
+  it appears; **at most one per view**, or it stops being emphasis.
+- **The update dialog's release notes are an accordion.** The first version dropped
+  them into the middle of the dialog with no boundary and no way to close them, so an
+  author's three paragraphs pushed the verdict off the top of a scroll view nobody had
+  asked to grow. The header doubles as the section divider and as the thing that
+  *fetches* on the badge path, so one gesture does both.
+- **`dialogs/download_with_progress.dart` is shared with the marketplace.** Only the
+  *download*, deliberately: the marketplace imports an archive as a new mod folder
+  while an update overwrites an existing one, and folding those together is what
+  would produce a shared "install" that quietly does the wrong one.
 - **In the resolve dialog the content filter degrades `hide` to `blur`, never to
   `omit`.** Dropping a flagged mod from a search the user is running to identify
   a mod they *already own* would make that mod permanently unresolvable, with no
