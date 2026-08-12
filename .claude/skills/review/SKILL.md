@@ -153,7 +153,7 @@ Every finding follows the same shape, so the user can scan a long review and sto
 at the ones that matter. Number them so they are easy to refer back to.
 
 ````markdown
-### 3. md5 mismatch is reported as a failed download
+### 3. 🔴 md5 mismatch is reported as a failed download
 
 **File:** `lib/services/download/io_download_transport.dart:118`
 **Also affects:** `assets/l10n/en.json` (`download.error.corrupt`)
@@ -182,19 +182,22 @@ final matchesCatalogue = digest.toString() == file.md5;
 ```
 
 …and surface `matchesCatalogue` as a hint on the import screen rather than an error.
+
+---
 ````
 
 ### The parts
 
 | Part | Rule |
 |---|---|
-| **Title** | The defect in one line, not the symptom. "Empty tag list crashes the filter", not "problem in filter". |
+| **Title** | The defect in one line, not the symptom. "Empty tag list crashes the filter", not "problem in filter". Also apply a colored circle to visually indicate the severity (e.g. 🔴, 🟡, 🟢). |
 | **File** | `path:line`, repo-relative so it is clickable. List every file the fix touches under **Also affects**. |
 | **Severity** | One of the group names above. |
 | **Summary** | One or two sentences: what the code does, and why that is wrong. A reader should be able to stop here. |
 | **Code** | The smallest snippet that shows the problem, in a fenced block with the language tag. Point at the exact line with a trailing `// ←` comment. Quote the code as it actually is — never paraphrase it. |
 | **Detail** | Only when the summary cannot carry it: the failure scenario as *concrete input → wrong output*, or the background the reader needs. Omit the heading entirely when it adds nothing. |
 | **Suggested fix** | What you would do, as code where code is clearer than prose. Say when a fix is one of several reasonable options, and say when you are unsure it is right. |
+| --- | Seperator to seperate each finding. |
 
 ### Keep it proportional
 
