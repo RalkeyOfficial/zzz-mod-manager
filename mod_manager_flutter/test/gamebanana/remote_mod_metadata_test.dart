@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gamebanana.dart';
 import 'package:mod_manager_flutter/services/gamebanana/remote_mod_metadata.dart';
+import 'package:mod_manager_flutter/utils/gamebanana_url.dart';
 import 'package:mod_manager_flutter/utils/zzz_characters.dart';
 
 import '../support/fixtures.dart';
@@ -30,7 +31,12 @@ void main() {
     test('is null rather than empty when the page has no text', () {
       final remote = RemoteModMetadata.fromMod(const GbMod(idRow: 1));
       expect(remote.description, isNull);
-      expect(remote.isEmpty, isTrue);
+      expect(remote.tags, isEmpty);
+      expect(remote.characterId, isNull);
+      expect(remote.imageUrls, isEmpty);
+      // Not `isEmpty`, and deliberately so: a page with nothing else on it
+      // still has an id, and a link back to it is worth writing on its own.
+      expect(remote.isEmpty, isFalse);
     });
   });
 
@@ -83,6 +89,26 @@ void main() {
 
       // Case-insensitive on the *title* only, so "ratio 16:9" survives.
       expect(RemoteModMetadata.fromMod(mod).tags, ['ratio 16:9']);
+    });
+  });
+
+  group('source url', () {
+    test('is built from the mod id, in the form the backfill parses back', () {
+      final remote = RemoteModMetadata.fromMod(const GbMod(idRow: 700727));
+      expect(remote.sourceUrl, 'https://gamebanana.com/mods/700727');
+      // The round trip is the point: the offline backfill reads `source_url`
+      // for a mod id, and it must arrive at the one the origin block already
+      // records rather than at a second opinion.
+      expect(gameBananaModIdFromUrl(remote.sourceUrl), 700727);
+    });
+
+    test('is the canonical url even when the page publishes its own', () {
+      final mod = GbMod.fromJson({
+        '_idRow': 531275,
+        '_sProfileUrl': 'https://gamebanana.com/mods/531275?utm=whatever',
+      })!;
+      expect(RemoteModMetadata.fromMod(mod).sourceUrl,
+          'https://gamebanana.com/mods/531275');
     });
   });
 

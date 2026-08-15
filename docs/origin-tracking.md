@@ -103,10 +103,19 @@ release too) and `remote_missing`. `tracking` survives untouched — it is the u
 own statement about whether the mod should be watched at all. `ingest` is refreshed
 from the layout the update actually used, which is how a pre-`ingest` mod gains one.
 
-**A marketplace install writes remote identity but *not* `source_url`**, which stays
-a user-editable field. So a freshly downloaded mod has a `mod_id` and no url, while a
-backfilled legacy mod has a url and a `mod_id` derived from it. Anything that wants
-"a link to the mod page" builds it from `origin.mod_id`.
+**A marketplace install writes both `origin.mod_id` and `source_url`**, and they are
+kept apart because they answer to different readers: `mod_id` is the machine handle
+this whole document is about, while `source_url` is the link the user clicks. The url
+is filled by the autofill rather than by the origin write, so it obeys the same rule
+every user-editable field does — *fill absence, never displace*. A folder that arrived
+carrying somebody's own sidecar keeps their url, which may point at a mirror, a
+collection or the author's page.
+
+It is written as `gameBananaModUrl(mod_id)` rather than copied from `_sProfileUrl`,
+and that is load-bearing rather than tidy: the canonical form is what
+`gameBananaModIdFromUrl` parses back, so the offline backfill (§3) reads the same id
+the origin block already holds, sees them agree, and writes nothing. A url in any
+other shape would invite the two to argue about which mod this is.
 
 ---
 

@@ -168,11 +168,13 @@ rather than reinterpreting this field.
 - **`source_url` is mod-page-only.** Don't write machine handles, direct
   `/dl/<fileid>` links, or API URLs into it — it's a human-facing field shown as a
   clickable link and editable as free text. Machine identifiers have their own
-  fields in the [`origin` block](#the-origin-block). Note the asymmetry that
-  creates and don't rely on this field being set: a marketplace install writes
-  `origin.mod_id` and *no* `source_url`, while a backfilled legacy mod has the url
-  and a `mod_id` derived from it — so anything wanting a link to the mod page
-  builds it from `origin.mod_id`.
+  fields in the [`origin` block](#the-origin-block) — the two coexist and say
+  different things, one to the user and one to the app. A marketplace install
+  fills this with `https://gamebanana.com/mods/<id>` alongside the origin block's
+  `mod_id`, deliberately in that canonical form so the offline backfill's parse
+  agrees with what the block already records. It is still **absence-filled, never
+  displaced**: a url the user typed, or one that travelled in an inbound sidecar,
+  wins over the canonical one.
 - **`images` entries are relative paths, always.** Two valid shapes: a file we
   imported (`.zzz-mod-manager/images/01.png`) or a file the mod author shipped
   (`Preview.png`). On load they're resolved to absolute paths and **silently

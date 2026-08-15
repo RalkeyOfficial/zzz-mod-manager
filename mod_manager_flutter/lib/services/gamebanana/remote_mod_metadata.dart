@@ -1,4 +1,5 @@
 import '../../models/gamebanana/gamebanana.dart';
+import '../../utils/gamebanana_url.dart';
 import '../../utils/html_to_markdown.dart';
 import '../../utils/zzz_characters.dart';
 
@@ -17,6 +18,7 @@ import '../../utils/zzz_characters.dart';
 class RemoteModMetadata {
   const RemoteModMetadata({
     this.description,
+    this.sourceUrl,
     this.tags = const [],
     this.characterId,
     this.imageUrls = const [],
@@ -25,6 +27,15 @@ class RemoteModMetadata {
   /// [GbMod.text] converted from HTML to markdown, which is the only form this
   /// app's descriptions come in.
   final String? description;
+
+  /// The mod's page url, in canonical form.
+  ///
+  /// Derived from the **identity** rather than read off the page. `_sProfileUrl`
+  /// says the same thing, but [gameBananaModUrl] is the form
+  /// [gameBananaModIdFromUrl] parses back — and the offline origin backfill does
+  /// exactly that parse. Agreeing with the origin block is what stops the two
+  /// from arguing about which mod this is.
+  final String? sourceUrl;
 
   /// Author tags, flattened to `"title: value"` — minus the credit family, see
   /// [_creditTagTitle].
@@ -36,8 +47,16 @@ class RemoteModMetadata {
   /// Gallery images to import, cover first, capped at [maxImages].
   final List<Uri> imageUrls;
 
+  /// Whether this page has nothing to contribute.
+  ///
+  /// [sourceUrl] counts, which in practice makes this **false for every real
+  /// mod page** — a page always has an id. That is the honest answer rather
+  /// than an oversight: a link back to where a mod came from is worth writing a
+  /// sidecar for on its own. Do not exclude it to restore the early-out; the
+  /// cost is one metadata read per installed mod.
   bool get isEmpty =>
       description == null &&
+      sourceUrl == null &&
       tags.isEmpty &&
       characterId == null &&
       imageUrls.isEmpty;
@@ -74,6 +93,7 @@ class RemoteModMetadata {
 
     return RemoteModMetadata(
       description: (markdown == null || markdown.isEmpty) ? null : markdown,
+      sourceUrl: gameBananaModUrl(mod.idRow),
       tags: [
         for (final tag in mod.tags)
           if (!_isCreditTag(tag)) tag,

@@ -60,6 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Installing a mod no longer risks deleting the folder its archive was sitting in.
 - A failed or interrupted marketplace download no longer leaves a partial file and an open file handle behind.
 - Mod downloads ran several times slower than the connection allowed — pinned near 3 MB/s no matter how fast the server was. They now run at whatever speed the server will give: about four times faster on an average-sized mod, closer to five on a large one, and limited only by the connection.
+- Mods downloaded from the Marketplace now carry a link back to their GameBanana page, so "open mod page" works on them straight away. A link already stored on a mod is never replaced.
 
 - Metadata written into a mod's `.zzz-mod-manager/metadata.json` by a newer version of the app (or another tool) is no longer erased when you edit that mod's description, tags or character.
 - Saving the edit dialog for a mod with no character assigned no longer records the placeholder "unknown" as its character, and mods carrying that placeholder from an older version are now treated as untagged.

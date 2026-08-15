@@ -7,6 +7,7 @@ import 'package:mod_manager_flutter/models/mod_metadata.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/origin_backfill.dart';
+import 'package:mod_manager_flutter/utils/gamebanana_url.dart';
 import 'package:mod_manager_flutter/utils/install_date_proxy.dart';
 
 /// The offline backfill, split the way the code is: the decisions run with no
@@ -75,6 +76,24 @@ void main() {
         )),
         isNull,
         reason: 'nothing to write means nothing written',
+      );
+    });
+
+    test('leaves a marketplace install alone, now that it writes both', () {
+      // An install records `mod_id` at `exact` *and* a canonical `source_url`.
+      // The two agree by construction — which is exactly why the url is built
+      // from the id rather than copied off the page — so the backfill has
+      // nothing to say, and could not downgrade the tier even if it did.
+      expect(
+        OriginBackfill.recoverableModId(meta(
+          sourceUrl: gameBananaModUrl(700727),
+          origin: const ModOrigin(
+            provenance: OriginProvenance.downloaded,
+            modId: 700727,
+            modIdConfidence: OriginConfidence.exact,
+          ),
+        )),
+        isNull,
       );
     });
 

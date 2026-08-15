@@ -887,12 +887,14 @@ void main() {
 
     RemoteModMetadata remote({
       String? description = 'Remote description',
+      String? sourceUrl = 'https://gamebanana.com/mods/700727',
       List<String> tags = const ['Ellen: Chained school uniforms'],
       String? characterId = 'ellen',
       List<String> imageUrls = const [coverUrl, secondUrl],
     }) =>
         RemoteModMetadata(
           description: description,
+          sourceUrl: sourceUrl,
           tags: tags,
           characterId: characterId,
           imageUrls: imageUrls.map(Uri.parse).toList(),
@@ -905,6 +907,7 @@ void main() {
 
       final sidecar = sidecarOf('Ellen Swimsuit')!;
       expect(sidecar['description'], 'Remote description');
+      expect(sidecar['source_url'], 'https://gamebanana.com/mods/700727');
       expect(sidecar['tags'], ['Ellen: Chained school uniforms']);
       expect(sidecar['character_id'], 'ellen');
       expect(sidecar['images'], [
@@ -968,6 +971,7 @@ void main() {
           .writeAsStringSync(jsonEncode({
         'schema_version': 2,
         'description': 'The author wrote this',
+        'source_url': 'https://example.com/author-page',
         'tags': ['4k'],
         'character_id': 'jane',
         'images': ['Preview.png'],
@@ -977,12 +981,37 @@ void main() {
 
       final sidecar = sidecarOf('Shared Mod')!;
       expect(sidecar['description'], 'The author wrote this');
+      expect(sidecar['source_url'], 'https://example.com/author-page',
+          reason: 'a url somebody chose may be a mirror or a collection, and '
+              'the canonical link is no substitute for it');
       expect(sidecar['tags'], ['4k']);
       expect(sidecar['character_id'], 'jane');
       expect(sidecar['images'], ['Preview.png']);
       expect(fill.isEmpty, isTrue);
       expect(images.totalCalls, 0,
           reason: 'nothing to store means nothing to download');
+    });
+
+    test('fills only the source url when that is all that is missing', () async {
+      // The narrow case the `remote.isEmpty` early-out used to swallow: nothing
+      // to fetch, nothing to describe, and still a write worth making — without
+      // it the mod has no "open mod page" link anywhere in the library.
+      final dir = makeMod('Linkless Mod');
+      Directory(path.join(dir.path, '.zzz-mod-manager')).createSync();
+      File(path.join(dir.path, '.zzz-mod-manager', 'metadata.json'))
+          .writeAsStringSync(jsonEncode({
+        'schema_version': 2,
+        'description': 'The author wrote this',
+        'tags': ['4k'],
+        'character_id': 'jane',
+        'images': ['Preview.png'],
+      }));
+
+      await repo.applyRemoteMetadata(['Linkless Mod'], remote());
+
+      expect(sidecarOf('Linkless Mod')!['source_url'],
+          'https://gamebanana.com/mods/700727');
+      expect(images.totalCalls, 0);
     });
 
     test('keeps a shipped Preview.png as the cover', () async {
@@ -1083,8 +1112,11 @@ void main() {
 
       final fill = await repo.applyRemoteMetadata(
         ['Shipped Preview'],
-        remote(description: null, tags: const [], characterId: null,
-            imageUrls: const [coverUrl]),
+        // `sourceUrl: null` too, so this isolates the images-only case. A page
+        // that offered a link would rightly be written even here — that is a
+        // fact worth recording, unlike a lone `Preview.png` entry.
+        remote(description: null, sourceUrl: null, tags: const [],
+            characterId: null, imageUrls: const [coverUrl]),
       );
 
       // A lone `Preview.png` entry would be a pointless write, and it would

@@ -13,6 +13,7 @@ import 'package:mod_manager_flutter/services/metadata_autofill.dart';
 void main() {
   final remote = RemoteModMetadata(
     description: 'Remote description',
+    sourceUrl: 'https://gamebanana.com/mods/700727',
     tags: const ['Ellen: Chained school uniforms'],
     characterId: 'ellen',
     imageUrls: [Uri.parse('https://images.gamebanana.com/x/01.jpg')],
@@ -30,6 +31,7 @@ void main() {
       final plan = planFor(const ModMetadata());
 
       expect(plan.description, 'Remote description');
+      expect(plan.sourceUrl, 'https://gamebanana.com/mods/700727');
       expect(plan.tags, ['Ellen: Chained school uniforms']);
       expect(plan.characterId, 'ellen');
       expect(plan.imageUrls, hasLength(1));
@@ -68,6 +70,21 @@ void main() {
       expect(planFor(const ModMetadata(characterId: 'jane')).characterId, isNull);
     });
 
+    test('keeps a source url somebody else put there', () {
+      // It may point at a collection, a mirror or the author's page — all
+      // better than the canonical link, and unrecoverable once overwritten.
+      final plan = planFor(
+        const ModMetadata(sourceUrl: 'https://example.com/my-mirror'),
+      );
+      expect(plan.sourceUrl, isNull);
+      expect(plan.description, 'Remote description');
+    });
+
+    test('an empty source url counts as absent', () {
+      expect(planFor(const ModMetadata(sourceUrl: '')).sourceUrl,
+          'https://gamebanana.com/mods/700727');
+    });
+
     test('fetches nothing when a gallery already exists', () {
       final plan = planFor(const ModMetadata(images: ['Preview.png']));
       expect(plan.imageUrls, isEmpty);
@@ -77,6 +94,7 @@ void main() {
     test('is empty when nothing is missing', () {
       final plan = planFor(const ModMetadata(
         description: 'Author text',
+        sourceUrl: 'https://example.com/my-mirror',
         tags: ['4k'],
         characterId: 'jane',
         images: ['Preview.png'],

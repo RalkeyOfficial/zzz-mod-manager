@@ -452,6 +452,7 @@ class ModMetadataRepository {
         // it wanted nothing else. Writing here would leave an *empty* sidecar in
         // a folder that had none, breaking the don't-litter rule for no gain.
         if (plan.description == null &&
+            plan.sourceUrl == null &&
             plan.tags == null &&
             plan.characterId == null &&
             storedImages == 0) {
@@ -460,7 +461,7 @@ class ModMetadataRepository {
 
         final metadata = fresh.replaceUserFields(
           description: plan.description ?? fresh.description,
-          sourceUrl: fresh.sourceUrl,
+          sourceUrl: plan.sourceUrl ?? fresh.sourceUrl,
           tags: plan.tags ?? fresh.tags,
           characterId: plan.characterId ?? fresh.characterId,
           images: galleryImages,
