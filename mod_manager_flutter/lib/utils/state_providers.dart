@@ -17,6 +17,10 @@ import '../services/update_check.dart';
 // The marketplace's own browsing state (query, results, categories, open mod)
 // lives in `marketplace_providers.dart` — one screen's session rather than
 // app-wide state, and keeping it there is what stops this registry sprawling.
+//
+// The notification stack lives in `notifications.dart` for the same reason: it
+// is one subsystem with its own vocabulary (severity, pinning, handles), and
+// call sites reach it through `context.notify` rather than through a provider.
 
 // API Service Provider
 final modManagerServiceProvider = FutureProvider<ModManagerService>((ref) async {

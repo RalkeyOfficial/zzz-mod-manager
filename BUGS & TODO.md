@@ -836,10 +836,13 @@ The block:
     guess.** Under Character Skins the category is the character's full in-world
     name, chosen from a list — and all **60** children resolve to a roster id
     while **none** of the 4 roots or the 22 Bangboo categories falsely matches
-    one. A test pins that 60/0 result as a canary. Folder-name detection still
+    one. A test pins that 60/0 result as a canary. ~~Folder-name detection still
     runs first and still wins (it is per-folder, so it is the only signal that can
     differ between siblings from one archive); the category fills the case names
-    cannot answer, `bikini` or `mod v2`.
+    cannot answer, `bikini` or `mod v2`.~~ **Reversed** — see "Other issues"
+    below: the category is a statement, the folder name is a substring guess, and
+    "Zhao Nicole" proved which one to trust. The category is now handed to the
+    import and detection only runs where there is no category character.
 
 ### Filed by the read side (found while building it, deliberately not built)
 
@@ -2685,5 +2688,23 @@ work that already opens the same file, so they cost nothing extra.
 
 # Other issues
 
-- Installing mods from the mod-market still goes through the same file-text based character recognition even though we have access to the correct character in the marketplace (no need to recognize the name in the file)
+- [x] Installing mods from the marketplace still goes through the same file-text based character recognition even though we have access to the correct character in the marketplace (no need to recognize the name in the file)
   - This happened when I installed "Zhao Nicole" from the marketplace (its a Zhao skin) and it landed under Nicole
+  - **Fixed.** The category character is now passed *into* the import
+    (`importMods(knownCharacters:)` / `importCombinedMod(knownCharacter:)`) and
+    replaces name detection for those folders. It could not be fixed in the
+    autofill that runs after the import: that rule is *fill absence*, and
+    detection had already filled the slot. An unassigned value still falls back
+    to detection, so a mod filed under `Other/Misc` keeps working.
+    `test/import_known_character_test.dart`.
+- [x] Going from the marketplace index page to the detail page and back reset how far
+  you had scrolled.
+  - **Fixed.** The two views are an `IndexedStack` rather than a conditional, so
+    the grid is never disposed and keeps its real scroll offset — no remembered
+    number to restore against a grid that may have changed height. The detail
+    slot stays empty while unused, because its per-mod state *must* reset.
+- [x] The detail page did not show the initial release date.
+  - **Fixed.** Released and updated are now two separate lines from their own
+    fields. The old `dateUpdated ?? dateAdded` fallback was worse than missing:
+    `_tsDateUpdated` is null until a mod is actually updated, so it labelled a
+    first release as an update.

@@ -274,16 +274,14 @@ void main() {
 
       await pumpLocalized(
         tester,
-        UncontrolledProviderScope(
-          container: container,
-          child: ModsToolbar(
-            onLibraryChanged: onLibraryChanged,
-            originWriter: (name, update) async {
-              written.add(name);
-              return update(mods.firstWhere((m) => m.id == name).origin) != null;
-            },
-          ),
+        ModsToolbar(
+          onLibraryChanged: onLibraryChanged,
+          originWriter: (name, update) async {
+            written.add(name);
+            return update(mods.firstWhere((m) => m.id == name).origin) != null;
+          },
         ),
+        container: container,
         surfaceSize: surfaceSize,
       );
       expectBuilt(ModsToolbar);

@@ -24,7 +24,7 @@
     "download_failed": "Не вдалося завантажити: {message}",
     "downloading": "Завантаження...",
     "download_progress_unknown": "Отримуємо дані...",
-    "install_success": "Імпортовано моди: {mods}",
+    "install_success": "Встановлено {mods}",
     "install_success_default": "мод",
     "install_missing_path": "Папку модів не налаштовано. Укажіть її в Налаштуваннях.",
     "install_unsupported": "Формат архіву не підтримується. Розпакуйте вручну.",
@@ -36,11 +36,6 @@
     "download_rate": "{rate}/с",
     "download_eta": "залишилось {time}",
     "install_duplicate": "Нічого не імпортовано. Мод уже може існувати.",
-    "install_tags": "Автотеги: {tags}",
-    "install_metadata": "Заповнено зі сторінки мода: {fields}",
-    "metadata_description": "опис",
-    "metadata_images": "зображення",
-    "metadata_tags": "теги",
     "install_empty": "Архів не містить папок модів.",
     "install_7zip_missing": "7-Zip не знайдено. Встановіть 7-Zip або додайте його до PATH для розпаковки RAR/7z.",
     "install_extract_failed": "Не вдалося розпакувати архів.",
@@ -86,6 +81,7 @@
     "badge_obsolete": "застарілий",
     "obsolete_notice": "Автор позначив цей мод як заміщений. Він досі існує та завантажується.",
     "remote_missing": "Цей мод більше не доступний публічно на GameBanana.",
+    "released_on": "випущено {date}",
     "updated_on": "оновлено {date}",
     "categories": "Категорії",
     "expand_category": "Показати підкатегорії",
@@ -138,7 +134,7 @@
       "photo_updated": "Фото оновлено",
       "clipboard_empty": "Буфер обміну порожній",
       "import_no_folders": "Будь ласка, перетягніть папки з модами",
-      "import_no_ini": "Імпортовано, але .ini не знайдено в: {mods} — мод може бути неповним.",
+      "import_no_ini": "Не знайдено .ini у {mods} — мод може бути неповним.",
       "origin_write_failed": "Не вдалося зберегти дані відстеження для {mods} — можливо, папка доступна лише для читання. Оновлення для них не перевірятимуться.",
       "import_duplicates": "Моди вже існують або сталася помилка",
       "import_success_title": "Успішно імпортовано!",
@@ -151,7 +147,7 @@
       "open_folder_failed": "Не вдалося відкрити папку моду",
       "invalid_url": "Невірне посилання",
       "paste_error": "Помилка вставки: {message}",
-      "import_patch": "Схоже на патч, а не на повноцінний мод: {mods} містить лише .ini файли й жодного власного вмісту. Встановіть мод, який він патчить, у ту саму папку — інакше в грі нічого не з'явиться."
+      "import_patch": "{mods} схоже на патч, а не на повноцінний мод. Встановіть мод, який він патчить, у ту саму папку — інакше в грі нічого не з'явиться."
     },
     "tooltips": {
       "auto_f10_on": "Автоматичне F10 увімкнено",
@@ -583,6 +579,9 @@
   },
   "common": {
     "unknown": "Невідомо"
+  },
+  "notifications": {
+    "dismiss": "Закрити"
   },
   "welcome": {
     "title": "Ласкаво просимо до ZZZ Mod Manager!",

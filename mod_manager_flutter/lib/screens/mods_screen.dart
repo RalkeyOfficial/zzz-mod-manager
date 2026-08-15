@@ -15,6 +15,7 @@ import '../services/api_service.dart';
 import '../services/archive_service.dart';
 import '../services/ingest_origin_builder.dart';
 import '../services/patch_scan.dart';
+import '../utils/notifications.dart';
 import '../utils/state_providers.dart';
 import '../utils/categories.dart';
 import '../utils/mod_group_diff.dart';
@@ -467,30 +468,25 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         ref.read(charactersProvider.notifier).state = updatedCharacters;
         _lastCharactersState = List.from(updatedCharacters);
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              wasActive
-                  ? loc.t('mods.snackbar.deactivated')
-                  : loc.t('mods.snackbar.activated'),
-            ),
-            duration: AppConstants.snackBarDuration,
-            behavior: SnackBarBehavior.floating,
-            width: 200,
-          ),
+        context.notify.success(
+          wasActive
+              ? loc.t('mods.snackbar.deactivated')
+              : loc.t('mods.snackbar.activated'),
+          icon: wasActive
+              ? Icons.toggle_off_outlined
+              : Icons.toggle_on_outlined,
+          // Shorter than the default: this confirms a switch the user is
+          // looking at, and a queue of them would otherwise fill the corner
+          // while they work through a list.
+          duration: AppConstants.notificationBriefDuration,
         );
       }
       _isOperationInProgress = false;
     } catch (e) {
       _isOperationInProgress = false;
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              loc.t('mods.errors.generic', params: {'message': e.toString()}),
-            ),
-            backgroundColor: Colors.red,
-          ),
+        context.notify.error(
+          loc.t('mods.errors.generic', params: {'message': e.toString()}),
         );
       }
     }
@@ -510,39 +506,19 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       final success = await modManagerService.reloadMods();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Icon(
-                  success ? Icons.check_circle : Icons.error,
-                  color: Colors.white,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  success
-                      ? loc.t('mods.snackbar.reload_success')
-                      : loc.t('mods.snackbar.reload_failure'),
-                ),
-              ],
-            ),
-            backgroundColor: success ? Colors.green : Colors.red,
-            duration: const Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-            width: 300,
-          ),
+        context.notify.show(
+          success
+              ? loc.t('mods.snackbar.reload_success')
+              : loc.t('mods.snackbar.reload_failure'),
+          severity: success
+              ? NotificationSeverity.success
+              : NotificationSeverity.error,
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              loc.t('mods.errors.generic', params: {'message': e.toString()}),
-            ),
-            backgroundColor: Colors.red,
-          ),
+        context.notify.error(
+          loc.t('mods.errors.generic', params: {'message': e.toString()}),
         );
       }
     } finally {
@@ -576,17 +552,12 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              isFavorite
-                  ? loc.t('mods.snackbar.favorites_removed')
-                  : loc.t('mods.snackbar.favorites_added'),
-            ),
-            duration: const Duration(seconds: 1),
-            behavior: SnackBarBehavior.floating,
-            width: 240,
-          ),
+        context.notify.success(
+          isFavorite
+              ? loc.t('mods.snackbar.favorites_removed')
+              : loc.t('mods.snackbar.favorites_added'),
+          icon: isFavorite ? Icons.star_border_rounded : Icons.star_rounded,
+          duration: AppConstants.notificationBriefDuration,
         );
       }
 
@@ -601,13 +572,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              loc.t('mods.errors.generic', params: {'message': e.toString()}),
-            ),
-            backgroundColor: Colors.red,
-          ),
+        context.notify.error(
+          loc.t('mods.errors.generic', params: {'message': e.toString()}),
         );
       }
     }
@@ -620,13 +586,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     await ApiService.clearKeybindCache();
     await loadMods(showLoading: false);
     if (!mounted || errorMessage != null) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(loc.t('mods.snackbar.list_refreshed')),
-        duration: const Duration(seconds: 1),
-        behavior: SnackBarBehavior.floating,
-        width: 220,
-      ),
+    context.notify.success(
+      loc.t('mods.snackbar.list_refreshed'),
+      icon: Icons.refresh_rounded,
+      duration: AppConstants.notificationBriefDuration,
     );
   }
 
@@ -634,25 +597,15 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
   /// delegates to [ApiService.renameMod], which also migrates the active link
   /// and the mod's active/favorite/category state.
   Future<void> _openModFolder(ModInfo mod) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final notify = context.notify;
     try {
       final ok = await ApiService.openModFolder(mod.id);
       if (!mounted || ok) return;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(loc.t('mods.snackbar.open_folder_failed')),
-          backgroundColor: Colors.red,
-        ),
-      );
+      notify.error(loc.t('mods.snackbar.open_folder_failed'));
     } catch (e) {
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            loc.t('mods.errors.generic', params: {'message': e.toString()}),
-          ),
-          backgroundColor: Colors.red,
-        ),
+      notify.error(
+        loc.t('mods.errors.generic', params: {'message': e.toString()}),
       );
     }
   }
@@ -1449,13 +1402,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
               'ModsScreen: Помилка розархівування ${archiveFile.name}: ${result.error}',
             );
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Помилка розархівування ${archiveFile.name}: ${result.error}',
-                  ),
-                  backgroundColor: Colors.orange,
-                ),
+              context.notify.warning(
+                loc.t('mods.snackbar.import_error', params: {
+                  'message': '${archiveFile.name}: ${result.error}',
+                }),
               );
             }
           }
@@ -1488,12 +1438,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         // asked and answered. "No mod folders found" would be a different claim
         // entirely, and a false one.
         if (mounted && !declinedDuplicate) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(loc.t('mods.snackbar.import_no_folders')),
-              backgroundColor: Colors.orange,
-            ),
-          );
+          context.notify.warning(loc.t('mods.snackbar.import_no_folders'));
         }
         return;
       }
@@ -1635,21 +1580,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         }
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.info_outline, color: Colors.white, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(loc.t('mods.snackbar.import_duplicates')),
-                  ),
-                ],
-              ),
-              backgroundColor: Colors.orange,
-              duration: const Duration(seconds: 3),
-            ),
-          );
+          context.notify.warning(loc.t('mods.snackbar.import_duplicates'));
         }
         return;
       }
@@ -1672,16 +1603,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
           importedMods,
         );
         if (noIni.isNotEmpty && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                loc.t(
-                  'mods.snackbar.import_no_ini',
-                  params: {'mods': noIni.join(', ')},
-                ),
-              ),
-              backgroundColor: Colors.orange,
-              duration: const Duration(seconds: 6),
+          context.notify.warning(
+            loc.t(
+              'mods.snackbar.import_no_ini',
+              params: {'mods': noIni.join(', ')},
             ),
           );
         }
@@ -1696,16 +1621,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
           importedMods.where((name) => !noIni.contains(name)),
         );
         if (patches.isNotEmpty && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                loc.t(
-                  'mods.snackbar.import_patch',
-                  params: {'mods': patches.join(', ')},
-                ),
-              ),
-              backgroundColor: Colors.orange,
-              duration: const Duration(seconds: 8),
+          context.notify.warning(
+            loc.t(
+              'mods.snackbar.import_patch',
+              params: {'mods': patches.join(', ')},
             ),
           );
         }
@@ -1716,16 +1635,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       // just be silently untracked for updates with no explanation.
       final originFailures = modManagerService.takeOriginWriteFailures();
       if (originFailures.isNotEmpty && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              loc.t(
-                'mods.snackbar.origin_write_failed',
-                params: {'mods': originFailures.join(', ')},
-              ),
-            ),
-            backgroundColor: Colors.orange,
-            duration: const Duration(seconds: 6),
+        context.notify.warning(
+          loc.t(
+            'mods.snackbar.origin_write_failed',
+            params: {'mods': originFailures.join(', ')},
           ),
         );
       }
@@ -1896,18 +1809,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error_outline, color: Colors.white, size: 20),
-                const SizedBox(width: 8),
-                Expanded(child: Text('Помилка імпорту: $e')),
-              ],
-            ),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
-          ),
+        context.notify.error(
+          loc.t('mods.snackbar.import_error', params: {'message': '$e'}),
         );
       }
     } finally {
@@ -1993,12 +1896,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
           clipboardData.text == null ||
           clipboardData.text!.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(loc.t('clipboard.empty')),
-              backgroundColor: Colors.orange,
-            ),
-          );
+          context.notify.warning(loc.t('clipboard.empty'));
         }
         return;
       }
@@ -2012,12 +1910,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
 
       if (paths.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(loc.t('clipboard.no_paths')),
-              backgroundColor: Colors.orange,
-            ),
-          );
+          context.notify.warning(loc.t('clipboard.no_paths'));
         }
         return;
       }
@@ -2039,12 +1932,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
 
       if (validFolders.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(loc.t('clipboard.no_valid')),
-              backgroundColor: Colors.orange,
-            ),
-          );
+          context.notify.warning(loc.t('clipboard.no_valid'));
         }
         return;
       }
@@ -2053,16 +1941,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       await _importModsFromFolders(validFolders);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              loc.t(
-                'mods.snackbar.paste_error',
-                params: {'message': e.toString()},
-              ),
-            ),
-            backgroundColor: Colors.red,
-          ),
+        context.notify.error(
+          loc.t('mods.snackbar.paste_error', params: {'message': e.toString()}),
         );
       }
     }

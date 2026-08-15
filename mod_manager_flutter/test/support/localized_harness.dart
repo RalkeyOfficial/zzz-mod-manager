@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/l10n/app_localizations.dart';
+import 'package:mod_manager_flutter/screens/components/notification_overlay.dart';
 
 /// Wraps a widget in a `MaterialApp` whose localizations are **already loaded**.
 ///
@@ -27,13 +28,25 @@ import 'package:mod_manager_flutter/l10n/app_localizations.dart';
 /// that had no reason to pass overrides — a failure about the harness, not
 /// about the widget. Pass [overrides] to substitute fakes so nothing reaches
 /// the network.
+/// Pass [container] instead of [overrides] when the test needs to read provider
+/// state back afterwards. It becomes the **root** scope rather than one nested
+/// inside the widget under test — which is not a detail: notifications are
+/// rendered by a host mounted above `home`, so a container nested below it is a
+/// second, invisible stack. A widget raising `context.notify` inside one would
+/// write to a queue nothing is watching, and the test would assert against an
+/// empty screen.
 Future<void> pumpLocalized(
   WidgetTester tester,
   Widget child, {
   Locale locale = const Locale('en'),
   List<Override>? overrides,
+  ProviderContainer? container,
   Size surfaceSize = const Size(1200, 800),
 }) async {
+  assert(
+    container == null || overrides == null,
+    'a container brings its own overrides; passing both silently drops these',
+  );
   await tester.binding.setSurfaceSize(surfaceSize);
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -49,11 +62,18 @@ Future<void> pumpLocalized(
     locale: locale,
     localizationsDelegates: [_PreloadedLocalizations(loaded!)],
     supportedLocales: [locale],
+    // Exactly how `main.dart` mounts it, so a test that triggers a notification
+    // renders one — `find.text` over a message is then the same assertion in a
+    // test as it is on screen. Without it every `context.notify` call in a
+    // widget under test would land in the provider and show nothing.
+    builder: (context, child) => NotificationHost(child: child!),
     home: Scaffold(body: child),
   );
 
   await tester.pumpWidget(
-    ProviderScope(overrides: overrides ?? const [], child: app),
+    container != null
+        ? UncontrolledProviderScope(container: container, child: app)
+        : ProviderScope(overrides: overrides ?? const [], child: app),
   );
   // A rebuild loop shows up here as a pumpAndSettle timeout rather than as a
   // failed expectation, which is the point of settling instead of pumping once.

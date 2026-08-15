@@ -54,7 +54,7 @@ description still gets a gallery.
 |---|---|---|
 | `description` | `_sText`, converted | HTML upstream, markdown here, through `utils/html_to_markdown.dart` — shared with the editors' paste-as-markdown so the two conversions can't drift. |
 | `source_url` | the mod **id** | Not a field on the page. Built with `gameBananaModUrl(idRow)`, so it is the one form `gameBananaModIdFromUrl` parses back. |
-| `character_id` | the **category** name | Not the mod name, not the tags. Under Character Skins the category is the character's full in-world name, picked from a list; `detectCharacterId()` resolves it. |
+| `character_id` | the **category** name | Not the mod name, not the tags. Under Character Skins the category is the character's full in-world name, picked from a list; `detectCharacterId()` resolves it. On a marketplace install it is passed *into* the import and replaces folder-name detection — see below. |
 | `tags` | `_aTags`, flattened | All-or-nothing: a non-empty local list is a curation, and merging into it would produce a set nobody chose. |
 | `images` | `_aPreviewContent`, fetched | The only field that needs the network, because our `images` are paths inside the mod folder. Comes from the mod's **profile**, which is what carries the full gallery — a listing record holds only the cover. |
 
@@ -75,11 +75,29 @@ Five decisions inside that are load-bearing rather than arbitrary:
 - **The character comes from the category because that mapping is exact, and
   measured.** All **60** children of Character Skins resolve to a roster id, and
   **none** of the 4 root categories or the 22 Bangboo categories falsely matches one.
-  The install's existing folder-name detection still runs first and still wins — it
-  is *per folder*, so when one archive becomes several mods it is the only signal
-  that can differ between them — and this fills the case it cannot answer, a folder
-  called `bikini` or `mod v2`. A test pins the 60/0 result as a canary: if GameBanana
-  adds a character our roster doesn't know, it fails and names it.
+  A test pins the 60/0 result as a canary: if GameBanana adds a character our roster
+  doesn't know, it fails and names it.
+
+  **On a marketplace install it beats the folder name, and it is handed to the
+  import rather than filled in afterwards.** The category is the author's own
+  filing; a folder name is a guess made by substring matching, and the two
+  disagree in the case that matters — a Zhao skin published as `Zhao Nicole`
+  reads as Nicole, because the longest matching term wins. Filling it after the
+  fact could not fix that: the rule above is *fill absence*, and detection has
+  already filled the slot. So `importMods` / `importCombinedMod` take the
+  character as a parameter (`knownCharacters` / `knownCharacter`) and skip
+  detection for the folders it covers. Everything else about the fill is
+  unchanged, and the fill still assigns the character on the paths that were
+  never told one — notably the resolve dialog, which runs against a mod that was
+  installed long ago.
+
+  Two consequences worth stating. An **unassigned** value falls back to
+  detection, so a mod filed under `Other/Misc` still gets its name read. And the
+  told character is one fact for the whole archive, so an archive that became
+  several mods files them all under the page's character — which is what a mod
+  page filed under one character is asserting. A genuinely mixed pack cannot be
+  filed under a character upstream, so it arrives with no told character and
+  every folder is detected separately, as before.
 - **`Software Used` tags are dropped.** `tags` is *structural* — it drives the filter
   chips in the mods toolbar — so noise there has a UI cost a noisy description does
   not, and this is not a marginal family: 3 of the 6 distinct tag values across the

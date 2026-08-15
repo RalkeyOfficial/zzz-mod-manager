@@ -2,34 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_localizations.dart';
 import '../models/character_info.dart';
+import 'notifications.dart';
 
 /// Opens [url] in the default external browser, validating the scheme and
-/// surfacing errors as snackbars. Shared by the source-URL link and any
+/// reporting failures as notifications. Shared by the source-URL link and any
 /// links embedded in a mod's markdown description.
 Future<void> launchExternalUrl(BuildContext context, String url) async {
   final loc = context.loc;
-  final messenger = ScaffoldMessenger.of(context);
+  final notify = context.notify;
   final uri = Uri.tryParse(url);
   if (uri == null || !uri.hasScheme) {
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(loc.t('mods.snackbar.invalid_url')),
-        backgroundColor: Colors.orange,
-      ),
-    );
+    // A warning rather than an error: nothing broke, the link is simply not one
+    // we can open — which is a fact about the mod's own metadata.
+    notify.warning(loc.t('mods.snackbar.invalid_url'));
     return;
   }
   try {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   } catch (e) {
-    if (!context.mounted) return;
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          loc.t('mods.errors.generic', params: {'message': e.toString()}),
-        ),
-        backgroundColor: Colors.red,
-      ),
+    notify.error(
+      loc.t('mods.errors.generic', params: {'message': e.toString()}),
     );
   }
 }

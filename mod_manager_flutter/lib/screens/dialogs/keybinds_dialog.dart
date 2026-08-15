@@ -5,6 +5,7 @@ import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../models/keybind_info.dart';
 import '../../services/api_service.dart';
+import '../../utils/notifications.dart';
 
 /// Lists a mod's keybinds as chips; tapping one opens [showEditKeybindDialog].
 /// [onSaved] runs after a keybind is successfully changed.
@@ -258,15 +259,13 @@ Future<void> _saveKeybindChange(
   String newKey,
 ) async {
   final loc = context.loc;
-  final messenger = ScaffoldMessenger.of(context);
+  final notify = context.notify;
   try {
     final modManagerService = await ApiService.getModManagerService();
     final modsPath = modManagerService.modsPath;
 
     if (modsPath == null) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(loc.t('mods.keybinds.error_no_path'))),
-      );
+      notify.error(loc.t('mods.keybinds.error_no_path'));
       return;
     }
 
@@ -275,9 +274,7 @@ Future<void> _saveKeybindChange(
     final modDir = Directory(modPath);
 
     if (!await modDir.exists()) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(loc.t('mods.keybinds.error_no_dir'))),
-      );
+      notify.error(loc.t('mods.keybinds.error_no_dir'));
       return;
     }
 
@@ -292,9 +289,7 @@ Future<void> _saveKeybindChange(
         .toList();
 
     if (iniFiles.isEmpty) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(loc.t('mods.keybinds.error_no_ini'))),
-      );
+      notify.error(loc.t('mods.keybinds.error_no_ini'));
       return;
     }
 
@@ -333,33 +328,20 @@ Future<void> _saveKeybindChange(
         // The .ini changed — drop this mod's cached keybinds so the reload
         // re-parses it.
         await ApiService.invalidateKeybinds(mod.id);
-        if (context.mounted) {
-          messenger.showSnackBar(
-            SnackBar(
-              content: Text(
-                loc.t(
-                  'mods.keybinds.updated',
-                  params: {'name': keybind.displayName, 'key': newKey},
-                ),
-              ),
-              backgroundColor: const Color(0xFF10B981),
-            ),
-          );
-        }
+        notify.success(
+          loc.t(
+            'mods.keybinds.updated',
+            params: {'name': keybind.displayName, 'key': newKey},
+          ),
+          icon: Icons.keyboard_alt_outlined,
+        );
         break;
       }
     }
   } catch (e) {
     print('Error saving keybind: $e');
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          loc.t(
-            'mods.keybinds.error_save',
-            params: {'message': e.toString()},
-          ),
-        ),
-      ),
+    notify.error(
+      loc.t('mods.keybinds.error_save', params: {'message': e.toString()}),
     );
   }
 }

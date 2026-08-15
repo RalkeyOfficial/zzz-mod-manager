@@ -63,14 +63,12 @@ void main() {
 
       await pumpLocalized(
         tester,
-        UncontrolledProviderScope(
-          container: container,
-          child: ModsToolbar(
-            updateFetcher: fetch == null
-                ? (ids) async => throw StateError('no fetch expected')
-                : fetch.call,
-          ),
+        ModsToolbar(
+          updateFetcher: fetch == null
+              ? (ids) async => throw StateError('no fetch expected')
+              : fetch.call,
         ),
+        container: container,
         surfaceSize: surfaceSize,
       );
       expectBuilt(ModsToolbar);
@@ -561,13 +559,11 @@ void main() {
 
       await pumpLocalized(
         tester,
-        UncontrolledProviderScope(
-          container: container,
-          child: ModUpdateDialog(
-            mod: target,
-            gateway: _RecordingGateway(target.origin, written),
-          ),
+        ModUpdateDialog(
+          mod: target,
+          gateway: _RecordingGateway(target.origin, written),
         ),
+        container: container,
       );
       await tester.pumpAndSettle();
       expect(transport.callCount, 0, reason: 'the badge path fetches nothing');
@@ -627,13 +623,11 @@ void main() {
 
       await pumpLocalized(
         tester,
-        UncontrolledProviderScope(
-          container: container,
-          child: ModUpdateDialog(
-            mod: target,
-            gateway: _RecordingGateway(target.origin, <ModOrigin?>[]),
-          ),
+        ModUpdateDialog(
+          mod: target,
+          gateway: _RecordingGateway(target.origin, <ModOrigin?>[]),
         ),
+        container: container,
       );
       await tester.pumpAndSettle();
 
@@ -685,13 +679,11 @@ void main() {
 
       await pumpLocalized(
         tester,
-        UncontrolledProviderScope(
-          container: container,
-          child: ModUpdateDialog(
-            mod: target,
-            gateway: _RecordingGateway(target.origin, <ModOrigin?>[]),
-          ),
+        ModUpdateDialog(
+          mod: target,
+          gateway: _RecordingGateway(target.origin, <ModOrigin?>[]),
         ),
+        container: container,
       );
       await tester.pumpAndSettle();
 

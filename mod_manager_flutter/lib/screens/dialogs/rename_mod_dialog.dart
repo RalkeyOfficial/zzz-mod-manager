@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../services/api_service.dart';
+import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
 
 /// Renames a mod (its on-disk folder). Live-validates the new name and
@@ -23,7 +24,7 @@ Future<void> showRenameModDialog(
     for (final c in ref.read(charactersProvider))
       for (final m in c.skins) m.id.toLowerCase(),
   }..remove(mod.id.toLowerCase());
-  final messenger = ScaffoldMessenger.of(context);
+  final notify = context.notify;
 
   return showDialog(
     context: context,
@@ -50,33 +51,15 @@ Future<void> showRenameModDialog(
               final ok = await ApiService.renameMod(mod.id, name);
               if (!context.mounted) return;
               if (ok) {
-                messenger.showSnackBar(
-                  SnackBar(
-                    content: Text(loc.t('mods.snackbar.renamed')),
-                    duration: const Duration(seconds: 1),
-                  ),
-                );
+                notify.success(loc.t('mods.snackbar.renamed'));
                 onRenamed(name);
               } else {
-                messenger.showSnackBar(
-                  SnackBar(
-                    content: Text(loc.t('mods.dialog.rename_exists')),
-                    backgroundColor: Colors.red,
-                  ),
-                );
+                notify.error(loc.t('mods.dialog.rename_exists'));
               }
             } catch (e) {
               if (!context.mounted) return;
-              messenger.showSnackBar(
-                SnackBar(
-                  content: Text(
-                    loc.t(
-                      'mods.errors.generic',
-                      params: {'message': e.toString()},
-                    ),
-                  ),
-                  backgroundColor: Colors.red,
-                ),
+              notify.error(
+                loc.t('mods.errors.generic', params: {'message': e.toString()}),
               );
             }
           }

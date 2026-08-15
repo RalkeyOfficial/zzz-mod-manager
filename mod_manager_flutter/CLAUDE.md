@@ -268,10 +268,30 @@ GameBanana hosts is reached via "open in browser".
   each one may claim.
 - **It is also where a mod stops arriving blank.** After the import,
   `_installArchive` hands the profile to `applyRemoteMetadata`, which fills the
-  description, gallery, tags and character the install would otherwise leave
-  empty. A character recovered from the mod's *category* is reported through the
-  same auto-tag line as one recovered from its folder name, because it is the
-  same fact from a better source.
+  description, gallery and tags the install would otherwise leave empty.
+  - **The character is the exception: it is passed *into* the import.** The mod
+    page's category is the author's own filing, while folder-name detection is a
+    substring guess, and they disagree exactly where it hurts — a Zhao skin
+    published as `Zhao Nicole` detects as Nicole, since the longest matching term
+    wins. It cannot be corrected afterwards, because the autofill's one rule is
+    *fill absence* and detection has already filled the slot — so
+    `importMods`/`importCombinedMod` take `knownCharacters`/`knownCharacter` and
+    skip detection for those folders. An unassigned value falls back to
+    detection, which is what keeps a mod filed under `Other/Misc` working. The
+    autofill still assigns the character on the paths nobody told, notably the
+    resolve dialog. See `../docs/metadata-autofill.md`.
+- **The two views are an `IndexedStack`, not a conditional.** Swapping them meant
+  disposing the browse view, and with it the scroll offset of a grid the user may
+  have scrolled a long way down — so opening a mod and pressing back always landed
+  them back at the top. Keeping it mounted keeps the *real* offset rather than a
+  remembered number, which is the only version that survives the grid being a
+  different height than when it was left (a content-filter change, a badge
+  appearing). The detail slot is deliberately the one that stays empty while
+  unused: `GbDetailView` holds per-mod state (gallery index, reveal, archived
+  files) that must reset between mods, and it is keyed by mod id for the same
+  reason. Note `IndexedStack` hides a child from painting, hit-testing and
+  semantics but **not** from focus traversal, hence the `ExcludeFocus` around the
+  grid — without it, tabbing on the detail view walks into an off-screen search box.
 - **`ref.invalidate` cannot be called from `initState`, unlike the rest of `ref`.**
   `MarketplaceScreen` re-snapshots the library when it opens, and that call lives in
   `didChangeDependencies` behind a once-per-`State` flag. `WidgetRef.invalidate`
@@ -447,6 +467,86 @@ follows is only what is specific to these widgets.
   `ConfigService` that writes the developer's **real** `<appData>/config.json`,
   so a widget test that merely mounted this dialog would clobber their library
   paths and favourites.
+
+### Notifications (`utils/notifications.dart`, `components/notification_overlay.dart`)
+
+Everything the app tells the user in passing. **Never call `ScaffoldMessenger`
+here** — `context.notify.success(…)` / `.info` / `.warning` / `.error` is the one
+way to raise a message, and `grep showSnackBar lib/` returning nothing is the
+check that it stayed that way.
+
+- **Why it is not Material's snackbar.** Two reasons, and the second is the one
+  that cannot be styled away. A `ScaffoldMessenger` shows **one bar at a time and
+  queues the rest**, so an install with three things to say showed them in
+  sequence, each replacing the last across the bottom of the window — the
+  headline was on screen only until the queue advanced. And the bar lives
+  *inside* the `Scaffold`, so a modal dialog's barrier covers it, which is where
+  a large share of these messages are raised from (rename, delete, keybinds, the
+  whole update flow).
+- **The host is mounted in `MaterialApp.builder`, above the `Navigator`.** That
+  is what puts a notification over a dialog. It is also why the close button
+  carries a **semantic label rather than a `Tooltip`**: a tooltip needs an
+  `Overlay` ancestor, and this layer is a *sibling* of the navigator, so one
+  throws "No Overlay widget found" the first time anything is raised.
+- **The queue holds no timers; the card owns the clock.** The auto-dismiss timer
+  has to stop while the stack is being read — a message that disappears
+  mid-sentence is the complaint this replaced — and only the widget knows where
+  the pointer is. `NotificationCenter` therefore stays a synchronous list, and
+  its tests assert about a list rather than about elapsed time.
+- **Hovering holds the whole stack, not the card under the pointer.** "Is the
+  pointer here" is one fact, owned by `NotificationOverlay` and passed down as
+  `paused`, with a single `MouseRegion` around the column — which also covers the
+  gaps between cards, so travelling from one notification to the next never
+  counts as leaving. Per-card pausing was the first version and is wrong twice
+  over: the fourth message expires while the pointer rests on the first, and the
+  stack reflows out from under the pointer as it goes. A notification raised
+  *while* the pointer is already there arrives held, and leaving **restarts the
+  full duration** rather than resuming the remainder.
+- **A notification says one thing, and it is the thing the user was waiting
+  for.** The install confirmation is the case that taught this: it used to carry
+  the auto-tags and a list of the metadata fields copied off the mod page under
+  a headline, so the one fact being waited for — the mod arrived — was the
+  hardest line on it to find, and all the rest was the app narrating its own
+  bookkeeping about work whose result is on the card a second later. What a
+  caller genuinely cannot drop is what the user must *act* on (no `.ini`, a
+  patch-shaped download, a sidecar that could not be written), and that goes
+  beside the success as its own **warning** rather than as body text under it —
+  a broken install must not be reported in the same colour as a clean one.
+  Title-plus-body is for the rare message with two real levels, not for padding
+  one out.
+- **Severity is the only thing a call site decides.** Colour, icon and duration
+  are derived from it in one place. They used to be chosen per call site from
+  whatever was nearest — `Colors.red` here, `colorScheme.error` there,
+  `Colors.orange` for a warning in one file and nothing in the next — so the same
+  kind of event looked different depending on which screen raised it.
+- **A notification can wait for a condition instead of a clock.** `pinned(…)`
+  raises one with no duration and hands back a `NotificationHandle`; `update()`
+  rewrites it in place (same id, so the same card, same position, no re-entry
+  animation) and `dismiss()` removes it. That is how the drag-a-mod-onto-a-
+  character flow reports itself: one notification held open across the write and
+  the rescan, rather than a one-second "saving…" bar immediately replaced by a
+  "saved" one that claimed the work was over before it was. A pinned
+  notification still has its close button — nothing this app puts on screen may
+  be un-dismissable.
+- **The handle is safe to hold past the end.** The user can close any
+  notification at any moment, so `update`/`dismiss` on one that is gone do
+  nothing rather than throw.
+- Re-raising an identical (severity, title, message) **moves it down and
+  restarts its clock** instead of stacking a duplicate; the stack is capped at
+  `kMaxVisibleNotifications` and drops the *oldest*, since a burst is usually one
+  action reporting several things and the last line concludes it.
+- `context.notify` resolves through `ProviderScope.containerOf(listen: false)`,
+  so it is legal in `initState`, in a dialog builder, and in a plain function
+  that was handed a context. **Capture it in a local before an `await`** and the
+  report survives the widget being disposed — which is why several `mounted`
+  checks that existed only to protect a `ScaffoldMessenger.of(context)` lookup
+  are gone.
+- Widget tests get the host from `test/support/localized_harness.dart`, which
+  mounts it exactly as `main.dart` does. A test that needs to read state back
+  must pass its `ProviderContainer` as `pumpLocalized(container:)` rather than
+  nesting an `UncontrolledProviderScope` **below** `home` — a nested container is
+  a second, invisible queue, and the assertion would run against an empty
+  screen.
 
 ### The download layer (`services/download/`)
 

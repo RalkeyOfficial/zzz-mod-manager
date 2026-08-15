@@ -14,13 +14,13 @@ import '../models/origin_enums.dart';
 import '../services/api_service.dart';
 import '../services/archive_service.dart';
 import '../services/gamebanana/remote_mod_metadata.dart';
-import '../services/metadata_autofill.dart';
 import '../services/mod_manager_service.dart';
 import '../services/patch_scan.dart';
 import '../services/platform_service_factory.dart';
 import '../utils/marketplace_providers.dart';
+import '../utils/notifications.dart';
 import '../utils/state_providers.dart';
-import 'components/install_result_snackbars.dart';
+import 'components/install_result_feedback.dart';
 import 'components/marketplace/gb_browse_view.dart';
 import 'components/marketplace/gb_detail_view.dart';
 import 'dialogs/download_with_progress.dart';
@@ -92,18 +92,49 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
     // full-bleed grid it just cuts the corners off the layout. With no radius there
     // is nothing to clip either, so the wrapper goes entirely rather than becoming
     // a no-op clip.
-    return openModId == null
-        ? GbBrowseView(
+    //
+    // **An `IndexedStack`, not a conditional.** Swapping the two views out of the
+    // tree disposes the browse view, and with it the scroll position of a grid the
+    // user may have paged deep into — so opening a mod and pressing back landed
+    // them at the top of the results every time. Keeping it mounted keeps the real
+    // scroll offset rather than a remembered number, which is the only version of
+    // this that survives the grid being a different height than when it was left
+    // (a content-filter change, a library badge appearing).
+    //
+    // The detail slot is the one that stays empty while unused: a `GbDetailView`
+    // holds per-mod view state (gallery index, reveal, archived files expanded),
+    // and *that* must reset between mods rather than persist.
+    return IndexedStack(
+      index: openModId == null ? 0 : 1,
+      // The children are laid out against the same constraints either way, which
+      // is what the conditional above did.
+      sizing: StackFit.expand,
+      children: [
+        // `IndexedStack` hides a child from painting, hit-testing and semantics,
+        // but **not** from focus traversal — so without this, tabbing from the
+        // detail view walks into the search box of a grid that isn't on screen.
+        ExcludeFocus(
+          excluding: openModId != null,
+          child: GbBrowseView(
             onOpenMod: (modId) =>
                 ref.read(marketplaceOpenModProvider.notifier).state = modId,
-          )
-        : GbDetailView(
+          ),
+        ),
+        if (openModId == null)
+          const SizedBox.shrink()
+        else
+          GbDetailView(
+            // Keyed so re-opening a *different* mod builds a fresh state rather
+            // than reusing the previous one's gallery index.
+            key: ValueKey(openModId),
             modId: openModId,
             onBack: () =>
                 ref.read(marketplaceOpenModProvider.notifier).state = null,
             onDownload: _handleDownload,
             onOpenInBrowser: _openInBrowser,
-          );
+          ),
+      ],
+    );
   }
 
   Future<void> _openInBrowser(String url) async {
@@ -111,12 +142,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
     final opened =
         await PlatformServiceFactory.getInstance().openUrlInBrowser(url);
     if (!opened && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: Theme.of(context).colorScheme.error,
-          content: Text(loc.t('marketplace.error_opening')),
-        ),
-      );
+      context.notify.error(loc.t('marketplace.error_opening'));
     }
   }
 
@@ -139,18 +165,18 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
     final choice = await _askDownloadChoice(file);
     if (choice == _DownloadChoice.cancel || !mounted) return;
 
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    // Captured before the awaits: it is a plain object rather than a context
+    // lookup, so it stays valid even if this screen is disposed mid-install.
+    final notify = context.notify;
 
-    // Null means cancelled or failed, and a snackbar has already said which.
+    // Null means cancelled or failed, and a notification has already said which.
     final result = await downloadFileWithProgress(context, ref, file);
     if (result == null || !mounted) return;
 
     if (choice == _DownloadChoice.downloadOnly) {
-      scaffoldMessenger.showSnackBar(
-        SnackBar(
-          content: Text(loc.t('marketplace.download_saved',
-              params: {'path': result.file.path})),
-        ),
+      notify.success(
+        loc.t('marketplace.download_saved', params: {'path': result.file.path}),
+        icon: Icons.save_alt_rounded,
       );
       return;
     }
@@ -311,14 +337,29 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       // and a null merely costs the fast path at resolution time.
       final effectiveSeed = _seedFor(mod, file, archiveMd5: archiveMd5);
 
+      // Read once, and *before* the import rather than only after it. The
+      // character it carries comes from the mod's own category upstream, which
+      // is a fact rather than a reading of a file name — so the import is told
+      // it instead of guessing. It has to be passed in rather than left to the
+      // autofill below, because that fills absence only, and name detection
+      // would already have filled the slot with its guess. The two disagree in
+      // exactly the case that matters: a Zhao skin named "Zhao Nicole" reads as
+      // Nicole, since the longest matching term wins.
+      final remote = RemoteModMetadata.fromMod(mod);
+
       final ModManagerService modManager =
           await ApiService.getModManagerService();
-      final (importedMods, autoTags) = plan.combine
+      // The auto-tag map the import returns is deliberately dropped here: on
+      // this path the character came from the mod page in the first place, and
+      // "Zhao Nicole → zhao" is the app narrating its own bookkeeping back at
+      // someone who just wanted the mod installed.
+      final (importedMods, _) = plan.combine
           ? await modManager.importCombinedMod(
               directoriesToImport,
               plan.combinedName,
               detectionHint: archiveBaseName,
               origin: effectiveSeed,
+              knownCharacter: remote.characterId,
             )
           : await modManager.importMods(
               directoriesToImport,
@@ -327,6 +368,10 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
               },
               originSeeds: {
                 for (final dir in directoriesToImport) dir: effectiveSeed,
+              },
+              knownCharacters: {
+                for (final dir in directoriesToImport)
+                  if (remote.characterId case final id?) dir: id,
               },
             );
 
@@ -339,19 +384,14 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       // filed under. Fill only what is still blank (an archive can arrive
       // carrying the author's own sidecar, and that text is better than ours).
       // After the import, deliberately: the folders have to exist, and the
-      // name-based character detection above has already had its say.
-      final fill = await modManager.applyRemoteMetadata(
-        importedMods,
-        RemoteModMetadata.fromMod(mod),
-      );
-      // Same shape as the import's own auto-tags, so one summary covers both:
-      // a character recovered from the mod's category is the same fact as one
-      // recovered from its folder name, just from a better source.
-      autoTags.addAll(fill.characterTags);
-
-      final tagSummary = autoTags.entries
-          .map((entry) => '${entry.key} → ${entry.value}')
-          .join(', ');
+      // character has already been settled above.
+      //
+      // Its result is not reported. Filling in a description and a gallery is
+      // what an install is *for* — the user sees it on the card a second later —
+      // so "Filled in from the mod page: description, preview images, tags" is
+      // the app describing its own routine work at the one moment the user is
+      // waiting to be told one thing: that the mod arrived.
+      await modManager.applyRemoteMetadata(importedMods, remote);
 
       // Safety net: warn about any imported mod that has no .ini at all — a
       // strong sign the mod is incomplete (e.g. a broken multi-folder archive).
@@ -385,11 +425,14 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       // either way.
       if (!mounted) return InstallResult.success(importedMods);
 
-      final messages = <String>[
-        if (tagSummary.isNotEmpty)
-          loc.t('marketplace.install_tags', params: {'tags': tagSummary}),
-        if (_metadataSummary(fill) case final summary?)
-          loc.t('marketplace.install_metadata', params: {'fields': summary}),
+      // **Only what the user has to act on.** Everything that merely describes
+      // what the install did — the character it was filed under, the fields it
+      // copied off the mod page — is gone: it is either visible on the card or
+      // not worth a sentence. What is left is three things the user cannot find
+      // out any other way, each of which changes what they do next. They travel
+      // as a *warning* beside the success rather than as more body text under
+      // it, so a mod that arrived broken doesn't read like a mod that arrived.
+      final warnings = <String>[
         if (noIni.isNotEmpty)
           loc.t('mods.snackbar.import_no_ini', params: {'mods': noIni.join(', ')}),
         if (patches.isNotEmpty)
@@ -399,33 +442,16 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
           loc.t('mods.snackbar.origin_write_failed',
               params: {'mods': originFailures.join(', ')}),
       ];
-      final message = messages.isEmpty ? null : messages.join('\n');
 
-      return InstallResult.success(importedMods, message: message);
+      return InstallResult.success(
+        importedMods,
+        message: warnings.isEmpty ? null : warnings.join('\n'),
+      );
     } finally {
       if (archiveConsumed && await archiveFile.exists()) {
         await _safeDeleteArchive(archiveFile);
       }
     }
-  }
-
-  /// Names what the mod page filled in, or null when it filled in nothing.
-  ///
-  /// Names, not counts. `fill.images` is a count of image *files* summed over
-  /// every mod the archive became, so one 8-shot gallery installed as two mods
-  /// is 16 — a number the user would read as the size of one gallery. The other
-  /// two fields never carried a number either, so dropping it also makes the
-  /// sentence consistent with itself.
-  ///
-  /// The character is deliberately absent: it is reported through the same
-  /// auto-tag line as folder-name detection, because it is the same fact.
-  String? _metadataSummary(RemoteMetadataFill fill) {
-    final fields = <String>[
-      if (fill.descriptions > 0) loc.t('marketplace.metadata_description'),
-      if (fill.images > 0) loc.t('marketplace.metadata_images'),
-      if (fill.tagSets > 0) loc.t('marketplace.metadata_tags'),
-    ];
-    return fields.isEmpty ? null : fields.join(', ');
   }
 
   /// Deletes the temp extract dirs (`zzz_archive_extract_*`) that hold the given

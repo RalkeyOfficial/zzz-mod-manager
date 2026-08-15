@@ -13,7 +13,15 @@ class InstallResult {
   /// Names of the mods that were created.
   final List<String> mods;
 
-  /// Informational detail — auto-tags applied, mods missing a `.ini`, and so on.
+  /// What the user has to **act on**, if anything — a mod with no `.ini`, a
+  /// download that turned out to be a patch, a sidecar that could not be
+  /// written. Rendered as its own warning beside the success, never as body
+  /// text under it.
+  ///
+  /// Deliberately not a description of what the install did. It used to carry
+  /// the auto-tags and the list of metadata fields copied off the mod page, and
+  /// that is the app narrating its own bookkeeping at the one moment the user
+  /// wants a single fact: the mod arrived.
   final String? message;
 
   /// Set only when the install genuinely failed.

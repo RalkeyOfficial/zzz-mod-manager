@@ -4,6 +4,7 @@ import '../../l10n/app_localizations.dart';
 import '../../models/mod_origin.dart';
 import '../../services/api_service.dart';
 import '../../services/bulk_assume_current.dart';
+import '../../utils/notifications.dart';
 
 /// Writes one mod's origin block. Injected only by tests — `ApiService` lazily
 /// builds a `ConfigService` against the developer's **real**
@@ -101,8 +102,9 @@ Future<BulkAssumeCurrentOutcome?> confirmAndApplyAssumeCurrent(
 /// Reports the outcome once, in one message.
 ///
 /// A partial run deliberately gets its own wording rather than two stacked
-/// snackbars: "31 done, 4 couldn't be saved" is one fact about one action, and
-/// splitting it makes the failure look like a separate event the user missed.
+/// notifications: "31 done, 4 couldn't be saved" is one fact about one action,
+/// and splitting it makes the failure look like a separate event the user
+/// missed.
 ///
 /// A run that only *declined* says so plainly and calmly — it is not a failure
 /// and must not be coloured or worded like one.
@@ -116,32 +118,30 @@ void showAssumeCurrentOutcome(
         params: {'count': '$count'},
       );
 
-  final (message, colour) = switch (outcome) {
+  final (message, severity) = switch (outcome) {
     // Nothing was written and nothing broke: every mod had already been sorted
     // out. Almost always a second press before the rescan caught up.
     BulkAssumeCurrentOutcome(written: 0, failed: 0) => (
         plural('mods.assume_current.already_done', outcome.skipped),
-        null,
+        NotificationSeverity.info,
       ),
     BulkAssumeCurrentOutcome(failed: 0) => (
         plural('mods.assume_current.done', outcome.written),
-        null,
+        NotificationSeverity.success,
       ),
     BulkAssumeCurrentOutcome(written: 0) => (
         plural('mods.assume_current.failed', outcome.failed),
-        Colors.orange,
+        NotificationSeverity.warning,
       ),
     _ => (
         loc.t('mods.assume_current.done_partial', params: {
           'count': '${outcome.written}',
           'failed': '${outcome.failed}',
         }),
-        Colors.orange,
+        NotificationSeverity.warning,
       ),
   };
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(message), backgroundColor: colour),
-  );
+  context.notify.show(message, severity: severity);
 }
 
 class _AssumeCurrentConfirmation extends StatelessWidget {

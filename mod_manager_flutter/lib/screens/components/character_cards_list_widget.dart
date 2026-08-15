@@ -7,13 +7,19 @@ import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import '../../core/constants.dart';
 import '../../models/character_info.dart';
 import '../../l10n/app_localizations.dart';
+import '../../utils/notifications.dart';
 import 'keybinds_widget.dart';
 
 class CharacterCardsListWidget extends ConsumerStatefulWidget {
   final List<CharacterInfo> characters;
   final int selectedIndex;
   final Function(int) onCharacterSelected;
-  final Function(String, String) onCharacterTagSaved;
+  /// Assigns a mod to a character, and completes when the library has caught
+  /// up. Typed as returning a future rather than `Function` so the drop can
+  /// hold a notification open for the length of the work instead of claiming it
+  /// is finished the instant the callback is *called*.
+  final Future<void> Function(String modId, String characterId)
+      onCharacterTagSaved;
   final Map<String, String> modCharacterTags;
 
   const CharacterCardsListWidget({
@@ -127,59 +133,23 @@ class _CharacterCardsListWidgetState
     final loc = context.loc;
     return DragTarget<ModInfo>(
       onAcceptWithDetails: (details) async {
-        // Показуємо повідомлення про початок обробки
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  ),
-                  SizedBox(width: 12),
-                  Text(loc.t('mods.dialog.saving_tag')),
-                ],
-              ),
-              backgroundColor: const Color(0xFF6366F1),
-              duration: const Duration(seconds: 1),
-            ),
-          );
-        }
-
-        // Зберігаємо тег персонажа для моду
-        widget.onCharacterTagSaved(details.data.id, character.id);
-
-        // Показуємо повідомлення про успішне збереження
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  Icon(Icons.check_circle, color: Colors.white, size: 16),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      loc.t(
-                        'mods.dialog.mod_assigned',
-                        params: {
-                          'mod': details.data.name,
-                          'character': character.name,
-                        },
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              backgroundColor: const Color(0xFF10B981),
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        }
+        // One notification for one action, held open for as long as the action
+        // takes. It is *pinned* while the write and the rescan run — the two
+        // used to be a one-second "saving…" bar immediately replaced by a
+        // "saved" bar, which meant the first was never read and the second
+        // claimed the work was finished before it was.
+        final saving = context.notify.pinned(loc.t('mods.dialog.saving_tag'));
+        await widget.onCharacterTagSaved(details.data.id, character.id);
+        saving.update(
+          severity: NotificationSeverity.success,
+          message: loc.t(
+            'mods.dialog.mod_assigned',
+            params: {
+              'mod': details.data.name,
+              'character': character.name,
+            },
+          ),
+        );
       },
       builder: (context, candidateData, rejectedData) {
         final bool isHovering = candidateData.isNotEmpty;

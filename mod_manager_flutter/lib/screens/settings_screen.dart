@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import '../core/constants.dart';
 import '../services/api_service.dart';
+import '../utils/notifications.dart';
 import '../utils/state_providers.dart';
 import '../utils/zzz_characters.dart';
 import '../l10n/app_localizations.dart';
@@ -86,23 +87,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
         saveModsPath: _saveModsPathController.text,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(loc.t('settings.save_success')),
-            behavior: SnackBarBehavior.floating,
-            width: 200,
-          ),
-        );
+        context.notify.success(loc.t('settings.save_success'));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              loc.t('settings.errors.generic', params: {'message': '$e'}),
-            ),
-            backgroundColor: Colors.red,
-          ),
+        context.notify.error(
+          loc.t('settings.errors.generic', params: {'message': '$e'}),
         );
       }
     }
@@ -371,29 +361,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
       if (mounted) {
         final currentLoc = context.loc;
         final languageName = currentLoc.t('language_names.$languageCode');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              currentLoc.t(
-                'settings.language.changed',
-                params: {'language': languageName},
-              ),
-            ),
+        context.notify.success(
+          currentLoc.t(
+            'settings.language.changed',
+            params: {'language': languageName},
           ),
+          icon: Icons.translate_rounded,
         );
       }
     } catch (e) {
       if (mounted) {
-        final errorLoc = context.loc;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              errorLoc.t(
-                'settings.language.error',
-                params: {'message': '$e'},
-              ),
-            ),
-            backgroundColor: Colors.red,
+        context.notify.error(
+          context.loc.t(
+            'settings.language.error',
+            params: {'message': '$e'},
           ),
         );
       }
@@ -582,13 +563,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
 
       if (autoTags.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(loc.t('settings.auto_tag.no_mods')),
-              backgroundColor: Colors.orange,
-              duration: const Duration(seconds: 2),
-            ),
-          );
+          context.notify.warning(loc.t('settings.auto_tag.no_mods'));
         }
       } else {
         if (mounted) {
@@ -706,14 +681,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              loc.t('settings.auto_tag.error', params: {'message': '$e'}),
-            ),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
-          ),
+        context.notify.error(
+          loc.t('settings.auto_tag.error', params: {'message': '$e'}),
         );
       }
     } finally {
@@ -939,13 +908,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
     await modManagerService.installF10Dependencies();
     
     if (mounted) {
-      final loc = context.loc;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(loc.t('settings.dialogs.dependencies_message')),
-          backgroundColor: const Color(0xFF0EA5E9),
-        ),
-      );
+      context.notify.info(context.loc.t('settings.dialogs.dependencies_message'));
     }
   }
 

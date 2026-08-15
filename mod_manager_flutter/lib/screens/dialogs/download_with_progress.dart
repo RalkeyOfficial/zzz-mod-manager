@@ -9,6 +9,7 @@ import '../../services/download/download_exceptions.dart';
 import '../../services/download/download_handle.dart';
 import '../../services/download/download_progress.dart';
 import '../../services/download/download_request.dart';
+import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
 import 'download_progress_dialog.dart';
 
@@ -26,21 +27,21 @@ import 'download_progress_dialog.dart';
 /// together is what would produce a shared "install" that quietly does the wrong
 /// one.
 ///
-/// Returns null when the user cancelled or the transfer failed — a snackbar has
-/// already said which.
+/// Returns null when the user cancelled or the transfer failed — a notification
+/// has already said which.
 Future<DownloadResult?> downloadFileWithProgress(
   BuildContext context,
   WidgetRef ref,
   GbFile file,
 ) async {
   final loc = context.loc;
-  final messenger = ScaffoldMessenger.of(context);
-  final errorColor = Theme.of(context).colorScheme.error;
+  // Read before the first await and kept: the dialog this runs behind can be
+  // gone by the time there is something to report, and this object does not
+  // care.
+  final notify = context.notify;
   final navigator = Navigator.of(context, rootNavigator: true);
 
-  void report(String message) => messenger.showSnackBar(
-        SnackBar(backgroundColor: errorColor, content: Text(message)),
-      );
+  void report(String message) => notify.error(message);
 
   final raw = file.downloadUrl ?? 'https://gamebanana.com/dl/${file.idRow}';
   final url = Uri.tryParse(raw);
@@ -95,8 +96,11 @@ Future<DownloadResult?> downloadFileWithProgress(
     return result;
   } on DownloadCancelledException {
     close();
-    messenger.showSnackBar(
-      SnackBar(content: Text(loc.t('marketplace.download_cancelled'))),
+    // Info, not an error: the user pressed cancel, and telling them off in red
+    // for doing what they asked for is exactly the noise this rework removed.
+    notify.info(
+      loc.t('marketplace.download_cancelled'),
+      icon: Icons.cancel_outlined,
     );
     return null;
   } catch (e) {

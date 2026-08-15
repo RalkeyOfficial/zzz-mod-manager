@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../services/api_service.dart';
+import '../../utils/notifications.dart';
 
 /// Confirms and permanently deletes a mod (its folder and all state). The
 /// action is irreversible, so it requires an explicit confirmation. [onDeleted]
@@ -12,7 +13,7 @@ Future<void> showDeleteModDialog(
   required VoidCallback onDeleted,
 }) {
   final loc = context.loc;
-  final messenger = ScaffoldMessenger.of(context);
+  final notify = context.notify;
   return showDialog(
     context: context,
     builder: (dialogContext) {
@@ -22,33 +23,15 @@ Future<void> showDeleteModDialog(
           final ok = await ApiService.deleteMod(mod.id);
           if (!context.mounted) return;
           if (ok) {
-            messenger.showSnackBar(
-              SnackBar(
-                content: Text(loc.t('mods.snackbar.deleted')),
-                duration: const Duration(seconds: 1),
-              ),
-            );
+            notify.success(loc.t('mods.snackbar.deleted'));
             onDeleted();
           } else {
-            messenger.showSnackBar(
-              SnackBar(
-                content: Text(loc.t('mods.snackbar.delete_failed')),
-                backgroundColor: Colors.red,
-              ),
-            );
+            notify.error(loc.t('mods.snackbar.delete_failed'));
           }
         } catch (e) {
           if (!context.mounted) return;
-          messenger.showSnackBar(
-            SnackBar(
-              content: Text(
-                loc.t(
-                  'mods.errors.generic',
-                  params: {'message': e.toString()},
-                ),
-              ),
-              backgroundColor: Colors.red,
-            ),
+          notify.error(
+            loc.t('mods.errors.generic', params: {'message': e.toString()}),
           );
         }
       }

@@ -7,6 +7,7 @@ import 'package:path/path.dart' as path;
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../services/api_service.dart';
+import '../../utils/notifications.dart';
 import '../../services/backup/snapshot_service.dart';
 import '../../services/update_apply/mod_activation_port.dart';
 import '../../services/update_apply/update_applier.dart';
@@ -221,12 +222,7 @@ class _ModBackupsDialogState extends ConsumerState<ModBackupsDialog> {
       // "couldn't restore" message, which says nothing the user can act on.
       if (!mounted) return;
       setState(() => _busy = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: Theme.of(context).colorScheme.error,
-          content: Text(loc.t('marketplace.install_missing_path')),
-        ),
-      );
+      context.notify.error(loc.t('marketplace.install_missing_path'));
       return;
     }
     final mods = await ApiService.getModManagerService();
@@ -247,19 +243,15 @@ class _ModBackupsDialogState extends ConsumerState<ModBackupsDialog> {
     await _load();
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor:
-            result.success ? null : Theme.of(context).colorScheme.error,
-        content: Text(
-          loc.t(
-            result.success
-                ? 'mods.backups.restored'
-                : 'mods.backups.restore_failed',
-            params: {'mod': widget.mod.name},
-          ),
-        ),
+    context.notify.show(
+      loc.t(
+        result.success ? 'mods.backups.restored' : 'mods.backups.restore_failed',
+        params: {'mod': widget.mod.name},
       ),
+      severity: result.success
+          ? NotificationSeverity.success
+          : NotificationSeverity.error,
+      icon: result.success ? Icons.restore_rounded : null,
     );
   }
 

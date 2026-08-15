@@ -7,6 +7,7 @@ import '../../models/gamebanana/gamebanana.dart';
 import '../../models/mod_origin.dart';
 import '../../models/origin_enums.dart';
 import '../../services/api_service.dart';
+import '../../utils/notifications.dart';
 import '../../services/gamebanana/content_filter.dart';
 import '../../services/gamebanana/file_selection.dart';
 import '../../services/gamebanana/remote_mod_metadata.dart';
@@ -439,13 +440,8 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     if (!mounted) return;
     if (!ok) {
       setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            loc.t('mods.resolve.save_failed', params: {'mod': widget.mod.name}),
-          ),
-          backgroundColor: Colors.orange,
-        ),
+      context.notify.warning(
+        loc.t('mods.resolve.save_failed', params: {'mod': widget.mod.name}),
       );
       return;
     }

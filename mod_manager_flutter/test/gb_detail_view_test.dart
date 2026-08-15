@@ -43,6 +43,9 @@ void main() {
   Future<void> pumpDetail(
     WidgetTester tester, {
     int imageCount = 4,
+    // The whole profile, for the tests that are about a field rather than about
+    // the gallery. Defaults to the shared fixture.
+    GbMod? profile,
     Size surfaceSize = const Size(1200, 800),
     // Overridden rather than left to load: unoverridden it reaches for
     // `ApiService`, which needs a real `SharedPreferences` and so resolves to an
@@ -62,7 +65,7 @@ void main() {
       overrides: [
         modProfileProvider(
           700727,
-        ).overrideWith((ref) async => mod(imageCount: imageCount)),
+        ).overrideWith((ref) async => profile ?? mod(imageCount: imageCount)),
         contentFilterProvider.overrideWith((ref) => ContentFilterMode.show),
         installedModsIndexProvider.overrideWith((ref) async => installed),
       ],
@@ -270,6 +273,52 @@ void main() {
       final heading = tester.getRect(find.text('Description'));
       final description = tester.getRect(find.byType(MarkdownBody));
       expect(heading.left, description.left);
+    });
+  });
+
+  group('the dates', () {
+    /// The two timestamps as the api sends them, in **seconds**.
+    GbMod dated({DateTime? added, DateTime? updated}) => GbMod(
+      idRow: 700727,
+      name: 'A Mod',
+      visibility: GbVisibility.show,
+      files: const [],
+      dateAdded: added,
+      dateUpdated: updated,
+    );
+
+    testWidgets('the first release is shown', (tester) async {
+      // It was missing entirely: the screen only ever rendered one date slot.
+      await pumpDetail(
+        tester,
+        profile: dated(added: DateTime.utc(2024, 9, 12, 12)),
+      );
+      expect(find.textContaining('released 2024-09-12'), findsOneWidget);
+    });
+
+    testWidgets('a mod that has never been updated says so by omission',
+        (tester) async {
+      // `_tsDateUpdated` is null until a mod is actually updated, and the old
+      // `dateUpdated ?? dateAdded` fallback turned that null into "updated
+      // <release date>" — the one reading of these fields that states something
+      // untrue.
+      await pumpDetail(
+        tester,
+        profile: dated(added: DateTime.utc(2024, 9, 12, 12)),
+      );
+      expect(find.textContaining('updated'), findsNothing);
+    });
+
+    testWidgets('both are shown once there is an update', (tester) async {
+      await pumpDetail(
+        tester,
+        profile: dated(
+          added: DateTime.utc(2024, 9, 12, 12),
+          updated: DateTime.utc(2026, 3, 4, 12),
+        ),
+      );
+      expect(find.textContaining('released 2024-09-12'), findsOneWidget);
+      expect(find.textContaining('updated 2026-03-04'), findsOneWidget);
     });
   });
 

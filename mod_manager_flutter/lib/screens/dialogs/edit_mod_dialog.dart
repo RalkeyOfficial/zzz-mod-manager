@@ -9,6 +9,7 @@ import '../../models/edit_image.dart';
 import '../../services/api_service.dart';
 import '../../utils/categories.dart';
 import '../../utils/markdown_editor.dart';
+import '../../utils/notifications.dart';
 import '../../utils/zzz_characters.dart';
 import '../components/category_picker.dart';
 
@@ -22,7 +23,7 @@ Future<void> showEditModDialog(
   required void Function(ModInfo updated) onSaved,
 }) {
   final loc = context.loc;
-  final messenger = ScaffoldMessenger.of(context);
+  final notify = context.notify;
   final selectedChar = ValueNotifier<String>(mod.characterId);
   final urlController = TextEditingController(text: mod.sourceUrl ?? '');
   final descController = TextEditingController(text: mod.description ?? '');
@@ -37,11 +38,7 @@ Future<void> showEditModDialog(
   Future<void> pasteImageInto() async {
     final bytes = await Pasteboard.image;
     if (bytes == null) {
-      if (context.mounted) {
-        messenger.showSnackBar(
-          SnackBar(content: Text(loc.t('mods.snackbar.clipboard_empty'))),
-        );
-      }
+      notify.warning(loc.t('mods.snackbar.clipboard_empty'));
       return;
     }
     images.value = [...images.value, EditImage.pasted(bytes)];
@@ -356,12 +353,7 @@ Future<void> showEditModDialog(
             if (!stillExists) {
               if (!context.mounted) return;
               Navigator.pop(dialogContext);
-              messenger.showSnackBar(
-                SnackBar(
-                  content: Text(loc.t('mods.snackbar.mod_gone')),
-                  backgroundColor: Colors.red,
-                ),
-              );
+              notify.error(loc.t('mods.snackbar.mod_gone'));
               return;
             }
 
@@ -384,12 +376,7 @@ Future<void> showEditModDialog(
             if (!context.mounted) return;
             // 2) Close + confirm immediately — the save is done.
             Navigator.pop(dialogContext);
-            messenger.showSnackBar(
-              SnackBar(
-                content: Text(loc.t('mods.snackbar.tag_saved')),
-                duration: const Duration(seconds: 1),
-              ),
-            );
+            notify.success(loc.t('mods.snackbar.tag_saved'));
             // 3) Let the caller apply a targeted in-memory update.
             onSaved(updated);
           },

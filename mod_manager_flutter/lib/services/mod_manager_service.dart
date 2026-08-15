@@ -468,10 +468,19 @@ class ModManagerService {
   /// where it came from, in the same shape as [detectionHints] and for the same
   /// reason: one call can mix folders from several archives with folders the
   /// user dragged in, so provenance has to be per-folder rather than per-call.
+  /// [knownCharacters] maps a source folder path to a character the caller was
+  /// **told**, rather than one to guess at — in practice the mod page's own
+  /// category. It replaces name detection for that folder instead of feeding
+  /// it: guessing from a name is what this exists to avoid, and the two
+  /// genuinely disagree (a Zhao skin named "Zhao Nicole" reads as Nicole,
+  /// because the longest matching term wins). Same map shape as the two above,
+  /// for the same reason. An unassigned value falls back to detection, so a mod
+  /// filed under a non-character category still gets its name read.
   Future<(List<String>, Map<String, String>)> importMods(
     List<String> folderPaths, {
     Map<String, String>? detectionHints,
     Map<String, ModOriginSeed>? originSeeds,
+    Map<String, String>? knownCharacters,
   }) async {
     try {
       final (valid, _) = await validatePaths();
@@ -510,10 +519,13 @@ class ModManagerService {
         // категорію, яка переживає перейменування — а не лише косметичне
         // визначення під час відображення.
         final hint = detectionHints?[folderPath];
-        final detectedChar = _detectCharacterFromName(
-          modName,
-          extraNames: [if (hint != null && hint.isNotEmpty) hint],
-        );
+        final known = knownCharacters?[folderPath];
+        final detectedChar = isUnassignedCharacterId(known)
+            ? _detectCharacterFromName(
+                modName,
+                extraNames: [if (hint != null && hint.isNotEmpty) hint],
+              )
+            : known;
         if (detectedChar != null) {
           await setModCharacter(modName, detectedChar);
           autoTags[modName] = detectedChar;
@@ -572,12 +584,15 @@ class ModManagerService {
   ///
   /// [origin] describes where the merged folders came from. Scalar rather than
   /// a map because this produces exactly one mod — and for the same reason it
-  /// never carries a sibling group.
+  /// never carries a sibling group. [knownCharacter] is the same fact
+  /// `importMods` takes per folder: a character the caller was told rather than
+  /// one to guess at, replacing name detection when it is set.
   Future<(List<String>, Map<String, String>)> importCombinedMod(
     List<String> folderPaths,
     String modName, {
     String? detectionHint,
     ModOriginSeed? origin,
+    String? knownCharacter,
   }) async {
     try {
       final (valid, _) = await validatePaths();
@@ -625,12 +640,15 @@ class ModManagerService {
       }
 
       final autoTags = <String, String>{};
-      final detectedChar = _detectCharacterFromName(
-        modName,
-        extraNames: [
-          if (detectionHint != null && detectionHint.isNotEmpty) detectionHint,
-        ],
-      );
+      final detectedChar = isUnassignedCharacterId(knownCharacter)
+          ? _detectCharacterFromName(
+              modName,
+              extraNames: [
+                if (detectionHint != null && detectionHint.isNotEmpty)
+                  detectionHint,
+              ],
+            )
+          : knownCharacter;
       if (detectedChar != null) {
         await setModCharacter(modName, detectedChar);
         autoTags[modName] = detectedChar;

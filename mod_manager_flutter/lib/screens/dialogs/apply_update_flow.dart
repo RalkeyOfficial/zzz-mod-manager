@@ -16,6 +16,7 @@ import '../../services/archive_service.dart';
 import '../../services/update_apply/mod_activation_port.dart';
 import '../../services/update_apply/update_applier.dart';
 import '../../services/update_apply/update_layout.dart';
+import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
 import 'download_with_progress.dart';
 import 'update_confirm_dialog.dart';
@@ -54,13 +55,9 @@ Future<bool> applyUpdateFlow(
   required GbFile file,
 }) async {
   final loc = context.loc;
-  final messenger = ScaffoldMessenger.of(context);
-  final errorColor = Theme.of(context).colorScheme.error;
+  final notify = context.notify;
 
-  void fail(String message) =>
-      messenger.showSnackBar(
-        SnackBar(backgroundColor: errorColor, content: Text(message)),
-      );
+  void fail(String message) => notify.error(message);
 
   final config = await ApiService.getConfig();
   final modsPath = config['mods_path'] ?? '';

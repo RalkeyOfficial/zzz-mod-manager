@@ -93,8 +93,13 @@ class AppConstants {
   static const Duration defaultAnimationDuration = Duration(milliseconds: 300);
   static const Duration fastAnimationDuration = Duration(milliseconds: 150);
   static const Duration slowAnimationDuration = Duration(milliseconds: 500);
-  static const Duration snackBarDuration = Duration(milliseconds: 800);
-  static const Duration imageSavedSnackBarDuration = Duration(seconds: 2);
+
+  /// For a notification confirming something the user is looking at — a
+  /// toggle, a favourite, a refresh. Shorter than any of the defaults in
+  /// `utils/notifications.dart` on purpose: these arrive in bursts while
+  /// someone works through a list, and the useful ones are the ones that get
+  /// out of the way.
+  static const Duration notificationBriefDuration = Duration(seconds: 2);
 
   // Debounce delays
   static const Duration modToggleDebounceDelay = Duration(milliseconds: 200);

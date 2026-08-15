@@ -8,6 +8,7 @@ import '../../models/character_info.dart';
 import '../../models/gamebanana/gamebanana.dart';
 import '../../models/mod_origin.dart';
 import '../../services/api_service.dart';
+import '../../utils/notifications.dart';
 import '../../services/gamebanana/file_selection.dart';
 import '../../services/update_check.dart';
 import '../../utils/gamebanana_url.dart';
@@ -286,16 +287,8 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       _wrote = true;
     });
     if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            loc.t(
-              'mods.update.dismiss_failed',
-              params: {'mod': widget.mod.name},
-            ),
-          ),
-          backgroundColor: Colors.orange,
-        ),
+      context.notify.warning(
+        loc.t('mods.update.dismiss_failed', params: {'mod': widget.mod.name}),
       );
       return;
     }

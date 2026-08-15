@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
-import '../core/constants.dart';
 import '../services/api_service.dart';
+import '../utils/notifications.dart';
 import '../utils/state_providers.dart';
 import '../l10n/app_localizations.dart';
 
@@ -94,12 +94,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
     final loc = context.loc;
     
     if (_modsPathController.text.isEmpty || _saveModsPathController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(loc.t('welcome.directories.validation_error')),
-          backgroundColor: Colors.red,
-        ),
-      );
+      context.notify.warning(loc.t('welcome.directories.validation_error'));
       return;
     }
 
@@ -113,11 +108,8 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
       widget.onComplete();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-          ),
+        context.notify.error(
+          loc.t('mods.errors.generic', params: {'message': e.toString()}),
         );
       }
     }

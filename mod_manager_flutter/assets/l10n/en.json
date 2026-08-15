@@ -24,7 +24,7 @@
     "download_failed": "Download failed: {message}",
     "downloading": "Downloading...",
     "download_progress_unknown": "Receiving data...",
-    "install_success": "Imported mods: {mods}",
+    "install_success": "Installed {mods}",
     "install_success_default": "mod",
     "install_missing_path": "Mods folder is not configured. Set it up in Settings.",
     "install_unsupported": "Archive format is not supported. Please extract manually.",
@@ -36,11 +36,6 @@
     "download_rate": "{rate}/s",
     "download_eta": "{time} left",
     "install_duplicate": "Nothing imported. The mod may already exist.",
-    "install_tags": "Auto-tags: {tags}",
-    "install_metadata": "Filled in from the mod page: {fields}",
-    "metadata_description": "description",
-    "metadata_images": "preview images",
-    "metadata_tags": "tags",
     "install_empty": "Archive doesn't contain any mod folders.",
     "install_7zip_missing": "7-Zip not found. Install 7-Zip or add it to PATH to extract RAR/7z files.",
     "install_extract_failed": "Failed to extract archive.",
@@ -86,6 +81,7 @@
     "badge_obsolete": "obsolete",
     "obsolete_notice": "The author flagged this mod as superseded. It still exists and still downloads.",
     "remote_missing": "This mod is no longer publicly available on GameBanana.",
+    "released_on": "released {date}",
     "updated_on": "updated {date}",
     "categories": "Categories",
     "expand_category": "Show subcategories",
@@ -138,7 +134,7 @@
       "photo_updated": "Image updated",
       "clipboard_empty": "Clipboard is empty",
       "import_no_folders": "Please drop mod folders",
-      "import_no_ini": "Imported, but no .ini found in: {mods} — the mod may be incomplete.",
+      "import_no_ini": "No .ini found in {mods} — the mod may be incomplete.",
       "origin_write_failed": "Couldn't save tracking data for {mods} — the folder may be read-only. They won't be checked for updates.",
       "import_duplicates": "Mods already exist or an error occurred",
       "import_success_title": "Imported successfully!",
@@ -151,7 +147,7 @@
       "open_folder_failed": "Could not open the mod folder",
       "invalid_url": "Invalid link",
       "paste_error": "Paste error: {message}",
-      "import_patch": "Looks like a patch, not a full mod: {mods} contains .ini files and no content of its own. Install the mod it patches into the same folder, or nothing will show up in the game."
+      "import_patch": "{mods} looks like a patch, not a full mod. Install the mod it patches into the same folder, or nothing will show up in the game."
     },
     "tooltips": {
       "auto_f10_on": "Auto F10 enabled",
@@ -583,6 +579,9 @@
   },
   "common": {
     "unknown": "Unknown"
+  },
+  "notifications": {
+    "dismiss": "Dismiss"
   },
   "welcome": {
     "title": "Welcome to ZZZ Mod Manager!",

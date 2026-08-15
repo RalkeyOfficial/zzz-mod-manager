@@ -8,6 +8,7 @@ import 'package:mod_manager_flutter/models/gamebanana/gb_page.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_top_sub.dart';
 import 'package:mod_manager_flutter/screens/components/marketplace/gb_browse_view.dart';
 import 'package:mod_manager_flutter/screens/components/marketplace/gb_detail_view.dart';
+import 'package:mod_manager_flutter/screens/components/marketplace/gb_mod_card.dart';
 import 'package:mod_manager_flutter/screens/marketplace_screen.dart';
 import 'package:mod_manager_flutter/services/gamebanana/content_filter.dart';
 import 'package:mod_manager_flutter/services/installed_mods_index.dart';
@@ -32,8 +33,19 @@ void main() {
     perPage: 30,
   );
 
-  List<Override> overrides({int? openMod}) => [
-        marketplaceResultsProvider.overrideWith((ref) async => page),
+  /// Enough cards that the grid genuinely overflows the viewport, so there is a
+  /// scroll offset to lose in the first place.
+  final longPage = GbPage<GbMod>(
+    records: [
+      for (var i = 1; i <= 40; i++)
+        GbMod(idRow: i, name: 'Mod $i', visibility: GbVisibility.show),
+    ],
+    recordCount: 400,
+    perPage: 30,
+  );
+
+  List<Override> overrides({int? openMod, GbPage<GbMod>? results}) => [
+        marketplaceResultsProvider.overrideWith((ref) async => results ?? page),
         rootCategoriesProvider.overrideWith(
           (ref) async => [
             const GbCategoryNode(idRow: 30305, name: 'Character Skins'),
@@ -43,12 +55,14 @@ void main() {
             .overrideWith((ref, arg) async => <GbCategoryNode>[]),
         topSubsProvider.overrideWith((ref) async => <GbTopSub>[]),
         contentFilterProvider.overrideWith((ref) => ContentFilterMode.show),
-        modProfileProvider(1).overrideWith(
-          (ref) async => const GbMod(
-            idRow: 1,
-            name: 'First Mod',
+        // The whole family, so a test may open whichever card happens to be on
+        // screen rather than having to predict which one the grid put there.
+        modProfileProvider.overrideWith(
+          (ref, modId) async => GbMod(
+            idRow: modId,
+            name: modId == 1 ? 'First Mod' : 'Mod $modId',
             visibility: GbVisibility.show,
-            files: <Never>[],
+            files: const <Never>[],
           ),
         ),
         // The library snapshot. Overridden because the real one reaches
@@ -81,6 +95,83 @@ void main() {
     expectBuilt(MarketplaceScreen);
     expect(tester.takeException(), isNull);
     expect(find.byType(GbDetailView), findsOneWidget);
+  });
+
+  group('the grid keeps its place while a mod is open', () {
+    /// The vertical offset of the results grid. `CustomScrollView` is unique to
+    /// the browse view — the detail view is a `ListView`, which is a different
+    /// class — so this cannot accidentally read the wrong scrollable.
+    double gridOffset(WidgetTester tester) => tester
+        .state<ScrollableState>(
+          find.descendant(
+            of: find.byType(CustomScrollView),
+            matching: find.byType(Scrollable),
+          ),
+        )
+        .position
+        .pixels;
+
+    /// The first card fully inside the viewport — which card that is depends on
+    /// how far the grid was dragged, so it is found rather than named.
+    Finder onscreenCard(WidgetTester tester) {
+      final cards = find.byType(GbModCard);
+      final viewport = tester.getRect(find.byType(CustomScrollView));
+      for (var i = 0; i < cards.evaluate().length; i++) {
+        final rect = tester.getRect(cards.at(i));
+        if (rect.top >= viewport.top && rect.bottom <= viewport.bottom) {
+          return cards.at(i);
+        }
+      }
+      fail('no mod card is fully on screen — nothing to tap');
+    }
+
+    testWidgets('opening a mod and pressing back returns to the same offset',
+        (tester) async {
+      // The complaint this is for: paging deep into the results, opening a mod,
+      // and being dropped back at the very top of the grid. The views used to be
+      // swapped by a conditional, which disposed the browse view — and with it
+      // the scroll position — every time a mod was opened.
+      await pumpLocalized(tester, const MarketplaceScreen(),
+          overrides: overrides(results: longPage));
+
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
+      await tester.pumpAndSettle();
+      final scrolled = gridOffset(tester);
+      expect(scrolled, greaterThan(100),
+          reason: 'the drag has to actually move the grid for this to test anything');
+
+      await tester.tap(onscreenCard(tester));
+      await tester.pumpAndSettle();
+      expect(find.byType(GbDetailView), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(GbDetailView), findsNothing);
+      expect(gridOffset(tester), moreOrLessEquals(scrolled, epsilon: 0.5));
+    });
+
+    testWidgets('the detail view still starts fresh for each mod',
+        (tester) async {
+      // The other half of the same decision: the *grid* is kept alive, the
+      // detail view is not. Its per-mod state (gallery index, reveal, archived
+      // files) must reset, so nothing may persist across a close.
+      await pumpLocalized(tester, const MarketplaceScreen(),
+          overrides: overrides(results: longPage));
+
+      await tester.tap(onscreenCard(tester));
+      await tester.pumpAndSettle();
+      final first = tester.state(find.byType(GbDetailView));
+
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+      expect(find.byType(GbDetailView), findsNothing,
+          reason: 'the detail view is gone from the tree, not merely hidden');
+
+      await tester.tap(onscreenCard(tester));
+      await tester.pumpAndSettle();
+      expect(tester.state(find.byType(GbDetailView)), isNot(same(first)));
+    });
   });
 
   testWidgets('survives being closed and re-opened', (tester) async {

@@ -421,7 +421,18 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
         // The mod-level version, clearly the mod's own and not a file's.
         if (mod.version case final version? when version.isNotEmpty)
           _pair(Icons.sell_outlined, version, style),
-        if (mod.dateUpdated ?? mod.dateAdded case final date?)
+        // Both dates, each from its own field. `_tsDateUpdated` is **null on a
+        // mod that has never been updated**, so the old `dateUpdated ??
+        // dateAdded` fallback labelled a first release as an update — the one
+        // reading of these two fields that states something untrue. Released
+        // first because it is the one every mod has.
+        if (mod.dateAdded case final date?)
+          _pair(
+            Icons.event_outlined,
+            loc.t('marketplace.released_on', params: {'date': _date(date)}),
+            style,
+          ),
+        if (mod.dateUpdated case final date?)
           _pair(
             Icons.schedule,
             loc.t('marketplace.updated_on', params: {'date': _date(date)}),

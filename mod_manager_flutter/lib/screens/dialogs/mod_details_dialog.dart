@@ -5,6 +5,7 @@ import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../models/keybind_info.dart';
 import '../../services/api_service.dart';
+import '../../utils/notifications.dart';
 import '../../utils/categories.dart';
 import '../../utils/markdown_description.dart';
 import '../../utils/markdown_editor.dart';
@@ -132,7 +133,7 @@ void showModDetailsDialog(
                           builder: (context, setLocal) {
                             Future<void> saveDescription() async {
                               final newDesc = descController.text.trim();
-                              final messenger = ScaffoldMessenger.of(context);
+                              final notify = context.notify;
                               try {
                                 await ApiService.updateMod(
                                   mod.copyWith(description: newDesc),
@@ -141,15 +142,10 @@ void showModDetailsDialog(
                                 setLocal(() => isEditingDescription = false);
                                 onChanged();
                               } catch (e) {
-                                messenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      loc.t(
-                                        'mods.errors.generic',
-                                        params: {'message': e.toString()},
-                                      ),
-                                    ),
-                                    backgroundColor: Colors.red,
+                                notify.error(
+                                  loc.t(
+                                    'mods.errors.generic',
+                                    params: {'message': e.toString()},
                                   ),
                                 );
                               }

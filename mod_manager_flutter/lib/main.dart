@@ -7,6 +7,7 @@ import 'package:window_manager/window_manager.dart';
 import 'dart:io';
 import 'core/constants.dart';
 import 'screens/mods_screen.dart';
+import 'screens/components/notification_overlay.dart';
 import 'screens/components/sidebar_nav_item.dart';
 import 'screens/settings_screen.dart';
 import 'screens/welcome_screen.dart';
@@ -100,6 +101,12 @@ class _MyAppState extends ConsumerState<MyApp> {
         GlobalCupertinoLocalizations.delegate,
       ],
       onGenerateTitle: (context) => context.loc.t('app.title'),
+      // Notifications are hosted **above the navigator**, so they are visible
+      // over a modal dialog. A large share of them are raised from one (rename,
+      // delete, keybinds, the whole update flow), and the `ScaffoldMessenger`
+      // bars they replaced were drawn inside the `Scaffold` — behind the
+      // barrier, where the user never saw them.
+      builder: (context, child) => NotificationHost(child: child!),
       home: _isLoading
           ? const Scaffold(body: Center(child: CircularProgressIndicator()))
           : (_isFirstRun
