@@ -10,221 +10,167 @@
   "_tsDateModified": 1771433824,
   "_tsDateAdded": 1721159885,
   "_sProfileUrl": "https://gamebanana.com/mods/528481",
-  "_aPreviewMedia": {
-    "_aImages": [
+  "_aPreviewContent": {
+    "screenshots": [
       {
-        "_sType": "screenshot",
-        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "66bd71db378c3.jpg",
-        "_sFile220": "220-90_66bd71db378c3.jpg",
+        "_sFile220": "sgi_common_thumbs_66bd71db378c3_220.webp",
         "_hFile220": 174,
-        "_wFile220": 220,
-        "_sFile530": "530-90_66bd71db378c3.jpg",
+        "_sFile220Sfw": "sgi_common_thumbs_66bd71db378c3_220_sfw.webp",
+        "_hFile220Sfw": 174,
+        "_sFile530": "sgi_common_thumbs_66bd71db378c3_530.webp",
         "_hFile530": 420,
-        "_wFile530": 530,
-        "_sFile100": "100-90_66bd71db378c3.jpg",
-        "_hFile100": 79,
-        "_wFile100": 100
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "66bd71db378c3.jpg"
       },
       {
-        "_sType": "screenshot",
-        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "6696d80f7d0ac.jpg",
-        "_sFile100": "100-90_6696d80f7d0ac.jpg",
+        "_sFile100": "sgi_common_thumbs_6696d80f7d0ac_100.webp",
         "_hFile100": 58,
-        "_wFile100": 100
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "6696d80f7d0ac.jpg"
       },
       {
-        "_sType": "screenshot",
-        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "6696c0f91e5b3.jpg",
-        "_sFile100": "100-90_6696c0f91e5b3.jpg",
+        "_sFile100": "sgi_common_thumbs_6696c0f91e5b3_100.webp",
         "_hFile100": 106,
-        "_wFile100": 100
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "6696c0f91e5b3.jpg"
       },
       {
-        "_sType": "screenshot",
-        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "6696c0f83400f.jpg",
-        "_sFile100": "100-90_6696c0f83400f.jpg",
+        "_sFile100": "sgi_common_thumbs_6696c0f83400f_100.webp",
         "_hFile100": 108,
-        "_wFile100": 100
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "6696c0f83400f.jpg"
       },
       {
-        "_sType": "screenshot",
-        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "6696c0f6a81d0.jpg",
-        "_sFile100": "100-90_6696c0f6a81d0.jpg",
+        "_sFile100": "sgi_common_thumbs_6696c0f6a81d0_100.webp",
         "_hFile100": 104,
-        "_wFile100": 100
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "6696c0f6a81d0.jpg"
       },
       {
-        "_sType": "screenshot",
-        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "6696c0fadea57.jpg",
-        "_sFile100": "100-90_6696c0fadea57.jpg",
+        "_sFile100": "sgi_common_thumbs_6696c0fadea57_100.webp",
         "_hFile100": 78,
-        "_wFile100": 100
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "6696c0fadea57.jpg"
       },
       {
-        "_sType": "screenshot",
+        "_sFile100": "sgi_common_thumbs_6696c0f545cec_100.webp",
+        "_hFile100": null,
         "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "6696c0f545cec.jpg",
-        "_sFile100": "100-90_6696c0f545cec.jpg",
-        "_hFile100": 80,
-        "_wFile100": 100
+        "_sFile": "6696c0f545cec.jpg"
       },
       {
-        "_sType": "screenshot",
-        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "6696c0f7c94dc.jpg",
-        "_sFile100": "100-90_6696c0f7c94dc.jpg",
+        "_sFile100": "sgi_common_thumbs_6696c0f7c94dc_100.webp",
         "_hFile100": 88,
-        "_wFile100": 100
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "6696c0f7c94dc.jpg"
       },
       {
-        "_sType": "screenshot",
-        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "6696c0f9a5d28.jpg",
-        "_sFile100": "100-90_6696c0f9a5d28.jpg",
+        "_sFile100": "sgi_common_thumbs_6696c0f9a5d28_100.webp",
         "_hFile100": 69,
-        "_wFile100": 100
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "6696c0f9a5d28.jpg"
       },
       {
-        "_sType": "screenshot",
-        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "6696c0f42b4f5.jpg",
-        "_sFile100": "100-90_6696c0f42b4f5.jpg",
+        "_sFile100": "sgi_common_thumbs_6696c0f42b4f5_100.webp",
         "_hFile100": 72,
-        "_wFile100": 100
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "6696c0f42b4f5.jpg"
       },
       {
-        "_sType": "screenshot",
-        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "669834ea2513d.jpg",
-        "_sFile100": "100-90_669834ea2513d.jpg",
+        "_sFile100": "sgi_common_thumbs_669834ea2513d_100.webp",
         "_hFile100": 114,
-        "_wFile100": 100
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "669834ea2513d.jpg"
       },
       {
-        "_sType": "screenshot",
+        "_sFile100": "sgi_common_thumbs_669834ea120c6_100.webp",
+        "_hFile100": null,
         "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "669834ea120c6.jpg",
-        "_sFile100": "100-90_669834ea120c6.jpg",
-        "_hFile100": 146,
-        "_wFile100": 100
+        "_sFile": "669834ea120c6.jpg"
       },
       {
-        "_sType": "screenshot",
-        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "66983527b0035.jpg",
-        "_sFile100": "100-90_66983527b0035.jpg",
+        "_sFile100": "sgi_common_thumbs_66983527b0035_100.webp",
         "_hFile100": 128,
-        "_wFile100": 100
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "66983527b0035.jpg"
       },
       {
-        "_sType": "screenshot",
-        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "66983553e5764.jpg",
-        "_sFile100": "100-90_66983553e5764.jpg",
+        "_sFile100": "sgi_common_thumbs_66983553e5764_100.webp",
         "_hFile100": 112,
-        "_wFile100": 100
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "66983553e5764.jpg"
       },
       {
-        "_sType": "screenshot",
-        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "669836af95f19.jpg",
-        "_sFile100": "100-90_669836af95f19.jpg",
+        "_sFile100": "sgi_common_thumbs_669836af95f19_100.webp",
         "_hFile100": 90,
-        "_wFile100": 100
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "669836af95f19.jpg"
       },
       {
-        "_sType": "screenshot",
-        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "6698392c95b2e.jpg",
-        "_sFile100": "100-90_6698392c95b2e.jpg",
+        "_sFile100": "sgi_common_thumbs_6698392c95b2e_100.webp",
         "_hFile100": 68,
-        "_wFile100": 100
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "6698392c95b2e.jpg"
       },
       {
-        "_sType": "screenshot",
-        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "6698392ccd435.jpg",
-        "_sFile100": "100-90_6698392ccd435.jpg",
+        "_sFile100": "sgi_common_thumbs_6698392ccd435_100.webp",
         "_hFile100": 52,
-        "_wFile100": 100
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "6698392ccd435.jpg"
       },
       {
-        "_sType": "screenshot",
-        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "669839c8b8f36.jpg",
-        "_sFile100": "100-90_669839c8b8f36.jpg",
+        "_sFile100": "sgi_common_thumbs_669839c8b8f36_100.webp",
         "_hFile100": 93,
-        "_wFile100": 100
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "669839c8b8f36.jpg"
       },
       {
-        "_sType": "screenshot",
-        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "669839c8866d8.jpg",
-        "_sFile100": "100-90_669839c8866d8.jpg",
+        "_sFile100": "sgi_common_thumbs_669839c8866d8_100.webp",
         "_hFile100": 90,
-        "_wFile100": 100
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "669839c8866d8.jpg"
       },
       {
-        "_sType": "screenshot",
-        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "669839aaea698.jpg",
-        "_sFile100": "100-90_669839aaea698.jpg",
+        "_sFile100": "sgi_common_thumbs_669839aaea698_100.webp",
         "_hFile100": 87,
-        "_wFile100": 100
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "669839aaea698.jpg"
       },
       {
-        "_sType": "screenshot",
-        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "66bd7184599ad.jpg",
-        "_sFile100": "100-90_66bd7184599ad.jpg",
+        "_sFile100": "sgi_common_thumbs_66bd7184599ad_100.webp",
         "_hFile100": 134,
-        "_wFile100": 100
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "66bd7184599ad.jpg"
       },
       {
-        "_sType": "screenshot",
-        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "66bd7171ed4d0.jpg",
-        "_sFile100": "100-90_66bd7171ed4d0.jpg",
+        "_sFile100": "sgi_common_thumbs_66bd7171ed4d0_100.webp",
         "_hFile100": 90,
-        "_wFile100": 100
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "66bd7171ed4d0.jpg"
       },
       {
-        "_sType": "screenshot",
-        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "66bd721292d8b.jpg",
-        "_sFile100": "100-90_66bd721292d8b.jpg",
+        "_sFile100": "sgi_common_thumbs_66bd721292d8b_100.webp",
         "_hFile100": 99,
-        "_wFile100": 100
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "66bd721292d8b.jpg"
       },
       {
-        "_sType": "screenshot",
-        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "66bd72127825d.jpg",
-        "_sFile100": "100-90_66bd72127825d.jpg",
+        "_sFile100": "sgi_common_thumbs_66bd72127825d_100.webp",
         "_hFile100": 89,
-        "_wFile100": 100
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "66bd72127825d.jpg"
       },
       {
-        "_sType": "screenshot",
+        "_sFile100": "sgi_common_thumbs_66bd72125c8c7_100.webp",
+        "_hFile100": null,
         "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "66bd72125c8c7.jpg",
-        "_sFile100": "100-90_66bd72125c8c7.jpg",
-        "_hFile100": 54,
-        "_wFile100": 100
+        "_sFile": "66bd72125c8c7.jpg"
       },
       {
-        "_sType": "screenshot",
-        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-        "_sFile": "66bd72127479c.jpg",
-        "_sFile100": "100-90_66bd72127479c.jpg",
+        "_sFile100": "sgi_common_thumbs_66bd72127479c_100.webp",
         "_hFile100": 84,
-        "_wFile100": 100
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "66bd72127479c.jpg"
       }
     ]
   },
@@ -233,7 +179,7 @@
   "_tsDateUpdated": 1750446360,
   "_nAllTodosCount": 0,
   "_bHasTodos": false,
-  "_nPostCount": 281,
+  "_nPostCount": 285,
   "_aTags": [],
   "_bCreatedBySubmitter": true,
   "_bIsPorted": false,
@@ -243,14 +189,15 @@
   },
   "_sInitialVisibility": "warn",
   "_sDownloadUrl": "https://gamebanana.com/mods/download/528481",
-  "_nDownloadCount": 83761,
+  "_nDownloadCount": 85149,
+  "_sPayType": "free",
   "_aFiles": [
     {
       "_idRow": 1462303,
       "_sFile": "v34.zip",
       "_nFilesize": 29568851,
       "_tsDateAdded": 1750446275,
-      "_nDownloadCount": 12666,
+      "_nDownloadCount": 13448,
       "_sDownloadUrl": "https://gamebanana.com/dl/1462303",
       "_sMd5Checksum": "6fe9301c754c54a240301a5e512d2fb9",
       "_sAnalysisState": "done",
@@ -267,7 +214,7 @@
       "_sFile": "v33.zip",
       "_nFilesize": 29568772,
       "_tsDateAdded": 1734613000,
-      "_nDownloadCount": 18608,
+      "_nDownloadCount": 19051,
       "_sDownloadUrl": "https://gamebanana.com/dl/1344799",
       "_sMd5Checksum": "d994052fb3c110e97b617e3c6fa3f449",
       "_sAnalysisState": "done",
@@ -284,7 +231,7 @@
       "_sFile": "v32_2f8b7.zip",
       "_nFilesize": 29147638,
       "_tsDateAdded": 1730933018,
-      "_nDownloadCount": 6914,
+      "_nDownloadCount": 7031,
       "_sDownloadUrl": "https://gamebanana.com/dl/1316721",
       "_sMd5Checksum": "f6002afa5a17409893b39112a62a5a5d",
       "_sAnalysisState": "done",
@@ -301,7 +248,7 @@
       "_sFile": "v31_40a8d.zip",
       "_nFilesize": 29149868,
       "_tsDateAdded": 1727283093,
-      "_nDownloadCount": 8369,
+      "_nDownloadCount": 8386,
       "_sDownloadUrl": "https://gamebanana.com/dl/1287187",
       "_sMd5Checksum": "8fb89e9ee7e06d0a24c95b468e982be3",
       "_sAnalysisState": "done",
@@ -318,7 +265,7 @@
       "_sFile": "v30_b0879.zip",
       "_nFilesize": 29190195,
       "_tsDateAdded": 1723692030,
-      "_nDownloadCount": 11467,
+      "_nDownloadCount": 11477,
       "_sDownloadUrl": "https://gamebanana.com/dl/1258541",
       "_sMd5Checksum": "a55bd4b2f3ca70e49464360e411964d2",
       "_sAnalysisState": "done",
@@ -335,7 +282,7 @@
       "_sFile": "v23_ab336.zip",
       "_nFilesize": 21834951,
       "_tsDateAdded": 1723615018,
-      "_nDownloadCount": 3064,
+      "_nDownloadCount": 3069,
       "_sDownloadUrl": "https://gamebanana.com/dl/1257990",
       "_sMd5Checksum": "8bea67d36f428d5dcf558038f275d4ef",
       "_sAnalysisState": "done",
@@ -352,7 +299,7 @@
       "_sFile": "v22_00edc.zip",
       "_nFilesize": 22544529,
       "_tsDateAdded": 1722322709,
-      "_nDownloadCount": 4819,
+      "_nDownloadCount": 4820,
       "_sDownloadUrl": "https://gamebanana.com/dl/1247499",
       "_sMd5Checksum": "352bd4620562181e7d437a258851c74b",
       "_sAnalysisState": "done",
@@ -369,7 +316,7 @@
       "_sFile": "v21_91b39.zip",
       "_nFilesize": 22792580,
       "_tsDateAdded": 1721279688,
-      "_nDownloadCount": 8995,
+      "_nDownloadCount": 8997,
       "_sDownloadUrl": "https://gamebanana.com/dl/1238838",
       "_sMd5Checksum": "dab4e990dfa701ac6d7477895f2203ef",
       "_sAnalysisState": "done",
@@ -386,7 +333,7 @@
       "_sFile": "v20_aa8d7.zip",
       "_nFilesize": 23155598,
       "_tsDateAdded": 1721251626,
-      "_nDownloadCount": 2217,
+      "_nDownloadCount": 2220,
       "_sDownloadUrl": "https://gamebanana.com/dl/1238580",
       "_sMd5Checksum": "a16f9aaf26eea39ff1002d38c40d8185",
       "_sAnalysisState": "done",
@@ -403,7 +350,7 @@
       "_sFile": "v12_33572.zip",
       "_nFilesize": 20884711,
       "_tsDateAdded": 1721226770,
-      "_nDownloadCount": 3283,
+      "_nDownloadCount": 3302,
       "_sDownloadUrl": "https://gamebanana.com/dl/1238361",
       "_sMd5Checksum": "6eea9f896d428921a54ce8cfbdcc17d8",
       "_sAnalysisState": "done",
@@ -416,7 +363,7 @@
       "_sDescription": "v1.2 - fixed hashes"
     }
   ],
-  "_nSubscriberCount": 677,
+  "_nSubscriberCount": 681,
   "_aContributingStudios": [],
   "_sLicense": "<a rel=\"license\" href=\"http://creativecommons.org/licenses/by-nc-nd/4.0/\"><img alt=\"Creative Commons License\" style=\"border-width:0\" src=\"https://i.creativecommons.org/l/by-nc-nd/4.0/88x31.png\" /></a><br />This work is licensed under a <a rel=\"license\" href=\"http://creativecommons.org/licenses/by-nc-nd/4.0/\">Creative Commons Attribution-NonCommercial-NoDerivs 4.0 Unported License</a>.",
   "_aLicenseChecklist": {
@@ -436,10 +383,10 @@
     ]
   },
   "_bGenerateTableOfContents": false,
-  "_sText": "ーーーーーーーーーーー<br><h1 class=\"SelectedElement\"><span class=\"RedColor\">This mod requires <a href=\"https://gamebanana.com/tools/17467\" target=\"_blank\">ZZMI</a>, I am unable to provide support for anything else.</span></h1><h1><span class=\"RedColor\">This mod also requires <a href=\"https://gamebanana.com/mods/531649\">RabbitFX</a> for her glow to work. You can download it <a href=\"https://gamebanana.com/mods/531649\">HERE</a>.</span></h1><h1><span class=\"RedColor\">This game has several LOD based on your GPU specs.<br></span><span class=\"RedColor\">Please look at <a href=\"https://gamebanana.com/polls/4170\">THIS POST</a> to test whether or not your GPU will load lower LOD models.<br></span><span class=\"RedColor\">I am currently working on looking for the hashes for the lower LODs.</span></h1>ーーーーーーーーーーー<br>Default keybind<br><br>H - Toggle Skirt<br>Y - Toggle Colour<br>N - Toggle Glow<br>ーーーーーーーーーーー<br><br>Hey everyone!<br><br>I was feeling a bit prolific while making the Nicole mod so I decided to make one for Ellen as well.<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/6696c0f83400f.jpg\"><br><br>I've been wanting to make a maid mod for a long time and this was the perfect opportunity.<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/6696c0f6a81d0.jpg\"><br><br>This turned out much better than I expected, the bounce in this game is absolutely amazing.<br><br><img src=\"https://i.imgur.com/02qzUTY.gif\"><br><br>Here are some extra shots.<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/6696c0f91e5b3.jpg\"><img src=\"https://files.gamebanana.com/img/ss/mods/6696c0fadea57.jpg\"><img src=\"https://files.gamebanana.com/img/ss/mods/6696c0f545cec.jpg\"><img src=\"https://files.gamebanana.com/img/ss/mods/6696c0f7c94dc.jpg\"><img src=\"https://files.gamebanana.com/img/ss/mods/6696d051e4d23.jpg\"><img src=\"https://files.gamebanana.com/img/ss/mods/6696c0f42b4f5.jpg\"><br><br>I'm not really entirely sure what to do about her skirt... If people like this enough I'll give it some more thought.<br><br>ーーーーーーーーーー<br><br>I've figured out how I want the skirt to look, it's been completely reworked, check it out.<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/669834ea2513d.jpg\" width=\"100%\"><img src=\"https://files.gamebanana.com/img/ss/mods/669834ea2513d.jpg\"><img src=\"https://files.gamebanana.com/img/ss/mods/669834ea120c6.jpg\" width=\"100%\"><img src=\"https://files.gamebanana.com/img/ss/mods/66983527b0035.jpg\" width=\"100%\"><img src=\"https://files.gamebanana.com/img/ss/mods/66983553e5764.jpg\" width=\"100%\"><br><img src=\"https://files.gamebanana.com/img/ss/mods/669836af95f19.jpg\"><br><br>A few action shots<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/6698392ccd435.jpg\"><img src=\"https://files.gamebanana.com/img/ss/mods/6698392c95b2e.jpg\"><img src=\"https://files.gamebanana.com/img/ss/mods/669839c8b8f36.jpg\"><img src=\"https://files.gamebanana.com/img/ss/mods/669839c8866d8.jpg\"><br><img src=\"https://files.gamebanana.com/img/ss/mods/669839aaea698.jpg\"><br><br>I think I've nailed it for this one.<br><br>ーーーーーーーーーー<br><br>Wow, we got 1000 likes! Thank you for all your support!! (´▽`ʃ♡ƪ)<br><br>As thanks, I've given her a rework. Check it out!<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/66bd7184599ad.jpg\"><br><br>I've given her an extra toggle, an extra white shark motif colour palette, and given her some glowy bits as requested by some.<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/66bd7171ed4d0.jpg\"><br><br>She looks so beautifully menacing with all these additions.<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/66bd721292d8b.jpg\"><img src=\"https://files.gamebanana.com/img/ss/mods/66bd72127825d.jpg\"><img src=\"https://files.gamebanana.com/img/ss/mods/66bd72125c8c7.jpg\"><img src=\"https://files.gamebanana.com/img/ss/mods/66bd72127479c.jpg\"><br><br>Once again, thank you for all your support and I hope you will continue supporting me in the future!",
+  "_sText": "\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc<br><h1 class=\"SelectedElement\"><span class=\"RedColor\">This mod requires\u00a0<a href=\"https://gamebanana.com/tools/17467\" target=\"_blank\">ZZMI</a>, I am unable to provide support for anything else.</span></h1><h1><span class=\"RedColor\">This mod also requires\u00a0<a href=\"https://gamebanana.com/mods/531649\">RabbitFX</a>\u00a0for her glow to work. You can download it\u00a0<a href=\"https://gamebanana.com/mods/531649\">HERE</a>.</span></h1><h1><span class=\"RedColor\">This game has several LOD based on your GPU specs.<br></span><span class=\"RedColor\">Please look at <a href=\"https://gamebanana.com/polls/4170\">THIS POST</a> to test whether or not your GPU will load lower LOD models.<br></span><span class=\"RedColor\">I am currently working on looking for the hashes for the lower LODs.</span></h1>\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc<br>Default keybind<br><br>H - Toggle Skirt<br>Y - Toggle Colour<br>N - Toggle Glow<br>\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc<br><br>Hey everyone!<br><br>I was feeling a bit prolific while making the Nicole mod so I decided to make one for Ellen as well.<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/6696c0f83400f.jpg\"><br><br>I've been wanting to make a maid mod for a long time and this was the perfect opportunity.<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/6696c0f6a81d0.jpg\"><br><br>This turned out much better than I expected, the bounce in this game is absolutely amazing.<br><br><img src=\"https://i.imgur.com/02qzUTY.gif\"><br><br>Here are some extra shots.<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/6696c0f91e5b3.jpg\"><img src=\"https://files.gamebanana.com/img/ss/mods/6696c0fadea57.jpg\"><img src=\"https://files.gamebanana.com/img/ss/mods/6696c0f545cec.jpg\"><img src=\"https://files.gamebanana.com/img/ss/mods/6696c0f7c94dc.jpg\"><img src=\"https://files.gamebanana.com/img/ss/mods/6696d051e4d23.jpg\"><img src=\"https://files.gamebanana.com/img/ss/mods/6696c0f42b4f5.jpg\"><br><br>I'm not really entirely sure what to do about her skirt... If people like this enough I'll give it some more thought.<br><br>\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc<br><br>I've figured out how I want the skirt to look, it's been completely reworked, check it out.<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/669834ea2513d.jpg\" width=\"100%\"><img src=\"https://files.gamebanana.com/img/ss/mods/669834ea2513d.jpg\"><img src=\"https://files.gamebanana.com/img/ss/mods/669834ea120c6.jpg\" width=\"100%\"><img src=\"https://files.gamebanana.com/img/ss/mods/66983527b0035.jpg\" width=\"100%\"><img src=\"https://files.gamebanana.com/img/ss/mods/66983553e5764.jpg\" width=\"100%\"><br><img src=\"https://files.gamebanana.com/img/ss/mods/669836af95f19.jpg\"><br><br>A few action shots<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/6698392ccd435.jpg\"><img src=\"https://files.gamebanana.com/img/ss/mods/6698392c95b2e.jpg\"><img src=\"https://files.gamebanana.com/img/ss/mods/669839c8b8f36.jpg\"><img src=\"https://files.gamebanana.com/img/ss/mods/669839c8866d8.jpg\"><br><img src=\"https://files.gamebanana.com/img/ss/mods/669839aaea698.jpg\"><br><br>I think I've nailed it for this one.<br><br>\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc\u30fc<br><br>Wow, we got 1000 likes! Thank you for all your support!! (\u00b4\u25bd`\u0283\u2661\u01aa)<br><br>As thanks, I've given her a rework. Check it out!<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/66bd7184599ad.jpg\"><br><br>I've given her an extra toggle, an extra white shark motif colour palette, and given her some glowy bits as requested by some.<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/66bd7171ed4d0.jpg\"><br><br>She looks so beautifully menacing with all these additions.<br><br><img src=\"https://files.gamebanana.com/img/ss/mods/66bd721292d8b.jpg\"><img src=\"https://files.gamebanana.com/img/ss/mods/66bd72127825d.jpg\"><img src=\"https://files.gamebanana.com/img/ss/mods/66bd72125c8c7.jpg\"><img src=\"https://files.gamebanana.com/img/ss/mods/66bd72127479c.jpg\"><br><br>Once again, thank you for all your support and I hope you will continue supporting me in the future!",
   "_bIsObsolete": false,
-  "_nLikeCount": 2593,
-  "_nViewCount": 492608,
+  "_nLikeCount": 2601,
+  "_nViewCount": 496957,
   "_sVersion": "3.4",
   "_bAcceptsDonations": true,
   "_bShowRipePromo": true,
@@ -473,7 +420,7 @@
     "_sLocation": "<a href=\"https://gamebanana.com\">Home</a> > <a href=\"https://gamebanana.com/members\">Members</a> > <a href=\"https://gamebanana.com/members/2987570\">caverabbit</a> > <a href=\"/members/settings/2987570\">Control Center : caverabbit</a> > <a href=\"https://gamebanana.com/members/cc/visibility/2987570\">Visibility : caverabbit</a>",
     "_sOnlineTitle": "",
     "_sOfflineTitle": "",
-    "_nPoints": 615333,
+    "_nPoints": 616593,
     "_nPointsRank": 17,
     "_aNormalMedals": [
       [
@@ -699,7 +646,7 @@
     ],
     "_bHasRipe": false,
     "_nBuddyCount": 16,
-    "_nSubscriberCount": 6034,
+    "_nSubscriberCount": 6082,
     "_aDonationMethods": [
       {
         "_sTitle": "Patreon Profile",
@@ -740,7 +687,7 @@
     "_sProfileUrl": "https://gamebanana.com/games/19567",
     "_sIconUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png",
     "_sBannerUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png",
-    "_nSubscriberCount": 98271,
+    "_nSubscriberCount": 100052,
     "_bHasSubmissionQueue": false,
     "_bAccessorIsSubscribed": false
   },
@@ -764,7 +711,7 @@
       "_sGroupName": "Key Authors",
       "_aAuthors": [
         {
-          "_sRole": "ME!! ♪(´▽｀)",
+          "_sRole": "ME!! \u266a(\u00b4\u25bd\uff40)",
           "_idRow": 2987570,
           "_sName": "caverabbit",
           "_sProfileUrl": "https://gamebanana.com/members/2987570",

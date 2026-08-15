@@ -23,7 +23,7 @@ void main() {
         page: 2,
         perPage: 20,
       );
-      expect(uri.path, '/apiv11/Mod/Index');
+      expect(uri.path, '/apiv13/Mod/Index');
       expect(uri.queryParameters, {
         '_aFilters[Generic_Game]': '19567',
         '_aFilters[Generic_Category]': '30395',
@@ -76,7 +76,7 @@ void main() {
 
     test('builds the search request', () {
       final uri = endpoints.search('ellen', page: 3);
-      expect(uri.path, '/apiv11/Util/Search/Results');
+      expect(uri.path, '/apiv13/Util/Search/Results');
       expect(uri.queryParameters, {
         '_sModelName': 'Mod',
         '_sSearchString': 'ellen',
@@ -100,12 +100,12 @@ void main() {
   group('Mod/<id> paths', () {
     test('profile', () {
       expect(endpoints.modProfile(531649).toString(),
-          'https://gamebanana.com/apiv11/Mod/531649/ProfilePage');
+          'https://gamebanana.com/apiv13/Mod/531649/ProfilePage');
     });
 
     test('download page', () {
       expect(endpoints.modDownloadPage(531649).toString(),
-          'https://gamebanana.com/apiv11/Mod/531649/DownloadPage');
+          'https://gamebanana.com/apiv13/Mod/531649/DownloadPage');
     });
 
     test('updates feed takes no parameters', () {
@@ -113,7 +113,7 @@ void main() {
       // question is always about the newest release, and a mod with fifty
       // update posts would otherwise tempt a caller into paging all of them.
       expect(endpoints.modUpdates(531649).toString(),
-          'https://gamebanana.com/apiv11/Mod/531649/Updates');
+          'https://gamebanana.com/apiv13/Mod/531649/Updates');
     });
   });
 
@@ -152,7 +152,7 @@ void main() {
         [531649, 528481],
         ['_idRow', '_sName', '_aFiles'],
       );
-      expect(uri.path, '/apiv11/Mod/Multi');
+      expect(uri.path, '/apiv13/Mod/Multi');
       expect(uri.queryParameters['_csvRowIds'], '531649,528481');
       expect(uri.queryParameters['_csvProperties'], '_idRow,_sName,_aFiles');
     });

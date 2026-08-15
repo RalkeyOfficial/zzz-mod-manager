@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_enums.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gb_image.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_page.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_submitter.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_top_sub.dart';
@@ -33,8 +34,11 @@ void main() {
         idRow: id,
         period: period,
         name: name ?? 'Mod $id',
-        imageUrl: 'https://example.invalid/$id-800.jpg',
-        thumbnailUrl: 'https://example.invalid/$id-220.jpg',
+        image: GbImage(
+          baseUrl: 'https://example.invalid',
+          file: '$id-800.jpg',
+          variants: {220: '$id-220.jpg'},
+        ),
         visibility: visibility,
         likeCount: 1234,
         submitter: const GbSubmitter(idRow: 9, name: 'author'),

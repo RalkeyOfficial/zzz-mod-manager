@@ -10,7 +10,7 @@ import '../../models/gamebanana/gb_enums.dart';
 class GameBananaEndpoints {
   const GameBananaEndpoints({this.gameId, this.baseUrl = defaultBaseUrl});
 
-  static const String defaultBaseUrl = 'https://gamebanana.com/apiv11';
+  static const String defaultBaseUrl = 'https://gamebanana.com/apiv13';
 
   /// Zenless Zone Zero. Every listing request is scoped to it.
   final int? gameId;
@@ -118,7 +118,7 @@ class GameBananaEndpoints {
   /// - **`_csvProperties` is a narrower set than a profile's fields.**
   ///   `_aArchivedFiles` and `_bHasFiles` are rejected as `UNKNOWN_PROPERTY`;
   ///   `_aFiles`, `_sVersion`, the four `_ts…` dates, the `_bIs…` flags,
-  ///   `_sProfileUrl` and `_aPreviewMedia` are accepted.
+  ///   `_sProfileUrl` and `_aPreviewContent` are accepted.
   /// - **`_aFiles` here is the union of current *and* archived files**, unlike
   ///   `ProfilePage` where the two are separate keys. `_bIsArchived` tells them
   ///   apart — see [GbMod.currentFiles]. So losing `_aArchivedFiles` costs

@@ -1,7 +1,7 @@
 /// GameBanana wire types.
 ///
 /// Everything here is prefixed **`Gb`** to mark it as a *remote DTO* — the
-/// shape GameBanana's undocumented `apiv11` happens to return today. They are
+/// shape GameBanana's undocumented `apiv13` happens to return today. They are
 /// not domain models: `ModInfo` and `ModMetadata` are ours, they outlive any
 /// API change, and nothing outside the GameBanana layer should be storing a
 /// `Gb*` object.

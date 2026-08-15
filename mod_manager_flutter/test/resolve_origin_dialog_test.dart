@@ -66,9 +66,9 @@ class _TransportFailure implements Exception {
 
 void main() {
   final profileUrl =
-      Uri.parse('https://gamebanana.com/apiv11/Mod/531649/ProfilePage');
+      Uri.parse('https://gamebanana.com/apiv13/Mod/531649/ProfilePage');
   final searchUrl = Uri.parse(
-    'https://gamebanana.com/apiv11/Util/Search/Results'
+    'https://gamebanana.com/apiv13/Util/Search/Results'
     '?_sModelName=Mod&_sSearchString=Ellen%20Swimsuit&_idGameRow=19567&_nPage=1',
   );
 
@@ -331,7 +331,7 @@ void main() {
         ..stub(profileUrl, body: loadGbFixture('mod_profile_531649'))
         ..stub(
           Uri.parse(
-            'https://gamebanana.com/apiv11/Util/Search/Results'
+            'https://gamebanana.com/apiv13/Util/Search/Results'
             '?_sModelName=Mod&_sSearchString=RabbitFX&_idGameRow=19567&_nPage=1',
           ),
           body: loadGbFixture('search_ellen'),
@@ -612,7 +612,7 @@ void main() {
     });
 
     testWidgets('a pasted file link says why it cannot work', (tester) async {
-      // Probed against the live API: neither apiv11 nor the legacy Core API
+      // Probed against the live API: neither apiv13 nor the legacy Core API
       // exposes the mod a file belongs to, so this is a dead end however it is
       // dressed up. Saying so beats searching for the url as if it were a name.
       await pumpDialog(tester, target: mod(name: 'Ellen Swimsuit'));

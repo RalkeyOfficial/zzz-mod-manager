@@ -1,1032 +1,1048 @@
 {
-    "_aMetadata": {
-        "_nRecordCount": 4,
-        "_nPerpage": 5,
-        "_bIsComplete": true
-    },
-    "_aRecords": [
-        {
-            "_idRow": 421423,
-            "_nStatus": "0",
-            "_bIsPrivate": false,
-            "_bAccessorIsSubmitter": false,
-            "_bIsTrashed": false,
-            "_sName": "Orginal Proportions added",
-            "_tsDateModified": 1778735348,
-            "_tsDateAdded": 1778732962,
-            "_sProfileUrl": "https:\/\/gamebanana.com\/updates\/421423",
-            "_aPreviewMedia": {
-                "_aMetadata": {
-                    "_sSnippet": "A version that has the exact (CBT) proportions of the OG Lucia model has been added. You can thank m..."
-                }
-            },
-            "_nPostCount": 0,
-            "_sInitialVisibility": "show",
-            "_bHasFiles": false,
-            "_sText": "<p>A version that has the exact (CBT) proportions of the OG Lucia model has been added. You can thank <a target=\"_blank\" rel=\"noopener noreferrer nofollow\" href=\"https:\/\/gamebanana.com\/members\/2042746\">manhattanbeach<\/a> for commissioning this one.<\/p><p>There was a minor texture issue with the metal spine on her book. It was supposed to be green that has now been fixed.<\/p><p><\/p>",
-            "_bShowRipePromo": false,
-            "_aSubmitter": {
-                "_idRow": 2527534,
-                "_sName": "ArcDestiny",
-                "_sUserTitle": "Bananite",
-                "_sHonoraryTitle": "",
-                "_tsJoinDate": 1678414777,
-                "_sAvatarUrl": "https:\/\/images.gamebanana.com\/img\/av\/6732d8d63783c.png",
-                "_sSigUrl": "",
-                "_sProfileUrl": "https:\/\/gamebanana.com\/members\/2527534",
-                "_sPointsUrl": "https:\/\/gamebanana.com\/members\/logs\/pointslog\/2527534",
-                "_sMedalsUrl": "https:\/\/gamebanana.com\/members\/stats\/medals\/2527534",
-                "_bIsOnline": false,
-                "_sLocation": "<a href=\"https:\/\/gamebanana.com\">Home<\/a> > <a href=\"https:\/\/gamebanana.com\/games\">Games<\/a> > <a href=\"https:\/\/gamebanana.com\/games\/19567\">Zenless Zone Zero<\/a>",
-                "_sOnlineTitle": "",
-                "_sOfflineTitle": "",
-                "_nPoints": 159892,
-                "_nPointsRank": 118,
-                "_aNormalMedals": [
-                    [
-                        "m_age_1.png",
-                        "One month a member",
-                        "normal",
-                        2140390
-                    ],
-                    [
-                        "m_age_2.png",
-                        "6 months a member",
-                        "normal",
-                        2140391
-                    ],
-                    [
-                        "m_age_3.png",
-                        "1 year a member",
-                        "normal",
-                        2140392
-                    ],
-                    [
-                        "m_pr_1.png",
-                        "Reached 1,000 Points",
-                        "normal",
-                        2277975
-                    ],
-                    [
-                        "thanks_recvd_1.png",
-                        "Received thanks 5 times",
-                        "normal",
-                        2306031
-                    ],
-                    [
-                        "subscribers_1.png",
-                        "Reached 10 subscribers",
-                        "normal",
-                        2308995
-                    ],
-                    [
-                        "m_pr_2.png",
-                        "Reached 2,500 Points",
-                        "normal",
-                        2324819
-                    ],
-                    [
-                        "features_1.png",
-                        "Submission featured",
-                        "normal",
-                        2325426
-                    ],
-                    [
-                        "m_pr_3.png",
-                        "Reached 7,500 Points",
-                        "normal",
-                        2332905
-                    ],
-                    [
-                        "mods1.png",
-                        "Submitted 5 Mods",
-                        "normal",
-                        2399886
-                    ],
-                    [
-                        "thanks_sent_1.png",
-                        "Thanked 5 submitters",
-                        "normal",
-                        2485447
-                    ],
-                    [
-                        "m_pr_4.png",
-                        "Reached 25,000 Points",
-                        "normal",
-                        2497588
-                    ],
-                    [
-                        "mods2.png",
-                        "Submitted 10 Mods",
-                        "normal",
-                        2570935
-                    ],
-                    [
-                        "m_age_4.png",
-                        "2 years a member",
-                        "normal",
-                        2915901
-                    ],
-                    [
-                        "wips1.png",
-                        "Submitted 10 WiPs",
-                        "normal",
-                        3051668
-                    ]
-                ],
-                "_aRareMedals": [
-                    [
-                        "subscribers_2.png",
-                        "Reached 50 subscribers",
-                        "rare",
-                        2375771
-                    ],
-                    [
-                        "thanks_recvd_2.png",
-                        "Received thanks 50 times",
-                        "rare",
-                        2538037
-                    ],
-                    [
-                        "mods3.png",
-                        "Submitted 15 Mods",
-                        "rare",
-                        2874451
-                    ],
-                    [
-                        "m_pr_5.png",
-                        "Reached 75,000 Points",
-                        "rare",
-                        3006363
-                    ],
-                    [
-                        "mods4.png",
-                        "Submitted 20 Mods",
-                        "rare",
-                        3208325
-                    ],
-                    [
-                        "features_2.png",
-                        "10 submissions featured",
-                        "rare",
-                        3214592
-                    ]
-                ],
-                "_aLegendaryMedals": [
-                    [
-                        "subscribers_3.png",
-                        "Reached 100 subscribers",
-                        "legendary",
-                        2460634
-                    ],
-                    [
-                        "ripe_subscriber.png",
-                        "Became a Ripe Supporter",
-                        "legendary",
-                        3287268
-                    ]
-                ],
-                "_bHasRipe": true,
-                "_nBuddyCount": 10,
-                "_nSubscriberCount": 1502,
-                "_aDonationMethods": [
-                    {
-                        "_sTitle": "Paypal",
-                        "_sValue": "jackmartoson@gmail.com",
-                        "_sInputType": "text",
-                        "_sInputPlaceholder": "Paypal Email...",
-                        "_sIconClasses": "MiscIcon PaypalDonateIcon",
-                        "_aValidator": {
-                            "_regexValidPattern": "@.*?\\.",
-                            "_sWarningMessage": "Email looks incorrect"
-                        },
-                        "_bIsUrl": false
-                    }
-                ],
-                "_bAccessorIsBuddy": false,
-                "_bBuddyRequestExistsWithAccessor": false,
-                "_bAccessorIsSubscribed": false,
-                "_sUpicUrl": "https:\/\/images.gamebanana.com\/img\/upic\/6732b0f528adf.png",
-                "_aDefaultLicenseChecklist": [
-                    "yes",
-                    "ask",
-                    "ask",
-                    "ask",
-                    "ask",
-                    "ask",
-                    "no",
-                    "ask"
-                ],
-                "_sDefaultLicense": "",
-                "_sHdAvatarUrl": "https:\/\/images.gamebanana.com\/img\/av\/685a5f8c5830f.png"
-            },
-            "_bFollowLinks": true,
-            "_bIsSignificant": false,
-            "_sVersion": "1.5",
-            "_aSubmission": {
-                "_sName": "Elegant Luica",
-                "_sProfileUrl": "https:\/\/gamebanana.com\/mods\/675945",
-                "_sModelName": "Mod",
-                "_sDownloadUrl": "https:\/\/gamebanana.com\/mods\/download\/675945"
-            },
-            "_aFileRowIds": [
-                1701141,
-                1701140,
-                1701139,
-                1701164
-            ],
-            "_aFiles": [
-                {
-                    "_idRow": 1701141,
-                    "_sFile": "lucia_elegantv5_glasses_.zip",
-                    "_nFilesize": 11641185,
-                    "_tsDateAdded": 1778732576,
-                    "_nDownloadCount": 2305,
-                    "_sDownloadUrl": "https:\/\/gamebanana.com\/dl\/1701141",
-                    "_sMd5Checksum": "3fb6087351246b93154360c80ef90ac2",
-                    "_sAnalysisState": "done",
-                    "_sAnalysisResult": "ok",
-                    "_sAnalysisResultVerbose": "File passed preliminary analysis",
-                    "_sAvState": "done",
-                    "_sAvResult": "clean",
-                    "_bIsArchived": false,
-                    "_bHasContents": true,
-                    "_sDescription": "Has glasses"
-                },
-                {
-                    "_idRow": 1701140,
-                    "_sFile": "lucia_elegantv5_no_glasses_.zip",
-                    "_nFilesize": 10932980,
-                    "_tsDateAdded": 1778732576,
-                    "_nDownloadCount": 1511,
-                    "_sDownloadUrl": "https:\/\/gamebanana.com\/dl\/1701140",
-                    "_sMd5Checksum": "00b2d5759d0e6c84ca30655aae4650a8",
-                    "_sAnalysisState": "done",
-                    "_sAnalysisResult": "ok",
-                    "_sAnalysisResultVerbose": "File passed preliminary analysis",
-                    "_sAvState": "done",
-                    "_sAvResult": "clean",
-                    "_bIsArchived": false,
-                    "_bHasContents": true,
-                    "_sDescription": "Has no glasses"
-                },
-                {
-                    "_idRow": 1701164,
-                    "_sFile": "lucia_elegantv5_og_proportions_.zip",
-                    "_nFilesize": 11369978,
-                    "_tsDateAdded": 1778735328,
-                    "_nDownloadCount": 1164,
-                    "_sDownloadUrl": "https:\/\/gamebanana.com\/dl\/1701164",
-                    "_sMd5Checksum": "7ef692f35eb98b2d190db49d04236dd2",
-                    "_sAnalysisState": "done",
-                    "_sAnalysisResult": "ok",
-                    "_sAnalysisResultVerbose": "File passed preliminary analysis",
-                    "_sAvState": "done",
-                    "_sAvResult": "clean",
-                    "_bIsArchived": false,
-                    "_bHasContents": true,
-                    "_sDescription": "Original (CBT) Proportions w\/glasses"
-                }
-            ],
-            "_aAccess": {
-                "Update_Edit": false,
-                "Update_Trash": false
-            }
-        },
-        {
-            "_idRow": 420999,
-            "_nStatus": "0",
-            "_bIsPrivate": false,
-            "_bAccessorIsSubmitter": false,
-            "_bIsTrashed": false,
-            "_sName": "New Stuff",
-            "_tsDateModified": 1778640418,
-            "_tsDateAdded": 1778574579,
-            "_sProfileUrl": "https:\/\/gamebanana.com\/updates\/420999",
-            "_aPreviewMedia": {
-                "_aMetadata": {
-                    "_sSnippet": "I've decided to go with a single version now, glasses only. It's my final ideal look of the mod so t..."
-                }
-            },
-            "_nPostCount": 0,
-            "_sInitialVisibility": "show",
-            "_bHasFiles": false,
-            "_sText": "<p><s>I've decided to go with a single version now, glasses only. It's my final ideal look of the mod so there won't be other variations<\/s>. Scratch that I decide to include a no glasses version again since it's the final iteration of the mod. Plus, it could open up mod merging for those that know how to that. Like combining a hair mod into this.<\/p><p>I gave up on getting rid of the purple glow, so I worked it into the outfit by adding a pendant there<\/p><p>I replaced Lucia's book with another book<\/p>",
-            "_bShowRipePromo": false,
-            "_aSubmitter": {
-                "_idRow": 2527534,
-                "_sName": "ArcDestiny",
-                "_sUserTitle": "Bananite",
-                "_sHonoraryTitle": "",
-                "_tsJoinDate": 1678414777,
-                "_sAvatarUrl": "https:\/\/images.gamebanana.com\/img\/av\/6732d8d63783c.png",
-                "_sSigUrl": "",
-                "_sProfileUrl": "https:\/\/gamebanana.com\/members\/2527534",
-                "_sPointsUrl": "https:\/\/gamebanana.com\/members\/logs\/pointslog\/2527534",
-                "_sMedalsUrl": "https:\/\/gamebanana.com\/members\/stats\/medals\/2527534",
-                "_bIsOnline": false,
-                "_sLocation": "<a href=\"https:\/\/gamebanana.com\">Home<\/a> > <a href=\"https:\/\/gamebanana.com\/games\">Games<\/a> > <a href=\"https:\/\/gamebanana.com\/games\/19567\">Zenless Zone Zero<\/a>",
-                "_sOnlineTitle": "",
-                "_sOfflineTitle": "",
-                "_nPoints": 159892,
-                "_nPointsRank": 118,
-                "_aNormalMedals": [
-                    [
-                        "m_age_1.png",
-                        "One month a member",
-                        "normal",
-                        2140390
-                    ],
-                    [
-                        "m_age_2.png",
-                        "6 months a member",
-                        "normal",
-                        2140391
-                    ],
-                    [
-                        "m_age_3.png",
-                        "1 year a member",
-                        "normal",
-                        2140392
-                    ],
-                    [
-                        "m_pr_1.png",
-                        "Reached 1,000 Points",
-                        "normal",
-                        2277975
-                    ],
-                    [
-                        "thanks_recvd_1.png",
-                        "Received thanks 5 times",
-                        "normal",
-                        2306031
-                    ],
-                    [
-                        "subscribers_1.png",
-                        "Reached 10 subscribers",
-                        "normal",
-                        2308995
-                    ],
-                    [
-                        "m_pr_2.png",
-                        "Reached 2,500 Points",
-                        "normal",
-                        2324819
-                    ],
-                    [
-                        "features_1.png",
-                        "Submission featured",
-                        "normal",
-                        2325426
-                    ],
-                    [
-                        "m_pr_3.png",
-                        "Reached 7,500 Points",
-                        "normal",
-                        2332905
-                    ],
-                    [
-                        "mods1.png",
-                        "Submitted 5 Mods",
-                        "normal",
-                        2399886
-                    ],
-                    [
-                        "thanks_sent_1.png",
-                        "Thanked 5 submitters",
-                        "normal",
-                        2485447
-                    ],
-                    [
-                        "m_pr_4.png",
-                        "Reached 25,000 Points",
-                        "normal",
-                        2497588
-                    ],
-                    [
-                        "mods2.png",
-                        "Submitted 10 Mods",
-                        "normal",
-                        2570935
-                    ],
-                    [
-                        "m_age_4.png",
-                        "2 years a member",
-                        "normal",
-                        2915901
-                    ],
-                    [
-                        "wips1.png",
-                        "Submitted 10 WiPs",
-                        "normal",
-                        3051668
-                    ]
-                ],
-                "_aRareMedals": [
-                    [
-                        "subscribers_2.png",
-                        "Reached 50 subscribers",
-                        "rare",
-                        2375771
-                    ],
-                    [
-                        "thanks_recvd_2.png",
-                        "Received thanks 50 times",
-                        "rare",
-                        2538037
-                    ],
-                    [
-                        "mods3.png",
-                        "Submitted 15 Mods",
-                        "rare",
-                        2874451
-                    ],
-                    [
-                        "m_pr_5.png",
-                        "Reached 75,000 Points",
-                        "rare",
-                        3006363
-                    ],
-                    [
-                        "mods4.png",
-                        "Submitted 20 Mods",
-                        "rare",
-                        3208325
-                    ],
-                    [
-                        "features_2.png",
-                        "10 submissions featured",
-                        "rare",
-                        3214592
-                    ]
-                ],
-                "_aLegendaryMedals": [
-                    [
-                        "subscribers_3.png",
-                        "Reached 100 subscribers",
-                        "legendary",
-                        2460634
-                    ],
-                    [
-                        "ripe_subscriber.png",
-                        "Became a Ripe Supporter",
-                        "legendary",
-                        3287268
-                    ]
-                ],
-                "_bHasRipe": true,
-                "_nBuddyCount": 10,
-                "_nSubscriberCount": 1502,
-                "_aDonationMethods": [
-                    {
-                        "_sTitle": "Paypal",
-                        "_sValue": "jackmartoson@gmail.com",
-                        "_sInputType": "text",
-                        "_sInputPlaceholder": "Paypal Email...",
-                        "_sIconClasses": "MiscIcon PaypalDonateIcon",
-                        "_aValidator": {
-                            "_regexValidPattern": "@.*?\\.",
-                            "_sWarningMessage": "Email looks incorrect"
-                        },
-                        "_bIsUrl": false
-                    }
-                ],
-                "_bAccessorIsBuddy": false,
-                "_bBuddyRequestExistsWithAccessor": false,
-                "_bAccessorIsSubscribed": false,
-                "_sUpicUrl": "https:\/\/images.gamebanana.com\/img\/upic\/6732b0f528adf.png",
-                "_aDefaultLicenseChecklist": [
-                    "yes",
-                    "ask",
-                    "ask",
-                    "ask",
-                    "ask",
-                    "ask",
-                    "no",
-                    "ask"
-                ],
-                "_sDefaultLicense": "",
-                "_sHdAvatarUrl": "https:\/\/images.gamebanana.com\/img\/av\/685a5f8c5830f.png"
-            },
-            "_bFollowLinks": true,
-            "_bIsSignificant": true,
-            "_sVersion": "1.3",
-            "_aSubmission": {
-                "_sName": "Elegant Luica",
-                "_sProfileUrl": "https:\/\/gamebanana.com\/mods\/675945",
-                "_sModelName": "Mod",
-                "_sDownloadUrl": "https:\/\/gamebanana.com\/mods\/download\/675945"
-            },
-            "_aFileRowIds": [
-                1699789,
-                1700415,
-                1700414
-            ],
-            "_aAccess": {
-                "Update_Edit": false,
-                "Update_Trash": false
-            }
-        },
-        {
-            "_idRow": 420450,
-            "_nStatus": "0",
-            "_bIsPrivate": false,
-            "_bAccessorIsSubmitter": false,
-            "_bIsTrashed": false,
-            "_sName": "Micro Update",
-            "_tsDateModified": 0,
-            "_tsDateAdded": 1778410463,
-            "_sProfileUrl": "https:\/\/gamebanana.com\/updates\/420450",
-            "_aPreviewMedia": {
-                "_aMetadata": {
-                    "_sSnippet": "I didn't like how plain the back of her jacket looked so I added a crest of a goat, it's shiny too!!..."
-                }
-            },
-            "_nPostCount": 0,
-            "_sInitialVisibility": "show",
-            "_bHasFiles": false,
-            "_sText": "<p>I didn't like how plain the back of her jacket looked so I added a crest of a goat, it's shiny too!!!<\/p><p>Final update for now, unless I get more ideas or someone helps me get rid of that purple light on her back.<\/p>",
-            "_bShowRipePromo": false,
-            "_aSubmitter": {
-                "_idRow": 2527534,
-                "_sName": "ArcDestiny",
-                "_sUserTitle": "Bananite",
-                "_sHonoraryTitle": "",
-                "_tsJoinDate": 1678414777,
-                "_sAvatarUrl": "https:\/\/images.gamebanana.com\/img\/av\/6732d8d63783c.png",
-                "_sSigUrl": "",
-                "_sProfileUrl": "https:\/\/gamebanana.com\/members\/2527534",
-                "_sPointsUrl": "https:\/\/gamebanana.com\/members\/logs\/pointslog\/2527534",
-                "_sMedalsUrl": "https:\/\/gamebanana.com\/members\/stats\/medals\/2527534",
-                "_bIsOnline": false,
-                "_sLocation": "<a href=\"https:\/\/gamebanana.com\">Home<\/a> > <a href=\"https:\/\/gamebanana.com\/games\">Games<\/a> > <a href=\"https:\/\/gamebanana.com\/games\/19567\">Zenless Zone Zero<\/a>",
-                "_sOnlineTitle": "",
-                "_sOfflineTitle": "",
-                "_nPoints": 159892,
-                "_nPointsRank": 118,
-                "_aNormalMedals": [
-                    [
-                        "m_age_1.png",
-                        "One month a member",
-                        "normal",
-                        2140390
-                    ],
-                    [
-                        "m_age_2.png",
-                        "6 months a member",
-                        "normal",
-                        2140391
-                    ],
-                    [
-                        "m_age_3.png",
-                        "1 year a member",
-                        "normal",
-                        2140392
-                    ],
-                    [
-                        "m_pr_1.png",
-                        "Reached 1,000 Points",
-                        "normal",
-                        2277975
-                    ],
-                    [
-                        "thanks_recvd_1.png",
-                        "Received thanks 5 times",
-                        "normal",
-                        2306031
-                    ],
-                    [
-                        "subscribers_1.png",
-                        "Reached 10 subscribers",
-                        "normal",
-                        2308995
-                    ],
-                    [
-                        "m_pr_2.png",
-                        "Reached 2,500 Points",
-                        "normal",
-                        2324819
-                    ],
-                    [
-                        "features_1.png",
-                        "Submission featured",
-                        "normal",
-                        2325426
-                    ],
-                    [
-                        "m_pr_3.png",
-                        "Reached 7,500 Points",
-                        "normal",
-                        2332905
-                    ],
-                    [
-                        "mods1.png",
-                        "Submitted 5 Mods",
-                        "normal",
-                        2399886
-                    ],
-                    [
-                        "thanks_sent_1.png",
-                        "Thanked 5 submitters",
-                        "normal",
-                        2485447
-                    ],
-                    [
-                        "m_pr_4.png",
-                        "Reached 25,000 Points",
-                        "normal",
-                        2497588
-                    ],
-                    [
-                        "mods2.png",
-                        "Submitted 10 Mods",
-                        "normal",
-                        2570935
-                    ],
-                    [
-                        "m_age_4.png",
-                        "2 years a member",
-                        "normal",
-                        2915901
-                    ],
-                    [
-                        "wips1.png",
-                        "Submitted 10 WiPs",
-                        "normal",
-                        3051668
-                    ]
-                ],
-                "_aRareMedals": [
-                    [
-                        "subscribers_2.png",
-                        "Reached 50 subscribers",
-                        "rare",
-                        2375771
-                    ],
-                    [
-                        "thanks_recvd_2.png",
-                        "Received thanks 50 times",
-                        "rare",
-                        2538037
-                    ],
-                    [
-                        "mods3.png",
-                        "Submitted 15 Mods",
-                        "rare",
-                        2874451
-                    ],
-                    [
-                        "m_pr_5.png",
-                        "Reached 75,000 Points",
-                        "rare",
-                        3006363
-                    ],
-                    [
-                        "mods4.png",
-                        "Submitted 20 Mods",
-                        "rare",
-                        3208325
-                    ],
-                    [
-                        "features_2.png",
-                        "10 submissions featured",
-                        "rare",
-                        3214592
-                    ]
-                ],
-                "_aLegendaryMedals": [
-                    [
-                        "subscribers_3.png",
-                        "Reached 100 subscribers",
-                        "legendary",
-                        2460634
-                    ],
-                    [
-                        "ripe_subscriber.png",
-                        "Became a Ripe Supporter",
-                        "legendary",
-                        3287268
-                    ]
-                ],
-                "_bHasRipe": true,
-                "_nBuddyCount": 10,
-                "_nSubscriberCount": 1502,
-                "_aDonationMethods": [
-                    {
-                        "_sTitle": "Paypal",
-                        "_sValue": "jackmartoson@gmail.com",
-                        "_sInputType": "text",
-                        "_sInputPlaceholder": "Paypal Email...",
-                        "_sIconClasses": "MiscIcon PaypalDonateIcon",
-                        "_aValidator": {
-                            "_regexValidPattern": "@.*?\\.",
-                            "_sWarningMessage": "Email looks incorrect"
-                        },
-                        "_bIsUrl": false
-                    }
-                ],
-                "_bAccessorIsBuddy": false,
-                "_bBuddyRequestExistsWithAccessor": false,
-                "_bAccessorIsSubscribed": false,
-                "_sUpicUrl": "https:\/\/images.gamebanana.com\/img\/upic\/6732b0f528adf.png",
-                "_aDefaultLicenseChecklist": [
-                    "yes",
-                    "ask",
-                    "ask",
-                    "ask",
-                    "ask",
-                    "ask",
-                    "no",
-                    "ask"
-                ],
-                "_sDefaultLicense": "",
-                "_sHdAvatarUrl": "https:\/\/images.gamebanana.com\/img\/av\/685a5f8c5830f.png"
-            },
-            "_bFollowLinks": true,
-            "_bIsSignificant": true,
-            "_sVersion": "1.1.2",
-            "_aSubmission": {
-                "_sName": "Elegant Luica",
-                "_sProfileUrl": "https:\/\/gamebanana.com\/mods\/675945",
-                "_sModelName": "Mod",
-                "_sDownloadUrl": "https:\/\/gamebanana.com\/mods\/download\/675945"
-            },
-            "_aFileRowIds": [
-                1698077,
-                1698078
-            ],
-            "_aFiles": [
-                {
-                    "_idRow": 1698077,
-                    "_sFile": "lucia_elegantv3.zip",
-                    "_nFilesize": 8656307,
-                    "_tsDateAdded": 1778410251,
-                    "_nDownloadCount": 881,
-                    "_sDownloadUrl": "https:\/\/gamebanana.com\/dl\/1698077",
-                    "_sMd5Checksum": "3a43db96d4bfc67751467e77c05807f3",
-                    "_sAnalysisState": "done",
-                    "_sAnalysisResult": "ok",
-                    "_sAnalysisResultVerbose": "File passed preliminary analysis",
-                    "_sAvState": "done",
-                    "_sAvResult": "clean",
-                    "_bIsArchived": true,
-                    "_bHasContents": true
-                },
-                {
-                    "_idRow": 1698078,
-                    "_sFile": "lucia_elegantv3_glasses_.zip",
-                    "_nFilesize": 11360109,
-                    "_tsDateAdded": 1778410254,
-                    "_nDownloadCount": 640,
-                    "_sDownloadUrl": "https:\/\/gamebanana.com\/dl\/1698078",
-                    "_sMd5Checksum": "1938968333d63f60fa2ca87be11a3ea8",
-                    "_sAnalysisState": "done",
-                    "_sAnalysisResult": "ok",
-                    "_sAnalysisResultVerbose": "File passed preliminary analysis",
-                    "_sAvState": "done",
-                    "_sAvResult": "clean",
-                    "_bIsArchived": true,
-                    "_bHasContents": true,
-                    "_sDescription": "Has Glasses"
-                }
-            ],
-            "_aAccess": {
-                "Update_Edit": false,
-                "Update_Trash": false
-            }
-        },
-        {
-            "_idRow": 420413,
-            "_nStatus": "0",
-            "_bIsPrivate": false,
-            "_bAccessorIsSubmitter": false,
-            "_bIsTrashed": false,
-            "_sName": "Fixes and Improvements",
-            "_tsDateModified": 1778397411,
-            "_tsDateAdded": 1778396835,
-            "_sProfileUrl": "https:\/\/gamebanana.com\/updates\/420413",
-            "_aPreviewMedia": {
-                "_aMetadata": {
-                    "_sSnippet": "There is a version that has glasses nowThe freezing in the agent menu should be fixed now. Chest siz..."
-                }
-            },
-            "_nPostCount": 0,
-            "_sInitialVisibility": "show",
-            "_bHasFiles": false,
-            "_sText": "<p>There is a version that has glasses now<\/p><p>The freezing in the agent menu should be fixed now. Chest size is reduced to be closer to Lucia's original size (No I will not make a bigger chest version). Added some shading to some areas.<\/p>",
-            "_bShowRipePromo": false,
-            "_aSubmitter": {
-                "_idRow": 2527534,
-                "_sName": "ArcDestiny",
-                "_sUserTitle": "Bananite",
-                "_sHonoraryTitle": "",
-                "_tsJoinDate": 1678414777,
-                "_sAvatarUrl": "https:\/\/images.gamebanana.com\/img\/av\/6732d8d63783c.png",
-                "_sSigUrl": "",
-                "_sProfileUrl": "https:\/\/gamebanana.com\/members\/2527534",
-                "_sPointsUrl": "https:\/\/gamebanana.com\/members\/logs\/pointslog\/2527534",
-                "_sMedalsUrl": "https:\/\/gamebanana.com\/members\/stats\/medals\/2527534",
-                "_bIsOnline": false,
-                "_sLocation": "<a href=\"https:\/\/gamebanana.com\">Home<\/a> > <a href=\"https:\/\/gamebanana.com\/games\">Games<\/a> > <a href=\"https:\/\/gamebanana.com\/games\/19567\">Zenless Zone Zero<\/a>",
-                "_sOnlineTitle": "",
-                "_sOfflineTitle": "",
-                "_nPoints": 159892,
-                "_nPointsRank": 118,
-                "_aNormalMedals": [
-                    [
-                        "m_age_1.png",
-                        "One month a member",
-                        "normal",
-                        2140390
-                    ],
-                    [
-                        "m_age_2.png",
-                        "6 months a member",
-                        "normal",
-                        2140391
-                    ],
-                    [
-                        "m_age_3.png",
-                        "1 year a member",
-                        "normal",
-                        2140392
-                    ],
-                    [
-                        "m_pr_1.png",
-                        "Reached 1,000 Points",
-                        "normal",
-                        2277975
-                    ],
-                    [
-                        "thanks_recvd_1.png",
-                        "Received thanks 5 times",
-                        "normal",
-                        2306031
-                    ],
-                    [
-                        "subscribers_1.png",
-                        "Reached 10 subscribers",
-                        "normal",
-                        2308995
-                    ],
-                    [
-                        "m_pr_2.png",
-                        "Reached 2,500 Points",
-                        "normal",
-                        2324819
-                    ],
-                    [
-                        "features_1.png",
-                        "Submission featured",
-                        "normal",
-                        2325426
-                    ],
-                    [
-                        "m_pr_3.png",
-                        "Reached 7,500 Points",
-                        "normal",
-                        2332905
-                    ],
-                    [
-                        "mods1.png",
-                        "Submitted 5 Mods",
-                        "normal",
-                        2399886
-                    ],
-                    [
-                        "thanks_sent_1.png",
-                        "Thanked 5 submitters",
-                        "normal",
-                        2485447
-                    ],
-                    [
-                        "m_pr_4.png",
-                        "Reached 25,000 Points",
-                        "normal",
-                        2497588
-                    ],
-                    [
-                        "mods2.png",
-                        "Submitted 10 Mods",
-                        "normal",
-                        2570935
-                    ],
-                    [
-                        "m_age_4.png",
-                        "2 years a member",
-                        "normal",
-                        2915901
-                    ],
-                    [
-                        "wips1.png",
-                        "Submitted 10 WiPs",
-                        "normal",
-                        3051668
-                    ]
-                ],
-                "_aRareMedals": [
-                    [
-                        "subscribers_2.png",
-                        "Reached 50 subscribers",
-                        "rare",
-                        2375771
-                    ],
-                    [
-                        "thanks_recvd_2.png",
-                        "Received thanks 50 times",
-                        "rare",
-                        2538037
-                    ],
-                    [
-                        "mods3.png",
-                        "Submitted 15 Mods",
-                        "rare",
-                        2874451
-                    ],
-                    [
-                        "m_pr_5.png",
-                        "Reached 75,000 Points",
-                        "rare",
-                        3006363
-                    ],
-                    [
-                        "mods4.png",
-                        "Submitted 20 Mods",
-                        "rare",
-                        3208325
-                    ],
-                    [
-                        "features_2.png",
-                        "10 submissions featured",
-                        "rare",
-                        3214592
-                    ]
-                ],
-                "_aLegendaryMedals": [
-                    [
-                        "subscribers_3.png",
-                        "Reached 100 subscribers",
-                        "legendary",
-                        2460634
-                    ],
-                    [
-                        "ripe_subscriber.png",
-                        "Became a Ripe Supporter",
-                        "legendary",
-                        3287268
-                    ]
-                ],
-                "_bHasRipe": true,
-                "_nBuddyCount": 10,
-                "_nSubscriberCount": 1502,
-                "_aDonationMethods": [
-                    {
-                        "_sTitle": "Paypal",
-                        "_sValue": "jackmartoson@gmail.com",
-                        "_sInputType": "text",
-                        "_sInputPlaceholder": "Paypal Email...",
-                        "_sIconClasses": "MiscIcon PaypalDonateIcon",
-                        "_aValidator": {
-                            "_regexValidPattern": "@.*?\\.",
-                            "_sWarningMessage": "Email looks incorrect"
-                        },
-                        "_bIsUrl": false
-                    }
-                ],
-                "_bAccessorIsBuddy": false,
-                "_bBuddyRequestExistsWithAccessor": false,
-                "_bAccessorIsSubscribed": false,
-                "_sUpicUrl": "https:\/\/images.gamebanana.com\/img\/upic\/6732b0f528adf.png",
-                "_aDefaultLicenseChecklist": [
-                    "yes",
-                    "ask",
-                    "ask",
-                    "ask",
-                    "ask",
-                    "ask",
-                    "no",
-                    "ask"
-                ],
-                "_sDefaultLicense": "",
-                "_sHdAvatarUrl": "https:\/\/images.gamebanana.com\/img\/av\/685a5f8c5830f.png"
-            },
-            "_bFollowLinks": true,
-            "_bIsSignificant": true,
-            "_sVersion": "1.1",
-            "_aSubmission": {
-                "_sName": "Elegant Luica",
-                "_sProfileUrl": "https:\/\/gamebanana.com\/mods\/675945",
-                "_sModelName": "Mod",
-                "_sDownloadUrl": "https:\/\/gamebanana.com\/mods\/download\/675945"
-            },
-            "_aFileRowIds": [
-                1697929,
-                1697930
-            ],
-            "_aAccess": {
-                "Update_Edit": false,
-                "Update_Trash": false
-            }
+  "_aMetadata": {
+    "_nRecordCount": 4,
+    "_nPerpage": 5,
+    "_bIsComplete": true
+  },
+  "_aRecords": [
+    {
+      "_idRow": 421423,
+      "_nStatus": "0",
+      "_bIsPrivate": false,
+      "_bAccessorIsSubmitter": false,
+      "_bIsTrashed": false,
+      "_sName": "Orginal Proportions added",
+      "_tsDateModified": 1778735348,
+      "_tsDateAdded": 1778732962,
+      "_sProfileUrl": "https://gamebanana.com/updates/421423",
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sBaseUrl": "https://images.gamebanana.com/static/img/DefaultEmbeddables",
+          "_sFile": "Update.jpg",
+          "_hFile": 350,
+          "_sFile220": "Update_220.jpg",
+          "_hFile220": 171
         }
-    ]
+      },
+      "_nPostCount": 0,
+      "_sInitialVisibility": "show",
+      "_bHasFiles": false,
+      "_sText": "<p>A version that has the exact (CBT) proportions of the OG Lucia model has been added. You can thank <a target=\"_blank\" rel=\"noopener noreferrer nofollow\" href=\"https://gamebanana.com/members/2042746\">manhattanbeach</a> for commissioning this one.</p><p>There was a minor texture issue with the metal spine on her book. It was supposed to be green that has now been fixed.</p><p></p>",
+      "_bShowRipePromo": false,
+      "_aSubmitter": {
+        "_idRow": 2527534,
+        "_sName": "ArcDestiny",
+        "_sUserTitle": "Bananite",
+        "_sHonoraryTitle": "",
+        "_tsJoinDate": 1678414777,
+        "_sAvatarUrl": "https://images.gamebanana.com/img/av/6732d8d63783c.png",
+        "_sSigUrl": "",
+        "_sProfileUrl": "https://gamebanana.com/members/2527534",
+        "_sPointsUrl": "https://gamebanana.com/members/logs/pointslog/2527534",
+        "_sMedalsUrl": "https://gamebanana.com/members/stats/medals/2527534",
+        "_bIsOnline": false,
+        "_sLocation": "<a href=\"https://gamebanana.com\">Home</a> > <a href=\"https://gamebanana.com/games\">Games</a> > <a href=\"https://gamebanana.com/games/19567\">Zenless Zone Zero</a>",
+        "_sOnlineTitle": "",
+        "_sOfflineTitle": "",
+        "_nPoints": 160162,
+        "_nPointsRank": 120,
+        "_aNormalMedals": [
+          [
+            "m_age_1.png",
+            "One month a member",
+            "normal",
+            2140390
+          ],
+          [
+            "m_age_2.png",
+            "6 months a member",
+            "normal",
+            2140391
+          ],
+          [
+            "m_age_3.png",
+            "1 year a member",
+            "normal",
+            2140392
+          ],
+          [
+            "m_pr_1.png",
+            "Reached 1,000 Points",
+            "normal",
+            2277975
+          ],
+          [
+            "thanks_recvd_1.png",
+            "Received thanks 5 times",
+            "normal",
+            2306031
+          ],
+          [
+            "subscribers_1.png",
+            "Reached 10 subscribers",
+            "normal",
+            2308995
+          ],
+          [
+            "m_pr_2.png",
+            "Reached 2,500 Points",
+            "normal",
+            2324819
+          ],
+          [
+            "features_1.png",
+            "Submission featured",
+            "normal",
+            2325426
+          ],
+          [
+            "m_pr_3.png",
+            "Reached 7,500 Points",
+            "normal",
+            2332905
+          ],
+          [
+            "mods1.png",
+            "Submitted 5 Mods",
+            "normal",
+            2399886
+          ],
+          [
+            "thanks_sent_1.png",
+            "Thanked 5 submitters",
+            "normal",
+            2485447
+          ],
+          [
+            "m_pr_4.png",
+            "Reached 25,000 Points",
+            "normal",
+            2497588
+          ],
+          [
+            "mods2.png",
+            "Submitted 10 Mods",
+            "normal",
+            2570935
+          ],
+          [
+            "m_age_4.png",
+            "2 years a member",
+            "normal",
+            2915901
+          ],
+          [
+            "wips1.png",
+            "Submitted 10 WiPs",
+            "normal",
+            3051668
+          ]
+        ],
+        "_aRareMedals": [
+          [
+            "subscribers_2.png",
+            "Reached 50 subscribers",
+            "rare",
+            2375771
+          ],
+          [
+            "thanks_recvd_2.png",
+            "Received thanks 50 times",
+            "rare",
+            2538037
+          ],
+          [
+            "mods3.png",
+            "Submitted 15 Mods",
+            "rare",
+            2874451
+          ],
+          [
+            "m_pr_5.png",
+            "Reached 75,000 Points",
+            "rare",
+            3006363
+          ],
+          [
+            "mods4.png",
+            "Submitted 20 Mods",
+            "rare",
+            3208325
+          ],
+          [
+            "features_2.png",
+            "10 submissions featured",
+            "rare",
+            3214592
+          ]
+        ],
+        "_aLegendaryMedals": [
+          [
+            "subscribers_3.png",
+            "Reached 100 subscribers",
+            "legendary",
+            2460634
+          ],
+          [
+            "ripe_subscriber.png",
+            "Became a Ripe Supporter",
+            "legendary",
+            3287268
+          ]
+        ],
+        "_bHasRipe": true,
+        "_nBuddyCount": 10,
+        "_nSubscriberCount": 1511,
+        "_aDonationMethods": [
+          {
+            "_sTitle": "Paypal",
+            "_sValue": "jackmartoson@gmail.com",
+            "_sInputType": "text",
+            "_sInputPlaceholder": "Paypal Email...",
+            "_sIconClasses": "MiscIcon PaypalDonateIcon",
+            "_aValidator": {
+              "_regexValidPattern": "@.*?\\.",
+              "_sWarningMessage": "Email looks incorrect"
+            },
+            "_bIsUrl": false
+          }
+        ],
+        "_bAccessorIsBuddy": false,
+        "_bBuddyRequestExistsWithAccessor": false,
+        "_bAccessorIsSubscribed": false,
+        "_sUpicUrl": "https://images.gamebanana.com/img/upic/6732b0f528adf.png",
+        "_aDefaultLicenseChecklist": [
+          "yes",
+          "ask",
+          "ask",
+          "ask",
+          "ask",
+          "ask",
+          "no",
+          "ask"
+        ],
+        "_sDefaultLicense": "",
+        "_sHdAvatarUrl": "https://images.gamebanana.com/img/av/685a5f8c5830f.png"
+      },
+      "_bFollowLinks": true,
+      "_bIsSignificant": false,
+      "_sVersion": "1.5",
+      "_aSubmission": {
+        "_sName": "Elegant Luica",
+        "_sProfileUrl": "https://gamebanana.com/mods/675945",
+        "_sModelName": "Mod",
+        "_sDownloadUrl": "https://gamebanana.com/mods/download/675945"
+      },
+      "_aFileRowIds": [
+        1701141,
+        1701140,
+        1701139,
+        1701164
+      ],
+      "_aFiles": [
+        {
+          "_idRow": 1701141,
+          "_sFile": "lucia_elegantv5_glasses_.zip",
+          "_nFilesize": 11641185,
+          "_tsDateAdded": 1778732576,
+          "_nDownloadCount": 2468,
+          "_sDownloadUrl": "https://gamebanana.com/dl/1701141",
+          "_sMd5Checksum": "3fb6087351246b93154360c80ef90ac2",
+          "_sAnalysisState": "done",
+          "_sAnalysisResult": "ok",
+          "_sAnalysisResultVerbose": "File passed preliminary analysis",
+          "_sAvState": "done",
+          "_sAvResult": "clean",
+          "_bIsArchived": false,
+          "_bHasContents": true,
+          "_sDescription": "Has glasses"
+        },
+        {
+          "_idRow": 1701140,
+          "_sFile": "lucia_elegantv5_no_glasses_.zip",
+          "_nFilesize": 10932980,
+          "_tsDateAdded": 1778732576,
+          "_nDownloadCount": 1596,
+          "_sDownloadUrl": "https://gamebanana.com/dl/1701140",
+          "_sMd5Checksum": "00b2d5759d0e6c84ca30655aae4650a8",
+          "_sAnalysisState": "done",
+          "_sAnalysisResult": "ok",
+          "_sAnalysisResultVerbose": "File passed preliminary analysis",
+          "_sAvState": "done",
+          "_sAvResult": "clean",
+          "_bIsArchived": false,
+          "_bHasContents": true,
+          "_sDescription": "Has no glasses"
+        },
+        {
+          "_idRow": 1701164,
+          "_sFile": "lucia_elegantv5_og_proportions_.zip",
+          "_nFilesize": 11369978,
+          "_tsDateAdded": 1778735328,
+          "_nDownloadCount": 1238,
+          "_sDownloadUrl": "https://gamebanana.com/dl/1701164",
+          "_sMd5Checksum": "7ef692f35eb98b2d190db49d04236dd2",
+          "_sAnalysisState": "done",
+          "_sAnalysisResult": "ok",
+          "_sAnalysisResultVerbose": "File passed preliminary analysis",
+          "_sAvState": "done",
+          "_sAvResult": "clean",
+          "_bIsArchived": false,
+          "_bHasContents": true,
+          "_sDescription": "Original (CBT) Proportions w/glasses"
+        }
+      ],
+      "_aAccess": {
+        "Update_Edit": false,
+        "Update_Trash": false
+      }
+    },
+    {
+      "_idRow": 420999,
+      "_nStatus": "0",
+      "_bIsPrivate": false,
+      "_bAccessorIsSubmitter": false,
+      "_bIsTrashed": false,
+      "_sName": "New Stuff",
+      "_tsDateModified": 1778640418,
+      "_tsDateAdded": 1778574579,
+      "_sProfileUrl": "https://gamebanana.com/updates/420999",
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sBaseUrl": "https://images.gamebanana.com/static/img/DefaultEmbeddables",
+          "_sFile": "Update.jpg",
+          "_hFile": 350,
+          "_sFile220": "Update_220.jpg",
+          "_hFile220": 171
+        }
+      },
+      "_nPostCount": 0,
+      "_sInitialVisibility": "show",
+      "_bHasFiles": false,
+      "_sText": "<p><s>I've decided to go with a single version now, glasses only. It's my final ideal look of the mod so there won't be other variations</s>. Scratch that I decide to include a no glasses version again since it's the final iteration of the mod. Plus, it could open up mod merging for those that know how to that. Like combining a hair mod into this.</p><p>I gave up on getting rid of the purple glow, so I worked it into the outfit by adding a pendant there</p><p>I replaced Lucia's book with another book</p>",
+      "_bShowRipePromo": false,
+      "_aSubmitter": {
+        "_idRow": 2527534,
+        "_sName": "ArcDestiny",
+        "_sUserTitle": "Bananite",
+        "_sHonoraryTitle": "",
+        "_tsJoinDate": 1678414777,
+        "_sAvatarUrl": "https://images.gamebanana.com/img/av/6732d8d63783c.png",
+        "_sSigUrl": "",
+        "_sProfileUrl": "https://gamebanana.com/members/2527534",
+        "_sPointsUrl": "https://gamebanana.com/members/logs/pointslog/2527534",
+        "_sMedalsUrl": "https://gamebanana.com/members/stats/medals/2527534",
+        "_bIsOnline": false,
+        "_sLocation": "<a href=\"https://gamebanana.com\">Home</a> > <a href=\"https://gamebanana.com/games\">Games</a> > <a href=\"https://gamebanana.com/games/19567\">Zenless Zone Zero</a>",
+        "_sOnlineTitle": "",
+        "_sOfflineTitle": "",
+        "_nPoints": 160162,
+        "_nPointsRank": 120,
+        "_aNormalMedals": [
+          [
+            "m_age_1.png",
+            "One month a member",
+            "normal",
+            2140390
+          ],
+          [
+            "m_age_2.png",
+            "6 months a member",
+            "normal",
+            2140391
+          ],
+          [
+            "m_age_3.png",
+            "1 year a member",
+            "normal",
+            2140392
+          ],
+          [
+            "m_pr_1.png",
+            "Reached 1,000 Points",
+            "normal",
+            2277975
+          ],
+          [
+            "thanks_recvd_1.png",
+            "Received thanks 5 times",
+            "normal",
+            2306031
+          ],
+          [
+            "subscribers_1.png",
+            "Reached 10 subscribers",
+            "normal",
+            2308995
+          ],
+          [
+            "m_pr_2.png",
+            "Reached 2,500 Points",
+            "normal",
+            2324819
+          ],
+          [
+            "features_1.png",
+            "Submission featured",
+            "normal",
+            2325426
+          ],
+          [
+            "m_pr_3.png",
+            "Reached 7,500 Points",
+            "normal",
+            2332905
+          ],
+          [
+            "mods1.png",
+            "Submitted 5 Mods",
+            "normal",
+            2399886
+          ],
+          [
+            "thanks_sent_1.png",
+            "Thanked 5 submitters",
+            "normal",
+            2485447
+          ],
+          [
+            "m_pr_4.png",
+            "Reached 25,000 Points",
+            "normal",
+            2497588
+          ],
+          [
+            "mods2.png",
+            "Submitted 10 Mods",
+            "normal",
+            2570935
+          ],
+          [
+            "m_age_4.png",
+            "2 years a member",
+            "normal",
+            2915901
+          ],
+          [
+            "wips1.png",
+            "Submitted 10 WiPs",
+            "normal",
+            3051668
+          ]
+        ],
+        "_aRareMedals": [
+          [
+            "subscribers_2.png",
+            "Reached 50 subscribers",
+            "rare",
+            2375771
+          ],
+          [
+            "thanks_recvd_2.png",
+            "Received thanks 50 times",
+            "rare",
+            2538037
+          ],
+          [
+            "mods3.png",
+            "Submitted 15 Mods",
+            "rare",
+            2874451
+          ],
+          [
+            "m_pr_5.png",
+            "Reached 75,000 Points",
+            "rare",
+            3006363
+          ],
+          [
+            "mods4.png",
+            "Submitted 20 Mods",
+            "rare",
+            3208325
+          ],
+          [
+            "features_2.png",
+            "10 submissions featured",
+            "rare",
+            3214592
+          ]
+        ],
+        "_aLegendaryMedals": [
+          [
+            "subscribers_3.png",
+            "Reached 100 subscribers",
+            "legendary",
+            2460634
+          ],
+          [
+            "ripe_subscriber.png",
+            "Became a Ripe Supporter",
+            "legendary",
+            3287268
+          ]
+        ],
+        "_bHasRipe": true,
+        "_nBuddyCount": 10,
+        "_nSubscriberCount": 1511,
+        "_aDonationMethods": [
+          {
+            "_sTitle": "Paypal",
+            "_sValue": "jackmartoson@gmail.com",
+            "_sInputType": "text",
+            "_sInputPlaceholder": "Paypal Email...",
+            "_sIconClasses": "MiscIcon PaypalDonateIcon",
+            "_aValidator": {
+              "_regexValidPattern": "@.*?\\.",
+              "_sWarningMessage": "Email looks incorrect"
+            },
+            "_bIsUrl": false
+          }
+        ],
+        "_bAccessorIsBuddy": false,
+        "_bBuddyRequestExistsWithAccessor": false,
+        "_bAccessorIsSubscribed": false,
+        "_sUpicUrl": "https://images.gamebanana.com/img/upic/6732b0f528adf.png",
+        "_aDefaultLicenseChecklist": [
+          "yes",
+          "ask",
+          "ask",
+          "ask",
+          "ask",
+          "ask",
+          "no",
+          "ask"
+        ],
+        "_sDefaultLicense": "",
+        "_sHdAvatarUrl": "https://images.gamebanana.com/img/av/685a5f8c5830f.png"
+      },
+      "_bFollowLinks": true,
+      "_bIsSignificant": true,
+      "_sVersion": "1.3",
+      "_aSubmission": {
+        "_sName": "Elegant Luica",
+        "_sProfileUrl": "https://gamebanana.com/mods/675945",
+        "_sModelName": "Mod",
+        "_sDownloadUrl": "https://gamebanana.com/mods/download/675945"
+      },
+      "_aFileRowIds": [
+        1699789,
+        1700415,
+        1700414
+      ],
+      "_aAccess": {
+        "Update_Edit": false,
+        "Update_Trash": false
+      }
+    },
+    {
+      "_idRow": 420450,
+      "_nStatus": "0",
+      "_bIsPrivate": false,
+      "_bAccessorIsSubmitter": false,
+      "_bIsTrashed": false,
+      "_sName": "Micro Update",
+      "_tsDateModified": 0,
+      "_tsDateAdded": 1778410463,
+      "_sProfileUrl": "https://gamebanana.com/updates/420450",
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sBaseUrl": "https://images.gamebanana.com/static/img/DefaultEmbeddables",
+          "_sFile": "Update.jpg",
+          "_hFile": 350,
+          "_sFile220": "Update_220.jpg",
+          "_hFile220": 171
+        }
+      },
+      "_nPostCount": 0,
+      "_sInitialVisibility": "show",
+      "_bHasFiles": false,
+      "_sText": "<p>I didn't like how plain the back of her jacket looked so I added a crest of a goat, it's shiny too!!!</p><p>Final update for now, unless I get more ideas or someone helps me get rid of that purple light on her back.</p>",
+      "_bShowRipePromo": false,
+      "_aSubmitter": {
+        "_idRow": 2527534,
+        "_sName": "ArcDestiny",
+        "_sUserTitle": "Bananite",
+        "_sHonoraryTitle": "",
+        "_tsJoinDate": 1678414777,
+        "_sAvatarUrl": "https://images.gamebanana.com/img/av/6732d8d63783c.png",
+        "_sSigUrl": "",
+        "_sProfileUrl": "https://gamebanana.com/members/2527534",
+        "_sPointsUrl": "https://gamebanana.com/members/logs/pointslog/2527534",
+        "_sMedalsUrl": "https://gamebanana.com/members/stats/medals/2527534",
+        "_bIsOnline": false,
+        "_sLocation": "<a href=\"https://gamebanana.com\">Home</a> > <a href=\"https://gamebanana.com/games\">Games</a> > <a href=\"https://gamebanana.com/games/19567\">Zenless Zone Zero</a>",
+        "_sOnlineTitle": "",
+        "_sOfflineTitle": "",
+        "_nPoints": 160162,
+        "_nPointsRank": 120,
+        "_aNormalMedals": [
+          [
+            "m_age_1.png",
+            "One month a member",
+            "normal",
+            2140390
+          ],
+          [
+            "m_age_2.png",
+            "6 months a member",
+            "normal",
+            2140391
+          ],
+          [
+            "m_age_3.png",
+            "1 year a member",
+            "normal",
+            2140392
+          ],
+          [
+            "m_pr_1.png",
+            "Reached 1,000 Points",
+            "normal",
+            2277975
+          ],
+          [
+            "thanks_recvd_1.png",
+            "Received thanks 5 times",
+            "normal",
+            2306031
+          ],
+          [
+            "subscribers_1.png",
+            "Reached 10 subscribers",
+            "normal",
+            2308995
+          ],
+          [
+            "m_pr_2.png",
+            "Reached 2,500 Points",
+            "normal",
+            2324819
+          ],
+          [
+            "features_1.png",
+            "Submission featured",
+            "normal",
+            2325426
+          ],
+          [
+            "m_pr_3.png",
+            "Reached 7,500 Points",
+            "normal",
+            2332905
+          ],
+          [
+            "mods1.png",
+            "Submitted 5 Mods",
+            "normal",
+            2399886
+          ],
+          [
+            "thanks_sent_1.png",
+            "Thanked 5 submitters",
+            "normal",
+            2485447
+          ],
+          [
+            "m_pr_4.png",
+            "Reached 25,000 Points",
+            "normal",
+            2497588
+          ],
+          [
+            "mods2.png",
+            "Submitted 10 Mods",
+            "normal",
+            2570935
+          ],
+          [
+            "m_age_4.png",
+            "2 years a member",
+            "normal",
+            2915901
+          ],
+          [
+            "wips1.png",
+            "Submitted 10 WiPs",
+            "normal",
+            3051668
+          ]
+        ],
+        "_aRareMedals": [
+          [
+            "subscribers_2.png",
+            "Reached 50 subscribers",
+            "rare",
+            2375771
+          ],
+          [
+            "thanks_recvd_2.png",
+            "Received thanks 50 times",
+            "rare",
+            2538037
+          ],
+          [
+            "mods3.png",
+            "Submitted 15 Mods",
+            "rare",
+            2874451
+          ],
+          [
+            "m_pr_5.png",
+            "Reached 75,000 Points",
+            "rare",
+            3006363
+          ],
+          [
+            "mods4.png",
+            "Submitted 20 Mods",
+            "rare",
+            3208325
+          ],
+          [
+            "features_2.png",
+            "10 submissions featured",
+            "rare",
+            3214592
+          ]
+        ],
+        "_aLegendaryMedals": [
+          [
+            "subscribers_3.png",
+            "Reached 100 subscribers",
+            "legendary",
+            2460634
+          ],
+          [
+            "ripe_subscriber.png",
+            "Became a Ripe Supporter",
+            "legendary",
+            3287268
+          ]
+        ],
+        "_bHasRipe": true,
+        "_nBuddyCount": 10,
+        "_nSubscriberCount": 1511,
+        "_aDonationMethods": [
+          {
+            "_sTitle": "Paypal",
+            "_sValue": "jackmartoson@gmail.com",
+            "_sInputType": "text",
+            "_sInputPlaceholder": "Paypal Email...",
+            "_sIconClasses": "MiscIcon PaypalDonateIcon",
+            "_aValidator": {
+              "_regexValidPattern": "@.*?\\.",
+              "_sWarningMessage": "Email looks incorrect"
+            },
+            "_bIsUrl": false
+          }
+        ],
+        "_bAccessorIsBuddy": false,
+        "_bBuddyRequestExistsWithAccessor": false,
+        "_bAccessorIsSubscribed": false,
+        "_sUpicUrl": "https://images.gamebanana.com/img/upic/6732b0f528adf.png",
+        "_aDefaultLicenseChecklist": [
+          "yes",
+          "ask",
+          "ask",
+          "ask",
+          "ask",
+          "ask",
+          "no",
+          "ask"
+        ],
+        "_sDefaultLicense": "",
+        "_sHdAvatarUrl": "https://images.gamebanana.com/img/av/685a5f8c5830f.png"
+      },
+      "_bFollowLinks": true,
+      "_bIsSignificant": true,
+      "_sVersion": "1.1.2",
+      "_aSubmission": {
+        "_sName": "Elegant Luica",
+        "_sProfileUrl": "https://gamebanana.com/mods/675945",
+        "_sModelName": "Mod",
+        "_sDownloadUrl": "https://gamebanana.com/mods/download/675945"
+      },
+      "_aFileRowIds": [
+        1698077,
+        1698078
+      ],
+      "_aFiles": [
+        {
+          "_idRow": 1698077,
+          "_sFile": "lucia_elegantv3.zip",
+          "_nFilesize": 8656307,
+          "_tsDateAdded": 1778410251,
+          "_nDownloadCount": 883,
+          "_sDownloadUrl": "https://gamebanana.com/dl/1698077",
+          "_sMd5Checksum": "3a43db96d4bfc67751467e77c05807f3",
+          "_sAnalysisState": "done",
+          "_sAnalysisResult": "ok",
+          "_sAnalysisResultVerbose": "File passed preliminary analysis",
+          "_sAvState": "done",
+          "_sAvResult": "clean",
+          "_bIsArchived": true,
+          "_bHasContents": true
+        },
+        {
+          "_idRow": 1698078,
+          "_sFile": "lucia_elegantv3_glasses_.zip",
+          "_nFilesize": 11360109,
+          "_tsDateAdded": 1778410254,
+          "_nDownloadCount": 644,
+          "_sDownloadUrl": "https://gamebanana.com/dl/1698078",
+          "_sMd5Checksum": "1938968333d63f60fa2ca87be11a3ea8",
+          "_sAnalysisState": "done",
+          "_sAnalysisResult": "ok",
+          "_sAnalysisResultVerbose": "File passed preliminary analysis",
+          "_sAvState": "done",
+          "_sAvResult": "clean",
+          "_bIsArchived": true,
+          "_bHasContents": true,
+          "_sDescription": "Has Glasses"
+        }
+      ],
+      "_aAccess": {
+        "Update_Edit": false,
+        "Update_Trash": false
+      }
+    },
+    {
+      "_idRow": 420413,
+      "_nStatus": "0",
+      "_bIsPrivate": false,
+      "_bAccessorIsSubmitter": false,
+      "_bIsTrashed": false,
+      "_sName": "Fixes and Improvements",
+      "_tsDateModified": 1778397411,
+      "_tsDateAdded": 1778396835,
+      "_sProfileUrl": "https://gamebanana.com/updates/420413",
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sBaseUrl": "https://images.gamebanana.com/static/img/DefaultEmbeddables",
+          "_sFile": "Update.jpg",
+          "_hFile": 350,
+          "_sFile220": "Update_220.jpg",
+          "_hFile220": 171
+        }
+      },
+      "_nPostCount": 0,
+      "_sInitialVisibility": "show",
+      "_bHasFiles": false,
+      "_sText": "<p>There is a version that has glasses now</p><p>The freezing in the agent menu should be fixed now. Chest size is reduced to be closer to Lucia's original size (No I will not make a bigger chest version). Added some shading to some areas.</p>",
+      "_bShowRipePromo": false,
+      "_aSubmitter": {
+        "_idRow": 2527534,
+        "_sName": "ArcDestiny",
+        "_sUserTitle": "Bananite",
+        "_sHonoraryTitle": "",
+        "_tsJoinDate": 1678414777,
+        "_sAvatarUrl": "https://images.gamebanana.com/img/av/6732d8d63783c.png",
+        "_sSigUrl": "",
+        "_sProfileUrl": "https://gamebanana.com/members/2527534",
+        "_sPointsUrl": "https://gamebanana.com/members/logs/pointslog/2527534",
+        "_sMedalsUrl": "https://gamebanana.com/members/stats/medals/2527534",
+        "_bIsOnline": false,
+        "_sLocation": "<a href=\"https://gamebanana.com\">Home</a> > <a href=\"https://gamebanana.com/games\">Games</a> > <a href=\"https://gamebanana.com/games/19567\">Zenless Zone Zero</a>",
+        "_sOnlineTitle": "",
+        "_sOfflineTitle": "",
+        "_nPoints": 160162,
+        "_nPointsRank": 120,
+        "_aNormalMedals": [
+          [
+            "m_age_1.png",
+            "One month a member",
+            "normal",
+            2140390
+          ],
+          [
+            "m_age_2.png",
+            "6 months a member",
+            "normal",
+            2140391
+          ],
+          [
+            "m_age_3.png",
+            "1 year a member",
+            "normal",
+            2140392
+          ],
+          [
+            "m_pr_1.png",
+            "Reached 1,000 Points",
+            "normal",
+            2277975
+          ],
+          [
+            "thanks_recvd_1.png",
+            "Received thanks 5 times",
+            "normal",
+            2306031
+          ],
+          [
+            "subscribers_1.png",
+            "Reached 10 subscribers",
+            "normal",
+            2308995
+          ],
+          [
+            "m_pr_2.png",
+            "Reached 2,500 Points",
+            "normal",
+            2324819
+          ],
+          [
+            "features_1.png",
+            "Submission featured",
+            "normal",
+            2325426
+          ],
+          [
+            "m_pr_3.png",
+            "Reached 7,500 Points",
+            "normal",
+            2332905
+          ],
+          [
+            "mods1.png",
+            "Submitted 5 Mods",
+            "normal",
+            2399886
+          ],
+          [
+            "thanks_sent_1.png",
+            "Thanked 5 submitters",
+            "normal",
+            2485447
+          ],
+          [
+            "m_pr_4.png",
+            "Reached 25,000 Points",
+            "normal",
+            2497588
+          ],
+          [
+            "mods2.png",
+            "Submitted 10 Mods",
+            "normal",
+            2570935
+          ],
+          [
+            "m_age_4.png",
+            "2 years a member",
+            "normal",
+            2915901
+          ],
+          [
+            "wips1.png",
+            "Submitted 10 WiPs",
+            "normal",
+            3051668
+          ]
+        ],
+        "_aRareMedals": [
+          [
+            "subscribers_2.png",
+            "Reached 50 subscribers",
+            "rare",
+            2375771
+          ],
+          [
+            "thanks_recvd_2.png",
+            "Received thanks 50 times",
+            "rare",
+            2538037
+          ],
+          [
+            "mods3.png",
+            "Submitted 15 Mods",
+            "rare",
+            2874451
+          ],
+          [
+            "m_pr_5.png",
+            "Reached 75,000 Points",
+            "rare",
+            3006363
+          ],
+          [
+            "mods4.png",
+            "Submitted 20 Mods",
+            "rare",
+            3208325
+          ],
+          [
+            "features_2.png",
+            "10 submissions featured",
+            "rare",
+            3214592
+          ]
+        ],
+        "_aLegendaryMedals": [
+          [
+            "subscribers_3.png",
+            "Reached 100 subscribers",
+            "legendary",
+            2460634
+          ],
+          [
+            "ripe_subscriber.png",
+            "Became a Ripe Supporter",
+            "legendary",
+            3287268
+          ]
+        ],
+        "_bHasRipe": true,
+        "_nBuddyCount": 10,
+        "_nSubscriberCount": 1511,
+        "_aDonationMethods": [
+          {
+            "_sTitle": "Paypal",
+            "_sValue": "jackmartoson@gmail.com",
+            "_sInputType": "text",
+            "_sInputPlaceholder": "Paypal Email...",
+            "_sIconClasses": "MiscIcon PaypalDonateIcon",
+            "_aValidator": {
+              "_regexValidPattern": "@.*?\\.",
+              "_sWarningMessage": "Email looks incorrect"
+            },
+            "_bIsUrl": false
+          }
+        ],
+        "_bAccessorIsBuddy": false,
+        "_bBuddyRequestExistsWithAccessor": false,
+        "_bAccessorIsSubscribed": false,
+        "_sUpicUrl": "https://images.gamebanana.com/img/upic/6732b0f528adf.png",
+        "_aDefaultLicenseChecklist": [
+          "yes",
+          "ask",
+          "ask",
+          "ask",
+          "ask",
+          "ask",
+          "no",
+          "ask"
+        ],
+        "_sDefaultLicense": "",
+        "_sHdAvatarUrl": "https://images.gamebanana.com/img/av/685a5f8c5830f.png"
+      },
+      "_bFollowLinks": true,
+      "_bIsSignificant": true,
+      "_sVersion": "1.1",
+      "_aSubmission": {
+        "_sName": "Elegant Luica",
+        "_sProfileUrl": "https://gamebanana.com/mods/675945",
+        "_sModelName": "Mod",
+        "_sDownloadUrl": "https://gamebanana.com/mods/download/675945"
+      },
+      "_aFileRowIds": [
+        1697929,
+        1697930
+      ],
+      "_aAccess": {
+        "Update_Edit": false,
+        "Update_Trash": false
+      }
+    }
+  ]
 }

@@ -16,9 +16,11 @@ void main() {
       expect(mod.name, 'ZZMI RabbitFX - Glow FX + Censor Remover');
       expect(mod.version, '7.7');
       expect(mod.profileUrl, 'https://gamebanana.com/mods/531649');
-      expect(mod.likeCount, 3715);
-      expect(mod.viewCount, 1040234);
-      expect(mod.downloadCount, 438060);
+      // Live counters, so these move whenever the fixture is re-captured —
+      // they pin which key lands in which field, not the mod's popularity.
+      expect(mod.likeCount, 3813);
+      expect(mod.viewCount, 1069167);
+      expect(mod.downloadCount, 452906);
       expect(mod.dateAdded!.isUtc, isTrue);
       expect(mod.dateAdded!.millisecondsSinceEpoch, 1722287660 * 1000);
       expect(mod.dateUpdated, isNotNull);

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_category.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_enums.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gb_image.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_page.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_submitter.dart';
@@ -74,7 +75,10 @@ void main() {
       idRow: 900,
       period: GbTopSubPeriod.today,
       name: 'Top Today',
-      imageUrl: 'https://example.invalid/900.jpg',
+      image: GbImage(
+        baseUrl: 'https://example.invalid',
+        file: '900.jpg',
+      ),
       visibility: GbVisibility.show,
       likeCount: 500,
     ),

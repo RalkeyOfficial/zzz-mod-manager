@@ -1,8 +1,11 @@
 /// An in-memory TTL cache of GameBanana response bodies.
 ///
-/// The default TTL mirrors the API's own `cache-control: public, max-age=600`
-/// rather than inventing a number: when the server tells us how long a response
-/// stays good, honouring that is both cheaper and more honest than guessing.
+/// The server's own `max-age` is honoured whenever it sends one — when it tells
+/// us how long a response stays good, that is both cheaper and more honest than
+/// guessing. **apiv13 sends no `cache-control` at all** (apiv11 sent
+/// `public, max-age=600`), so in practice [defaultTtl] is what applies, and the
+/// ten minutes it carries is our own choice — inherited from what apiv11 used to
+/// advertise, for want of a better-informed number.
 ///
 /// Two deliberate choices:
 ///

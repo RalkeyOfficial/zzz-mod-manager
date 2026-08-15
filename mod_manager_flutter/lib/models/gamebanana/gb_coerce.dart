@@ -1,4 +1,4 @@
-/// Coercion helpers for GameBanana's `apiv11` wire format.
+/// Coercion helpers for GameBanana's `apiv13` wire format.
 ///
 /// The API's field-prefix convention (`_s` string, `_n` number, `_b` bool,
 /// `_ts` unix seconds, `_a` array/object) is a naming *habit*, not a guarantee:

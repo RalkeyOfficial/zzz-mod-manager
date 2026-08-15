@@ -308,8 +308,10 @@ class _Card extends StatelessWidget {
   Widget _image(BuildContext context, bool blurred) {
     final scheme = Theme.of(context).colorScheme;
     // Prefer the large image here — this card is far wider than the 220px
-    // thumbnail the strip tiles used.
-    final url = sub.imageUrl ?? sub.thumbnailUrl;
+    // thumbnail the strip tiles used. `urlAtLeast` falls back to the original
+    // rather than inventing a filename, which for a TopSubs entry *is* the
+    // 800px render.
+    final url = sub.image?.urlAtLeast(800);
 
     Widget placeholder() => ColoredBox(
       color: scheme.surfaceContainerHighest,

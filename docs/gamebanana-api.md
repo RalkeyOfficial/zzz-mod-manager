@@ -4,10 +4,11 @@ Practical reference for talking to GameBanana from this app: which of the two AP
 to use, how to browse and filter, what every field we care about means, and where it
 will bite you.
 
-**Everything here was verified against the live API on 2026-08-01**, anonymously,
-with no cookies and no account. Requests are plain `GET`s that return JSON. Examples
-use the ZZZ game id **`19567`**; a real mod (`698834`) and file (`1770600`) are used
-so you can paste any of them into a terminal.
+**Everything here was verified against the live API on 2026-08-01, and re-verified
+against apiv13 on 2026-08-15**, anonymously, with no cookies and no account.
+Requests are plain `GET`s that return JSON. Examples use the ZZZ game id
+**`19567`**; a real mod (`698834`) and file (`1770600`) are used so you can paste
+any of them into a terminal.
 
 > Scope: the *remote* protocol only — what GameBanana serves and how to ask for it.
 > **Not** our client, which lives in
@@ -17,24 +18,47 @@ so you can paste any of them into a terminal.
 
 ---
 
-## 1. There are two APIs. Use apiv11.
+## 1. There are two APIs. Use apiv13.
 
-| | **apiv11** | **Core API (legacy)** |
+| | **apiv13** | **Core API (legacy)** |
 |---|---|---|
-| Base | `https://gamebanana.com/apiv11` | `https://api.gamebanana.com` |
+| Base | `https://gamebanana.com/apiv13` | `https://api.gamebanana.com` |
 | Documented? | **No** — no `/apidocs` page exists | **Yes**, at <https://api.gamebanana.com/> (and self-describing, see [§10](#10-the-legacy-core-api)) |
 | Who uses it | GameBanana's own site | Third-party apps, older tooling |
 | Filtering | Rich (`_aFilters`, 7 sort aliases) | Almost none — 3 sorts, 1 filter |
 | Shape | Purpose-built responses (`ProfilePage`, `DownloadPage`) | Field-picker (`?fields=a,b,c`) |
 
-**Use apiv11 for everything.** It returns whole screens in one request, it's what the
+**Use apiv13 for everything.** It returns whole screens in one request, it's what the
 website itself calls (so it won't rot quietly), and the legacy API's filtering is too
 weak to build a browser on. The tradeoff — being undocumented — is why this file
 exists.
 
 The Core API is still worth knowing for two things: it's *self-describing* (it can
 enumerate its own allowed fields and sorts), and it exposes a couple of things
-apiv11 doesn't name as plainly. See [§10](#10-the-legacy-core-api).
+apiv13 doesn't name as plainly. See [§10](#10-the-legacy-core-api).
+
+### Versions, and why v13 rather than v11 or v12
+
+`apiv11`, `apiv12` and `apiv13` all serve today, and **v11 carries no deprecation or
+sunset header**, so nothing forces the move — but its `_aPreviewMedia` is a shape the
+site itself no longer requests, which is exactly what rots quietly on an API with no
+`/apidocs`.
+
+**The entire difference between v11 and v13 is the preview-image field**, plus a new
+`_sPayType` (`free`/`freemium`). Everything else was re-verified unchanged: sorts,
+filters, the `_nPerpage` cap, the error envelope, `DownloadPage`, `Mod/Categories`,
+`Game/<id>/ProfilePage`, `Subfeed`, `_aFiles`, and downloads.
+
+| | v11 | v12 | v13 |
+|---|---|---|---|
+| `_aPreviewMedia` | ✅ | ✅ | ❌ removed |
+| `_aPreviewContent` | ❌ | ✅ | ✅ |
+| `_sPayType` | ❌ | ✅ | ✅ |
+| `cache-control` | `max-age=600` | **none** | **none** |
+
+**Skip v12**: it is the transitional version that carries *both* image shapes, and
+offers nothing v13 doesn't. The image change is [§5](#images); the missing
+`cache-control` is [§2](#caching-and-rate-limits).
 
 ### No authentication, for anything we do
 
@@ -63,10 +87,14 @@ read themselves:
 | `_ts…` | **Unix timestamp, seconds** | `_tsDateAdded` |
 | `_ds…` | date *string* | `_dsReleaseDate` |
 | `_csv…` | comma-separated input param | `_csvProperties` |
-| `_h…` / `_w…` | pixel height / width | `_hFile220`, `_wFile220` |
+| `_h…` | pixel height | `_hFile220` |
 
 Two exceptions that will trip you up: **`_nStatus` is a string** (`"0"`), and a
 `_ts…` of **`0` means "never"**, not 1970 — treat it as null.
+
+`_w…` (pixel width) was a prefix under apiv11 and **no longer appears anywhere in
+apiv13** — image variants now ship a height only, because the width is the variant
+size itself ([§5](#images)).
 
 ### Request parameters
 
@@ -74,7 +102,7 @@ Query params only. Array params use PHP bracket syntax and **must be URL-encoded
 
 ```bash
 # _aFilters[Generic_Game]=19567
-curl 'https://gamebanana.com/apiv11/Mod/Index?_aFilters%5BGeneric_Game%5D=19567&_nPerpage=5'
+curl 'https://gamebanana.com/apiv13/Mod/Index?_aFilters%5BGeneric_Game%5D=19567&_nPerpage=5'
 ```
 
 Common params: `_nPage` (1-based), `_nPerpage`, `_sSort`, `_aFilters[…]`,
@@ -105,16 +133,31 @@ HTTP status carries the class, the body carries the detail:
                                "_sErrorMessage": "Sort alias not recognized" } } }
 ```
 
-Codes seen: `NO_SUCH_ROUTE` (404), `INPUT_ERRORS` (400) with a per-parameter
+Codes seen: `NO_SUCH_RECORD` (404), `INPUT_ERRORS` (400) with a per-parameter
 breakdown, `UNKNOWN_FILTER`, `INVALID_FILTER_VALUE`, `UNKNOWN_SORT`,
-`VALUE_NOT_ALLOWED`, `INVALID_PERPAGE`. Errors **do not enumerate the valid values**
-— "not recognized" is all you get, which is why [§4](#4-sorting-and-filtering)
-lists them explicitly.
+`UNKNOWN_PROPERTY`, `VALUE_NOT_ALLOWED`, `INVALID_PERPAGE`. Errors **do not
+enumerate the valid values** — "not recognized" is all you get, which is why
+[§4](#4-sorting-and-filtering) lists them explicitly.
+
+**An unrecognised *route* is no longer a JSON error.** apiv11 and apiv12 answer
+`/apiv1N/Mod/NoSuchRoute` with `404` + `{"_sErrorCode": "NO_SUCH_ROUTE"}`; **apiv13
+returns `200` with a full HTML error page**, which a JSON client will hit as a parse
+failure rather than a typed error. Worth knowing, but not worth defending against
+with anything elaborate: routes are written by us, not by users.
+
+What *users* can reach is a **missing mod id**, and that is unchanged —
+`Mod/999999999/ProfilePage`, `/DownloadPage` and `/Updates` all still return `404`
+with `{"_sErrorCode": "NO_SUCH_RECORD", "_sErrorMessage": "This Mod doesn't exist"}`.
+So a "has this mod been removed?" check behaves identically on v13.
 
 ### Caching and rate limits
 
-- Responses carry `cache-control: public, max-age=600`. **Mirror that 10-minute TTL**
-  in a client cache rather than inventing one.
+- **apiv13 sends no `cache-control` at all.** apiv11 answered every request with
+  `public, max-age=600`, and the advice used to be "mirror that 10-minute TTL rather
+  than inventing one". There is now nothing to mirror, so a client cache has to pick
+  its own number — 10 minutes remains a defensible one, inherited from what v11 used
+  to advertise, but be honest that it is a choice rather than the server's
+  instruction. Honour a `max-age` if one reappears.
 - **No published rate limit** — no `RateLimit-*`, no `Retry-After` on normal
   responses. 30 concurrent requests in a burst all returned `200` with no throttling.
   That is *not* a licence to hammer it: treat backoff as reactive (on `429`/`503`),
@@ -128,17 +171,17 @@ lists them explicitly.
 
 | Endpoint | Returns |
 |---|---|
-| `GET /apiv11/Game/<gameId>/ProfilePage` | Game info + **its sections and mod root categories** |
-| `GET /apiv11/Mod/Categories?_idGameRow=<id>&_sSort=…` | Root categories for a game |
-| `GET /apiv11/Mod/Categories?_idCategoryRow=<id>&_sSort=…` | **Subcategories** of a category |
-| `GET /apiv11/Mod/Index?_aFilters[…]&_sSort=…` | Filtered, sorted mod list — the browse workhorse |
-| `GET /apiv11/Game/<gameId>/Subfeed` | The game's activity feed (newest-ish, unfiltered) |
-| `GET /apiv11/Game/<gameId>/TopSubs` | **"Best of period" — 3 mods × 7 time windows.** See [§3.1](#31-top-submissions--gameidtopsubs) |
-| `GET /apiv11/Util/Search/Results?_sModelName=Mod&_sSearchString=…` | Text search |
-| `GET /apiv11/Mod/<id>/ProfilePage` | Everything for a mod detail screen, in one call |
-| `GET /apiv11/Mod/<id>/DownloadPage` | Just the file lists — cheap, for update checks |
-| `GET /apiv11/Mod/<id>/Updates` | The author's changelog entries |
-| `GET /apiv11/Mod/Multi?_csvRowIds=…&_csvProperties=…` | **Many mods, chosen fields, one request** |
+| `GET /apiv13/Game/<gameId>/ProfilePage` | Game info + **its sections and mod root categories** |
+| `GET /apiv13/Mod/Categories?_idGameRow=<id>&_sSort=…` | Root categories for a game |
+| `GET /apiv13/Mod/Categories?_idCategoryRow=<id>&_sSort=…` | **Subcategories** of a category |
+| `GET /apiv13/Mod/Index?_aFilters[…]&_sSort=…` | Filtered, sorted mod list — the browse workhorse |
+| `GET /apiv13/Game/<gameId>/Subfeed` | The game's activity feed (newest-ish, unfiltered) |
+| `GET /apiv13/Game/<gameId>/TopSubs` | **"Best of period" — 3 mods × 7 time windows.** See [§3.1](#31-top-submissions--gameidtopsubs) |
+| `GET /apiv13/Util/Search/Results?_sModelName=Mod&_sSearchString=…` | Text search |
+| `GET /apiv13/Mod/<id>/ProfilePage` | Everything for a mod detail screen, in one call |
+| `GET /apiv13/Mod/<id>/DownloadPage` | Just the file lists — cheap, for update checks |
+| `GET /apiv13/Mod/<id>/Updates` | The author's changelog entries |
+| `GET /apiv13/Mod/Multi?_csvRowIds=…&_csvProperties=…` | **Many mods, chosen fields, one request** |
 
 ### Browsing — `Mod/Index`
 
@@ -146,7 +189,7 @@ The one to build the results grid on. Filter, sort and page:
 
 ```bash
 # UI mods for ZZZ, most liked first
-curl 'https://gamebanana.com/apiv11/Mod/Index?_aFilters%5BGeneric_Game%5D=19567\
+curl 'https://gamebanana.com/apiv13/Mod/Index?_aFilters%5BGeneric_Game%5D=19567\
 &_aFilters%5BGeneric_Category%5D=30395&_sSort=Generic_MostLiked&_nPerpage=20&_nPage=1'
 ```
 
@@ -160,13 +203,13 @@ a "what's new" strip; use `Index` for anything the user controls.
 
 ### 3.1 Top submissions — `Game/<id>/TopSubs`
 
-Undocumented even by the standards of the rest of apiv11 — it appears in no field
+Undocumented even by the standards of the rest of apiv13 — it appears in no field
 list and was found by probing route names. It is the **only** way to get
 period-ranked "best of" data, and worth knowing about before anyone tries to
 synthesise it:
 
 ```bash
-curl 'https://gamebanana.com/apiv11/Game/19567/TopSubs'
+curl 'https://gamebanana.com/apiv13/Game/19567/TopSubs'
 ```
 
 Returns a **bare array** of exactly **21 entries: three for each of seven windows**,
@@ -191,7 +234,7 @@ Its entry shape is its **own**, not a subset of the mod object:
 | `_idRow` | A normal mod id — opens through `Mod/<id>/ProfilePage` like anything else |
 | `_sPeriod` | The window this entry won |
 | `_sName`, `_sProfileUrl` | |
-| `_sImageUrl`, `_sThumbnailUrl` | **Finished urls** (800px / 220px), *not* the `_aPreviewMedia` base-plus-variants ladder — there is no size to negotiate |
+| `_aPreviewContent.screenshot` | The cover, as the **ordinary variant ladder** ([§5](#images)) — `_sFile` is the 800px render here rather than an original upload, with `_sFile220` beside it. Under apiv11 this was two finished urls (`_sImageUrl`, `_sThumbnailUrl`) with no size to negotiate; that difference is gone |
 | `_sInitialVisibility` | Present on every entry, so the NSFW filter still applies |
 | `_aSubmitter`, `_nLikeCount`, `_nPostCount` | |
 | `_aRootCategory` | Root only — **no `_aSubCategory`**, so an entry cannot show a character name |
@@ -204,7 +247,7 @@ nothing here, so it needs to collapse gracefully rather than render empty headin
 ### Search — `Util/Search/Results`
 
 ```bash
-curl 'https://gamebanana.com/apiv11/Util/Search/Results?_sModelName=Mod\
+curl 'https://gamebanana.com/apiv13/Util/Search/Results?_sModelName=Mod\
 &_sSearchString=ellen&_idGameRow=19567&_nPage=1'
 ```
 
@@ -219,9 +262,10 @@ One request fills an entire detail screen. Top-level keys:
 
 ```
 _idRow _sName _sText _sVersion _sProfileUrl _sDownloadUrl _sLicense _sCommentsMode
+_sPayType
 _tsDateAdded _tsDateModified _tsDateUpdated
 _aGame _aCategory _aSuperCategory _aSubmitter _aTags _aCredits _aContributingStudios
-_aPreviewMedia _aFiles _aArchivedFiles _aEmbeddables _aLicenseChecklist
+_aPreviewContent _aFiles _aArchivedFiles _aEmbeddables _aLicenseChecklist
 _aContentRatings _sInitialVisibility
 _nLikeCount _nViewCount _nDownloadCount _nPostCount _nThanksCount _nSubscriberCount
 _nUpdatesCount _bHasUpdates _nAllTodosCount _bHasTodos
@@ -240,8 +284,13 @@ change?".
 
 Paginated author update posts: `_idRow`, `_sName` (title, often the closest thing to
 a real version number a mod page has — `Version 1.5`), `_tsDateAdded`, `_sProfileUrl`,
-and the body in `_aPreviewMedia._aMetadata._sSnippet` / `_sText`. This is the
-changelog to show before updating — no scraping needed.
+and the body in `_sText`. This is the changelog to show before updating — no scraping
+needed.
+
+**apiv13 dropped the pre-truncated body snippet.** apiv11 carried a ready-made teaser
+at `_aPreviewMedia._aMetadata._sSnippet`; v13's `_aPreviewContent` here holds a stock
+`DefaultEmbeddables/Update.jpg` illustration instead, and no snippet anywhere. Take
+the teaser from `_sText` yourself.
 
 **`_aFileRowIds` is the field that matters most, and it is easy to miss.** It lists
 the files released *together* in that post, which is the only authoritative answer to
@@ -273,7 +322,7 @@ Three things to know:
 The most useful non-obvious endpoint. Fetch many mods at once **and pick the fields**:
 
 ```bash
-curl 'https://gamebanana.com/apiv11/Mod/Multi?_csvRowIds=698834,605830\
+curl 'https://gamebanana.com/apiv13/Mod/Multi?_csvRowIds=698834,605830\
 &_csvProperties=_idRow,_sName,_sVersion,_tsDateUpdated,_aFiles,_bIsObsolete'
 ```
 
@@ -286,8 +335,11 @@ assumed, and the last two will bite:
   trim listing payloads.
 - **`_csvProperties` accepts a narrower set than a profile carries.** `_aFiles`,
   `_sVersion`, the `_ts…` dates, `_bIsObsolete` / `_bIsPrivate` / `_bIsTrashed` /
-  `_bIsWithheld`, `_sProfileUrl` and `_aPreviewMedia` all work. `_aArchivedFiles` and
-  `_bHasFiles` are rejected outright as `UNKNOWN_PROPERTY`.
+  `_bIsWithheld`, `_sProfileUrl` and `_aPreviewContent` all work. `_aArchivedFiles`
+  and `_bHasFiles` are rejected outright as `UNKNOWN_PROPERTY` — **as is
+  `_aPreviewMedia` on v13 and `_aPreviewContent` on v11**, so this parameter is a
+  place the version difference surfaces as a hard `400` rather than a missing field.
+  `_sPayType` is rejected on both.
 - **`_aFiles` here is the union of current *and* archived files**, unlike
   `ProfilePage` where they are two separate keys. Measured on mod `531649`: 14 entries
   from `Multi` against 6 + 8 from its profile, same ids. `_bIsArchived` is what tells
@@ -347,8 +399,8 @@ either API:
   **`["id", "name", "udate"]`** ([§10](#10-the-legacy-core-api)).
 
 > **Honesty about the strength of that second point.** The Core API enumerates
-> *its own* surface, not apiv11's — apiv11 has seven `Generic_*` sorts that appear
-> nowhere in that list. So it is corroboration, **not proof**: apiv11 has no
+> *its own* surface, not apiv13's — apiv13 has seven `Generic_*` sorts that appear
+> nowhere in that list. So it is corroboration, **not proof**: apiv13 has no
 > discovery endpoint, so "no ripe sort exists there" rests on nine rejected guesses.
 > (An earlier revision of this file overstated it as settled. It isn't.)
 
@@ -417,7 +469,8 @@ we actually care about:
 | `_aSubCategory` | list | The **specific** category, and the only place a listing names it. For ZZZ this is usually the *character* ("Ellen Joe"). Absent on mods filed directly under a root. |
 | `_aCategory` | profile | The profile's spelling of the specific category. Carries `_idRow`; the two listing spellings do not (see [below](#three-spellings-of-category)). |
 | `_aTags` | both | Author tags. **Two different wire shapes** — see below. Often empty; don't rely on it for character detection. |
-| `_aPreviewMedia._aImages[]` | both | Gallery. See below. |
+| `_aPreviewContent` | both | Gallery — but **`screenshots` (array) on a profile and `screenshot` (one object) on a listing**. See below. |
+| `_sPayType` | both | New in v12. `free` / `freemium` (43 / 7 in a 50-record sample). Not accepted by `Mod/Multi`. |
 | `_nLikeCount`, `_nViewCount`, `_nPostCount` | both | Stats for the card. |
 | `_nDownloadCount` | **profile only** | **Not on listing records.** A card cannot show a download count — see below. |
 | `_bHasFiles` | list | Whether anything is downloadable. |
@@ -442,6 +495,10 @@ this wrong shows up as a card rendering a confident zero:
 - **`_aArchivedFiles` is omitted, not empty,** when a mod has no superseded files. So
   `null` and `[]` genuinely both occur and mean different things (see
   [§6](#6-files--_afiles-and-_aarchivedfiles)).
+- **The gallery is profile-only as of apiv13.** A listing's `_aPreviewContent` holds
+  one `screenshot` object — the cover — where a profile holds the full `screenshots`
+  array. A card is unaffected; anything wanting more than one image must fetch the
+  profile ([§5](#images)).
 
 ### Three spellings of "category"
 
@@ -486,37 +543,72 @@ mod. Measured over the captured listings: **4 of 20 records carry any tag at all
 
 ### Images
 
-`_aPreviewMedia._aImages[]` gives a base url plus pre-rendered sizes; join them
-yourself:
+**This is the one thing apiv13 changed**, and it is what the version exists for —
+GameBanana's own announcement calls it "unifying image and thumbnail URLs into a
+single system". `_aPreviewMedia` is **gone**; `_aPreviewContent` replaces it.
 
+```jsonc
+// apiv11                                  // apiv13
+"_aPreviewMedia": {                        "_aPreviewContent": {
+  "_aImages": [{                             "screenshots": [{   // listing: "screenshot", one object
+    "_sType": "screenshot",                    "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+    "_sBaseUrl": "…/img/ss/mods",              "_sFile":    "6a6d7bb20324f.jpg",
+    "_sFile":    "6a6d7bb20324f.jpg",          "_sFile220": "sgi_common_thumbs_6a6d7bb20324f_220.webp",
+    "_sFile220": "220-90_6a6d7bb20324f.jpg",   "_hFile220": 137,
+    "_wFile220": 220, "_hFile220": 137,        "_sFile220Sfw": "…_220_sfw.webp",  // new, see §7
+  }]                                           "_hFile220Sfw": 137,
+}                                            }]
+                                           }
 ```
-_sBaseUrl  = https://images.gamebanana.com/img/ss/mods
-_sFile     = 6693f0120d40f.jpg          → full size
-_sFile220  = 220-90_6693f0120d40f.jpg   → thumbnail (with _wFile220/_hFile220)
-_sFile530  = …   _sFile800 = …
-```
 
-Only `_sFile` and `_sFile100` are guaranteed; **the larger variants may be missing**
-on any given image, so fall back down the ladder rather than assuming `_sFile530`
-exists.
+Five things changed inside it:
 
-How often that matters, measured across the captured listings (132 gallery images
-over 20 mods):
+- **Two container spellings, and this is the trap.** A profile sends `screenshots`
+  — the whole gallery, as an array. Every listing (`Mod/Index`,
+  `Util/Search/Results`, `Subfeed`, `TopSubs`) sends a single `screenshot`
+  **object**. Reading only one of the two keys fails *silently*, as an empty
+  gallery rather than an error.
+- **A listing now carries only the cover.** Measured over the same 50 records:
+  apiv11 returned **420** images, apiv13 returns **50**. v11 was sending entire
+  galleries to a response that only ever renders the first image; nothing that
+  displays a card loses anything, but a gallery must come from a profile.
+- **Variants are WebP**, named `sgi_common_thumbs_<hash>_<size>.webp` from a shared
+  thumbnail store. `_sFile` is still the original JPEG. Measured over 8 covers:
+  **81 KB WebP against 127 KB JPEG, i.e. 64%**. Old JPEG urls still resolve, so
+  nothing already stored breaks.
+- **`_wFileNNN` is gone**; `_hFileNNN` is present on every rung (388/388 sampled).
+  The width is the rung number — `_wFileNNN == NNN` held in 534 of 534 apiv11
+  samples — so nothing is actually lost.
+- **`_sType` is gone.** The container key says what it is.
 
-- **Every cover — the first image — carried `_sFile220`** (20 of 20). So a results
-  grid can rely on getting a genuinely small file for its cards.
-- **112 of 132 images overall had only `_sFile` and `_sFile100`.** The misses are
-  concentrated in *secondary* gallery images, so anything walking a mod's whole
-  gallery at a large size will fall through to the full-resolution original
-  regularly.
-- Two whole galleries measured image by image (`Content-Length` on every url):
-  **15 images = 2.3 MB, 26 images = 5.5 MB**, i.e. ~115–310 KB each. So
-  "full-resolution original" here means *web-compressed jpeg*, not a raw
-  screenshot — the **decode** is multi-megapixel and needs bounding, but the
-  **download** is small next to a 21.9 MB median mod archive
-  ([§8](#8-downloading-a-file)). Don't reach for a size negotiation to save
-  bandwidth that isn't being spent; the cover is the only image a smaller rung
-  even exists for.
+### The ladder is not uniform, and cannot be reconstructed
+
+Never fabricate a variant filename. That rule was already true and apiv13 makes it
+absolute: under apiv11 a variant name was *derivable* from the original
+(`6a6d7bb20324f.jpg` → `530-90_6a6d7bb20324f.jpg`), so guessing at least produced a
+plausible url. apiv13's thumbnail hash **has no relationship to `_sFile`**, so a
+variant that was not published cannot be constructed at all — only fallen back from.
+Discover variants by scanning `_sFileNNN` keys.
+
+Which rungs actually appear, measured on 150 listing covers and 55 profile gallery
+images (2026-08-15):
+
+| | `_sFile` | 100 | 220 | 530 | 800 |
+|---|---|---|---|---|---|
+| Listing cover | 150/150 | — | 150/150 | 150/150 | — |
+| Profile cover | 5/5 | — | 5/5 | 5/5 | — |
+| Profile non-cover | 50/50 | 50/50 | — | — | — |
+
+So: **a cover reliably has 220 and 530, and a secondary gallery image reliably has
+only 100 and the original.** Note the cover no longer publishes `_sFile100` at all,
+which apiv11 did — anything asking for a ~100px cover now gets the 220 rung.
+
+Sizes are small enough not to optimise for: two whole galleries measured
+`Content-Length` image by image came to **15 images = 2.3 MB and 26 images =
+5.5 MB**, ~115–310 KB each. "Full-resolution original" means *web-compressed jpeg*,
+not a raw screenshot — the **decode** is multi-megapixel and needs bounding, but the
+**download** is trivial beside a 21.9 MB median mod archive
+([§8](#8-downloading-a-file)).
 
 Three practical consequences: pick the variant by the size you will *display*; bound
 the decode independently, because the url you get back is not always the size you
@@ -549,7 +641,7 @@ downloadable**.
 
 ### A file id cannot be turned back into a mod id
 
-`GET /apiv11/File/<id>` exists and returns the file record in full — `_sFile`,
+`GET /apiv13/File/<id>` exists and returns the file record in full — `_sFile`,
 `_nFilesize`, `_tsDateAdded`, `_sMd5Checksum`, `_sDescription`, the AV and
 analysis verdicts, even `_aArchiveFileTree` listing everything inside the
 archive. What it does **not** return, anywhere, is the mod that owns it.
@@ -634,6 +726,28 @@ expects the client to honour it:
 | `_sInitialVisibility` | `show` — render normally · `warn` — render behind a warning · `hide` — don't show unless asked |
 | `_bHasContentRatings` | quick boolean in listing records |
 | `_aContentRatings` | map of reasons, e.g. `{"sc":"Sexual Content","nu":"Full Nudity","sa":"Skimpy Attire","pn":"Partial Nudity","st":"Sexual Themes"}` |
+| `_sFile220Sfw` | **new in apiv13** — a server-rendered *pixelated* copy of the cover, inside `_aPreviewContent` ([§5](#images)) |
+
+### `_sFile220Sfw` — GameBanana now censors the image for you
+
+The blog post announcing apiv13 lists it as "content-warning overlays and pixelation
+for mature content in previews", and it is real: same dimensions as the normal
+thumbnail (220×137 on the sample checked), heavily mosaiced, **2.8 KB against
+12.3 KB**.
+
+Measured over 150 listing covers, it appears on **exactly** the records whose
+`_sInitialVisibility` is `hide` (30) or `warn` (7) — 88 of 150 — and on none of the
+`show` ones. Two limits matter before building on it:
+
+- **Only the 220 rung has an SFW twin.** Nothing at 100, 530 or the original, across
+  388 rungs sampled. So it can stand in for a client-side blur on a grid card and
+  nowhere else.
+- It is a *substitute image*, not a flag: using it means the explicit pixels are
+  never downloaded until the user asks, which is the real argument for it.
+
+**This app does not use it** — `GbThumbnail` applies its own blur, so the field is
+parsed by nothing and `GbImage` deliberately ignores `_sFileNNNSfw` keys. Recorded
+here because the omission is a decision, not an oversight.
 
 So the filter is **ours to implement**, client-side, on every listing we render. For
 ZZZ specifically this is not an edge case: in a sample of 45 recent submissions, 25
@@ -775,7 +889,7 @@ but this is how you'd discover the rest.
 Drill into one for its children:
 
 ```bash
-curl 'https://gamebanana.com/apiv11/Mod/Categories?_idCategoryRow=30305&_sSort=a_to_z&_nPerpage=50'
+curl 'https://gamebanana.com/apiv13/Mod/Categories?_idCategoryRow=30305&_sSort=a_to_z&_nPerpage=50'
 ```
 
 This returns a **bare array** (no `_aMetadata`) of `_idRow`, `_sName`, `_nItemCount`,
@@ -803,12 +917,12 @@ Documented at <https://api.gamebanana.com/>. Weaker for browsing (3 sorts, 1 fil
 but genuinely useful for two things.
 
 **It describes itself.** These endpoints answer "what can I ask for?" — for *this*
-API, which is the important caveat. apiv11 has no equivalent, and the two surfaces do
-not overlap: `AllowedSorts` here returns `["id", "name", "udate"]` while apiv11
+API, which is the important caveat. apiv13 has no equivalent, and the two surfaces do
+not overlap: `AllowedSorts` here returns `["id", "name", "udate"]` while apiv13
 accepts seven `Generic_*` aliases that appear in no such list, and `AllowedFilters`
-returns only `["userid"]` against apiv11's three filters. So this is a useful
+returns only `["userid"]` against apiv13's three filters. So this is a useful
 cross-check and a weak one — do **not** read an absence here as proof of absence in
-apiv11 ([§4](#4-sorting-and-filtering) flags exactly that trap).
+apiv13 ([§4](#4-sorting-and-filtering) flags exactly that trap).
 
 ```bash
 curl 'https://api.gamebanana.com/Core/Item/Data/AllowedItemTypes'
@@ -826,7 +940,7 @@ curl 'https://api.gamebanana.com/Core/Item/Data?itemtype=Mod&itemid=698834\
 
 Notes: results come back as a **positional array matching your `fields` order** (not
 an object), method-style fields end in `()`, and `Files().aFiles()` returns the same
-file objects as apiv11 — md5 included — but **keyed by file id** rather than as a
+file objects as apiv13 — md5 included — but **keyed by file id** rather than as a
 list. `Nsfw().bIsNsfw()` is a plain boolean, which is occasionally handier than
 interpreting `_sInitialVisibility`.
 
@@ -846,6 +960,8 @@ Collected so nobody rediscovers them:
   not exist. Only `_aFilters[…]` keys are validated (`UNKNOWN_FILTER`), and only
   `_sSort` values (`UNKNOWN_SORT`). **Never conclude a parameter works because the
   request succeeded** — change it and check the results actually differ.
+  (Re-confirmed on apiv13: two junk params produced a byte-identical body, while a
+  junk `_aFilters` key still errored.)
 - **`_nPerpage` limits differ per endpoint** — 50 on `Index`/`Subfeed` (hard error
   above), **15 on Search, silently**. Always read `_aMetadata._nPerpage` back. Some
   endpoints (`TopSubs`) ignore it entirely.
@@ -864,6 +980,23 @@ Collected so nobody rediscovers them:
 - **Listing records omit `_nDownloadCount` and `_aContentRatings`.** Both are
   profile-only, so a card can neither show a download count nor explain *why* a mod is
   flagged ([§5](#5-the-mod-object)).
+- **`_aPreviewContent` has two container spellings**: `screenshots` (array) on a
+  profile, `screenshot` (single object) on every listing. Reading one key gives an
+  *empty gallery*, not an error, so this fails silently ([§5](#images)).
+- **A listing carries only the cover on apiv13** — 50 images across 50 records, where
+  apiv11 sent 420. The gallery is profile-only now.
+- **apiv13 sends no `cache-control`.** apiv11 sent `max-age=600`. A client TTL is now
+  the client's own invention ([§2](#caching-and-rate-limits)).
+- **An unknown *route* returns `200` + HTML on apiv13**, not `404` + `NO_SUCH_ROUTE`
+  JSON, so it reaches a JSON client as a parse error. A missing *mod id* is
+  unchanged (`404` + `NO_SUCH_RECORD`) ([§2](#errors)).
+- **Never fabricate a variant filename.** apiv13 names thumbnails by a hash unrelated
+  to `_sFile`, so a variant that wasn't published cannot be constructed — and the
+  ladder is not uniform: covers carry 220/530, secondary images only 100
+  ([§5](#images)).
+- **`_sFileNNNSfw` is a censored *substitute*, not another size.** A key-scanning
+  variant parser that accepts it will serve the pixelated image to users who asked to
+  see everything ([§7](#7-nsfw-and-content-ratings)).
 - **"Category" has three key names** and no response carries more than two; only the
   profile's `_aCategory` has an `_idRow`, and a listing hides the id inside
   `_sProfileUrl` ([§5](#three-spellings-of-category)).
@@ -871,6 +1004,9 @@ Collected so nobody rediscovers them:
   `_sDescription`** — the field that otherwise means "variant". Never sort files by
   version string, and never auto-pick among several files
   ([§6](#6-files--_afiles-and-_aarchivedfiles)).
+- **`_aPreviewMedia` and `_sType` no longer exist**, and `_wFileNNN` is gone with
+  them. Code written against apiv11's image shape reads an apiv13 response as having
+  *no images at all* rather than failing ([§5](#images)).
 - **`_aArchivedFiles` is absent rather than `[]`** when nothing is archived, so null
   ("not requested") and empty ("none exist") are both real and mean different things.
 - **A file id does not lead back to its mod.** `File/<id>` returns the whole file
@@ -894,7 +1030,7 @@ Collected so nobody rediscovers them:
 - **No `Content-Disposition` on downloads.** The filename only exists in `_sFile`.
 - **Errors never list valid values.** If something is "not recognized", consult
   [§4](#4-sorting-and-filtering) rather than guessing; the guess-rate is low.
-- **No `/apidocs` for apiv11.** The surface is discoverable only by probing, which is
+- **No `/apidocs` for apiv13.** The surface is discoverable only by probing, which is
   a standing argument for keeping our client's surface small: every endpoint and field
   we depend on is one more thing that can change without warning.
 
@@ -910,6 +1046,21 @@ change, the highest-value probes are: a bogus `_sSort` and a bogus `_aFilters[�
 # resume still works? expect: 206 + "content-range: bytes 1000-.../<total>"
 curl -sSI -L -r 1000-2000 'https://gamebanana.com/dl/1770254' \
   -H 'User-Agent: zzz-mod-manager/2.0' | grep -Ei 'HTTP/|content-range|etag'
+```
+
+**Add one probe for the version itself**, since a new one arrives with no
+announcement beyond a blog post — walk the numbers until a `404` marks the ceiling,
+then diff the top-level keys of one `ProfilePage` against the version below it. That
+is exactly how the v11 → v13 difference was found, and it is two commands:
+
+```bash
+for v in 13 14 15; do
+  printf 'apiv%s ' "$v"
+  curl -so /dev/null -w '%{http_code}\n' "https://gamebanana.com/apiv$v/Mod/698834/ProfilePage"
+done
+# then, for two versions that both answered 200:
+diff <(curl -s https://gamebanana.com/apiv11/Mod/698834/ProfilePage | python3 -c 'import json,sys;print("\n".join(sorted(json.load(sys.stdin))))') \
+     <(curl -s https://gamebanana.com/apiv13/Mod/698834/ProfilePage | python3 -c 'import json,sys;print("\n".join(sorted(json.load(sys.stdin))))')
 ```
 
 The download numbers in [§8](#8-downloading-a-file) are the perishable ones — node

@@ -179,7 +179,7 @@ The most important architectural decision is the **platform abstraction**:
 
 ### The GameBanana layer (`services/gamebanana/`, `services/http/`)
 
-Read-only client for GameBanana's `apiv11` — browse, search, mod detail,
+Read-only client for GameBanana's `apiv13` — browse, search, mod detail,
 category tree. Read [`../docs/gamebanana-api.md`](../docs/gamebanana-api.md)
 before touching it; the remote surface is undocumented upstream, so guessing
 costs more than looking.
@@ -210,7 +210,9 @@ costs more than looking.
   can be asserted with no transport. Browse is built on `Mod/Index` (not
   `Subfeed`, which supports neither filters nor sort).
 - `GameBananaResponseCache` — in-memory, keyed by full `Uri`, TTL taken from the
-  server's own `cache-control: max-age` (default 10 min). Injected clock. **A
+  server's own `cache-control: max-age` when one is sent — **apiv13 sends none**, so
+  in practice the 10-minute default is ours rather than the server's, inherited from
+  what apiv11 used to advertise. Injected clock. **A
   user-initiated refresh has to be able to bypass it**: re-issuing the same request
   otherwise answers from memory and hands back the byte-identical page for up to ten
   minutes — a refresh control that cannot refresh. Keep the bypass scoped to that

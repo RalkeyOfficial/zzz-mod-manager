@@ -157,8 +157,8 @@ void main() {
       // relative Uri and would be requested as garbage.
       final mod = GbMod.fromJson({
         '_idRow': 1,
-        '_aPreviewMedia': {
-          '_aImages': [
+        '_aPreviewContent': {
+          'screenshots': [
             {'_sFile': 'orphan.jpg'},
             {'_sBaseUrl': 'https://images.gamebanana.com/x', '_sFile': 'ok.jpg'},
           ],

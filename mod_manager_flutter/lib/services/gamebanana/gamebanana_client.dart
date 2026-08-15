@@ -9,7 +9,7 @@ import 'gamebanana_endpoints.dart';
 import 'gamebanana_error_mapper.dart';
 import 'gamebanana_response_cache.dart';
 
-/// Read-only client for GameBanana's `apiv11`.
+/// Read-only client for GameBanana's `apiv13`.
 ///
 /// The protocol is documented in `docs/gamebanana-api.md`; this class is only
 /// about *our* client. Its surface is kept deliberately small — search, browse,

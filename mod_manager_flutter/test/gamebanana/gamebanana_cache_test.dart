@@ -13,8 +13,8 @@ void main() {
     );
   }
 
-  final a = Uri.parse('https://gamebanana.com/apiv11/Mod/1/ProfilePage');
-  final b = Uri.parse('https://gamebanana.com/apiv11/Mod/2/ProfilePage');
+  final a = Uri.parse('https://gamebanana.com/apiv13/Mod/1/ProfilePage');
+  final b = Uri.parse('https://gamebanana.com/apiv13/Mod/2/ProfilePage');
 
   setUp(() => clock = DateTime.utc(2026, 8, 1, 12));
 

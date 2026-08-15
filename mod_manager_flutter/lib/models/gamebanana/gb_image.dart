@@ -1,28 +1,39 @@
 import 'gb_coerce.dart';
 
-/// One entry of `_aPreviewMedia._aImages`.
+/// One entry of `_aPreviewContent` — see [listFromPreviewContent] for the two
+/// container spellings it arrives under.
 ///
 /// GameBanana stores a base url plus a family of pre-scaled filenames:
 ///
 /// ```json
 /// { "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-///   "_sFile":    "6693f0120d40f.jpg",
-///   "_sFile100": "100-_6693f0120d40f.jpg",  "_wFile100": 100, "_hFile100": 56,
-///   "_sFile220": "220-90_6693f0120d40f.jpg", … }
+///   "_sFile":    "6a6d7bb20324f.jpg",
+///   "_sFile220": "sgi_common_thumbs_6a6d7bb20324f_220.webp", "_hFile220": 137,
+///   "_sFile530": "sgi_common_thumbs_6a6d7bb20324f_530.webp", "_hFile530": 331 }
 /// ```
 ///
-/// **Only `_sFile` and `_sFile100` are guaranteed**; any larger variant may be
-/// missing on any given image. Variants are therefore discovered by scanning
-/// the keys rather than assuming the usual 100/220/530/800 ladder — a size the
-/// server stops emitting is then naturally absent instead of being turned into
-/// a fabricated filename that 404s, and a new size costs no code change.
+/// **The ladder is not uniform**, so variants are discovered by scanning the
+/// keys rather than assuming a fixed 100/220/530/800 set: measured on apiv13, a
+/// cover publishes 220 and 530 while the gallery images behind it publish only
+/// 100. Scanning means a size the server stops emitting is naturally absent
+/// instead of being turned into a fabricated filename that 404s, and a new size
+/// costs no code change.
+///
+/// Two apiv13 details worth knowing before reading a raw response:
+///
+/// - `_sFile` is still the original jpeg, while every *variant* is webp under a
+///   shared `sgi_common_thumbs_<hash>_<size>` name. Nothing here parses those
+///   names — they are opaque strings joined to [baseUrl].
+/// - **`_sFileNNNSfw` keys are ignored on purpose.** apiv13 publishes a
+///   server-pixelated copy (only at 220, and only for `warn`/`hide` mods); this
+///   app applies its own blur in `GbThumbnail` instead, so their absence here is
+///   a decision rather than an oversight. See `docs/gamebanana-api.md` §7.
 class GbImage {
   const GbImage({
     required this.baseUrl,
     required this.file,
     this.variants = const {},
     this.dimensions = const {},
-    this.type,
   });
 
   /// `_sBaseUrl`, with no trailing slash.
@@ -34,13 +45,29 @@ class GbImage {
   /// Width -> filename, parsed from every `_sFileNNN` key.
   final Map<int, String> variants;
 
-  /// Width -> `(width, height)`, where `_wFileNNN`/`_hFileNNN` were supplied.
+  /// Width -> `(width, height)`, for every variant whose height was supplied.
   final Map<int, ({int width, int height})> dimensions;
 
-  /// `_sType`, e.g. `screenshot`.
-  final String? type;
-
   static final RegExp _variantKey = RegExp(r'^_sFile(\d+)$');
+
+  /// Every image in an `_aPreviewContent` object, cover first.
+  ///
+  /// Handles **both container spellings**, which is the one apiv13 quirk that
+  /// has to live somewhere: a profile sends `screenshots` — the full gallery, as
+  /// an array — while `Mod/Index`, `Util/Search/Results`, `Subfeed` and
+  /// `TopSubs` send a single `screenshot` **object** holding only the cover.
+  /// Reading just one of the two keys therefore fails silently, with a gallery
+  /// that is empty rather than an error.
+  static List<GbImage> listFromPreviewContent(Object? raw) {
+    final content = gbObject(raw);
+    if (content == null) return const [];
+    return <GbImage>[
+      for (final entry in gbObjects(content['screenshots']))
+        if (GbImage.fromJson(entry) case final parsed?) parsed,
+      if (gbObject(content['screenshot']) case final single?)
+        if (GbImage.fromJson(single) case final parsed?) parsed,
+    ];
+  }
 
   static GbImage? fromJson(Map<String, dynamic> json) {
     final file = gbString(json['_sFile']);
@@ -55,9 +82,17 @@ class GbImage {
       final name = gbString(entry.value);
       if (name == null) continue;
       variants[width] = name;
-      final w = gbInt(json['_wFile$width']);
+      // apiv13 stopped sending `_wFileNNN`, so the width comes from the rung
+      // itself — which is what it always was: `_wFileNNN == NNN` held on every
+      // apiv11 sample measured. The explicit value still wins where one is sent,
+      // so this reads an older response identically.
       final h = gbInt(json['_hFile$width']);
-      if (w != null && h != null) dimensions[width] = (width: w, height: h);
+      if (h != null) {
+        dimensions[width] = (
+          width: gbInt(json['_wFile$width']) ?? width,
+          height: h,
+        );
+      }
     }
 
     return GbImage(
@@ -65,7 +100,6 @@ class GbImage {
       file: file,
       variants: Map.unmodifiable(variants),
       dimensions: Map.unmodifiable(dimensions),
-      type: gbString(json['_sType']),
     );
   }
 

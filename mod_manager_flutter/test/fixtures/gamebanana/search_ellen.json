@@ -1,6 +1,6 @@
 {
   "_aMetadata": {
-    "_nRecordCount": 220,
+    "_nRecordCount": 221,
     "_nPerpage": 15,
     "_bIsComplete": false
   },
@@ -15,37 +15,21 @@
       "_tsDateAdded": 1720873222,
       "_tsDateModified": 1720873222,
       "_bHasFiles": true,
+      "_sPayType": "free",
       "_aTags": [
         "cheongsam: ellen"
       ],
-      "_aPreviewMedia": {
-        "_aImages": [
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "6692707820b3d.jpg",
-            "_sFile220": "220-90_6692707820b3d.jpg",
-            "_hFile220": 237,
-            "_wFile220": 220,
-            "_sFile530": "530-90_6692707820b3d.jpg",
-            "_hFile530": 572,
-            "_wFile530": 530,
-            "_sFile100": "100-90_6692707820b3d.jpg",
-            "_hFile100": 108,
-            "_wFile100": 100,
-            "_sFile800": "800-90_6692707820b3d.jpg",
-            "_hFile800": 863,
-            "_wFile800": 800
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "669270778df1c.jpg",
-            "_sFile100": "100-90_669270778df1c.jpg",
-            "_hFile100": 122,
-            "_wFile100": 100
-          }
-        ]
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sFile220": "sgi_common_thumbs_6692707820b3d_220.webp",
+          "_hFile220": 237,
+          "_sFile220Sfw": "sgi_common_thumbs_6692707820b3d_220_sfw.webp",
+          "_hFile220Sfw": 237,
+          "_sFile530": "sgi_common_thumbs_6692707820b3d_530.webp",
+          "_hFile530": 572,
+          "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+          "_sFile": "6692707820b3d.jpg"
+        }
       },
       "_aSubmitter": {
         "_idRow": 2437196,
@@ -75,10 +59,10 @@
       "_bIsObsolete": false,
       "_sInitialVisibility": "warn",
       "_bHasContentRatings": true,
-      "_nLikeCount": 611,
+      "_nLikeCount": 613,
       "_nPostCount": 30,
       "_bWasFeatured": false,
-      "_nViewCount": 172181,
+      "_nViewCount": 173243,
       "_bIsOwnedByAccessor": false
     },
     {
@@ -91,64 +75,17 @@
       "_tsDateAdded": 1766067060,
       "_tsDateModified": 1766508926,
       "_bHasFiles": true,
+      "_sPayType": "free",
       "_aTags": [],
-      "_aPreviewMedia": {
-        "_aImages": [
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "69440a5da80c2.jpg",
-            "_sFile220": "220-90_69440a5da80c2.jpg",
-            "_hFile220": 121,
-            "_wFile220": 220,
-            "_sFile530": "530-90_69440a5da80c2.jpg",
-            "_hFile530": 291,
-            "_wFile530": 530,
-            "_sFile100": "100-90_69440a5da80c2.jpg",
-            "_hFile100": 55,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "69440a621959d.jpg",
-            "_sFile100": "100-90_69440a621959d.jpg",
-            "_hFile100": 55,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "69440b661140d.jpg",
-            "_sFile100": "100-90_69440b661140d.jpg",
-            "_hFile100": 55,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "6945f500972d3.jpg",
-            "_sFile100": "100-90_6945f500972d3.jpg",
-            "_hFile100": 59,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "69440b2eedd8b.jpg",
-            "_sFile100": "100-90_69440b2eedd8b.jpg",
-            "_hFile100": 74,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "69440b4520a8b.jpg",
-            "_sFile100": "100-90_69440b4520a8b.jpg",
-            "_hFile100": 75,
-            "_wFile100": 100
-          }
-        ]
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sFile220": "sgi_common_thumbs_69440a5da80c2_220.webp",
+          "_hFile220": 121,
+          "_sFile530": "sgi_common_thumbs_69440a5da80c2_530.webp",
+          "_hFile530": 291,
+          "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+          "_sFile": "69440a5da80c2.jpg"
+        }
       },
       "_aSubmitter": {
         "_idRow": 4604155,
@@ -181,7 +118,7 @@
       "_nLikeCount": 142,
       "_nPostCount": 11,
       "_bWasFeatured": true,
-      "_nViewCount": 21048,
+      "_nViewCount": 21472,
       "_bIsOwnedByAccessor": false
     },
     {
@@ -194,32 +131,17 @@
       "_tsDateAdded": 1725532385,
       "_tsDateModified": 1725651816,
       "_bHasFiles": true,
+      "_sPayType": "free",
       "_aTags": [],
-      "_aPreviewMedia": {
-        "_aImages": [
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "66d98879711a6.jpg",
-            "_sFile220": "220-90_66d98879711a6.jpg",
-            "_hFile220": 53,
-            "_wFile220": 220,
-            "_sFile530": "530-90_66d98879711a6.jpg",
-            "_hFile530": 127,
-            "_wFile530": 530,
-            "_sFile100": "100-90_66d98879711a6.jpg",
-            "_hFile100": 24,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "66d988dac8752.jpg",
-            "_sFile100": "100-90_66d988dac8752.jpg",
-            "_hFile100": 49,
-            "_wFile100": 100
-          }
-        ]
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sFile220": "sgi_common_thumbs_66d98879711a6_220.webp",
+          "_hFile220": 53,
+          "_sFile530": "sgi_common_thumbs_66d98879711a6_530.webp",
+          "_hFile530": 127,
+          "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+          "_sFile": "66d98879711a6.jpg"
+        }
       },
       "_aSubmitter": {
         "_idRow": 3570737,
@@ -247,227 +169,7 @@
       "_nLikeCount": 23,
       "_nPostCount": 1,
       "_bWasFeatured": false,
-      "_nViewCount": 9833,
-      "_bIsOwnedByAccessor": false
-    },
-    {
-      "_idRow": 561406,
-      "_sModelName": "Mod",
-      "_sSingularTitle": "Mod",
-      "_sIconClasses": "SubmissionType Mod",
-      "_sName": "Ellen shoes off",
-      "_sProfileUrl": "https://gamebanana.com/mods/561406",
-      "_tsDateAdded": 1733823068,
-      "_tsDateModified": 1768667781,
-      "_bHasFiles": true,
-      "_aTags": [],
-      "_aPreviewMedia": {
-        "_aImages": [
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "67580a008b824.jpg",
-            "_sFile220": "220-90_67580a008b824.jpg",
-            "_hFile220": 120,
-            "_wFile220": 220,
-            "_sFile530": "530-90_67580a008b824.jpg",
-            "_hFile530": 288,
-            "_wFile530": 530,
-            "_sFile100": "100-90_67580a008b824.jpg",
-            "_hFile100": 54,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "675809a1b10a2.jpg",
-            "_sFile100": "100-90_675809a1b10a2.jpg",
-            "_hFile100": 55,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "675809a1e285b.jpg",
-            "_sFile100": "100-90_675809a1e285b.jpg",
-            "_hFile100": 56,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "675809a1bee8d.jpg",
-            "_sFile100": "100-90_675809a1bee8d.jpg",
-            "_hFile100": 53,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "675809a169e50.jpg",
-            "_sFile100": "100-90_675809a169e50.jpg",
-            "_hFile100": 120,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "675809c74de81.jpg",
-            "_sFile100": "100-90_675809c74de81.jpg",
-            "_hFile100": 44,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "675809a1a3eeb.jpg",
-            "_sFile100": "100-90_675809a1a3eeb.jpg",
-            "_hFile100": 60,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "675809a1b8cce.jpg",
-            "_sFile100": "100-90_675809a1b8cce.jpg",
-            "_hFile100": 72,
-            "_wFile100": 100
-          }
-        ]
-      },
-      "_aSubmitter": {
-        "_idRow": 3540552,
-        "_sName": "T_YBIN_G",
-        "_bIsOnline": false,
-        "_bHasRipe": false,
-        "_sProfileUrl": "https://gamebanana.com/members/3540552",
-        "_sAvatarUrl": "https://images.gamebanana.com/img/av/675b87764c251.gif"
-      },
-      "_aGame": {
-        "_idRow": 19567,
-        "_sName": "Zenless Zone Zero",
-        "_sProfileUrl": "https://gamebanana.com/games/19567",
-        "_sIconUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png"
-      },
-      "_aRootCategory": {
-        "_sName": "Character Skins",
-        "_sProfileUrl": "https://gamebanana.com/mods/cats/30305",
-        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/66a1928c3e239.gif"
-      },
-      "_aSubCategory": {
-        "_sName": "Ellen Joe",
-        "_sProfileUrl": "https://gamebanana.com/mods/cats/30341",
-        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/68802045acf1f.png"
-      },
-      "_sVersion": "",
-      "_tsDateUpdated": 1734555010,
-      "_bIsObsolete": false,
-      "_sInitialVisibility": "show",
-      "_bHasContentRatings": false,
-      "_nLikeCount": 119,
-      "_nPostCount": 10,
-      "_bWasFeatured": true,
-      "_nViewCount": 18772,
-      "_bIsOwnedByAccessor": false
-    },
-    {
-      "_idRow": 572965,
-      "_sModelName": "Mod",
-      "_sSingularTitle": "Mod",
-      "_sIconClasses": "SubmissionType Mod",
-      "_sName": "Ellen Thicc Mod",
-      "_sProfileUrl": "https://gamebanana.com/mods/572965",
-      "_tsDateAdded": 1738494911,
-      "_tsDateModified": 1738993365,
-      "_bHasFiles": true,
-      "_aTags": [],
-      "_aPreviewMedia": {
-        "_aImages": [
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sCaption": "v1",
-            "_sFile": "67a6ea55a2247.jpg",
-            "_sFile220": "220-90_67a6ea55a2247.jpg",
-            "_hFile220": 283,
-            "_wFile220": 220,
-            "_sFile530": "530-90_67a6ea55a2247.jpg",
-            "_hFile530": 682,
-            "_wFile530": 530,
-            "_sFile100": "100-90_67a6ea55a2247.jpg",
-            "_hFile100": 129,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sCaption": "v1",
-            "_sFile": "67a6ea63b9964.jpg",
-            "_sFile100": "100-90_67a6ea63b9964.jpg",
-            "_hFile100": 142,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sCaption": "v1",
-            "_sFile": "67a6ea723552f.jpg",
-            "_sFile100": "100-90_67a6ea723552f.jpg",
-            "_hFile100": 171,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sCaption": "SkirtLess V",
-            "_sFile": "67a6eab4b7935.jpg",
-            "_sFile100": "100-90_67a6eab4b7935.jpg",
-            "_hFile100": 149,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sCaption": "Skirless V",
-            "_sFile": "67a6eacd7d105.jpg",
-            "_sFile100": "100-90_67a6eacd7d105.jpg",
-            "_hFile100": 131,
-            "_wFile100": 100
-          }
-        ]
-      },
-      "_aSubmitter": {
-        "_idRow": 4040028,
-        "_sName": "EverEspitia",
-        "_bIsOnline": false,
-        "_bHasRipe": false,
-        "_sProfileUrl": "https://gamebanana.com/members/4040028",
-        "_sAvatarUrl": "https://images.gamebanana.com/static/img/defaults/avatar.gif"
-      },
-      "_aGame": {
-        "_idRow": 19567,
-        "_sName": "Zenless Zone Zero",
-        "_sProfileUrl": "https://gamebanana.com/games/19567",
-        "_sIconUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png"
-      },
-      "_aRootCategory": {
-        "_sName": "Character Skins",
-        "_sProfileUrl": "https://gamebanana.com/mods/cats/30305",
-        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/66a1928c3e239.gif"
-      },
-      "_aSubCategory": {
-        "_sName": "Ellen Joe",
-        "_sProfileUrl": "https://gamebanana.com/mods/cats/30341",
-        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/68802045acf1f.png"
-      },
-      "_sVersion": "V1",
-      "_bIsObsolete": false,
-      "_sInitialVisibility": "warn",
-      "_bHasContentRatings": true,
-      "_nLikeCount": 49,
-      "_nPostCount": 5,
-      "_bWasFeatured": false,
-      "_nViewCount": 33830,
+      "_nViewCount": 9963,
       "_bIsOwnedByAccessor": false
     },
     {
@@ -480,85 +182,19 @@
       "_tsDateAdded": 1722154235,
       "_tsDateModified": 1722154235,
       "_bHasFiles": true,
+      "_sPayType": "free",
       "_aTags": [
         "Ellen: Chained school uniforms"
       ],
-      "_aPreviewMedia": {
-        "_aImages": [
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "66a5f8c8c7960.jpg",
-            "_sFile220": "220-90_66a5f8c8c7960.jpg",
-            "_hFile220": 241,
-            "_wFile220": 220,
-            "_sFile530": "530-90_66a5f8c8c7960.jpg",
-            "_hFile530": 579,
-            "_wFile530": 530,
-            "_sFile100": "100-90_66a5f8c8c7960.jpg",
-            "_hFile100": 109,
-            "_wFile100": 100,
-            "_sFile800": "800-90_66a5f8c8c7960.jpg",
-            "_hFile800": 875,
-            "_wFile800": 800
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "66a5f8c8ca170.jpg",
-            "_sFile100": "100-90_66a5f8c8ca170.jpg",
-            "_hFile100": 104,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "66a5f8c87a0fe.jpg",
-            "_sFile100": "100-90_66a5f8c87a0fe.jpg",
-            "_hFile100": 123,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "66a5f8c8e190c.jpg",
-            "_sFile100": "100-90_66a5f8c8e190c.jpg",
-            "_hFile100": 111,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "66a5f8c7acb91.jpg",
-            "_sFile100": "100-90_66a5f8c7acb91.jpg",
-            "_hFile100": 107,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "66a5f8c84229e.jpg",
-            "_sFile100": "100-90_66a5f8c84229e.jpg",
-            "_hFile100": 138,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "66a5f8c86e0ac.jpg",
-            "_sFile100": "100-90_66a5f8c86e0ac.jpg",
-            "_hFile100": 98,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "66a5f8c88958c.jpg",
-            "_sFile100": "100-90_66a5f8c88958c.jpg",
-            "_hFile100": 130,
-            "_wFile100": 100
-          }
-        ]
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sFile220": "sgi_common_thumbs_66a5f8c8c7960_220.webp",
+          "_hFile220": 241,
+          "_sFile530": "sgi_common_thumbs_66a5f8c8c7960_530.webp",
+          "_hFile530": 579,
+          "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+          "_sFile": "66a5f8c8c7960.jpg"
+        }
       },
       "_aSubmitter": {
         "_idRow": 2437196,
@@ -588,10 +224,10 @@
       "_bIsObsolete": false,
       "_sInitialVisibility": "show",
       "_bHasContentRatings": false,
-      "_nLikeCount": 357,
+      "_nLikeCount": 359,
       "_nPostCount": 37,
       "_bWasFeatured": false,
-      "_nViewCount": 86527,
+      "_nViewCount": 86954,
       "_bIsOwnedByAccessor": false
     },
     {
@@ -604,131 +240,19 @@
       "_tsDateAdded": 1737455757,
       "_tsDateModified": 1737455792,
       "_bHasFiles": true,
+      "_sPayType": "free",
       "_aTags": [],
-      "_aPreviewMedia": {
-        "_aImages": [
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "678f77d73ea5d.jpg",
-            "_sFile220": "220-90_678f77d73ea5d.jpg",
-            "_hFile220": 124,
-            "_wFile220": 220,
-            "_sFile530": "530-90_678f77d73ea5d.jpg",
-            "_hFile530": 298,
-            "_wFile530": 530,
-            "_sFile100": "100-90_678f77d73ea5d.jpg",
-            "_hFile100": 56,
-            "_wFile100": 100,
-            "_sFile800": "800-90_678f77d73ea5d.jpg",
-            "_hFile800": 450,
-            "_wFile800": 800
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "678f784a5475d.jpg",
-            "_sFile100": "100-90_678f784a5475d.jpg",
-            "_hFile100": 200,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "678f7849ea3c6.jpg",
-            "_sFile100": "100-90_678f7849ea3c6.jpg",
-            "_hFile100": 196,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "678f7849f1af7.jpg",
-            "_sFile100": "100-90_678f7849f1af7.jpg",
-            "_hFile100": 265,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "678f784a268f6.jpg",
-            "_sFile100": "100-90_678f784a268f6.jpg",
-            "_hFile100": 156,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "678f784a2a0bf.jpg",
-            "_sFile100": "100-90_678f784a2a0bf.jpg",
-            "_hFile100": 91,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "678f784a35582.jpg",
-            "_sFile100": "100-90_678f784a35582.jpg",
-            "_hFile100": 205,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "678f784a3d494.jpg",
-            "_sFile100": "100-90_678f784a3d494.jpg",
-            "_hFile100": 207,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "678f784a402e6.jpg",
-            "_sFile100": "100-90_678f784a402e6.jpg",
-            "_hFile100": 141,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "678f784a55658.jpg",
-            "_sFile100": "100-90_678f784a55658.jpg",
-            "_hFile100": 179,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "678f784a6ebd7.jpg",
-            "_sFile100": "100-90_678f784a6ebd7.jpg",
-            "_hFile100": 166,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "678f784a66e9a.jpg",
-            "_sFile100": "100-90_678f784a66e9a.jpg",
-            "_hFile100": 91,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "678f784a8129b.jpg",
-            "_sFile100": "100-90_678f784a8129b.jpg",
-            "_hFile100": 81,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "678f784a90bea.jpg",
-            "_sFile100": "100-90_678f784a90bea.jpg",
-            "_hFile100": 58,
-            "_wFile100": 100
-          }
-        ]
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sFile220": "sgi_common_thumbs_678f77d73ea5d_220.webp",
+          "_hFile220": 124,
+          "_sFile220Sfw": "sgi_common_thumbs_678f77d73ea5d_220_sfw.webp",
+          "_hFile220Sfw": 124,
+          "_sFile530": "sgi_common_thumbs_678f77d73ea5d_530.webp",
+          "_hFile530": 298,
+          "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+          "_sFile": "678f77d73ea5d.jpg"
+        }
       },
       "_aSubmitter": {
         "_idRow": 3543718,
@@ -763,53 +287,38 @@
       "_nLikeCount": 420,
       "_nPostCount": 17,
       "_bWasFeatured": false,
-      "_nViewCount": 77947,
+      "_nViewCount": 78639,
       "_bIsOwnedByAccessor": false
     },
     {
-      "_idRow": 579699,
+      "_idRow": 561406,
       "_sModelName": "Mod",
       "_sSingularTitle": "Mod",
       "_sIconClasses": "SubmissionType Mod",
-      "_sName": "Ellen Remake",
-      "_sProfileUrl": "https://gamebanana.com/mods/579699",
-      "_tsDateAdded": 1741297774,
-      "_tsDateModified": 1741297774,
+      "_sName": "Ellen shoes off",
+      "_sProfileUrl": "https://gamebanana.com/mods/561406",
+      "_tsDateAdded": 1733823068,
+      "_tsDateModified": 1768667781,
       "_bHasFiles": true,
+      "_sPayType": "free",
       "_aTags": [],
-      "_aPreviewMedia": {
-        "_aImages": [
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "67ca1862d9c19.jpg",
-            "_sFile220": "220-90_67ca1862d9c19.jpg",
-            "_hFile220": 124,
-            "_wFile220": 220,
-            "_sFile530": "530-90_67ca1862d9c19.jpg",
-            "_hFile530": 298,
-            "_wFile530": 530,
-            "_sFile100": "100-90_67ca1862d9c19.jpg",
-            "_hFile100": 56,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "67ca1862e7c91.jpg",
-            "_sFile100": "100-90_67ca1862e7c91.jpg",
-            "_hFile100": 56,
-            "_wFile100": 100
-          }
-        ]
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sFile220": "sgi_common_thumbs_67580a008b824_220.webp",
+          "_hFile220": 120,
+          "_sFile530": "sgi_common_thumbs_67580a008b824_530.webp",
+          "_hFile530": 288,
+          "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+          "_sFile": "67580a008b824.jpg"
+        }
       },
       "_aSubmitter": {
-        "_idRow": 3022167,
-        "_sName": "KuinGa",
+        "_idRow": 3540552,
+        "_sName": "T_YBIN_G",
         "_bIsOnline": false,
         "_bHasRipe": false,
-        "_sProfileUrl": "https://gamebanana.com/members/3022167",
-        "_sAvatarUrl": "https://images.gamebanana.com/img/av/67c3378a7cb21.jpg"
+        "_sProfileUrl": "https://gamebanana.com/members/3540552",
+        "_sAvatarUrl": "https://images.gamebanana.com/img/av/675b87764c251.gif"
       },
       "_aGame": {
         "_idRow": 19567,
@@ -828,84 +337,73 @@
         "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/68802045acf1f.png"
       },
       "_sVersion": "",
+      "_tsDateUpdated": 1734555010,
       "_bIsObsolete": false,
       "_sInitialVisibility": "show",
       "_bHasContentRatings": false,
-      "_nLikeCount": 74,
+      "_nLikeCount": 119,
+      "_nPostCount": 10,
+      "_bWasFeatured": true,
+      "_nViewCount": 18845,
+      "_bIsOwnedByAccessor": false
+    },
+    {
+      "_idRow": 572965,
+      "_sModelName": "Mod",
+      "_sSingularTitle": "Mod",
+      "_sIconClasses": "SubmissionType Mod",
+      "_sName": "Ellen Thicc Mod",
+      "_sProfileUrl": "https://gamebanana.com/mods/572965",
+      "_tsDateAdded": 1738494911,
+      "_tsDateModified": 1738993365,
+      "_bHasFiles": true,
+      "_sPayType": "free",
+      "_aTags": [],
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sFile220": "sgi_common_thumbs_67a6ea55a2247_220.webp",
+          "_hFile220": 283,
+          "_sFile220Sfw": "sgi_common_thumbs_67a6ea55a2247_220_sfw.webp",
+          "_hFile220Sfw": 283,
+          "_sFile530": "sgi_common_thumbs_67a6ea55a2247_530.webp",
+          "_hFile530": 682,
+          "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+          "_sFile": "67a6ea55a2247.jpg",
+          "_sCaption": "v1"
+        }
+      },
+      "_aSubmitter": {
+        "_idRow": 4040028,
+        "_sName": "EverEspitia",
+        "_bIsOnline": false,
+        "_bHasRipe": false,
+        "_sProfileUrl": "https://gamebanana.com/members/4040028",
+        "_sAvatarUrl": "https://images.gamebanana.com/static/img/defaults/avatar.gif"
+      },
+      "_aGame": {
+        "_idRow": 19567,
+        "_sName": "Zenless Zone Zero",
+        "_sProfileUrl": "https://gamebanana.com/games/19567",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png"
+      },
+      "_aRootCategory": {
+        "_sName": "Character Skins",
+        "_sProfileUrl": "https://gamebanana.com/mods/cats/30305",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/66a1928c3e239.gif"
+      },
+      "_aSubCategory": {
+        "_sName": "Ellen Joe",
+        "_sProfileUrl": "https://gamebanana.com/mods/cats/30341",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/68802045acf1f.png"
+      },
+      "_sVersion": "V1",
+      "_bIsObsolete": false,
+      "_sInitialVisibility": "warn",
+      "_bHasContentRatings": true,
+      "_nLikeCount": 49,
       "_nPostCount": 5,
       "_bWasFeatured": false,
-      "_nViewCount": 24232,
-      "_bIsOwnedByAccessor": false
-    },
-    {
-      "_idRow": 616585,
-      "_sModelName": "Mod",
-      "_sSingularTitle": "Mod",
-      "_sIconClasses": "SubmissionType Mod",
-      "_sName": "Ellen Enhanced",
-      "_sProfileUrl": "https://gamebanana.com/mods/616585",
-      "_tsDateAdded": 1756349732,
-      "_tsDateModified": 1757123989,
-      "_bHasFiles": true,
-      "_aTags": [],
-      "_aPreviewMedia": {
-        "_aImages": [
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "68b0a715bd761.jpg",
-            "_sFile220": "220-90_68b0a715bd761.jpg",
-            "_hFile220": 124,
-            "_wFile220": 220,
-            "_sFile530": "530-90_68b0a715bd761.jpg",
-            "_hFile530": 298,
-            "_wFile530": 530,
-            "_sFile100": "100-90_68b0a715bd761.jpg",
-            "_hFile100": 56,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "68b0a715a9426.jpg",
-            "_sFile100": "100-90_68b0a715a9426.jpg",
-            "_hFile100": 56,
-            "_wFile100": 100
-          }
-        ]
-      },
-      "_aSubmitter": {
-        "_idRow": 3022167,
-        "_sName": "KuinGa",
-        "_bIsOnline": false,
-        "_bHasRipe": false,
-        "_sProfileUrl": "https://gamebanana.com/members/3022167",
-        "_sAvatarUrl": "https://images.gamebanana.com/img/av/67c3378a7cb21.jpg"
-      },
-      "_aGame": {
-        "_idRow": 19567,
-        "_sName": "Zenless Zone Zero",
-        "_sProfileUrl": "https://gamebanana.com/games/19567",
-        "_sIconUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png"
-      },
-      "_aRootCategory": {
-        "_sName": "Character Skins",
-        "_sProfileUrl": "https://gamebanana.com/mods/cats/30305",
-        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/66a1928c3e239.gif"
-      },
-      "_aSubCategory": {
-        "_sName": "Ellen Joe",
-        "_sProfileUrl": "https://gamebanana.com/mods/cats/30341",
-        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/68802045acf1f.png"
-      },
-      "_sVersion": "",
-      "_bIsObsolete": false,
-      "_sInitialVisibility": "show",
-      "_bHasContentRatings": false,
-      "_nLikeCount": 82,
-      "_nPostCount": 6,
-      "_bWasFeatured": false,
-      "_nViewCount": 18343,
+      "_nViewCount": 34229,
       "_bIsOwnedByAccessor": false
     },
     {
@@ -918,56 +416,17 @@
       "_tsDateAdded": 1769725397,
       "_tsDateModified": 1775161572,
       "_bHasFiles": true,
+      "_sPayType": "free",
       "_aTags": [],
-      "_aPreviewMedia": {
-        "_aImages": [
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "697bdbd3259ed.jpg",
-            "_sFile220": "220-90_697bdbd3259ed.jpg",
-            "_hFile220": 132,
-            "_wFile220": 220,
-            "_sFile530": "530-90_697bdbd3259ed.jpg",
-            "_hFile530": 317,
-            "_wFile530": 530,
-            "_sFile100": "100-90_697bdbd3259ed.jpg",
-            "_hFile100": 60,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "697bdbd9c8a8c.jpg",
-            "_sFile100": "100-90_697bdbd9c8a8c.jpg",
-            "_hFile100": 100,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "697bdbdddeb5c.jpg",
-            "_sFile100": "100-90_697bdbdddeb5c.jpg",
-            "_hFile100": 69,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "697bdbd9ac493.jpg",
-            "_sFile100": "100-90_697bdbd9ac493.jpg",
-            "_hFile100": 100,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "697bdbd9d606d.jpg",
-            "_sFile100": "100-90_697bdbd9d606d.jpg",
-            "_hFile100": 100,
-            "_wFile100": 100
-          }
-        ]
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sFile220": "sgi_common_thumbs_697bdbd3259ed_220.webp",
+          "_hFile220": 132,
+          "_sFile530": "sgi_common_thumbs_697bdbd3259ed_530.webp",
+          "_hFile530": 317,
+          "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+          "_sFile": "697bdbd3259ed.jpg"
+        }
       },
       "_aSubmitter": {
         "_idRow": 2453208,
@@ -1007,9 +466,121 @@
       "_bIsObsolete": false,
       "_sInitialVisibility": "show",
       "_bHasContentRatings": false,
-      "_nLikeCount": 51,
+      "_nLikeCount": 54,
       "_bWasFeatured": true,
-      "_nViewCount": 11356,
+      "_nViewCount": 11898,
+      "_bIsOwnedByAccessor": false
+    },
+    {
+      "_idRow": 579699,
+      "_sModelName": "Mod",
+      "_sSingularTitle": "Mod",
+      "_sIconClasses": "SubmissionType Mod",
+      "_sName": "Ellen Remake",
+      "_sProfileUrl": "https://gamebanana.com/mods/579699",
+      "_tsDateAdded": 1741297774,
+      "_tsDateModified": 1741297774,
+      "_bHasFiles": true,
+      "_sPayType": "free",
+      "_aTags": [],
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sFile220": "sgi_common_thumbs_67ca1862d9c19_220.webp",
+          "_hFile220": 124,
+          "_sFile530": "sgi_common_thumbs_67ca1862d9c19_530.webp",
+          "_hFile530": 298,
+          "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+          "_sFile": "67ca1862d9c19.jpg"
+        }
+      },
+      "_aSubmitter": {
+        "_idRow": 3022167,
+        "_sName": "KuinGa",
+        "_bIsOnline": false,
+        "_bHasRipe": false,
+        "_sProfileUrl": "https://gamebanana.com/members/3022167",
+        "_sAvatarUrl": "https://images.gamebanana.com/img/av/67c3378a7cb21.jpg"
+      },
+      "_aGame": {
+        "_idRow": 19567,
+        "_sName": "Zenless Zone Zero",
+        "_sProfileUrl": "https://gamebanana.com/games/19567",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png"
+      },
+      "_aRootCategory": {
+        "_sName": "Character Skins",
+        "_sProfileUrl": "https://gamebanana.com/mods/cats/30305",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/66a1928c3e239.gif"
+      },
+      "_aSubCategory": {
+        "_sName": "Ellen Joe",
+        "_sProfileUrl": "https://gamebanana.com/mods/cats/30341",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/68802045acf1f.png"
+      },
+      "_sVersion": "",
+      "_bIsObsolete": false,
+      "_sInitialVisibility": "show",
+      "_bHasContentRatings": false,
+      "_nLikeCount": 75,
+      "_nPostCount": 5,
+      "_bWasFeatured": false,
+      "_nViewCount": 24707,
+      "_bIsOwnedByAccessor": false
+    },
+    {
+      "_idRow": 616585,
+      "_sModelName": "Mod",
+      "_sSingularTitle": "Mod",
+      "_sIconClasses": "SubmissionType Mod",
+      "_sName": "Ellen Enhanced",
+      "_sProfileUrl": "https://gamebanana.com/mods/616585",
+      "_tsDateAdded": 1756349732,
+      "_tsDateModified": 1757123989,
+      "_bHasFiles": true,
+      "_sPayType": "free",
+      "_aTags": [],
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sFile220": "sgi_common_thumbs_68b0a715bd761_220.webp",
+          "_hFile220": 124,
+          "_sFile530": "sgi_common_thumbs_68b0a715bd761_530.webp",
+          "_hFile530": 298,
+          "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+          "_sFile": "68b0a715bd761.jpg"
+        }
+      },
+      "_aSubmitter": {
+        "_idRow": 3022167,
+        "_sName": "KuinGa",
+        "_bIsOnline": false,
+        "_bHasRipe": false,
+        "_sProfileUrl": "https://gamebanana.com/members/3022167",
+        "_sAvatarUrl": "https://images.gamebanana.com/img/av/67c3378a7cb21.jpg"
+      },
+      "_aGame": {
+        "_idRow": 19567,
+        "_sName": "Zenless Zone Zero",
+        "_sProfileUrl": "https://gamebanana.com/games/19567",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png"
+      },
+      "_aRootCategory": {
+        "_sName": "Character Skins",
+        "_sProfileUrl": "https://gamebanana.com/mods/cats/30305",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/66a1928c3e239.gif"
+      },
+      "_aSubCategory": {
+        "_sName": "Ellen Joe",
+        "_sProfileUrl": "https://gamebanana.com/mods/cats/30341",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/68802045acf1f.png"
+      },
+      "_sVersion": "",
+      "_bIsObsolete": false,
+      "_sInitialVisibility": "show",
+      "_bHasContentRatings": false,
+      "_nLikeCount": 84,
+      "_nPostCount": 6,
+      "_bWasFeatured": false,
+      "_nViewCount": 18705,
       "_bIsOwnedByAccessor": false
     },
     {
@@ -1022,32 +593,17 @@
       "_tsDateAdded": 1720431833,
       "_tsDateModified": 1720431833,
       "_bHasFiles": true,
+      "_sPayType": "free",
       "_aTags": [],
-      "_aPreviewMedia": {
-        "_aImages": [
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "668bb4c8c3f25.jpg",
-            "_sFile220": "220-90_668bb4c8c3f25.jpg",
-            "_hFile220": 396,
-            "_wFile220": 220,
-            "_sFile530": "530-90_668bb4c8c3f25.jpg",
-            "_hFile530": 953,
-            "_wFile530": 530,
-            "_sFile100": "100-90_668bb4c8c3f25.jpg",
-            "_hFile100": 180,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "668bb4c908524.jpg",
-            "_sFile100": "100-90_668bb4c908524.jpg",
-            "_hFile100": 114,
-            "_wFile100": 100
-          }
-        ]
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sFile220": "sgi_common_thumbs_668bb4c8c3f25_220.webp",
+          "_hFile220": 396,
+          "_sFile530": "sgi_common_thumbs_668bb4c8c3f25_530.webp",
+          "_hFile530": 953,
+          "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+          "_sFile": "668bb4c8c3f25.jpg"
+        }
       },
       "_aSubmitter": {
         "_idRow": 2835261,
@@ -1085,7 +641,7 @@
       "_nLikeCount": 105,
       "_nPostCount": 17,
       "_bWasFeatured": false,
-      "_nViewCount": 28866,
+      "_nViewCount": 28965,
       "_bIsOwnedByAccessor": false
     },
     {
@@ -1098,59 +654,17 @@
       "_tsDateAdded": 1724743299,
       "_tsDateModified": 1724745354,
       "_bHasFiles": true,
+      "_sPayType": "free",
       "_aTags": [],
-      "_aPreviewMedia": {
-        "_aImages": [
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "66cd7ddad8859.jpg",
-            "_sFile220": "220-90_66cd7ddad8859.jpg",
-            "_hFile220": 96,
-            "_wFile220": 220,
-            "_sFile530": "530-90_66cd7ddad8859.jpg",
-            "_hFile530": 231,
-            "_wFile530": 530,
-            "_sFile100": "100-90_66cd7ddad8859.jpg",
-            "_hFile100": 44,
-            "_wFile100": 100,
-            "_sFile800": "800-90_66cd7ddad8859.jpg",
-            "_hFile800": 349,
-            "_wFile800": 800
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "66cd7ddd2a054.jpg",
-            "_sFile100": "100-90_66cd7ddd2a054.jpg",
-            "_hFile100": 62,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "66cd7de779661.jpg",
-            "_sFile100": "100-90_66cd7de779661.jpg",
-            "_hFile100": 89,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "66cd7deb95c62.jpg",
-            "_sFile100": "100-90_66cd7deb95c62.jpg",
-            "_hFile100": 88,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "66cd7df09c397.jpg",
-            "_sFile100": "100-90_66cd7df09c397.jpg",
-            "_hFile100": 128,
-            "_wFile100": 100
-          }
-        ]
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sFile220": "sgi_common_thumbs_66cd7ddad8859_220.webp",
+          "_hFile220": 96,
+          "_sFile530": "sgi_common_thumbs_66cd7ddad8859_530.webp",
+          "_hFile530": 231,
+          "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+          "_sFile": "66cd7ddad8859.jpg"
+        }
       },
       "_aSubmitter": {
         "_idRow": 3047351,
@@ -1180,77 +694,10 @@
       "_bIsObsolete": false,
       "_sInitialVisibility": "show",
       "_bHasContentRatings": false,
-      "_nLikeCount": 189,
+      "_nLikeCount": 190,
       "_nPostCount": 12,
       "_bWasFeatured": true,
-      "_nViewCount": 36796,
-      "_bIsOwnedByAccessor": false
-    },
-    {
-      "_idRow": 527446,
-      "_sModelName": "Mod",
-      "_sSingularTitle": "Mod",
-      "_sIconClasses": "SubmissionType Mod",
-      "_sName": "Ellen banner exposed",
-      "_sProfileUrl": "https://gamebanana.com/mods/527446",
-      "_tsDateAdded": 1720779026,
-      "_tsDateModified": 1730225237,
-      "_bHasFiles": true,
-      "_aTags": [],
-      "_aPreviewMedia": {
-        "_aImages": [
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "6690ff995265a.jpg",
-            "_sFile220": "220-90_6690ff995265a.jpg",
-            "_hFile220": 124,
-            "_wFile220": 220,
-            "_sFile530": "530-90_6690ff995265a.jpg",
-            "_hFile530": 298,
-            "_wFile530": 530,
-            "_sFile100": "100-90_6690ff995265a.jpg",
-            "_hFile100": 56,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "66910004d982a.jpg",
-            "_sFile100": "100-90_66910004d982a.jpg",
-            "_hFile100": 56,
-            "_wFile100": 100
-          }
-        ]
-      },
-      "_aSubmitter": {
-        "_idRow": 2789093,
-        "_sName": "Satan1c",
-        "_bIsOnline": false,
-        "_bHasRipe": false,
-        "_sProfileUrl": "https://gamebanana.com/members/2789093",
-        "_sAvatarUrl": "https://images.gamebanana.com/img/av/672bed194108a.png",
-        "_sHdAvatarUrl": "https://images.gamebanana.com/img/av/672bee6240cb1.png"
-      },
-      "_aGame": {
-        "_idRow": 19567,
-        "_sName": "Zenless Zone Zero",
-        "_sProfileUrl": "https://gamebanana.com/games/19567",
-        "_sIconUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png"
-      },
-      "_aRootCategory": {
-        "_sName": "UI",
-        "_sProfileUrl": "https://gamebanana.com/mods/cats/30395",
-        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/6690641770738.png"
-      },
-      "_sVersion": "1.0",
-      "_bIsObsolete": false,
-      "_sInitialVisibility": "hide",
-      "_bHasContentRatings": true,
-      "_nLikeCount": 76,
-      "_nPostCount": 5,
-      "_bWasFeatured": false,
-      "_nViewCount": 31949,
+      "_nViewCount": 36957,
       "_bIsOwnedByAccessor": false
     },
     {
@@ -1263,32 +710,19 @@
       "_tsDateAdded": 1742930725,
       "_tsDateModified": 1742930725,
       "_bHasFiles": true,
+      "_sPayType": "free",
       "_aTags": [],
-      "_aPreviewMedia": {
-        "_aImages": [
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "67e30287bc1bc.jpg",
-            "_sFile220": "220-90_67e30287bc1bc.jpg",
-            "_hFile220": 93,
-            "_wFile220": 220,
-            "_sFile530": "530-90_67e30287bc1bc.jpg",
-            "_hFile530": 225,
-            "_wFile530": 530,
-            "_sFile100": "100-90_67e30287bc1bc.jpg",
-            "_hFile100": 42,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "67e3028d6c194.jpg",
-            "_sFile100": "100-90_67e3028d6c194.jpg",
-            "_hFile100": 42,
-            "_wFile100": 100
-          }
-        ]
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sFile220": "sgi_common_thumbs_67e30287bc1bc_220.webp",
+          "_hFile220": 93,
+          "_sFile220Sfw": "sgi_common_thumbs_67e30287bc1bc_220_sfw.webp",
+          "_hFile220Sfw": 93,
+          "_sFile530": "sgi_common_thumbs_67e30287bc1bc_530.webp",
+          "_hFile530": 225,
+          "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+          "_sFile": "67e30287bc1bc.jpg"
+        }
       },
       "_aSubmitter": {
         "_idRow": 3591465,
@@ -1320,7 +754,61 @@
       "_sInitialVisibility": "hide",
       "_bHasContentRatings": true,
       "_bWasFeatured": false,
-      "_nViewCount": 3339,
+      "_nViewCount": 3461,
+      "_bIsOwnedByAccessor": false
+    },
+    {
+      "_idRow": 527446,
+      "_sModelName": "Mod",
+      "_sSingularTitle": "Mod",
+      "_sIconClasses": "SubmissionType Mod",
+      "_sName": "Ellen banner exposed",
+      "_sProfileUrl": "https://gamebanana.com/mods/527446",
+      "_tsDateAdded": 1720779026,
+      "_tsDateModified": 1730225237,
+      "_bHasFiles": true,
+      "_sPayType": "free",
+      "_aTags": [],
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sFile220": "sgi_common_thumbs_6690ff995265a_220.webp",
+          "_hFile220": 124,
+          "_sFile220Sfw": "sgi_common_thumbs_6690ff995265a_220_sfw.webp",
+          "_hFile220Sfw": 124,
+          "_sFile530": "sgi_common_thumbs_6690ff995265a_530.webp",
+          "_hFile530": 298,
+          "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+          "_sFile": "6690ff995265a.jpg"
+        }
+      },
+      "_aSubmitter": {
+        "_idRow": 2789093,
+        "_sName": "Satan1c",
+        "_bIsOnline": false,
+        "_bHasRipe": false,
+        "_sProfileUrl": "https://gamebanana.com/members/2789093",
+        "_sAvatarUrl": "https://images.gamebanana.com/img/av/672bed194108a.png",
+        "_sHdAvatarUrl": "https://images.gamebanana.com/img/av/672bee6240cb1.png"
+      },
+      "_aGame": {
+        "_idRow": 19567,
+        "_sName": "Zenless Zone Zero",
+        "_sProfileUrl": "https://gamebanana.com/games/19567",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png"
+      },
+      "_aRootCategory": {
+        "_sName": "UI",
+        "_sProfileUrl": "https://gamebanana.com/mods/cats/30395",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/6690641770738.png"
+      },
+      "_sVersion": "1.0",
+      "_bIsObsolete": false,
+      "_sInitialVisibility": "hide",
+      "_bHasContentRatings": true,
+      "_nLikeCount": 76,
+      "_nPostCount": 5,
+      "_bWasFeatured": false,
+      "_nViewCount": 32015,
       "_bIsOwnedByAccessor": false
     },
     {
@@ -1333,30 +821,17 @@
       "_tsDateAdded": 1722751013,
       "_tsDateModified": 1722751013,
       "_bHasFiles": true,
+      "_sPayType": "free",
       "_aTags": [],
-      "_aPreviewMedia": {
-        "_aImages": [
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "66af18052287a.jpg",
-            "_sFile220": "220-90_66af18052287a.jpg",
-            "_sFile530": "530-90_66af18052287a.jpg",
-            "_hFile530": 901,
-            "_wFile530": 530,
-            "_sFile100": "100-90_66af18052287a.jpg",
-            "_hFile100": 170,
-            "_wFile100": 100
-          },
-          {
-            "_sType": "screenshot",
-            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
-            "_sFile": "66af1808485e5.jpg",
-            "_sFile100": "100-90_66af1808485e5.jpg",
-            "_hFile100": 170,
-            "_wFile100": 100
-          }
-        ]
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sFile220": "sgi_common_thumbs_66af18052287a_220.webp",
+          "_hFile220": 374,
+          "_sFile530": "sgi_common_thumbs_66af18052287a_530.webp",
+          "_hFile530": 901,
+          "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+          "_sFile": "66af18052287a.jpg"
+        }
       },
       "_aSubmitter": {
         "_idRow": 3142911,
@@ -1389,7 +864,7 @@
       "_nLikeCount": 52,
       "_nPostCount": 5,
       "_bWasFeatured": false,
-      "_nViewCount": 33238,
+      "_nViewCount": 33397,
       "_bIsOwnedByAccessor": false
     }
   ]

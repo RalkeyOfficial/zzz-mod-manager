@@ -88,7 +88,8 @@ int? gameBananaModIdFromUrl(String? url) {
 /// [gameBananaModIdFromUrl].
 ///
 /// **This cannot be turned into a mod id.** Probed against the live API
-/// (2026-08-08): `apiv11 File/<id>` returns the file record — name, size, date,
+/// (2026-08-08, re-confirmed on apiv13 2026-08-15): `File/<id>` returns the
+/// file record — name, size, date,
 /// md5, scan results, even its archive tree — and carries no owning mod
 /// anywhere; `_sProfileUrl` on a File comes back as the broken
 /// `https://gamebanana.com//<id>`, and the legacy Core API's `File` fields list

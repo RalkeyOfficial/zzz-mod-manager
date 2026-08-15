@@ -9,7 +9,7 @@ import '../support/fixtures.dart';
 /// `Game/<id>/TopSubs` — the "best of period" list behind the featured carousel.
 ///
 /// Tested against a real captured response because this endpoint is undocumented
-/// even by the standards of the rest of apiv11: it appears in no field list, takes
+/// even by the standards of the rest of apiv13: it appears in no field list, takes
 /// no parameters, and returns a shape that exists nowhere else in the API.
 void main() {
   group('GbTopSubPeriod.parse', () {
@@ -60,18 +60,22 @@ void main() {
       for (final sub in subs) {
         expect(sub.idRow, greaterThan(0));
         expect(sub.name, isNotNull);
-        expect(sub.thumbnailUrl, isNotNull, reason: 'mod ${sub.idRow}');
+        expect(sub.image, isNotNull, reason: 'mod ${sub.idRow}');
         expect(sub.likeCount, isNotNull, reason: 'mod ${sub.idRow}');
         expect(sub.submitter?.name, isNotNull, reason: 'mod ${sub.idRow}');
       }
     });
 
-    test('images are finished urls, not a base plus variants', () {
-      // The reason this is its own DTO rather than a GbMod: there is no size
-      // ladder to negotiate here.
-      expect(subs.first.thumbnailUrl, startsWith('https://'));
-      expect(subs.first.imageUrl, startsWith('https://'));
-      expect(subs.first.thumbnailUrl, contains('220-'));
+    test('images are the ordinary variant ladder, as of apiv13', () {
+      // This used to be a *reason* for the separate DTO: apiv11 sent finished
+      // `_sImageUrl`/`_sThumbnailUrl` strings with no size to negotiate. apiv13
+      // sends `_aPreviewContent` like everything else, so the entry carries a
+      // normal GbImage — and what still justifies the type is `_sPeriod` plus
+      // the absent `_aSubCategory`.
+      final image = subs.first.image!;
+      expect(image.fullUrl, startsWith('https://'));
+      expect(image.urlAtMost(220), startsWith('https://'));
+      expect(image.variants.keys, contains(220));
     });
 
     test('carries the visibility hint, so the filter applies', () {
@@ -86,13 +90,17 @@ void main() {
       final flagged = subs
           .where((s) => s.effectiveVisibility.needsContentWarning)
           .length;
-      expect(flagged, 20, reason: '20 of 21 captured entries are warn/hide');
+      // A range rather than the exact count: the claim under test is the *skew*,
+      // and which mods are trending changes with every re-capture. Measured
+      // 19 of 21 on 2026-08-15, and 20 of 21 on the 2026-08-05 capture before it.
+      expect(flagged, greaterThanOrEqualTo(subs.length - 3),
+          reason: 'all but a couple of captured entries are warn/hide');
 
       final surviving = subs.where((s) =>
           contentTreatment(s.effectiveVisibility, ContentFilterMode.hide) !=
           ContentTreatment.omit);
-      expect(surviving.length, 1,
-          reason: 'a single entry survives the hide filter');
+      expect(surviving.length, lessThanOrEqualTo(3),
+          reason: 'almost nothing survives the hide filter (2 of 21 measured)');
     });
 
     test('only the root category is available, never a character', () {

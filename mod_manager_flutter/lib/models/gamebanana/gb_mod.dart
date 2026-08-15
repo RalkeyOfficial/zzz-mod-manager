@@ -121,7 +121,12 @@ class GbMod {
   /// responses; [gbTags] absorbs that.
   final List<String> tags;
 
-  /// `_aPreviewMedia._aImages` — the gallery. First entry is the cover.
+  /// `_aPreviewContent` — the gallery. First entry is the cover.
+  ///
+  /// **A listing-sourced `GbMod` carries only the cover**; the full gallery
+  /// comes from `Mod/<id>/ProfilePage`. Measured on apiv13: the same 50 records
+  /// yield 50 images from `Mod/Index` against 420 on apiv11, which sent every
+  /// screenshot to a response that only ever renders the first.
   final List<GbImage> images;
 
   /// `_aFiles`. **Null = not requested; `[]` = none published.**
@@ -198,7 +203,6 @@ class GbMod {
     final id = gbInt(json['_idRow']);
     if (id == null) return null;
 
-    final preview = gbObject(json['_aPreviewMedia']);
     return GbMod(
       idRow: id,
       name: gbString(json['_sName']),
@@ -218,12 +222,7 @@ class GbMod {
       subCategory: GbCategoryRef.fromJson(json['_aSubCategory']),
       rootCategory: GbCategoryRef.fromJson(json['_aRootCategory']),
       tags: gbTags(json['_aTags']),
-      images: preview == null
-          ? const []
-          : <GbImage>[
-              for (final image in gbObjects(preview['_aImages']))
-                if (GbImage.fromJson(image) case final parsed?) parsed,
-            ],
+      images: GbImage.listFromPreviewContent(json['_aPreviewContent']),
       // Absent key -> null (not requested); present key -> a list, even empty.
       files: json.containsKey('_aFiles') ? GbFile.listFrom(json['_aFiles']) : null,
       archivedFiles: json.containsKey('_aArchivedFiles')

@@ -54,7 +54,7 @@ description still gets a gallery.
 | `description` | `_sText`, converted | HTML upstream, markdown here, through `utils/html_to_markdown.dart` — shared with the editors' paste-as-markdown so the two conversions can't drift. |
 | `character_id` | the **category** name | Not the mod name, not the tags. Under Character Skins the category is the character's full in-world name, picked from a list; `detectCharacterId()` resolves it. |
 | `tags` | `_aTags`, flattened | All-or-nothing: a non-empty local list is a curation, and merging into it would produce a set nobody chose. |
-| `images` | `_aPreviewMedia`, fetched | The only field that needs the network, because our `images` are paths inside the mod folder. |
+| `images` | `_aPreviewContent`, fetched | The only field that needs the network, because our `images` are paths inside the mod folder. Comes from the mod's **profile**, which is what carries the full gallery — a listing record holds only the cover. |
 
 Four decisions inside that are load-bearing rather than arbitrary:
 

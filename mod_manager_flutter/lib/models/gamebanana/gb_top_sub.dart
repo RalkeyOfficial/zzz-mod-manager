@@ -1,6 +1,7 @@
 import 'gb_category.dart';
 import 'gb_coerce.dart';
 import 'gb_enums.dart';
+import 'gb_image.dart';
 import 'gb_submitter.dart';
 
 /// The time window a [GbTopSub] won.
@@ -45,12 +46,15 @@ enum GbTopSubPeriod {
 /// marketplace's featured carousel.
 ///
 /// A **separate type from `GbMod`, deliberately.** This endpoint returns its own
-/// shape rather than a subset of the mod object: images arrive as two
-/// pre-resolved urls (`_sImageUrl`, `_sThumbnailUrl`) instead of the
-/// `_aPreviewMedia` base-plus-variants ladder that `GbImage` models, and it
-/// carries `_sPeriod`, which exists nowhere else. Forcing it into `GbMod` would
-/// mean either faking a `GbImage` from a finished url or making `GbMod` lie about
-/// which fields a response can carry.
+/// shape rather than a subset of the mod object: it carries `_sPeriod`, which
+/// exists nowhere else, and no `_aSubCategory`, so an entry can name its root
+/// category but never a character. Forcing it into `GbMod` would make that type
+/// lie about which fields a response can carry.
+///
+/// Images used to be a second reason and are no longer: apiv11 sent two finished
+/// urls (`_sImageUrl`, `_sThumbnailUrl`) with no size to negotiate, where apiv13
+/// sends the same `_aPreviewContent` ladder as everything else — so [image] is an
+/// ordinary [GbImage] whose `_sFile` happens to be the 800px render.
 ///
 /// [idRow] is a real mod id, so opening one goes through the normal
 /// `Mod/<id>/ProfilePage` detail path — nothing about the detail view needs to
@@ -62,8 +66,7 @@ class GbTopSub {
     this.name,
     this.description,
     this.profileUrl,
-    this.imageUrl,
-    this.thumbnailUrl,
+    this.image,
     this.visibility,
     this.submitter,
     this.likeCount,
@@ -87,11 +90,10 @@ class GbTopSub {
   /// `_sProfileUrl`.
   final String? profileUrl;
 
-  /// `_sImageUrl` — a finished url for the large (800px) image.
-  final String? imageUrl;
-
-  /// `_sThumbnailUrl` — a finished url for the 220px thumbnail.
-  final String? thumbnailUrl;
+  /// `_aPreviewContent.screenshot` — the cover, as the usual variant ladder.
+  /// `_sFile` is the 800px render here rather than an original upload, with
+  /// `_sFile220` beside it.
+  final GbImage? image;
 
   /// `_sInitialVisibility`. Present on every captured entry, which matters: the
   /// carousel has to honour the content filter like any other listing, and the
@@ -122,8 +124,9 @@ class GbTopSub {
       name: gbString(json['_sName']),
       description: gbString(json['_sDescription']),
       profileUrl: gbString(json['_sProfileUrl']),
-      imageUrl: gbString(json['_sImageUrl']),
-      thumbnailUrl: gbString(json['_sThumbnailUrl']),
+      image: GbImage.listFromPreviewContent(
+        json['_aPreviewContent'],
+      ).firstOrNull,
       visibility: json.containsKey('_sInitialVisibility')
           ? GbVisibility.parse(json['_sInitialVisibility'])
           : null,
