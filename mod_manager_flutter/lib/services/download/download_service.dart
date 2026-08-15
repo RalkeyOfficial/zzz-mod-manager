@@ -4,14 +4,15 @@ import 'dart:io';
 import 'package:path/path.dart' as path;
 
 import '../../utils/path_helper.dart';
-import '../archive_hash.dart';
 import 'download_exceptions.dart';
 import 'download_handle.dart';
 import 'download_paths.dart';
 import 'download_progress.dart';
+import 'download_pump.dart';
 import 'download_request.dart';
 import 'download_transport.dart';
-import 'io_download_transport.dart';
+import 'inline_download_pump.dart';
+import 'isolate_download_pump.dart';
 import 'partial_download.dart';
 import 'rate_estimator.dart';
 import 'resume_policy.dart';
@@ -26,10 +27,19 @@ import 'resume_policy.dart';
 /// duration, and progress reports a rate so the user can tell a slow download
 /// from a dead one.
 ///
-/// Everything is injectable — transport, directory, clock, sink opener — so the
-/// whole class is testable with no network and no real waiting.
+/// **Every decision lives here; only the socket→disk pump does not.** Reading
+/// the socket on the root isolate costs ~2.3 ms per event, which caps a download
+/// at ~3 MB/s regardless of the network — so that part, and only that part, is
+/// behind the [DownloadPump] seam and normally runs on a spawned isolate. See
+/// [DownloadPump] for the measurements. Resume, promotion, the stall timer and
+/// the rate estimate all stay on this isolate, because they are judgements and
+/// judgements are where the subtle bugs are.
+///
+/// Everything is injectable — pump, transport, directory, clock, sink opener —
+/// so the whole class is testable with no network and no real waiting.
 class DownloadService {
   DownloadService({
+    DownloadPump? pump,
     DownloadTransport? transport,
     Directory? directory,
     DateTime Function()? now,
@@ -37,18 +47,28 @@ class DownloadService {
     this.stallTimeout = const Duration(seconds: 60),
     this.progressInterval = const Duration(milliseconds: 500),
     ResumePolicy policy = const ResumePolicy(),
-  })  : _transport = transport ?? IoDownloadTransport(),
+  })  : assert(
+          pump == null || transport == null,
+          'Pass a pump or a transport, not both — they name the same layer.',
+        ),
+        assert(
+          openSink == null || transport != null,
+          'openSink only reaches the inline pump; a worker cannot receive a '
+          'closure. Pass a transport alongside it.',
+        ),
+        _pump = pump ??
+            (transport != null
+                ? InlineDownloadPump(transport, openSink: openSink)
+                : IsolateDownloadPump()),
         _paths = DownloadPaths(
           directory ?? Directory(PathHelper.getDownloadsPath()),
         ),
         _now = now ?? DateTime.now,
-        _openSink = openSink ?? _defaultOpenSink,
         _policy = policy;
 
-  final DownloadTransport _transport;
+  final DownloadPump _pump;
   final DownloadPaths _paths;
   final DateTime Function() _now;
-  final IOSink Function(File file, FileMode mode) _openSink;
   final ResumePolicy _policy;
 
   /// Abort only after this long with **zero** bytes received.
@@ -59,10 +79,14 @@ class DownloadService {
 
   final Duration progressInterval;
 
-  bool _swept = false;
+  /// Runs that have not finished yet, so [close] can reach their workers.
+  ///
+  /// Without this the isolate pump would outlive its owner: there is no client
+  /// on this isolate to close, so a `close()` that only spoke to the pump would
+  /// be a silent no-op while every in-flight worker kept its socket.
+  final Set<_Run> _runs = <_Run>{};
 
-  static IOSink _defaultOpenSink(File file, FileMode mode) =>
-      file.openWrite(mode: mode);
+  bool _swept = false;
 
   /// Clears junk left by crashes and abandoned downloads. Runs once, lazily.
   Future<void> _sweepOnce() async {
@@ -85,6 +109,7 @@ class DownloadService {
       progress: progress,
       completer: completer,
     );
+    _runs.add(run);
 
     unawaited(run.execute());
 
@@ -100,12 +125,23 @@ class DownloadService {
     );
   }
 
-  void close() => _transport.close();
+  /// Stops everything this service owns.
+  ///
+  /// Fire-and-forget by necessity — `ref.onDispose` takes a `void Function()`,
+  /// so there is nowhere to await. That is acceptable rather than merely
+  /// tolerated: a partial left by an interrupted write is a valid prefix, which
+  /// is exactly what the next resume needs. Partials are kept, not deleted; the
+  /// app closing is the case `DownloadHandle.cancel` keeps them for.
+  void close() {
+    _pump.close().ignore();
+    for (final run in List<_Run>.of(_runs)) {
+      run.cancel().ignore();
+    }
+  }
 }
 
 /// One download attempt. Holds the mutable state that would otherwise clutter
-/// the service, and guarantees every exit path closes the sink and releases the
-/// connection.
+/// the service, and guarantees every exit path releases the pump session.
 class _Run {
   _Run({
     required this.service,
@@ -122,17 +158,27 @@ class _Run {
   late final DownloadPaths _paths = service._paths;
   final RateEstimator _rate = RateEstimator();
 
-  StreamSubscription<List<int>>? _sub;
-  IOSink? _sink;
+  /// The connection currently open, if any. Assigned the instant it exists —
+  /// including when a cancel has already given up waiting for it — because an
+  /// unreferenced session is a worker nothing can ever shut down.
+  PumpSession? _session;
+
   Timer? _stallTimer;
   Timer? _progressTimer;
-  Md5Accumulator? _digest;
+  bool _stallActive = false;
 
-  /// Completes when the body stream ends, errors, stalls, or is cancelled.
-  /// Held on the run so [cancel] can unblock a transfer in flight — without
-  /// this, cancelling the subscription would leave the run awaiting a future
-  /// nothing ever completes.
-  Completer<void>? _finished;
+  /// Completes when [cancel] is called, so a connect in flight can be abandoned
+  /// without waiting out the connect timeout.
+  final Completer<void> _cancelSignal = Completer<void>();
+
+  /// Why the drain was stopped early, when it was.
+  ///
+  /// A stall interrupts the pump *gracefully* — the partial has to survive, or
+  /// every stall would cost the user a restart — so the drain comes back looking
+  /// like a short but successful transfer. The reason is recorded here and
+  /// raised afterwards rather than thrown from inside the pump, which is what
+  /// keeps teardown to a single path.
+  DownloadStalledException? _stallError;
 
   bool _cancelled = false;
   bool _deletePartialOnCancel = false;
@@ -165,8 +211,10 @@ class _Run {
       _emit(state, error: error);
       if (!completer.isCompleted) completer.completeError(error);
     } finally {
-      _stallTimer?.cancel();
+      _stopStallTimer();
       _progressTimer?.cancel();
+      await _session?.shutdown();
+      service._runs.remove(this);
       if (!progress.isClosed) await progress.close();
     }
   }
@@ -185,27 +233,37 @@ class _Run {
     _emit(DownloadState.connecting);
     if (_cancelled) throw const DownloadCancelledException();
 
-    final response = await _open(onDisk, record?.etag);
+    final session = await _open(onDisk, record?.etag);
+
+    // Cancel can land *during* the connect, which is exactly when the user is
+    // looking at "connecting" and pressing the button. Without this check the
+    // run carried on: it opened the sink, dropped every chunk, and promoted an
+    // empty file under the archive's final name.
+    if (_cancelled) {
+      await session.shutdown();
+      throw const DownloadCancelledException();
+    }
+
     final decision = service._policy.decide(
-      statusCode: response.statusCode,
+      statusCode: session.statusCode,
       bytesOnDisk: onDisk,
-      contentLength: response.contentLength,
-      contentRange: response.contentRange,
-      etag: response.etag,
+      contentLength: session.contentLength,
+      contentRange: session.contentRange,
+      etag: session.etag,
     );
 
     if (decision.action == ResumeAction.fail) {
-      await response.discard();
+      await session.shutdown();
       throw DownloadHttpException(
         decision.reason,
-        statusCode: response.statusCode,
+        statusCode: session.statusCode,
         retryable: decision.retryable,
       );
     }
 
     if (decision.action == ResumeAction.complete) {
       // The server says we already hold every byte. Nothing to transfer.
-      await response.discard();
+      await session.shutdown();
       _received = onDisk;
       _total = decision.totalSize ?? onDisk;
       final promoted = await _promote(partFile, filename);
@@ -223,8 +281,8 @@ class _Run {
     // "restarting" here would promote a zero-byte file. Clear the partial and
     // make one fresh request with no range. Bounded to a single retry so a
     // server answering 416 unconditionally can't loop.
-    if (response.statusCode == 416 && decision.action == ResumeAction.restart) {
-      await response.discard();
+    if (session.statusCode == 416 && decision.action == ResumeAction.restart) {
+      await session.shutdown();
       await _discardPartial(partFile, recordFile);
       if (attempt >= 2) {
         throw const DownloadHttpException(
@@ -236,14 +294,21 @@ class _Run {
     }
 
     final appending = decision.action == ResumeAction.append;
+    if (!appending) {
+      // Clear the partial **before** the record is written, not by truncating
+      // as the body starts. A crash between the two would otherwise leave a
+      // record advertising the new download's size and validator beside the old
+      // download's bytes — and the next run would resume from there, appending
+      // the new file's tail onto the old file's head. That is precisely the
+      // plausible-looking, silently broken archive `resume_policy.dart` exists
+      // to prevent, reached around the back.
+      await _discardPartial(partFile, recordFile);
+      record = null;
+    }
+
     _resumedFrom = appending ? onDisk : 0;
     _received = _resumedFrom;
     _total = decision.totalSize ?? request.expectedSize;
-
-    // Only meaningful when this attempt writes every byte. On a resume the
-    // earlier bytes never passed through this process, so there is nothing
-    // honest to accumulate and the hash is left to the extraction step.
-    _digest = appending ? null : Md5Accumulator();
 
     record = (record ?? PartialDownload(
       url: request.url.toString(),
@@ -258,16 +323,21 @@ class _Run {
     );
     await record.write(recordFile);
 
-    await _streamToDisk(response, partFile, appending: appending);
+    // Only hashed when this attempt writes every byte. On a resume the earlier
+    // bytes never passed through this process, so there is nothing honest to
+    // accumulate and the hash is left to the extraction step.
+    final md5 = await _streamToDisk(session, partFile, hashMd5: !appending);
 
     final promoted = await _promote(partFile, filename);
     await PartialDownload.delete(recordFile);
 
     return DownloadResult(
       file: promoted,
-      totalBytes: _received,
+      // From the file rather than the counter. They agree on every ordinary
+      // path, and where they can't the file is the one telling the truth.
+      totalBytes: await _sizeOf(promoted),
       etag: decision.etag,
-      md5: _digest?.close(),
+      md5: md5,
       resumed: _resumedFrom > 0,
     );
   }
@@ -303,7 +373,7 @@ class _Run {
     return record;
   }
 
-  Future<DownloadResponse> _open(int onDisk, String? etag) async {
+  Future<PumpSession> _open(int onDisk, String? etag) async {
     final headers = <String, String>{};
     if (onDisk > 0) {
       headers['range'] = 'bytes=$onDisk-';
@@ -312,8 +382,40 @@ class _Run {
       // won't spuriously restart the transfer.
       if (etag != null) headers['if-range'] = etag;
     }
+
+    final Future<PumpSession> pending;
     try {
-      return await service._transport.open(request.url, headers: headers);
+      pending = service._pump.open(request.url, headers: headers);
+    } catch (error) {
+      throw DownloadNetworkException(
+        'Could not reach ${request.url}',
+        cause: error,
+      );
+    }
+
+    // Take ownership of the session the moment it exists, even if the race
+    // below has already given up on it. A cancel during connect would otherwise
+    // leave a worker nothing holds a reference to, still opening the socket.
+    unawaited(pending.then(
+      (session) {
+        _session = session;
+        if (_cancelled) unawaited(session.shutdown());
+      },
+      onError: (Object _) {
+        // Reported by the race below; handled here only so the second listener
+        // doesn't turn it into an unhandled async error.
+      },
+    ));
+
+    try {
+      // Racing the cancel matters: a connect can take the full 20 s timeout,
+      // and making the user watch that out after pressing Cancel is the sort of
+      // unresponsiveness they read as a hang.
+      return await Future.any<PumpSession>([
+        pending,
+        _cancelSignal.future
+            .then<PumpSession>((_) => throw const DownloadCancelledException()),
+      ]);
     } on DownloadException {
       rethrow;
     } catch (error) {
@@ -324,101 +426,87 @@ class _Run {
     }
   }
 
-  Future<void> _streamToDisk(
-    DownloadResponse response,
+  /// Runs the transfer and returns the in-stream md5, when one was asked for.
+  Future<String?> _streamToDisk(
+    PumpSession session,
     File partFile, {
-    required bool appending,
+    required bool hashMd5,
   }) async {
-    final finished = Completer<void>();
-    _finished = finished;
-    _sink = service._openSink(
-      partFile,
-      appending ? FileMode.append : FileMode.write,
-    );
-
     _emit(DownloadState.downloading);
     _rate.add(_received);
-    _startStallTimer(finished);
+    _startStallTimer();
     _progressTimer = Timer.periodic(
       service.progressInterval,
       (_) => _emit(DownloadState.downloading),
     );
 
-    late final StreamSubscription<List<int>> sub;
-    sub = response.body.listen(
-      (chunk) {
-        if (_cancelled) return;
-        try {
-          _sink!.add(chunk);
-        } catch (error) {
-          _fail(finished, DownloadWriteException('Write failed', cause: error));
-          return;
-        }
-        _digest?.add(chunk);
-        _received += chunk.length;
-        _rate.add(_received);
-        _restartStallTimer(finished);
-        // Backpressure. Without this the socket keeps delivering while the disk
-        // falls behind and the difference buffers in memory. `sink.add` is not
-        // awaitable, so pausing on the flush is what applies the brake.
-        sub.pause(_sink!.flush());
-      },
-      onError: (Object error, StackTrace stack) {
-        _fail(finished, error);
-      },
-      onDone: () {
-        if (!finished.isCompleted) finished.complete();
-      },
-      cancelOnError: true,
-    );
-    _sub = sub;
-
     try {
-      await finished.future;
+      final outcome = await session.drainTo(
+        partFile.path,
+        hashMd5: hashMd5,
+        onBytes: _onBytes,
+        // The socket is done, the sink is not yet flushed. Flushing a gigabyte
+        // onto contended storage takes real time, and the stall timer must not
+        // be running through it — a download that already finished must not be
+        // able to time out.
+        onBodyEnded: _stopStallTimer,
+      );
+      _received = _resumedFrom + outcome.bytesWritten;
+      _rate.add(_received);
+
+      final stalled = _stallError;
+      if (stalled != null) throw stalled;
+      if (_cancelled) throw const DownloadCancelledException();
+      return outcome.md5;
     } finally {
-      _finished = null;
-      _stallTimer?.cancel();
+      _stopStallTimer();
       _progressTimer?.cancel();
-      await _sub?.cancel();
-      _sub = null;
-      // Always close the sink, on every path. The old inline downloader leaked
-      // it on every error, which is how partial writes stayed unflushed.
-      await _closeSink();
+      _progressTimer = null;
+      // Before the caller renames or deletes the partial. Windows refuses both
+      // on a file something still holds open, and Linux hides the same mistake
+      // by unlinking an inode that is still being written.
+      await session.shutdown();
+      _session = null;
     }
   }
 
-  void _startStallTimer(Completer<void> finished) {
+  /// The pump reports a counter, not chunks. Only an **increase** counts as
+  /// progress: the isolate pump posts on a fixed timer whether anything moved
+  /// or not, and a tick that says the same number as last time is precisely
+  /// what a stalled transfer looks like.
+  void _onBytes(int bytesWritten) {
+    final received = _resumedFrom + bytesWritten;
+    if (received <= _received) return;
+    _received = received;
+    _rate.add(_received);
+    _restartStallTimer();
+  }
+
+  void _startStallTimer() {
+    _stallActive = true;
     _stallTimer = Timer(service.stallTimeout, () {
-      _fail(
-        finished,
-        DownloadStalledException(
-          'No data for ${service.stallTimeout.inSeconds}s',
-          stallTimeout: service.stallTimeout,
-        ),
+      _stallError = DownloadStalledException(
+        'No data for ${service.stallTimeout.inSeconds}s',
+        stallTimeout: service.stallTimeout,
       );
+      // The one interrupt mechanism, shared with cancel. The drain stops
+      // gracefully and flushes what it has, so the partial can still be
+      // resumed; `_streamToDisk` raises the recorded reason afterwards.
+      final session = _session;
+      if (session != null) unawaited(session.shutdown());
     });
   }
 
-  void _restartStallTimer(Completer<void> finished) {
+  void _restartStallTimer() {
+    if (!_stallActive) return;
     _stallTimer?.cancel();
-    _startStallTimer(finished);
+    _startStallTimer();
   }
 
-  void _fail(Completer<void> finished, Object error) {
-    if (finished.isCompleted) return;
-    finished.completeError(error);
-  }
-
-  Future<void> _closeSink() async {
-    final sink = _sink;
-    _sink = null;
-    if (sink == null) return;
-    try {
-      await sink.flush();
-      await sink.close();
-    } catch (_) {
-      // Already broken; the error that got us here is the one worth reporting.
-    }
+  void _stopStallTimer() {
+    _stallActive = false;
+    _stallTimer?.cancel();
+    _stallTimer = null;
   }
 
   /// Moves the finished `.part` to its final name. A rename within the same
@@ -452,31 +540,20 @@ class _Run {
   /// Stops the download and waits for it to unwind.
   ///
   /// Deliberately does **not** tear things down itself: it signals the run and
-  /// lets [execute]'s normal error path close the sink, release the connection
-  /// and — when asked — delete the partial. One teardown path is far easier to
-  /// keep correct than two racing ones.
+  /// lets [execute]'s normal error path release the session and — when asked —
+  /// delete the partial. One teardown path is far easier to keep correct than
+  /// two racing ones.
+  ///
+  /// Shutting the session down is a signal too, not a teardown: the pump stops
+  /// the drain *gracefully*, flushing and closing what it has written, because
+  /// those bytes are what a later resume picks up from.
   Future<void> cancel({bool deletePartial = false}) async {
     if (!_cancelled) {
       _cancelled = true;
       _deletePartialOnCancel = deletePartial;
-      _stallTimer?.cancel();
-
-      final finished = _finished;
-      if (finished != null && !finished.isCompleted) {
-        // Unblocks the transfer; without this the run would await a future that
-        // nothing ever completes and hang for the life of the app.
-        finished.completeError(const DownloadCancelledException());
-      } else if (!completer.isCompleted) {
-        // Cancelled before the body started; nothing is streaming to interrupt.
-        _emit(DownloadState.cancelled);
-        completer.completeError(const DownloadCancelledException());
-        if (_deletePartialOnCancel) {
-          await _discardPartial(
-            _paths.partFile(_filename),
-            _paths.recordFile(_filename),
-          );
-        }
-      }
+      _stopStallTimer();
+      if (!_cancelSignal.isCompleted) _cancelSignal.complete();
+      await _session?.shutdown();
     }
     // Let callers await cancel() and know the file system has settled.
     await completer.future.then<void>((_) {}, onError: (_) {});

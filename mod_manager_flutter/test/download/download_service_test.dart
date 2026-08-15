@@ -292,6 +292,35 @@ void main() {
       await controller.close();
     });
 
+    test('cancelling while still connecting leaves no archive behind', () async {
+      // The run used to carry on past a cancel it could not yet interrupt: it
+      // opened the sink, dropped every chunk, and then promoted a **zero-byte**
+      // file under the archive's final name. The result was swallowed by the
+      // already-completed guard; the file was not.
+      transport.enqueue(url,
+          body: body, openDelay: const Duration(milliseconds: 100));
+      final handle = build().start(request());
+
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await handle.cancel();
+
+      await expectLater(handle.done, throwsA(isA<DownloadCancelledException>()));
+      expect(paths.finalFile('mod.rar').existsSync(), isFalse);
+    });
+
+    test('cancelling while connecting does not wait out the connect', () async {
+      // Real connects run to a 20 s timeout, and making the user watch that out
+      // after pressing Cancel is the kind of unresponsiveness read as a hang.
+      transport.enqueue(url,
+          body: body, openDelay: const Duration(seconds: 30));
+      final handle = build().start(request());
+
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await handle.cancel().timeout(const Duration(seconds: 2));
+
+      await expectLater(handle.done, throwsA(isA<DownloadCancelledException>()));
+    });
+
     test('deletePartial removes both files', () async {
       final controller = StreamController<List<int>>();
       transport.enqueueControlled(url, controller);

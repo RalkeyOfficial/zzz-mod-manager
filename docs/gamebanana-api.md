@@ -837,6 +837,21 @@ So hash on the way past — there is no second chance.
 
 The single biggest surprise of the measurement, and it shapes the whole retry design.
 
+> **Every figure in this section was measured with a standalone `dart run`
+> script, never through the app.** That distinction is not pedantry — it is where
+> a real bug hid for a whole release. These numbers describe what the *network*
+> will give you; what the *downloader* delivered was capped at ~3 MB/s by the
+> isolate it ran on, entirely independently of anything here. If you are
+> comparing an in-app rate against a number below, you are comparing two
+> different things. See `mod_manager_flutter/CLAUDE.md` § "The download layer".
+>
+> **Treat these as samples, not as a node's settled property.** A later session
+> watched the node serving one file swing **2.4 → 26 MB/s within ten minutes**,
+> which is wider than the gap between "healthy" and "degraded" claimed below. The
+> deterministic-assignment finding may well still hold — the retry design rests
+> on it — but it rests on one session's sampling, and a second session could not
+> reproduce the stability.
+
 - A healthy node serves at **14–22 MB/s** (655 MB in ~35 s).
 - `filecache43` served at **0.83 MB/s**, degrading to **~0.08 MB/s** over the same
   hour — 20–200× slower. It was slow for *every* file it served, including one that
@@ -855,15 +870,23 @@ What that means for anything downloading from here:
   needs ~25 minutes at best, and got worse while being measured. Any fixed ceiling
   would cancel legitimate downloads; only a **stall timeout** — N seconds with *zero*
   bytes received — distinguishes a dead transfer from a slow one.
-- **Retrying cannot route around a bad node**, since node choice is deterministic per
-  filename. Resuming from the current offset is the only thing that makes progress.
+- **Retrying cannot route around a bad node, but it can catch a better moment on
+  it.** Node choice really is deterministic per filename — mod `704111` resolved to
+  `filecache31` on every sample — so a retry always lands on the same machine. What
+  it does *not* mean is that the answer will be the same: that node served the same
+  file at **~0.6 MB/s through the app one minute and ~12 MB/s the next**, with `curl`
+  from outside the app measuring 10.35 and 12.14 MB/s across the same window. So a
+  slow transfer is worth retrying later even though it cannot be rerouted, and a
+  single slow download is **not** evidence of anything about the client. Resume from
+  the current offset regardless — it costs nothing and it is what makes the retry
+  cheap.
 - *(Observation, not a recommendation: the same file fetched directly from another
   `filecacheNN` host is fast. Hard-coding node numbers is undocumented, discourteous
   and will break — don't build on it. Recorded only so the cause isn't
   re-investigated.)*
 
-Our downloader's side of this — the stall timeout, resume policy and socket
-backpressure — is in
+Our downloader's side of this — the stall timeout, resume policy, socket
+backpressure, and why the transfer runs on a spawned isolate — is in
 [`../mod_manager_flutter/CLAUDE.md`](../mod_manager_flutter/CLAUDE.md).
 
 ---

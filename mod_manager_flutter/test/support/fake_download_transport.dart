@@ -37,6 +37,7 @@ class FakeDownloadTransport implements DownloadTransport {
     int? failAfter,
     int? contentLength,
     Object? openError,
+    Duration? openDelay,
   }) {
     _queues.putIfAbsent(url.toString(), () => <_Scripted>[]).add(
           _Scripted(
@@ -47,6 +48,7 @@ class FakeDownloadTransport implements DownloadTransport {
             failAfter: failAfter,
             contentLength: contentLength ?? body.length,
             openError: openError,
+            openDelay: openDelay,
           ),
         );
   }
@@ -95,6 +97,12 @@ class FakeDownloadTransport implements DownloadTransport {
     // Always consume. A "last one repeats" shortcut would silently re-serve an
     // interrupted response to a resume attempt, which reads as a service bug.
     final scripted = queue.removeAt(0);
+    // Holds the response back so a test can act while the run is still
+    // "connecting" — the window a real CDN spends on two redirect hops, and the
+    // one a user pressing Cancel is most likely to be in.
+    if (scripted.openDelay != null) {
+      await Future<void>.delayed(scripted.openDelay!);
+    }
     if (scripted.openError != null) throw scripted.openError!;
 
     return DownloadResponse(
@@ -120,6 +128,7 @@ class _Scripted {
     this.failAfter,
     this.controller,
     this.openError,
+    this.openDelay,
   });
 
   final int statusCode;
@@ -130,6 +139,7 @@ class _Scripted {
   final int contentLength;
   final StreamController<List<int>>? controller;
   final Object? openError;
+  final Duration? openDelay;
 
   Stream<List<int>> stream() {
     final driven = controller;
