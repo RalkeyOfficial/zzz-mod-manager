@@ -48,11 +48,25 @@ class BulkUpdateCheckOutcome {
     required this.checks,
     required this.failed,
     required this.requests,
+    this.records = const <int, GbMod>{},
     this.abortedBy,
   });
 
   /// Mod folder id -> verdict, for every mod that got one.
   final Map<String, UpdateCheck> checks;
+
+  /// Remote mod id -> the record the pass fetched for it.
+  ///
+  /// Handed back rather than discarded because **the results screen is also the
+  /// bulk *resolution* screen**, and every question it asks — which file of this
+  /// mod do you have, is this really your mod, is the page gone — is answered by
+  /// the same response the verdicts came from. Re-fetching it would spend a
+  /// second round of requests to learn what is already in hand, and would let
+  /// the two halves of one screen describe different states of the mod page.
+  ///
+  /// Absent for any id the pass never reached, which is why the screen builds
+  /// rows from this map rather than from the plan.
+  final Map<int, GbMod> records;
 
   /// Mod folder ids whose remote lookup failed for a reason that is **not** an
   /// answer — connectivity, a timeout, throttling. Distinct from
@@ -147,7 +161,9 @@ Future<BulkUpdateCheckOutcome> runBulkUpdateCheck({
   int batchSize = 50,
 }) async {
   final checks = <String, UpdateCheck>{...plan.skipped};
-  // Kept so phase two can re-fold a verdict without re-fetching the mod.
+  // Kept so phase two can re-fold a verdict without re-fetching the mod — and
+  // returned, so the results screen can ask its resolution questions against the
+  // same response rather than fetching the library a second time.
   final records = <int, GbMod>{};
   final failed = <String>{};
   final ids = plan.modIds;
@@ -288,6 +304,7 @@ Future<BulkUpdateCheckOutcome> runBulkUpdateCheck({
     checks: checks,
     failed: failed,
     requests: requests,
+    records: records,
     abortedBy: aborted,
   );
 }

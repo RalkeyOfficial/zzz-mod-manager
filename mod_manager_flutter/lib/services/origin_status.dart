@@ -42,6 +42,18 @@ enum ModOriginStatus {
   /// pass through the resolve dialog fixes it.
   versionUnknown,
 
+  /// The mod page this folder is bound to is private, trashed or withheld, and
+  /// the bulk resolution pass recorded that.
+  ///
+  /// **Its own state rather than silence**, which is the correction the flag's
+  /// first writer forced. While nothing wrote `remote_missing` the slot could
+  /// treat it like `tracking: "off"` and render nothing; the moment something
+  /// does, that becomes a mod which silently stopped being watched with no
+  /// wording anywhere explaining why. It is deliberately *not* amber: the amber
+  /// state's whole offer is "click to set the version", and there is no page
+  /// left to read one off. It is a statement of fact, like [untracked].
+  sourceGone,
+
   /// The last update check found something newer published.
   ///
   /// **Never returned by [modOriginStatus]** — it is not a property of the
@@ -61,13 +73,14 @@ enum ModOriginStatus {
 ///   GameBanana / it's my own", and the promise attached to it is that the slot
 ///   goes quiet permanently. A stale `source_url` still sitting in the sidecar
 ///   must not talk them out of it.
-/// - **`remote_missing` is treated the same way**, for a different reason: the
+/// - **`remote_missing` gets its own state**, and does not borrow amber's. The
 ///   amber state's whole offer is "click to set the version", and that means
-///   reading a mod page that is private, trashed or withheld. Offering an
-///   action that cannot complete is worse than staying quiet. Nothing writes
-///   this flag yet — §7.6's bulk pass is what sets it — and when it does, the
-///   honest thing is its *own* wording ("source no longer available") rather
-///   than borrowing one of the three states here.
+///   reading a mod page that is private, trashed or withheld — offering an
+///   action that cannot complete is worse than saying what happened. It used to
+///   fold to [ModOriginStatus.none], which was correct only while nothing wrote
+///   the flag; the bulk resolution pass writes it now, and a mod that quietly
+///   stops being watched with no wording anywhere is the silent hole that
+///   arrangement would have opened.
 /// - **Identity before version.** Without a mod id there is nothing to check a
 ///   version against, so "untracked" is the truthful answer even though the
 ///   version is also unknown. Reporting the version instead would promise an
@@ -83,7 +96,7 @@ enum ModOriginStatus {
 ModOriginStatus modOriginStatus(ModOrigin? origin) {
   if (origin == null) return ModOriginStatus.untracked;
   if (origin.tracking == OriginTracking.off) return ModOriginStatus.none;
-  if (origin.remoteMissing) return ModOriginStatus.none;
+  if (origin.remoteMissing) return ModOriginStatus.sourceGone;
   if (!origin.hasIdentity) return ModOriginStatus.untracked;
   return switch (origin.versionConfidence) {
     OriginConfidence.unknown => ModOriginStatus.versionUnknown,
@@ -94,8 +107,8 @@ ModOriginStatus modOriginStatus(ModOrigin? origin) {
     OriginConfidence.inferred =>
       ModOriginStatus.versionGuessed,
     OriginConfidence.user || OriginConfidence.exact => ModOriginStatus.none,
-    // Not reachable: `updateAvailable` is not a version confidence. The card's
-    // fold is [modSlotStatus].
+    // Not reachable: `updateAvailable` and `sourceGone` are not version
+    // confidences. The card's fold is [modSlotStatus].
   };
 }
 
@@ -104,11 +117,12 @@ ModOriginStatus modOriginStatus(ModOrigin? origin) {
 ///
 /// Precedence, and the reasons rather than the order:
 ///
-/// - **Silence still wins first.** `tracking: "off"` and `remote_missing` are
-///   handled by [modOriginStatus] returning [ModOriginStatus.none], and an
-///   update verdict must not talk over either. In practice a check on such a
-///   mod cannot produce one — `checkForUpdate` short-circuits on both — so this
-///   is belt and braces rather than a live branch.
+/// - **The origin block still wins first for the two "don't ask" states.**
+///   `tracking: "off"` renders nothing and `remote_missing` renders its own
+///   quiet mark, and an update verdict must not talk over either. In practice a
+///   check on such a mod cannot produce one — `checkForUpdate` short-circuits on
+///   `tracking: "off"` and answers `sourceGone` for a missing page — so this is
+///   belt and braces rather than a live branch.
 /// - **An update beats every origin state.** The two overlap in exactly the
 ///   cases worth thinking about: a mod tracked by date only can be flagged as
 ///   *possibly* outdated, and a mod whose version was never recorded can still
@@ -127,7 +141,7 @@ ModOriginStatus modSlotStatus(ModOrigin? origin, UpdateCheck? update) {
   // would hide the strongest verdict this feature can produce.
   if (origin != null &&
       (origin.tracking == OriginTracking.off || origin.remoteMissing)) {
-    return ModOriginStatus.none;
+    return modOriginStatus(origin);
   }
   if (update?.hasUpdate ?? false) return ModOriginStatus.updateAvailable;
   return modOriginStatus(origin);
@@ -159,9 +173,16 @@ ModOriginStatus modSlotStatus(ModOrigin? origin, UpdateCheck? update) {
 /// "Which mods have updates" is a different question with a different control,
 /// and folding it into this filter would make the count change whenever a check
 /// ran — a filter whose meaning depends on what the network last said.
+/// [ModOriginStatus.sourceGone] is out for a fourth reason: the filter's promise
+/// is that everything in it can be dealt with, and a private, trashed or
+/// withheld mod page cannot. Counting it would leave a number that never reaches
+/// zero however much work the user does — the one thing that turns a count into
+/// noise. The mark on the card still says what happened, and the resolve dialog
+/// still rebinds the folder for anyone whose mod was reuploaded elsewhere.
 bool modNeedsAttention(ModOrigin? origin) => switch (modOriginStatus(origin)) {
       ModOriginStatus.untracked || ModOriginStatus.versionUnknown => true,
       ModOriginStatus.versionGuessed ||
+      ModOriginStatus.sourceGone ||
       ModOriginStatus.updateAvailable ||
       ModOriginStatus.none =>
         false,

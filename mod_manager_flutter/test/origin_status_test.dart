@@ -84,11 +84,34 @@ void main() {
       );
     });
 
-    test('remote_missing silences the amber offer it cannot honour', () {
+    test('remote_missing gets its own state, not amber and not silence', () {
       // Amber promises "click to set the version", which means reading a mod
-      // page that is private, trashed or withheld.
+      // page that is private, trashed or withheld — so it must not be amber.
+      // It must not be silence either: the bulk resolution pass writes this
+      // flag now, and a mod that quietly stops being watched with no wording
+      // anywhere is the hole that would open.
       expect(
         modOriginStatus(origin(modId: 123, remoteMissing: true)),
+        ModOriginStatus.sourceGone,
+      );
+    });
+
+    test('a gone source is not counted as needing attention', () {
+      // The filter's promise is that everything in it can be dealt with, and a
+      // private, trashed or withheld page cannot. Counting it would leave a
+      // number that never reaches zero however much work the user does.
+      expect(modNeedsAttention(origin(modId: 123, remoteMissing: true)), isFalse);
+    });
+
+    test('tracking off still beats a gone source', () {
+      // "Not from GameBanana / it's my own" promises permanent silence, and a
+      // stale remote id must not talk the user out of a decision they made.
+      expect(
+        modOriginStatus(origin(
+          modId: 123,
+          remoteMissing: true,
+          tracking: OriginTracking.off,
+        )),
         ModOriginStatus.none,
       );
     });

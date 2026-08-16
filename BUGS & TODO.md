@@ -535,9 +535,147 @@ Goal: the payoff feature. Needs §2 + §3 + §5 from M1/M2.
     one call and no branch to forget next time. The precondition it rests on —
     a failed copy still returns its snapshot — is now pinned by a test that
     makes the copy genuinely fail.
-- [ ] **§4 + §7** — the bulk "check all" results screen doubles as the bulk
+- [x] **§4 + §7** — the bulk "check all" results screen doubles as the bulk
   **resolution** screen (§7.6): per-row identity confirmation and inline version
   pickers. Verdict wording and auto-update gating become confidence-aware (§7.2).
+  **Done.** `services/bulk_resolution.dart` is the pure half — `(scanned mods,
+  the records the check already fetched) → rows`, plus the one composed
+  transform each row is written through — and
+  `screens/dialogs/bulk_resolution_dialog.dart` is the surface. It costs **no
+  request**: `runBulkUpdateCheck` now hands back the `Mod/Multi` records it was
+  discarding, and every question resolution asks is answered by that response.
+  Written up in [`docs/origin-tracking.md`](docs/origin-tracking.md) §7, now
+  authoritative.
+  The confidence-aware half of this line was **already shipped** by §4's
+  comparator (`isGuess` caps every verdict at `possiblyOutdated`) and by
+  `ModOrigin.allowsUnattendedUpdate`, which is the auto-update gate and is
+  untouched here — M4 still owns auto-update itself. What this item added on
+  that axis is the *other* direction: a pass that raises `inferred` to `user`,
+  which is the confirmation §7.2 requires before any update may overwrite files.
+  Measured against the developer's real 57-mod library, one live `Mod/Multi`
+  request of **111 KB**: as it actually stands (every mod at `user`/`exact`) the
+  planner produces **0 rows in 0.4 ms**, so the screen never opens and the check
+  reports through its notification as before. The **same library reduced to the
+  shape a legacy one has** — identity `inferred` from a url, no version, its own
+  real proxied install dates — gives **57 rows in 2.8 ms, 24 of them arriving
+  with the file already worked out** and 33 needing a pick, over 127 ranked
+  candidates. So the pass removes about two fifths of the human work for
+  nothing.
+  **Four corrections to what this doc assumed, all applied — see §7.6 below:**
+  the pass **must not write before Apply**, the **remote thumbnail cannot
+  exist**, `remote_missing` **needed its own visible state to be writable at
+  all**, and the "1 file uploaded before install" rule **needs the date test
+  spelled out** or it invents a version for a mod whose file was deleted.
+  **A fifth correction came from pressing it, and it was not about the screen at
+  all — it was about where the screen lived.** Reported immediately: *"that popup
+  only happens once when you started the check and cannot be re-opened, and
+  adding an extra button next to it will just make the UX worse."* Both halves
+  were right, and the second is what made the first hard to fix. The Mods
+  toolbar had actions and view controls interleaved across three places — global
+  actions parked in the character header because there was room, a filter bar
+  carrying one control that was secretly also an action, and a second row that
+  appeared and disappeared holding a filter reset beside two bulk writes — so a
+  new surface had nowhere to go and became a side effect of pressing a filter
+  toggle. Rebuilt as **two rows: search plus a library menu, then every filter.**
+  - The menu holds the three bulk actions — *check for updates*, *sort out mod
+    tracking…*, *mark all as current* — each with the count it would act on and
+    disabled when it can do nothing, and it badges what the resolution screen
+    would open. *Sort out mod tracking* is the one exception and is offered at
+    zero: with nothing in hand it runs the check itself, where greying it out
+    would make the most useful entry the one disabled on launch.
+  - `modUpdateRecordsProvider` keeps the check's records in session state beside
+    its verdicts, so re-opening the screen costs nothing; opening it with none
+    runs the check it would have run anyway.
+  - **The update-check button stops doing two jobs**, which retires a
+    compromise this doc's §4 recorded as a known cost ("re-checking means
+    turning the filter on, pressing check again, and turning it off"). It is a
+    filter now, beside the other filters.
+  - **"Mark all as current" moved into the menu without weakening its rule.**
+    The entry turns the needs-attention filter on and *then* confirms, so the
+    grid behind the confirmation shows exactly the set being rewritten — where
+    before the rule was enforced by hiding the button. Flipping the filter cannot
+    change which mods are eligible, only which are on screen, so the count in
+    the menu is the count that gets written.
+  - Row two is **always present** now. That costs a row of height on an
+    unfiltered library and buys every control a fixed place; a bar whose
+    contents move as you use it is what made the old one hard to learn.
+  **A sixth correction, reported next and about the screen itself: it was
+  unreadable.** *"Hard to understand what it does, what you need to do… even for
+  me I had to look at it for a few minutes"*, and *"missing much of the flair and
+  understandability of the regular Update tracking modal."* Both true, and the
+  cause was that it invented its own vocabulary instead of using the one this app
+  already has. It is built from `components/dialog_section.dart` now — the same
+  headings, notices and theme type sizes the update flow's dialogs use, which is
+  the component written *because* those dialogs had the identical problem
+  (hardcoded 10–13px, nothing marking where one idea ended). Four changes:
+  - **Every question arrives under a heading that says what the group is for and
+    why it matters.** Ungrouped, a row asking *is this the right mod?* looked
+    exactly like one asking *which file?*.
+  - **Rows are grouped by their leading question, and a mod is listed once.** A
+    section per *question* was the other option and is worse: on a legacy library
+    nearly every row asks both, so every name would appear twice. Order is
+    identity → file → gone → back, so a library with one dead page and fifty to
+    confirm does not open on the dead one.
+  - **The screen says what it is for**, in an intro that also states the one
+    thing the controls cannot show — nothing is written until Save.
+  - **The glance test is labelled.** A folder name and a page name stacked as two
+    bare lines gave no clue which was which; they carry a folder and a link icon
+    now, and the type comes from the theme rather than from literals.
+  **A seventh correction, and this one was a real bug found by a question rather
+  than by a test:** *"what does it do when you press save but you did not tick
+  'yes this is the right mod page'?"* It confirmed the identity anyway. The rule
+  as written was "answering anything about a mod also confirms it", justified by
+  the per-mod dialog's own behaviour — but that justification holds for a file
+  the *user picked* and not for the single-file inference this screen
+  **pre-ticks**. So pressing Save on a row whose confirmation had been
+  deliberately left unticked raised `mod_id_confidence` from `inferred` to
+  `user`: a guess parsed out of a pasted url promoted into the tier that lets an
+  update overwrite files, on the one screen where the user had visibly declined
+  to confirm it. That is §7.2's "never-confirmed ≠ safe" inverted. Now only the
+  tick, a **user-picked** file, or a **checksum match** confirms an identity;
+  the pass's own inference leaves both axes guesses, which caps the verdict at
+  *possibly outdated*. Pinned by four tests, two of them at the widget layer
+  where the pre-tick actually happens.
+  **A review then found three more, all at edges the tests did not reach.**
+  - **A row could be rendered twice.** The four section lists were independent
+    filters rather than a cascade, so `back` did not exclude `needsIdentity`: a
+    mod recorded as gone whose page came back, with an identity nobody had
+    confirmed, appeared under two headings with the same two checkboxes. Nothing
+    was written twice (both copies key off one mod id) but it contradicted the
+    invariant the whole layout rests on. Reachable rather than contrived —
+    writing `remote_missing` never touches `mod_id_confidence`. `gone` needed no
+    guard and was safe only by accident, which is now stated where the lists are
+    built.
+  - **The two doors reported different numbers, and one of them dropped a count
+    entirely.** The menu door passed the *view-scoped* update count, so the same
+    sentence meant "in your library" or "on this character tab" depending on
+    which tab was open; both read `libraryUpdateCountProvider` now. Worse, it
+    hardcoded `unreachable: 0` while `BulkResolutionPlan.unreachable` was
+    computed and read by nothing — so on the door the rebuild exists to provide,
+    the "N mods couldn't be checked" line silently vanished. That is the exact
+    accounting gap the excluded-mods notice is there to prevent.
+  - **"Mark all as current" left the filter on after a cancel.** It is switched
+    off only on the full-success path, so declining the confirmation returned
+    the user to a grid filtered behind their back. Under the old placement the
+    filter was a precondition and declining changed nothing; making the action
+    flip it is what created the case. Restored now on cancel and on the
+    nothing-to-do return, and a filter the user had already set is left alone.
+  Two tests came out of it — the `sourceBack` + identity pair, and the summary
+  line on the menu door — plus two on the cancel path. The second was checked
+  against the old code, where it fails on exactly the symptom.
+  **Not yet pressed on a real library**, and the reason is itself a
+  measurement: this library no longer has a single unresolved mod, so the screen
+  cannot be reached from it without degrading a sidecar by hand. Verified by
+  tests (**28 pure, 14 widget** for the screen, plus the toolbar's own) and by
+  the measurements above; the live behaviour it has never had is the one where a
+  row is actually applied against a real sidecar.
+
+**M3 is code-complete.** Detection, applying and bulk resolution have all
+shipped, and the two of them that touch a live install were verified by pressing
+them on a real published update. What is not verified is Windows — the same gap
+M1 recorded, for the same reason (no Windows machine in this environment), and
+it matters more here than it did there: §4.1's busy-file path exists *because*
+ZZMI holds handles on Windows, and it has never been hit.
 
 ### M4 — Robustness & polish
 
@@ -931,10 +1069,14 @@ The block:
 
 - [x] **Manual update check** — per-mod and bulk ("check all"). The bulk results
   screen is also the bulk-resolution surface for unknown origins — see §7.6.
-  **The check is done; the results *screen* is not.** Bulk reports through a
-  snackbar and the card badges, which is enough to act on a finding but is not
-  the per-row confirmation surface §7.6 describes. That screen stays filed
-  there, unchanged.
+  ~~**The check is done; the results *screen* is not.**~~ **Both are done now**
+  (see M3 above). The notification did not go away, though, and that is the
+  decision worth recording: a check reports through **one** surface and which
+  one depends on whether the pass turned up anything to act on beyond the
+  badges. Nothing to resolve → the summary notification, because a modal would
+  stand between the user and the badges they pressed for. Something to resolve →
+  the screen, which states the summary itself. Raising both for one press is how
+  a user ends up reading neither.
 - [x] Update rule: prioritise version string + version label; fall back to upload
   date / hash. Best-effort suggestion, clearly labelled as such.
   **Done, with one correction that changes the mechanism while keeping the
@@ -1160,7 +1302,7 @@ The block:
   once; a test pumps that at 480px, since that row is where the last overflow
   bug came from.
   Written up in [`docs/update-checks.md`](docs/update-checks.md) §6.
-- [ ] **`remote_missing` is now *detected* and still never written.**
+- [x] **`remote_missing` is now *detected* and still never written.**
   `checkForUpdate` returns `sourceGone` from the remote's explicit
   `_bIsPrivate` / `_bIsTrashed` / `_bIsWithheld` flags, and the bulk pass
   returns it for an id the server refuses outright — but nothing persists it to
@@ -1170,6 +1312,21 @@ The block:
   the "silent hole" already filed under §7.5. The two have to land together —
   the state needs its own wording ("source no longer available") before
   anything writes it.
+  **Done, and they landed together as this predicted they had to.** The bulk
+  resolution screen offers the write, and `ModOriginStatus.sourceGone` is the
+  state that makes it safe to accept: a muted **broken link** on the card, told
+  apart from the dot and the clock by shape rather than by colour, like the
+  other two quiet states. Three decisions came with it.
+  - **It is not counted by the "needs attention" filter.** That filter's promise
+    is that everything in it can be dealt with, and a private, trashed or
+    withheld page cannot be — a count that can never reach zero however much
+    work the user does is the one thing that turns a count into noise.
+  - **`tracking: "off"` still wins over it**, unchanged: a stale `source_url` is
+    exactly why somebody might have declared a mod their own.
+  - **The reverse is written too.** A page that answers normally while the block
+    says it is gone offers to *clear* the flag, pre-ticked. Without it the first
+    write would be permanent in practice, since nothing else ever revisits it —
+    and a mod page coming back (unwithheld, un-privated) is an ordinary thing.
 - [ ] **Verdicts are session state, and that is a decision worth revisiting
   once, not a gap.** Nothing is persisted, so the badges are empty on every
   launch until a check is pressed. That is right on the merits — a verdict
@@ -1276,6 +1433,12 @@ The block:
   is exactly where a bulk apply belongs, and bolting one onto the toolbar instead
   would mean a control that rewrites folders the user never enumerated, which is
   the placement rule the bulk "assume current" button already follows.
+  **The prerequisite exists now** (§7.6 shipped) and this is still not built,
+  deliberately: that screen currently only ever rewrites *sidecars*, and an
+  "update all" on it would download and overwrite mod folders from the same
+  button. The two need visibly different weight before they share a surface —
+  and each apply already has its own confirmation, its own snapshot and its own
+  stale-`.ini` question, none of which collapses into a checkbox.
 - [ ] **Total backup size is not surfaced anywhere.** The rollback dialog shows a
   size per snapshot; there is no whole-library figure, so the retention budget
   bounds something invisible. §4.2 always intended this to live in the storage
@@ -2327,13 +2490,16 @@ mod context menu, and the edit-mod dialog.
   seeing them is enough; at 80 it may not be, and the natural home is a second
   row on the `!` toggle rather than a sixth toolbar control. Filed rather than
   built, to see whether it is actually wanted.
-- [ ] **`remote_missing` has no visible state, and now silences the slot.** §7.4's
+- [x] **`remote_missing` has no visible state, and now silences the slot.** §7.4's
   three states have no room for "the mod page is gone", so `modOriginStatus`
   treats the flag like `tracking: "off"` and renders nothing — correct today,
   since nothing writes the flag, but it becomes a silent hole the moment §7.6
   does. That state needs its own wording ("source no longer available"), and it
   must stay distinct from `_bIsObsolete`, which means the mod still exists and its
   author flagged it superseded.
+  **Done**, with §7.6 and necessarily in the same change — see §4's filed item
+  above for the three decisions. The `_bIsObsolete` distinction is untouched:
+  that flag still rides alongside a verdict and never becomes a slot state.
 - [ ] **A `/dl/` link could still pick the *file*, once the mod is known.** The
   identity step rejects one honestly (see above), but the file step has the mod's
   `_aFiles` + `_aArchivedFiles` in hand, so a pasted file id is a direct row match
@@ -2361,6 +2527,14 @@ mod context menu, and the edit-mod dialog.
   and both spell that rationale out. One shared typedef would stop them
   drifting. Small, and it belongs with the item above, since fixing
   `updateOrigin`'s return type has to touch both anyway.
+  **Still two seams, now three call sites**: the bulk resolution screen imports
+  `BulkOriginWriter` rather than declaring a third, so the drift did not get
+  worse — but it now lives in `assume_current_dialog.dart` and is used by two
+  other files, which is the wrong home for it. And the bool-return conflation
+  the item above describes is worked around a *second* time there, in the same
+  shape (wrap the transform, notice the decline at the call site). Two
+  workarounds for one missing result type is the point at which the durable fix
+  is cheaper than the next copy.
 - [ ] **Ukrainian plurals are 1-vs-many, and the language has three forms.**
   `AppLocalizations.t` has no plural machinery, so counted strings use a
   `_single` / `_plural` key pair chosen in Dart — the pattern
@@ -2418,11 +2592,39 @@ One screen, two jobs, and nothing that goes stale once libraries are migrated.
   Folder names in the wild (`Ellen final FIXED v2`, `bikini`, `mod`) are exactly
   where fuzzy matching is least reliable. **Untracked mods therefore get no bulk
   feature at all.**
-- [ ] **It's a confirmation pass, not a search pass.** Per row: local folder name
+  **Implemented as written.** A mod with no `mod_id` gets no row, and the screen
+  says how many were excluded for that reason — "eleven mods" out of a library of
+  fifty reads as though it covered the library unless the rest are accounted for.
+- [x] **It's a confirmation pass, not a search pass.** Per row: local folder name
   + cover on the left, remote mod name + thumbnail on the right, ✓/✗. A glance
   test that cheaply upgrades `inferred` → `user`, which is exactly what §7.2
   requires before any overwrite.
-- [ ] **Per-row auto-resolution** from the file list + banked hash + proxy date:
+  **Done, and the ✓ is a checkbox that starts *unticked* while every other answer
+  on the row starts ticked.** The asymmetry is the point: a file the pass
+  inferred and a page the API itself reports as gone are statements the app can
+  defend from the response in hand, where an identity is the one thing only the
+  user can settle. Pre-ticking it would turn the glance test into the rubber
+  stamp the bullet above exists to prevent. A *confirm all* shortcut sits above
+  the list, which is a second press after the rows are on screen rather than a
+  default.
+  **Correction (applied): there is no remote thumbnail, and there cannot be
+  one.** `Mod/Multi` **rejects `_sInitialVisibility` as an unknown property**, so
+  a bulk response can carry a mod's cover but never its content rating — and
+  rendering an unblurred adult cover in the library tab to make a name
+  comparison prettier is not a trade worth making. The obvious substitute was
+  measured and fails: apiv13 publishes a server-pixelated `_sFileNNNSfw` copy
+  only for `warn`/`hide` mods, so its presence looks like a rating flag, and mod
+  `541825` is `hide` with `{Skimpy Attire, Full Nudity}` and carries no `Sfw`
+  key in a listing, a profile *or* a `Multi` response. (That also corrects
+  `docs/gamebanana-api.md` §7, which claimed the correlation was exact; it holds
+  across 150 recent listing records — 70 `hide` + 18 `warn`, 0 mismatches, and
+  the "(30)/(7)" figures it quoted were simply wrong — and not in general.) The
+  glance test is therefore **name to name**, plus a link to the mod page on every
+  row. That is what catches the realistic failure, which is a wrong paste: the
+  two names then disagree completely. The local cover went with it — without a
+  remote half to compare against it is decoration, and a 57-row list wants
+  compact rows.
+- [x] **Per-row auto-resolution** from the file list + banked hash + proxy date:
   - *Banked archive md5 matches a remote file* → resolved at `exact`, no question
     asked. Cheapest and strongest outcome; try this first on every row (§7.8).
   - *1 file, uploaded before install* → almost certainly what they have. Write
@@ -2437,13 +2639,42 @@ One screen, two jobs, and nothing that goes stale once libraries are migrated.
     `_bIsTrashed` / `_bIsWithheld` (a 404 is only the crudest case), stop retrying,
     show "source no longer available". `_bIsObsolete` is **not** this state: the mod
     still exists and its author flagged it superseded — say that instead.
-- [ ] **Match against `_aArchivedFiles`, not just `_aFiles`.** `ProfilePage` returns
+  **Done, every branch, and the tiers are as written** — `exact` for a hash
+  match, `inferred` for the single-file inference, `user` for a row the person
+  picked out of the inline picker themselves. Measured: on the developer's real
+  library reduced to legacy shape, **24 of 57 rows arrive pre-answered** and 33
+  get a picker.
+  ~~**write without asking, then show a summary with an undo**~~ —
+  **correction (applied): nothing is written until Apply.** Two things argue
+  against the undo. The control that gets the user here says *check for updates*
+  and nothing about rewriting sidecars; and the placement rule the bulk "assume
+  current" button established is that a bulk rewrite acts only on a set the user
+  has **seen**. A pre-ticked row costs one glance and one press, where an undo
+  costs noticing a summary nobody asked for — so the safe inferences arrive
+  ticked and Apply is the consent.
+  **Correction (applied): the second bullet's date test is not decoration, and
+  dropping it inverts the rule.** "1 file, uploaded *before* install" is written
+  as a likelihood; it is actually a *precondition*, because the complement is not
+  merely weaker evidence. A mod whose only file was published **after** the
+  install is a mod whose original file was deleted outright, so the single thing
+  on the page is provably not what the user has — recording it would invent a
+  version and then report the mod as up to date, which §4 names as the one
+  failure this feature cannot afford. It is pinned by a test in both directions,
+  as is the case with no install date at all.
+  A **folder-name match is deliberately not** in the pre-ticked set, though it
+  ranks first in the picker with its reason shown. The rule is §7.5's and it is
+  unchanged here: a suggestion informs, it never drives.
+- [x] **Match against `_aArchivedFiles`, not just `_aFiles`.** `ProfilePage` returns
   superseded files too, each with its own `_idRow`, `_tsDateAdded` and
   `_sMd5Checksum`. That measurably improves resolution: a banked hash (§7.8) can hit a
   file that's no longer offered, pinning the installed version at `exact` for exactly
   the "you have an old one" case that would otherwise stay unknown — and it supplies
   date-ranked candidates for the picker. Same response, no extra request.
-- [ ] Bounded, cancellable request queue with progress and backoff on rate limits;
+  **Done, and on this path it needs no code of its own**: `Mod/Multi` folds the
+  two lists into `_aFiles`, so the ranking is handed `GbMod.allFiles` and
+  `_bIsArchived` is what tells them apart. Measured on the real library, 127
+  candidates across 57 rows — the archived ones are most of that.
+- [x] Bounded, cancellable request queue with progress and backoff on rate limits;
   cache responses so re-running is cheap (honour the API's own 10-minute `max-age`).
   Never runs without an explicit press — no network on launch.
   - Build it on **`Mod/Multi?_csvRowIds=…&_csvProperties=…`**, which returns many
@@ -2462,6 +2693,69 @@ One screen, two jobs, and nothing that goes stale once libraries are migrated.
     offender, which a library of `inferred` ids will hit; `runBulkUpdateCheck`
     recovers by halving, and the guard that keeps that bounded is checking
     *which field* `_aErrorData` names.
+    **Reused rather than re-derived, as instructed** — `runBulkUpdateCheck` now
+    returns the records it was already keeping for its own phase two, and the
+    resolution screen is built from those. So the "queue with progress and
+    backoff" this bullet budgeted for never had to exist: it is one request the
+    user already pressed for, and the fourth correction is that there is nothing
+    left here to build.
+
+#### Filed by the bulk resolution pass (found while building it, deliberately not built)
+
+- [ ] **Resolving a mod does not refresh its verdict.** The screen writes a
+  `file_id` for a mod the check had answered `versionUnknown`, and that verdict
+  stays in session state until the next press — so a user who sorts out 24 mods
+  learns nothing about *their* updates without checking again. Re-folding is
+  free (the records are still in hand and `checkForUpdate` is pure), and it was
+  still not taken: phase two's release feeds were fetched only for the mods that
+  flagged, so a freshly-resolved mod re-folded now would miss the
+  `ReleaseGroups` suppression and could show the variant-shaped false positive
+  the pass had already learned to remove. The honest options are a second full
+  check (a request nobody asked for) or fetching one feed per newly-flagged mod;
+  both are decisions about the check, not about this screen.
+- [x] **The screen has one entry point and no way back.** It is built from a
+  fresh response and discarded with the dialog, so cancelling — or closing it by
+  accident — means pressing check again. That is deliberate rather than
+  overlooked: keeping the rows would mean caching a mod page and answering
+  questions about a library state nobody has re-read. But there is no second
+  door, and the toolbar has no room for one.
+  **Filed as a known limit and reported as a bug within the hour, which is the
+  correct verdict on it.** Both halves of the reasoning above were wrong. The
+  records are worth keeping — `modUpdateRecordsProvider` is session state beside
+  the verdicts, under the same never-persisted rule, so they can be no older
+  than the session and the rows are re-derived from the *current* library rather
+  than cached. And "the toolbar has no room" was a statement about a toolbar
+  that needed rebuilding: the second door is a menu entry, and the menu replaced
+  two conditional buttons and un-overloaded a third, so the control count went
+  *down*. Worth keeping as a pattern — **"there is nowhere to put it" is a claim
+  about the layout, not about the feature.**
+- [ ] **Untracked mods are listed as a count and nothing more.** The bulk rule
+  forbids acting on them, which is right, but the screen could still offer to
+  open the per-mod dialog for each in turn rather than leaving the user to find
+  them through the "needs attention" filter afterwards. Small, and it is the one
+  place the two surfaces could hand off to each other.
+- [ ] **There is no "I don't know which" per row.** The ambiguous rows get a
+  picker or nothing; the `assumed_latest` escape hatch exists per mod (§7.5) and
+  in bulk (§6 of the origin doc), but not *here*, where the user is already
+  looking at the list. It would need its own column and its own wording, and it
+  overlaps a button that already exists — filed rather than guessed at.
+- [ ] **The card cannot say "the mod page is still a guess".** `modOriginStatus`
+  keys on the *version* confidence once an identity exists, so a mod at
+  `inferred`/`inferred` renders the same muted clock as one the user resolved to
+  a date on purpose. Pre-existing — the backfill has always produced `inferred`
+  identities — but this screen makes the state reachable in bulk, since ticking
+  only the pre-ticked file answer now leaves exactly that pair. A fourth slot
+  state is the wrong fix (the slot has one mark by rule); the honest options are
+  the tooltip saying so, or the resolve dialog's existing "worked out from the
+  source link — not confirmed" line being enough.
+- [ ] **The character header still holds four global controls.** Auto-F10,
+  refresh, F10 reload and Single/Multi sit at the right of a block titled
+  *Characters*, which is where they ended up because there was room rather than
+  because they belong. The toolbar rebuild deliberately stopped short of them:
+  they are not library *bulk* actions, and moving them into the same menu would
+  mix "rescan the folder" with "rewrite 24 sidecars". Whether the header's right
+  side should become an explicit action bar is a separate question, and it is
+  the last place in this tab where placement is accidental.
 
 ### 7.7 Self-healing (why none of this has to be perfect)
 
@@ -2610,6 +2904,14 @@ work that already opens the same file, so they cost nothing extra.
   you installed this"), which are the whole difference between a ranked list the
   user can argue with and one they have to trust — and they are confidence copy,
   so they have to be translated rather than interpolated.
+  **§7.6's bulk resolution screen added 27** — one card tooltip and the
+  screen's 26. The observation holds a seventh time and the split is starker
+  here than anywhere: **six of the 26 are the *why* line under a checkbox** —
+  what "worked out from a link" means, what "the page is gone" means, why
+  untracked mods are absent — and those six are the whole difference between a
+  list of ticks somebody rubber-stamps and one they can disagree with. The
+  subtitle carries the other load-bearing sentence, *nothing is saved until you
+  press Apply*, which is a promise rather than a label.
 - [ ] **Name the tests, because the risky parts are pure functions.** The pieces most
   likely to be quietly wrong need no network and no UI: `source_url` → `mod_id`
   parsing (§7.3); the confidence state machine and what each tier permits (§7.2); the

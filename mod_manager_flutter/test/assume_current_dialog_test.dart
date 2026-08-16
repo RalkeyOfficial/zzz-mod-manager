@@ -253,14 +253,13 @@ void main() {
     expect(find.textContaining("Couldn't save"), findsNothing);
   });
 
-  group('the toolbar button', () {
+  group('the library menu', () {
     late ProviderContainer container;
     late List<String> written;
 
     Future<void> pumpToolbar(
       WidgetTester tester,
       List<ModInfo> mods, {
-      required bool filterOn,
       Size surfaceSize = const Size(1200, 800),
       VoidCallback? onLibraryChanged,
     }) async {
@@ -269,7 +268,6 @@ void main() {
       container.read(charactersProvider.notifier).state = [
         CharacterInfo(id: 'all', name: 'All', skins: mods),
       ];
-      container.read(modNeedsAttentionOnlyProvider.notifier).state = filterOn;
       written = <String>[];
 
       await pumpLocalized(
@@ -287,23 +285,105 @@ void main() {
       expectBuilt(ModsToolbar);
     }
 
-    testWidgets('is hidden until the mods have been enumerated',
-        (tester) async {
-      // Deliberate: the action rewrites every mod on the list, so it is offered
-      // only once the filter has put that list on screen.
-      await pumpToolbar(tester, [mod('a', origin: origin())], filterOn: false);
-      expect(find.textContaining('Assume'), findsNothing);
+    Future<void> openMenu(WidgetTester tester) async {
+      await tester.tap(find.text('Library'));
+      await tester.pumpAndSettle();
+    }
 
-      await pumpToolbar(tester, [mod('a', origin: origin())], filterOn: true);
-      expect(find.text('Assume 1 are current'), findsOneWidget);
+    testWidgets('turns the filter on before it asks', (tester) async {
+      // The rule is unchanged — the user must have *seen* the set being
+      // rewritten — but it is now enforced by the action rather than by hiding
+      // the control until the filter happens to be on. The grid behind the
+      // confirmation shows exactly those mods.
+      await pumpToolbar(tester, [
+        mod('a', origin: origin()),
+        mod('b', origin: origin()),
+        mod('resolved', origin: origin(versionConfidence: OriginConfidence.exact)),
+      ]);
+      expect(container.read(modNeedsAttentionOnlyProvider), isFalse);
+
+      await openMenu(tester);
+      await tester.tap(find.text('Mark all as current'));
+      await tester.pumpAndSettle();
+
+      expect(container.read(modNeedsAttentionOnlyProvider), isTrue);
+      expect(container.read(visibleModsProvider).map((m) => m.id), ['a', 'b']);
+      expect(find.text('Assume 2 mods are up to date?'), findsOneWidget);
     });
 
-    testWidgets('is hidden when the filter has nothing it can act on',
+    testWidgets('the count in the menu is the count that gets written',
         (tester) async {
-      // An untracked mod needs attention but may never be resolved in bulk, so
-      // the filter is non-empty while the button has no work.
-      await pumpToolbar(tester, [mod('untracked')], filterOn: true);
-      expect(find.textContaining('Assume'), findsNothing);
+      // Flipping the filter cannot change *which* mods are eligible, only which
+      // are on screen: the plan already keeps only versionUnknown mods, and
+      // needs-attention drops exactly the ones it would have skipped anyway.
+      await pumpToolbar(tester, [
+        mod('a', origin: origin()),
+        mod('b', origin: origin()),
+        mod('untracked'),
+        mod('resolved', origin: origin(versionConfidence: OriginConfidence.exact)),
+      ]);
+      await openMenu(tester);
+      expect(find.text('2'), findsOneWidget);
+
+      await tester.tap(find.text('Mark all as current'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Mark 2 mods'));
+      await tester.pumpAndSettle();
+
+      expect(written, ['a', 'b']);
+    });
+
+    testWidgets('cancelling puts the filter back the way it was',
+        (tester) async {
+      // Turning the filter on *for* the confirmation means cancelling — the one
+      // thing a confirmation exists to allow — would otherwise leave the grid
+      // filtered behind the user's back, with nothing on screen saying why.
+      // Under the old placement the filter was a precondition, so declining
+      // changed nothing.
+      await pumpToolbar(tester, [mod('a', origin: origin())]);
+      expect(container.read(modNeedsAttentionOnlyProvider), isFalse);
+
+      await openMenu(tester);
+      await tester.tap(find.text('Mark all as current'));
+      await tester.pumpAndSettle();
+      expect(container.read(modNeedsAttentionOnlyProvider), isTrue,
+          reason: 'the grid shows the set while the confirmation is up');
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(written, isEmpty);
+      expect(container.read(modNeedsAttentionOnlyProvider), isFalse);
+    });
+
+    testWidgets('cancelling leaves a filter the user had already set alone',
+        (tester) async {
+      await pumpToolbar(tester, [mod('a', origin: origin())]);
+      container.read(modNeedsAttentionOnlyProvider.notifier).state = true;
+      await tester.pumpAndSettle();
+
+      await openMenu(tester);
+      await tester.tap(find.text('Mark all as current'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(container.read(modNeedsAttentionOnlyProvider), isTrue,
+          reason: 'restoring means restoring, not switching off');
+    });
+
+    testWidgets('is disabled when there is nothing it can act on',
+        (tester) async {
+      // An untracked mod needs attention but may never be resolved in bulk.
+      await pumpToolbar(tester, [mod('untracked')]);
+      await openMenu(tester);
+
+      await tester.tap(find.text('Mark all as current'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('are up to date?'), findsNothing);
+      expect(container.read(modNeedsAttentionOnlyProvider), isFalse,
+          reason: 'a disabled entry must not flip a filter on the way to '
+              'doing nothing');
     });
 
     testWidgets('presses through to the writes and asks for a rescan',
@@ -316,11 +396,11 @@ void main() {
           mod('b', origin: origin()),
           mod('untracked'),
         ],
-        filterOn: true,
         onLibraryChanged: () => rescans++,
       );
 
-      await tester.tap(find.text('Assume 2 are current'));
+      await openMenu(tester);
+      await tester.tap(find.text('Mark all as current'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Mark 2 mods'));
       await tester.pumpAndSettle();
@@ -334,16 +414,13 @@ void main() {
       expect(container.read(modNeedsAttentionOnlyProvider), isTrue);
     });
 
-    testWidgets('turns the filter off when it leaves nothing behind',
+    testWidgets('turns the filter off again when it leaves nothing behind',
         (tester) async {
-      // Otherwise the reward for pressing the button is an empty grid.
-      await pumpToolbar(
-        tester,
-        [mod('a', origin: origin())],
-        filterOn: true,
-      );
+      // Otherwise the reward for pressing is an empty grid.
+      await pumpToolbar(tester, [mod('a', origin: origin())]);
 
-      await tester.tap(find.text('Assume 1 are current'));
+      await openMenu(tester);
+      await tester.tap(find.text('Mark all as current'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Mark 1 mod'));
       await tester.pumpAndSettle();
@@ -351,81 +428,21 @@ void main() {
       expect(container.read(modNeedsAttentionOnlyProvider), isFalse);
     });
 
-    testWidgets('counts what the grid shows, not what the filter could show',
-        (tester) async {
-      // The whole argument for this button's placement is that it acts on the
-      // list in front of the user. Combine the needs-attention filter with the
-      // search box and the two lists come apart — so the plan is built from
-      // `visibleModsProvider`, the one the grid renders.
-      await pumpToolbar(
-        tester,
-        [
-          mod('ellen skin', origin: origin()),
-          mod('rina skin', origin: origin()),
-          mod('rina other', origin: origin()),
-        ],
-        filterOn: true,
-      );
-      expect(find.text('Assume 3 are current'), findsOneWidget);
-
-      container.read(modSearchQueryProvider.notifier).state = 'ellen';
-      await tester.pumpAndSettle();
-
-      expect(container.read(visibleModsProvider), hasLength(1));
-      expect(find.text('Assume 1 are current'), findsOneWidget);
-      // The `!` toggle deliberately still counts the unfiltered view — it
-      // answers "what could this view show", not "what is it showing".
-      expect(container.read(modsNeedingAttentionCountProvider), 3);
-    });
-
-    testWidgets('leaves no gap behind when the toolbar loses the "!" toggle',
-        (tester) async {
-      // Reported after the first real run: resolving the last mod removed the
-      // toggle but left both of its 8px spacers, so the two controls either
-      // side of it sat 16px apart and the row read as though a button had
-      // failed to render. The control and its spacer are conditional together
-      // now — the same shape the tag filter already used.
-      //
-      // Measured against the update-check button rather than the favourites
-      // star, because that button now sits between the toggle and the star:
-      // what this test is about is the *hole the toggle leaves*, so it has to
-      // span the toggle's slot and nothing else.
-      double gapAfterSort() {
-        Finder box(IconData icon) => find
-            .ancestor(of: find.byIcon(icon), matching: find.byType(Container))
-            .first;
-        return tester.getTopLeft(box(Icons.arrow_circle_up)).dx -
-            tester.getTopRight(box(Icons.sort)).dx;
-      }
-
-      await pumpToolbar(tester, [mod('a', origin: origin())], filterOn: false);
-      final withToggle = gapAfterSort();
-
-      await pumpToolbar(
-        tester,
-        [mod('a', origin: origin(versionConfidence: OriginConfidence.exact))],
-        filterOn: false,
-      );
-      expect(find.byIcon(Icons.priority_high), findsNothing);
-      // One gap where the toggle used to be, not two — and the same 8px the
-      // toggle itself sits behind.
-      expect(gapAfterSort(), 8);
-      expect(withToggle, greaterThan(8));
-    });
-
-    testWidgets('shares its row with "clear filters" without overflowing',
+    testWidgets('the filter row survives a three-digit count at 480px',
         (tester) async {
       // The narrowest the toolbar can get: an 800px minimum window, less the
-      // nav rail and the character panel beside it. Both labels are whole words
-      // with nothing to ellipsise, so a Row that doesn't fit overflows rather
-      // than degrading — and a three-digit count is the widest label there is.
+      // nav rail and the character panel beside it. Nothing in that row can
+      // ellipsise, so a Row that doesn't fit overflows rather than degrading.
       await pumpToolbar(
         tester,
         [for (var i = 0; i < 120; i++) mod('mod $i', origin: origin())],
-        filterOn: true,
         surfaceSize: const Size(480, 400),
       );
-      expect(find.text('Assume 120 are current'), findsOneWidget);
+      container.read(modNeedsAttentionOnlyProvider.notifier).state = true;
+      await tester.pumpAndSettle();
+
+      expect(find.text('120'), findsOneWidget);
+      expect(find.text('Clear filters'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });

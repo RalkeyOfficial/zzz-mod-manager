@@ -21,6 +21,7 @@ ModOrigin origin({
   int? modId,
   OriginConfidence versionConfidence = OriginConfidence.unknown,
   OriginTracking tracking = OriginTracking.auto,
+  bool remoteMissing = false,
 }) =>
     ModOrigin(
       modId: modId,
@@ -29,6 +30,7 @@ ModOrigin origin({
       versionConfidence: versionConfidence,
       provenance: OriginProvenance.importedFolder,
       tracking: tracking,
+      remoteMissing: remoteMissing,
     );
 
 void main() {
@@ -98,6 +100,24 @@ void main() {
       ),
     );
     expect(colourOf(Icons.schedule), dot);
+  });
+
+  testWidgets('a gone source is a broken link, not amber and not silence',
+      (tester) async {
+    // Amber's whole offer is "click to set the version", which means reading a
+    // page that is private, trashed or withheld. Silence was correct only while
+    // nothing wrote the flag; the bulk resolution pass writes it now, so a mod
+    // that quietly stopped being watched needed something to say why.
+    await pumpLocalized(
+      tester,
+      ModStatusSlot(
+        mod: mod(origin: origin(modId: 1, remoteMissing: true)),
+        onTap: () {},
+      ),
+    );
+    expectBuilt(ModStatusSlot);
+    expect(find.byIcon(Icons.link_off), findsOneWidget);
+    expect(find.byIcon(Icons.priority_high), findsNothing);
   });
 
   testWidgets('a resolved mod renders nothing at all', (tester) async {

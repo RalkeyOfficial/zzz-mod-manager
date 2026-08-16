@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/character_info.dart';
 import '../services/api_service.dart';
+import '../services/bulk_resolution.dart';
 import '../services/download/download_service.dart';
 import '../models/gamebanana/gb_enums.dart';
+import '../models/gamebanana/gb_mod.dart';
 import '../services/gamebanana/content_filter.dart';
 import '../services/gamebanana/gamebanana_client.dart';
 import '../services/backup/snapshot_service.dart';
@@ -353,6 +355,32 @@ final bulkAssumeCurrentPlanProvider = Provider<BulkAssumeCurrentPlan>((ref) {
 final modUpdateChecksProvider =
     StateProvider<Map<String, UpdateCheck>>((ref) => const {});
 
+/// The mod pages the last check fetched, by remote mod id.
+///
+/// Session-scoped for exactly the reasons [modUpdateChecksProvider] is, and
+/// kept for one reason: **the resolution screen has to be re-openable.** Built
+/// only from the outcome of a press, it could be shown once and never again —
+/// which is what the first version did, and the complaint that produced this
+/// provider. Holding the records makes reopening free, and a screen opened with
+/// none simply runs the check it would have run anyway.
+///
+/// Never persisted, so a record can only ever be as old as the current session
+/// — a resolution question asked against a mod page nobody has looked at since
+/// last week is the same mistake as a restored verdict.
+final modUpdateRecordsProvider =
+    StateProvider<Map<int, GbMod>>((ref) => const {});
+
+/// What the resolution screen would show for the records currently in hand.
+///
+/// Derived rather than stored, so it tracks the library as a rescan changes it:
+/// resolving a mod through the per-mod dialog removes its row here without the
+/// records being re-fetched.
+final bulkResolutionPlanProvider = Provider<BulkResolutionPlan>((ref) {
+  final records = ref.watch(modUpdateRecordsProvider);
+  if (records.isEmpty) return BulkResolutionPlan.empty;
+  return planBulkResolution(mods: ref.watch(modsProvider), records: records);
+});
+
 /// What a "check all" would look up.
 ///
 /// Built from the **whole library** ([modsProvider]) rather than from
@@ -393,20 +421,29 @@ final modsWithUpdatesCountProvider = Provider<int>((ref) {
       .length;
 });
 
-/// Whether **anywhere in the library** still has an update to show.
+/// How many mods **anywhere in the library** have an update to show.
 ///
 /// Deliberately library-wide where [modsWithUpdatesCountProvider] is
-/// view-scoped, and the two are not interchangeable. This one drives the
-/// filter switching *itself* off once there is nothing left to show, and doing
-/// that on the view-scoped count would turn the filter off merely because the
-/// user clicked a character tab with no updates of its own — a filter that
-/// vanishes when you look somewhere else.
-final libraryHasUpdatesProvider = Provider<bool>((ref) {
+/// view-scoped, and the two are not interchangeable. A control that *filters*
+/// wants the view count, because that is what pressing it would leave on
+/// screen; anything **reporting what a check found** wants this one, or the
+/// same sentence means "in your library" or "on this character tab" depending
+/// on where the user happened to be standing.
+final libraryUpdateCountProvider = Provider<int>((ref) {
   final checks = ref.watch(modUpdateChecksProvider);
-  if (checks.isEmpty) return false;
+  if (checks.isEmpty) return 0;
   return ref
       .watch(modsProvider)
-      .any((mod) => checks[mod.id]?.hasUpdate ?? false);
+      .where((mod) => checks[mod.id]?.hasUpdate ?? false)
+      .length;
+});
+
+/// Whether any of them do. Drives the update filter switching *itself* off once
+/// there is nothing left to show — on the view-scoped count that would fire
+/// merely because the user clicked a character tab with no updates of its own,
+/// giving a filter that vanishes when you look somewhere else.
+final libraryHasUpdatesProvider = Provider<bool>((ref) {
+  return ref.watch(libraryUpdateCountProvider) > 0;
 });
 
 /// Show only mods the last check flagged.

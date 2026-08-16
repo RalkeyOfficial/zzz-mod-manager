@@ -42,6 +42,17 @@ enum OriginConfidence {
   /// property of the enum rather than a scattered `== exact` check.
   bool get allowsUnattendedUpdate => this == OriginConfidence.exact;
 
+  /// Whether somebody actually *established* this, as opposed to us guessing.
+  ///
+  /// The line every "is this a guess?" decision draws, and it is drawn once
+  /// here rather than per caller: the update comparator caps its verdict on it,
+  /// and the bulk resolution pass asks it to decide which identities still want
+  /// a human's confirmation. [inferred] sits on the wrong side of it on purpose
+  /// — it came from a free-form text field a human typed and may be a wrong
+  /// paste entirely.
+  bool get isConfirmed =>
+      this == OriginConfidence.exact || this == OriginConfidence.user;
+
   /// Parses the stored value, **degrading anything unrecognised to [unknown]**.
   ///
   /// Load-bearing, not defensive habit: a future build inventing a stronger

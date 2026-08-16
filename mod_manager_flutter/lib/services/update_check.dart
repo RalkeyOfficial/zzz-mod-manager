@@ -666,9 +666,12 @@ UpdateCheck _judgeAgainstBaseline({
 }
 
 /// `exact` or `user`. Everything else is a guess we recorded and label as one.
-bool _isConfirmed(OriginConfidence confidence) =>
-    confidence == OriginConfidence.exact ||
-    confidence == OriginConfidence.user;
+///
+/// Delegates to the enum rather than restating the test: the bulk resolution
+/// pass asks the same question to decide which identities still want a human's
+/// confirmation, and two copies of "which tiers count as established" is a
+/// disagreement waiting to happen.
+bool _isConfirmed(OriginConfidence confidence) => confidence.isConfirmed;
 
 /// Newest upload first, undated entries last, ties broken by id so the order is
 /// stable across runs — a list the user reads must not reshuffle itself.

@@ -60,6 +60,11 @@ void main() {
     'mods.assume_current.title_',
     'mods.assume_current.confirm_',
     'mods.assume_current.done_',
+    'mods.bulk_resolve.apply_',
+    'mods.bulk_resolve.done_',
+    'mods.bulk_resolve.excluded_untracked_',
+    'mods.bulk_resolve.already_known_',
+    'mods.update.bulk_found_',
     'marketplace.content_filter_',
     'language_names.',
   ];

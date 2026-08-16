@@ -339,7 +339,14 @@ assumed, and the last two will bite:
   and `_bHasFiles` are rejected outright as `UNKNOWN_PROPERTY` — **as is
   `_aPreviewMedia` on v13 and `_aPreviewContent` on v11**, so this parameter is a
   place the version difference surfaces as a hard `400` rather than a missing field.
-  `_sPayType` is rejected on both.
+  `_sPayType` is rejected on both, and so is **`_sInitialVisibility`** — which means
+  a bulk response can carry a mod's *cover* but never its content rating. Anything
+  rendering an image from `Multi` therefore has no filter hint to honour ([§7](#7-nsfw-and-content-ratings)),
+  and there is no reliable substitute: the presence of a server-pixelated
+  `_sFileNNNSfw` variant looks like one, and is not. Measured across a real 57-mod
+  library, mod `541825` is `hide` on its profile and its `Multi` cover carries no
+  `Sfw` key at all. The app's bulk resolution screen shows mod *names* rather than
+  thumbnails for this reason.
 - **`_aFiles` here is the union of current *and* archived files**, unlike
   `ProfilePage` where they are two separate keys. Measured on mod `531649`: 14 entries
   from `Multi` against 6 + 8 from its profile, same ids. `_bIsArchived` is what tells
@@ -735,15 +742,25 @@ for mature content in previews", and it is real: same dimensions as the normal
 thumbnail (220×137 on the sample checked), heavily mosaiced, **2.8 KB against
 12.3 KB**.
 
-Measured over 150 listing covers, it appears on **exactly** the records whose
-`_sInitialVisibility` is `hide` (30) or `warn` (7) — 88 of 150 — and on none of the
-`show` ones. Two limits matter before building on it:
+Measured over 150 recent listing covers, it appears on `hide` (70) and `warn` (18)
+records — 88 of 150 — and on none of the 62 `show` ones. Three limits matter before
+building on it:
 
 - **Only the 220 rung has an SFW twin.** Nothing at 100, 530 or the original, across
   388 rungs sampled. So it can stand in for a client-side blur on a grid card and
   nowhere else.
 - It is a *substitute image*, not a flag: using it means the explicit pixels are
   never downloaded until the user asks, which is the real argument for it.
+- **It is not a reliable stand-in for the rating either**, and an earlier version of
+  this section said it was ("appears on *exactly* the `hide`/`warn` records"). The
+  correlation is perfect across those 150 *recent* records and does not hold in
+  general: mod `541825` reports `_sInitialVisibility: hide` with
+  `{sa, nu}` content ratings, and its cover carries **no** `Sfw` key in a listing, a
+  profile or a `Mod/Multi` response. Its thumbnail filenames also lack the `_220`
+  suffix the others carry, so the copies look to be generated per image by a pipeline
+  older submissions predate. Anything that needs the rating must read
+  `_sInitialVisibility` — which `Mod/Multi` will not give you
+  ([§3](#bulk--modmulti)).
 
 **This app does not use it** — `GbThumbnail` applies its own blur, so the field is
 parsed by nothing and `GbImage` deliberately ignores `_sFileNNNSfw` keys. Recorded

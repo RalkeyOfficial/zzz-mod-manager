@@ -95,6 +95,11 @@ BulkAssumeCurrentPlan planBulkAssumeCurrent(Iterable<ModInfo> mods) {
       // every time the user looked at it.
       case ModOriginStatus.none:
       case ModOriginStatus.versionGuessed:
+      // Nothing to compare a baseline against: the mod page is private,
+      // trashed or withheld, so every future check answers `sourceGone`
+      // whatever date is written here. Recording one would be busywork that
+      // also makes the card stop saying what actually happened.
+      case ModOriginStatus.sourceGone:
       // Not reachable from `modOriginStatus`, which folds only the origin
       // block — "an update is published" comes from a check nobody has run
       // here. Listed rather than defaulted so that if this ever *does* become

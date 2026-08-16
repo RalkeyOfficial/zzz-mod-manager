@@ -370,6 +370,15 @@ the distinction the two outcomes exist to make. Four mods flagged before the
 release-group and same-version suppressions and two after, which is the whole
 argument for phase two.
 
+**The records it fetched come back with the verdicts**, in
+`BulkUpdateCheckOutcome.records`, and that is what lets the results screen double as
+the bulk **resolution** screen
+([`origin-tracking.md` §7](origin-tracking.md#7-the-bulk-resolution-pass)). Every
+question resolution asks — which file of this mod do you have, is this really your
+mod, is the page gone — is answered by the same response the verdicts came from. So
+folding the two together costs no request, and the two halves of one screen cannot
+describe different states of the same mod page.
+
 **Scope: the whole library, not the current view.** This is a deliberate
 departure from where the bulk "assume current" action gets its list
 ([`origin-tracking.md` §6](origin-tracking.md#6-assume-current-in-bulk)). Both
@@ -415,48 +424,74 @@ The "needs attention" filter deliberately does **not** count updates. It answers
 "what have I not dealt with", which is a property of the sidecar; folding in a
 network result would make its count change whenever a check ran.
 
-### The toolbar button does two jobs
+### The results screen
 
-A badge on a card is spatial: across 128 mods, three marks are something you
-hunt for. So the same control that runs the check also **filters the grid to
-what it found**, and which job it does is decided by whether there is anything
-to show:
+A whole-library check reports through **one** of two surfaces, and which one is
+decided by whether the pass turned up anything the user could act on beyond the
+badges:
 
-| state | shows | pressing it |
-|---|---|---|
-| nothing found, or not checked yet | a bare icon | runs the check |
-| *n* found in this view | a count | filters the grid to them |
+| the pass found | shows |
+|---|---|
+| nothing to resolve | the summary as a notification |
+| mods whose origin can be sorted out | the results screen, which states the summary itself |
 
-A separate filter toggle beside it was the obvious design and was rejected —
-this toolbar already carries six controls, and a seventh that means nothing
-until a check has run is a permanent cost for an occasional state. What keeps
-the overload legible is that **the control does the only useful thing
-available**: with no findings, checking is all there is to do; with findings,
-seeing them is. The count is the visible signal for which mode it is in, so
-nothing about it is hidden state — and because results are session-scoped, every
-launch starts in check mode.
+On a fully sorted-out library a modal would stand between the user and the badges
+they pressed the button to see; when there are questions, raising a notification
+*behind* the dialog would be two reports of one press, which is how a user ends up
+reading neither.
 
-The cost, stated plainly: re-checking once results exist means turning the
-filter on, pressing **check again** in the row below, and turning it off. That
-row is where the bulk "assume current" button already lives, and for the same
-reason — a secondary action that only makes sense while a particular filter is
-on.
+**Auto-opening is not the only way in**, and that is the fix for the complaint this
+arrangement first produced: a screen reachable only as a side effect of a check can
+be seen once and, if dismissed, not again. *Sort out mod tracking…* in the library
+menu below reopens it from the records the check left behind.
 
-**Two scopes meet in that one button, and they differ deliberately.** The
-*check* covers the whole library, because its badges are drawn on every
-character tab. The *filter* covers the current view, because that is all it can
-narrow. So on a tab whose mods are all current, the button falls back to check
-mode — the same rule applied, not an exception to it. The consequence worth
-knowing: updates on other character tabs are reachable from the "All" view, not
-from a tab that has none of its own.
+The screen itself belongs to origin tracking rather than to this document, because
+what it writes is origin data:
+[`origin-tracking.md` §7](origin-tracking.md#7-the-bulk-resolution-pass).
 
-Two more properties, both of which had to be built rather than falling out:
+### Where the controls live
 
-- **The filter switches itself off when the library runs out of updates.**
-  Ignoring the last flagged mod would otherwise leave the grid filtered to
-  nothing, with a control the user has to work out they need to press — the same
-  "the reward for pressing the button is an empty grid" the bulk "assume
-  current" action already avoids.
+The Mods toolbar is **two rows: search plus a library menu, then every filter.**
+That split replaced an arrangement where actions and filters were interleaved
+across three places, and it is what this feature needed rather than a tidy-up —
+the results screen above had no home in the old one, so it could only ever be
+seen as a side effect of pressing a filter toggle, and dismissing it meant it was
+gone until the next check.
+
+**The library menu holds the three things you can do to the whole library**:
+*Check for updates*, *Sort out mod tracking…* and *Mark all as current*. Each row
+carries the number of mods it would act on, and is disabled when it can do
+nothing — a disabled entry reading `0` says why, where a hidden one looks like a
+missing feature. The menu's badge counts what *Sort out mod tracking* would open,
+the only one of the three whose work is otherwise invisible.
+
+*Sort out mod tracking* is the **exception to that, deliberately**: it is offered
+at zero, because with nothing in hand it **runs a check first**, which is the
+request it would have taken anyway. Greying it out until a check had run would
+make the menu's most useful item the one disabled on launch. With records already
+fetched it costs nothing, because they are session state
+([`origin-tracking.md` §7](origin-tracking.md#7-the-bulk-resolution-pass)).
+
+**The `↑` toggle is now only a filter.** A badge on a card is spatial — across
+128 mods, three marks are something you hunt for — so the count filters the grid
+to what the last check found. It used to run the check as well, on the reasoning
+that a seventh control was too many; the trade never paid. Re-checking took three
+clicks (turn the filter on, find *check again* in a row that only exists while a
+filter is on, turn it off), and the screen the check produced could not be
+re-opened at all. Checking is an action; it belongs with the other actions.
+
+**Two scopes still meet here, deliberately.** The *check* covers the whole
+library, because its badges are drawn on every character tab. The *filter* covers
+the current view, because that is all it can narrow. So updates on other
+character tabs are reachable from the "All" view, not from a tab with none of its
+own.
+
+Two properties of the filter, both of which had to be built rather than falling
+out:
+
+- **It switches itself off when the library runs out of updates.** Ignoring the
+  last flagged mod would otherwise leave the grid filtered to nothing, with a
+  control the user has to work out they need to press.
   That is keyed on the **library**, not on the view-scoped count beside it. On
   the view count it would fire merely because the user clicked a character tab
   with no updates of its own, and the filter would evaporate whenever they
@@ -465,8 +500,8 @@ Two more properties, both of which had to be built rather than falling out:
 - **It ANDs with the other filters**, like everything else here. Combining it
   with "needs attention" usually empties the grid, because a mod with no
   recorded version usually has no update either — the exception being one
-  identified by a banked archive hash. `Clear filters` is the way out, and it
-  resets this filter along with the rest.
+  identified by a banked archive hash. `Clear filters` sits at the end of the
+  filter row and resets this along with the rest.
 
 ### The dialog
 

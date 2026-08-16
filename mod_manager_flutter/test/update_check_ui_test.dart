@@ -8,6 +8,7 @@ import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/components/mods_toolbar.dart';
+import 'package:mod_manager_flutter/screens/dialogs/bulk_resolution_dialog.dart';
 import 'package:mod_manager_flutter/screens/dialogs/mod_update_dialog.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_client.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_endpoints.dart';
@@ -55,6 +56,7 @@ void main() {
       List<CharacterInfo> groups, {
       ModRecordFetcherStub? fetch,
       Size surfaceSize = const Size(1200, 800),
+      List<String>? written,
     }) async {
       await tester.pumpWidget(const SizedBox());
       container = ProviderContainer();
@@ -67,6 +69,12 @@ void main() {
           updateFetcher: fetch == null
               ? (ids) async => throw StateError('no fetch expected')
               : fetch.call,
+          // Never the real `ApiService`: it lazily builds a `ConfigService`
+          // against the developer's own `<appData>/config.json`.
+          originWriter: (name, update) async {
+            written?.add(name);
+            return written != null;
+          },
         ),
         container: container,
         surfaceSize: surfaceSize,
@@ -74,15 +82,208 @@ void main() {
       expectBuilt(ModsToolbar);
     }
 
-    testWidgets('is absent when nothing in the library is tracked',
+    /// Picks an entry out of the library menu — the one place the three bulk
+    /// actions live now that none of them is overloaded onto a filter.
+    Future<void> runAction(WidgetTester tester, String label) async {
+      await tester.tap(find.text('Library'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(label));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('nothing tracked means the check is offered but disabled',
         (tester) async {
-      // A legacy library that has never been resolved has nothing to check, and
-      // a control that can only ever report nothing is noise in a toolbar that
-      // already carries five.
+      // Disabled rather than hidden, because it lives in a menu now: an entry
+      // reading "Check for updates  0" says why it can do nothing, where a
+      // missing entry would just look like the feature isn't there.
       await pumpToolbar(tester, [
         CharacterInfo(id: 'all', name: 'All', skins: [mod('bare')]),
       ]);
+      await tester.tap(find.text('Library'));
+      await tester.pumpAndSettle();
+      expect(find.text('Check for updates'), findsOneWidget);
+
+      // Pressing it does nothing at all — the fetcher this toolbar was given
+      // throws if it is ever called, and a disabled entry leaves the menu open.
+      await tester.tap(find.text('Check for updates'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('Check for updates'), findsOneWidget);
+    });
+
+    testWidgets('the updates toggle is a filter and nothing else',
+        (tester) async {
+      // It used to run the check as well, which is why re-checking took three
+      // clicks and the results screen had nowhere to be re-opened from. With
+      // nothing found there is nothing to filter, so it isn't rendered at all.
+      final fetch = ModRecordFetcherStub((ids) async => [record(1, fileId: 10)]);
+      await pumpToolbar(
+        tester,
+        [
+          CharacterInfo(id: 'all', name: 'All', skins: [
+            mod('current', origin: origin(modId: 1, fileId: 10)),
+            mod('stale', origin: origin(modId: 1, fileId: 99)),
+          ]),
+        ],
+        fetch: fetch,
+      );
       expect(find.byIcon(Icons.arrow_circle_up), findsNothing);
+
+      await runAction(tester, 'Check for updates');
+      expect(find.byIcon(Icons.arrow_circle_up), findsOneWidget);
+
+      // One press filters, a second clears — no hidden second job.
+      await tester.tap(find.byIcon(Icons.arrow_circle_up));
+      await tester.pumpAndSettle();
+      expect(container.read(modUpdatesOnlyProvider), isTrue);
+      expect(container.read(visibleModsProvider).map((m) => m.id), ['stale']);
+
+      await tester.tap(find.byIcon(Icons.arrow_circle_up));
+      await tester.pumpAndSettle();
+      expect(container.read(modUpdatesOnlyProvider), isFalse);
+      expect(container.read(visibleModsProvider), hasLength(2));
+    });
+
+    testWidgets('the results screen can be re-opened after it is dismissed',
+        (tester) async {
+      // The complaint that produced the library menu: the screen only ever
+      // appeared as a side effect of a check, so cancelling it — or closing it
+      // by accident — meant it was gone. The records are session state now, so
+      // reopening costs no request at all.
+      var runs = 0;
+      final fetch = ModRecordFetcherStub((ids) async {
+        runs++;
+        return [
+          GbMod(
+            idRow: 1,
+            name: 'Ellen Swimsuit',
+            files: [
+              GbFile(idRow: 10, file: 'e.zip', dateAdded: DateTime.utc(2025)),
+            ],
+          ),
+        ];
+      });
+      await pumpToolbar(
+        tester,
+        [
+          CharacterInfo(id: 'all', name: 'All', skins: [
+            mod('Ellen',
+                origin: origin(modId: 1, installedAt: DateTime.utc(2026))),
+          ]),
+        ],
+        fetch: fetch,
+      );
+
+      await runAction(tester, 'Check for updates');
+      expect(find.byType(BulkResolutionDialog), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.byType(BulkResolutionDialog), findsNothing);
+
+      await runAction(tester, 'Sort out mod tracking…');
+      expect(find.byType(BulkResolutionDialog), findsOneWidget);
+      expect(runs, 1, reason: 're-opened from the records already in hand');
+    });
+
+    testWidgets('both doors report the same library-wide summary',
+        (tester) async {
+      // The check door had the pass's own count and the menu door had the
+      // *view-scoped* toolbar count, so standing on a character tab the same
+      // sentence in the same dialog meant something different. Both read the
+      // library now.
+      final fetch = ModRecordFetcherStub(
+        (ids) async => [
+          for (final id in ids)
+            GbMod(
+              idRow: id,
+              name: 'Mod $id',
+              files: [
+                GbFile(idRow: 10, file: 'e.zip', dateAdded: DateTime.utc(2025)),
+              ],
+            ),
+        ],
+      );
+      await pumpToolbar(
+        tester,
+        [
+          CharacterInfo(id: 'ellen', name: 'Ellen', skins: [
+            mod('Ellen skin',
+                origin: origin(modId: 1, installedAt: DateTime.utc(2026))),
+          ]),
+          CharacterInfo(id: 'rina', name: 'Rina', skins: [
+            mod('Rina skin',
+                origin: origin(modId: 2, fileId: 99, installedAt: DateTime.utc(2026))),
+          ]),
+        ],
+        fetch: fetch,
+      );
+
+      // File 99 is gone from mod 2's list, so Rina — on the *other* tab — is
+      // the only mod with an update.
+      await runAction(tester, 'Check for updates');
+      expect(find.textContaining('1 mod has an update'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      await runAction(tester, 'Sort out mod tracking…');
+      expect(find.textContaining('1 mod has an update'), findsOneWidget,
+          reason: 'the view shows none of its own, the library has one');
+    });
+
+    testWidgets('opening it with nothing in hand runs the check first',
+        (tester) async {
+      // Otherwise the menu's most useful entry is the one greyed out on launch.
+      var runs = 0;
+      final fetch = ModRecordFetcherStub((ids) async {
+        runs++;
+        return [
+          GbMod(
+            idRow: 1,
+            name: 'Ellen Swimsuit',
+            files: [
+              GbFile(idRow: 10, file: 'e.zip', dateAdded: DateTime.utc(2025)),
+            ],
+          ),
+        ];
+      });
+      await pumpToolbar(
+        tester,
+        [
+          CharacterInfo(id: 'all', name: 'All', skins: [
+            mod('Ellen',
+                origin: origin(modId: 1, installedAt: DateTime.utc(2026))),
+          ]),
+        ],
+        fetch: fetch,
+      );
+
+      await runAction(tester, 'Sort out mod tracking…');
+      expect(runs, 1);
+      expect(find.byType(BulkResolutionDialog), findsOneWidget);
+    });
+
+    testWidgets('re-checking is one press, whatever the filters are doing',
+        (tester) async {
+      // The whole cost of the old overload: "check again" only existed while
+      // the filter it hid behind was on.
+      var runs = 0;
+      final fetch = ModRecordFetcherStub((ids) async {
+        runs++;
+        return [record(1, fileId: 10)];
+      });
+      await pumpToolbar(
+        tester,
+        [
+          CharacterInfo(id: 'all', name: 'All', skins: [
+            mod('stale', origin: origin(modId: 1, fileId: 99)),
+          ]),
+        ],
+        fetch: fetch,
+      );
+
+      await runAction(tester, 'Check for updates');
+      await runAction(tester, 'Check for updates');
+      expect(runs, 2);
     });
 
     testWidgets('covers the whole library, not the selected character',
@@ -115,8 +316,7 @@ void main() {
       // Index 0 is selected, so the grid is showing Ellen's one mod.
       expect(container.read(currentCharacterSkinsProvider), hasLength(1));
 
-      await tester.tap(find.byIcon(Icons.arrow_circle_up));
-      await tester.pumpAndSettle();
+      await runAction(tester, 'Check for updates');
 
       expect(asked, [1, 2]);
     });
@@ -141,8 +341,7 @@ void main() {
       // states, and a zero would assert the first while meaning the second.
       expect(find.text('0'), findsNothing);
 
-      await tester.tap(find.byIcon(Icons.arrow_circle_up));
-      await tester.pumpAndSettle();
+      await runAction(tester, 'Check for updates');
 
       expect(find.text('1'), findsOneWidget);
       expect(find.text('1 mod has an update'), findsOneWidget);
@@ -152,74 +351,69 @@ void main() {
       );
     });
 
-    testWidgets('becomes a filter once it has found something', (tester) async {
-      // One control, two jobs. A seventh toolbar control was the obvious
-      // alternative and was rejected — so the rule keeping this legible is
-      // "the button does the only useful thing available", and the count is
-      // the visible signal for which mode it is in.
-      final fetch = ModRecordFetcherStub((ids) async => [record(1, fileId: 10)]);
+    testWidgets('a fully sorted-out library gets a notification, not a modal',
+        (tester) async {
+      // The results screen appears only when it has something to ask — the
+      // same rule the button itself follows. With nothing to resolve, a modal
+      // would stand between the user and the badges they pressed for.
+      final fetch = ModRecordFetcherStub((ids) async => [record(1)]);
       await pumpToolbar(
         tester,
         [
           CharacterInfo(id: 'all', name: 'All', skins: [
-            mod('current', origin: origin(modId: 1, fileId: 10)),
-            mod('stale', origin: origin(modId: 1, fileId: 99)),
+            mod('done', origin: origin(modId: 1, fileId: 10)),
           ]),
         ],
         fetch: fetch,
       );
+      await runAction(tester, 'Check for updates');
 
-      // Check mode: no count, and pressing runs the check.
-      expect(container.read(modUpdatesOnlyProvider), isFalse);
-      await tester.tap(find.byIcon(Icons.arrow_circle_up));
-      await tester.pumpAndSettle();
-      expect(container.read(modUpdatesOnlyProvider), isFalse,
-          reason: 'the first press checked, it did not filter');
-      expect(find.text('1'), findsOneWidget);
-
-      // Filter mode: the same control now narrows the grid instead.
-      await tester.tap(find.byIcon(Icons.arrow_circle_up));
-      await tester.pumpAndSettle();
-      expect(container.read(modUpdatesOnlyProvider), isTrue);
-      expect(container.read(visibleModsProvider).map((m) => m.id), ['stale']);
-      // …and it is a toggle, not a one-way door.
-      await tester.tap(find.byIcon(Icons.arrow_circle_up));
-      await tester.pumpAndSettle();
-      expect(container.read(modUpdatesOnlyProvider), isFalse);
-      expect(container.read(visibleModsProvider), hasLength(2));
+      expect(find.byType(BulkResolutionDialog), findsNothing);
+      expect(find.text('No updates found'), findsOneWidget);
     });
 
-    testWidgets('re-checking moves to the row below while filtering',
+    testWidgets('an unresolved mod opens the results screen instead',
         (tester) async {
-      // The cost of overloading the button: the action needs somewhere to go.
-      // This is the shape the bulk "assume current" button already uses.
-      var runs = 0;
-      final fetch = ModRecordFetcherStub((ids) async {
-        runs++;
-        return [record(1, fileId: 10)];
-      });
+      // The same press, the same request: the check's own response is what the
+      // resolution questions are asked against, so the screen costs nothing
+      // extra.
+      final fetch = ModRecordFetcherStub(
+        (ids) async => [
+          GbMod(
+            idRow: 1,
+            name: 'Ellen Swimsuit',
+            files: [
+              GbFile(
+                idRow: 10,
+                file: 'ellen.zip',
+                dateAdded: DateTime.utc(2025),
+              ),
+            ],
+          ),
+        ],
+      );
+      final written = <String>[];
       await pumpToolbar(
         tester,
         [
           CharacterInfo(id: 'all', name: 'All', skins: [
-            mod('stale', origin: origin(modId: 1, fileId: 99)),
+            mod('Ellen',
+                origin: origin(modId: 1, installedAt: DateTime.utc(2026))),
           ]),
         ],
         fetch: fetch,
+        written: written,
       );
+      await runAction(tester, 'Check for updates');
 
-      expect(find.text('Check again'), findsNothing);
-      await tester.tap(find.byIcon(Icons.arrow_circle_up));
-      await tester.pumpAndSettle();
-      expect(find.text('Check again'), findsNothing,
-          reason: 'not offered until the button is actually held by the filter');
+      expect(find.byType(BulkResolutionDialog), findsOneWidget);
+      // And the summary is stated *here* rather than raised behind it — two
+      // reports of one press is how a user ends up reading neither.
+      expect(find.text('No updates found'), findsNothing);
 
-      await tester.tap(find.byIcon(Icons.arrow_circle_up));
+      await tester.tap(find.widgetWithText(FilledButton, 'Save 1 mod'));
       await tester.pumpAndSettle();
-      expect(find.text('Check again'), findsOneWidget);
-      await tester.tap(find.text('Check again'));
-      await tester.pumpAndSettle();
-      expect(runs, 2);
+      expect(written, ['Ellen']);
     });
 
     testWidgets('switches itself off when the last update is dealt with',
@@ -294,19 +488,17 @@ void main() {
       expect(container.read(modUpdatesOnlyProvider), isFalse);
     });
 
-    testWidgets('the second row survives all three buttons at 480px',
+    testWidgets('the filter row survives every control at 480px',
         (tester) async {
       // Where the last overflow bug came from: none of these labels can
-      // ellipsise, so a Row that doesn't fit degrades into a red stripe rather
-      // than into anything. That row is a Wrap for exactly this.
+      // ellipsise, so a Row that doesn't fit degrades into a red stripe. The
+      // row is a Wrap for exactly this, and it now has to hold five filters
+      // plus the reset.
       //
-      // Reaching all three at once takes some doing, and the reason is worth
-      // recording: the two status filters AND like every other filter, and a
-      // mod that needs attention (no recorded version) usually has no update
-      // either — so combining them normally empties the grid and the
-      // "assume current" button has nothing to act on. The exception is a mod
-      // identified by a **banked archive hash**, which can carry an update while
-      // its version is still unrecorded. That is the case built here.
+      // Both status filters at once takes some doing: they AND like every other
+      // filter, and a mod with no recorded version usually has no update
+      // either. The exception is a mod identified by a **banked archive hash**,
+      // which can carry an update while its version is unrecorded.
       await pumpToolbar(
         tester,
         [
@@ -335,8 +527,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Clear filters'), findsOneWidget);
-      expect(find.text('Check again'), findsOneWidget);
-      expect(find.textContaining('Assume'), findsOneWidget);
+      expect(find.text('Library'), findsOneWidget);
+      expect(find.byIcon(Icons.arrow_circle_up), findsOneWidget);
+      expect(find.byIcon(Icons.priority_high), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -357,8 +550,7 @@ void main() {
         fetch: fetch,
       );
 
-      await tester.tap(find.byIcon(Icons.arrow_circle_up));
-      await tester.pumpAndSettle();
+      await runAction(tester, 'Check for updates');
 
       expect(find.text('No updates found'), findsNothing);
       expect(find.textContaining("couldn't be checked"), findsOneWidget);

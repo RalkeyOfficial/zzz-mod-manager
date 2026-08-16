@@ -39,9 +39,15 @@ import '../../utils/state_providers.dart';
 ///   by being louder still — the card has no room above amber, and two filled
 ///   pills that differ only in intensity read as one state rendered twice.
 ///
-/// The two quiet states are told apart by **shape, not colour** — a dot against
-/// a clock face. Two muted colours at 9px would be indistinguishable, and would
-/// stay indistinguishable for anyone colourblind.
+/// - **A source that is gone is a broken link, and it is quiet too.** The mod
+///   page is private, trashed or withheld, which is not the user's fault and
+///   not something they can fix from here — so it states the fact rather than
+///   asking for anything. It is the one state that cannot be cleared by doing
+///   work, which is also why the "needs attention" filter leaves it out.
+///
+/// The three quiet states are told apart by **shape, not colour** — a dot, a
+/// clock face, a broken link. Three muted colours at 9–15px would be
+/// indistinguishable, and would stay indistinguishable for anyone colourblind.
 ///
 /// All of them are tappable and all of them open the same dialog: none is an
 /// error, but each is a case a user *may* want to change, and giving them no
@@ -131,6 +137,7 @@ class ModStatusSlot extends ConsumerWidget {
               : 'mods.origin.possibly_outdated_tooltip',
         ModOriginStatus.versionUnknown => 'mods.origin.version_unknown_tooltip',
         ModOriginStatus.versionGuessed => 'mods.origin.version_guessed_tooltip',
+        ModOriginStatus.sourceGone => 'mods.origin.source_gone_tooltip',
         ModOriginStatus.untracked ||
         ModOriginStatus.none =>
           'mods.origin.untracked_tooltip',
@@ -164,6 +171,11 @@ class ModStatusSlot extends ConsumerWidget {
                 // one family rather than as two levels of severity.
                 ModOriginStatus.versionGuessed => Icon(
                     Icons.schedule,
+                    size: 15,
+                    color: muted,
+                  ),
+                ModOriginStatus.sourceGone => Icon(
+                    Icons.link_off,
                     size: 15,
                     color: muted,
                   ),

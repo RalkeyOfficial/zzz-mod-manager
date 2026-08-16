@@ -77,19 +77,22 @@ The most important architectural decision is the **platform abstraction**:
   `AnimatedSwitcher` with no keep-alive, so `ModsScreen` is *disposed* while the
   marketplace is up and that list goes stale exactly when the badges are visible.
   The marketplace invalidates it on open and after each install. See
-  `../docs/origin-tracking.md` §8 for what it can and cannot answer — notably that
+  `../docs/origin-tracking.md` §9 for what it can and cannot answer — notably that
   file-level knowledge is absent for any library that predates the origin block.
 - `modOriginStatus()` (`services/origin_status.dart`) — pure `ModOrigin?` → the
   **one** thing a library card's status slot may render: amber "version
-  unknown", a muted clock for a version recorded only as a guess, a muted dot
-  for "untracked", or nothing. One rule covers all four — *the slot speaks
-  whenever tracking is less than complete, and how loudly depends on how cheaply
-  the user can act*. The mods toolbar's "needs attention" filter is built from
-  the same function, and `modNeedsAttention()` is where the two deliberately
-  come apart: a recorded guess is **shown but not counted**, or the bulk "assume
-  current" action's count would never drop. See `../docs/origin-tracking.md` §4
-  for that, for why `tracking: "off"` and `remote_missing` both silence the
-  slot, and for why the weak state is marked rather than the strong one.
+  unknown", a muted clock for a version recorded only as a guess, a muted broken
+  link for a mod page that is gone, a muted dot for "untracked", or nothing. One
+  rule covers all five — *the slot speaks whenever tracking is less than
+  complete, and how loudly depends on how cheaply the user can act*. The mods
+  toolbar's "needs attention" filter is built from the same function, and
+  `modNeedsAttention()` is where the two deliberately come apart: a recorded
+  guess is **shown but not counted**, or the bulk "assume current" action's
+  count would never drop, and a gone source is out because its count could never
+  reach zero. See `../docs/origin-tracking.md` §4 for that, for why
+  `tracking: "off"` silences the slot outright while `remote_missing` gets a
+  state of its own, and for why the weak state is marked rather than the strong
+  one.
 - `summarizeOrigin()` (`services/origin_summary.dart`) — pure `ModOrigin?` → the
   two lines the resolve dialog shows about what is **already** recorded. Split
   out because the risk is not the fold but the strength of the claim: the same
@@ -153,10 +156,22 @@ The most important architectural decision is the **platform abstraction**:
 - `services/origin_resolution.dart` — pure decision logic behind the resolve
   dialog: ranking a mod's published files against what is known locally (banked
   archive hash → folder name → newest file that already existed at install
-  time), and the four transforms that produce the new origin block. Two rules
+  time), and the transforms that produce the new origin block. Two rules
   it exists to enforce: a *suggestion* is never preselected (only a hash match
   and a single-file mod are), and confirming an identity raises it to `user`
   while nothing but a checksum match ever reaches `exact`.
+- `services/bulk_resolution.dart` — the same job over a whole library, from the
+  bulk update check's own response. Pure: `(scanned mods, the records the check
+  fetched) → rows`, plus the one composed transform each row is written through.
+  It exists because **the check's results screen is also the resolution
+  screen** — that response already carries the mod's name, its whole file list
+  and the upstream-gone flags, so a separate migration pass would re-fetch the
+  library to ask questions about it. Read `../docs/origin-tracking.md` §7 before
+  changing it; the four rules it enforces are inherited rather than local,
+  notably that bulk acts only on precise handles, that a file it works out for
+  itself is recorded at `inferred` and never at `user`, and that **nothing is
+  written until the user presses Apply** — a correction to the plan, which
+  wanted a write-then-undo.
 - `planMetadataAutofill()` (`services/metadata_autofill.dart`) — pure
   (existing sidecar, what the mod page offers) → what may be written, and
   `services/gamebanana/remote_mod_metadata.dart` for the `GbMod` → domain half.
@@ -306,7 +321,7 @@ GameBanana hosts is reached via "open in browser".
   ingest paths run `confirmArchiveNotDuplicate` (`dialogs/duplicate_archive_dialog.dart`)
   before installing an archive whose hash is already banked. The badge is keyed on
   the mod and the row marker on the file, because those are different questions with
-  very different availability — see `../docs/origin-tracking.md` §8.
+  very different availability — see `../docs/origin-tracking.md` §9.
 - **`GbModCard` has one status slot.** `_statusSlot` returns at most one badge,
   never a stack — the same rule the library card follows, since a card that can
   show three things at once shows none of them. **"Update available" belongs in
@@ -379,18 +394,40 @@ follows is only what is specific to these widgets.
 - **The toolbar toggle carries a count and hides itself at zero.** The answer is
   usually either nothing or most of the library, and both are worth knowing
   before pressing rather than after landing on an empty grid.
-- **The update-check button is one control doing two jobs**: a bare icon runs
-  the check, a count filters the grid to what it found. A seventh toolbar
-  control was rejected for it — the rule that keeps the overload legible is
-  *the control does the only useful thing available*, and the count is the
-  visible signal for which mode it is in. The cost is that re-checking moves to
-  **check again** in the second row, beside the bulk "assume current" button and
-  for the same reason. Two scopes meet there deliberately: the *check* covers
-  the whole library (its badges are drawn on every tab, so scoping it to one
-  would leave the rest looking checked-and-clean), while the *filter* covers the
-  current view (that is all it can narrow). Its results are session state
-  (`modUpdateChecksProvider`) and never persisted — a verdict restored from disk
-  asserts something about a mod page nobody has looked at since.
+- **The toolbar is two rows: search plus the library menu, then every filter.**
+  Actions and filters used to be interleaved — the check overloaded onto a
+  filter toggle, "check again" and "assume current" in a row that appeared only
+  while some filter was on — which left the bulk resolution screen with nowhere
+  to be re-opened from. Row two is always present now: it costs a row of height
+  and buys every control a fixed place.
+- **The library menu holds the three bulk actions** (check, sort out tracking,
+  mark all as current), each with the count of mods it would act on and disabled
+  when it can do nothing — except *sort out tracking*, which is offered at zero
+  because it runs the check itself rather than greying out the most useful entry
+  on launch. Its badge counts what that entry would open, the one whose work is
+  otherwise invisible. The `↑` toggle beside the other filters is now **only** a
+  filter.
+- **The check's results are session state** (`modUpdateChecksProvider`) and so
+  are the records behind them (`modUpdateRecordsProvider`) — never persisted, a
+  verdict restored from disk asserts something about a mod page nobody has
+  looked at since. Keeping the *records* is what lets the resolution screen be
+  re-opened without a request. Two scopes meet here deliberately: the check
+  covers the whole library (its badges are drawn on every tab), the filter
+  covers the current view (that is all it can narrow).
+- **`dialogs/bulk_resolution_dialog.dart` is built from `components/dialog_section.dart`**,
+  like the update flow's dialogs, and for the reason that component exists: its
+  first version was an undifferentiated list of bordered boxes at 11–13px, and
+  it took minutes to work out what it was asking. Every question now arrives
+  under a heading that says what the group is for, rows are grouped by their
+  *leading* question so a mod is listed once, and the intro states the one thing
+  that is not visible from the controls — nothing is written until Save.
+- **A check reports through one surface, not two.** With nothing to resolve it
+  raises the summary notification; with mods whose origin can be sorted out it
+  opens `dialogs/bulk_resolution_dialog.dart`, which states that summary itself.
+  Raising a notification behind a modal is how a user ends up reading neither.
+  The spinner is cleared **before** the dialog opens — the request is what it
+  reports, and one turning behind a dialog says the app is still working while
+  disabling the control they would press next.
 - **`modSlotStatus()` is where the card's one slot is decided**, folding the
   origin block together with the session verdict, so precedence between "you have
   not sorted this mod out" and "this mod has an update" is one decision in one
@@ -398,15 +435,16 @@ follows is only what is specific to these widgets.
   and `remote_missing`, **not** every route to `none`: a mod recorded at `exact`
   also folds to `none` and is precisely the mod best placed to have a *confirmed*
   update.
-- **The bulk "assume current" button appears only once that filter is on**
-  (`services/bulk_assume_current.dart`, `dialogs/assume_current_dialog.dart`).
-  The filter is what turns the state from a dot on a card into a list, and this
-  action rewrites every mod on that list — so requiring the enumeration first
-  means the user has seen what they are about to act on. Its plan comes from
+- **The bulk "assume current" action turns the needs-attention filter on before
+  it confirms** (`services/bulk_assume_current.dart`,
+  `dialogs/assume_current_dialog.dart`). The rule is unchanged — the user must
+  have *seen* the set being rewritten — but it is enforced by the action rather
+  than by hiding the control until the filter happens to be on. Flipping the
+  filter cannot change which mods are eligible, only which are on screen, so the
+  count in the menu is the count that gets written. Its plan comes from
   `visibleModsProvider`, the list the grid renders, **not** from the wider list
-  the `!` toggle counts: the two come apart as soon as a second filter is
-  active, and a control that rewrites more mods than it displays is exactly what
-  this placement exists to prevent. See `../docs/origin-tracking.md` §6 for the
+  the `!` toggle counts: a control that rewrites more mods than it displays is
+  exactly what this rule exists to prevent. See `../docs/origin-tracking.md` §6 for the
   four rules it enforces, notably that eligibility is re-checked against the
   sidecar as freshly read — so a batch can't downgrade a mod resolved while it
   ran, and a decline is reported as a decline rather than as a read-only folder.

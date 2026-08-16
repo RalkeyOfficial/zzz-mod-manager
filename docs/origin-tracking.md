@@ -218,11 +218,12 @@ disagree about which mods are which.
 | **`versionUnknown`** | `mod_id` known, `version_confidence` is `unknown` | Amber, actionable. We can query the file list but can't judge what comes back, and one pass through the dialog fixes it. |
 | **`versionGuessed`** | `mod_id` known, version at `assumed_latest` or `inferred` | A muted **clock**. A version is on record but it is a guess. |
 | **`untracked`** | no `origin` block, or no `mod_id` | A muted **dot**. **Informational, never alarming** — most of a pre-origin library looks like this, and badging all of it loudly trains the user to stop seeing the slot. |
-| **`none`** | version at `user` or `exact`, `tracking: "off"`, or `remote_missing` | Nothing at all. |
+| **`sourceGone`** | `remote_missing` | A muted **broken link**. The mod page is private, trashed or withheld, and nothing more can be checked. |
+| **`none`** | version at `user` or `exact`, or `tracking: "off"` | Nothing at all. |
 
-The rule the four states follow, in one line: **the slot speaks whenever tracking is
+The rule the five states follow, in one line: **the slot speaks whenever tracking is
 less than complete, and how loudly depends on how cheaply the user can act.** Amber
-is the one that asks for something; the two muted states are statements of fact.
+is the one that asks for something; the three muted states are statements of fact.
 
 `versionGuessed` exists because `assumed_latest` and `user` used to render
 identically, so a mod waved through by the bulk action was indistinguishable from one
@@ -233,19 +234,22 @@ but opening every dialog in turn. Two things about it:
   was considered and rejected: those marks grow to cover every card as the library is
   resolved and then are permanent noise, where these *shrink as the user does the
   work*.
-- **The two muted states differ by shape, not colour.** Two muted colours at 9–15px
-  are indistinguishable, and stay so for anyone colourblind.
+- **The three muted states differ by shape, not colour.** Three muted colours at
+  9–15px are indistinguishable, and stay so for anyone colourblind — so it is a dot,
+  a clock face and a broken link.
 
 Three of those rows are decisions rather than mechanics:
 
-- **`tracking: "off"` and `remote_missing` both silence the slot**, for different
-  reasons. The first is the user's explicit "not from GameBanana / it's my own", and
-  the promise attached to it is permanence. The second is different: the amber
-  state's entire offer is *click to set the version*, which means reading a mod page
-  that is private, trashed or withheld — offering an action that cannot complete is
-  worse than staying quiet. Nothing writes `remote_missing` yet; when something does,
-  it wants its own wording ("source no longer available") rather than one of the
-  states here.
+- **`tracking: "off"` silences the slot; `remote_missing` gets a state of its own.**
+  The first is the user's explicit "not from GameBanana / it's my own", and the
+  promise attached to it is permanence — it wins over everything, including a gone
+  page, because a stale `source_url` is exactly why somebody might have set it. The
+  second is not amber, for the reason amber cannot be honoured here: that state's
+  entire offer is *click to set the version*, which means reading a mod page that is
+  private, trashed or withheld. It is not silence either. It used to be, and that was
+  correct only while nothing wrote the flag — the bulk resolution pass
+  ([§7](#7-the-bulk-resolution-pass)) writes it now, and a mod that quietly stops
+  being watched with no wording anywhere is a hole rather than a tidy default.
 - **Only `unknown` is actionable.** `assumed_latest` is the user having already
   answered "I don't know which, I got it around then", and `inferred` is a guess we
   recorded and label as one. Re-ambering either would make the dialog impossible to
@@ -265,6 +269,12 @@ and the badge deliberately come apart:
   guessed ones, and the count dropping is the entire visible proof that it worked.
   Were guessed mods still counted, the number would sit unchanged while the marks
   merely changed shape, which reads as a button that did nothing.
+- **`sourceGone` is out too, for a different reason again.** The filter's promise is
+  that everything in it can be dealt with, and a private, trashed or withheld page
+  cannot be. Counting it would leave a number that never reaches zero however much
+  work the user does, which is the one thing that turns a count into noise. The mark
+  on the card still says what happened, and the resolve dialog still rebinds the
+  folder for anyone whose mod was reuploaded elsewhere.
 
 ---
 
@@ -375,7 +385,7 @@ Rules worth knowing before changing any of it:
 The same "I don't know which file — I got it around then" answer, applied to a whole
 view in one press. `services/bulk_assume_current.dart` holds the decisions;
 `screens/dialogs/assume_current_dialog.dart` is the confirmation and the write loop,
-offered from the mods toolbar.
+reached from the mods toolbar's **library menu**.
 
 It makes **no requests at all**, which is what makes it worth having: it turns a
 legacy library from something that can never report an update into something that
@@ -407,8 +417,20 @@ Four rules, in the order they matter:
   That number is built from the list **the grid is rendering**, not from the wider
   list the toolbar's `!` toggle counts: combine the needs-attention filter with the
   search box and the two come apart, and a control that rewrites more mods than it is
-  showing is the failure this placement exists to avoid. The two counts are therefore
-  allowed to differ, and do so only when a second filter is active.
+  showing is the failure this rule exists to avoid.
+- **The action turns the needs-attention filter on before it asks, and puts it
+  back if it doesn't go through.** The rule has always been that the user must have
+  *seen* the set being rewritten; it used to be enforced by hiding the button until
+  that filter happened to be on, which is what put a bulk write in a row that
+  appears and disappears. The menu entry flips the filter itself, so the grid behind
+  the confirmation shows exactly those mods — and restores it on cancel, since
+  turning it on *for* a confirmation means declining the one thing a confirmation
+  exists to allow would otherwise leave the grid filtered behind the user's back.
+  Restoring means restoring: a filter the user had already set stays on.
+  Flipping it cannot change *which* mods are eligible, only which are on screen —
+  `planBulkAssumeCurrent` already keeps only `versionUnknown` mods and
+  needs-attention drops exactly the ones it would have skipped — so the count in the
+  menu is the count that gets written.
 - **The baseline it writes is unclamped, and that is a deferred problem, not a solved
   one.** The per-mod dialog clamps `baseline_remote_date` to the mod's own
   `_tsDateAdded`, because a proxy install date taken from file timestamps can read
@@ -432,7 +454,199 @@ none is needed; the button simply disables while it runs.
 
 ---
 
-## 7. The write path
+## 7. The bulk resolution pass
+
+The whole-library update check's **results screen is also the resolution screen**.
+`services/bulk_resolution.dart` holds the decisions;
+`screens/dialogs/bulk_resolution_dialog.dart` is the surface.
+
+**It has two doors, and the second one is the correction that mattered.** A check
+opens it by itself when the pass turned up something to ask; and *Sort out mod
+tracking…* in the toolbar's library menu opens it on demand, from the records the
+last check left in session state — or by running that check first when there are
+none. Built only on the first door it was a modal that could be seen once and never
+again: cancelling it, or closing it by accident, meant waiting for the next check.
+Keeping the records (`modUpdateRecordsProvider`, never persisted, exactly like the
+verdicts beside them) is what makes reopening free.
+
+**Both doors must say the same thing**, which took fixing twice over. The update
+count is read library-wide (`libraryUpdateCountProvider`) rather than from whichever
+door opened the screen: the check's own tally is library-wide while the toolbar's
+count is view-scoped, so one sentence in one dialog would otherwise mean "in your
+library" or "on this character tab" depending on where the user was standing. And
+the "couldn't be checked" line is real on the menu door too — it was hardcoded to
+zero there, which dropped the accounting the whole screen is careful about, on the
+door the rebuild exists to provide. The two numbers come from different fields on
+purpose: the check door quotes what the pass failed to reach, the menu door quotes
+`BulkResolutionPlan.unreachable` — every tracked mod with no record in hand — and
+they differ where a batch *answered* a mod as `sourceGone`, since that answer
+arrives without a record.
+
+**There is deliberately no separate migration screen.** The check already fetches
+every tracked mod's record in one or two requests
+([`update-checks.md` §5](update-checks.md#5-checking-the-whole-library)), and that
+response carries exactly what resolution needs: the mod's name, its whole file list
+— current *and* archived, which `Mod/Multi` folds into one key — and the explicit
+upstream-gone flags. So this costs no request at all, and there is no screen left
+behind to go stale the day the last legacy mod is resolved.
+
+### What each row may be asked
+
+One row per mod, and a row can carry more than one question — a legacy mod
+backfilled from a pasted url has both an unconfirmed identity and no version, and
+both answers land in a **single** `updateOrigin` call so it cannot half-write itself.
+
+**Rows are grouped by the question they lead with, under a heading that says what
+the group is for and why it matters** — the same `DialogSection` shape the update
+flow's dialogs use. That is a correction, and the report behind it was that the
+screen took minutes to understand: ungrouped, a row asking *is this the right mod?*
+looked identical to one asking *which file?*, nothing said what the screen was for,
+and the type was the 11–13px the rest of the app had already moved away from.
+
+The grouping is by **leading** question rather than by question, and a mod appears
+once. A section per question with mods appearing in two of them reads better on
+paper and is worse in practice: on a legacy library nearly every row asks both, so
+every name would be listed twice. Order is identity → file → gone → back, main work
+first, so a library with one dead page and fifty to confirm does not open on the
+dead one.
+
+That is a **cascade, not four independent filters**, and the first version was not:
+a mod recorded as gone whose page has come back *and* whose identity nobody
+confirmed carries both questions, and it was listed under two headings with the
+same two checkboxes. Nothing was written twice — both copies key off one mod id —
+but "Save 1 mod" under two visible rows contradicts the invariant this layout is
+built on. It is a reachable state rather than a contrived one: writing
+`remote_missing` never touches `mod_id_confidence`, so a legacy mod's identity is
+still `inferred` when its page reappears.
+
+| Question | When | What ticking it writes |
+|---|---|---|
+| Confirm the identity | `mod_id_confidence` is weaker than `user` | `mod_id_confidence: user` |
+| Record the file | `version_confidence` is `unknown` and the page publishes files | `file_id`, `version`, `version_label`, at the tier below |
+| The page is gone | the record says private/trashed/withheld and the block does not | `remote_missing: true` |
+| The page is back | the block says gone and the record answered normally | `remote_missing: false` |
+
+A mod with **no `mod_id` gets no row at all**, and the screen says how many were
+excluded for that reason. This is the same rule the bulk "assume current" action
+follows and it is the oldest one here: identifying an untracked mod means
+fuzzy-matching a folder name (`Ellen final FIXED v2`, `bikini`, `mod`) against a
+search, and a wrong match rubber-stamped in bulk would later let an "update"
+overwrite a mod with an unrelated mod's files. That decision stays one-at-a-time and
+user-confirmed, in the per-mod dialog, forever.
+
+### Nothing is written until Apply
+
+This is a **correction** to the plan the screen was built from, which said to write
+the safe inferences immediately and offer an undo afterwards. Two things argue
+against it. The control that gets the user here says *check for updates* and nothing
+about rewriting sidecars; and the placement rule this codebase already follows
+([§6](#6-assume-current-in-bulk)) is that a bulk rewrite acts only on a set the user
+has seen. A pre-ticked row costs one glance and one press, where an undo costs
+noticing a summary nobody asked for.
+
+**Identity starts unticked; everything else starts ticked**, and the asymmetry is the
+point. A file the pass inferred, and a page the API itself reports as gone, are
+statements the app is making and can defend from the response in hand. An identity is
+the one thing only the user can settle — `mod_id` came from a free-form url somebody
+pasted — so pre-ticking it would turn the glance test into a rubber stamp. A
+*confirm all* shortcut sits at the head of that section for a user who has read it,
+and the intro at the top of the screen states the asymmetry rather than leaving it
+to be inferred from which boxes happen to be ticked.
+
+### What the pass may answer by itself
+
+Only two things arrive pre-ticked, and the difference between them is the confidence
+model in miniature:
+
+- a **banked `archive_md5`** matching a published checksum, recorded at `exact` — a
+  matching key, never an integrity claim; and
+- the mod publishing **exactly one file, uploaded at or before the install**,
+  recorded at **`inferred`**.
+
+`inferred` rather than `user` because the user consented to a plan; they did not look
+at a file list and recognise their download. It never drives an unattended update and
+it renders as a guess on the card, which is what makes offering it safe.
+
+The install-date test on the single-file case is easy to drop and is load-bearing: a
+mod whose only file was published *after* the install is one whose original file has
+been deleted outright, so the single thing on the page is provably **not** what the
+user has. Recording it would invent a version and then report the mod as up to date.
+
+A **folder-name match is not** in that list. It is a suggestion, it appears in the
+picker with its reason attached, and a suggestion may never be what a pre-ticked box
+writes — the same rule the per-mod dialog holds
+([§5](#what-it-is-allowed-to-write)). Anything else ambiguous gets an inline picker
+with nothing chosen; choosing from it is the user saying so, so *that* writes `user`.
+
+### What confirms an identity, and what must not
+
+The tick does. So does a file recorded at `user` or `exact`: picking a row off this
+mod's own file list is a stronger statement that it is your mod than ticking a box
+beside its name, and a banked checksum matching a file the page publishes is proof
+rather than testimony.
+
+**A file at `inferred` does not**, and an earlier version of this screen had that
+wrong. The pass pre-ticks its own single-file inference, so pressing Save on a row
+whose *"yes, this is the right mod page"* was deliberately left unticked raised
+`mod_id_confidence` to `user` anyway — laundering a guess parsed out of a pasted url
+into the tier that lets an update overwrite files, on the one screen where the user
+had visibly declined to confirm it. It is the "never-confirmed ≠ safe" rule
+([§1](#1-two-axes-confidence-and-provenance)) inverted. Both axes stay guesses
+instead, which caps that mod's verdict at *possibly outdated* — honest, and exactly
+what two separate confidences are for.
+
+A row with **nothing ticked writes nothing**: it is not in the map the dialog hands
+over, and the transform declines it even if it were.
+
+### Two things it re-checks, and one it does not
+
+Every answer is applied to the block **as freshly read from disk**, and each
+precondition is re-tested there rather than trusted from the plan — the plan is
+exactly what has gone stale in the case that matters. An inference abandons itself
+against a version that is no longer `unknown`, so a mod resolved exactly while the
+screen was open cannot be downgraded to a guess. A folder rebound to a different mod
+meanwhile abandons the whole row. But a **declined file does not abandon a confirmed
+identity**: they are independent answers about the same mod, and the version being
+settled elsewhere is no reason to throw away the user's "yes, that's the mod".
+
+A declined write is reported as a decline, never as a failure —
+`updateOrigin` answers one bare `false` for "unwritable folder" and "the transform
+said no", and blaming the user's filesystem for the guard working is the conflation
+[§6](#6-assume-current-in-bulk) already had to untangle once.
+
+### The comparison is name to name
+
+The plan asked for a thumbnail beside each remote name. There isn't one, and the
+reason is not cost: **`Mod/Multi` cannot supply the content-filter hint** —
+`_sInitialVisibility` is rejected there as an unknown property
+([`gamebanana-api.md`](gamebanana-api.md#bulk--modmulti)) — and the one available
+proxy is unreliable. apiv13 publishes a server-pixelated `_sFileNNNSfw` copy only for
+`warn`/`hide` mods, so its presence looks like a rating flag; measured across a real
+57-mod library it is absent on a mod whose profile reports `hide` (`541825`).
+Rendering an unblurred adult cover in the library tab to make a name comparison
+prettier is not a trade worth making, and the realistic failure this pass catches — a
+wrong paste — is one where the two names disagree completely. Every row links to the
+mod page for anyone who wants to look.
+
+### Cost, measured on a real library
+
+57 mods against the live `Mod/Multi` response for their 56 distinct ids, one request
+of 111 KB:
+
+- **As the library actually stands** (every mod resolved to `user` or `exact`): the
+  planner produces **0 rows** in 0.4 ms, so the screen never opens and the check
+  reports through its summary notification as before.
+- **The same library reduced to the shape a legacy one has** (identity `inferred`
+  from a url, no version, real proxied install dates): **57 rows** in 2.8 ms, of
+  which **24 arrive with their file already worked out** and 33 need a pick. 127
+  candidate files ranked in total.
+
+So the expensive part of resolving a library is the human, and the pass removes about
+two fifths of it for nothing.
+
+---
+
+## 8. The write path
 
 `ModMetadataRepository.updateOrigin(modName, update)` **amends** the block, where
 `recordOrigin` replaces it — so the archive hash, the ingest shape and the provenance
@@ -453,7 +667,7 @@ weaker confidence than anything decided here.
 
 ---
 
-## 8. Reading it back: the installed-mods index
+## 9. Reading it back: the installed-mods index
 
 `services/installed_mods_index.dart` is the read model built on top of all of the
 above: given an already-scanned `List<ModInfo>`, it answers "is this remote mod /

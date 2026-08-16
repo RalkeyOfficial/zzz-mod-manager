@@ -278,6 +278,58 @@ class OriginResolution {
     );
   }
 
+  /// Records a file the **bulk pass worked out**, rather than one the user
+  /// picked off a list.
+  ///
+  /// Separate from [pickFile] because it claims something weaker and is allowed
+  /// to do less. The user consented to a plan; they did not look at this mod's
+  /// file list and recognise their download, so the tier is
+  /// [OriginConfidence.inferred] — which never drives an unattended update and
+  /// renders as a guess on the card. Writing `user` here would launder a
+  /// one-line inference into the user's own testimony.
+  ///
+  /// Returns null — abandoning that mod's write — unless the block as freshly
+  /// read still names [modId] and still has **no** version at all. It never
+  /// displaces a better answer, and the guard is deliberately re-run here rather
+  /// than trusted from the plan: the plan is exactly what has gone stale in the
+  /// case that matters, so it would go on agreeing right up until the fresh read
+  /// disagrees. Without it, a mod resolved exactly while the batch ran would be
+  /// silently downgraded to a guess.
+  static ModOrigin? inferFile(
+    ModOrigin? existing, {
+    required int modId,
+    required GbFile file,
+  }) {
+    if (existing == null || existing.modId != modId) return null;
+    if (existing.versionConfidence != OriginConfidence.unknown) return null;
+    return existing.copyWith(
+      fileId: file.idRow,
+      version: file.version,
+      versionLabel: file.description,
+      versionConfidence: OriginConfidence.inferred,
+    );
+  }
+
+  /// Records that the mod page this folder is bound to is gone upstream.
+  ///
+  /// Read from the remote's own `_bIsPrivate` / `_bIsTrashed` / `_bIsWithheld`
+  /// rather than inferred from a status code, and stored so the app stops asking
+  /// questions about a page it cannot read. [gone] false is the same statement
+  /// in reverse — the page answered normally, so a flag left over from a
+  /// previous pass is now wrong and clearing it is what puts the mod back under
+  /// normal watch.
+  ///
+  /// Null when nothing would change, or when the folder has since been rebound.
+  static ModOrigin? setRemoteMissing(
+    ModOrigin? existing, {
+    required int modId,
+    required bool gone,
+  }) {
+    if (existing == null || existing.modId != modId) return null;
+    if (existing.remoteMissing == gone) return null;
+    return existing.copyWith(remoteMissing: gone);
+  }
+
   /// "I don't know which file — I got it around then."
   ///
   /// Records no file and no version, only a date to compare against, so the mod
