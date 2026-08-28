@@ -91,32 +91,40 @@ mistake.
 ## Architecture
 
 > Developer documentation lives in **`docs/`** — start at
-> [`docs/README.md`](docs/README.md), which indexes all six. Read the relevant one
-> before changing anything that persists or anything that talks to GameBanana:
+> [`docs/README.md`](docs/README.md), which indexes it. Read the relevant one
+> before changing anything it covers:
 >
 > | Doc | Owns |
 > |---|---|
-> | [`docs/metadata-schema.md`](docs/metadata-schema.md) | The **file format** of a mod's `metadata.json` sidecar — fields, save semantics, versioning, the migration hook |
-> | [`docs/origin-tracking.md`](docs/origin-tracking.md) | What we know about **where a mod came from** — the confidence model, the backfill, the resolve flow |
-> | [`docs/metadata-autofill.md`](docs/metadata-autofill.md) | What an install **copies from a mod page** — description, character, tags, gallery |
-> | [`docs/update-checks.md`](docs/update-checks.md) | Whether a mod **has a newer version** — the comparator, the confidence-aware verdicts, the bulk pass |
-> | [`docs/applying-updates.md`](docs/applying-updates.md) | How an update **is written over an installed mod** — the overwrite, patch detection, the snapshot and rollback |
-> | [`docs/configuration.md`](docs/configuration.md) | The app's **own settings** — `config.json`, the dual-storage pattern, adding a setting |
-> | [`docs/gamebanana-api.md`](docs/gamebanana-api.md) | GameBanana's **remote protocol** — which of the two APIs and why, browsing/filtering/sorting, every field, NSFW, downloads, the category tree |
+> | [`app-architecture.md`](docs/app-architecture.md) | The **layers of `lib/`** — service layer, platform abstraction, our GameBanana client |
+> | [`gamebanana-api.md`](docs/gamebanana-api.md) | GameBanana's **remote protocol** — which of the two APIs and why, browsing/filtering/sorting, every field, NSFW, downloads, the category tree |
+> | [`downloads.md`](docs/downloads.md) | **Fetching archives** — the isolate pump, resume, backpressure, the stall timeout |
+> | [`marketplace.md`](docs/marketplace.md) | The **native browser screens** |
+> | [`library-screen.md`](docs/library-screen.md) | The **Mods tab** — card, status slot, toolbar, bulk actions |
+> | [`notifications.md`](docs/notifications.md) | **What the app tells the user** — whether to speak, the two levels, the card |
+> | [`metadata-schema.md`](docs/metadata-schema.md) | The **file format** of a mod's `metadata.json` sidecar |
+> | [`origin-tracking.md`](docs/origin-tracking.md) | **Where a mod came from** — the confidence model, the backfill, the resolve flow |
+> | [`metadata-autofill.md`](docs/metadata-autofill.md) | What an install **copies from a mod page** |
+> | [`update-checks.md`](docs/update-checks.md) | Whether a mod **has a newer version** |
+> | [`applying-updates.md`](docs/applying-updates.md) | How an update **is written over an installed mod** |
+> | [`configuration.md`](docs/configuration.md) | The app's **own settings** |
 >
 > Read the API doc before writing any request; its surface is undocumented upstream,
 > so guessing costs more than looking.
 >
 > **Each doc owns one subject.** A fact that doesn't fit any of them wants a new
 > file, not the nearest existing one — the scope line at the top of each doc is
-> what decides. Notably: the remote API doc describes GameBanana's protocol, not
-> our client; our architecture lives in the `CLAUDE.md` files, and what has shipped
-> lives in `CHANGELOG.md` rather than in a status section inside a reference. New
-> developer docs go in `docs/`, not the repo root.
+> what decides. Notably: the remote API doc describes GameBanana's protocol, while
+> our client is `app-architecture.md`; and what has shipped lives in `CHANGELOG.md`
+> rather than in a status section inside a reference. New developer docs go in
+> `docs/`, not the repo root.
+>
+> **The `CLAUDE.md` files stay under 200 lines and carry only context, rules and
+> pointers.** They load on every session, so anything that needs *explaining* —
+> a measurement, a rejected alternative, the reasoning behind a rule — goes in a
+> doc, with the rule stated here in a line or two.
 
-The app's internal architecture — layered structure of `lib/`, the service layer
-and platform abstraction, the GameBanana and download layers, how mods work,
-localization, app-data paths — lives in
+The app's rules and its index into `docs/` live in
 [`mod_manager_flutter/CLAUDE.md`](mod_manager_flutter/CLAUDE.md).
 
 ### Non-negotiables

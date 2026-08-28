@@ -7,6 +7,11 @@ the root [`README.md`](../README.md).
 
 | Document | Covers |
 |---|---|
+| [`app-architecture.md`](app-architecture.md) | The **layers of `lib/`**: the service layer, the platform abstraction, our GameBanana client, and the one markdown style sheet |
+| [`marketplace.md`](marketplace.md) | The **native GameBanana browser**: the grid and detail screens, the `IndexedStack`, the card's one status slot, and what an install does on the way through |
+| [`library-screen.md`](library-screen.md) | The **Mods tab**: the card and its status slot, the two-row toolbar, the library menu's bulk actions, and the dialogs reached from a mod |
+| [`notifications.md`](notifications.md) | **What the app tells the user in passing**: whether to speak at all, the headline-and-subject rule, the card's leading slot, the stack and its clock |
+| [`downloads.md`](downloads.md) | **Fetching mod archives**: the spawned-isolate pump and the measurements behind it, resume policy, backpressure, and the stall timeout |
 | [`metadata-schema.md`](metadata-schema.md) | The **file format** of a mod's `metadata.json` sidecar: every field, save and round-trip semantics, schema versioning and the migration hook |
 | [`origin-tracking.md`](origin-tracking.md) | What the app **knows about where a mod came from**: the confidence model, every route that writes an `origin` block, the offline backfill, the resolve flow, and the installed-mods index |
 | [`metadata-autofill.md`](metadata-autofill.md) | What a marketplace install **copies from a mod page** into the new mod: description, character, tags and gallery |
@@ -19,7 +24,8 @@ the root [`README.md`](../README.md).
 
 | File | Covers |
 |---|---|
-| [`../CLAUDE.md`](../CLAUDE.md) | Architecture overview, layer structure, dev workflow (hot reload vs restart), the platform abstraction, and the version-bump checklist |
+| [`../CLAUDE.md`](../CLAUDE.md) | Repo-wide rules: language policy, dev workflow (hot reload vs restart), changelog conventions, the non-negotiables |
+| [`../mod_manager_flutter/CLAUDE.md`](../mod_manager_flutter/CLAUDE.md) | The app's rules and the index into this directory. **Rules and pointers only** — anything that needs explaining belongs in a doc here |
 | [`../CHANGELOG.md`](../CHANGELOG.md) | Release history (Keep a Changelog / SemVer) |
 | [`../BUILD_WINDOWS_GUIDE.md`](../BUILD_WINDOWS_GUIDE.md) | Windows build and packaging |
 
@@ -27,6 +33,13 @@ the root [`README.md`](../README.md).
 
 - **New developer docs go in this directory**, not the repo root. The root has
   accumulated a dozen one-off markdown files and is no longer navigable.
+- **The `CLAUDE.md` files carry context, rules and pointers — nothing else, and
+  under 200 lines each.** They are loaded into context on every session, so length
+  there is a running cost in a way length here is not. Anything that needs
+  *explaining* — a measurement, a rejected alternative, the reasoning behind a
+  rule — belongs in a doc in this directory, with `CLAUDE.md` stating the rule in
+  a line or two and linking to it. The app's `CLAUDE.md` reached 771 lines by
+  absorbing exactly that material.
 - **English only**, per the language rule in `CLAUDE.md`. Some older root-level
   documents are in Ukrainian (`*_UK.md`) and predate that rule.
 - **One subject per document, and the scope line at the top is what decides.** A fact
