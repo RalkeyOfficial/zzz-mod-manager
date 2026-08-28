@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_enums.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_image.dart';
@@ -265,6 +266,43 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Second'), findsOneWidget,
           reason: 'the rotation should pick back up after the cursor leaves');
+    });
+
+    testWidgets('holds while the mod detail view is open', (tester) async {
+      // The browse view stays mounted under the detail view, so the carousel is
+      // still ticking behind an overlay unless it is told to stop.
+      final container = ProviderContainer(
+        overrides: [
+          topSubsProvider.overrideWith((ref) async => three()),
+          contentFilterProvider.overrideWith((ref) => ContentFilterMode.show),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await pumpLocalized(
+        tester,
+        GbTopSubsCarousel(onOpenMod: (_) {}, autoAdvanceInterval: interval),
+        container: container,
+      );
+      expect(find.text('First'), findsOneWidget);
+
+      container.read(marketplaceOpenModProvider.notifier).state = 42;
+      await tester.pumpAndSettle();
+
+      await tester.pump(interval * 3);
+      await tester.pumpAndSettle();
+      expect(find.text('First'), findsOneWidget,
+          reason: 'the detail view must hold the current card');
+
+      // Back to the grid: the card they left is the card they return to, and the
+      // rotation picks up from there.
+      container.read(marketplaceOpenModProvider.notifier).state = null;
+      await tester.pumpAndSettle();
+      expect(find.text('First'), findsOneWidget);
+
+      await tester.pump(interval);
+      await tester.pumpAndSettle();
+      expect(find.text('Second'), findsOneWidget);
     });
 
     testWidgets('a manual step resets the dwell', (tester) async {

@@ -67,9 +67,18 @@ class _GbTopSubsCarouselState extends ConsumerState<GbTopSubsCarousel> {
   /// True while the pointer is over the carousel.
   bool _hovered = false;
 
+  /// True while the mod detail view is open over the grid.
+  bool _detailOpen = false;
+
+  /// Nothing rotates while anything is holding it. Two holds, one rule.
+  bool get _paused => _hovered || _detailOpen;
+
   @override
   void initState() {
     super.initState();
+    // `read`, not `watch`: `initState` cannot watch, and this is only the
+    // starting value — `build` listens for every change after it.
+    _detailOpen = ref.read(marketplaceOpenModProvider) != null;
     _restartAutoAdvance();
   }
 
@@ -90,15 +99,17 @@ class _GbTopSubsCarouselState extends ConsumerState<GbTopSubsCarousel> {
     super.dispose();
   }
 
-  /// (Re)starts the dwell timer from zero.
+  /// (Re)starts the dwell timer from zero, or leaves it stopped while paused.
   ///
   /// Called after **every** page change, whoever caused it — arrow, drag or the
   /// timer itself — so a card the user just navigated to gets a full interval
-  /// rather than the remainder of the previous one.
+  /// rather than the remainder of the previous one. Also the one way a hold is
+  /// applied or lifted, which is why it cancels before it checks: releasing one
+  /// hold while another is still on must not start the timer.
   void _restartAutoAdvance() {
     _autoAdvance?.cancel();
     final interval = widget.autoAdvanceInterval;
-    if (interval == null || _hovered) return;
+    if (interval == null || _paused) return;
     _autoAdvance = Timer.periodic(interval, (_) => _advanceAutomatically());
   }
 
@@ -123,12 +134,15 @@ class _GbTopSubsCarouselState extends ConsumerState<GbTopSubsCarousel> {
     if (_hovered == hovered) return;
     _hovered = hovered;
     // Paused rather than merely skipped on tick: the point is that the card under
-    // the cursor stays put for as long as the user is reading it.
-    if (hovered) {
-      _autoAdvance?.cancel();
-    } else {
-      _restartAutoAdvance();
-    }
+    // the cursor stays put for as long as the user is reading it. Leaving
+    // restarts the full interval rather than resuming the remainder.
+    _restartAutoAdvance();
+  }
+
+  void _setDetailOpen(bool open) {
+    if (_detailOpen == open) return;
+    _detailOpen = open;
+    _restartAutoAdvance();
   }
 
   void _step(int delta, int count) {
@@ -146,6 +160,13 @@ class _GbTopSubsCarouselState extends ConsumerState<GbTopSubsCarousel> {
 
   @override
   Widget build(BuildContext context) {
+    // The browse view stays mounted under the detail view, so without this the
+    // rotation carries on behind a full-screen overlay. Above the early returns
+    // because `ref.listen` has to run on every build.
+    ref.listen(marketplaceOpenModProvider, (_, next) {
+      _setDetailOpen(next != null);
+    });
+
     final subs = ref.watch(topSubsProvider);
     final filter = ref.watch(contentFilterProvider);
 
