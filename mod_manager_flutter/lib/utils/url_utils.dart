@@ -14,15 +14,17 @@ Future<void> launchExternalUrl(BuildContext context, String url) async {
   if (uri == null || !uri.hasScheme) {
     // A warning rather than an error: nothing broke, the link is simply not one
     // we can open — which is a fact about the mod's own metadata.
-    notify.warning(loc.t('mods.snackbar.invalid_url'));
+    //
+    // No portrait on either of these, though every caller holds a mod: what
+    // failed is a fact about a URL string, and a character's face would claim
+    // the message is about their mod.
+    notify.warning(loc.t('mods.snackbar.invalid_url_title'), body: url);
     return;
   }
   try {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   } catch (e) {
-    notify.error(
-      loc.t('mods.errors.generic', params: {'message': e.toString()}),
-    );
+    notify.error(loc.t('mods.errors.generic_title'), body: e.toString());
   }
 }
 

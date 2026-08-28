@@ -133,23 +133,19 @@ class _CharacterCardsListWidgetState
     final loc = context.loc;
     return DragTarget<ModInfo>(
       onAcceptWithDetails: (details) async {
-        // One notification for one action, held open for as long as the action
-        // takes. It is *pinned* while the write and the rescan run — the two
-        // used to be a one-second "saving…" bar immediately replaced by a
-        // "saved" bar, which meant the first was never read and the second
-        // claimed the work was finished before it was.
-        final saving = context.notify.pinned(loc.t('mods.dialog.saving_tag'));
-        await widget.onCharacterTagSaved(details.data.id, character.id);
-        saving.update(
-          severity: NotificationSeverity.success,
-          message: loc.t(
-            'mods.dialog.mod_assigned',
-            params: {
-              'mod': details.data.name,
-              'character': character.name,
-            },
-          ),
+        // Pinned, because the write and the rescan behind it take long enough
+        // that a timed notification would expire mid-work.
+        //
+        // The character is the drop *destination*, not the mod's current one —
+        // and it is passed in up front rather than read at the end, because the
+        // handle is deliberately used after an await with no `mounted` check.
+        final saving = context.notify.pinned(
+          loc.t('mods.dialog.saving_tag'),
+          body: details.data.name,
+          characterId: character.id,
         );
+        await widget.onCharacterTagSaved(details.data.id, character.id);
+        saving.dismiss();
       },
       builder: (context, candidateData, rejectedData) {
         final bool isHovering = candidateData.isNotEmpty;

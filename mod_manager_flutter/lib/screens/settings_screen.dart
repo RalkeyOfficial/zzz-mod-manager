@@ -87,12 +87,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
         saveModsPath: _saveModsPathController.text,
       );
       if (mounted) {
-        context.notify.success(loc.t('settings.save_success'));
+        context.notify.success(
+          loc.t('settings.save_success_title'),
+          body: loc.t('settings.save_success_body'),
+        );
       }
     } catch (e) {
       if (mounted) {
         context.notify.error(
-          loc.t('settings.errors.generic', params: {'message': '$e'}),
+          loc.t('settings.errors.generic_title'),
+          body: '$e',
         );
       }
     }
@@ -358,24 +362,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
 
     try {
       await ApiService.setLanguage(languageCode);
-      if (mounted) {
-        final currentLoc = context.loc;
-        final languageName = currentLoc.t('language_names.$languageCode');
-        context.notify.success(
-          currentLoc.t(
-            'settings.language.changed',
-            params: {'language': languageName},
-          ),
-          icon: Icons.translate_rounded,
-        );
-      }
     } catch (e) {
       if (mounted) {
         context.notify.error(
-          context.loc.t(
-            'settings.language.error',
-            params: {'message': '$e'},
-          ),
+          context.loc.t('settings.language.error_title'),
+          body: '$e',
         );
       }
     } finally {
@@ -563,7 +554,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
 
       if (autoTags.isEmpty) {
         if (mounted) {
-          context.notify.warning(loc.t('settings.auto_tag.no_mods'));
+          context.notify.warning(
+            loc.t('settings.auto_tag.no_mods_title'),
+            body: loc.t('settings.auto_tag.no_mods_body'),
+          );
         }
       } else {
         if (mounted) {
@@ -682,7 +676,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
     } catch (e) {
       if (mounted) {
         context.notify.error(
-          loc.t('settings.auto_tag.error', params: {'message': '$e'}),
+          loc.t('settings.auto_tag.error_title'),
+          body: '$e',
         );
       }
     } finally {
@@ -908,7 +903,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
     await modManagerService.installF10Dependencies();
     
     if (mounted) {
-      context.notify.info(context.loc.t('settings.dialogs.dependencies_message'));
+      context.notify.info(
+        context.loc.t('settings.dialogs.dependencies_title'),
+        body: context.loc.t('settings.dialogs.dependencies_message'),
+      );
     }
   }
 

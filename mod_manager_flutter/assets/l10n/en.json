@@ -20,26 +20,31 @@
     "download_cancel": "Cancel",
     "download_only": "Download only",
     "download_install": "Download & install",
-    "download_saved": "Archive saved to {path}",
-    "download_failed": "Download failed: {message}",
+    "download_saved_title": "Archive downloaded",
+    "download_failed_title": "Download failed",
     "downloading": "Downloading...",
     "download_progress_unknown": "Receiving data...",
-    "install_success": "Installed {mods}",
+    "install_success_title_single": "Mod installed",
+    "install_success_title_plural": "Mods installed",
     "install_success_default": "mod",
-    "install_missing_path": "Mods folder is not configured. Set it up in Settings.",
-    "install_unsupported": "Archive format is not supported. Please extract manually.",
-    "archive_kept": "The archive was kept at {path} so you can extract it manually.",
+    "install_missing_path_title": "Mods folder is not set",
+    "install_missing_path_body": "Choose it in Settings before installing.",
+    "extract_failed_title": "Couldn't extract the archive",
+    "extract_failed_body": "The file is still at {path}, so you can extract it by hand.",
     "download_cancel_button": "Cancel download",
-    "download_cancelled": "Download cancelled.",
-    "download_stalled": "The download stopped responding. You can resume it by downloading again.",
+    "download_stalled_title": "The download stopped responding",
+    "download_stalled_body": "You can resume it by downloading again.",
     "download_resumed": "Resuming an interrupted download.",
     "download_rate": "{rate}/s",
     "download_eta": "{time} left",
-    "install_duplicate": "Nothing imported. The mod may already exist.",
-    "install_empty": "Archive doesn't contain any mod folders.",
+    "install_duplicate_title": "Nothing imported",
+    "install_duplicate_body": "The mod may already be in your library.",
+    "install_empty_title": "Nothing to install",
+    "install_empty_body": "The archive doesn't contain any mod folders.",
     "install_7zip_missing": "7-Zip not found. Install 7-Zip or add it to PATH to extract RAR/7z files.",
     "install_extract_failed": "Failed to extract archive.",
-    "error_opening": "Error opening marketplace",
+    "error_opening_title": "Couldn't open your browser",
+    "error_opening_body": "Check that a default browser is set for your system.",
     "clear_search": "Clear search",
     "loading": "Loading…",
     "retry": "Try again",
@@ -121,33 +126,33 @@
       "load_title": "Failed to load",
       "load": "Error loading mods",
       "retry": "Try again",
-      "generic": "Error: {message}"
+      "generic_title": "Something went wrong"
     },
     "snackbar": {
-      "activated": "Activated",
-      "deactivated": "Deactivated",
-      "reload_success": "Mods reloaded (F10)",
-      "reload_failure": "Reload failed",
-      "favorites_added": "Added to favorites",
-      "favorites_removed": "Removed from favorites",
-      "list_refreshed": "Mod list refreshed",
-      "photo_updated": "Image updated",
-      "clipboard_empty": "Clipboard is empty",
-      "import_no_folders": "Please drop mod folders",
-      "import_no_ini": "No .ini found in {mods} — the mod may be incomplete.",
-      "origin_write_failed": "Couldn't save tracking data for {mods} — the folder may be read-only. They won't be checked for updates.",
-      "import_duplicates": "Mods already exist or an error occurred",
+      "reload_success_title": "Mods reloaded",
+      "reload_success_body": "F10 was sent to the running game.",
+      "reload_failure_title": "Couldn't reload mods",
+      "reload_failure_body": "The game may not be running, or F10 could not be sent.",
+      "clipboard_empty_title": "Clipboard is empty",
+      "clipboard_empty_body": "Copy an image first, then paste it here.",
+      "import_no_folders_title": "Nothing to import",
+      "import_no_folders_body": "Drop mod folders, or an archive that contains them.",
+      "import_no_ini_title": "The mod may be incomplete",
+      "import_no_ini_body": "No .ini file was found in {mods}.",
+      "import_patch_title": "This looks like a patch",
+      "import_patch_body": "{mods} needs the mod it patches installed in the same folder, or nothing will show up in the game.",
+      "origin_write_failed_title": "Update tracking not saved",
+      "origin_write_failed_body": "{mods} — the folder may be read-only, so they won't be checked for updates.",
+      "import_duplicates_title": "Nothing imported",
+      "import_duplicates_body": "These mods are already in your library.",
       "import_success_title": "Imported successfully!",
-      "import_error": "Import error: {message}",
-      "tag_saved": "Tag updated",
-      "mod_gone": "This mod no longer exists (it may have been renamed or deleted); your changes were not saved.",
-      "renamed": "Mod renamed",
-      "deleted": "Mod deleted",
-      "delete_failed": "Failed to delete mod",
-      "open_folder_failed": "Could not open the mod folder",
-      "invalid_url": "Invalid link",
-      "paste_error": "Paste error: {message}",
-      "import_patch": "{mods} looks like a patch, not a full mod. Install the mod it patches into the same folder, or nothing will show up in the game."
+      "import_error_title": "Import failed",
+      "mod_gone_title": "That mod is gone",
+      "mod_gone_body": "It was renamed or deleted, so your changes were not saved.",
+      "delete_failed_title": "Couldn't delete the mod",
+      "open_folder_failed_title": "Couldn't open the mod folder",
+      "invalid_url_title": "That link can't be opened",
+      "paste_error_title": "Paste failed"
     },
     "tooltips": {
       "auto_f10_on": "Auto F10 enabled",
@@ -184,6 +189,7 @@
       "rename_confirm": "Rename",
       "rename_invalid": "Name contains invalid characters",
       "rename_exists": "A mod with this name already exists",
+      "rename_failed_title": "Couldn't rename the mod",
       "delete_title": "Delete mod",
       "delete_message": "Permanently delete \"{mod}\"? This removes the mod folder and all its files from disk and cannot be undone.",
       "delete_confirm": "Delete",
@@ -220,8 +226,7 @@
       "import_ready": "Mods are ready to use!",
       "great": "Great!",
       "move_to_character": "Assign to {character}",
-      "saving_tag": "Saving tag...",
-      "mod_assigned": "Mod \"{mod}\" assigned to {character}"
+      "saving_tag": "Saving tag..."
     },
     "context_menu": {
       "details": "Details",
@@ -285,11 +290,11 @@
       "common_list": "VK_F1 to VK_F12, VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT\nCTRL, ALT, SHIFT, no_alt, no_shift, no_CTRL",
       "cancel": "Cancel",
       "save": "Save",
-      "updated": "Keybind updated: {name} → {key}",
-      "error_no_path": "Mods path not configured",
-      "error_no_dir": "Mod directory not found",
-      "error_no_ini": "No INI file found",
-      "error_save": "Error saving keybind: {message}"
+      "error_no_path_title": "Mods folder is not set",
+      "error_no_path_body": "Choose it in Settings before editing keybinds.",
+      "error_no_dir": "Couldn't find the mod's folder",
+      "error_no_ini": "No .ini file to edit",
+      "error_save": "Couldn't save the keybind"
     },
     "origin": {
       "version_unknown_tooltip": "Installed version unknown — click to set it",
@@ -326,7 +331,8 @@
       "resume_tracking": "Track this mod again",
       "save": "Save",
       "cancel": "Cancel",
-      "save_failed": "Couldn't save tracking data for \"{mod}\" — the folder may be read-only.",
+      "save_failed_title": "Update tracking not saved",
+      "save_failed": "\"{mod}\" — the folder may be read-only.",
       "tracked_heading": "Currently tracked",
       "tracked_id_downloaded": "You downloaded this mod from here.",
       "tracked_id_confirmed": "You confirmed this is the right mod page.",
@@ -354,11 +360,16 @@
       "cancel": "Cancel",
       "done_single": "1 mod now watches for files published after its install date.",
       "done_plural": "{count} mods now watch for files published after their install date.",
-      "done_partial": "{count} mods updated. Couldn't save tracking data for {failed} — those folders may be read-only.",
-      "already_done_single": "That mod was already sorted out — nothing to change.",
-      "already_done_plural": "Those {count} mods were already sorted out — nothing to change.",
-      "failed_single": "Couldn't save tracking data for 1 mod — its folder may be read-only.",
-      "failed_plural": "Couldn't save tracking data for {count} mods — those folders may be read-only."
+      "done_partial_title_single": "1 mod updated",
+      "done_partial_title_plural": "{count} mods updated",
+      "done_partial_body_single": "Couldn't save tracking data for 1 more — its folder may be read-only.",
+      "done_partial_body_plural": "Couldn't save tracking data for {count} more — those folders may be read-only.",
+      "nothing_to_change": "Nothing to change",
+      "already_done_single": "That mod was already sorted out.",
+      "already_done_plural": "Those {count} mods were already sorted out.",
+      "not_saved_title": "Tracking data not saved",
+      "failed_single": "One mod's folder may be read-only.",
+      "failed_plural": "{count} mods' folders may be read-only."
     },
     "bulk_resolve": {
       "title": "Sort out where these mods came from",
@@ -386,13 +397,19 @@
       "cancel": "Cancel",
       "apply_single": "Save 1 mod",
       "apply_plural": "Save {count} mods",
-      "done_single": "Tracking data saved for 1 mod.",
-      "done_plural": "Tracking data saved for {count} mods.",
-      "done_partial": "Tracking data saved for {count} mods. Couldn't save it for {failed} — those folders may be read-only.",
-      "already_done_single": "That mod was already sorted out — nothing to change.",
-      "already_done_plural": "Those {count} mods were already sorted out — nothing to change.",
-      "failed_single": "Couldn't save tracking data for 1 mod — its folder may be read-only.",
-      "failed_plural": "Couldn't save tracking data for {count} mods — those folders may be read-only."
+      "done_title_single": "Tracking data saved for 1 mod.",
+      "done_title_plural": "Tracking data saved for {count} mods.",
+      "done_body": "They'll be checked for updates from now on.",
+      "done_partial_title_single": "Tracking data saved for 1 mod",
+      "done_partial_title_plural": "Tracking data saved for {count} mods",
+      "done_partial_body_single": "Couldn't save it for 1 more — its folder may be read-only.",
+      "done_partial_body_plural": "Couldn't save it for {count} more — those folders may be read-only.",
+      "nothing_to_change": "Nothing to change",
+      "already_done_single": "That mod was already sorted out.",
+      "already_done_plural": "Those {count} mods were already sorted out.",
+      "not_saved_title": "Tracking data not saved",
+      "failed_single": "One mod's folder may be read-only.",
+      "failed_plural": "{count} mods' folders may be read-only."
     },
     "update": {
       "title": "Updates — {mod}",
@@ -427,12 +444,16 @@
       "bulk_found_single": "1 mod has an update",
       "bulk_found_plural": "{count} mods have updates",
       "bulk_none": "No updates found",
+      "bulk_none_partial": "No updates among the mods we could check",
+      "bulk_checked_single": "Checked 1 mod.",
+      "bulk_checked_plural": "Checked {count} mods.",
       "bulk_failed_single": "1 mod couldn't be checked",
       "bulk_failed_plural": "{count} mods couldn't be checked",
       "dismiss": "Ignore this update",
       "undismiss": "Stop ignoring it",
       "dismissed": "You're ignoring this update — the mark is gone from this mod's card. If the author publishes anything newer, it will show up again on its own.",
-      "dismiss_failed": "Couldn't save that for “{mod}” — the folder may be read-only.",
+      "dismiss_failed_title": "Couldn't ignore that update",
+      "dismiss_failed": "“{mod}” — the folder may be read-only.",
       "release": "Release",
       "notes_heading": "What the author says changed",
       "notes_untitled": "Update",
@@ -476,11 +497,15 @@
       "keybinds_explainer": "The new version shipped its own .ini, which replaced the keys you had. Nothing was carried over — putting a key back automatically risks writing a broken .ini — so set them again with “Edit keybinds” in the mod's right-click menu, or restore the saved copy to get the old file back.",
       "keybind_gone": "gone",
       "rollback_hint": "Not what you expected? “Restore a previous version…” in this mod's right-click menu puts it back exactly as it was.",
+      "mod_missing_title": "The mod is no longer there",
       "mod_missing": "“{mod}” is no longer in your mods folder.",
+      "snapshot_failed_title": "Nothing was changed",
       "snapshot_failed": "Couldn't save a copy of “{mod}” first, so nothing was changed. Check that there's free space and that the app data folder is writable.",
+      "copy_failed_title": "The update failed part-way",
       "copy_failed": "Updating “{mod}” failed part-way: {message}. Restore the saved copy from its right-click menu, and close the game first if it's running.",
+      "layout_failed_title": "Couldn't place the new files",
       "layout_failed": "Couldn't work out where the new files go for “{mod}”.",
-      "failed": "The update failed: {message}"
+      "failed_title": "The update failed"
     },
     "backups": {
       "title": "Previous versions of {mod}",
@@ -492,21 +517,25 @@
       "reason_restore": "before a restore",
       "confirm_title": "Restore this version?",
       "confirm_body": "“{mod}” will be put back to how it was on {date}. A copy of it as it is right now is saved first, so you can undo this.",
-      "restored": "“{mod}” restored.",
-      "restore_failed": "Couldn't restore “{mod}”."
+      "restored_title": "Previous version restored",
+      "restore_failed_title": "Couldn't restore that version"
     }
   },
   "clipboard": {
-    "empty": "Clipboard is empty",
-    "no_paths": "No folder paths found",
-    "no_valid": "No valid mod folders found"
+    "empty_title": "Clipboard is empty",
+    "empty_body": "Copy a mod folder, then paste it here.",
+    "no_paths_title": "No folder paths found",
+    "no_paths_body": "What you pasted doesn't look like a file or folder path.",
+    "no_valid_title": "No valid mod folders found",
+    "no_valid_body": "None of the pasted paths point at a folder."
   },
   "settings": {
     "title": "Settings",
     "loading": "Loading settings...",
-    "save_success": "Configuration saved",
+    "save_success_title": "Settings saved",
+    "save_success_body": "Your folder paths have been updated.",
     "errors": {
-      "generic": "Error: {message}"
+      "generic_title": "Couldn't save your settings"
     },
     "sections": {
       "paths": "Mod directories",
@@ -527,8 +556,7 @@
       "label": "App language",
       "english": "English",
       "ukrainian": "Ukrainian",
-      "changed": "Language changed to {language}",
-      "error": "Failed to change language: {message}"
+      "error_title": "Couldn't change the language"
     },
     "actions": {
       "save_configuration": "Save configuration"
@@ -549,7 +577,8 @@
       "run_action": "Detect tags for all mods",
       "dialog_title": "Detecting tags...",
       "dialog_message": "Analyzing mod names",
-      "no_mods": "No mods found for auto tagging",
+      "no_mods_title": "Nothing to tag",
+      "no_mods_body": "Every mod already has a character, or your library is empty.",
       "success_title": "Tags detected!",
       "success_message": "Mods grouped by characters!",
       "ok": "Great!",
@@ -558,7 +587,7 @@
       "tag_single": "tag",
       "tag_plural": "tags",
       "list_title": "Detected tags:",
-      "error": "Auto-tagging error: {message}"
+      "error_title": "Auto-tagging failed"
     },
     "auto_f10": {
       "title": "Automatic mod reload",
@@ -617,7 +646,8 @@
     "unknown": "Unknown"
   },
   "notifications": {
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "character_portrait": "Portrait of {name}"
   },
   "welcome": {
     "title": "Welcome to ZZZ Mod Manager!",
@@ -635,7 +665,8 @@
       "save_mods_label": "Links folder",
       "save_mods_hint": "Path where symlinks will be created",
       "browse": "Browse",
-      "validation_error": "Please specify both directories"
+      "validation_error_title": "Both folders are required",
+      "validation_error_body": "Choose where your mods live and where the links go."
     },
     "complete": {
       "title": "All set!",

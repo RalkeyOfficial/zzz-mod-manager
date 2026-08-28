@@ -23,15 +23,20 @@ Future<void> showDeleteModDialog(
           final ok = await ApiService.deleteMod(mod.id);
           if (!context.mounted) return;
           if (ok) {
-            notify.success(loc.t('mods.snackbar.deleted'));
             onDeleted();
           } else {
-            notify.error(loc.t('mods.snackbar.delete_failed'));
+            notify.error(
+              loc.t('mods.snackbar.delete_failed_title'),
+              body: mod.name,
+              characterId: mod.characterId,
+            );
           }
         } catch (e) {
           if (!context.mounted) return;
           notify.error(
-            loc.t('mods.errors.generic', params: {'message': e.toString()}),
+            loc.t('mods.errors.generic_title'),
+            body: e.toString(),
+            characterId: mod.characterId,
           );
         }
       }

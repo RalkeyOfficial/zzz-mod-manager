@@ -20,6 +20,7 @@ import '../services/platform_service_factory.dart';
 import '../utils/marketplace_providers.dart';
 import '../utils/notifications.dart';
 import '../utils/state_providers.dart';
+import 'components/extract_failure_message.dart';
 import 'components/install_result_feedback.dart';
 import 'components/marketplace/gb_browse_view.dart';
 import 'components/marketplace/gb_detail_view.dart';
@@ -142,7 +143,10 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
     final opened =
         await PlatformServiceFactory.getInstance().openUrlInBrowser(url);
     if (!opened && mounted) {
-      context.notify.error(loc.t('marketplace.error_opening'));
+      context.notify.error(
+        loc.t('marketplace.error_opening_title'),
+        body: loc.t('marketplace.error_opening_body'),
+      );
     }
   }
 
@@ -169,14 +173,25 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
     // lookup, so it stays valid even if this screen is disposed mid-install.
     final notify = context.notify;
 
+    // The mod page's own filing, so the notifications below can lead with the
+    // character rather than a generic glyph. Pure and offline.
+    final characterId = RemoteModMetadata.fromMod(mod).characterId;
+
     // Null means cancelled or failed, and a notification has already said which.
-    final result = await downloadFileWithProgress(context, ref, file);
+    final result = await downloadFileWithProgress(
+      context,
+      ref,
+      file,
+      characterId: characterId,
+      subject: mod.name ?? file.file ?? loc.t('marketplace.unknown_file'),
+    );
     if (result == null || !mounted) return;
 
     if (choice == _DownloadChoice.downloadOnly) {
       notify.success(
-        loc.t('marketplace.download_saved', params: {'path': result.file.path}),
-        icon: Icons.save_alt_rounded,
+        loc.t('marketplace.download_saved_title'),
+        body: result.file.path,
+        characterId: characterId,
       );
       return;
     }
@@ -271,7 +286,10 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       // Inside the try, deliberately: as an early return above it, this skipped
       // the cleanup in `finally` entirely and leaked the archive.
       if (modsPath.isEmpty) {
-        return InstallResult.error(loc.t('marketplace.install_missing_path'));
+        return InstallResult.error(
+          loc.t('marketplace.install_missing_path_title'),
+          loc.t('marketplace.install_missing_path_body'),
+        );
       }
 
       final extractionResult = await ArchiveService.extractArchive(
@@ -282,13 +300,9 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       if (!extractionResult.success) {
         // Keep the archive: the user can still extract it by hand, and telling
         // them where it is turns a dead end into a workaround.
-        final reason =
-            extractionResult.error ?? loc.t('marketplace.install_unsupported');
-        final kept = loc.t(
-          'marketplace.archive_kept',
-          params: {'path': archiveFile.path},
-        );
-        return InstallResult.error('$reason\n$kept');
+        final lines =
+            extractFailureMessage(loc, archivePath: archiveFile.path);
+        return InstallResult.error(lines.title, lines.body);
       }
       archiveConsumed = true;
 
@@ -297,7 +311,10 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       );
 
       if (directoriesToImport.isEmpty) {
-        return InstallResult.warning(loc.t('marketplace.install_empty'));
+        return InstallResult.warning(
+          loc.t('marketplace.install_empty_title'),
+          loc.t('marketplace.install_empty_body'),
+        );
       }
 
       // The character is often in the archive name rather than the inner folder
@@ -376,7 +393,10 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
             );
 
       if (importedMods.isEmpty) {
-        return InstallResult.warning(loc.t('marketplace.install_duplicate'));
+        return InstallResult.warning(
+          loc.t('marketplace.install_duplicate_title'),
+          loc.t('marketplace.install_duplicate_body'),
+        );
       }
 
       // The mod page we downloaded from knows everything a fresh install
@@ -423,29 +443,45 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       // installed and its metadata is filled; the only thing lost is the sentence
       // describing it, and the caller is unmounted too so it would show nothing
       // either way.
-      if (!mounted) return InstallResult.success(importedMods);
+      if (!mounted) {
+        return InstallResult.success(
+          importedMods,
+          characterId: remote.characterId,
+        );
+      }
 
       // **Only what the user has to act on.** Everything that merely describes
       // what the install did — the character it was filed under, the fields it
       // copied off the mod page — is gone: it is either visible on the card or
       // not worth a sentence. What is left is three things the user cannot find
-      // out any other way, each of which changes what they do next. They travel
-      // as a *warning* beside the success rather than as more body text under
-      // it, so a mod that arrived broken doesn't read like a mod that arrived.
-      final warnings = <String>[
+      // out any other way, each of which changes what they do next. Each is its
+      // own warning beside the success rather than more body text under it, so
+      // a mod that arrived broken doesn't read like a mod that arrived.
+      final warnings = <NotificationLines>[
         if (noIni.isNotEmpty)
-          loc.t('mods.snackbar.import_no_ini', params: {'mods': noIni.join(', ')}),
+          NotificationLines(
+            loc.t('mods.snackbar.import_no_ini_title'),
+            loc.t('mods.snackbar.import_no_ini_body',
+                params: {'mods': noIni.join(', ')}),
+          ),
         if (patches.isNotEmpty)
-          loc.t('mods.snackbar.import_patch',
-              params: {'mods': patches.join(', ')}),
+          NotificationLines(
+            loc.t('mods.snackbar.import_patch_title'),
+            loc.t('mods.snackbar.import_patch_body',
+                params: {'mods': patches.join(', ')}),
+          ),
         if (originFailures.isNotEmpty)
-          loc.t('mods.snackbar.origin_write_failed',
-              params: {'mods': originFailures.join(', ')}),
+          NotificationLines(
+            loc.t('mods.snackbar.origin_write_failed_title'),
+            loc.t('mods.snackbar.origin_write_failed_body',
+                params: {'mods': originFailures.join(', ')}),
+          ),
       ];
 
       return InstallResult.success(
         importedMods,
-        message: warnings.isEmpty ? null : warnings.join('\n'),
+        warnings: warnings,
+        characterId: remote.characterId,
       );
     } finally {
       if (archiveConsumed && await archiveFile.exists()) {

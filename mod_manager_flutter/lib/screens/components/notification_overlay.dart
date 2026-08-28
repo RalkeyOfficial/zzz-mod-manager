@@ -4,9 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../utils/categories.dart';
 // `AppNotification` and `NotificationSeverity` come through here — the queue
 // re-exports its own model, so nothing has to import both.
 import '../../utils/notifications.dart';
+import '../../utils/zzz_characters.dart';
+import 'character_avatar.dart';
 import 'mod_status_slot.dart';
 
 /// Where notifications are drawn: a stack of small cards in the bottom-right
@@ -148,6 +151,98 @@ IconData notificationIcon(NotificationSeverity severity) {
   };
 }
 
+/// The card's leading slot: whose mod this is about, or what kind of message it
+/// is when there is no mod.
+///
+/// **Always [_diameter] wide, whichever it renders.** The cards share a stack,
+/// and a slot that changed width would give the column a ragged left edge — the
+/// text of a portrait card starting 22px right of the card above it. One
+/// footprint, two occupants, which is the rule `ModStatusSlot` already follows.
+///
+/// [_diameter] is 40 for an arithmetic reason worth keeping: two lines of card
+/// text — a `titleSmall` headline (20px line box) plus 2 plus one `bodyMedium`
+/// line at this card's `height: 1.35` (19) — come to 41px. 40 is therefore the
+/// largest slot that never makes a card taller than its own text already did.
+/// A larger avatar would grow every two-line card in the app.
+///
+/// **Considered and rejected: a severity badge on the portrait's corner.** It
+/// sits over 60 different pieces of artwork, so it needs an opaque fill plus a
+/// card-coloured cut-out ring to stay readable — three new painted elements. At
+/// 40px outer, a badge legible at all is ≥14px, eating the chin or shoulder of
+/// every portrait. And it duplicates [notificationIcon] into a second renderer
+/// at a second size, which is the drift `notificationColor` exists to prevent.
+class _NotificationLeading extends StatelessWidget {
+  const _NotificationLeading({
+    required this.severity,
+    required this.icon,
+    required this.characterId,
+    required this.accent,
+  });
+
+  final NotificationSeverity severity;
+  final IconData? icon;
+  final String? characterId;
+
+  /// `notificationColor` for this severity, resolved once by the card and
+  /// passed down — so the stripe, the border and this slot are one derivation
+  /// rather than three that can drift.
+  final Color accent;
+
+  static const double _diameter = 40;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final portrait = CharacterAvatar.assetPathFor(characterId);
+
+    if (icon == null && portrait != null) {
+      return Semantics(
+        image: true,
+        label: context.loc.t(
+          'notifications.character_portrait',
+          params: {'name': getCharacterDisplayName(characterId!)},
+        ),
+        child: CharacterAvatar(
+          characterId: characterId,
+          size: _diameter,
+          // The ring *is* the severity, and it appears exactly where the
+          // severity icon stopped appearing — the same `notificationColor` the
+          // stripe uses, read a third time rather than derived a second.
+          ring: BorderSide(color: accent, width: 2),
+          // Card surface between ring and artwork, so the ring's contrast is
+          // against one known colour per theme rather than against whichever
+          // pixels this character's silhouette has at the clip edge.
+          ringGap: 2,
+          background: scheme.surfaceContainerHighest,
+        ),
+      );
+    }
+
+    // A mod filed under a built-in category has no portrait but does have a
+    // subject, so the slot still says what the message is about.
+    final category =
+        characterId == null ? null : builtInCategoryById(characterId!);
+
+    return Container(
+      width: _diameter,
+      height: _diameter,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        // A tint of the one severity colour, not a second palette entry. No
+        // ring here: the disc and the glyph already carry the accent, and a
+        // third statement of one fact inside 40px is noise.
+        color: accent.withValues(alpha: 0.14),
+      ),
+      child: Icon(
+        icon ?? category?.icon ?? notificationIcon(severity),
+        size: 20,
+        color: accent,
+      ),
+    );
+  }
+}
+
 /// One card, and the only thing in this subsystem that owns a clock.
 ///
 /// The auto-dismiss timer is here rather than in `NotificationCenter` because it
@@ -231,7 +326,8 @@ class _NotificationCardState extends State<_NotificationCard>
     // pinned notification: it sits there with no timer while the work runs, and
     // the update that reports the result is what gives it an ending.
     if (oldWidget.notification.duration != widget.notification.duration ||
-        oldWidget.notification.message != widget.notification.message) {
+        oldWidget.notification.title != widget.notification.title ||
+        oldWidget.notification.body != widget.notification.body) {
       _restartTimer();
     }
   }
@@ -294,7 +390,6 @@ class _NotificationCardState extends State<_NotificationCard>
     final scheme = theme.colorScheme;
     final notification = widget.notification;
     final accent = notificationColor(scheme, notification.severity);
-    final title = notification.title;
 
     return Material(
       color: Colors.transparent,
@@ -329,11 +424,11 @@ class _NotificationCardState extends State<_NotificationCard>
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(
-                        notification.icon ??
-                            notificationIcon(notification.severity),
-                        size: 18,
-                        color: accent,
+                      _NotificationLeading(
+                        severity: notification.severity,
+                        icon: notification.icon,
+                        characterId: notification.characterId,
+                        accent: accent,
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -341,25 +436,22 @@ class _NotificationCardState extends State<_NotificationCard>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (title != null)
-                              Text(
-                                title,
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            if (title != null) const SizedBox(height: 2),
                             Text(
-                              notification.message,
-                              // Long enough for the install summary, which is
-                              // several lines by design; past that the message
+                              notification.title,
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              notification.body,
+                              // Long enough for the few messages that carry a
+                              // reason as well as a subject; past that it
                               // belongs in a dialog rather than here.
                               maxLines: 8,
                               overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.bodyMedium?.copyWith(
-                                color: title == null
-                                    ? scheme.onSurface
-                                    : scheme.onSurfaceVariant,
+                                color: scheme.onSurfaceVariant,
                                 height: 1.35,
                               ),
                             ),

@@ -32,8 +32,17 @@ import 'download_progress_dialog.dart';
 Future<DownloadResult?> downloadFileWithProgress(
   BuildContext context,
   WidgetRef ref,
-  GbFile file,
-) async {
+  GbFile file, {
+  /// Whose portrait leads any notification this raises. A [GbFile] knows
+  /// neither the character nor the mod's name, and both callers do — so they
+  /// arrive as parameters rather than being looked up here, which would be a
+  /// read after the awaits below.
+  String? characterId,
+
+  /// What the download is *of*, for the body line. `file.file` is a filename,
+  /// not a mod name.
+  String? subject,
+}) async {
   final loc = context.loc;
   // Read before the first await and kept: the dialog this runs behind can be
   // gone by the time there is something to report, and this object does not
@@ -41,7 +50,9 @@ Future<DownloadResult?> downloadFileWithProgress(
   final notify = context.notify;
   final navigator = Navigator.of(context, rootNavigator: true);
 
-  void report(String message) => notify.error(message);
+  final body = subject ?? file.file ?? loc.t('marketplace.unknown_file');
+  void report(String title) =>
+      notify.error(title, body: body, characterId: characterId);
 
   final raw = file.downloadUrl ?? 'https://gamebanana.com/dl/${file.idRow}';
   final url = Uri.tryParse(raw);
@@ -51,7 +62,7 @@ Future<DownloadResult?> downloadFileWithProgress(
     // Update produced nothing at all. Unlikely (the fallback is a literal), but
     // a silent failure in the one helper that exists so the error handling is
     // not written twice is the worst place for one.
-    report(loc.t('marketplace.download_failed', params: {'message': raw}));
+    report(loc.t('marketplace.download_failed_title'));
     return null;
   }
 
@@ -96,20 +107,20 @@ Future<DownloadResult?> downloadFileWithProgress(
     return result;
   } on DownloadCancelledException {
     close();
-    // Info, not an error: the user pressed cancel, and telling them off in red
-    // for doing what they asked for is exactly the noise this rework removed.
-    notify.info(
-      loc.t('marketplace.download_cancelled'),
-      icon: Icons.cancel_outlined,
-    );
     return null;
   } catch (e) {
     close();
-    report(
-      e is DownloadStalledException
-          ? loc.t('marketplace.download_stalled')
-          : loc.t('marketplace.download_failed', params: {'message': '$e'}),
-    );
+    if (e is DownloadStalledException) {
+      // The one recoverable failure, so its body is the way out rather than the
+      // name of what stalled.
+      notify.error(
+        loc.t('marketplace.download_stalled_title'),
+        body: loc.t('marketplace.download_stalled_body'),
+        characterId: characterId,
+      );
+    } else {
+      report(loc.t('marketplace.download_failed_title'));
+    }
     return null;
   } finally {
     close();

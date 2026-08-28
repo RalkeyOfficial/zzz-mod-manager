@@ -265,7 +265,10 @@ Future<void> _saveKeybindChange(
     final modsPath = modManagerService.modsPath;
 
     if (modsPath == null) {
-      notify.error(loc.t('mods.keybinds.error_no_path'));
+      notify.error(
+        loc.t('mods.keybinds.error_no_path_title'),
+        body: loc.t('mods.keybinds.error_no_path_body'),
+      );
       return;
     }
 
@@ -274,7 +277,11 @@ Future<void> _saveKeybindChange(
     final modDir = Directory(modPath);
 
     if (!await modDir.exists()) {
-      notify.error(loc.t('mods.keybinds.error_no_dir'));
+      notify.error(
+        loc.t('mods.keybinds.error_no_dir'),
+        body: mod.name,
+        characterId: mod.characterId,
+      );
       return;
     }
 
@@ -289,7 +296,11 @@ Future<void> _saveKeybindChange(
         .toList();
 
     if (iniFiles.isEmpty) {
-      notify.error(loc.t('mods.keybinds.error_no_ini'));
+      notify.error(
+        loc.t('mods.keybinds.error_no_ini'),
+        body: mod.name,
+        characterId: mod.characterId,
+      );
       return;
     }
 
@@ -328,20 +339,15 @@ Future<void> _saveKeybindChange(
         // The .ini changed — drop this mod's cached keybinds so the reload
         // re-parses it.
         await ApiService.invalidateKeybinds(mod.id);
-        notify.success(
-          loc.t(
-            'mods.keybinds.updated',
-            params: {'name': keybind.displayName, 'key': newKey},
-          ),
-          icon: Icons.keyboard_alt_outlined,
-        );
         break;
       }
     }
   } catch (e) {
     print('Error saving keybind: $e');
     notify.error(
-      loc.t('mods.keybinds.error_save', params: {'message': e.toString()}),
+      loc.t('mods.keybinds.error_save'),
+      body: e.toString(),
+      characterId: mod.characterId,
     );
   }
 }

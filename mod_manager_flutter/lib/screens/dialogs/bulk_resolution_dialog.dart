@@ -139,28 +139,32 @@ void _showOutcome(BuildContext context, BulkResolutionOutcome outcome) {
         params: {'count': '$count'},
       );
 
-  final (message, severity) = switch (outcome) {
+  // Each half is pluralised on the count it is actually about: the title on
+  // what was written, the body on what failed.
+  final (title, body, severity) = switch (outcome) {
     BulkResolutionOutcome(written: 0, failed: 0) => (
+        loc.t('mods.bulk_resolve.nothing_to_change'),
         plural('mods.bulk_resolve.already_done', outcome.skipped),
         NotificationSeverity.info,
       ),
     BulkResolutionOutcome(failed: 0) => (
-        plural('mods.bulk_resolve.done', outcome.written),
+        plural('mods.bulk_resolve.done_title', outcome.written),
+        loc.t('mods.bulk_resolve.done_body'),
         NotificationSeverity.success,
       ),
     BulkResolutionOutcome(written: 0) => (
+        loc.t('mods.bulk_resolve.not_saved_title'),
         plural('mods.bulk_resolve.failed', outcome.failed),
         NotificationSeverity.warning,
       ),
     _ => (
-        loc.t('mods.bulk_resolve.done_partial', params: {
-          'count': '${outcome.written}',
-          'failed': '${outcome.failed}',
-        }),
+        plural('mods.bulk_resolve.done_partial_title', outcome.written),
+        plural('mods.bulk_resolve.done_partial_body', outcome.failed),
         NotificationSeverity.warning,
       ),
   };
-  context.notify.show(message, severity: severity);
+  // No portrait: this is about a count across the library, not about one mod.
+  context.notify.show(title, body: body, severity: severity);
 }
 
 class BulkResolutionDialog extends StatefulWidget {

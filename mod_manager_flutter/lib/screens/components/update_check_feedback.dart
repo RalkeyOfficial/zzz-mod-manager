@@ -27,25 +27,41 @@ void showUpdateCheckOutcome(
       );
 
   final found = outcome.updatesFound;
-  // Composed from the same two pluralised halves rather than a third string
-  // with two counts interpolated into it: `{count} updates found — {failed}
-  // mods couldn't be checked` reads "1 updates found — 1 mods" the moment
-  // either lands on one, and this app pluralises every other counted string.
-  final foundText = found > 0
-      ? plural('mods.update.bulk_found', found)
-      : loc.t('mods.update.bulk_none');
-  final (message, severity) = switch (outcome) {
-    BulkUpdateCheckOutcome(failed: final f) when f.isNotEmpty => (
-        '$foundText — ${plural('mods.update.bulk_failed', f.length)}',
-        NotificationSeverity.warning,
-      ),
-    // Finding updates is not a *problem*, so it stays neutral; the badges on the
-    // cards are what the user acts on.
-    _ => (foundText, NotificationSeverity.info),
-  };
+  final incomplete = outcome.failed.isNotEmpty;
 
+  // Each half is pluralised on its own count rather than composed into a third
+  // string with two counts in it: `{count} updates found — {failed} mods
+  // couldn't be checked` reads "1 updates found — 1 mods" the moment either
+  // lands on one, and this app pluralises every other counted string.
+  //
+  // **"No updates found" is reserved for a check that finished.** When some
+  // mods could not be reached, finding nothing among the rest is a different
+  // statement, and the headline has to make that difference itself — a
+  // reassuring title with the caveat demoted to the body is the false
+  // reassurance this whole three-way split exists to prevent.
+  final title = switch ((found, incomplete)) {
+    (> 0, _) => plural('mods.update.bulk_found', found),
+    (_, true) => loc.t('mods.update.bulk_none_partial'),
+    _ => loc.t('mods.update.bulk_none'),
+  };
+  final (body, severity) = incomplete
+      ? (
+          plural('mods.update.bulk_failed', outcome.failed.length),
+          NotificationSeverity.warning,
+        )
+      // Finding updates is not a *problem*, so it stays neutral; the badges on
+      // the cards are what the user acts on. How many mods were looked at is
+      // the half the badges cannot show, which is what the body is for.
+      : (
+          plural('mods.update.bulk_checked', outcome.checks.length),
+          NotificationSeverity.info,
+        );
+
+  // No portrait: this is about a count across the whole library, and one
+  // arbitrary face would claim the message is about that mod.
   context.notify.show(
-    message,
+    title,
+    body: body,
     severity: severity,
     icon: found > 0 ? Icons.system_update_alt_rounded : null,
   );

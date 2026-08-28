@@ -288,7 +288,10 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     });
     if (!ok) {
       context.notify.warning(
-        loc.t('mods.update.dismiss_failed', params: {'mod': widget.mod.name}),
+        loc.t('mods.update.dismiss_failed_title'),
+        body: loc.t('mods.update.dismiss_failed',
+            params: {'mod': widget.mod.name}),
+        characterId: widget.mod.characterId,
       );
       return;
     }

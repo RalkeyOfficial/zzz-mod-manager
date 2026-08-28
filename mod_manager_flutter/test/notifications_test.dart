@@ -25,14 +25,14 @@ void main() {
 
   test('newest goes last, which is what puts it at the bottom of the stack',
       () {
-    center().info('first');
-    center().info('second');
-    expect(state().map((n) => n.message), ['first', 'second']);
+    center().info('first', body: 'a');
+    center().info('second', body: 'b');
+    expect(state().map((n) => n.title), ['first', 'second']);
   });
 
   test('each severity gets its own default duration', () {
-    center().success('a');
-    center().error('b');
+    center().success('a', body: 'x');
+    center().error('b', body: 'y');
     expect(state().first.duration,
         kNotificationDurations[NotificationSeverity.success]);
     expect(state().last.duration,
@@ -40,8 +40,21 @@ void main() {
   });
 
   test('an explicit duration wins over the default', () {
-    center().info('a', duration: const Duration(seconds: 30));
+    center().info('a', body: 'x', duration: const Duration(seconds: 30));
     expect(state().single.duration, const Duration(seconds: 30));
+  });
+
+  test('an icon and a character both claim the leading slot, so both is a bug',
+      () {
+    // Caught in development rather than resolved silently — the icon would win
+    // and the portrait would vanish with nothing to explain it.
+    expect(
+      () => center().success('Saved',
+          body: 'Ellen Swimsuit',
+          characterId: 'ellen',
+          icon: Icons.save_alt_rounded),
+      throwsAssertionError,
+    );
   });
 
   group('the cap', () {
@@ -49,60 +62,76 @@ void main() {
       // A burst is nearly always one action reporting several things, and the
       // last line is the one that concludes it.
       for (var i = 1; i <= kMaxVisibleNotifications + 2; i++) {
-        center().info('message $i');
+        center().info('message $i', body: 'body $i');
       }
       expect(state(), hasLength(kMaxVisibleNotifications));
-      expect(state().first.message, 'message 3');
-      expect(state().last.message, 'message ${kMaxVisibleNotifications + 2}');
+      expect(state().first.title, 'message 3');
+      expect(state().last.title, 'message ${kMaxVisibleNotifications + 2}');
     });
   });
 
   group('re-raising the same message', () {
     test('moves it to the bottom instead of stacking a copy', () {
-      // Toggling a mod twice, or eight files failing the same way, would
-      // otherwise fill the cap with one repeated sentence.
-      center().success('Activated');
-      center().info('something else');
-      center().success('Activated');
+      // Eight files failing the same way would otherwise fill the cap with one
+      // repeated sentence.
+      center().success('Saved', body: 'Ellen Swimsuit');
+      center().info('something else', body: 'x');
+      center().success('Saved', body: 'Ellen Swimsuit');
 
-      expect(state().map((n) => n.message), ['something else', 'Activated']);
+      expect(state().map((n) => n.title), ['something else', 'Saved']);
     });
 
     test('gets a new id, so its card re-enters and its clock restarts', () {
-      final first = center().success('Activated');
-      final second = center().success('Activated');
+      final first = center().success('Saved', body: 'Ellen Swimsuit');
+      final second = center().success('Saved', body: 'Ellen Swimsuit');
       expect(second.id, isNot(first.id));
       expect(first.isVisible, isFalse);
       expect(second.isVisible, isTrue);
     });
 
-    test('is scoped to the same severity and title', () {
-      center().success('Done');
-      center().error('Done');
-      center().success('Done', title: 'Import');
+    test('is scoped to the same severity, title and body', () {
+      center().success('Done', body: 'x');
+      center().error('Done', body: 'x');
+      center().success('Done', body: 'a different subject');
       expect(state(), hasLength(3));
+    });
+
+    test('a differing portrait alone does not stack a second copy', () {
+      // The picture is not part of what a notification *says*. Two identical
+      // sentences about different characters — re-filing one mod twice in quick
+      // succession — collapse, and the survivor carries the current face rather
+      // than the stale one.
+      center().warning('Tag not saved', body: 'the folder may be read-only',
+          characterId: 'ellen');
+      center().warning('Tag not saved', body: 'the folder may be read-only',
+          characterId: 'nicole');
+
+      expect(state(), hasLength(1));
+      expect(state().single.characterId, 'nicole');
     });
   });
 
   group('pinned', () {
     test('has no duration, so nothing on screen will time it out', () {
-      final handle = center().pinned('Scanning…');
+      final handle = center().pinned('Scanning…', body: 'your library');
       expect(state().single.duration, isNull);
       expect(state().single.isPinned, isTrue);
       expect(handle.isVisible, isTrue);
     });
 
-    test('an update can give it an ending', () {
-      // The shape the whole feature exists for: raise it pinned while the work
-      // runs, then let the result dismiss itself.
-      final handle = center().pinned('Scanning…');
+    test('an update can give it an ending, and the body stays put', () {
+      // The shape the whole feature exists for: the body is the stable subject
+      // and the title is the changing verb, so finishing the work rewrites one
+      // level and leaves the other alone.
+      final handle = center().pinned('Saving tag…', body: 'Ellen Swimsuit');
       handle.update(
-        message: 'Library scanned',
+        title: 'Tag saved',
         severity: NotificationSeverity.success,
       );
 
       final updated = state().single;
-      expect(updated.message, 'Library scanned');
+      expect(updated.title, 'Tag saved');
+      expect(updated.body, 'Ellen Swimsuit');
       expect(updated.severity, NotificationSeverity.success);
       expect(updated.duration,
           kNotificationDurations[NotificationSeverity.success],
@@ -110,43 +139,43 @@ void main() {
     });
 
     test('`pin` on an update takes the clock back off', () {
-      final handle = center().success('done');
-      handle.update(message: 'actually still working', pin: true);
+      final handle = center().success('done', body: 'x');
+      handle.update(title: 'actually still working', pin: true);
       expect(state().single.duration, isNull);
     });
 
     test('an update keeps the id, so the card is not replaced', () {
-      final handle = center().pinned('Working…');
+      final handle = center().pinned('Working…', body: 'x');
       final id = state().single.id;
-      handle.update(message: 'Still working…');
+      handle.update(title: 'Still working…');
       expect(state().single.id, id);
     });
   });
 
   group('dismissing', () {
     test('removes exactly one', () {
-      center().info('a');
-      final b = center().info('b');
-      center().info('c');
+      center().info('a', body: '1');
+      final b = center().info('b', body: '2');
+      center().info('c', body: '3');
       b.dismiss();
-      expect(state().map((n) => n.message), ['a', 'c']);
+      expect(state().map((n) => n.title), ['a', 'c']);
     });
 
     test('a handle to something already gone is inert, never a throw', () {
       // The user can close any notification by hand at any moment, so every
       // caller holding a handle is holding one that may have expired.
-      final handle = center().pinned('Working…');
+      final handle = center().pinned('Working…', body: 'x');
       center().clear();
 
       expect(handle.isVisible, isFalse);
-      expect(() => handle.update(message: 'done'), returnsNormally);
+      expect(() => handle.update(title: 'done'), returnsNormally);
       expect(() => handle.dismiss(), returnsNormally);
       expect(state(), isEmpty);
     });
 
     test('clear empties the stack', () {
-      center().info('a');
-      center().info('b');
+      center().info('a', body: '1');
+      center().info('b', body: '2');
       center().clear();
       expect(state(), isEmpty);
     });
@@ -172,11 +201,10 @@ void main() {
         ),
       );
 
-      captured.notify.info('from a context');
-      capturedRef.notify.info('from a ref');
+      captured.notify.info('from a context', body: 'x');
+      capturedRef.notify.info('from a ref', body: 'y');
 
-      expect(state().map((n) => n.message),
-          ['from a context', 'from a ref']);
+      expect(state().map((n) => n.title), ['from a context', 'from a ref']);
     });
   });
 }

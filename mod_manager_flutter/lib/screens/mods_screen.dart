@@ -467,26 +467,15 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
 
         ref.read(charactersProvider.notifier).state = updatedCharacters;
         _lastCharactersState = List.from(updatedCharacters);
-
-        context.notify.success(
-          wasActive
-              ? loc.t('mods.snackbar.deactivated')
-              : loc.t('mods.snackbar.activated'),
-          icon: wasActive
-              ? Icons.toggle_off_outlined
-              : Icons.toggle_on_outlined,
-          // Shorter than the default: this confirms a switch the user is
-          // looking at, and a queue of them would otherwise fill the corner
-          // while they work through a list.
-          duration: AppConstants.notificationBriefDuration,
-        );
       }
       _isOperationInProgress = false;
     } catch (e) {
       _isOperationInProgress = false;
       if (mounted) {
         context.notify.error(
-          loc.t('mods.errors.generic', params: {'message': e.toString()}),
+          loc.t('mods.errors.generic_title'),
+          body: e.toString(),
+          characterId: mod.characterId,
         );
       }
     }
@@ -506,10 +495,15 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       final success = await modManagerService.reloadMods();
 
       if (mounted) {
+        // One of the few successes worth keeping: F10 goes to the game, so
+        // nothing in this window shows whether it landed.
         context.notify.show(
-          success
-              ? loc.t('mods.snackbar.reload_success')
-              : loc.t('mods.snackbar.reload_failure'),
+          loc.t(success
+              ? 'mods.snackbar.reload_success_title'
+              : 'mods.snackbar.reload_failure_title'),
+          body: loc.t(success
+              ? 'mods.snackbar.reload_success_body'
+              : 'mods.snackbar.reload_failure_body'),
           severity: success
               ? NotificationSeverity.success
               : NotificationSeverity.error,
@@ -518,7 +512,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     } catch (e) {
       if (mounted) {
         context.notify.error(
-          loc.t('mods.errors.generic', params: {'message': e.toString()}),
+          loc.t('mods.errors.generic_title'),
+          body: e.toString(),
         );
       }
     } finally {
@@ -551,16 +546,6 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         });
       }
 
-      if (mounted) {
-        context.notify.success(
-          isFavorite
-              ? loc.t('mods.snackbar.favorites_removed')
-              : loc.t('mods.snackbar.favorites_added'),
-          icon: isFavorite ? Icons.star_border_rounded : Icons.star_rounded,
-          duration: AppConstants.notificationBriefDuration,
-        );
-      }
-
       // Targeted update: flip the one mod's favorite flag instead of rescanning.
       final allMods = _currentAllMods();
       final index = allMods?.indexWhere((m) => m.id == mod.id) ?? -1;
@@ -573,7 +558,9 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     } catch (e) {
       if (mounted) {
         context.notify.error(
-          loc.t('mods.errors.generic', params: {'message': e.toString()}),
+          loc.t('mods.errors.generic_title'),
+          body: e.toString(),
+          characterId: mod.characterId,
         );
       }
     }
@@ -585,12 +572,6 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     // may have changed outside the app.
     await ApiService.clearKeybindCache();
     await loadMods(showLoading: false);
-    if (!mounted || errorMessage != null) return;
-    context.notify.success(
-      loc.t('mods.snackbar.list_refreshed'),
-      icon: Icons.refresh_rounded,
-      duration: AppConstants.notificationBriefDuration,
-    );
   }
 
   /// Renames a mod (its on-disk folder). Live-validates the new name and
@@ -601,11 +582,17 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     try {
       final ok = await ApiService.openModFolder(mod.id);
       if (!mounted || ok) return;
-      notify.error(loc.t('mods.snackbar.open_folder_failed'));
+      notify.error(
+        loc.t('mods.snackbar.open_folder_failed_title'),
+        body: mod.name,
+        characterId: mod.characterId,
+      );
     } catch (e) {
       if (!mounted) return;
       notify.error(
-        loc.t('mods.errors.generic', params: {'message': e.toString()}),
+        loc.t('mods.errors.generic_title'),
+        body: e.toString(),
+        characterId: mod.characterId,
       );
     }
   }
@@ -1403,9 +1390,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
             );
             if (mounted) {
               context.notify.warning(
-                loc.t('mods.snackbar.import_error', params: {
-                  'message': '${archiveFile.name}: ${result.error}',
-                }),
+                loc.t('mods.snackbar.import_error_title'),
+                body: '${archiveFile.name}: ${result.error}',
               );
             }
           }
@@ -1438,7 +1424,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         // asked and answered. "No mod folders found" would be a different claim
         // entirely, and a false one.
         if (mounted && !declinedDuplicate) {
-          context.notify.warning(loc.t('mods.snackbar.import_no_folders'));
+          context.notify.warning(
+            loc.t('mods.snackbar.import_no_folders_title'),
+            body: loc.t('mods.snackbar.import_no_folders_body'),
+          );
         }
         return;
       }
@@ -1580,7 +1569,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         }
 
         if (mounted) {
-          context.notify.warning(loc.t('mods.snackbar.import_duplicates'));
+          context.notify.warning(
+            loc.t('mods.snackbar.import_duplicates_title'),
+            body: loc.t('mods.snackbar.import_duplicates_body'),
+          );
         }
         return;
       }
@@ -1604,8 +1596,9 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         );
         if (noIni.isNotEmpty && mounted) {
           context.notify.warning(
-            loc.t(
-              'mods.snackbar.import_no_ini',
+            loc.t('mods.snackbar.import_no_ini_title'),
+            body: loc.t(
+              'mods.snackbar.import_no_ini_body',
               params: {'mods': noIni.join(', ')},
             ),
           );
@@ -1622,8 +1615,9 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         );
         if (patches.isNotEmpty && mounted) {
           context.notify.warning(
-            loc.t(
-              'mods.snackbar.import_patch',
+            loc.t('mods.snackbar.import_patch_title'),
+            body: loc.t(
+              'mods.snackbar.import_patch_body',
               params: {'mods': patches.join(', ')},
             ),
           );
@@ -1636,8 +1630,9 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       final originFailures = modManagerService.takeOriginWriteFailures();
       if (originFailures.isNotEmpty && mounted) {
         context.notify.warning(
-          loc.t(
-            'mods.snackbar.origin_write_failed',
+          loc.t('mods.snackbar.origin_write_failed_title'),
+          body: loc.t(
+            'mods.snackbar.origin_write_failed_body',
             params: {'mods': originFailures.join(', ')},
           ),
         );
@@ -1810,7 +1805,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
 
       if (mounted) {
         context.notify.error(
-          loc.t('mods.snackbar.import_error', params: {'message': '$e'}),
+          loc.t('mods.snackbar.import_error_title'),
+          body: '$e',
         );
       }
     } finally {
@@ -1896,7 +1892,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
           clipboardData.text == null ||
           clipboardData.text!.isEmpty) {
         if (mounted) {
-          context.notify.warning(loc.t('clipboard.empty'));
+          context.notify.warning(
+            loc.t('clipboard.empty_title'),
+            body: loc.t('clipboard.empty_body'),
+          );
         }
         return;
       }
@@ -1910,7 +1909,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
 
       if (paths.isEmpty) {
         if (mounted) {
-          context.notify.warning(loc.t('clipboard.no_paths'));
+          context.notify.warning(
+            loc.t('clipboard.no_paths_title'),
+            body: loc.t('clipboard.no_paths_body'),
+          );
         }
         return;
       }
@@ -1932,7 +1934,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
 
       if (validFolders.isEmpty) {
         if (mounted) {
-          context.notify.warning(loc.t('clipboard.no_valid'));
+          context.notify.warning(
+            loc.t('clipboard.no_valid_title'),
+            body: loc.t('clipboard.no_valid_body'),
+          );
         }
         return;
       }
@@ -1942,7 +1947,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     } catch (e) {
       if (mounted) {
         context.notify.error(
-          loc.t('mods.snackbar.paste_error', params: {'message': e.toString()}),
+          loc.t('mods.snackbar.paste_error_title'),
+          body: e.toString(),
         );
       }
     }

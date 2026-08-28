@@ -18,6 +18,7 @@ import '../../services/update_apply/update_applier.dart';
 import '../../services/update_apply/update_layout.dart';
 import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
+import '../components/extract_failure_message.dart';
 import 'download_with_progress.dart';
 import 'update_confirm_dialog.dart';
 import 'update_result_dialog.dart';
@@ -57,22 +58,37 @@ Future<bool> applyUpdateFlow(
   final loc = context.loc;
   final notify = context.notify;
 
-  void fail(String message) => notify.error(message);
+  // `mod` is captured before every await, so its character is safe to read on
+  // any path below — including the catch blocks.
+  void fail(String title, String body) =>
+      notify.error(title, body: body, characterId: mod.characterId);
 
   final config = await ApiService.getConfig();
   final modsPath = config['mods_path'] ?? '';
   if (modsPath.isEmpty) {
-    fail(loc.t('marketplace.install_missing_path'));
+    fail(
+      loc.t('marketplace.install_missing_path_title'),
+      loc.t('marketplace.install_missing_path_body'),
+    );
     return false;
   }
   final modFolder = Directory(path.join(modsPath, mod.id));
   if (!await modFolder.exists()) {
-    fail(loc.t('mods.update_apply.mod_missing', params: {'mod': mod.name}));
+    fail(
+      loc.t('mods.update_apply.mod_missing_title'),
+      loc.t('mods.update_apply.mod_missing', params: {'mod': mod.name}),
+    );
     return false;
   }
 
   if (!context.mounted) return false;
-  final download = await downloadFileWithProgress(context, ref, file);
+  final download = await downloadFileWithProgress(
+    context,
+    ref,
+    file,
+    characterId: mod.characterId,
+    subject: mod.name,
+  );
   if (download == null) return false;
 
   var archiveConsumed = false;
@@ -85,17 +101,19 @@ Future<bool> applyUpdateFlow(
     if (!extraction.success) {
       // The archive is kept on purpose: the user can still extract it by hand,
       // and saying where it is turns a dead end into a workaround.
-      fail(
-        '${extraction.error ?? loc.t('marketplace.install_unsupported')}\n'
-        '${loc.t('marketplace.archive_kept', params: {'path': download.file.path})}',
-      );
+      final lines =
+          extractFailureMessage(loc, archivePath: download.file.path);
+      fail(lines.title, lines.body);
       return false;
     }
     archiveConsumed = true;
 
     final folders = extraction.extractedFolders ?? const <String>[];
     if (folders.isEmpty) {
-      fail(loc.t('marketplace.install_empty'));
+      fail(
+        loc.t('marketplace.install_empty_title'),
+        loc.t('marketplace.install_empty_body'),
+      );
       return false;
     }
     extractRoot = Directory(folders.first).parent;
@@ -142,7 +160,8 @@ Future<bool> applyUpdateFlow(
 
     if (!result.success) {
       if (!context.mounted) return result.snapshot != null;
-      fail(_failureMessage(loc, result, mod));
+      final lines = _failureMessage(loc, result, mod);
+      fail(lines.title, lines.body);
       // A failed *copy* still moved files. Anything else left the folder alone.
       return result.failure == UpdateApplyFailure.copy;
     }
@@ -168,7 +187,7 @@ Future<bool> applyUpdateFlow(
     return true;
   } catch (e) {
     if (context.mounted) {
-      fail(loc.t('mods.update_apply.failed', params: {'message': '$e'}));
+      fail(loc.t('mods.update_apply.failed_title'), '$e');
     }
     return false;
   } finally {
@@ -226,17 +245,31 @@ ModIngest? _ingestFor(UpdateLayout layout, ModIngest? current) {
   );
 }
 
-String _failureMessage(AppLocalizations loc, UpdateApplyResult result, ModInfo mod) =>
+NotificationLines _failureMessage(
+  AppLocalizations loc,
+  UpdateApplyResult result,
+  ModInfo mod,
+) =>
     switch (result.failure) {
-      UpdateApplyFailure.snapshot =>
-        loc.t('mods.update_apply.snapshot_failed', params: {'mod': mod.name}),
-      UpdateApplyFailure.modMissing =>
-        loc.t('mods.update_apply.mod_missing', params: {'mod': mod.name}),
-      UpdateApplyFailure.copy => loc.t(
-          'mods.update_apply.copy_failed',
-          params: {'mod': mod.name, 'message': result.error ?? ''},
+      UpdateApplyFailure.snapshot => NotificationLines(
+          loc.t('mods.update_apply.snapshot_failed_title'),
+          loc.t('mods.update_apply.snapshot_failed', params: {'mod': mod.name}),
         ),
-      _ => loc.t('mods.update_apply.layout_failed', params: {'mod': mod.name}),
+      UpdateApplyFailure.modMissing => NotificationLines(
+          loc.t('mods.update_apply.mod_missing_title'),
+          loc.t('mods.update_apply.mod_missing', params: {'mod': mod.name}),
+        ),
+      UpdateApplyFailure.copy => NotificationLines(
+          loc.t('mods.update_apply.copy_failed_title'),
+          loc.t(
+            'mods.update_apply.copy_failed',
+            params: {'mod': mod.name, 'message': result.error ?? ''},
+          ),
+        ),
+      _ => NotificationLines(
+          loc.t('mods.update_apply.layout_failed_title'),
+          loc.t('mods.update_apply.layout_failed', params: {'mod': mod.name}),
+        ),
     };
 
 Future<void> _cleanupExtract(Directory? root) async {

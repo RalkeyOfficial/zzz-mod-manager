@@ -38,7 +38,10 @@ Future<void> showEditModDialog(
   Future<void> pasteImageInto() async {
     final bytes = await Pasteboard.image;
     if (bytes == null) {
-      notify.warning(loc.t('mods.snackbar.clipboard_empty'));
+      notify.warning(
+        loc.t('mods.snackbar.clipboard_empty_title'),
+        body: loc.t('mods.snackbar.clipboard_empty_body'),
+      );
       return;
     }
     images.value = [...images.value, EditImage.pasted(bytes)];
@@ -353,7 +356,11 @@ Future<void> showEditModDialog(
             if (!stillExists) {
               if (!context.mounted) return;
               Navigator.pop(dialogContext);
-              notify.error(loc.t('mods.snackbar.mod_gone'));
+              notify.error(
+                loc.t('mods.snackbar.mod_gone_title'),
+                body: loc.t('mods.snackbar.mod_gone_body'),
+                characterId: mod.characterId,
+              );
               return;
             }
 
@@ -374,9 +381,8 @@ Future<void> showEditModDialog(
             await ApiService.setModCharacter(mod.id, selectedChar.value);
 
             if (!context.mounted) return;
-            // 2) Close + confirm immediately — the save is done.
+            // 2) Close immediately — the save is done.
             Navigator.pop(dialogContext);
-            notify.success(loc.t('mods.snackbar.tag_saved'));
             // 3) Let the caller apply a targeted in-memory update.
             onSaved(updated);
           },

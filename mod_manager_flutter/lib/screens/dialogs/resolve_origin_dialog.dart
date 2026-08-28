@@ -441,7 +441,10 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     if (!ok) {
       setState(() => _saving = false);
       context.notify.warning(
-        loc.t('mods.resolve.save_failed', params: {'mod': widget.mod.name}),
+        loc.t('mods.resolve.save_failed_title'),
+        body: loc.t('mods.resolve.save_failed',
+            params: {'mod': widget.mod.name}),
+        characterId: widget.mod.characterId,
       );
       return;
     }

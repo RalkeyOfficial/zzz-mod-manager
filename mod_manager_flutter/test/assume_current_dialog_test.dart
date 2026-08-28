@@ -218,8 +218,8 @@ void main() {
 
     expect(run.outcomes.single.written, 0);
     expect(run.outcomes.single.failed, 2);
-    expect(find.textContaining("Couldn't save tracking data for 2 mods"),
-        findsOneWidget);
+    expect(find.text('Tracking data not saved'), findsOneWidget);
+    expect(find.textContaining('2 mods'), findsOneWidget);
   });
 
   testWidgets('a declined write is not reported as a read-only folder',

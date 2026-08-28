@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/screens/components/character_avatar.dart';
 import 'package:mod_manager_flutter/screens/components/notification_overlay.dart';
 import 'package:mod_manager_flutter/utils/notifications.dart';
 
@@ -11,8 +12,9 @@ import 'support/localized_harness.dart';
 ///
 /// The queue itself is `notifications_test.dart`; everything here is what only
 /// the widget can answer — that a card appears at all, that the newest is the
-/// bottom one, that the close button works, and that the auto-dismiss clock
-/// runs *here* and stops while the pointer is over the card.
+/// bottom one, that the close button works, that the auto-dismiss clock runs
+/// *here* and stops while the pointer is over the card, and what the leading
+/// slot renders.
 void main() {
   late ProviderContainer container;
   NotificationCenter center() =>
@@ -36,29 +38,40 @@ void main() {
     expectBuilt(NotificationHost);
   }
 
+  /// The bundled file a rendered portrait actually points at, or null when the
+  /// slot rendered an icon instead.
+  ///
+  /// **Asserted through the `AssetImage`, never through pixels.** `Image.asset`
+  /// resolves asynchronously and `pumpAndSettle` does not wait for real async
+  /// I/O — the same trap `localized_harness.dart` documents for localizations.
+  /// This assertion is synchronous, so it cannot pass vacuously.
+  String? portraitAsset(WidgetTester tester) {
+    final images = tester.widgetList<Image>(find.byType(Image));
+    if (images.isEmpty) return null;
+    return (images.first.image as AssetImage).assetName;
+  }
+
   testWidgets('nothing is drawn while the queue is empty', (tester) async {
     await pumpOverlay(tester);
     expect(find.byType(NotificationOverlay), findsOneWidget);
     expect(find.byIcon(Icons.close_rounded), findsNothing);
   });
 
-  testWidgets('a message and its title both render', (tester) async {
+  testWidgets('both levels render', (tester) async {
     await pumpOverlay(tester);
-    center().success('Auto-tags: Ellen Swim → ellen', title: 'Imported 1 mod');
+    center().success('Mod installed', body: 'Ellen Swimsuit');
     await tester.pumpAndSettle();
 
-    expect(find.text('Imported 1 mod'), findsOneWidget);
-    expect(find.text('Auto-tags: Ellen Swim → ellen'), findsOneWidget);
-    // The old install flow said these two things as two bars, the second
-    // replacing the first. One card, both facts.
+    expect(find.text('Mod installed'), findsOneWidget);
+    expect(find.text('Ellen Swimsuit'), findsOneWidget);
     expect(find.byIcon(Icons.close_rounded), findsOneWidget);
   });
 
   testWidgets('each severity brings its own icon', (tester) async {
     await pumpOverlay(tester);
-    center().success('a');
-    center().warning('b');
-    center().error('c');
+    center().success('a', body: '1');
+    center().warning('b', body: '2');
+    center().error('c', body: '3');
     await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.check_circle_outline_rounded), findsOneWidget);
@@ -69,17 +82,131 @@ void main() {
   testWidgets('an explicit icon overrides the severity default',
       (tester) async {
     await pumpOverlay(tester);
-    center().success('Saved', icon: Icons.save_alt_rounded);
+    center().success('Saved', body: 'x', icon: Icons.save_alt_rounded);
     await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.save_alt_rounded), findsOneWidget);
     expect(find.byIcon(Icons.check_circle_outline_rounded), findsNothing);
   });
 
+  group('the leading slot', () {
+    testWidgets('a known character shows their portrait instead of the icon',
+        (tester) async {
+      await pumpOverlay(tester);
+      center().success('Mod installed',
+          body: 'Ellen Swimsuit', characterId: 'ellen');
+      await tester.pumpAndSettle();
+
+      expect(portraitAsset(tester), 'assets/characters/ellen.png');
+      // The portrait *replaced* the severity glyph — that is the feature, not a
+      // decoration added beside it.
+      expect(find.byIcon(Icons.check_circle_outline_rounded), findsNothing);
+      // A failed asset load throws into the error handler rather than the test.
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets("the roster's asset override survives", (tester) async {
+      // The one thing a hand-built path silently loses, and the reason
+      // `assetPathFor` exists at all.
+      await pumpOverlay(tester);
+      center().info('Mod enabled', body: 'Starlight Knight', characterId: 'billy');
+      await tester.pumpAndSettle();
+
+      expect(portraitAsset(tester), 'assets/characters/billy_herinkton.png');
+    });
+
+    for (final id in <String?>[null, '', 'unknown']) {
+      testWidgets('an unassigned character (${id ?? 'null'}) falls back to the '
+          'severity icon', (tester) async {
+        await pumpOverlay(tester);
+        center().info('Something happened', body: 'x', characterId: id);
+        await tester.pumpAndSettle();
+
+        expect(find.byIcon(Icons.info_outline_rounded), findsOneWidget);
+        expect(find.byType(Image), findsNothing);
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('a built-in category shows that category, not a portrait',
+        (tester) async {
+      // `getCharacterAssetName` falls back to the id, so without the roster
+      // pre-check this would ask the bundle for `cat_ui.png` and hit
+      // `errorBuilder` on every notification about a category-filed mod.
+      await pumpOverlay(tester);
+      center().info('Mod enabled', body: 'Dark HUD', characterId: 'cat_ui');
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.web_asset), findsOneWidget);
+      expect(find.byType(Image), findsNothing);
+      expect(find.byIcon(Icons.info_outline_rounded), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the ring carries the severity, and only on the portrait',
+        (tester) async {
+      await pumpOverlay(tester);
+      center().error('Update failed', body: 'Ellen Swimsuit',
+          characterId: 'ellen');
+      await tester.pumpAndSettle();
+
+      final avatar = tester.widget<CharacterAvatar>(
+        find.byType(CharacterAvatar),
+      );
+      final scheme = Theme.of(tester.element(find.byType(CharacterAvatar)))
+          .colorScheme;
+      expect(avatar.ring?.color,
+          notificationColor(scheme, NotificationSeverity.error));
+
+      // The icon variant gets no ring — the tinted disc and the glyph already
+      // carry the accent.
+      center().clear();
+      center().error('Update failed', body: 'no character here');
+      await tester.pumpAndSettle();
+      expect(find.byType(CharacterAvatar), findsNothing);
+    });
+
+    testWidgets('the slot is the same width whichever variant renders',
+        (tester) async {
+      // The regression guard for the fixed 40px footprint. Without it, a future
+      // "the icon looks lonely, let's shrink the slot" reintroduces a ragged
+      // left edge down the stack with no test failure.
+      await pumpOverlay(tester);
+      center().info('With a portrait', body: 'x', characterId: 'ellen');
+      center().info('Without one', body: 'y');
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getRect(find.text('With a portrait')).left,
+        tester.getRect(find.text('Without one')).left,
+      );
+    });
+
+    testWidgets('a portrait does not make the card taller', (tester) async {
+      // Pins the arithmetic the 40px slot was chosen for: two lines of card
+      // text come to 41px, so the avatar never drives the card's height.
+      await pumpOverlay(tester);
+      center().info('A headline', body: 'a subject');
+      await tester.pumpAndSettle();
+      final withoutPortrait =
+          tester.getRect(find.byType(NotificationOverlay)).height;
+
+      center().clear();
+      await tester.pumpAndSettle();
+      center().info('A headline', body: 'a subject', characterId: 'ellen');
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getRect(find.byType(NotificationOverlay)).height,
+        withoutPortrait,
+      );
+    });
+  });
+
   testWidgets('they stack upwards — the newest is the lowest', (tester) async {
     await pumpOverlay(tester);
-    center().info('older');
-    center().info('newer');
+    center().info('older', body: '1');
+    center().info('newer', body: '2');
     await tester.pumpAndSettle();
 
     expect(
@@ -90,7 +217,7 @@ void main() {
 
   testWidgets('they sit in the bottom-right corner', (tester) async {
     await pumpOverlay(tester);
-    center().info('corner');
+    center().info('corner', body: 'x');
     await tester.pumpAndSettle();
 
     final card = tester.getRect(find.text('corner'));
@@ -101,8 +228,8 @@ void main() {
   testWidgets('the close button dismisses that one and only that one',
       (tester) async {
     await pumpOverlay(tester);
-    center().pinned('first');
-    center().pinned('second');
+    center().pinned('first', body: '1');
+    center().pinned('second', body: '2');
     await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.close_rounded).first);
@@ -110,14 +237,15 @@ void main() {
 
     expect(find.text('first'), findsNothing);
     expect(find.text('second'), findsOneWidget);
-    expect(container.read(notificationsProvider).single.message, 'second');
+    expect(container.read(notificationsProvider).single.title, 'second');
   });
 
   group('the clock', () {
     testWidgets('dismisses a notification once its duration is up',
         (tester) async {
       await pumpOverlay(tester);
-      center().info('temporary', duration: const Duration(seconds: 3));
+      center().info('temporary',
+          body: 'x', duration: const Duration(seconds: 3));
       await tester.pumpAndSettle();
       expect(find.text('temporary'), findsOneWidget);
 
@@ -132,7 +260,8 @@ void main() {
         (tester) async {
       // The point of pinning: it ends on a condition, not on a clock.
       await pumpOverlay(tester);
-      final handle = center().pinned('Scanning the library…');
+      final handle =
+          center().pinned('Scanning the library…', body: 'your mods');
       await tester.pumpAndSettle();
 
       await tester.pump(const Duration(minutes: 5));
@@ -140,11 +269,13 @@ void main() {
       expect(find.text('Scanning the library…'), findsOneWidget);
 
       handle.update(
-        message: 'Library scanned',
+        title: 'Library scanned',
         severity: NotificationSeverity.success,
       );
       await tester.pumpAndSettle();
       expect(find.text('Library scanned'), findsOneWidget);
+      expect(find.text('your mods'), findsOneWidget,
+          reason: 'the body is the stable subject and carries over');
 
       // …and the update it was given *does* have a clock.
       await tester.pump(kNotificationDurations[NotificationSeverity.success]!);
@@ -158,7 +289,7 @@ void main() {
       // it is being read.
       await pumpOverlay(tester);
       center().error('a long error worth reading',
-          duration: const Duration(seconds: 4));
+          body: 'x', duration: const Duration(seconds: 4));
       await tester.pumpAndSettle();
 
       final pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
@@ -186,8 +317,10 @@ void main() {
       // still working down the stack, and letting the others expire underneath
       // them would also reflow the stack out from under the pointer.
       await pumpOverlay(tester);
-      center().info('read me first', duration: const Duration(seconds: 4));
-      center().info('read me second', duration: const Duration(seconds: 4));
+      center().info('read me first',
+          body: '1', duration: const Duration(seconds: 4));
+      center().info('read me second',
+          body: '2', duration: const Duration(seconds: 4));
       await tester.pumpAndSettle();
 
       final pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
@@ -215,7 +348,7 @@ void main() {
       // Otherwise a burst that lands during a read ticks away under a reader
       // who never moved.
       await pumpOverlay(tester);
-      center().pinned('something to hover');
+      center().pinned('something to hover', body: 'x');
       await tester.pumpAndSettle();
 
       final pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
@@ -225,7 +358,8 @@ void main() {
       addTearDown(pointer.removePointer);
       await tester.pump();
 
-      center().info('arrived late', duration: const Duration(seconds: 4));
+      center().info('arrived late',
+          body: 'y', duration: const Duration(seconds: 4));
       await tester.pumpAndSettle();
 
       await tester.pump(const Duration(seconds: 20));
@@ -244,7 +378,8 @@ void main() {
     testWidgets('leaving restarts the full duration rather than resuming',
         (tester) async {
       await pumpOverlay(tester);
-      center().info('nearly expired', duration: const Duration(seconds: 4));
+      center().info('nearly expired',
+          body: 'x', duration: const Duration(seconds: 4));
       await tester.pumpAndSettle();
 
       // Three of its four seconds gone before the pointer arrives.
@@ -273,13 +408,15 @@ void main() {
   testWidgets('the stack stays inside a short window', (tester) async {
     // 800x600 is the app's minimum window size, and four cards of a paragraph
     // each is more than it has to give — so the column scrolls rather than
-    // overflowing into a debug stripe.
+    // overflowing into a debug stripe. The 40px leading slot narrows the text
+    // column, so this wraps harder than it looks.
     await pumpOverlay(tester, surfaceSize: const Size(800, 600));
     for (var i = 0; i < kMaxVisibleNotifications; i++) {
       center().pinned(
-        'A notification with a genuinely long message, of the kind an import '
-        'summary produces when it has several things to say about several '
-        'mods at once — number $i.',
+        'A headline for notification number $i',
+        body: 'A genuinely long body, of the kind an install produces when it '
+            'has something to say about several mods at once — number $i.',
+        characterId: 'ellen',
       );
     }
     await tester.pumpAndSettle();

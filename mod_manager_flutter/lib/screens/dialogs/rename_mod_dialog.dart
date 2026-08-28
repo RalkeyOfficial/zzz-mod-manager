@@ -51,15 +51,20 @@ Future<void> showRenameModDialog(
               final ok = await ApiService.renameMod(mod.id, name);
               if (!context.mounted) return;
               if (ok) {
-                notify.success(loc.t('mods.snackbar.renamed'));
                 onRenamed(name);
               } else {
-                notify.error(loc.t('mods.dialog.rename_exists'));
+                notify.error(
+                  loc.t('mods.dialog.rename_failed_title'),
+                  body: loc.t('mods.dialog.rename_exists'),
+                  characterId: mod.characterId,
+                );
               }
             } catch (e) {
               if (!context.mounted) return;
               notify.error(
-                loc.t('mods.errors.generic', params: {'message': e.toString()}),
+                loc.t('mods.errors.generic_title'),
+                body: e.toString(),
+                characterId: mod.characterId,
               );
             }
           }

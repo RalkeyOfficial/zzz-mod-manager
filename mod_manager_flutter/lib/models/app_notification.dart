@@ -23,6 +23,27 @@ enum NotificationSeverity {
   error,
 }
 
+/// A headline and its subject, for a producer that decides what to say
+/// somewhere other than where it is said.
+///
+/// Deliberately *not* the shape of the `notify` methods: roughly half of all
+/// bodies are bare data the call site already holds (`mod.name`, `e.toString()`)
+/// and would gain nothing from being wrapped.
+@immutable
+class NotificationLines {
+  const NotificationLines(this.title, this.body);
+
+  final String title;
+  final String body;
+
+  @override
+  bool operator ==(Object other) =>
+      other is NotificationLines && other.title == title && other.body == body;
+
+  @override
+  int get hashCode => Object.hash(title, body);
+}
+
 /// One message on the notification stack.
 ///
 /// Immutable and value-identified by [id]: the overlay keys its cards on it, so
@@ -32,33 +53,47 @@ enum NotificationSeverity {
 /// scratch.
 @immutable
 class AppNotification {
-  const AppNotification({
+  AppNotification({
     required this.id,
     required this.severity,
-    required this.message,
-    this.title,
+    required this.title,
+    required this.body,
+    this.characterId,
     this.icon,
     this.duration,
-  });
+  }) : assert(
+          icon == null || characterId == null,
+          'An explicit icon and a character both claim the leading slot. '
+          'Pass one: the icon wins, and the portrait would be dropped silently.',
+        );
 
   /// Unique and monotonic, so the newest is always last in the list.
   final int id;
 
   final NotificationSeverity severity;
 
-  /// The body. Always present — a notification with no message says nothing.
-  final String message;
+  /// What happened, in a few words. "Mod installed", "Couldn't extract the
+  /// archive".
+  final String title;
 
-  /// An optional headline above [message].
+  /// The one thing it happened to — the mod's name, the path, the reason it
+  /// failed. Where a call site has no subject in hand, the single next step the
+  /// user can take.
   ///
-  /// Optional rather than defaulted per severity, because most messages here
-  /// are already a whole sentence and a generic "Success" above one is noise.
-  /// It earns its place where a call site genuinely has two levels — "Imported
-  /// Ellen Swimsuit" over "Auto-tags: … · 2 mods have no .ini" — which used to
-  /// be sent as two separate bars, one of which pushed the other off screen.
-  final String? title;
+  /// Required, like [title]. An optional second level is a level nobody fills
+  /// in: for the whole life of the earlier two-field version, not one call site
+  /// passed a headline.
+  final String body;
 
-  /// Overrides the icon [severity] would otherwise choose.
+  /// Whose portrait leads the card, when the notification is about one mod.
+  ///
+  /// Also accepts a built-in category id; the overlay falls back to that
+  /// category's own icon. Null, `unknown` or an unrecognised id fall back to
+  /// the severity icon.
+  final String? characterId;
+
+  /// Overrides the icon [severity] would otherwise choose. Mutually exclusive
+  /// with [characterId] — see the constructor's assert.
   final IconData? icon;
 
   /// How long it stays before dismissing itself, or **null to stay until it is
@@ -72,24 +107,45 @@ class AppNotification {
   /// Whether this one waits for something rather than for a clock.
   bool get isPinned => duration == null;
 
+  /// Whether [other] is *the same thing being said again*, which is what makes
+  /// re-raising it move down the stack instead of stacking a duplicate.
+  ///
+  /// Deliberately not full equality. [icon] and [characterId] are pictures of
+  /// what a notification says, not part of what it says, and [duration] is how
+  /// long it says it for — a second raise differing only in those is the same
+  /// sentence, and the newer one's picture is the current one.
+  ///
+  /// It lives here rather than inline in `show` so that the next field added to
+  /// this class has to answer the question rather than silently join the key or
+  /// silently miss it.
+  bool saysTheSameAs(AppNotification other) =>
+      other.severity == severity &&
+      other.title == title &&
+      other.body == body;
+
   AppNotification copyWith({
     NotificationSeverity? severity,
-    String? message,
     String? title,
+    String? body,
+    String? characterId,
     IconData? icon,
     Duration? duration,
-    bool clearTitle = false,
+    bool clearCharacterId = false,
     bool clearIcon = false,
     bool clearDuration = false,
   }) {
     return AppNotification(
       id: id,
       severity: severity ?? this.severity,
-      message: message ?? this.message,
+      title: title ?? this.title,
+      body: body ?? this.body,
       // `copyWith` cannot express "back to nothing" with a nullable value, and
       // an update that turns a pinned notification into a self-dismissing one
-      // has to be able to — as does one that drops a title.
-      title: clearTitle ? null : (title ?? this.title),
+      // has to be able to — as does one that drops a portrait or an icon.
+      //
+      // There is no `clearTitle`/`clearBody`: neither has a "back to nothing"
+      // state, which is the point of both being required.
+      characterId: clearCharacterId ? null : (characterId ?? this.characterId),
       icon: clearIcon ? null : (icon ?? this.icon),
       duration: clearDuration ? null : (duration ?? this.duration),
     );
@@ -100,11 +156,13 @@ class AppNotification {
       other is AppNotification &&
       other.id == id &&
       other.severity == severity &&
-      other.message == message &&
       other.title == title &&
+      other.body == body &&
+      other.characterId == characterId &&
       other.icon == icon &&
       other.duration == duration;
 
   @override
-  int get hashCode => Object.hash(id, severity, message, title, icon, duration);
+  int get hashCode =>
+      Object.hash(id, severity, title, body, characterId, icon, duration);
 }

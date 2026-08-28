@@ -17,9 +17,26 @@
 ///
 /// ## Raising one
 ///
+/// Every notification is two levels: **what happened**, and **what it happened
+/// to**. Both are required, which is what stops a card being a lone headline
+/// over blank space.
+///
 /// ```dart
-/// context.notify.success(loc.t('mods.snackbar.activated'));
-/// context.notify.error(message);
+/// context.notify.success(
+///   loc.t('marketplace.install_success_title_single'),
+///   body: mod.name,
+///   characterId: mod.characterId,   // leads the card with their portrait
+/// );
+/// ```
+///
+/// Where a call site has no subject in hand, the body is the single next step
+/// the user can take — never a restatement of the title:
+///
+/// ```dart
+/// context.notify.error(
+///   loc.t('marketplace.install_missing_path_title'),
+///   body: loc.t('marketplace.install_missing_path_body'),
+/// );
 /// ```
 ///
 /// Capture it in a local before an `await` and it keeps working afterwards with
@@ -28,7 +45,7 @@
 /// ```dart
 /// final notify = context.notify;
 /// await doTheWork();
-/// notify.success('…');           // no context used after the await
+/// notify.success('…', body: '…');   // no context used after the await
 /// ```
 ///
 /// ## Notifications that wait for something rather than for a clock
@@ -38,11 +55,16 @@
 /// [NotificationHandle] for exactly that:
 ///
 /// ```dart
-/// final scanning = context.notify.pinned('Scanning the library…');
-/// await scan();
-/// scanning.update(message: 'Library scanned', severity: NotificationSeverity.success);
-/// // …or scanning.dismiss();
+/// final saving = context.notify.pinned('Saving tag…', body: mod.name);
+/// await save();
+/// saving.update(title: 'Tag saved', severity: NotificationSeverity.success);
+/// // …or saving.dismiss();
 /// ```
+///
+/// Note what that update does *not* say: the body is the stable subject, so it
+/// carries over untouched. Raising builds a whole statement and needs both
+/// levels; updating changes one level of a statement that already exists, which
+/// is why every parameter of [NotificationHandle.update] is optional.
 ///
 /// The user can still close a pinned notification by hand — nothing this app
 /// puts on screen may be un-dismissable.
@@ -109,28 +131,32 @@ class NotificationHandle {
 
   /// Rewrites it in place, keeping its position in the stack and its card.
   ///
-  /// Every parameter is optional and unspecified means unchanged. Pass
-  /// `duration` to give a pinned notification an ending — that is the usual
-  /// shape: raise it pinned while the work runs, then update it to a result
-  /// that dismisses itself.
+  /// Every parameter is optional and unspecified means unchanged — unlike
+  /// raising one, which requires both levels. The two are different operations:
+  /// raising builds a whole statement, updating changes one level of a
+  /// statement that already exists. Pass `duration` to give a pinned
+  /// notification an ending — that is the usual shape: raise it pinned while
+  /// the work runs, then update it to a result that dismisses itself.
   void update({
     NotificationSeverity? severity,
-    String? message,
     String? title,
+    String? body,
+    String? characterId,
     IconData? icon,
     Duration? duration,
-    bool clearTitle = false,
+    bool clearCharacterId = false,
     bool clearIcon = false,
     bool pin = false,
   }) {
     _center.update(
       id,
       severity: severity,
-      message: message,
       title: title,
+      body: body,
+      characterId: characterId,
       icon: icon,
       duration: duration,
-      clearTitle: clearTitle,
+      clearCharacterId: clearCharacterId,
       clearIcon: clearIcon,
       pin: pin,
     );
@@ -168,69 +194,85 @@ class NotificationCenter extends Notifier<List<AppNotification>> {
   /// specified" in Dart, and silently defaulting a caller's intended pin to a
   /// 4-second timer is the kind of bug nobody finds.
   NotificationHandle show(
-    String message, {
+    String title, {
+    required String body,
     NotificationSeverity severity = NotificationSeverity.info,
-    String? title,
+    String? characterId,
     IconData? icon,
     Duration? duration,
     bool pinned = false,
   }) {
-    // Re-raising something already on screen moves it to the bottom and
-    // restarts its clock rather than stacking a second copy: a mod toggled
-    // twice, or a folder scan that fails the same way for eight files, would
-    // otherwise fill the cap with one repeated sentence and push everything
-    // else off.
-    state = [
-      for (final n in state)
-        if (n.severity != severity || n.message != message || n.title != title)
-          n,
-    ];
-
     final notification = AppNotification(
       id: _nextId++,
       severity: severity,
-      message: message,
       title: title,
+      body: body,
+      characterId: characterId,
       icon: icon,
       duration: pinned ? null : (duration ?? kNotificationDurations[severity]!),
     );
 
-    final next = [...state, notification];
+    // Re-raising something already on screen moves it to the bottom and
+    // restarts its clock rather than stacking a second copy: a folder scan that
+    // fails the same way for eight files would otherwise fill the cap with one
+    // repeated sentence and push everything else off. The survivor is the new
+    // object, so it carries the current portrait.
+    final next = [
+      for (final n in state)
+        if (!n.saysTheSameAs(notification)) n,
+      notification,
+    ];
     state = next.length > kMaxVisibleNotifications
         ? next.sublist(next.length - kMaxVisibleNotifications)
         : next;
     return NotificationHandle(this, notification.id);
   }
 
-  NotificationHandle success(String message,
-          {String? title, IconData? icon, Duration? duration}) =>
-      show(message,
+  NotificationHandle success(String title,
+          {required String body,
+          String? characterId,
+          IconData? icon,
+          Duration? duration}) =>
+      show(title,
+          body: body,
           severity: NotificationSeverity.success,
-          title: title,
+          characterId: characterId,
           icon: icon,
           duration: duration);
 
-  NotificationHandle info(String message,
-          {String? title, IconData? icon, Duration? duration}) =>
-      show(message,
+  NotificationHandle info(String title,
+          {required String body,
+          String? characterId,
+          IconData? icon,
+          Duration? duration}) =>
+      show(title,
+          body: body,
           severity: NotificationSeverity.info,
-          title: title,
+          characterId: characterId,
           icon: icon,
           duration: duration);
 
-  NotificationHandle warning(String message,
-          {String? title, IconData? icon, Duration? duration}) =>
-      show(message,
+  NotificationHandle warning(String title,
+          {required String body,
+          String? characterId,
+          IconData? icon,
+          Duration? duration}) =>
+      show(title,
+          body: body,
           severity: NotificationSeverity.warning,
-          title: title,
+          characterId: characterId,
           icon: icon,
           duration: duration);
 
-  NotificationHandle error(String message,
-          {String? title, IconData? icon, Duration? duration}) =>
-      show(message,
+  NotificationHandle error(String title,
+          {required String body,
+          String? characterId,
+          IconData? icon,
+          Duration? duration}) =>
+      show(title,
+          body: body,
           severity: NotificationSeverity.error,
-          title: title,
+          characterId: characterId,
           icon: icon,
           duration: duration);
 
@@ -238,23 +280,29 @@ class NotificationCenter extends Notifier<List<AppNotification>> {
   /// moment. Dismiss it — or [NotificationHandle.update] it into a result — when
   /// that event happens.
   NotificationHandle pinned(
-    String message, {
+    String title, {
+    required String body,
     NotificationSeverity severity = NotificationSeverity.info,
-    String? title,
+    String? characterId,
     IconData? icon,
   }) =>
-      show(message,
-          severity: severity, title: title, icon: icon, pinned: true);
+      show(title,
+          body: body,
+          severity: severity,
+          characterId: characterId,
+          icon: icon,
+          pinned: true);
 
   /// Rewrites one in place. A no-op if it is already gone.
   void update(
     int id, {
     NotificationSeverity? severity,
-    String? message,
     String? title,
+    String? body,
+    String? characterId,
     IconData? icon,
     Duration? duration,
-    bool clearTitle = false,
+    bool clearCharacterId = false,
     bool clearIcon = false,
     bool pin = false,
   }) {
@@ -264,8 +312,9 @@ class NotificationCenter extends Notifier<List<AppNotification>> {
         if (n.id == id)
           n.copyWith(
             severity: severity,
-            message: message,
             title: title,
+            body: body,
+            characterId: characterId,
             icon: icon,
             // A severity change with no explicit duration re-clocks it to the
             // new severity's default: an update turning "working…" into an
@@ -274,7 +323,7 @@ class NotificationCenter extends Notifier<List<AppNotification>> {
                 (severity != null && !pin
                     ? kNotificationDurations[severity]
                     : null),
-            clearTitle: clearTitle,
+            clearCharacterId: clearCharacterId,
             clearIcon: clearIcon,
             clearDuration: pin,
           )

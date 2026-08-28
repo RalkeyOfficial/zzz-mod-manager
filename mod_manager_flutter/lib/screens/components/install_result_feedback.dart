@@ -10,38 +10,44 @@ import '../../utils/notifications.dart';
 /// an archive can be installed from — so any wording fix had to be made twice
 /// and, predictably, wouldn't be.
 ///
-/// **A success says one thing: the mod arrived.** It used to carry a paragraph
-/// underneath naming the character it was filed under and which fields were
-/// copied off the mod page — the app narrating its own routine work at the one
-/// moment the user is waiting to hear one fact. All of that is visible on the
-/// card a second later anyway.
+/// **A success says the mod arrived, and names it.** It does not describe the
+/// work: the character it was filed under and the fields copied off the mod page
+/// are visible on the card a second later, and listing them buries the one fact
+/// being waited for.
 ///
-/// What the caller could not leave out travels *beside* it as a second,
-/// **warning** notification rather than as body text under the success: a mod
-/// that needs something doing to it should not be reported in the same breath,
-/// and the same colour, as one that is ready to use. That only became possible
-/// with the notification stack — as snackbars the second message replaced the
-/// first, so a warning cost you the confirmation.
+/// What the caller could not leave out travels *beside* it as its own
+/// **warning** rather than as more text under the success: a mod that needs
+/// something doing to it should not be reported in the same breath, and the same
+/// colour, as one that is ready to use.
 void showInstallResult(BuildContext context, InstallResult result) {
   final notify = context.notify;
   final loc = context.loc;
 
   result.when(
-    success: (mods, message) {
+    success: (mods, warnings, characterId) {
+      // Warnings first, success last. Four cards is the cap, and three warnings
+      // plus a success is exactly four — raised the other way round, the
+      // success is the one pushed off, and it is the line that concludes the
+      // install. Last also puts it at the bottom, where the eye lands.
+      for (final warning in warnings) {
+        notify.warning(
+          warning.title,
+          body: warning.body,
+          characterId: characterId,
+        );
+      }
       final imported = mods.join(', ');
       notify.success(
-        loc.t(
-          'marketplace.install_success',
-          params: {
-            'mods': imported.isEmpty
-                ? loc.t('marketplace.install_success_default')
-                : imported,
-          },
-        ),
+        loc.t(mods.length == 1
+            ? 'marketplace.install_success_title_single'
+            : 'marketplace.install_success_title_plural'),
+        body: imported.isEmpty
+            ? loc.t('marketplace.install_success_default')
+            : imported,
+        characterId: characterId,
       );
-      if (message != null && message.isNotEmpty) notify.warning(message);
     },
-    warning: notify.warning,
-    error: notify.error,
+    warning: (lines) => notify.warning(lines.title, body: lines.body),
+    error: (lines) => notify.error(lines.title, body: lines.body),
   );
 }

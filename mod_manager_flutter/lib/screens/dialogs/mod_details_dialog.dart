@@ -143,10 +143,9 @@ void showModDetailsDialog(
                                 onChanged();
                               } catch (e) {
                                 notify.error(
-                                  loc.t(
-                                    'mods.errors.generic',
-                                    params: {'message': e.toString()},
-                                  ),
+                                  loc.t('mods.errors.generic_title'),
+                                  body: e.toString(),
+                                  characterId: mod.characterId,
                                 );
                               }
                             }

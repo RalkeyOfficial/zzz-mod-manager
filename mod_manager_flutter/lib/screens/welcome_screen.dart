@@ -94,7 +94,10 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
     final loc = context.loc;
     
     if (_modsPathController.text.isEmpty || _saveModsPathController.text.isEmpty) {
-      context.notify.warning(loc.t('welcome.directories.validation_error'));
+      context.notify.warning(
+        loc.t('welcome.directories.validation_error_title'),
+        body: loc.t('welcome.directories.validation_error_body'),
+      );
       return;
     }
 
@@ -109,7 +112,8 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
     } catch (e) {
       if (mounted) {
         context.notify.error(
-          loc.t('mods.errors.generic', params: {'message': e.toString()}),
+          loc.t('mods.errors.generic_title'),
+          body: e.toString(),
         );
       }
     }

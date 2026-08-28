@@ -65,8 +65,17 @@ void main() {
     'mods.bulk_resolve.excluded_untracked_',
     'mods.bulk_resolve.already_known_',
     'mods.update.bulk_found_',
+    'mods.update.bulk_failed_',
+    'mods.update.bulk_checked_',
     'marketplace.content_filter_',
     'language_names.',
+    // Chosen at runtime by a ternary *inside* `t(...)`, so the call-site regex
+    // above sees `t(cond ? …` and matches nothing at all.
+    'mods.snackbar.reload_success_',
+    'mods.snackbar.reload_failure_',
+    'mods.backups.restored_',
+    'mods.backups.restore_failed_',
+    'marketplace.install_success_title_',
   ];
 
   late Map<String, String> en;
@@ -126,6 +135,29 @@ void main() {
           expect(entry.value.containsKey(sibling), isTrue,
               reason: '${entry.key}.json has $key but not $sibling');
         }
+      }
+    }
+  });
+
+  test('every _body key has a _title sibling', () {
+    // A notification is a headline and a subject, and both are required at the
+    // API — so a `_body` with no `_title` is a pair that was half-added, and it
+    // would surface as a card whose headline is a raw dotted path.
+    //
+    // One direction only. The reverse would false-positive on every legitimate
+    // non-notification `*_title` (`welcome.title`, `marketplace.download_title`,
+    // `mods.bulk_resolve.section_identity`), and would need an allowlist that
+    // rots. A `_title` whose `_body` was never added is already caught twice
+    // over: `body` is required at the call site, and the "referenced in lib/"
+    // check above catches the missing key.
+    for (final entry in {'en': en, 'uk': uk}.entries) {
+      for (final key in entry.value.keys) {
+        if (!key.endsWith('_body')) continue;
+        // A prefix match rather than an exact one, because a headline that
+        // carries a count is itself a `_single`/`_plural` pair.
+        final base = '${key.substring(0, key.length - '_body'.length)}_title';
+        expect(entry.value.keys.any((k) => k.startsWith(base)), isTrue,
+            reason: '${entry.key}.json has $key but no $base');
       }
     }
   });

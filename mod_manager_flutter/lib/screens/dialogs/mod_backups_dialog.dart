@@ -222,7 +222,10 @@ class _ModBackupsDialogState extends ConsumerState<ModBackupsDialog> {
       // "couldn't restore" message, which says nothing the user can act on.
       if (!mounted) return;
       setState(() => _busy = false);
-      context.notify.error(loc.t('marketplace.install_missing_path'));
+      context.notify.error(
+        loc.t('marketplace.install_missing_path_title'),
+        body: loc.t('marketplace.install_missing_path_body'),
+      );
       return;
     }
     final mods = await ApiService.getModManagerService();
@@ -244,14 +247,14 @@ class _ModBackupsDialogState extends ConsumerState<ModBackupsDialog> {
     if (!mounted) return;
 
     context.notify.show(
-      loc.t(
-        result.success ? 'mods.backups.restored' : 'mods.backups.restore_failed',
-        params: {'mod': widget.mod.name},
-      ),
+      loc.t(result.success
+          ? 'mods.backups.restored_title'
+          : 'mods.backups.restore_failed_title'),
+      body: widget.mod.name,
       severity: result.success
           ? NotificationSeverity.success
           : NotificationSeverity.error,
-      icon: result.success ? Icons.restore_rounded : null,
+      characterId: widget.mod.characterId,
     );
   }
 
