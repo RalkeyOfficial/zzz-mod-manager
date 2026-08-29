@@ -81,25 +81,6 @@ void main() {
       expect(roots.map((c) => c.idRow), contains(30305));
     });
 
-    test('modProfileByUrl resolves a mod page url', () async {
-      transport.stub(endpoints.modProfile(531649),
-          body: loadGbFixture('mod_profile_531649'));
-
-      final mod = await buildClient()
-          .modProfileByUrl('https://gamebanana.com/mods/531649?tab=files');
-
-      expect(mod.idRow, 531649);
-    });
-
-    test('modProfileByUrl rejects a /dl/ file link without requesting', () async {
-      // A file id is not a mod id; resolving one as the other would bind to an
-      // unrelated mod entirely.
-      await expectLater(
-        buildClient().modProfileByUrl('https://gamebanana.com/dl/1770600'),
-        throwsA(isA<GbFormatException>()),
-      );
-      expect(transport.callCount, 0);
-    });
   });
 
   group('headers', () {

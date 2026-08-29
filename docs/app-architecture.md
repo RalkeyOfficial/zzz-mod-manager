@@ -111,6 +111,24 @@ Read-only client for `apiv13` — browse, search, mod detail, category tree. Rea
   `gameBananaClientProvider` (never construct one in a widget: the response cache
   is meant to be shared). **JSON GETs only** — file downloads belong to
   [`downloads.md`](downloads.md).
+
+  **One method per endpoint, and no method that isn't an endpoint.** The whole
+  surface is `browseMods`, `searchMods`, `topSubs`, `modProfile`, `modsMulti`,
+  `modUpdates`, `categories` — plus `close`. That is the rule that keeps upkeep
+  proportional when the API changes, and two consequences of it are easy to
+  misread as gaps:
+
+  - **There is no file-list call.** GameBanana returns a mod's files *inside* its
+    profile (`_aFiles` / `_aAlternateFileSources` → `GbMod.files` and
+    `archivedFiles`), so `modProfile` already carries them. A separate `files()`
+    would be a second request for data we are handed.
+  - **There is no by-url call.** A url becomes an id in
+    `utils/gamebanana_url.dart` — pure, and therefore reachable by the offline
+    origin backfill, which is why it lives there rather than here — and callers
+    pass the id. A `modProfileByUrl` convenience wrapper existed and was removed
+    once every call site had gone to the util directly; it is the shape this rule
+    exists to prevent, since it made the client's surface look like it had two
+    ways in when it has one.
 - **`HttpTransport`** (`services/http/`) — **the single seam** between our network
   code and the outside world for JSON, with `PackageHttpTransport` as the real
   implementation. Every GameBanana test injects a fake through it and runs with no
@@ -127,7 +145,14 @@ Read-only client for `apiv13` — browse, search, mod detail, category tree. Rea
     after the mod is already in place.
 - **`GameBananaEndpoints`** — pure `Uri` builders, kept separate so request shapes
   can be asserted with no transport. Browse is built on `Mod/Index` (not `Subfeed`,
-  which supports neither filters nor sort).
+  which supports neither filters nor sort). **One builder per method above and no
+  others**, so the two files stay in step and neither accumulates a url for a
+  request nobody makes. `Mod/<id>/DownloadPage` is the one the API offers and this
+  app does not use: it returns just the file lists and is cheaper *per mod*, but
+  the update check batches 50 mods into one `Mod/Multi` and needs `Updates`'
+  `_aFileRowIds` grouping besides, so it loses on both counts. Its captured
+  response and parse test are kept (`test/gamebanana/gb_parse_test.dart`) —
+  evidence about an undocumented API costs nothing, an unused `Uri` builder does.
 - **`GameBananaResponseCache`** — in-memory, keyed by full `Uri`, TTL from the
   server's `cache-control: max-age` when one is sent. **apiv13 sends none**, so the
   10-minute default is ours. Injected clock. **A user-initiated refresh has to be

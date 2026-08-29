@@ -103,11 +103,6 @@ void main() {
           'https://gamebanana.com/apiv13/Mod/531649/ProfilePage');
     });
 
-    test('download page', () {
-      expect(endpoints.modDownloadPage(531649).toString(),
-          'https://gamebanana.com/apiv13/Mod/531649/DownloadPage');
-    });
-
     test('updates feed takes no parameters', () {
       // `_nPerpage` is left at the server's default of 5 deliberately: the
       // question is always about the newest release, and a mod with fifty

@@ -564,13 +564,57 @@ they earn priority.
 > field meanings, the category tree, and the gotchas. This section is only about
 > *our client*; don't duplicate protocol detail here.
 
-- [ ] Thin, dedicated API client service — **not** inline in the UI. Surface kept
-  small and stable: search, mod profile (metadata), and file list.
-- [ ] Resolve a mod URL **or** id → structured data: name, author, images,
-  description, category, and the list of downloadable files with version labels +
-  dates.
-- [ ] This same layer powers browsing, metadata auto-fill (§3), and update checks
-  (§4). Keep its surface area minimal to limit upkeep when the API changes.
+- [x] Thin, dedicated API client service — **not** inline in the UI.
+  `services/gamebanana/gamebanana_client.dart`, reached only through
+  `gameBananaClientProvider`. Nothing outside `services/gamebanana/` builds an
+  apiv13 url or touches `HttpTransport`; the only other transport user is
+  `ImageFetcher`, which fetches **bytes** and is a deliberate second seam rather
+  than a second API path.
+  **The stated surface was off by one, and the correction is worth keeping:
+  there is no file-list call.** GameBanana returns a mod's files *inside* its
+  profile, so `modProfile` already carries them and a `files()` would be a
+  second request for data we are handed. That line was written before the API
+  was probed.
+- [x] Resolve a mod URL **or** id → structured data. `modProfile(int)` returns a
+  `GbMod` carrying every field this line asks for: `name`, `submitter`, `images`,
+  `text`, `displayCategory`, and `files` with `version`, `description` (the
+  variant label — never conflated with the version) and `dateAdded`.
+  **The *url* half is not a client method and should not become one.** A url
+  becomes an id in `utils/gamebanana_url.dart`, which is pure and therefore
+  reachable by the offline origin backfill — the reason it lives there. A
+  `modProfileByUrl` wrapper did exist and has been **removed**: every call site
+  had already gone to the util directly, leaving five lines with no caller and
+  two tests keeping them alive, while making the client look like it had two
+  ways in when it has one. The `/dl/` guard it advertised was never its own —
+  it belongs to the util, where `test/gamebanana/gamebanana_url_test.dart`
+  covers it against five url shapes.
+- [x] This same layer powers browsing, metadata auto-fill (§3), and update checks
+  (§4), with the surface kept minimal. Verified by the callers: browsing is
+  `utils/marketplace_providers.dart` (`browseMods`, `searchMods`, `categories`,
+  `topSubs`), autofill is `RemoteModMetadata.fromMod` off `modProfile`, and the
+  update check is `services/update_check_run.dart` (`modsMulti`, `modUpdates`).
+  **The operational form of "minimal" is one method per endpoint and no method
+  that isn't an endpoint** — stated in
+  [`docs/app-architecture.md`](docs/app-architecture.md) §4, which is what makes
+  a wrapper like the one above visible as surface rather than as convenience.
+- [x] **`GameBananaEndpoints.modDownloadPage` built a url nothing requested.**
+  Removed, along with its endpoints test. It was earmarked for update checks —
+  [`docs/gamebanana-api.md`](docs/gamebanana-api.md) §"Update checks" calls
+  `DownloadPage` *"much cheaper than `ProfilePage` when all you need is did the
+  file list change"* — and the check that shipped went elsewhere for two reasons
+  that both still hold: `Mod/Multi` batches **50 mods into one request** where
+  this is one request per mod, and `Mod/<id>/Updates` carries the `_aFileRowIds`
+  grouping without which a variant reads as a newer version.
+  **The capture and its parse test stay** (`test/gamebanana/gb_parse_test.dart`,
+  `fixtures/gamebanana/download_page_531649.json`). Evidence about an
+  undocumented API costs nothing when our own code changes; an unused `Uri`
+  builder is upkeep. That split is the point — bringing the endpoint back is four
+  lines against a response whose shape is already pinned, including the detail
+  that would otherwise bite: it carries **no `_idRow`**, so a caller has to supply
+  the mod id.
+  Worth stating because the wrong reason to keep it was written down first: it is
+  **not** needed for download urls. `ProfilePage` carries `_sDownloadUrl` on every
+  file already (`GbFile.downloadUrl`).
 
 ### Verified against the live API (probed 2026-08-01, anonymous, no cookies)
 

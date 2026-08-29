@@ -2,7 +2,6 @@ import 'dart:async';
 
 import '../../core/constants.dart';
 import '../../models/gamebanana/gamebanana.dart';
-import '../../utils/gamebanana_url.dart';
 import '../http/http_transport.dart';
 import '../http/package_http_transport.dart';
 import 'gamebanana_endpoints.dart';
@@ -125,22 +124,6 @@ class GameBananaClient {
       throw GbFormatException('Mod $modId: profile carried no _idRow');
     }
     return mod;
-  }
-
-  /// Resolves a GameBanana **mod page** url and fetches its profile.
-  ///
-  /// Throws [GbFormatException] when the url isn't a mod page — including a
-  /// `/dl/<id>` file link, which is a different id space entirely.
-  ///
-  /// `async` so a bad url surfaces through the returned future like every other
-  /// failure here, rather than throwing synchronously and forcing callers to
-  /// guard the call site *and* the future.
-  Future<GbMod> modProfileByUrl(String url, {bool refresh = false}) async {
-    final modId = gameBananaModIdFromUrl(url);
-    if (modId == null) {
-      throw GbFormatException('Not a GameBanana mod page url: $url');
-    }
-    return modProfile(modId, refresh: refresh);
   }
 
   /// Many mods' chosen fields in one request via `Mod/Multi` — a **bare array**

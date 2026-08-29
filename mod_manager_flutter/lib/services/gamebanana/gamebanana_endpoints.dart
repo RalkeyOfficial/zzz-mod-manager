@@ -72,10 +72,6 @@ class GameBananaEndpoints {
   /// `Mod/<id>/ProfilePage` — everything the detail screen needs in one call.
   Uri modProfile(int modId) => _uri('Mod/$modId/ProfilePage', const {});
 
-  /// `Mod/<id>/DownloadPage` — just the file lists. Cheaper than a profile for
-  /// an update check, but carries no `_idRow` of its own.
-  Uri modDownloadPage(int modId) => _uri('Mod/$modId/DownloadPage', const {});
-
   /// `Mod/<id>/Updates` — the author's release feed, newest first.
   ///
   /// Read for `_aFileRowIds`: **the files released together as one release.**

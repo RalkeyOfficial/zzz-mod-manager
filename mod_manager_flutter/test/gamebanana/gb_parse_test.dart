@@ -253,8 +253,16 @@ void main() {
 
   group('DownloadPage', () {
     test('carries the file lists', () {
-      // Note it has no _idRow of its own, which is why the client would have to
-      // supply the mod id — one reason this endpoint is deferred past M1.
+      // **The app does not request this endpoint** — the update check gets its
+      // file lists from `Mod/Multi` (50 mods per request, where this is one) and
+      // its release grouping from `Mod/<id>/Updates`, so no `Uri` is built for
+      // it. The capture and this test stay anyway: they are recorded evidence
+      // about an undocumented API, they cost nothing when our own code changes,
+      // and they are what would make wiring it up cheap if a per-mod "did the
+      // file list change?" check is ever wanted.
+      //
+      // The detail that would bite whoever does: it carries no `_idRow`, so the
+      // caller has to supply the mod id — every other response identifies itself.
       final json = parseObject(loadGbFixture('download_page_531649'));
       expect(GbFile.listFrom(json['_aFiles']), hasLength(6));
       expect(GbFile.listFrom(json['_aArchivedFiles']), hasLength(8));
