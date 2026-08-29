@@ -9,16 +9,24 @@ decisions made so far, not *how* to implement it. Items are grouped by area.
 > §7) belong in [`docs/origin-tracking.md`](docs/origin-tracking.md). Don't let this
 > document become the only written explanation of anything.
 
+> **A checkbox means work.** `- [ ]` is something someone could pick up and do;
+> `- [x]` is that same thing, done. Everything else — a locked decision, a
+> measured fact about the API, a schema the code already implements, a design
+> that was considered and refused — is a **plain bullet**, because a checkbox
+> next to it is a promise nobody intends to keep and it buries the handful of
+> entries that are real. Recording a finding is not the same as filing a task:
+> if there is no action, do not give it a box.
+
 ---
 
 ## Locked decisions
 
-- [ ] **Origin data is confidence-tiered, and "unknown" is a real state — not a
+- **Origin data is confidence-tiered, and "unknown" is a real state — not a
   migration to be finished.** Mods that predate the origin block (the whole
   existing library) and every future manual import carry no origin data, so the
   model gets an explicit unknown tier, a visible status, and a resolution flow
   that stays in the UI permanently. Fully planned in **§7**.
-- [ ] **Marketplace = native GameBanana browser (not a webview).** One shared
+- **Marketplace = native GameBanana browser (not a webview).** One shared
   implementation for Linux and Windows. Motivation: minimal platform difference
   and easy in-app integration. Today the marketplace is asymmetric — Windows uses
   an embedded `flutter_inappwebview`, Linux falls back to the external browser +
@@ -656,12 +664,12 @@ probing, which is one more reason to keep our client tiny.
   `GET /apiv11/Mod/<id>/ProfilePage` (everything the detail screen needs, in one call),
   `GET /apiv11/Mod/<id>/Updates` (the author's changelog feed — that's §4's changelog
   display, no scraping required).
-- [ ] **Downloads are anonymous and unguarded.** `_sDownloadUrl`
+- **Downloads are anonymous and unguarded.** `_sDownloadUrl`
   (`gamebanana.com/dl/<fileid>`) 302s to `files.gamebanana.com` and on to a
   `filecacheNN` node, serving real bytes with no session, no referer and no Cloudflare
   challenge. Range requests are honoured (`206 Partial Content`) — which is what makes
   §5's retry/**resume** actually implementable.
-- [ ] **`ProfilePage` already carries every field the origin block wants**, so §3's
+- **`ProfilePage` already carries every field the origin block wants**, so §3's
   "auto-populate metadata on install" is one request rather than several. `_aFiles[]`
   → `_idRow` (our `file_id`), `_sFile`, `_nFilesize`, `_tsDateAdded`,
   `_sMd5Checksum` (§7.8 confirmed), and **two strings that must not be conflated**:
@@ -672,14 +680,14 @@ probing, which is one more reason to keep our client tiny.
   `_tsDateAdded` / `_tsDateUpdated`, `_aTags`, `_aCategory`, `_sText` (description —
   **HTML**, while ours is markdown, so it needs converting on install),
   `_aPreviewMedia` (gallery).
-- [ ] **Upstream-gone is an explicit field, not just a 404.** `_bIsPrivate`,
+- **Upstream-gone is an explicit field, not just a 404.** `_bIsPrivate`,
   `_bIsTrashed`, `_bIsWithheld` — §7.6's `remote_missing` should read these rather
   than infer from a status code. `_bIsObsolete` is a *different* thing (the author
   flagged it superseded) and needs its own wording.
-- [ ] **Per-file scan results ship too** — `_sAvResult` (`clean`), `_sAnalysisResult`.
+- **Per-file scan results ship too** — `_sAvResult` (`clean`), `_sAnalysisResult`.
   Worth showing verbatim on the file list: unlike an md5 match it genuinely *is* a
   safety signal (contrast §7.8), and it costs nothing to surface.
-- [ ] **No documented rate limit.** No `RateLimit-*` or `Retry-After` headers on a
+- **No documented rate limit.** No `RateLimit-*` or `Retry-After` headers on a
   normal response; responses carry `cache-control: public, max-age=600`. Mirror that
   10-minute TTL in our own cache (§6) and treat backoff as **reactive** (on 429/503)
   rather than budgeted — then measure a burst before shipping §7.6.
@@ -699,25 +707,25 @@ recorded at install time.
 
 The block:
 
-- [ ] **Source service** (e.g. `gamebanana`) — future-proofs for other sources.
-- [ ] **Remote mod id** (GameBanana `_idRow`) — stable handle to re-query; more
+- **Source service** (e.g. `gamebanana`) — future-proofs for other sources.
+- **Remote mod id** (GameBanana `_idRow`) — stable handle to re-query; more
   reliable than `sourceUrl`.
-- [ ] **Installed file id** — GameBanana mods have multiple files; track *which*.
-- [ ] **Installed version string + file/version label** (e.g. "white hair ver").
-- [ ] **Downloaded date** — fallback comparator + UI ("added N ago"); ties into
+- **Installed file id** — GameBanana mods have multiple files; track *which*.
+- **Installed version string + file/version label** (e.g. "white hair ver").
+- **Downloaded date** — fallback comparator + UI ("added N ago"); ties into
   existing `sort_mode: added`.
-- [ ] **Archive hash** — detect real changes vs same-version re-upload; enables
+- **Archive hash** — detect real changes vs same-version re-upload; enables
   dedup / "already have this". Recorded for **every** ingested archive, not only
   in-app downloads, since GameBanana publishes a per-file md5 we can match against
   — see §7.8 for what it can and cannot be used for.
-- [ ] Locally-imported mods (drag/drop) simply have **no origin block** and show
+- Locally-imported mods (drag/drop) simply have **no origin block** and show
   no update info — manual import keeps working unchanged. They are not an error
   state: how they surface, and how a user can opt one into tracking, is §7.
-- [ ] **`source_url` stays user-facing and mod-page-only.** Never write machine
+- **`source_url` stays user-facing and mod-page-only.** Never write machine
   handles or `/dl/<fileid>` links into it — the origin block owns those. The
   resolve dialog (§7.5) may *accept* a pasted `/dl/` link, but it stores the
   resolved ids in the origin block and normalizes `source_url` to the mod page.
-- [ ] **Record the ingest shape, not just the file.** One archive does **not** map to
+- **Record the ingest shape, not just the file.** One archive does **not** map to
   one mod folder: `_installArchive` → `resolveImportSelection()` lets the user install
   several top-level folders as separate mods (`importMods`) *or* merge them into one
   (`importCombinedMod`). The origin block has to record what was actually done —
@@ -729,7 +737,7 @@ The block:
   three separate hits; and a group whose members were partly deleted is *broken*, not
   updatable — offer a clean reinstall rather than silently re-creating what the user
   removed.
-- [ ] **An inbound sidecar is untrusted input.**
+- **An inbound sidecar is untrusted input.**
   [`docs/metadata-schema.md`](docs/metadata-schema.md) §1 already says a sidecar is
   "effectively a public interchange format", and `_copyDirectory()` copies a source
   folder's `.zzz-mod-manager/` in wholesale — so a folder from Discord or a friend can
@@ -757,12 +765,14 @@ The block:
   three published files include the two variants installed locally). The badge
   therefore names every matching folder instead of rendering a singular
   "installed".
-- [ ] **A failed origin write is a state, not a shrug.** `ModMetadataService.write()`
+- **A failed origin write is a state, not a shrug.** `ModMetadataService.write()`
   returns `false` on a read-only folder or an odd network share, and nothing looks at
   the result today. A mod whose origin can't persist would re-resolve forever with no
   explanation — report it once ("couldn't save tracking data for `<mod>` — folder is
-  read-only") instead of silently retrying every scan.
-- [ ] Every field above carries a **confidence** — see §7.2 for the tiers and
+  read-only") instead of silently retrying every scan. **Done for the install
+  path** (`takeOriginWriteFailures`); the backfill path is a separate open item
+  under "Open around the read side".
+- Every field above carries a **confidence** — see §7.2 for the tiers and
   what each one is allowed to drive.
 - [x] Auto-populate metadata (description, images, tags, character) from the API
   on marketplace install instead of leaving it blank.
@@ -816,7 +826,7 @@ The block:
   where inverting `_buildGroups` to derive the groups from a stored flat list is
   a change to the 2000-line screen that owns the scan. That inversion is *not*
   done and is filed on its own below.
-- [ ] **Nothing keeps the library list live across a tab switch.** `ModsScreen` is
+- **Nothing keeps the library list live across a tab switch.** `ModsScreen` is
   a keyed child of an `AnimatedSwitcher` with no keep-alive, so it is disposed on
   every tab change and `initState` re-scans on the way back. The read side works
   around it by taking its own snapshot and invalidating it when the marketplace
@@ -867,7 +877,7 @@ The block:
   What is missing is the other half: a way to say "10 of 26", or to pull the rest from
   the mod page in the edit dialog. Not a silent cap on correctness (the mod page is
   one click away), but the user has no way to know there is more.
-- [ ] **The install-summary merge rests on an unasserted invariant.**
+- **The install-summary merge rests on an unasserted invariant.**
   `autoTags.addAll(fill.characterTags)` in `_installArchive` is correct only because
   the two maps are disjoint by construction — the autofill assigns a character solely
   when none is set, so folder-name detection and category detection can never both
@@ -1193,14 +1203,17 @@ The block:
   nobody has checked. Off by default, so a user who never finds the setting
   still gets today's behaviour and no launch traffic. §5.1 of
   [`docs/update-checks.md`](docs/update-checks.md) owns it.
-- [ ] **The per-mod check fetches a whole `ProfilePage` when `DownloadPage`
+- **The per-mod check fetches a whole `ProfilePage` when `DownloadPage`
   would do.** `Mod/<id>/DownloadPage` returns `_aFiles` + `_aArchivedFiles`
   plus the upstream-gone flags and nothing else — everything the comparator
   reads except `_tsDateAdded` (the baseline clamp) and `_tsDateUpdated`. Not
   taken: the dialog would then need a second request for the two dates, and the
   profile is very often already in the client's ten-minute cache from the
-  marketplace. Worth measuring before assuming either way.
-- [ ] **The batch bisect could ask the error which id was bad.** A
+  marketplace. Worth measuring before assuming either way. Note the `Uri`
+  builder for that endpoint has since been **removed** as dead surface (§2), so
+  acting on this means re-adding it — four lines, against a response shape
+  already pinned by `test/gamebanana/gb_parse_test.dart`.
+- **The batch bisect could ask the error which id was bad.** A
   `NO_SUCH_RECORD` response names the offending id in `_sErrorMessage`
   (`Record Mod.999999999 doesn't exist`), so a parser could drop it and retry
   once instead of halving. Not taken because it trades a structural recovery
@@ -1266,7 +1279,7 @@ The block:
   fact.** Written up in
   [`docs/update-checks.md`](docs/update-checks.md) §3, which is now the place to
   read before proposing a fifth rule.
-- [ ] **`_bHasFiles` on an update record is unreliable** — it reads `false` on a
+- **`_bHasFiles` on an update record is unreliable** — it reads `false` on a
   record whose `_aFileRowIds` names two files (measured on `549029`). Nothing
   reads it; noted so nothing starts to.
 
@@ -1303,7 +1316,7 @@ The block:
   view (backlog); `SnapshotService.totalBytes()` exists and has no reader. Worth
   pairing with a "delete all snapshots for this mod" action, which the per-row
   delete currently makes tedious.
-- [ ] **The retention numbers are not user-configurable**, deliberately for now
+- **The retention numbers are not user-configurable**, deliberately for now
   (30 days / 3 per mod / 5 GB). They are the kind of setting that is easy to add
   and hard to remove, and nobody has asked. If they are ever exposed it belongs
   with §6's Settings work, and the age floor has to keep beating the count cap in
@@ -1322,7 +1335,7 @@ The block:
   fix (keep the progress dialog open through a "preparing" phase rather than
   bolting a spinner onto one step). Longer than the install's for a big archive,
   because extraction is the slow part and it happens before anything is shown.
-- [ ] **Cancelling at the update confirmation still costs a full re-download.**
+- **Cancelling at the update confirmation still costs a full re-download.**
   `archiveConsumed` is set once extraction succeeds and the dialog comes after,
   so backing out deletes the archive. Deliberate — the alternative is keeping
   every declined archive in a folder the user does not manage, and §0 measured a
@@ -1742,14 +1755,14 @@ is exactly right.
   `DownloadWriteException` whose message says nothing about space. Dart has no
   portable free-space API, so it needs a `PlatformService` method rather than a
   `Platform.isX` branch.
-- [ ] **A queued download cannot be reordered or paused.** The panel offers
+- **A queued download cannot be reordered or paused.** The panel offers
   cancel, retry and dismiss; there is no "start this one first" and no
   pause-and-keep-the-partial, even though the service already supports exactly
   that (`DownloadHandle.cancel()` without `deletePartial` is a pause in
   everything but name, and re-enqueuing resumes). Not built because neither has
   been asked for, and a row three lines tall cannot carry more controls without
   becoming a decision — see `rowAction`.
-- [ ] **An update decline costs the user their place in the queue.** If the file
+- **An update decline costs the user their place in the queue.** If the file
   an update wants is already being fetched as a *new install*,
   `downloadFileWithProgress` declines with "already downloading" rather than
   attaching to it. Correct — the archive in flight belongs to somebody else and
@@ -1758,7 +1771,7 @@ is exactly right.
   deleted by whoever finishes first. Rare enough to leave: it needs the same file
   id to be both the newest release of a mod you own and something you are
   installing fresh, at the same moment.
-- [ ] **Nothing tells the user a background install asked a question.** An
+- **Nothing tells the user a background install asked a question.** An
   archive with several top-level folders, or one whose hash is already banked,
   raises a dialog from `DownloadQueueHost` — which is right (it is the only way
   to ask) but arrives over whatever screen they are on, possibly minutes after
@@ -1796,13 +1809,13 @@ is exactly right.
   shown, or omitted. Needed in M1, since it's the first thing a user hits on the
   results grid. **Done in M1**; its Settings-tab entry landed with M4 — see the
   filed item below.
-- [ ] Keys for §7: the post-upgrade nudge's dismissed flag, and the remote-lookup
+- Keys for §7: the post-upgrade nudge's dismissed flag, and the remote-lookup
   response cache — the latter should honour the API's own `max-age=600` (§2), and
   probably belongs in app-data rather than config.
   Neither is due yet and both are waiting on their feature rather than on the
   key: the nudge (§7.4) is not built, and the client's ten-minute cache is
   in-memory and per session, so there is no persisted cache to configure.
-- [ ] Key for §4.2: backup retention (count or age), once a cap is chosen. The cap
+- Key for §4.2: backup retention (count or age), once a cap is chosen. The cap
   is chosen (30 days / 3 per mod / 5 GB) and is deliberately **not** exposed —
   §4.2's own argument is that presenting the age floor and the count cap as two
   independent numbers invites exactly the configuration it rejects. Kept open
@@ -2010,7 +2023,7 @@ is exactly right.
   branch so it doesn't flicker in and out with the listing it loads independently
   of. The **pager stays pinned** below the scroll view — paging is navigation, and
   hunting for it at the bottom of a long grid gets worse the longer the page is.
-- [ ] **We cannot reproduce GameBanana's default ordering, and users will compare.**
+- **We cannot reproduce GameBanana's default ordering, and users will compare.**
   The site defaults to its own "ripe" ranking, which **neither API exposes**: every
   plausible `_sSort` alias is rejected, and the legacy Core API — authoritative,
   since it enumerates its own sorts — offers only `id`, `name`, `udate`. This is not
@@ -2034,7 +2047,7 @@ is exactly right.
     sorts that appear in no such list. It is corroboration, not proof — apiv11 has
     no discovery endpoint, so the claim rests on rejected guesses. Worth keeping in
     mind before treating any Core API absence as authoritative for apiv11.
-- [ ] **Unrecognised top-level query params are silently ignored by apiv11.** Only
+- **Unrecognised top-level query params are silently ignored by apiv11.** Only
   `_aFilters[…]` keys and `_sSort` values are validated; a bogus `_sPeriod`,
   `_sRange` etc. returns `200` with unchanged results. So a successful response is
   **not** evidence a parameter works — five invented period params all "succeeded"
@@ -2089,7 +2102,7 @@ is exactly right.
   is prev/next with "Page N of M", which is honest but tedious across 866 pages. Also
   worth showing `_nRecordCount` so the user knows the search narrowed anything.
   Deliberately plain per M1; revisit with M4's polish.
-- [ ] **Images are fetched with `Image.network` and cached only in memory.** Fine and
+- **Images are fetched with `Image.network` and cached only in memory.** Fine and
   measured-adequate for a browsing session — Flutter's `ImageCache` de-duplicates and
   holds decoded frames — but thumbnails are re-fetched from scratch after a restart. No
   dependency was added for this on purpose; revisit only if it is ever observed to be
@@ -2121,7 +2134,7 @@ rather than collapsed into one enum:
 
 ### 7.2 Confidence-tiered origin block
 
-- [ ] Extend the §3 origin block with a confidence per axis, plus honest markers
+- Extend the §3 origin block with a confidence per axis, plus honest markers
   for derived values:
 
 ```jsonc
@@ -2148,12 +2161,12 @@ rather than collapsed into one enum:
 }
 ```
 
-- [ ] **Confidence and provenance are separate axes.** Confidence measures *how
+- **Confidence and provenance are separate axes.** Confidence measures *how
   sure we are*; provenance records *where the mod came from*. They came apart the
   moment a hand-imported archive could be matched exactly (§7.8), so a tier named
   after a source (the old `installed`) would be actively misleading in the UI for
   a mod the user dragged in themselves.
-- [ ] Tiers, and what each one may drive:
+- Tiers, and what each one may drive:
   - **`exact`** — we know precisely which file this is: we downloaded it, or its
     archive md5 matched GameBanana's published checksum. The only tier at which
     the app stops hedging: an uncapped verdict ("an update **is** available"
@@ -2166,7 +2179,7 @@ rather than collapsed into one enum:
   - **`assumed_latest`** — "I don't know what I have, I got it around then."
     Compares against `baseline_remote_date` only.
   - **`unknown`** — nothing.
-- [ ] **Never-confirmed ≠ safe.** An `inferred` identity came from a free-form
+- **Never-confirmed ≠ safe.** An `inferred` identity came from a free-form
   text field a human typed — it may be a wrong paste, a collection link, a Drive
   link, or a different mod entirely. It must be confirmed once (§7.6) before any
   update is allowed to overwrite files.
@@ -2255,7 +2268,7 @@ been renamed). Strictly local: scans run offline on every launch.
   mod folder with empty sidecars" rule — a user who never opens the marketplace
   should see no new files. Only an explicit user decision (`tracking: "off"`)
   causes a write.
-- [ ] **Version sniffing from local files** (folder-name `_v2` tokens,
+- **Version sniffing from local files** (folder-name `_v2` tokens,
   `; version` comments in `.ini`, README lines): **hint only, never written.**
   Mods embed ZZMI/game versions and author-side numbering that are
   indistinguishable from mod versions, and a wrong stored version is worse than
@@ -2285,7 +2298,7 @@ been renamed). Strictly local: scans run offline on every launch.
   derived `mod_id`. **Anything wanting "a link to the mod page" must build it from
   `origin.mod_id`** rather than expecting `source_url` to be set — filed as its own
   item below, since nothing does that yet.
-- [ ] **A backfilled sibling group can't be reconstructed, and two mods sharing a
+- **A backfilled sibling group can't be reconstructed, and two mods sharing a
   `mod_id` must not be read as one.** `origin.ingest.sibling_group` is what makes
   §4's "an update acts on the whole sibling group at once" work, and nothing on
   disk records that two folders came from one archive — so the backfill leaves it
@@ -2526,7 +2539,7 @@ mod context menu, and the edit-mod dialog.
 
 #### Open around the resolve dialog (known, deliberately not built)
 
-- [ ] **A "tracked by date only" filter, if the card marker turns out not to be
+- **A "tracked by date only" filter, if the card marker turns out not to be
   enough.** The new muted clock makes the state visible but not *enumerable* —
   deliberately, since it is out of the "needs attention" count. At 17 mods
   seeing them is enough; at 80 it may not be, and the natural home is a second
@@ -2614,7 +2627,7 @@ mod context menu, and the edit-mod dialog.
   forgetting it produces no error — just a surface that renders yesterday's data
   until the tab is switched. The durable fix is value equality on `ModInfo`
   itself, which needs the keybinds question above answered first.
-- [ ] **The dialog is per-mod only, by design, and that leaves the two-variant
+- **The dialog is per-mod only, by design, and that leaves the two-variant
   case tedious.** Two folders from one mod page are common (measured: two in a
   23-mod library), and each needs its own trip through the dialog even though the
   identity step's answer is identical. §7.6's bulk screen is the proper fix;
@@ -2627,7 +2640,7 @@ mod context menu, and the edit-mod dialog.
 bulk update-check results list, which already fetches exactly the data needed.
 One screen, two jobs, and nothing that goes stale once libraries are migrated.
 
-- [ ] **Bulk acts only on precise handles (`mod_id`).** Fuzzy identity matching is
+- **Bulk acts only on precise handles (`mod_id`).** Fuzzy identity matching is
   always one-at-a-time and user-confirmed (§7.5's search box). Rationale: a mass
   fuzzy name-match that a user rubber-stamps can bind a folder to an unrelated
   mod — and then an "update" overwrites their mod with a different mod's files.
@@ -2776,12 +2789,12 @@ One screen, two jobs, and nothing that goes stale once libraries are migrated.
   open the per-mod dialog for each in turn rather than leaving the user to find
   them through the "needs attention" filter afterwards. Small, and it is the one
   place the two surfaces could hand off to each other.
-- [ ] **There is no "I don't know which" per row.** The ambiguous rows get a
+- **There is no "I don't know which" per row.** The ambiguous rows get a
   picker or nothing; the `assumed_latest` escape hatch exists per mod (§7.5) and
   in bulk (§6 of the origin doc), but not *here*, where the user is already
   looking at the list. It would need its own column and its own wording, and it
   overlaps a button that already exists — filed rather than guessed at.
-- [ ] **The card cannot say "the mod page is still a guess".** `modOriginStatus`
+- **The card cannot say "the mod page is still a guess".** `modOriginStatus`
   keys on the *version* confidence once an identity exists, so a mod at
   `inferred`/`inferred` renders the same muted clock as one the user resolved to
   a date on purpose. Pre-existing — the backfill has always produced `inferred`
@@ -2790,7 +2803,7 @@ One screen, two jobs, and nothing that goes stale once libraries are migrated.
   state is the wrong fix (the slot has one mark by rule); the honest options are
   the tooltip saying so, or the resolve dialog's existing "worked out from the
   source link — not confirmed" line being enough.
-- [ ] **The character header still holds four global controls.** Auto-F10,
+- **The character header still holds four global controls.** Auto-F10,
   refresh, F10 reload and Single/Multi sit at the right of a block titled
   *Characters*, which is where they ended up because there was room rather than
   because they belong. The toolbar rebuild deliberately stopped short of them:
@@ -2801,7 +2814,7 @@ One screen, two jobs, and nothing that goes stale once libraries are migrated.
 
 ### 7.7 Self-healing (why none of this has to be perfect)
 
-- [ ] Any mod whose **identity** is known becomes fully known the first time it
+- Any mod whose **identity** is known becomes fully known the first time it
   updates *through* us — the download writes an `exact` origin block. So
   version-unknown is a one-time speed bump per mod, and the heuristics only need
   to get identity right. This is what justifies keeping the guessing conservative
@@ -2823,10 +2836,10 @@ file the user has, which is the one path to exactness for hand-imported mods.
   rather than in the zip decoder, where it would have silently covered zips only.
   Honest cost: **free on download** (hashed in-stream, passed in as `knownMd5`),
   **one extra streamed read on manual import**.
-- [ ] **Hash before the archive is deleted** (§5 discards it after extraction).
+- **Hash before the archive is deleted** (§5 discards it after extraction).
   The hash is the cheap 32-char residue that survives that deletion — it cannot be
   recovered later, because zip output isn't reproducible from extracted files.
-- [ ] **Bank now, cash in at resolution.** A hash alone never yields *identity* —
+- **Bank now, cash in at resolution.** A hash alone never yields *identity* —
   GameBanana has no reverse-hash lookup. It's a file-level discriminator that pays
   off once identity is known: on resolution (§7.5) or in the bulk pass (§7.6),
   compare the banked hash against that mod's file list. A hit sets `file_id` +
@@ -2866,14 +2879,14 @@ file the user has, which is the one path to exactness for hand-imported mods.
 
 Known limits — worth writing down so nothing is built to depend on this:
 
-- [ ] **Moderate hit rate.** An untouched GameBanana zip matches. Anything
+- **Moderate hit rate.** An untouched GameBanana zip matches. Anything
   re-zipped — a user who unpacked and repacked it, or an archive passed around via
   Discord — never matches, because any repack changes the md5 even when the
   contents are byte-identical. Treat it as a **bonus fast-path, never load-bearing**.
-- [ ] **A miss costs nothing.** The field is null-or-exact: no match means we learn
+- **A miss costs nothing.** The field is null-or-exact: no match means we learn
   nothing and fall through to the normal guess path (§7.5). False negatives are
   common by design; false positives are not a realistic accident.
-- [ ] **`archive_md5` is a matching key, never an integrity or authenticity claim.**
+- **`archive_md5` is a matching key, never an integrity or authenticity claim.**
   No "✓ verified" checkmark, no shield icon. The honest phrasing is "byte-identical
   to file X on the mod page". md5 is in this design *only* because it's what
   GameBanana publishes; it is cryptographically broken, so a deliberate collision
@@ -2906,7 +2919,7 @@ work that already opens the same file, so they cost nothing extra.
 
 ## 9. Cross-cutting work (easy to forget, not optional)
 
-- [ ] **Localization is a per-screen tax.** Every surface here needs keys in **both**
+- **Localization is a per-screen tax.** Every surface here needs keys in **both**
   `assets/l10n/en.json` and `uk.json`: ~~§1's two screens,~~ §7.4's status slot and
   tooltips, §7.5's resolve dialog, §7.6's bulk screen, §4's post-update report. It's
   the most repetitive cost in the plan and it currently appears in no milestone —
@@ -2968,7 +2981,7 @@ work that already opens the same file, so they cost nothing extra.
   the retry button the screen deliberately withholds, so it carries the whole
   weight of the decision. The other four are the actions themselves, and they
   are labels only because the state above them already did the explaining.
-- [ ] **Name the tests, because the risky parts are pure functions.** The pieces most
+- **Name the tests, because the risky parts are pure functions.** The pieces most
   likely to be quietly wrong need no network and no UI: `source_url` → `mod_id`
   parsing (§7.3); the confidence state machine and what each tier permits (§7.2); the
   dangling-`.ini`-reference scan (§4.1), which decides whether a folder is warned about
@@ -3015,8 +3028,9 @@ work that already opens the same file, so they cost nothing extra.
   an unrecognised setting degrades to `blur`), and that listing fixtures carry
   `_sInitialVisibility` at all — that last one is a canary, since if the field ever
   disappears upstream the filter silently blurs the entire grid.
-- [ ] **One seam for offline tests.** Keep HTTP behind a single injectable interface
-  in §2, or every test above needs a network to run.
+- **One seam for offline tests.** Keep HTTP behind a single injectable interface
+  in §2, or every test above needs a network to run. Done — `HttpTransport`, with
+  `ImageFetcher` as the one deliberate second seam for bytes.
 
 ---
 
