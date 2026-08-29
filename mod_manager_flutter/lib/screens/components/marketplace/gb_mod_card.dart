@@ -189,9 +189,7 @@ class _GbModCardState extends State<GbModCard> {
   ///
   /// One slot rendering exactly one state, never a stack of badges — the same rule
   /// the library card follows, and for the same reason: a card that can show three
-  /// things at once shows none of them. **"Update available" belongs here** as a
-  /// second branch when it lands, so precedence between the two is one decision in
-  /// one place rather than a second badge somewhere else on the card.
+  /// things at once shows none of them.
   ///
   /// A filled pill rather than the alternative that was actually built and
   /// compared: a full-width strip along the bottom of the cover, which lost a
@@ -203,12 +201,13 @@ class _GbModCardState extends State<GbModCard> {
   /// saturated, which is why [_badge] has a `filled` mode at all — and occludes
   /// almost nothing.
   ///
-  /// Consequence to carry into M3: "you already have this" now occupies `primary`,
-  /// here and on the detail view's notice and file-row chips alike, so
-  /// "update available" has to differ by **hue at similar weight** rather than by
-  /// being the louder of the two. `tertiary` is already spoken for by the
-  /// `obsolete` badge a few lines above, so that pick wants making against a real
-  /// screen rather than in advance.
+  /// "You already have this" occupies `primary` — here and on the detail view's
+  /// notice and file-row chips alike — so the marketplace never changes hue for
+  /// that meaning between screens.
+  ///
+  /// **The slot has one branch and is meant to keep one.** An "update available"
+  /// state was considered for it and refused; see
+  /// [`docs/marketplace.md`](../../../../../docs/marketplace.md) §7 for why.
   Widget? _statusSlot(BuildContext context, AppLocalizations loc) {
     if (widget.installedAs.isEmpty) return null;
 

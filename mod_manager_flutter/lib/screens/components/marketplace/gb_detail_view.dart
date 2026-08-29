@@ -161,9 +161,7 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
                 params: {'mods': installedAs.join(', ')}),
             // `primary`, matching the card's badge. One colour per meaning across
             // the marketplace, so "you already have this" doesn't change hue
-            // depending on which screen you are looking at. Note the consequence
-            // for M3: "update available" therefore has to differ by hue rather
-            // than by being the louder of the two.
+            // depending on which screen you are looking at.
             Theme.of(context).colorScheme.primary,
           ),
         if (mod.isRemoteMissing)

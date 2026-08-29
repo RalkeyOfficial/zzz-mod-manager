@@ -111,9 +111,38 @@ are different questions with very different availability — see
 
 `_statusSlot` returns at most one badge, never a stack — the same rule the library
 card follows, since a card that can show three things at once shows none of them.
-**"Update available" belongs in that method** as a second branch when it lands, so
-precedence between the two states is one decision in one place rather than a second
-badge elsewhere on the card.
+It has **one** branch, "in library", and is meant to keep one.
+
+### "Update available" here was considered and refused
+
+Recorded because it is the obvious next idea, and because the case against it is
+not visible from this file. **The marketplace answers *do I have this*; the
+library answers *is mine current*.** Two screens, two questions, and moving the
+second one here fails twice over:
+
+- **The badge would be blank most of the time, and blank reads as "no update".**
+  Rendering it needs no request at all — `modUpdateChecksProvider` is keyed by
+  folder and `InstalledModsIndex.installsOfMod` turns a remote mod id into
+  folders, so a card showing an installed mod is showing one a library-wide check
+  already covered. But that map is **session state that is never persisted** (see
+  [`library-screen.md`](library-screen.md) §4) and the launch check is **off by
+  default** ([`update-checks.md`](update-checks.md) §5.1), so on a normal launch it
+  is empty. An indicator that is usually absent teaches the user that absence
+  means *no update*, when it means *nobody checked*. The library gets away with
+  the same emptiness because the button that fills it is in its own toolbar.
+- **The action behind it does not exist here, and cannot cheaply.** This screen's
+  Download enqueues an install, and `ModManagerService.importMods` skips a folder
+  that already exists — so pressing it on a mod you own downloads a whole archive
+  and reports *"Nothing imported"*, or, when the author renamed the folder between
+  versions, silently lands a **second copy** beside the first. Updating is
+  `applyUpdateFlow`: snapshot, overwrite in place, keep the name, character,
+  favourite and enabled state, reconcile moved keybinds, and ask first. §5 already
+  says why those two are not folded together. So the badge without the action is a
+  trap, and with it the whole update conversation moves into a browse screen.
+
+What is actually missing is the opposite direction — a way to get **from** a
+marketplace mod **to** its library entry. "In your library as …" is a dead label
+today, and a link would be useful whether or not anything is out of date.
 
 It renders a **filled** pill top-right, opposite `obsolete` and above the reveal
 overlay (owning a mod is not adult content, so it must read before the blur is
@@ -127,9 +156,7 @@ lifted).
   and occludes almost nothing.
 - **"You already have this" is `primary` everywhere** — the card badge, the detail
   view's notice, the file-row chips, the carousel — so it doesn't change hue
-  between screens. The consequence for M3 is worth knowing in advance: "update
-  available" has to differ by **hue at similar weight** rather than by being the
-  louder of the two, and `tertiary` is already spoken for by the `obsolete` badge.
+  between screens. `tertiary` is spoken for by the `obsolete` badge.
 
 **The carousel answers the same question.** `TopSubs` returns its own DTO, so its
 card is a separate widget from `GbModCard` — which is how it came to be the one

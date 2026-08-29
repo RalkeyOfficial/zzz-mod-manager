@@ -159,9 +159,8 @@ Goal: make the data recorded in M1 pay off in the UI.
   [`docs/marketplace.md`](docs/marketplace.md) §7.
   - [x] **"Update available"** shipped for the *library* card with M3 — a blue
     mark at amber's weight in the same one slot, precedence folded into
-    `modSlotStatus` so the two cannot stack. The **marketplace** card's half is
-    still open and filed under §1: `GbModCard._statusSlot` answers a different
-    question and needs a check to have run for a mod the library index can name.
+    `modSlotStatus` so the two cannot stack. It is a **library** state only: the
+    marketplace half was considered and refused, see §1.
 - [x] **§7** — the mod-card **status slot** (§7.4), the **"needs attention"**
   filter, and the per-mod **resolve dialog** (§7.5). Three pure units carry the
   decisions: `services/origin_status.dart` (the one-slot fold, shared by badge
@@ -521,9 +520,9 @@ they earn priority.
   failing closed to `warn` would blur the whole grid rather than un-blur it), but
   they **don't** carry `_aContentRatings` — so a card can flag a mod while only the
   detail view can name "Skimpy Attire".
-- [ ] "Already installed" / "update available" indicators on cards & detail,
-  driven by the per-mod origin data (see §3). In the **library**, this indicator
-  shares a single status slot with the unknown-origin states — see §7.4.
+- [x] "Already installed" indicators on cards & detail, driven by the per-mod
+  origin data (see §3). In the **library**, this indicator shares a single status
+  slot with the unknown-origin states — see §7.4.
   **The library half is done** (M2's badge, M3's blue update mark, one slot
   each), and so is *"already installed"* on every marketplace surface — the grid
   card, the detail view's notice, the file-row chips, and now the **carousel**,
@@ -535,8 +534,15 @@ they earn priority.
   cluster rather than in its own corner, and that cluster is inside an
   `IgnorePointer` because the whole card is one tap target with the overlays
   laid over it rather than around it.
-  What is left is the *marketplace* card's "update available" branch —
-  `GbModCard._statusSlot`, which answers the mirrored question. Filed under §4.
+  **The line's "update available" half is refused, not pending**, and the slot
+  keeps its one branch. Two screens, two questions: the marketplace answers *do
+  I have this*, the library answers *is mine current*. Moving the second here
+  fails twice — the verdict map is session state and the launch check is off by
+  default, so the badge would be blank on a normal launch and blank reads as *no
+  update*; and this screen's Download imports a **new folder**, so pressing it
+  on a mod you own reports "Nothing imported" or lands a second copy, where
+  updating means `applyUpdateFlow`'s snapshot-and-overwrite. Full reasoning in
+  [`docs/marketplace.md`](docs/marketplace.md) §7.
 - [x] Decide empty/error/loading states and offline behaviour.
   **Done for M1's two screens**; M4's §1 item then took the errors and the
   empties past them, and [`docs/marketplace.md`](docs/marketplace.md) §9 is now
@@ -1040,13 +1046,35 @@ The block:
   imports an archive as a new mod folder while an update overwrites an existing
   one, and folding those together is what would produce a shared "install" that
   quietly does the wrong one.
-- [ ] **The marketplace card still has no "update available" state.**
-  `GbModCard._statusSlot` gained the "in library" badge in M2 and the app
-  `CLAUDE.md` reserves that method's second branch for this. It is a different
-  question from the library card's — *does the mod you are browsing publish
-  something newer than the folder you own?* — and it needs the installed-mods
-  index to name the folder before a verdict can be looked up for it. Small, and
-  it closes §1's last unchecked indicator.
+- [x] **The marketplace card's "update available" state is refused.** It read as
+  small — the verdict needs no request, since `modUpdateChecksProvider` is keyed
+  by folder and `InstalledModsIndex.installsOfMod` turns a browsed mod id into
+  folders — and being cheap to *draw* is what made it look obvious. Two things
+  kill it, and both are about what happens after it is drawn.
+  **Blank would read as "no update".** Verdicts are session state and are never
+  persisted (deliberately — a restored verdict asserts something about a page
+  nobody has looked at since), and the launch check is off by default, so on a
+  normal launch the map is empty and every card would show nothing. An indicator
+  that is usually absent teaches absence to mean *up to date*. The library
+  survives that because the button that fills the map is in its own toolbar; the
+  marketplace would be showing the residue of an action taken elsewhere.
+  **And the badge has no action behind it.** This screen's Download enqueues an
+  install, and `importMods` skips a folder that already exists — so pressing it
+  on a mod you own downloads a whole archive to report "Nothing imported", or,
+  when the author renamed the folder between versions, quietly lands a second
+  copy. Updating is `applyUpdateFlow` (snapshot, overwrite in place, keep name /
+  character / favourite / enabled, reconcile keybinds, ask first), which §4.1
+  keeps separate from installing on purpose. So the badge alone is a trap, and
+  with the action the whole update conversation moves into a browse screen.
+  Recorded in [`docs/marketplace.md`](docs/marketplace.md) §7 so the slot's one
+  branch is not read as an omission.
+- [ ] **"In your library as …" is a dead label.** The opposite direction to the
+  refusal above, and the thing actually missing: a mod you already own is named
+  on the marketplace card and in the detail view's notice, and neither takes you
+  to it. A link to the library entry is useful whether or not anything is out of
+  date, needs no check to have run, and is the honest answer to "I already have
+  this — what do I do about it?". Wants deciding where it lands the user: the
+  Mods tab filtered to that folder, or the folder's own dialog.
 - [x] **There is no "has an update" filter.** The `!` toggle enumerates mods
   whose *origin* is incomplete and deliberately ignores update state (its
   meaning would otherwise change every time a check ran). So a 200-mod library
