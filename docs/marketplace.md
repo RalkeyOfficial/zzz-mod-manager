@@ -142,7 +142,100 @@ height decouples them: the text always gets its room and the cover absorbs the
 remainder, which also survives the OS text scale growing the title. Covered by
 `test/gb_mod_card_test.dart` across the whole width range.
 
-## 9. Descriptions
+## 9. What the two screens say when they have nothing to show
+
+`services/gamebanana/gb_failure.dart` decides, `components/marketplace/gb_state_view.dart`
+renders. **One decision, one surface, both screens.** The grid and the detail view
+each used to carry their own copy of the error state, and the copies had already
+drifted: one drew a detail line under the heading and the other didn't.
+
+### Four failures, not two
+
+`describeGbFailure` classifies anything an `AsyncValue.error` can hand over —
+including a bug of ours, which arrives as a bare `Object` and still has to land
+somewhere rather than throw while rendering an error.
+
+| Kind | What the user is told to do |
+|---|---|
+| `offline` | Check the connection. The most common failure and not a bug. |
+| `rateLimited` | Wait a moment. Temporary by definition, and `429`/`503` both arrive here. |
+| `notFound` | Give up on this mod. The only failure that will still be true in an hour. |
+| `generic` | Try again; we can't say more. |
+
+The two that matter are the two that were missing. A back-off reported as
+*"Something went wrong"* reads as a bug in the app, and a removed mod reported the
+same way sends the user retrying forever.
+
+**Retry is withheld on `notFound` and nowhere else**, and that is a property of
+the classifier rather than of either widget — `GbFailure.canRetry`. It is absent
+rather than disabled: a greyed-out button still says *this is the thing to press
+once you fix something*, and there is nothing to fix. The three recoverable kinds
+all keep it.
+
+### No message from the wire reaches the screen
+
+`models/gamebanana/gb_exceptions.dart` states the rule at the top of the file:
+these exceptions carry **codes, never user-facing prose**, because the API's own
+messages are server English that cannot be localized — and `GbException.message`
+is marked *"Developer-facing detail. Not for display."*
+
+The grid was breaking it, printing that field under the heading, so a back-off
+rendered as the untranslated `Server asked us to back off (HTTP 429)`. It goes to
+`debugPrint` now instead, which keeps the detail for a developer at a terminal and
+off the screen. **The type is what enforces this**: `GbFailure` carries a kind and
+nothing else, so there is nowhere to put a message even by accident.
+
+The l10n keys are spelled out as literals in the widget's switch rather than built
+from a stem, because `test/l10n_keys_test.dart` finds keys by scanning `lib/` for
+single-quoted literals and cannot see an interpolated one.
+
+### The empty states carry the control that acts on them
+
+Two states, because *no results* and *your filter hid all of these* are different
+claims and showing the wrong one sends the user hunting for a mod that was never
+in the results. Each now offers what it can:
+
+| State | Action |
+|---|---|
+| No results, while searching | **Clear search** — the same call as submitting an empty box, so `_FilterBar`'s existing listener empties the text field for free |
+| No results, past page 1 | **Back to page 1** — a real dead end, since `pageCount` is null on some listings and the pager legitimately walks past the end |
+| No results, page 1 of a browse | none — inventing a button here would send the user pressing something that cannot help |
+| Everything filtered | **Blur them instead** |
+
+**The filter action degrades `hide` to `blur`, never to `show`** — the same rule
+the resolve dialog follows ([`library-screen.md`](library-screen.md) §7). `blur` is
+the mode where the cards are on screen and each one can still be clicked through
+individually, so it answers the complaint without turning a deliberate choice into
+its opposite. Only `hide` can produce this state, so there is one transition and no
+branch.
+
+It writes through a **`ContentFilterWriter`** seam (the typedef
+`components/settings/marketplace_section.dart` already defines, reused so there is
+one signature for this write rather than two), defaulting to
+`ApiService.setContentFilter`. Not optional: `ApiService` lazily builds a
+`ConfigService` against the developer's real `<appData>/config.json`, so a widget
+test that pressed that button without a seam would rewrite their own settings.
+
+### What is deliberately silent, and stays so
+
+Not everything that can fail should say so, and these are decisions rather than
+gaps:
+
+- **The category panel says nothing on error.** It fails exactly when the listing
+  beside it fails, and that error is already on screen; two messages for one outage
+  reads as two problems.
+- **The carousel is absent rather than empty** on loading, error, or a filter that
+  hides every entry. It is a decorative strip above the real content, and a spinner
+  or an error box there reports a problem the user cannot act on and did not ask
+  about.
+- **Thumbnails have no per-tile spinner.** A grid of them flickering is worse than
+  tiles that fill in; the container behind is already the right size and colour, so
+  nothing reflows.
+- **The detail header falls back to `#<modId>`, not to *Loading…*, once the profile
+  has failed.** Left as the loading string it sat as a title over a message saying
+  the load had failed.
+
+## 10. Descriptions
 
 `_sText` is HTML while every description this app renders is markdown, so it goes
 through `utils/html_to_markdown.dart` — shared with the description editors'

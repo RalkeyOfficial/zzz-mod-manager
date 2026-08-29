@@ -8,16 +8,32 @@ import '../../../services/gamebanana/content_filter.dart';
 import '../../../services/installed_mods_index.dart';
 import '../../../utils/marketplace_providers.dart';
 import '../../../utils/state_providers.dart';
+import '../settings/marketplace_section.dart' show ContentFilterWriter;
 import 'gb_category_panel.dart';
 import 'gb_mod_card.dart';
+import 'gb_state_view.dart';
 import 'gb_top_subs_carousel.dart';
 
 /// The results grid: search box + sort + category/character filters over a grid
 /// of mod cards, with paging.
 class GbBrowseView extends ConsumerWidget {
-  const GbBrowseView({super.key, required this.onOpenMod});
+  const GbBrowseView({
+    super.key,
+    required this.onOpenMod,
+    this.contentFilterWriter,
+  });
 
   final void Function(int modId) onOpenMod;
+
+  /// Persists the content filter when the "everything here is hidden" empty
+  /// state offers to loosen it. Defaults to [ApiService.setContentFilter].
+  ///
+  /// A seam because `ApiService` lazily builds a `ConfigService` against the
+  /// developer's **real** `<appData>/config.json` — a widget test that pressed
+  /// that button without one would rewrite their own settings. Same reason
+  /// `ResolveOriginGateway` exists, and it reuses the settings section's
+  /// typedef so there is one signature for this write rather than two.
+  final ContentFilterWriter? contentFilterWriter;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -111,15 +127,21 @@ class GbBrowseView extends ConsumerWidget {
                             error: (error, _) => [
                               SliverFillRemaining(
                                 hasScrollBody: false,
-                                child: _ErrorState(error: error),
+                                child: GbFailureState(
+                                  error: error,
+                                  onRetry: () => ref
+                                      .invalidate(marketplaceResultsProvider),
+                                ),
                               ),
                             ],
                             data: (page) => _resultSlivers(
                               context,
+                              ref,
                               page: page,
                               filter: filter,
                               onOpenMod: onOpenMod,
                               installed: installed,
+                              contentFilterWriter: contentFilterWriter,
                             ),
                           ),
                         ],
@@ -150,11 +172,13 @@ class GbBrowseView extends ConsumerWidget {
 /// into a box context by mistake — whereas a `List<Widget>` of slivers spread with
 /// `...` reads exactly as what it is at the call site.
 List<Widget> _resultSlivers(
-  BuildContext context, {
+  BuildContext context,
+  WidgetRef ref, {
   required GbPage<GbMod> page,
   required ContentFilterMode filter,
   required void Function(int modId) onOpenMod,
   required InstalledModsIndex installed,
+  ContentFilterWriter? contentFilterWriter,
 }) {
   final loc = context.loc;
 
@@ -168,20 +192,16 @@ List<Widget> _resultSlivers(
   ];
 
   if (visible.isEmpty) {
-    // Two genuinely different empty states. "Your filter hid all of these" is
-    // actionable; "there is nothing here" is not, and showing the wrong one sends
-    // the user hunting for a mod that was never in the results.
-    final hiddenByFilter = page.records.isNotEmpty;
     return [
       SliverFillRemaining(
         hasScrollBody: false,
-        child: _EmptyState(
-          message: loc.t(hiddenByFilter
-              ? 'marketplace.empty_filtered'
-              : 'marketplace.empty_results'),
-          icon:
-              hiddenByFilter ? Icons.visibility_off_outlined : Icons.search_off,
-        ),
+        // Two genuinely different empty states. "Your filter hid all of these"
+        // is actionable; "there is nothing here" mostly is not, and showing the
+        // wrong one sends the user hunting for a mod that was never in the
+        // results.
+        child: page.records.isNotEmpty
+            ? _filteredEmptyState(context, ref, contentFilterWriter)
+            : _noResultsEmptyState(context, ref, loc),
       ),
     ];
   }
@@ -533,76 +553,74 @@ class _ContentFilterMenu extends ConsumerWidget {
 }
 
 
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.message, required this.icon});
+/// Nothing came back. The action depends on *why* there is nothing, and on
+/// page 1 of an ordinary browse there genuinely isn't one — an empty state with
+/// a button that does nothing useful is worse than one that simply says so.
+Widget _noResultsEmptyState(
+  BuildContext context,
+  WidgetRef ref,
+  AppLocalizations loc,
+) {
+  final query = ref.watch(marketplaceQueryProvider);
+  final notifier = ref.read(marketplaceQueryProvider.notifier);
 
-  final String message;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 44, color: scheme.onSurfaceVariant),
-          const SizedBox(height: 12),
-          Text(message, style: TextStyle(color: scheme.onSurfaceVariant)),
-        ],
-      ),
+  Widget? action;
+  if (query.mode == MarketplaceMode.search) {
+    // Exactly what submitting an empty box does, so the search field empties
+    // itself for free — `_FilterBar` already listens for the query leaving
+    // search mode and clears its controller then.
+    action = FilledButton.icon(
+      onPressed: () => notifier.state =
+          query.refine(mode: MarketplaceMode.browse, text: ''),
+      icon: const Icon(Icons.close, size: 16),
+      label: Text(loc.t('marketplace.empty_search_action')),
+    );
+  } else if (query.page > 1) {
+    // A real dead end rather than a hypothetical one: `pageCount` is null on
+    // some listings, so the pager legitimately walks past the last page and
+    // leaves the user on an empty grid with only a back arrow to guess at.
+    action = FilledButton.icon(
+      onPressed: () => notifier.state = query.copyWith(page: 1),
+      icon: const Icon(Icons.first_page, size: 16),
+      label: Text(loc.t('marketplace.empty_first_page_action')),
     );
   }
+
+  return GbStateView(
+    icon: Icons.search_off,
+    title: loc.t('marketplace.empty_results'),
+    action: action,
+  );
 }
 
-class _ErrorState extends ConsumerWidget {
-  const _ErrorState({required this.error});
+/// Every record on this page was dropped by the content filter.
+///
+/// The action degrades `hide` to **`blur`**, never to `show` — the same rule
+/// the resolve dialog follows (`docs/library-screen.md` §7). `blur` is the mode
+/// where the cards are on screen and each one can still be clicked through
+/// individually, so it answers the complaint without turning a deliberate
+/// choice into its opposite. Only `hide` can produce this state — `blur` leaves
+/// every record in place — so there is one transition to offer and no branch.
+Widget _filteredEmptyState(
+  BuildContext context,
+  WidgetRef ref,
+  ContentFilterWriter? writer,
+) {
+  final loc = context.loc;
 
-  final Object error;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final loc = context.loc;
-    final scheme = Theme.of(context).colorScheme;
-
-    // Offline is by far the most common failure and is not a bug, so it gets
-    // its own wording instead of a stack-trace-shaped message.
-    final isNetwork = error is GbNetworkException;
-
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              isNetwork ? Icons.wifi_off : Icons.error_outline,
-              size: 44,
-              color: scheme.error,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              loc.t(isNetwork
-                  ? 'marketplace.error_offline'
-                  : 'marketplace.error_generic'),
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-            const SizedBox(height: 6),
-            Text(
-              error is GbException ? (error as GbException).message : '$error',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: () => ref.invalidate(marketplaceResultsProvider),
-              icon: const Icon(Icons.refresh, size: 16),
-              label: Text(loc.t('marketplace.retry')),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  return GbStateView(
+    icon: Icons.visibility_off_outlined,
+    title: loc.t('marketplace.empty_filtered'),
+    action: FilledButton.icon(
+      onPressed: () {
+        // Both, in this order, matching `_ContentFilterMenu`: the provider so
+        // the grid re-filters this frame without refetching, and config so the
+        // choice survives a restart.
+        ref.read(contentFilterProvider.notifier).state = ContentFilterMode.blur;
+        (writer ?? ApiService.setContentFilter)(ContentFilterMode.blur);
+      },
+      icon: const Icon(Icons.blur_on, size: 16),
+      label: Text(loc.t('marketplace.empty_filtered_action')),
+    ),
+  );
 }

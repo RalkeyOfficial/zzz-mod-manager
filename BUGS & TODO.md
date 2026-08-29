@@ -404,7 +404,40 @@ on Windows, and it has never been hit.
   no room for — a switch that contacts the network needs a sentence, not a
   label. What the §6 list asked for and did *not* get an entry, each with its
   reason, is in [`docs/configuration.md`](docs/configuration.md) §5.
-- [ ] **§1** — empty/error/loading/offline states.
+- [x] **§1** — empty/error/loading/offline states, for the *errors* and the
+  *empties*. `services/gamebanana/gb_failure.dart` is the classifier and
+  `components/marketplace/gb_state_view.dart` the one surface both screens
+  render it through; [`docs/marketplace.md`](docs/marketplace.md) §9 owns it.
+  Most of what this line implied turned out to be **already decided** — the
+  carousel absent rather than empty, the category panel silent because it fails
+  with the listing beside it, the file list's three notices, no per-tile
+  thumbnail spinner. Those stay; the doc says so, so the next pass doesn't
+  "fix" them. What was genuinely missing:
+  - **Four failures were being rendered as two.** A back-off read as
+    "Something went wrong" (a bug in the app), and a mod taken down read the
+    same way — with a **Try again** button whose every press was guaranteed to
+    fail. `canRetry` is withheld on `notFound` and nowhere else, and it lives on
+    the classifier because both screens have to give the same answer.
+  - **The grid printed `GbException.message`**, which
+    `models/gamebanana/gb_exceptions.dart` marks *"Developer-facing detail. Not
+    for display"* — server English that cannot be localized. The type now
+    forbids it: `GbFailure` carries a kind and nothing else, so there is nowhere
+    to put a message even by accident. It goes to `debugPrint`.
+  - **Both empty states were dead ends**, despite §1 having locked the
+    distinction on the grounds that *"only the second is actionable"*. Each now
+    carries the control that acts on it, and the filtered one degrades
+    **`hide` → `blur`, never `show`** — the identical rule the resolve dialog
+    follows, and the reason is the same: `blur` shows the cards and keeps the
+    per-mod click-through, where `show` would silently invert a deliberate
+    choice.
+  - The detail header read *Loading…* over a message saying the load had failed.
+  Two things a later change must not undo: the l10n keys are **literals** in the
+  widget's switch rather than built from a stem, because `l10n_keys_test` finds
+  keys by scanning `lib/` for single-quoted strings; and the content-filter
+  write goes through a `ContentFilterWriter` seam, because `ApiService` builds a
+  `ConfigService` against the developer's real `config.json` and a widget test
+  pressing that button without one rewrites their own settings.
+  **The loading half was scoped out rather than done** — refiled below.
 
 ### Later — backlog
 
@@ -495,8 +528,9 @@ they earn priority.
   each). What is left is the *marketplace* card's "update available" branch —
   `GbModCard._statusSlot`, which answers the mirrored question. Filed under §4.
 - [x] Decide empty/error/loading states and offline behaviour.
-  **Done for M1's two screens** (M4's item covers polish beyond this). Decisions
-  worth keeping: *no results* and *everything on this page was hidden by your
+  **Done for M1's two screens**; M4's §1 item then took the errors and the
+  empties past them, and [`docs/marketplace.md`](docs/marketplace.md) §9 is now
+  where all of it lives. Decisions worth keeping: *no results* and *everything on this page was hidden by your
   content filter* are separate empty states, because only the second is actionable
   and showing the wrong one sends the user hunting for a mod that was never there;
   offline gets its own wording rather than a stack-trace-shaped message, since it is
@@ -746,15 +780,19 @@ The block:
 
 ### Open around metadata autofill (known, deliberately not built)
 
-- [ ] **The install is silent between the download finishing and the result.** The
-  progress dialog closes the moment the bytes are in, and extract → duplicate check
-  → folder-selection → import → autofill all run behind nothing at all. That was
-  already the shape before this change, but the autofill lengthens the quiet window:
-  typically ~830 ms, and up to one 20 s per-image timeout when a CDN node is
-  degraded (§0 measured one serving at 0.08 MB/s). Filed rather than fixed because
-  the fix is a decision about the whole install flow — most likely keeping the same
-  dialog open through an "installing" phase — not a spinner bolted onto one step.
-  Belongs with M4's "empty/error/loading states".
+- [x] **The install is silent between the download finishing and the result.** The
+  quiet window is extract → duplicate check → folder-selection → import →
+  autofill: typically ~830 ms, and up to one 20 s per-image timeout when a CDN
+  node is degraded (§0 measured one serving at 0.08 MB/s). Filed against the old
+  foreground progress dialog, which closed the moment the bytes were in.
+  **Answered by M4 §5, not by M4 §1**, and recorded here so it isn't fixed
+  twice: the background queue keeps one pinned card across exactly that window,
+  reading *Installing…* — `DownloadQueueHost._syncProgressNotification`, driven
+  by `QueueProgress.installing` in `queue_policy.dart`, which is true from the
+  moment the job leaves the transfer until the install returns. The prediction in
+  the original filing was right about the shape of the fix (a phase of the same
+  surface, not a spinner bolted onto one step) and wrong about which surface it
+  would be.
 - [ ] **A mod page's tags are now parsed but still shown nowhere.** `GbMod.tags` had
   no reader at all before the autofill, which is why the two-shape parsing bug
   (§3 above) could sit there unnoticed. The autofill stores them on install; the
@@ -1948,6 +1986,23 @@ is exactly right.
   not something to do as a drive-by — but either the messages should be wired up (the
   7-Zip one in particular looks like it *should* be reachable from `ArchiveService`) or
   the keys should go.
+- [ ] **The grid blanks itself on every page turn, and that was nobody's decision.**
+  `results.when(loading:)` replaces the whole grid with a centred spinner
+  whenever the *query* changes — page, sort, category, search — but not when the
+  same query is refreshed. The asymmetry is a Riverpod default rather than a
+  choice: `AsyncValue.when` takes `skipLoadingOnRefresh: true` and
+  `skipLoadingOnReload: false` (`riverpod-2.6.1/lib/src/common.dart:719`), so
+  `ref.invalidate` keeps the previous page on screen and a dependency change
+  throws it away. Worth recording because the codebase already has the reasoning
+  and applied it to one path only: `refreshMarketplaceResults` goes to the
+  trouble of fetching *before* invalidating expressly to avoid "flashing a
+  spinner over content that is about to be replaced by something nearly
+  identical". Split out of M4 §1 rather than folded into it because the fix is a
+  design choice and not a flag — retaining the previous grid means it has to be
+  visibly *being replaced* (dimmed, non-interactive, under a progress bar) or it
+  reads as page 2's content under page 2's label, and the scroll offset then has
+  to be reset when the new page lands, which the blanking was accidentally
+  providing.
 - [ ] **The results grid has no infinite scroll and no result-count display.** Paging
   is prev/next with "Page N of M", which is honest but tedious across 866 pages. Also
   worth showing `_nRecordCount` so the user knows the search narrowed anything.
@@ -2824,6 +2879,13 @@ work that already opens the same file, so they cost nothing extra.
   benefit) *and* that nothing is downloaded or installed, because a switch a
   user could read as consenting to automatic updates would promise something
   §4 deliberately refuses.
+  **M4 §1's empty and error states added 10.** The pattern is by now a rule
+  rather than an observation: **six of the ten are the second line**, the one
+  saying what to do — and one of those six exists to say the opposite, that
+  nothing will bring a removed mod back. That is the sentence standing in for
+  the retry button the screen deliberately withholds, so it carries the whole
+  weight of the decision. The other four are the actions themselves, and they
+  are labels only because the state above them already did the explaining.
 - [ ] **Name the tests, because the risky parts are pure functions.** The pieces most
   likely to be quietly wrong need no network and no UI: `source_url` → `mod_id`
   parsing (§7.3); the confidence state machine and what each tier permits (§7.2); the

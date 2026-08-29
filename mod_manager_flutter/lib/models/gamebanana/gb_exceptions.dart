@@ -65,7 +65,14 @@ class GbApiException extends GbException {
   final Map<String, GbFieldError> fieldErrors;
 
   /// Whether the mod/route simply doesn't exist.
-  bool get isNotFound => code == 'NO_SUCH_ROUTE' || statusCode == 404;
+  ///
+  /// **The status check is what carries this**, and the codes are corroboration.
+  /// A missing *record* answers `NO_SUCH_RECORD` and a missing *route*
+  /// `NO_SUCH_ROUTE`, but both arrive as `404` — and apiv13 serves an unknown
+  /// route as `200` + HTML with no code at all, so no list of codes is complete.
+  /// See [`docs/gamebanana-api.md`](../../../../docs/gamebanana-api.md) §2.
+  bool get isNotFound =>
+      code == 'NO_SUCH_RECORD' || code == 'NO_SUCH_ROUTE' || statusCode == 404;
 }
 
 /// One entry of `_aErrorData`.

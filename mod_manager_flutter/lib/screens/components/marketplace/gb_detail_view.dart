@@ -12,6 +12,7 @@ import '../../../utils/markdown_style.dart';
 import '../../../utils/marketplace_providers.dart';
 import '../../../utils/state_providers.dart';
 import 'gb_file_list.dart';
+import 'gb_state_view.dart';
 import 'gb_thumbnail.dart';
 
 /// The mod detail screen: gallery, description, author/category/stats, and the
@@ -68,11 +69,14 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
 
     return Column(
       children: [
-        _header(context, loc, profile.valueOrNull),
+        _header(context, loc, profile.valueOrNull, failed: profile.hasError),
         Expanded(
           child: profile.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, _) => _error(context, loc, error),
+            error: (error, _) => GbFailureState(
+              error: error,
+              onRetry: () => ref.invalidate(modProfileProvider(widget.modId)),
+            ),
             data: (mod) => _body(context, loc, mod),
           ),
         ),
@@ -80,7 +84,12 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
     );
   }
 
-  Widget _header(BuildContext context, AppLocalizations loc, GbMod? mod) {
+  Widget _header(
+    BuildContext context,
+    AppLocalizations loc,
+    GbMod? mod, {
+    required bool failed,
+  }) {
     final scheme = Theme.of(context).colorScheme;
     final url =
         mod?.profileUrl ?? 'https://gamebanana.com/mods/${widget.modId}';
@@ -105,7 +114,13 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
           const SizedBox(width: 4),
           Expanded(
             child: Text(
-              mod?.name ?? loc.t('marketplace.loading'),
+              // *Loading…* only while it genuinely is. On a failure there is no
+              // name to show and never will be, so the header falls back to the
+              // id — the same shape a file row uses for a record it cannot name
+              // (`gb_file_list.dart`). Left as "Loading…" it sat as a title over
+              // a message saying the load had failed.
+              mod?.name ??
+                  (failed ? '#${widget.modId}' : loc.t('marketplace.loading')),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(
@@ -474,41 +489,6 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
           const SizedBox(width: 10),
           Expanded(child: Text(message, style: const TextStyle(fontSize: 12))),
         ],
-      ),
-    );
-  }
-
-  Widget _error(BuildContext context, AppLocalizations loc, Object error) {
-    final scheme = Theme.of(context).colorScheme;
-    final isNetwork = error is GbNetworkException;
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 400),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              isNetwork ? Icons.wifi_off : Icons.error_outline,
-              size: 40,
-              color: scheme.error,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              loc.t(
-                isNetwork
-                    ? 'marketplace.error_offline'
-                    : 'marketplace.error_generic',
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: () => ref.invalidate(modProfileProvider(widget.modId)),
-              icon: const Icon(Icons.refresh, size: 16),
-              label: Text(loc.t('marketplace.retry')),
-            ),
-          ],
-        ),
       ),
     );
   }
