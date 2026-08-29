@@ -126,10 +126,37 @@ lifted).
   noticeable through *fill*, which is the whole reason `_badge` has a `filled` mode,
   and occludes almost nothing.
 - **"You already have this" is `primary` everywhere** — the card badge, the detail
-  view's notice, the file-row chips — so it doesn't change hue between screens. The
-  consequence for M3 is worth knowing in advance: "update available" has to differ
-  by **hue at similar weight** rather than by being the louder of the two, and
-  `tertiary` is already spoken for by the `obsolete` badge.
+  view's notice, the file-row chips, the carousel — so it doesn't change hue
+  between screens. The consequence for M3 is worth knowing in advance: "update
+  available" has to differ by **hue at similar weight** rather than by being the
+  louder of the two, and `tertiary` is already spoken for by the `obsolete` badge.
+
+**The carousel answers the same question.** `TopSubs` returns its own DTO, so its
+card is a separate widget from `GbModCard` — which is how it came to be the one
+surface showing a mod without saying you already had it. It watches
+`installedModsIndexProvider` and paints the same filled `primary` pill.
+
+Where it differs from the grid card, and why:
+
+- **Beside the period badge, not in a corner of its own.** The two pills are one
+  top-left cluster in a single `Positioned`, laid out by a `Row` — their widths
+  are their labels', which vary by period and by locale, so the second one's
+  offset is not a number anyone can write down. The cluster sits **after** the
+  reveal overlay in the `Stack`, so neither pill is dimmed by the scrim: which
+  period this is the best of is no more adult content than owning the mod is.
+- **No tooltip, and the cluster is inside an `IgnorePointer`.** The card is one
+  big tap target laid *under* its overlays rather than around them, so anything
+  up there that absorbs a hit carves a dead zone out of it — the bug the title
+  and period badge already had to be `IgnorePointer`ed to fix.
+  `test/gb_top_subs_carousel_test.dart` taps the badge's *position* to keep it
+  that way.
+- **It therefore names no folders.** They are one click away in the detail view's
+  own notice, which is what the grid card's tooltip is standing in for anyway.
+
+The grid card's "paints over the reveal overlay" rule is testable there because
+the badge being underneath changes what a click does. Here both orders behave the
+same under a tap, so the test pins only that the badge is **shown on a blurred
+card at all** — the part that would be a wrong answer rather than a dim one.
 
 ## 8. Layout
 

@@ -525,7 +525,17 @@ they earn priority.
   driven by the per-mod origin data (see §3). In the **library**, this indicator
   shares a single status slot with the unknown-origin states — see §7.4.
   **The library half is done** (M2's badge, M3's blue update mark, one slot
-  each). What is left is the *marketplace* card's "update available" branch —
+  each), and so is *"already installed"* on every marketplace surface — the grid
+  card, the detail view's notice, the file-row chips, and now the **carousel**,
+  which had been the one surface that showed a mod without saying you already
+  had it. Its card is a separate widget because `TopSubs` returns its own DTO, so
+  the badge wiring never came with it; see
+  [`docs/marketplace.md`](docs/marketplace.md) §7 for what its version does
+  differently and why — it sits beside the period badge as one `Row`-laid
+  cluster rather than in its own corner, and that cluster is inside an
+  `IgnorePointer` because the whole card is one tap target with the overlays
+  laid over it rather than around it.
+  What is left is the *marketplace* card's "update available" branch —
   `GbModCard._statusSlot`, which answers the mirrored question. Filed under §4.
 - [x] Decide empty/error/loading states and offline behaviour.
   **Done for M1's two screens**; M4's §1 item then took the errors and the

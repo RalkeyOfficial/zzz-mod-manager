@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../models/gamebanana/gb_top_sub.dart';
 import '../../../services/gamebanana/content_filter.dart';
+import '../../../services/installed_mods_index.dart';
 import '../../../utils/marketplace_providers.dart';
 import '../../../utils/state_providers.dart';
 
@@ -169,6 +170,12 @@ class _GbTopSubsCarouselState extends ConsumerState<GbTopSubsCarousel> {
 
     final subs = ref.watch(topSubsProvider);
     final filter = ref.watch(contentFilterProvider);
+    // While the library snapshot loads, `empty` means "nothing is known to be
+    // installed" — no badge, rather than a badge that might be wrong. Same
+    // reading as the grid beneath, so the two cannot disagree about a mod that
+    // appears in both.
+    final installed = ref.watch(installedModsIndexProvider).valueOrNull ??
+        InstalledModsIndex.empty;
 
     // Absent rather than empty on loading or error. This is a decorative strip
     // above the real content: a spinner or an error box here would report a problem
@@ -223,6 +230,7 @@ class _GbTopSubsCarouselState extends ConsumerState<GbTopSubsCarousel> {
                   sub: entry.sub,
                   period: entry.period,
                   treatment: entry.treatment,
+                  installedAs: installed.installsOfMod(entry.sub.idRow),
                   revealed: _revealed.contains(entry.sub.idRow),
                   onReveal: () =>
                       setState(() => _revealed.add(entry.sub.idRow)),
@@ -263,6 +271,7 @@ class _Card extends StatelessWidget {
     required this.sub,
     required this.period,
     required this.treatment,
+    required this.installedAs,
     required this.revealed,
     required this.onReveal,
     required this.onOpen,
@@ -271,6 +280,11 @@ class _Card extends StatelessWidget {
   final GbTopSub sub;
   final GbTopSubPeriod period;
   final ContentTreatment treatment;
+
+  /// Mod folders in the local library that came from this remote mod, or empty.
+  /// Same question `GbModCard` answers, keyed on the mod rather than the file.
+  final List<String> installedAs;
+
   final bool revealed;
   final VoidCallback onReveal;
   final VoidCallback onOpen;
@@ -303,18 +317,10 @@ class _Card extends StatelessWidget {
             child: InkWell(onTap: onOpen),
           ),
         ),
-        // IgnorePointer on both: they are decoration layered *above* the tap layer,
-        // and a `Text` does absorb a hit — without this, clicking the title (the
-        // most obvious thing to click) did nothing at all.
-        Positioned(
-          left: 14,
-          top: 12,
-          child: IgnorePointer(
-            child: _PeriodBadge(
-              label: loc.t('marketplace.period_${period.l10nKey}'),
-            ),
-          ),
-        ),
+        // IgnorePointer on both this and the cluster below: they are decoration
+        // layered *above* the tap layer, and a `Text` does absorb a hit —
+        // without it, clicking the title (the most obvious thing to click) did
+        // nothing at all.
         Positioned(
           left: 16,
           right: 90,
@@ -322,6 +328,33 @@ class _Card extends StatelessWidget {
           child: IgnorePointer(child: _Caption(sub: sub)),
         ),
         if (blurred) Positioned.fill(child: _RevealOverlay(onReveal: onReveal)),
+        // The top-left cluster, **after** the reveal overlay so it paints over
+        // it. Neither of these is adult content — which period this is the best
+        // of, and whether you already own it — and making the user click
+        // through a blur to find out would be an odd trade.
+        //
+        // One `Positioned` holding both rather than two: their widths are their
+        // labels', which vary by period and by locale, so the second one's
+        // offset is not a number anyone can write down. A `Row` lays them out
+        // instead.
+        Positioned(
+          left: 14,
+          top: 12,
+          child: IgnorePointer(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _PeriodBadge(
+                  label: loc.t('marketplace.period_${period.l10nKey}'),
+                ),
+                if (installedAs.isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  const _InstalledBadge(),
+                ],
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -359,6 +392,50 @@ class _Card extends StatelessWidget {
       );
     }
     return image;
+  }
+}
+
+/// "You already have this", beside the period badge at the top-left.
+///
+/// **`primary`, filled**, exactly as `GbModCard` paints it — one colour per
+/// meaning across the marketplace, so owning a mod doesn't change hue depending
+/// on which surface you meet it on. That rule wins over this card's usual
+/// literal-black-over-artwork treatment because an opaque saturated pill is
+/// legible over any cover anyway; the neutral overlays are literal black only
+/// because a *neutral* has to be picked without a theme to pick it from.
+///
+/// **No tooltip, unlike the grid card's.** The whole card is one big tap target
+/// laid *under* these overlays rather than around them, so anything up here that
+/// absorbs a hit carves a dead zone out of it — which is why the cluster this
+/// sits in is inside an `IgnorePointer`. The folder names are one click away in
+/// the detail view's own notice, which is what the grid card's tooltip is
+/// standing in for anyway.
+class _InstalledBadge extends StatelessWidget {
+  const _InstalledBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: scheme.primary,
+        borderRadius: BorderRadius.circular(6),
+        // Matches the period badge beside it, which needs a hairline to sit on
+        // arbitrary artwork. Two pills in a row with different outlines read as
+        // two unrelated things.
+        border: Border.all(color: const Color(0x33FFFFFF)),
+      ),
+      child: Text(
+        context.loc.t('marketplace.badge_installed'),
+        style: TextStyle(
+          color: scheme.onPrimary,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.2,
+        ),
+      ),
+    );
   }
 }
 

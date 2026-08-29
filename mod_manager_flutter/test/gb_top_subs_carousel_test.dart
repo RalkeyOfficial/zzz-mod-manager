@@ -7,8 +7,12 @@ import 'package:mod_manager_flutter/models/gamebanana/gb_image.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_page.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_submitter.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_top_sub.dart';
+import 'package:mod_manager_flutter/models/character_info.dart';
+import 'package:mod_manager_flutter/models/mod_origin.dart';
+import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/components/marketplace/gb_top_subs_carousel.dart';
 import 'package:mod_manager_flutter/services/gamebanana/content_filter.dart';
+import 'package:mod_manager_flutter/services/installed_mods_index.dart';
 import 'package:mod_manager_flutter/utils/marketplace_providers.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
@@ -51,6 +55,11 @@ void main() {
     ContentFilterMode filter = ContentFilterMode.blur,
     void Function(int)? onOpenMod,
     Duration? autoAdvance,
+    // Overridden rather than left to load, always. Unoverridden it reaches for
+    // `ApiService`, which needs a real `SharedPreferences` and so resolves to an
+    // error — silently, as an unread `AsyncValue`. Every "no badge" assertion
+    // below would then pass for the wrong reason.
+    InstalledModsIndex installed = InstalledModsIndex.empty,
   }) async {
     await pumpLocalized(
       tester,
@@ -64,6 +73,7 @@ void main() {
       overrides: [
         topSubsProvider.overrideWith((ref) async => subs ?? captured),
         contentFilterProvider.overrideWith((ref) => filter),
+        installedModsIndexProvider.overrideWith((ref) async => installed),
       ],
     );
   }
@@ -442,5 +452,116 @@ void main() {
     await tester.pumpAndSettle();
     expect(opened, 4242,
         reason: 'a top-sub id is a normal mod id and opens the detail view');
+  });
+
+  group('"in your library" badge', () {
+    InstalledModsIndex libraryWith(int modId, String folder) =>
+        InstalledModsIndex.fromMods([
+          ModInfo(
+            id: folder,
+            name: folder,
+            characterId: 'unknown',
+            isActive: false,
+            origin: ModOrigin(
+              provenance: OriginProvenance.importedFolder,
+              source: 'gamebanana',
+              modId: modId,
+              modIdConfidence: OriginConfidence.inferred,
+            ),
+          ),
+        ]);
+
+    testWidgets('marks a featured mod already in the library', (tester) async {
+      await pump(
+        tester,
+        subs: [sub(4242, GbTopSubPeriod.today, name: 'Target')],
+        filter: ContentFilterMode.show,
+        installed: libraryWith(4242, 'Target Folder'),
+      );
+
+      expect(find.text('In library'), findsOneWidget);
+    });
+
+    testWidgets('says nothing about a mod the library does not have',
+        (tester) async {
+      await pump(
+        tester,
+        subs: [sub(4242, GbTopSubPeriod.today, name: 'Target')],
+        filter: ContentFilterMode.show,
+        installed: libraryWith(999, 'Something Else'),
+      );
+
+      expect(find.text('In library'), findsNothing);
+    });
+
+    testWidgets('is still shown on a card that is blurred', (tester) async {
+      // Owning a mod is not adult content, so the badge is not gated on the
+      // card having been revealed. That it also *paints over* the scrim is a
+      // matter of Stack order and is not asserted here: unlike the grid card,
+      // both orders behave identically under a tap, so the only test available
+      // would be one about traversal order — brittle, and the consequence of
+      // getting it wrong is a dimmed pill rather than a wrong answer.
+      await pump(
+        tester,
+        subs: [
+          sub(4242, GbTopSubPeriod.today,
+              name: 'Target', visibility: GbVisibility.warn),
+        ],
+        filter: ContentFilterMode.blur,
+        installed: libraryWith(4242, 'Target Folder'),
+      );
+
+      expect(find.text('Click to reveal'), findsOneWidget,
+          reason: 'the card is meant to still be blurred here');
+      expect(find.text('In library'), findsOneWidget);
+    });
+
+    testWidgets('sits beside the period badge, not in a corner of its own',
+        (tester) async {
+      await pump(
+        tester,
+        subs: [sub(4242, GbTopSubPeriod.today, name: 'Target')],
+        filter: ContentFilterMode.show,
+        installed: libraryWith(4242, 'Target Folder'),
+      );
+
+      final period = tester.getRect(find.text('Best of today'));
+      final badge = tester.getRect(find.text('In library'));
+
+      expect(badge.left, greaterThan(period.right),
+          reason: 'the badge should follow the period badge, not overlap it');
+      expect(
+        badge.center.dy,
+        moreOrLessEquals(period.center.dy, epsilon: 1.0),
+        reason: 'the two pills should share a baseline',
+      );
+      // Left-hand cluster, so it stays clear of the position counter.
+      final counter = tester.getRect(find.text('1 / 1'));
+      expect(badge.right, lessThan(counter.left));
+    });
+
+    testWidgets('does not carve a dead zone out of the card', (tester) async {
+      // The badge is an overlay above the card's tap layer rather than inside
+      // it, so anything up there that absorbs a hit steals it — which is the
+      // bug the title and the period badge already had to be `IgnorePointer`ed
+      // to fix.
+      int? opened;
+      await pump(
+        tester,
+        subs: [sub(4242, GbTopSubPeriod.today, name: 'Target')],
+        filter: ContentFilterMode.show,
+        onOpenMod: (id) => opened = id,
+        installed: libraryWith(4242, 'Target Folder'),
+      );
+
+      // `tapAt` the badge's position rather than `tap` on the badge: the point
+      // is that a click *there* reaches the card underneath, and `tap` would
+      // warn that the widget it found never received the hit — which is the
+      // pass condition, not a problem.
+      await tester.tapAt(tester.getCenter(find.text('In library')));
+      await tester.pumpAndSettle();
+
+      expect(opened, 4242, reason: 'the badge swallowed the click');
+    });
   });
 }
