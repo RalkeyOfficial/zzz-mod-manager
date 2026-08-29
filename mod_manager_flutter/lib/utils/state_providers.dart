@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/character_info.dart';
 import '../services/api_service.dart';
 import '../services/bulk_resolution.dart';
-import '../services/download/download_service.dart';
 import '../models/gamebanana/gb_enums.dart';
 import '../models/gamebanana/gb_mod.dart';
 import '../services/gamebanana/content_filter.dart';
@@ -45,16 +44,9 @@ final gameBananaClientProvider = Provider<GameBananaClient>((ref) {
   return client;
 });
 
-/// The mod-archive downloader.
-///
-/// Shared rather than per-screen so the resume bookkeeping in
-/// `<appData>/downloads` has a single owner, and so a download survives the
-/// user navigating away from the screen that started it.
-final downloadServiceProvider = Provider<DownloadService>((ref) {
-  final service = DownloadService();
-  ref.onDispose(service.close);
-  return service;
-});
+// `downloadQueueProvider` and `downloadServiceProvider` live in
+// `services/download/download_queue.dart`, for the same reason the notification
+// stack lives in `notifications.dart`.
 
 /// What the local library already has, keyed by remote identity.
 ///

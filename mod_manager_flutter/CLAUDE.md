@@ -12,7 +12,7 @@ before changing anything it covers.
 |---|---|
 | [`app-architecture.md`](../docs/app-architecture.md) | The **layers of `lib/`** — service layer, platform abstraction, the GameBanana client, markdown rendering |
 | [`gamebanana-api.md`](../docs/gamebanana-api.md) | GameBanana's **remote protocol**. Read before writing any request — the surface is undocumented upstream, so guessing costs more than looking |
-| [`downloads.md`](../docs/downloads.md) | **Fetching archives** — the isolate pump, resume, backpressure, the stall timeout |
+| [`downloads.md`](../docs/downloads.md) | **Fetching archives** — the isolate pump, resume, backpressure, the stall timeout, the background queue |
 | [`marketplace.md`](../docs/marketplace.md) | The **native browser screens** — grid, detail view, what an install does |
 | [`library-screen.md`](../docs/library-screen.md) | The **Mods tab** — card, status slot, toolbar, bulk actions, its dialogs |
 | [`notifications.md`](../docs/notifications.md) | **What the app tells the user** — whether to speak at all, the two levels, the card |
@@ -88,6 +88,11 @@ marketplace's browsing session, which is one screen's state rather than the app'
 the inactive tab's `State` is *disposed*. Anything that must survive a tab switch
 takes its own snapshot (`installedModsIndexProvider`) rather than deriving from a
 provider the disposed screen was keeping current.
+
+**Work that outlives the press that started it must not be owned by a tab.**
+Its `BuildContext` dies on the next tab switch, silently and mid-await. Mount a
+host above the switcher instead — `DownloadQueueHost` in `main.dart` is the
+pattern, and `downloads.md` §8 is why.
 
 ## Localization
 

@@ -69,11 +69,22 @@ variant label before the first byte and writes them at `exact`. See
 [`origin-tracking.md`](origin-tracking.md) §2 for every route that writes a block
 and the tier each one may claim.
 
-## 5. Where a mod stops arriving blank
+## 5. What pressing Download actually does
 
-After the import, `_installArchive` hands the profile to `applyRemoteMetadata`,
-which fills the description, gallery and tags the install would otherwise leave
-empty.
+`MarketplaceScreen._handleDownload` **enqueues and returns.** It does not wait and
+it does not own what follows: the transfer runs in the background
+([`downloads.md`](downloads.md) §7) and the install belongs to
+`DownloadQueueHost`, mounted above the tabs.
+
+That split is forced rather than tidy. This screen is *disposed* the moment the
+user switches tabs, so an install owned by it dies there — which the old modal
+progress dialog hid by making walking away impossible. What the screen still owns
+is the one thing only it has: the **mod page**, which travels with the job and is
+what lets the origin block land at `exact` (§4) and the autofill run at all.
+
+The install itself is `dialogs/install_archive_flow.dart`. After the import it
+hands the profile to `applyRemoteMetadata`, which fills the description, gallery
+and tags the install would otherwise leave empty.
 
 **The character is the exception: it is passed *into* the import.** The mod page's
 category is the author's own filing, while folder-name detection is a substring

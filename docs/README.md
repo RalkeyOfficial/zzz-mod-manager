@@ -11,7 +11,7 @@ the root [`README.md`](../README.md).
 | [`marketplace.md`](marketplace.md) | The **native GameBanana browser**: the grid and detail screens, the `IndexedStack`, the card's one status slot, and what an install does on the way through |
 | [`library-screen.md`](library-screen.md) | The **Mods tab**: the card and its status slot, the two-row toolbar, the library menu's bulk actions, and the dialogs reached from a mod |
 | [`notifications.md`](notifications.md) | **What the app tells the user in passing**: whether to speak at all, the headline-and-subject rule, the card's leading slot, the stack and its clock |
-| [`downloads.md`](downloads.md) | **Fetching mod archives**: the spawned-isolate pump and the measurements behind it, resume policy, backpressure, and the stall timeout |
+| [`downloads.md`](downloads.md) | **Fetching mod archives**: the spawned-isolate pump and the measurements behind it, resume policy, backpressure, the stall timeout, the background queue and the panel that shows it |
 | [`metadata-schema.md`](metadata-schema.md) | The **file format** of a mod's `metadata.json` sidecar: every field, save and round-trip semantics, schema versioning and the migration hook |
 | [`origin-tracking.md`](origin-tracking.md) | What the app **knows about where a mod came from**: the confidence model, every route that writes an `origin` block, the offline backfill, the resolve flow, and the installed-mods index |
 | [`metadata-autofill.md`](metadata-autofill.md) | What a marketplace install **copies from a mod page** into the new mod: description, character, tags and gallery |

@@ -7,6 +7,8 @@ import 'package:window_manager/window_manager.dart';
 import 'dart:io';
 import 'core/constants.dart';
 import 'screens/mods_screen.dart';
+import 'screens/components/download_queue_host.dart';
+import 'screens/components/downloads_button.dart';
 import 'screens/components/notification_overlay.dart';
 import 'screens/components/sidebar_nav_item.dart';
 import 'screens/settings_screen.dart';
@@ -269,7 +271,13 @@ class _MainScreenState extends ConsumerState<MainScreen>
     final isSidebarCollapsed = ref.watch(sidebarCollapsedProvider);
     final loc = context.loc;
 
-    return Scaffold(
+    // `DownloadQueueHost` wraps the whole screen, and **below** the `Navigator`
+    // rather than beside it like `NotificationHost`: it finishes a background
+    // download by installing it, which can raise a dialog, and `showDialog`
+    // needs a `Navigator` ancestor. Here rather than inside a tab because the
+    // tabs are disposed as the user moves between them — see the host itself.
+    return DownloadQueueHost(
+      child: Scaffold(
       body: Column(
         children: [
           // Custom title bar
@@ -547,6 +555,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
           ),
         ],
       ),
+      ),
     );
   }
 
@@ -639,6 +648,9 @@ class _MainScreenState extends ConsumerState<MainScreen>
                 ],
               ),
             ),
+            // Downloads. Between the title and the window controls, and absent
+            // until there is a transfer to report — see `DownloadsButton`.
+            const DownloadsButton(),
             // Window controls
             _buildWindowButton(
               icon: Icons.remove,

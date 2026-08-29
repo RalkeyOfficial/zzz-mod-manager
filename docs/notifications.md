@@ -34,6 +34,12 @@ whole point), a mod installed (it lands in a tab you are not looking at), F10 se
 and every count-bearing bulk report — the count and any partial failure *are* the
 message.
 
+**Work in progress is the other survivor, and it is a pinned card rather than a
+message.** A background download has no visible effect until it lands, and the
+modal dialog that used to stand in for the report is gone — so it reports itself
+while it runs, non-blockingly. See [`downloads.md`](downloads.md) §9 for the one
+that exists, and §6 below for the mechanism.
+
 ## 2. The two levels
 
 > **`title` is what happened. `body` is what it happened to.**
@@ -169,6 +175,17 @@ Re-raising an identical **(severity, title, body)** moves it down the stack and
 restarts its clock instead of stacking a duplicate. The stack is capped at
 `kMaxVisibleNotifications` and drops the *oldest*, since a burst is usually one
 action reporting several things and the last line concludes it.
+
+**The oldest *dismissable* one, though — a pinned notification is passed over.**
+A pinned card ends on a condition, and whoever raised it holds a handle it will
+`update` when that condition arrives; an update to one that is gone is a
+deliberate no-op (§6). So evicting a pinned card does not merely hide a sentence,
+it silently throws away the only report of the work it was tracking. That was
+unreachable while the only pinned caller was a tag save finishing in
+milliseconds, and became reachable the moment a download queue started reporting
+a twenty-five-minute transfer beside an install's three warnings. A stack of
+nothing but pinned cards still obeys the cap: it is what keeps the corner from
+becoming a wall, and that has to hold whatever the stack is made of.
 
 `icon` and `characterId` are deliberately **not** in that key — they are pictures
 of what a notification says, not part of what it says. So the same sentence about

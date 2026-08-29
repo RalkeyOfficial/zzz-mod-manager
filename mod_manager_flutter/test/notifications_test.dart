@@ -68,6 +68,32 @@ void main() {
       expect(state().first.title, 'message 3');
       expect(state().last.title, 'message ${kMaxVisibleNotifications + 2}');
     });
+
+    test('drops the oldest *dismissable* one, never a pinned one', () {
+      // A pinned notification ends on a condition, and its owner is holding a
+      // handle to update when that condition arrives — but an update to one
+      // that is gone is a no-op. Evicting it silently throws away the only
+      // report of the work it was tracking. Reachable the moment a download
+      // runs for twenty-five minutes beside an install's three warnings.
+      final progress = center().pinned('Downloading', body: 'Ellen Swimsuit');
+      for (var i = 1; i <= kMaxVisibleNotifications + 2; i++) {
+        center().info('message $i', body: 'body $i');
+      }
+
+      expect(state(), hasLength(kMaxVisibleNotifications));
+      expect(progress.isVisible, isTrue);
+      expect(state().first.title, 'Downloading');
+    });
+
+    test('but a stack of nothing but pinned ones still obeys the cap', () {
+      // The cap is what keeps the corner from becoming a wall, and that has to
+      // hold whatever the stack is made of.
+      for (var i = 1; i <= kMaxVisibleNotifications + 2; i++) {
+        center().pinned('pinned $i', body: 'body $i');
+      }
+      expect(state(), hasLength(kMaxVisibleNotifications));
+      expect(state().first.title, 'pinned 3');
+    });
   });
 
   group('re-raising the same message', () {

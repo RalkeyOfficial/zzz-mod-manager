@@ -42,6 +42,13 @@ Future<void> pumpLocalized(
   List<Override>? overrides,
   ProviderContainer? container,
   Size surfaceSize = const Size(1200, 800),
+
+  /// Pass false for a tree that contains an **indeterminate** progress
+  /// indicator. Those animate forever, so `pumpAndSettle` never returns and the
+  /// test fails as a timeout that says nothing about the widget. A single pump
+  /// still builds everything; what it gives up is the rebuild-loop check below,
+  /// which is why it is opt-in rather than the default.
+  bool settle = true,
 }) async {
   assert(
     container == null || overrides == null,
@@ -77,7 +84,11 @@ Future<void> pumpLocalized(
   );
   // A rebuild loop shows up here as a pumpAndSettle timeout rather than as a
   // failed expectation, which is the point of settling instead of pumping once.
-  await tester.pumpAndSettle();
+  if (settle) {
+    await tester.pumpAndSettle();
+  } else {
+    await tester.pump();
+  }
 }
 
 /// Guards against a vacuous test: fails if the subtree under test never built.

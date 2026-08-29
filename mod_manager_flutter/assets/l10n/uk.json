@@ -37,6 +37,8 @@
     "download_resumed": "Продовження перерваного завантаження.",
     "download_rate": "{rate}/с",
     "download_eta": "залишилось {time}",
+    "download_already_queued_title": "Уже завантажується",
+    "install_failed_title": "Не вдалося встановити мод",
     "install_duplicate_title": "Нічого не імпортовано",
     "install_duplicate_body": "Мод уже може бути у вашій бібліотеці.",
     "install_empty_title": "Немає чого встановлювати",
@@ -678,6 +680,28 @@
       "back": "Назад",
       "finish": "Завершити"
     }
+  },
+  "downloads": {
+    "title": "Завантаження",
+    "tooltip": "Завантаження",
+    "empty": "Нічого не завантажується.",
+    "clear_finished": "Очистити завершені",
+    "queued": "Очікує вільного слота",
+    "notification_title_single": "Завантаження",
+    "notification_title_plural": "Завантаження модів: {count}",
+    "notification_body_several": "Завантажень: {count}",
+    "connecting": "З'єднання...",
+    "installing": "Встановлення...",
+    "done": "Встановлено",
+    "saved": "Збережено в папку завантажень застосунку",
+    "cancelled": "Скасовано",
+    "failed": "Не вдалося завантажити",
+    "failed_stalled": "Передача зупинилась — спробуйте знову, щоб продовжити",
+    "failed_network": "Не вдалося зв'язатися з GameBanana",
+    "failed_install": "Файл завантажено, але встановити не вдалося",
+    "cancel": "Скасувати",
+    "retry": "Спробувати знову",
+    "dismiss": "Прибрати зі списку"
   },
   "time": {
     "just_now": "щойно",

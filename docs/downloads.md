@@ -1,18 +1,25 @@
 # Downloads — fetching mod archives
 
 **Scope:** `services/download/`, which fetches archives into
-`<appData>/downloads`, resumably. Owns the isolate pump, resume policy,
-backpressure and the stall timeout.
+`<appData>/downloads`, resumably — the isolate pump, resume policy,
+backpressure, the stall timeout — plus the **queue** above it and the panel that
+shows it.
 
 Separate from the JSON client (`services/gamebanana/`) because it needs streamed
 bodies, byte ranges and socket backpressure. [`gamebanana-api.md`](gamebanana-api.md)
 §8 has the remote-side measurements that shape it.
 
+Not in scope: what an install does with the archive once it has landed
+([`marketplace.md`](marketplace.md) §5), or how an update writes one over an
+existing mod ([`applying-updates.md`](applying-updates.md)).
+
 ---
 
 ## 1. The shape
 
-`DownloadService` — reached via `downloadServiceProvider`. Returns a
+`DownloadService` — reached via `downloadServiceProvider`, which lives in
+`download_queue.dart` beside its only consumer rather than in the
+`state_providers.dart` registry, so the two do not import each other. Returns a
 `DownloadHandle` (progress stream, `done` future, `cancel()`). **Every *decision*
 lives here**; only the pump below does not.
 
@@ -129,3 +136,148 @@ just a bar, cancellable and resumable throughout.
 `services/archive_hash.dart` — md5 for archive fingerprinting. Free during a
 download (hashed in-stream), one extra read on manual import. A **matching key,
 never an integrity claim** — never render a match as "verified".
+
+## 7. The queue
+
+`DownloadQueue` (`download_queue.dart`, reached via `downloadQueueProvider`) owns
+every transfer the app makes; `queue_policy.dart` holds the decisions, pure. The
+download **service** below it is unchanged and still knows nothing about queues.
+
+The queue exists because the tail measured in
+[`gamebanana-api.md`](gamebanana-api.md) §8 is not a hypothetical. Archives reach
+1.24 GB and a degraded node stretches one to twenty-five minutes, which is a long
+time to hold the whole app behind a modal barrier.
+
+**Two transfers at once, and the reason is not throughput.**
+`gamebanana-api.md` §8 measured that node assignment is deterministic per file and
+that more connections to *one* file do not make it arrive faster, so no claim is
+made that concurrency speeds anything up. What it buys is that a file on a
+degraded node does not hold up everything queued behind it. Two is the smallest
+number that delivers that; higher was not measured, so it was not chosen — and
+each connection costs a spawned isolate (§2).
+
+**A job is de-duplicated on the GameBanana file id, and that is correctness
+rather than politeness.** Two runs of one file would write the same `.part` and
+the same resume record in one shared directory, appending two streams into a
+corrupt archive that still looks plausible — the same failure `resume_policy.dart`
+exists to prevent, reached around the back. Only non-terminal jobs count, so
+pressing Download again after a failure is a retry rather than a refused
+duplicate.
+
+**`retry` goes through the same gate**, and that is not belt-and-braces. A failed
+row stays in the panel by design, so the user can perfectly well press Download
+again — leaving two rows with the same mod name — and then press Retry on the
+stale one. Without the check that is a second transfer of a file already in
+flight, which is exactly what the rule above exists to prevent.
+
+**A foreground job bypasses the cap on the way in, and counts against it
+afterwards.** The one modal download left (§8) runs behind a barrier that covers
+the panel, so parking it behind two background transfers would leave the user
+watching "waiting for a slot" with no way to reach what they would have to
+cancel. Admitting it closes the door behind it rather than raising the ceiling,
+so the worst case is one over the cap and only while a dialog is open.
+
+**Nothing is persisted.** A queue restored from disk would start re-fetching on
+launch. The partials in `<appData>/downloads` are already the durable half: an
+interrupted job is resumed by asking for it again.
+
+## 8. Where a download ends, and who finishes it
+
+The queue moves bytes and stops. Unpacking, importing and reporting need
+localized strings and can raise a dialog, and a `Notifier` has neither — so a
+finished transfer parks in `downloaded` and **`DownloadQueueHost`** takes it from
+there. `DownloadIntent`, fixed when the user presses the button, says which of
+three things happens:
+
+| intent | who finishes it |
+|---|---|
+| `install` | the host, through `dialogs/install_archive_flow.dart` |
+| `keepArchive` | the host — one notification naming the path |
+| `callerHandles` | the caller awaiting `completionOf`, i.e. `applyUpdateFlow` |
+
+**Where the host is mounted is the whole design.** It wraps the tab switcher in
+`main.dart`: the three tabs are keyed `AnimatedSwitcher` children with no
+keep-alive and are *disposed* as the user moves between them, so an install owned
+by `MarketplaceScreen` — which is where it used to live — dies on the first tab
+switch with the archive already on disk. That was only ever safe because the
+modal dialog made walking away impossible, and removing that barrier is the whole
+point of a queue. It must also sit **below** the `Navigator`, unlike
+`NotificationHost`, because `showDialog` needs one as an ancestor.
+
+**One install at a time.** Installing runs `7z`, writes into the mods folder
+through a service held as a singleton, and can ask a question. Two of those
+interleaving would race on all three, and two dialogs would stack.
+
+## 9. What the user sees
+
+Two surfaces, and they answer different questions. The **notification** says
+*something is happening and here is how fast*; the **panel** says *what,
+exactly, and let me change it*.
+
+### The pinned progress notification
+
+Raised by `DownloadQueueHost` and kept in step with the queue. Backgrounding a
+transfer takes away the modal dialog that used to *be* the progress report, and
+a download nobody can see is one the user assumes failed — so the report moves to
+the foreground without blocking it.
+
+- **One card for the whole queue, never one per download.** The stack holds four
+  and drops the oldest, so a card per job turns a five-mod queue into a wall and
+  pushes off the messages that actually need reading. The card carries the
+  aggregate (`aggregateProgress`); the panel is where the per-mod breakdown is.
+- **Pinned, because the end of a download is an event rather than a moment.**
+  That is the shape `NotificationCenter.pinned` exists for: the **body** is the
+  stable subject and only the title is rewritten. It is dismissed when the queue
+  empties — what is left to say about a finished install is said by the install.
+- **A percentage, not two byte counts.** The card's title has no `maxLines`, and
+  `5.0 MB / 21.9 MB · 14 MB/s · 2m left` costs a second line on a 360px card
+  while saying less than `24%` does in a quarter of the width.
+- **The ETA is the queue's, not any one job's** — remaining bytes over the
+  *combined* rate, because the queue finishes when the last byte lands.
+- **A count-bearing card gets no portrait**, the same rule the bulk reports
+  follow: one arbitrary face would claim the message is about that mod, and
+  which mod sorted first would change between runs. One download still gets its
+  own.
+- **Closing it sticks.** Nothing this app shows may be un-dismissable, so the
+  card is *raised* only when a job it has not covered appears and merely
+  *updated* thereafter. A card re-raised on the next progress tick would
+  override the user; closing it therefore holds until they ask for something
+  else, which is itself a request to be told about it.
+
+This is also why `show()` evicts the oldest **dismissable** notification rather
+than simply the oldest: an update to a pinned card that has been evicted is a
+no-op, so dropping one silently throws away the only report of the work it was
+tracking. See `notifications.md` §7.
+
+### The panel
+
+`DownloadsButton` in the title bar, opening `DownloadsPanel`. Both are **absent
+until there is something to report**: a control that is empty on every launch is
+one nobody learns.
+
+- **Finished rows stay until they are cleared.** A row that vanished on its own
+  would take the only record of a failure with it.
+- **One control per row**, chosen by `rowAction`: cancel, retry, dismiss, or
+  nothing at all while an install is between its unpack and its import, where
+  there is no safe stopping point to offer. It reads the **whole queue**, not
+  just the row, because two of those answers depend on it — a failure another
+  job is already re-fetching offers no retry (`DownloadQueue.retry` would refuse
+  it, and a button that silently does nothing is worse than a row that reads as
+  history), and neither does an **install** failure, where the bytes were fine
+  and re-fetching them hits the same `7z` error.
+- **An install failure says what actually failed.** It travels as an
+  `InstallFailure` rather than a bare string, so the row carries the install's
+  own message instead of "Download failed" — which would name the one half that
+  worked.
+- **The ring reports bytes, not jobs** — a 1.2 GB archive and a 4 MB one are not
+  half the work each — and goes indeterminate rather than inventing a number
+  while any active job's size is unknown.
+- **A cancel deletes what it stops**: the partial for a running transfer, and the
+  whole archive for one cancelled after the bytes landed, since the install that
+  would have consumed it is exactly what is being called off. It **records no
+  error** — the user asked for it — so `DownloadJob.error` means "something went
+  wrong" everywhere, and the title bar does not turn red over a stop that
+  worked. An *installing* job cannot be cancelled at all, and the refusal is in
+  `DownloadQueue.cancel` rather than only in the button that declines to offer
+  it: that same method's archive delete would otherwise pull the file out from
+  under a running extraction.

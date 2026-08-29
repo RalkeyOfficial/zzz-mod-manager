@@ -128,10 +128,17 @@ displays is exactly what this rule exists to prevent. See
 - **`mod_backups_dialog.dart`** is the rollback, reachable from the context menu
   only for mods that have a snapshot (`modBackupsProvider`, one readdir for the
   whole library).
-- **`dialogs/download_with_progress.dart` is shared with the marketplace.** Only
-  the *download*, deliberately: the marketplace imports an archive as a new mod
-  folder while an update overwrites an existing one, and folding those together is
-  what would produce a shared "install" that quietly does the wrong one.
+- **`dialogs/download_with_progress.dart` is the app's last *foreground*
+  download**, and the exception rather than the rule — every marketplace download
+  runs in the background queue. Applying an update is a conversation (fetch, show
+  what is about to be written over a live mod, write only if they agree), and
+  holding that open across a tab switch would mean asking about a mod the user has
+  navigated away from. It still goes through the queue, exempt from the
+  concurrency cap on the way in — see [`downloads.md`](downloads.md) §7.
+  Only the *download* is shared with the marketplace, deliberately: the
+  marketplace imports an archive as a new mod folder while an update overwrites an
+  existing one, and folding those together is what would produce a shared
+  "install" that quietly does the wrong one.
 
 ## 7. The resolve dialog
 

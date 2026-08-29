@@ -37,6 +37,8 @@
     "download_resumed": "Resuming an interrupted download.",
     "download_rate": "{rate}/s",
     "download_eta": "{time} left",
+    "download_already_queued_title": "Already downloading",
+    "install_failed_title": "Couldn't install the mod",
     "install_duplicate_title": "Nothing imported",
     "install_duplicate_body": "The mod may already be in your library.",
     "install_empty_title": "Nothing to install",
@@ -678,6 +680,28 @@
       "back": "Back",
       "finish": "Finish"
     }
+  },
+  "downloads": {
+    "title": "Downloads",
+    "tooltip": "Downloads",
+    "empty": "Nothing is downloading.",
+    "clear_finished": "Clear finished",
+    "queued": "Waiting for a free slot",
+    "notification_title_single": "Downloading",
+    "notification_title_plural": "Downloading {count} mods",
+    "notification_body_several": "{count} downloads",
+    "connecting": "Connecting...",
+    "installing": "Installing...",
+    "done": "Installed",
+    "saved": "Saved to the app's downloads folder",
+    "cancelled": "Cancelled",
+    "failed": "Download failed",
+    "failed_stalled": "Stopped responding — try again to resume",
+    "failed_network": "Couldn't reach GameBanana",
+    "failed_install": "The download arrived but couldn't be installed",
+    "cancel": "Cancel",
+    "retry": "Try again",
+    "dismiss": "Remove from the list"
   },
   "time": {
     "just_now": "just now",

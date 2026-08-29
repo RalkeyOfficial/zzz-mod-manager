@@ -66,621 +66,298 @@ same work by *when it lands*. Dependency order is largely forced: the API layer
 files, the browser (§1) sits on top, and updating (§4) is the payoff that needs
 all of them. Decision: **ship a thin vertical slice first** (see M1), then thicken.
 
-### M1 — Thin vertical slice (both platforms) ← lands first
+### M1 — Thin vertical slice (both platforms)
 
 Goal: kill the broken Linux external-browser path and get one real end-to-end
-install working identically on Linux and Windows. Deliberately plain — no update
-UI, no badges, minimal styling.
+install working identically on Linux and Windows.
 
-- [x] **§0 — the large-download unknown is now measured.** **Done** (2026-08-01);
-  full results in [`docs/gamebanana-api.md`](docs/gamebanana-api.md) §8. The rest of
-  the contract was already verified there: search, profile, file list and anonymous
-  download all work, 30 concurrent requests drew no throttling, and `Mod/Multi` can
-  fetch many mods' file lists in **one** request — which shrinks §7.6's bulk pass
-  from ~80 requests to a handful and largely retires the rate-limit worry. What the
-  spike found:
-  - **Resume works, from the `/dl/` link itself.** `Range` survives both redirect
-    hops, `ETag` is stable across CDN nodes (so `If-Range` is safe), and we never
-    need to persist a resolved CDN url. Verified byte-exact on a 655 MB file with
-    three interruptions via curl and four through Dart's `HttpClient`, both matching
-    the published `_sMd5Checksum`.
-  - **Files reach 1.24 GB, not ~650 MB** — but the median is only 21.9 MB and just
-    9.5% exceed 100 MB. The tail is what needs engineering, not the common case.
-  - **Throughput is a property of the CDN node and node choice is deterministic per
-    file.** A healthy node gives 14–22 MB/s; a degraded one gave 0.83 MB/s falling to
-    0.08 MB/s, for every file it served. **Retrying cannot route around it**, and
-    parallel connections don't help. Worst observed case: ~25 min for one file.
-  - **Consequence — resume moves out of M4 polish and into M1** (below), and the
-    download service must use a **stall** timeout (no bytes for N seconds), never a
-    total-duration one, or it will cancel legitimate slow downloads.
-  - **In-stream md5 costs nothing**, confirming §7.8 is free to do on every ingest.
-- [x] **§2 (subset)** — GameBanana API client: search, mod profile, file list.
-  Only what browsing + install needs; no caching/retry polish yet.
-  **Done.** `GameBananaClient` (`services/gamebanana/`) exposes `browseMods`,
-  `searchMods`, `modProfile`, `modProfileByUrl` and `categories`, over an
-  injectable `HttpTransport` seam (`services/http/`) so all 132 tests run with no
-  network — verified in a namespace with no route out. Wire DTOs live in
-  `models/gamebanana/`, one type per file, against 9 real captured fixtures in
-  `test/fixtures/gamebanana/`. Two corrections to what this doc assumed, both
-  applied — see §2 below: **browse is `Mod/Index`, not `Subfeed`**, and
-  **`Mod/Categories` was a missing fourth method**. Caching (the server's own
-  10-min `max-age`), reactive 429/503 backoff and in-flight coalescing landed
-  with it rather than being deferred — they were a few lines each once the seam
-  existed. The mod-page-url parser went to `utils/gamebanana_url.dart` so §7.3
-  can use it offline.
-- [x] **§5 (basic)** — extract the inline download code into a service;
-  download → extract → auto-tag. Single fixed flow, no queue yet — but **resume and
-  a stall timeout are in scope for M1**, not deferred: §0 measured 1.24 GB files and
-  a CDN node serving at 0.08 MB/s, so a download that survives an interruption is
-  table stakes rather than polish. Hash the archive in-stream on every ingest path
-  (§7.8) — it's unrecoverable afterwards, so this has to land with the flow itself
-  even though nothing reads it until M2.
-  **Done.** `services/download/` — resume via `Range`/`If-Range` on the original
-  `/dl/` link, stall timeout (never total-duration), socket backpressure,
-  cancellation, resume across an app restart, and `<appData>/downloads` as the
-  single landing spot. The SSL bypass is gone: `package:http`-style clients aside,
-  the new transport simply never sets `badCertificateCallback`. **Blocker found
-  and fixed on the way:** `_safeDeleteArchive` deleted `archiveFile.parent`
-  *recursively*, which was survivable only while every download had its own temp
-  dir — against a shared downloads folder it would have wiped every other archive
-  and every in-flight partial on the first use.
-- [x] **§3 (write side)** — record the origin block at install time (source,
-  remote mod id, file id, version string + label, date, hash). *Written now,
-  read in M2.* Ships **with the confidence fields from day one** (§7.2) —
-  otherwise M1's own format needs migrating later.
-  **Done**, on every ingest path, with the drop-inbound-origin rule enforced by
-  construction. Two corrections to what this doc assumed, both applied — see
-  below: it ships as **schema v2** and **`ModInfo` gains nothing**. ~~Note the honest
-  limit: the webview yields a CDN url and no mod id, so today every block lands with
-  both confidences `unknown`.~~ **That limit is now closed** — §1's native browser
-  supplies `source`, `mod_id`, `file_id`, `version` and `version_label` before the
-  first byte is fetched, so an in-app download writes both confidences at **`exact`**.
-  That is the honest tier, not an optimistic one: the user picked this row of this
-  mod's file list and we fetched exactly that file id. Manual imports still land at
-  `unknown`, correctly — their route to `exact` is an `archive_md5` match at
-  resolution time (§7.8), not the install path.
-- [x] **§3 (prerequisite)** — make the sidecar **round-trip unknown keys** and
-  treat machine-owned fields (`origin`, `schema_version`) as preserved-from-disk
-  rather than sourced from `ModInfo`. Must land **before** anything writes an origin
-  block: today an unrelated metadata edit would silently erase it, and older builds
-  strip keys they don't know. Forward-only fix — see
-  [`docs/metadata-schema.md`](docs/metadata-schema.md) §2 and §4.
-  **Done.** `ModMetadata.extra` + `knownKeys` round-trip unrecognised keys, and
-  `replaceUserFields()` makes preservation structural: adding a machine-owned field
-  needs no save-site change, adding a user-editable one is a compile error at every
-  save site. Written up in `docs/metadata-schema.md` §2.
-- [x] **§7 (offline backfill)** — schema v1 → v2 during the normal scan:
-  `source_url` → remote mod id, proxy install date. Local-only, no network, no
-  UI. Without this, every pre-existing install is permanently invisible to §4.
-  **Done.** `services/origin_backfill.dart` holds the decisions (pure, with the
-  one filesystem walk injected as an `InstallDateProbe`);
-  `utils/install_date_proxy.dart` is that walk. One correction to what this doc
-  assumed, applied — see §7.3: it is a **sibling** of the legacy migration, not
-  an extension of it. Measured on a real 23-mod library: **23 of 23 recovered
-  identity**, first scan 30 ms including all 23 writes, second scan 7 ms with
-  zero writes. Two limits worth knowing before building on it: sibling groups
-  are unrecoverable (see §7.3), and the backfill helps the *legacy* library
-  only — nothing in the install path writes `source_url`, so a mod downloaded
-  through today's marketplace has neither identity nor a url to derive one
-  from, and stays untracked until §1 supplies the id at ingest.
-- [x] **§1 (plain)** — results grid + mod detail screens, both platforms; remove
-  the `_isWebViewSupported => _isWindows` gate and the Downloads-folder watcher.
-  **Done.** `screens/components/marketplace/` holds the grid (search, sort,
-  root-category + 60-character filter chips, paging) and the detail view (gallery,
-  description, file list, "open in browser"). The webview gate, the Linux
-  open-in-browser view, the Downloads watcher and `flutter_inappwebview` itself
-  are all gone — including the `Platform.isWindows` webview registration in
-  `main()`. Verified against the live API: 5194 records / 866 pages, 4 roots + 60
-  characters, search capped at 15 as documented, profile → file list → `/dl/<id>`.
-  Two corrections to what this doc assumed, both applied — see §1 below: the
-  **default-selection rule cannot have a "highest version" branch**, and the
-  **category filter has no offline fallback**.
-- [x] **§6 (as needed)** — the NSFW/content-filter toggle (§1) is the only new key
-  M1 actually needs. *Not* a download-directory key: §5 fixes that to
-  `<appData>/downloads` and explicitly defers making it configurable.
-  **Done.** `content_filter` (`blur` | `show` | `hide`, default `blur`) through the
-  dual-storage pattern, with the decision itself in a pure unit
-  (`services/gamebanana/content_filter.dart`). The control sits in the marketplace
-  toolbar, where it is first needed; **surfacing it in the Settings tab is still
-  open** and filed under §6 below rather than counted here.
+- [x] **§0** — measure the large-download unknown. Results in
+  [`docs/gamebanana-api.md`](docs/gamebanana-api.md) §8, which is authoritative:
+  file-size distribution, per-node throughput, resume mechanics, rate limits.
+  Two consequences that shaped everything after it — resume is M1 rather than
+  M4 polish, and every download timeout is a **stall** timeout.
+- [x] **§2 (subset)** — `GameBananaClient` (`services/gamebanana/`) over an
+  injectable `HttpTransport` seam, so the whole layer tests offline against
+  captured fixtures. Protocol in
+  [`docs/gamebanana-api.md`](docs/gamebanana-api.md), our client in
+  [`docs/app-architecture.md`](docs/app-architecture.md). Two things this doc
+  had wrong and §2 below now records: browse is `Mod/Index`, not `Subfeed`, and
+  `Mod/Categories` is a fourth endpoint the filter needs.
+- [x] **§5 (basic)** — `services/download/`, written up in
+  [`docs/downloads.md`](docs/downloads.md): resume, stall timeout, backpressure,
+  cancellation, and `<appData>/downloads` as the single landing spot. The
+  archive is hashed in-stream on every ingest path — free there and
+  unrecoverable afterwards (§7.8).
+- [x] **§3 (write side)** — the origin block, on every ingest path, with the
+  confidence fields from day one and the drop-inbound-origin rule enforced by
+  construction. Schema **v2**; `ModInfo` gains nothing. Every route that writes
+  a block and the tier each may claim is in
+  [`docs/origin-tracking.md`](docs/origin-tracking.md) §2.
+- [x] **§3 (prerequisite)** — the sidecar round-trips unknown keys, and
+  `replaceUserFields()` makes that structural: a new machine-owned field needs
+  no save-site change, a new user-editable one is a compile error at every save
+  site. [`docs/metadata-schema.md`](docs/metadata-schema.md) §2.
+- [x] **§7 (offline backfill)** — `services/origin_backfill.dart` (pure, with
+  the one filesystem walk injected) recovers identity from `source_url` during
+  a normal scan. Measured on a real 23-mod library: 23 of 23 recovered, 30 ms
+  first scan including all writes, 7 ms and zero writes on the second. Two
+  limits to know before building on it: sibling groups are unrecoverable
+  (§7.3), and it helps only the *legacy* library — nothing in the install path
+  writes `source_url`.
+- [x] **§1 (plain)** — `screens/components/marketplace/`, the grid and the
+  detail view; the webview gate, the Linux open-in-browser view, the Downloads
+  watcher and `flutter_inappwebview` are all gone. See
+  [`docs/marketplace.md`](docs/marketplace.md). Two things this doc had wrong
+  and §1 below now records: the default-selection rule cannot have a "highest
+  version" branch, and the category filter has no offline fallback.
+- [x] **§6 (as needed)** — `content_filter` (`blur` | `show` | `hide`) through
+  the dual-storage pattern, decided by a pure unit
+  (`services/gamebanana/content_filter.dart`). The control is in the marketplace
+  toolbar; **a Settings-tab entry is still open**, filed under §6.
 
-Exit criteria: on Linux *and* Windows, search a ZZZ mod in-app → open detail →
-download → it installs, auto-tags, and carries an origin block.
+**M1 is code-complete on Linux**, verified end to end against the live API.
+**Not verified on Windows** — there is no Windows machine in this environment.
+The implementation is shared with no platform branch (junction-vs-symlink and
+`openUrlInBrowser` go through `PlatformService`), so the risk is low, but the
+exit criterion names both.
 
-**M1 is code-complete.** Verified on Linux end to end against the live API: the grid
-renders with character-accurate badges and the blur overlay, the category chips are the
-live 4 roots + 60 characters, search pages at the documented cap of 15, and a profile
-resolves to a file list whose rows carry real `/dl/<fileid>` urls, sizes, md5s and
-`clean` AV results. The origin block now lands at `exact` on both axes.
-**Not yet verified on Windows** — there is no Windows machine in this environment. The
-implementation is shared with no platform branch (junction-vs-symlink and
-`openUrlInBrowser` already go through `PlatformService`), so the risk is low, but the
-exit criterion says "Linux *and* Windows" and only one of those was actually run.
 
 ### M2 — Smart installs (read the origin block)
 
 Goal: make the data recorded in M1 pay off in the UI.
 
-- [x] **§3 (read side)** — "already installed" detection; file-hash dedup.
-  **Done.** `services/installed_mods_index.dart` is the pure read model (mod id /
-  file id / archive md5 → mod folders), fed by `installedModsIndexProvider`. The
-  origin block now reaches `ModInfo`, so this costs no extra sidecar reads.
-  Two corrections applied — see §3 and §7.3: **the `ModInfo` origin ban is lifted
-  for a read-only field** (a test pins that nothing can write it back), and **the
-  index cannot derive from `charactersProvider`**, which is stale exactly when the
-  badges are on screen because `ModsScreen` is disposed. It re-snapshots per
-  marketplace open instead: 4 ms warm, 12 ms cold for 23 mods.
-  Measured limit worth knowing before building on it: **23 of 23 real mods have a
-  `mod_id`, none has a `file_id` or an `archive_md5`.** Mod-level answers work on a
-  legacy library today; every file-level one is inert until mods are installed by
-  this build or resolved by hand (§7.5), so hash dedup fires for nothing in an
-  existing library.
-- [x] **§3** — auto-populate metadata (description, images, tags, character) from
-  the API on install instead of leaving it blank.
-  **Done.** Two pure units — `services/gamebanana/remote_mod_metadata.dart` (what the
-  page is worth) and `services/metadata_autofill.dart` (what may be written) — with
-  the I/O in `ModMetadataRepository.applyRemoteMetadata()`. One rule governs it and it
-  is a safety rule, not a courtesy: **fill absence, never displace.** An inbound
-  sidecar's user-facing fields are deliberately kept (§3), so "already set" usually
-  means "the author wrote this". Written up in
-  [`docs/metadata-autofill.md`](docs/metadata-autofill.md). Measured end to end against
-  the live API: 827 ms to fill two sibling mods with the same 8-image gallery — 8
-  downloads, 16 files, 882 KB per folder.
-  Three corrections to what this doc assumed, all applied — see §2 and §3 below:
-  **`_aTags` has two wire shapes and we were reading only one**, **the character comes
-  from the *category*, not from names or tags**, and **the images are the only part
-  that costs anything, and the cost is not where it was assumed to be**.
-- [x] **§1** — "already installed" indicators on cards + detail.
-  **Done.** A filled "In library" badge on the card, a notice on the detail view,
-  and a per-row marker in the file list. The badge names the *folders* — one mod
-  page is often several — and rows separate "installed" (a recorded `file_id`) from
-  "you have this" (a hash match), which per §7.8 must never read as verification.
-  A full-width cover strip was built as an alternative and lost a side-by-side
-  comparison. Design rules, including why a border and a dimmed card were rejected,
-  are in [`mod_manager_flutter/CLAUDE.md`](mod_manager_flutter/CLAUDE.md).
-  - [x] **"Update available" is not part of this** — needs §4, lands with M3. Same
-    slot, and it must differ from "installed" by **hue rather than volume**, since
-    that now takes `primary`.
-    **Done for the *library* card** (M3 below): a blue mark at the same weight as
-    amber, in the same one slot, with precedence folded in `modSlotStatus` so the
-    two can never stack. The **marketplace** card's half is *not* done — that is
-    `GbModCard._statusSlot`, a different widget answering a different question
-    ("does the mod you are browsing have a newer file than the one you own?"),
-    and it needs the check to have run for a mod the library index can name.
-    Filed as its own item under §1.
+- [x] **§3 (read side)** — `services/installed_mods_index.dart`, the pure read
+  model (mod id / file id / archive md5 → mod folders) behind
+  `installedModsIndexProvider`. It **re-snapshots** rather than deriving from
+  `charactersProvider`, which is stale exactly when the badges are on screen
+  because `ModsScreen` is disposed; 4 ms warm, 12 ms cold for 23 mods.
+  Measured limit to know before building on it: on a legacy library every mod
+  has a `mod_id` and **none** has a `file_id` or an `archive_md5`, so every
+  file-level answer — hash dedup included — is inert until mods are installed by
+  this build or resolved by hand (§7.5).
+- [x] **§3** — metadata autofill on install. Two pure units
+  (`services/gamebanana/remote_mod_metadata.dart`,
+  `services/metadata_autofill.dart`) with the I/O in
+  `ModMetadataRepository.applyRemoteMetadata()`. One rule, and it is a safety
+  rule rather than a courtesy: **fill absence, never displace** — an inbound
+  sidecar's user-facing text is usually the author's.
+  [`docs/metadata-autofill.md`](docs/metadata-autofill.md) owns it. The images
+  are the only part that costs anything: 827 ms for two sibling mods sharing an
+  8-image gallery.
+- [x] **§1** — "already installed" indicators on cards and detail. The badge
+  names the *folders* (one mod page is often several) and file rows separate
+  "installed" (a recorded `file_id`) from "you have this" (a hash match), which
+  per §7.8 must never read as verification. Design rules, including the
+  alternatives that lost, are in
+  [`mod_manager_flutter/CLAUDE.md`](mod_manager_flutter/CLAUDE.md) and
+  [`docs/marketplace.md`](docs/marketplace.md) §7.
+  - [x] **"Update available"** shipped for the *library* card with M3 — a blue
+    mark at amber's weight in the same one slot, precedence folded into
+    `modSlotStatus` so the two cannot stack. The **marketplace** card's half is
+    still open and filed under §1: `GbModCard._statusSlot` answers a different
+    question and needs a check to have run for a mod the library index can name.
 - [x] **§7** — the mod-card **status slot** (§7.4), the **"needs attention"**
-  filter, and the per-mod **resolve dialog** (§7.5). This is where "the user can
-  take action" actually lands; it needs §2's client and §1's file-list widget.
-  **Done.** Three pure units carry the decisions —
-  `services/origin_status.dart` (the one-slot fold, shared by the badge *and* the
-  filter so they cannot disagree), `services/origin_resolution.dart` (candidate
-  ranking with a stated reason, plus the four transforms an answer may write) and
-  `ModOrigin.boundTo` (what survives a rebind, now one copy shared with the
-  offline backfill instead of two). The surfaces are
-  `screens/components/mod_status_slot.dart`, a toolbar toggle carrying a live
-  count, and `screens/dialogs/resolve_origin_dialog.dart`; the write path is
-  `ModMetadataRepository.updateOrigin`, which **amends** rather than replaces and
-  re-reads before applying. Written up in
-  [`docs/origin-tracking.md`](docs/origin-tracking.md) §5 and §7, now authoritative.
-  Two corrections to what this doc assumed, both applied — see §7.4 and §7.5:
-  **a `/dl/` link cannot be resolved to a mod by either API**, and **the filter
-  covers the muted state too, not only the amber one**. Smoke-tested against the
-  real library on Linux: the toolbar reports 16 of the developer's own mods as
-  needing attention.
-  **Blocker found by using it, not by testing it, and worth recording as a
-  pattern.** Saving in the dialog left the amber mark on the card. Everything
-  underneath was correct — the sidecar was written, the rescan re-read it — but
-  `ModsScreen` guards `charactersProvider` behind a hand-written field-by-field
-  comparison, and `origin` had never been added to it (it went onto `ModInfo`
-  during M2's read side, where nothing yet depended on the guard seeing it). So
-  the guard said "unchanged" and the grid kept rendering the previous `ModInfo`.
-  Nothing threw, no test failed, and the whole feature looked broken from the one
-  place it is used. Fixed by giving `ModOrigin` real value equality and moving the
-  comparison out of the 2000-line screen into `utils/mod_group_diff.dart`, where
-  it is now tested — including that removing the `origin` line fails three tests.
-  The general lesson is filed below: **that list is a silent-staleness trap for
-  every future field on `ModInfo`**, and only `origin` is now self-maintaining.
-- [x] **§7** — the zero-network **"assume current"** baseline action (§7.5).
-  The **per-mod** half shipped with the dialog above (the "I don't know which
-  file" escape hatch, with the §7.3 clamp applied). What was still open is the
-  *bulk* action — apply it to every tracked-but-versionless mod at once — and
-  the confirmation that states how many mods it is about to flag.
-  **Done.** `services/bulk_assume_current.dart` is the pure half (a plan split
-  into eligible / untracked / undatable, plus the transform each write goes
-  through) and `screens/dialogs/assume_current_dialog.dart` is the confirmation
-  and the write loop; the button sits in the mods toolbar and appears **only
-  while the "needs attention" filter is on**, so the user has enumerated the
-  mods before rewriting them. It acts on exactly the set the count beside it
-  describes — the current view, which on "All" is the whole library — because a
-  control acting on a different set than the one on screen is the quiet kind of
-  wrong. Written up in
-  [`docs/origin-tracking.md`](docs/origin-tracking.md) §6.
-  Measured against a mirror of the developer's real library: 17 mods with
-  sidecars, **10 eligible**, 6 already resolved at `user` and 1 at `exact` from
-  the per-mod dialog's own smoke test, 0 untracked and 0 undatable. The whole
-  pass including all 10 rewrites is **13 ms**, and re-running it is a 4 ms
-  no-op — so there is no progress UI and none is warranted; the button just
-  disables while it runs.
-  One layout bug found by a test rather than by a user, which is the way round
-  this repo has not usually managed: the second toolbar row is `Clear filters`
-  and this button, and as a `Row` with a `Spacer` it **overflowed by 126px** at
-  the narrow end of the window. Neither label can ellipsise, so a `Row` that
-  doesn't fit degrades into a red stripe rather than into anything. It is a
-  `Wrap` with `spaceBetween` now — same look while they fit, stacked when they
-  don't — and the test pumps the toolbar at 480px with a three-digit count.
-  **Verified by pressing it, on the developer's real library.** All 10 eligible
-  mods went to `assumed_latest` with `baseline_remote_date == installed_at`, the
-  6 at `user` and 1 at `exact` were left alone by the re-check guard, and **no
-  `file_id` or `version` was invented on any of them** — identity, hash,
-  description and tags all survived. No write failed. On screen the amber marks
-  and the toolbar's `!` button both went away (the count reaching zero) and the
-  filter cleared itself rather than leaving an empty grid.
-  **And pressing it found a bug nothing else would have**, which is the argument
-  for doing this every time. With the count at zero the `!` toggle hid itself by
-  returning `SizedBox.shrink()` — but both of its 8px spacers stayed, so the
-  sort dropdown and the favourites star sat **16px** apart and the row read as a
-  button that had failed to render. It predates this work (the toggle shipped
-  with §7.4) and was simply unreachable until a library could reach zero. The
-  control and its spacer are conditional together now, the shape the tag filter
-  already used. Worth generalising: **a control that hides itself by returning
-  an empty box leaves its gaps behind** — the caller has to omit it. A test
-  measures the gap and was checked against the old code, where it reads 16.
-  **Two more corrections came out of review, both to claims this work made about
-  itself.**
-  - **The plan was built from the wrong list.** It came from
-    `currentCharacterSkinsProvider` — the view *before* search, tags and
-    favourites — while the grid renders `visibleModsProvider`. Search `ellen`
-    with the needs-attention filter on and the grid showed 3 mods while the
-    button offered to rewrite 12. The number was still honest (it is what got
-    written), but it contradicted the one property the placement argues for.
-    Now built from `visibleModsProvider`. The knock-on is worth stating rather
-    than hiding: the button's count and the `!` toggle's count may now differ,
-    because they answer different questions — what the view *is* showing versus
-    what it *could*. They agree whenever needs-attention is the only filter.
-  - **A declined write was reported as a read-only folder.** `updateOrigin`
-    answers one bare `false` for "unwritable" and "the transform said no", so
-    the guard that this whole item is built around surfaced its own correct
-    behaviour as a filesystem permission error. Reachable with no concurrency at
-    all: press the button, then press it again before the rescan has refreshed
-    the plan. The loop wraps the transform to tell the two apart and reports a
-    third outcome ("already sorted out"), and the rescan is now unconditional so
-    an all-declined run cannot leave the same stale plan on screen. The
-    identical conflation in the *per-mod* dialog is pre-existing and filed
-    separately below.
-  One correction to what this doc assumed, applied — see §7.3: **the clamp
-  cannot be applied here at all**, and the fallback this doc proposed for that
-  case is unusable. The deferred half is filed as its own item under §4.
-  The hazard worth recording, because it is invisible rather than obvious: the
-  plan is built from a scan and each write re-reads, so eligibility is
-  **re-checked against the fresh block** and abandons anything no longer
-  `versionUnknown`. Without that, a mod resolved exactly while the batch ran
-  would be silently *downgraded* to a guess, inside a pass nobody is watching
-  per-mod. A test walks all four resolved tiers to pin it.
+  filter, and the per-mod **resolve dialog** (§7.5). Three pure units carry the
+  decisions: `services/origin_status.dart` (the one-slot fold, shared by badge
+  *and* filter so they cannot disagree), `services/origin_resolution.dart`
+  (candidate ranking with a stated reason) and `ModOrigin.boundTo` (what
+  survives a rebind). The write path is
+  `ModMetadataRepository.updateOrigin`, which **amends** rather than replaces
+  and re-reads before applying.
+  [`docs/origin-tracking.md`](docs/origin-tracking.md) §5 and §7 own it.
+  Two constraints that are not obvious from the code: **a `/dl/` link cannot be
+  resolved to a mod by either API**, and **the filter covers the muted state as
+  well as the amber one**.
+- [x] **§7** — the zero-network **"assume current"** baseline action.
+  `services/bulk_assume_current.dart` is the pure half (a plan split into
+  eligible / untracked / undatable); `screens/dialogs/assume_current_dialog.dart`
+  is the confirmation and the write loop.
+  [`docs/origin-tracking.md`](docs/origin-tracking.md) §6 owns it. On a real
+  17-mod library the whole pass including 10 rewrites is 13 ms and re-running it
+  is a 4 ms no-op, so there is no progress UI and none is warranted.
+  Two hazards it is built around, both invisible rather than obvious:
+  - **Each write re-reads and re-checks eligibility against the fresh block**,
+    abandoning anything no longer `versionUnknown`. Without that a mod resolved
+    exactly while the batch ran is silently *downgraded* to a guess, inside a
+    pass nobody watches per-mod. A test walks all four resolved tiers.
+  - **The plan comes from `visibleModsProvider`** — what the grid renders — not
+    from the wider unfiltered view, because the action rewrites every mod it
+    covers and its number must describe what is on screen. The knock-on: its
+    count and the `!` toggle's count answer different questions and may differ,
+    agreeing whenever needs-attention is the only filter.
+  Two general lessons this item produced, both filed below: `ModsScreen`'s
+  rescan guard is a **silent-staleness trap** for every future field on
+  `ModInfo`, and **a control that hides itself by returning an empty box leaves
+  its gaps behind** — the caller has to omit it.
 
 ### M3 — Updating
 
 Goal: the payoff feature. Needs §2 + §3 + §5 from M1/M2.
 
-- [x] **§4 (detection)** — manual update check (per-mod + bulk), version-string
-  +label rule, update badges.
-  **Done.** `services/update_check.dart` is the pure comparator (origin block +
-  mod page → one verdict) and `services/bulk_update_check.dart` the
-  whole-library pass over `Mod/Multi`; the surfaces are a toolbar button, a
-  right-click entry, a blue mark in the card's existing status slot and
-  `screens/dialogs/mod_update_dialog.dart`. Written up in
-  [`docs/update-checks.md`](docs/update-checks.md), now authoritative.
-  §4's clamp item and the `_tsDateUpdated` item below both landed with it.
-  **Three corrections to what this doc assumed, all applied — see §4 below:**
-  the version+label rule **cannot be a same-label rule alone** (real data makes
-  that a silent false "up to date"), `Mod/Multi` **cannot return
-  `_aArchivedFiles`** but folds them into `_aFiles` instead, and **one bad id
-  fails the whole batch**, which a legacy library of `inferred` ids will hit.
-  Measured against the developer's real 17-mod library, live: **one request,
-  982 ms**, 15 up to date (8 of them date-only guesses, labelled as such), 0
-  confirmed updates and 2 `possiblyOutdated` — both the predicted soft
-  false-positive, a mod whose author published a *different variant* after the
-  one installed. Injecting one dead id into the same batch cost **9 requests
-  and 1490 ms** and still answered every other mod, where without the halving
-  all seventeen would have come back unreachable.
-  **Two corrections after the first real use, both applied.**
-  - **The detection was wrong in a way no amount of label or date comparison
-    could fix**, and both live false positives were the same shape: a *different
-    variant* published after the installed one (`SFW Variants Only` beside
-    `NSFW Variants Included`; four proportion variants in one post). The fix is
-    not a better heuristic but a field this doc never mentioned —
-    **`Mod/<id>/Updates` carries `_aFileRowIds`, the files an author released
-    together**, which is the author's own statement that two files are variants
-    rather than successors. A second suppression covers what release groups
-    cannot: two still-offered files stamped with the **same `_sVersion`** are
-    the same version, which caught a `FULL MOD`/`NSFW MOD` pair posted nine days
-    apart in separate updates. Both suppressions can only ever turn a flag
-    *off*, neither can change the verdict once the installed file is archived
-    (the same-version rule is confined to the still-offered branch; release
-    groups still decide which file gets *named*), and
-    absent data suppresses nothing. Re-measured on the same library: **4 flags
-    before, 2 after**, 5 requests, 226 ms.
-    Worth recording what was *not* built, since it is the obvious next step and
-    is a trap: suppressing an unlabelled candidate against a labelled install
-    would clear the last variant-shaped false positive, and would also silence
-    an author who labelled one release and not the next — a false "up to date",
-    which is the failure this feature cannot afford. Filed below.
-  - **There was no way to ignore an update.** Added
-    `origin.updates_dismissed_until` and an "ignore this update" in the dialog:
-    a **date** rather than a file id, so it expires by itself the moment
-    something newer is published, and written as the date of the thing dismissed
-    rather than as "now" so nothing published mid-check is swallowed unseen. The
-    verdict is kept and only the badge goes quiet — the dialog is where someone
-    goes to change their mind.
-  **Two more corrections from pressing it, both reported and both real.**
-  - **The label said "Not now", which reads as a deferral.** It is permanent
-    until the author publishes something newer, so it says "Ignore this update"
-    and the undo says "Stop ignoring it". The confirmation line now also states
-    what visibly happened (the mark is gone from the card).
-  - **Pressing it appeared to do nothing, and the write had actually
-    succeeded** — a shape worth recording because it produced no error
-    anywhere. The dismissal was re-derived by re-folding the verdict against a
-    fetched mod page, and the dialog **opened from a card badge never fetches
-    one**: a verdict is already on record from the bulk pass, so re-asking would
-    spend a request to redraw the same sentence. The fold therefore returned
-    null, the store call no-opped, and the dialog, the card badge and the
-    toolbar count all kept showing the pre-dismissal state. Fixed by flipping
-    the flag on the verdict already in hand (`UpdateCheck.asDismissed`).
-    The general lesson: **a dialog with two entry points has two states, and
-    the cheaper one is the one that ships broken.** The only test covering the
-    button used the entry point that fetches, where a profile happens to exist;
-    a test now covers the badge path and was checked against the old code,
-    where it fails on exactly the symptom reported.
-  - **A mod with several new files named one and hid the rest.** Asked for
-    directly: *"does it automatically suggest the latest NSFW version even
-    though I am on an older SFW version, or does the user get to pick?"* The
-    answer measured out better than feared — where the author's labels are
-    stable the check already follows *your* variant, and the label match beats
-    recency, so an SFW install is offered the new SFW build even though the
-    NSFW one is two minutes newer. But when labels drift it names the newest,
-    which may be somebody else's variant, and when nothing matches it names
-    none. `UpdateCheck.newerFiles` now carries every candidate and the dialog
-    lists them, marking the one it would pick **and on what grounds** —
-    `matches your variant` against `newest published`, which are different
-    claims and must not render alike. Four scenarios are pinned as tests,
-    including that an old ignore never carries forward to the next release.
-  **Verified against the developer's real library** and by pressing it.
+- [x] **§4 (detection)** — manual update check, per-mod and whole-library.
+  `services/update_check.dart` is the pure comparator (origin block + mod page →
+  one verdict), `services/bulk_update_check.dart` the pass over `Mod/Multi`; the
+  surfaces are the toolbar button, a right-click entry, a blue mark in the card's
+  status slot and `screens/dialogs/mod_update_dialog.dart`.
+  [`docs/update-checks.md`](docs/update-checks.md) owns it.
+  What a future change here must not undo:
+  - **A different *variant* is not a newer version.** `Mod/<id>/Updates` carries
+    `_aFileRowIds` — the files an author released together — which is the
+    author's own statement that two files are siblings rather than successors. A
+    second rule covers what release groups cannot: two still-offered files
+    stamped with the same `_sVersion` are the same version. Both can only turn a
+    flag **off**, neither survives the installed file being archived, and absent
+    data suppresses nothing.
+  - **Do not extend that to suppressing an unlabelled candidate against a
+    labelled install.** It would clear the last variant-shaped false positive
+    and also silence an author who labelled one release and not the next — a
+    false "up to date", which is the one failure this feature cannot afford.
+    Filed below.
+  - **An ignore is a date, not a file id** (`origin.updates_dismissed_until`), so
+    it expires by itself when something newer is published, and it stores the
+    date of the thing dismissed rather than "now" so nothing published mid-check
+    is swallowed unseen.
+  - **`UpdateCheck.newerFiles` carries every candidate**, and the dialog marks
+    which one it would pick *and on what grounds* — "matches your variant"
+    against "newest published" are different claims and must not render alike.
+  - **The dialog has two entry points and they have different state.** Opened
+    from a card badge it never fetches a profile, so anything re-derived from a
+    fetched page silently no-ops there.
+  Measured live on a real 17-mod library: one request, 982 ms. One dead id in
+  the batch costs 9 requests and still answers every other mod, where without
+  the halving all seventeen come back unreachable.
 - [x] **§4 (applying)** — changelog display, backup/rollback, §4.1's overwrite
   path, its patch detection, and §4.2's backups.
-  **Done.** `services/update_apply/` holds the mechanism (`UpdateApplier` for the
-  I/O and the ordering; `update_layout.dart` and `stale_ini.dart` for the two
-  decisions it must not guess at), `services/backup/` the snapshot and its
-  retention, and `services/ini_resources.dart` + `services/patch_detection.dart`
-  the patch test. The surfaces are an **Update** button in the update dialog,
-  `screens/dialogs/update_confirm_dialog.dart` before anything is written,
-  `update_result_dialog.dart` after, and `mod_backups_dialog.dart` for the
-  rollback. Written up in
-  [`docs/applying-updates.md`](docs/applying-updates.md), now authoritative —
-  and a **new doc rather than a section of `update-checks.md`**, which is the
-  first correction below.
-  **Four corrections to what this doc assumed, all applied.**
-  - **`update-checks.md` said the applying half wanted a section inside it
-    rather than a second doc.** Wrong on `docs/README.md`'s own rule, which is
-    that the scope line decides: that doc's scope is "turning *which remote file
-    is this* into *is there a newer one*", and nothing here is that. It is
-    filesystem semantics and shares no vocabulary with the comparator. The two
-    meet at exactly one point — the Update button — and both docs now say so.
-  - **§4.1's stale-`.ini` rule was too broad, in the one direction this whole
-    path exists to avoid.** "Any `.ini` we did not just write is a leftover,
-    default to delete" offers to delete the `.ini` of a *second mod merged into
-    the same folder* — the same destruction overwrite was chosen to prevent,
-    with a dialog in front of it, and it contradicts §4.1's own refusal to clear
-    `.ini` files wholesale for exactly that reason. The intent stands; the test
-    is now **"does this file describe the content we just wrote"** — stale iff
-    every resource it names is a file the incoming download ships. An upstream
-    rename satisfies that by construction (the renamed `.ini` is a full
-    replacement, so it references the same resources); a merged second mod names
-    its own files and is *kept and named* rather than offered. An `.ini` naming
-    nothing checkable is kept without asking. Pinned by seven tests, including
-    the merged-mod case and the rollback direction, where the same rule reads in
-    reverse.
-  - **§4.1's "follow includes and namespaces first" names the wrong mechanism.**
-    The intent — do not make an ordinary multi-`.ini` mod look broken — is right
-    and is load-bearing; the mechanism is not. Namespaces rename *sections* so
-    two mods can both define `[ResourceBody]`, and have no bearing on a
-    `filename`, which is always relative to the `.ini` that wrote it. What
-    actually produces that false positive is reading each `.ini` **in
-    isolation**: a mod that declares its resources in one file and its overrides
-    in another is ordinary. So the rule is that a folder's `.ini` files are
-    parsed **collectively**, and `include` / `include_recursive` are themselves
-    references (to a file and to a directory respectively). A test pins the
-    split-across-two-files mod.
-  - **§4.1's "never re-ask the import questions — replay the recorded `ingest`"
-    describes the rare path, not the common one.** `ingest` is written by this
-    build and by nothing else, and §7.3's backfill deliberately recovers
-    identity and not layout — so on a real library it is absent for **every**
-    mod. The replay is built and correct, but the path carrying almost all
-    traffic is the fallback, and it had to be designed rather than left as an
-    afterthought: exactly one top-level folder maps to the mod folder, anything
-    else **stops and asks**. An applied update then *writes* an `ingest`, so a
-    mod gains a layout the first time it is updated and its next update replays.
-  Two design notes worth keeping, because both were nearly got wrong the other
-  way. **A renamed upstream folder is expected, not a mismatch** — `Ellen` →
-  `Ellen v2` is routine and must not stop an update, and it is unambiguous while
-  there is one folder to pick; it *cannot* be absorbed for a combined install,
-  where three differently-named incoming folders give no way to tell which
-  became which, and a guess writes a mod's textures over its buffers. And **the
-  retention plan reports an irreducible overage rather than forcing it**: a user
-  with one 1.2 GB mod is over any sane budget by keeping a single snapshot of
-  it, and the alternative to saying so is leaving them with no rollback.
-  **Verified by pressing it** on a real published update (`Miyabi Transfer
-  Student` 700727, v1.1 → v1.2), which is what found the patch-detection
-  correction above. A review afterwards found two more, both in the paths the
-  feature's own safety argument rests on, and both now fixed:
-  - **A stale `.ini` whose real name had any capital letter was never deleted,
-    silently.** Comparison paths are lower-cased (3DMigoto is case-insensitive
-    and they have to be) and that same path was handed to `File`, so
-    `Ellen.ini` never matched `ellen.ini` on Linux: `exists()` answered false,
-    the loop reported nothing removed, nothing threw, and the user was left
-    with the two live `.ini` files the rule exists to prevent — after ticking
-    the box and being told it was done. `FolderContents.actualPaths` now carries
-    the on-disk spelling beside the normalised one; **compare with the key,
-    touch the filesystem with the value.** The confirmation had the same fault
-    cosmetically and takes the same fix.
-    The reason nothing caught it is worth more than the bug: **every test wrote
-    a lower-case filename**, so the feature was only ever exercised on the one
-    spelling that happens to work, while authors overwhelmingly ship
-    `Ellen.ini` / `Miyabi.ini` / `MasterNico.ini`. A mixed-case regression test
-    was checked against the old code, where it fails on exactly the symptom.
-  - **After a failed copy, the rollback the error message points at was not in
-    the menu.** `modBackupsProvider` was invalidated only on the success path,
-    and the context-menu entry is drawn from its cached set — so for a mod being
-    updated for the first time, the single moment the rollback matters most was
-    the one moment it was unreachable (until a tab switch or a restart). Fixed
-    *before* the success check rather than in the failure branch, so there is
-    one call and no branch to forget next time. The precondition it rests on —
-    a failed copy still returns its snapshot — is now pinned by a test that
-    makes the copy genuinely fail.
+  `services/update_apply/` holds the mechanism (`UpdateApplier` for the I/O and
+  the ordering; `update_layout.dart` and `stale_ini.dart` for the two decisions
+  it must not guess at), `services/backup/` the snapshot and its retention, and
+  `services/ini_resources.dart` + `services/patch_detection.dart` the patch test.
+  [`docs/applying-updates.md`](docs/applying-updates.md) owns it — **its own doc
+  rather than a section of `update-checks.md`**, because that doc's scope is
+  turning *which remote file is this* into *is there a newer one*, and this is
+  filesystem semantics sharing no vocabulary with the comparator. The two meet at
+  exactly one point, the Update button.
+  Rules a future change here must not undo:
+  - **An `.ini` is stale iff every resource it names is a file the incoming
+    download ships**, not merely because we did not write it. The broader rule
+    offers to delete the `.ini` of a *second mod merged into the same folder* —
+    the destruction overwrite exists to prevent, with a dialog in front of it. A
+    merged mod names its own files and is kept and *named*; one naming nothing
+    checkable is kept without asking.
+  - **A folder's `.ini` files are parsed collectively**, and `include` /
+    `include_recursive` are themselves references. Reading each in isolation is
+    what makes an ordinary mod — resources in one file, overrides in another —
+    look broken. (Namespaces are irrelevant here: they rename *sections*, not
+    `filename`s.)
+  - **The layout fallback is the common path, not the rare one.** `ingest` is
+    written by this build alone and the backfill recovers identity, not layout,
+    so on a real library it is absent for every mod. Exactly one top-level folder
+    maps to the mod folder; anything else **stops and asks**. An applied update
+    writes an `ingest`, so the *next* update replays.
+  - **A renamed upstream folder is expected, not a mismatch** — `Ellen` →
+    `Ellen v2` is routine and unambiguous while there is one folder to pick. It
+    cannot be absorbed for a combined install, where three differently-named
+    incoming folders give no way to tell which became which and a guess writes a
+    mod's textures over its buffers.
+  - **Compare with the normalised key, touch the filesystem with the on-disk
+    spelling** (`FolderContents.actualPaths`). Comparison paths are lower-cased
+    because 3DMigoto is case-insensitive; handing that to `File` means
+    `Ellen.ini` never matches on Linux, and authors overwhelmingly ship
+    mixed-case names.
+  - **`modBackupsProvider` is invalidated before the success check**, so the
+    rollback a failed copy points the user at is actually in the menu. A failed
+    copy still returns its snapshot; a test makes the copy genuinely fail.
+  - **The retention plan reports an irreducible overage rather than forcing it.**
+    One 1.2 GB mod is over any sane budget with a single snapshot, and the
+    alternative to saying so is leaving the user no rollback.
+  Verified against a real published update (`Miyabi Transfer Student` 700727,
+  v1.1 → v1.2).
 - [x] **§4 + §7** — the bulk "check all" results screen doubles as the bulk
   **resolution** screen (§7.6): per-row identity confirmation and inline version
-  pickers. Verdict wording and auto-update gating become confidence-aware (§7.2).
-  **Done.** `services/bulk_resolution.dart` is the pure half — `(scanned mods,
-  the records the check already fetched) → rows`, plus the one composed
-  transform each row is written through — and
-  `screens/dialogs/bulk_resolution_dialog.dart` is the surface. It costs **no
-  request**: `runBulkUpdateCheck` now hands back the `Mod/Multi` records it was
-  discarding, and every question resolution asks is answered by that response.
-  Written up in [`docs/origin-tracking.md`](docs/origin-tracking.md) §7, now
-  authoritative.
-  The confidence-aware half of this line was **already shipped** by §4's
-  comparator (`isGuess` caps every verdict at `possiblyOutdated`) and by
-  `ModOrigin.allowsUnattendedUpdate`, which is the auto-update gate and is
-  untouched here — M4 still owns auto-update itself. What this item added on
-  that axis is the *other* direction: a pass that raises `inferred` to `user`,
-  which is the confirmation §7.2 requires before any update may overwrite files.
-  Measured against the developer's real 57-mod library, one live `Mod/Multi`
-  request of **111 KB**: as it actually stands (every mod at `user`/`exact`) the
-  planner produces **0 rows in 0.4 ms**, so the screen never opens and the check
-  reports through its notification as before. The **same library reduced to the
-  shape a legacy one has** — identity `inferred` from a url, no version, its own
-  real proxied install dates — gives **57 rows in 2.8 ms, 24 of them arriving
-  with the file already worked out** and 33 needing a pick, over 127 ranked
-  candidates. So the pass removes about two fifths of the human work for
-  nothing.
-  **Four corrections to what this doc assumed, all applied — see §7.6 below:**
-  the pass **must not write before Apply**, the **remote thumbnail cannot
-  exist**, `remote_missing` **needed its own visible state to be writable at
-  all**, and the "1 file uploaded before install" rule **needs the date test
-  spelled out** or it invents a version for a mod whose file was deleted.
-  **A fifth correction came from pressing it, and it was not about the screen at
-  all — it was about where the screen lived.** Reported immediately: *"that popup
-  only happens once when you started the check and cannot be re-opened, and
-  adding an extra button next to it will just make the UX worse."* Both halves
-  were right, and the second is what made the first hard to fix. The Mods
-  toolbar had actions and view controls interleaved across three places — global
-  actions parked in the character header because there was room, a filter bar
-  carrying one control that was secretly also an action, and a second row that
-  appeared and disappeared holding a filter reset beside two bulk writes — so a
-  new surface had nowhere to go and became a side effect of pressing a filter
-  toggle. Rebuilt as **two rows: search plus a library menu, then every filter.**
-  - The menu holds the three bulk actions — *check for updates*, *sort out mod
-    tracking…*, *mark all as current* — each with the count it would act on and
-    disabled when it can do nothing, and it badges what the resolution screen
-    would open. *Sort out mod tracking* is the one exception and is offered at
-    zero: with nothing in hand it runs the check itself, where greying it out
-    would make the most useful entry the one disabled on launch.
-  - `modUpdateRecordsProvider` keeps the check's records in session state beside
-    its verdicts, so re-opening the screen costs nothing; opening it with none
-    runs the check it would have run anyway.
-  - **The update-check button stops doing two jobs**, which retires a
-    compromise this doc's §4 recorded as a known cost ("re-checking means
-    turning the filter on, pressing check again, and turning it off"). It is a
-    filter now, beside the other filters.
-  - **"Mark all as current" moved into the menu without weakening its rule.**
-    The entry turns the needs-attention filter on and *then* confirms, so the
-    grid behind the confirmation shows exactly the set being rewritten — where
-    before the rule was enforced by hiding the button. Flipping the filter cannot
-    change which mods are eligible, only which are on screen, so the count in
-    the menu is the count that gets written.
-  - Row two is **always present** now. That costs a row of height on an
-    unfiltered library and buys every control a fixed place; a bar whose
-    contents move as you use it is what made the old one hard to learn.
-  **A sixth correction, reported next and about the screen itself: it was
-  unreadable.** *"Hard to understand what it does, what you need to do… even for
-  me I had to look at it for a few minutes"*, and *"missing much of the flair and
-  understandability of the regular Update tracking modal."* Both true, and the
-  cause was that it invented its own vocabulary instead of using the one this app
-  already has. It is built from `components/dialog_section.dart` now — the same
-  headings, notices and theme type sizes the update flow's dialogs use, which is
-  the component written *because* those dialogs had the identical problem
-  (hardcoded 10–13px, nothing marking where one idea ended). Four changes:
-  - **Every question arrives under a heading that says what the group is for and
-    why it matters.** Ungrouped, a row asking *is this the right mod?* looked
-    exactly like one asking *which file?*.
-  - **Rows are grouped by their leading question, and a mod is listed once.** A
-    section per *question* was the other option and is worse: on a legacy library
-    nearly every row asks both, so every name would appear twice. Order is
-    identity → file → gone → back, so a library with one dead page and fifty to
-    confirm does not open on the dead one.
-  - **The screen says what it is for**, in an intro that also states the one
-    thing the controls cannot show — nothing is written until Save.
-  - **The glance test is labelled.** A folder name and a page name stacked as two
-    bare lines gave no clue which was which; they carry a folder and a link icon
-    now, and the type comes from the theme rather than from literals.
-  **A seventh correction, and this one was a real bug found by a question rather
-  than by a test:** *"what does it do when you press save but you did not tick
-  'yes this is the right mod page'?"* It confirmed the identity anyway. The rule
-  as written was "answering anything about a mod also confirms it", justified by
-  the per-mod dialog's own behaviour — but that justification holds for a file
-  the *user picked* and not for the single-file inference this screen
-  **pre-ticks**. So pressing Save on a row whose confirmation had been
-  deliberately left unticked raised `mod_id_confidence` from `inferred` to
-  `user`: a guess parsed out of a pasted url promoted into the tier that lets an
-  update overwrite files, on the one screen where the user had visibly declined
-  to confirm it. That is §7.2's "never-confirmed ≠ safe" inverted. Now only the
-  tick, a **user-picked** file, or a **checksum match** confirms an identity;
-  the pass's own inference leaves both axes guesses, which caps the verdict at
-  *possibly outdated*. Pinned by four tests, two of them at the widget layer
-  where the pre-tick actually happens.
-  **A review then found three more, all at edges the tests did not reach.**
-  - **A row could be rendered twice.** The four section lists were independent
-    filters rather than a cascade, so `back` did not exclude `needsIdentity`: a
-    mod recorded as gone whose page came back, with an identity nobody had
-    confirmed, appeared under two headings with the same two checkboxes. Nothing
-    was written twice (both copies key off one mod id) but it contradicted the
-    invariant the whole layout rests on. Reachable rather than contrived —
-    writing `remote_missing` never touches `mod_id_confidence`. `gone` needed no
-    guard and was safe only by accident, which is now stated where the lists are
-    built.
-  - **The two doors reported different numbers, and one of them dropped a count
-    entirely.** The menu door passed the *view-scoped* update count, so the same
-    sentence meant "in your library" or "on this character tab" depending on
-    which tab was open; both read `libraryUpdateCountProvider` now. Worse, it
-    hardcoded `unreachable: 0` while `BulkResolutionPlan.unreachable` was
-    computed and read by nothing — so on the door the rebuild exists to provide,
-    the "N mods couldn't be checked" line silently vanished. That is the exact
-    accounting gap the excluded-mods notice is there to prevent.
-  - **"Mark all as current" left the filter on after a cancel.** It is switched
-    off only on the full-success path, so declining the confirmation returned
-    the user to a grid filtered behind their back. Under the old placement the
-    filter was a precondition and declining changed nothing; making the action
-    flip it is what created the case. Restored now on cancel and on the
-    nothing-to-do return, and a filter the user had already set is left alone.
-  Two tests came out of it — the `sourceBack` + identity pair, and the summary
-  line on the menu door — plus two on the cancel path. The second was checked
-  against the old code, where it fails on exactly the symptom.
-  **Not yet pressed on a real library**, and the reason is itself a
-  measurement: this library no longer has a single unresolved mod, so the screen
-  cannot be reached from it without degrading a sidecar by hand. Verified by
-  tests (**28 pure, 14 widget** for the screen, plus the toolbar's own) and by
-  the measurements above; the live behaviour it has never had is the one where a
-  row is actually applied against a real sidecar.
-
-**M3 is code-complete.** Detection, applying and bulk resolution have all
-shipped, and the two of them that touch a live install were verified by pressing
-them on a real published update. What is not verified is Windows — the same gap
-M1 recorded, for the same reason (no Windows machine in this environment), and
-it matters more here than it did there: §4.1's busy-file path exists *because*
-ZZMI holds handles on Windows, and it has never been hit.
+  pickers.
+  `services/bulk_resolution.dart` is the pure half — `(scanned mods, the records
+  the check already fetched) → rows`, plus the one composed transform each row is
+  written through — and `screens/dialogs/bulk_resolution_dialog.dart` is the
+  surface. It costs **no request**: `runBulkUpdateCheck` hands back the
+  `Mod/Multi` records it would otherwise discard.
+  [`docs/origin-tracking.md`](docs/origin-tracking.md) §7 owns it.
+  The confidence-aware half of this line was already covered by §4's comparator
+  (`isGuess` caps every verdict at `possiblyOutdated`) and by
+  `ModOrigin.allowsUnattendedUpdate`, the auto-update gate M4 still owns. What
+  this adds is the other direction: a pass that raises `inferred` to `user`,
+  which is the confirmation §7.2 requires before an update may overwrite files.
+  Rules a future change here must not undo:
+  - **Only a tick, a user-picked file, or a checksum match confirms an
+    identity.** The pass's own single-file inference is **pre-ticked** but leaves
+    both axes guesses — promoting it would raise a url-parsed guess into the tier
+    that lets an update overwrite files, on the one screen where the user can
+    visibly decline. That is §7.2's "never-confirmed ≠ safe" inverted.
+  - **Nothing is written until Save**, and the intro says so, because the
+    controls cannot show it.
+  - **The section lists are a cascade, not four independent filters.** `back` has
+    to exclude `needsIdentity` or a mod recorded as gone whose page returned
+    appears under two headings — reachable, since writing `remote_missing` never
+    touches `mod_id_confidence`.
+  - **Rows are grouped by their leading question and a mod is listed once**,
+    ordered identity → file → gone → back. A section per *question* would list
+    nearly every legacy mod twice.
+  - **Both doors report `libraryUpdateCountProvider`**, not a view-scoped count,
+    and both pass `BulkResolutionPlan.unreachable` — the "N mods couldn't be
+    checked" line is the accounting gap the excluded-mods notice exists to close.
+  - **A bulk action that flips a filter restores it on cancel**, including the
+    nothing-to-do return, and leaves a filter the user had already set alone.
+  - It is built from `components/dialog_section.dart`, the same headings and
+    theme type sizes the update dialogs use, rather than its own vocabulary.
+  Measured on a real 57-mod library, one 111 KB `Mod/Multi` request: at
+  `user`/`exact` throughout the planner produces 0 rows in 0.4 ms and the screen
+  never opens; the same library reduced to a legacy shape gives 57 rows in
+  2.8 ms, 24 with the file already worked out, over 127 ranked candidates.
+  **Never applied against a real sidecar** — this library has no unresolved mod
+  left, so the screen cannot be reached without degrading one by hand. Verified
+  by 28 pure and 14 widget tests.
+**M3 is code-complete on Linux.** **Not verified on Windows**, and it matters
+more here than in M1: §4.1's busy-file path exists *because* ZZMI holds handles
+on Windows, and it has never been hit.
 
 ### M4 — Robustness & polish
 
-- [ ] **§5** — download queue and multi-download progress; revisit SSL bypass.
-  (Resume itself moved to M1 — see §0.)
+- [x] **§5** — download queue and multi-download progress. (Resume is M1's; the
+  SSL bypass went with M1's transport and needs no revisit.)
+  `services/download/download_queue.dart` is the queue, `queue_policy.dart` its
+  pure decisions, `DownloadQueueHost` the half with a `BuildContext`,
+  `dialogs/install_archive_flow.dart` the install, and `DownloadsButton` /
+  `DownloadsPanel` / a pinned progress notification the surfaces. All of it is
+  written up in [`docs/downloads.md`](docs/downloads.md) §7–9, which is
+  authoritative; only what a *future* item needs is repeated here.
+  Constraints this item is built on, all of them still live:
+  - **Work that outlives the press cannot be owned by a tab.** The tabs are
+    keyed `AnimatedSwitcher` children with no keep-alive, so their
+    `BuildContext` dies on a tab switch. The host wraps the switcher, and sits
+    **below** the `Navigator` (unlike `NotificationHost`) because `showDialog`
+    needs one as an ancestor.
+  - **One transfer per file id, everywhere.** Two runs share a `.part` and a
+    resume record in one directory and append two streams into a corrupt
+    archive. `enqueue` *and* `retry` both check; the foreground update download
+    goes through the queue for the same reason.
+  - **A foreground job bypasses the cap on the way in.** Its modal barrier
+    covers the panel, so a queued one leaves the user unable to reach what they
+    would have to cancel. It counts against the cap once running.
+  - **Two concurrent transfers, and not for throughput** — node choice is
+    deterministic per file, so the cap only stops a degraded node holding up the
+    queue behind it. Higher was never measured.
+  - **A lazy viewport cannot live inside a `MenuAnchor`.** The menu measures
+    through an `IntrinsicWidth` and a `ListView` asserts during layout; it also
+    needs its own `ScrollController`, since the menu already has one on the
+    `PrimaryScrollController`.
+  - **A cancel records no error**, so `DownloadJob.error` means "something went
+    wrong" everywhere, and an install failure is a typed `InstallFailure` so the
+    panel never calls it a download failure.
+  61 tests: 30 pure over the policy, 17 over the queue against a scripted
+  transport and a temp directory, 10 over the panel and button, 6 over the host,
+  plus 2 in the notification suite for the pinned-eviction rule.
+  **Never exercised against the live API**, and that is the gap: two large
+  archives arriving while the user browses, and an install running while a second
+  transfer is still coming in.
 - [ ] **§4** — opt-in auto-update (global + per-mod) with notification.
 - [ ] **§6** — surface all new settings in the Settings tab.
 - [ ] **§1** — empty/error/loading/offline states.
@@ -982,7 +659,7 @@ The block:
     "Zhao Nicole" proved which one to trust. The category is now handed to the
     import and detection only runs where there is no category character.
 
-### Filed by the read side (found while building it, deliberately not built)
+### Open around the read side (known, deliberately not built)
 
 - [x] **`modsProvider` in `state_providers.dart` is dead and now misleading.**
   Declared as `StateProvider<List<ModInfo>>` and never read or written by
@@ -1023,7 +700,7 @@ The block:
   read-only folder silently never gains an identity and now silently never gets a
   badge either. Same fix shape, different source.
 
-### Filed by the metadata autofill (found while building it, deliberately not built)
+### Open around metadata autofill (known, deliberately not built)
 
 - [ ] **The install is silent between the download finishing and the result.** The
   progress dialog closes the moment the bytes are in, and extract → duplicate check
@@ -1196,7 +873,7 @@ The block:
   The snapshot above is what actually carries this, and rollback already required
   it on its own grounds.
 
-### Filed by the update check (found while building it, deliberately not built)
+### Open around the update check (known, deliberately not built)
 
 - [ ] **A mixed folder makes us watch the wrong mod page, and we report it as
   clean.** Live today, not introduced by §4.1. When a folder holds a patch plus the
@@ -1412,7 +1089,7 @@ The block:
   record whose `_aFileRowIds` names two files (measured on `549029`). Nothing
   reads it; noted so nothing starts to.
 
-### Filed by the applying half (found while building it, deliberately not built)
+### Open around applying an update (known, deliberately not built)
 
 - [ ] **A sibling group updates one member at a time, re-downloading the archive
   for each.** One archive can install as several mods, each with its own origin
@@ -1806,9 +1483,12 @@ is exactly right.
 
 ## 5. Download manager
 
-- [ ] Extract the inline download code out of `marketplace_screen.dart`
+- [x] Extract the inline download code out of `marketplace_screen.dart`
   (`_downloadToTemporaryFile` bare `HttpClient`) into a dedicated service.
-- [ ] Queue + progress. **Resume is M1, not M4** — §0 measured the numbers behind
+  **Done in M1** (`services/download/`). The *install* followed it out in M4 —
+  see the roadmap item — so `marketplace_screen.dart` now holds only the two
+  screens and the choice dialog.
+- [x] Queue + progress. **Resume is M1, not M4** — §0 measured the numbers behind
   this; `docs/gamebanana-api.md` §8 has the mechanics. What the service must do:
   - **Resume by re-requesting the original `/dl/<id>` with `Range: bytes=<have>-`.**
     Range survives both redirect hops, so the resolved `filecacheNN` url never needs
@@ -1824,18 +1504,93 @@ is exactly right.
     `sink.add()` is never awaited and the subscription is never paused.
   - Persist enough per download (`file_id`, expected size, ETag, bytes-on-disk) that
     a resume survives an app restart, not just a flaky connection.
-- [ ] Progress UI must suit hour-long transfers: rate + ETA, not just a bar, and
+
+  Every bullet above landed in **M1**, in the service. The **queue** on top of it
+  is M4's, and its own decisions are in
+  [`docs/downloads.md`](docs/downloads.md) §7. One correction to what this list
+  assumed: the queue itself is **not** persisted, and deliberately — a queue
+  restored from disk would start re-fetching on launch, while the partials on
+  disk already are the durable half. Asking for the file again is what resumes
+  it.
+- [x] Progress UI must suit hour-long transfers: rate + ETA, not just a bar, and
   cancellable throughout. `_nFilesize` exactly equals `Content-Length`, so it's a
-  reliable denominator and a preflight disk-space check.
-- [ ] **Unify the download directory.** Today it's inconsistent (system Downloads
+  reliable denominator and ~~a preflight disk-space check~~.
+  **Done** — the modal dialog in M1, and now `DownloadsPanel`, which shows the
+  same three figures per row for several transfers at once and never hides a
+  failure behind an auto-clearing row.
+  **The preflight disk-space check was never built.** `InsufficientSpaceException`
+  exists and nothing raises it; Dart exposes no portable free-space API, so it
+  wants a `PlatformService` method. Filed below rather than counted here.
+- [x] **Unify the download directory.** Today it's inconsistent (system Downloads
   on Linux vs `<appData>/downloads` for HTTP grabs). **Decision**: incoming
   archives land in **`<appData>/downloads`** and are **deleted after successful
   extraction** — the archive is a throwaway intermediate. Not user-configurable in
   M1; add a config key later only if requested.
-- [ ] One consistent download → extract → tag → (optionally activate) flow for
+  **Done in M1**, and the queue is what makes the "one shared folder" half of
+  that decision load-bearing rather than incidental — see the file-id
+  de-duplication in the roadmap item above.
+- [x] One consistent download → extract → tag → (optionally activate) flow for
   both platforms. **Every** entry point into it (download, drag-drop, file picker)
   hashes the archive on the way through, *before* the archive is deleted — §7.8.
-- [ ] Revisit the current SSL-validation bypass on Win/Linux.
+  **Done.** The download half is `DownloadQueue`, the import half
+  `install_archive_flow.dart` and the mods tab's own path, and both run
+  `confirmArchiveNotDuplicate` and bank the hash.
+- [x] Revisit the current SSL-validation bypass on Win/Linux.
+  **Done in M1, and this line was already stale when M4 started.**
+  `IoDownloadTransport` simply never sets `badCertificateCallback`, so there is
+  nothing left to bypass. The consequence recorded in
+  [`docs/downloads.md`](docs/downloads.md) §4 stands: the isolate pump builds its
+  own transport, so its TLS behaviour is deliberately **untested** rather than
+  tested behind a hole in that rule.
+
+### Filed while building the queue
+
+- [ ] **Three source comments cite a section of this file.**
+  `apply_update_flow.dart:293` and `image_fetcher.dart:41` cite "§0";
+  `origin_backfill.dart:90` cites "§7.5". All three predate M4 and are the docs
+  rule one layer down — this file gets deleted as its contents ship, taking the
+  meaning and leaving a dead reference. Each wants its figure or rule inlined,
+  or a pointer to the doc that now owns it (`docs/downloads.md` §2 and
+  `docs/origin-tracking.md` §5 respectively). Not fixed with the queue because
+  none of them is about the queue.
+- [ ] **There is no preflight free-space check.**
+  `InsufficientSpaceException` has existed since M1 and nothing throws it. It
+  matters more with a queue than it did with one download at a time: several
+  archives now land in `<appData>/downloads` at once, `_nFilesize` gives an
+  exact total up front, and running the volume out mid-transfer fails as a
+  `DownloadWriteException` whose message says nothing about space. Dart has no
+  portable free-space API, so it needs a `PlatformService` method rather than a
+  `Platform.isX` branch.
+- [ ] **A queued download cannot be reordered or paused.** The panel offers
+  cancel, retry and dismiss; there is no "start this one first" and no
+  pause-and-keep-the-partial, even though the service already supports exactly
+  that (`DownloadHandle.cancel()` without `deletePartial` is a pause in
+  everything but name, and re-enqueuing resumes). Not built because neither has
+  been asked for, and a row three lines tall cannot carry more controls without
+  becoming a decision — see `rowAction`.
+- [ ] **An update decline costs the user their place in the queue.** If the file
+  an update wants is already being fetched as a *new install*,
+  `downloadFileWithProgress` declines with "already downloading" rather than
+  attaching to it. Correct — the archive in flight belongs to somebody else and
+  will be consumed by them — but the honest fix is for two intents to be able to
+  share one transfer, which needs the archive to be reference-counted rather than
+  deleted by whoever finishes first. Rare enough to leave: it needs the same file
+  id to be both the newest release of a mod you own and something you are
+  installing fresh, at the same moment.
+- [ ] **Nothing tells the user a background install asked a question.** An
+  archive with several top-level folders, or one whose hash is already banked,
+  raises a dialog from `DownloadQueueHost` — which is right (it is the only way
+  to ask) but arrives over whatever screen they are on, possibly minutes after
+  they pressed Download. A quieter shape would park the job in the panel with a
+  "needs you" state and let them open it. Not built because the two dialogs are
+  the uncommon case and a job that silently waits is worse than one that asks;
+  revisit if it reads as an interruption in practice.
+- [x] ~~**The queue's own tests never install anything.**~~ Closed by the
+  feedback above: `DownloadQueueHost` takes an `installer` seam, and
+  `test/download_queue_host_test.dart` covers the drain loop's one-at-a-time
+  guard and the progress card. Still uncovered, and smaller than it was: the
+  mapping from an `InstallResult` back to a job state, which needs an installer
+  fake per outcome rather than a new seam.
 
 ## 6. Config / persistence
 
@@ -2219,7 +1974,7 @@ been renamed). Strictly local: scans run offline on every launch.
   indistinguishable from mod versions, and a wrong stored version is worse than
   none. Surface detected tokens in the resolve dialog to help the user choose.
 
-#### Filed by the backfill (found while building it, deliberately not built)
+#### Open around the backfill (known, deliberately not built)
 
 - [ ] **`ModSort.added` still sorts by scan order.** `installed_at` now exists on
   every backfilled mod, so the sort finally *can* have a real timestamp — but
@@ -2482,7 +2237,7 @@ mod context menu, and the edit-mod dialog.
     down 280 → 230 to pay for it: anything new in this dialog is paid for by the
     list that scrolls, never by the hatches, which have nowhere to go.
 
-#### Filed by the resolve dialog (found while building it, deliberately not built)
+#### Open around the resolve dialog (known, deliberately not built)
 
 - [ ] **A "tracked by date only" filter, if the card marker turns out not to be
   enough.** The new muted clock makes the state visible but not *enumerable* —
@@ -2700,7 +2455,7 @@ One screen, two jobs, and nothing that goes stale once libraries are migrated.
     user already pressed for, and the fourth correction is that there is nothing
     left here to build.
 
-#### Filed by the bulk resolution pass (found while building it, deliberately not built)
+#### Open around the bulk resolution pass (known, deliberately not built)
 
 - [ ] **Resolving a mod does not refresh its verdict.** The screen writes a
   `file_id` for a mod the check had answered `versionUnknown`, and that verdict

@@ -222,10 +222,30 @@ class NotificationCenter extends Notifier<List<AppNotification>> {
         if (!n.saysTheSameAs(notification)) n,
       notification,
     ];
-    state = next.length > kMaxVisibleNotifications
-        ? next.sublist(next.length - kMaxVisibleNotifications)
-        : next;
+    state = _capped(next);
     return NotificationHandle(this, notification.id);
+  }
+
+  /// Trims the stack to [kMaxVisibleNotifications], dropping the oldest
+  /// **dismissable** notification rather than simply the oldest.
+  ///
+  /// A pinned one ends on a condition rather than a clock, and whoever raised it
+  /// is holding a handle to [update] when that condition arrives — but an update
+  /// to one that is gone is a deliberate no-op. So evicting a pinned card does
+  /// not merely hide a sentence, it silently throws away the only report of the
+  /// work it was tracking.
+  ///
+  /// Pinned ones still go once there is nothing else to drop. The cap is what
+  /// keeps the corner from becoming a wall, and that has to hold whatever the
+  /// stack happens to be made of.
+  static List<AppNotification> _capped(List<AppNotification> all) {
+    if (all.length <= kMaxVisibleNotifications) return all;
+    final kept = List<AppNotification>.of(all);
+    while (kept.length > kMaxVisibleNotifications) {
+      final oldestDismissable = kept.indexWhere((n) => !n.isPinned);
+      kept.removeAt(oldestDismissable >= 0 ? oldestDismissable : 0);
+    }
+    return kept;
   }
 
   NotificationHandle success(String title,

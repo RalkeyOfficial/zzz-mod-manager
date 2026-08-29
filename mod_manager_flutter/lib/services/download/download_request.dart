@@ -1,9 +1,9 @@
 /// What the caller knows about a file it wants.
 ///
-/// Only [url] is required. The GameBanana-derived fields are optional because
-/// the marketplace is still a webview today: it intercepts a CDN url and knows
-/// nothing else about the file. The native browser will fill them in, and
-/// nothing about the service changes when it does.
+/// Only [url] is required: a caller may know nothing but a link. Every caller
+/// today comes from a `GbFile` and fills the rest in, but the service must keep
+/// working without them — a paste-a-url install has a url and nothing else, and
+/// each absent field costs a specific thing named below rather than failing.
 class DownloadRequest {
   const DownloadRequest({
     required this.url,

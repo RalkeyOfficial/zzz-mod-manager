@@ -30,6 +30,33 @@ When editing a file that has legacy non-English (e.g. Ukrainian) comments or
 strings, write your additions in English; converting the surrounding legacy text
 to English as you touch it is welcome but not required.
 
+## Write the present tense. Git holds the history.
+
+**No prose anywhere describes how the code got this way.** Not code comments,
+not `docs/`, not `BUGS & TODO.md`, not a checked-off item. This applies to every
+file except `CHANGELOG.md`, whose whole subject is what changed.
+
+Delete on sight:
+
+- what the code **used to do** — "this used to…", "the old flow…", "previously…",
+  "N corrections to what this doc assumed";
+- **who or what found something** — "a review found", "reported after the first
+  use", "found by pressing it", "verified against the old code";
+- **the order things happened in** — "then", "afterwards", "a fifth correction".
+
+Keep the durable half, which is usually already in the same paragraph: the rule,
+the constraint, the measurement, the rejected alternative and *why it loses*.
+"`<appData>/downloads` is shared, so delete the file and never the directory" is
+worth a comment forever. "This used to delete the parent recursively" is a commit
+message.
+
+Two things that look like history and are not, so keep them:
+
+- **What is verified and what is not** ("not yet run on Windows") — that is
+  current state, and the reader needs it.
+- **A hazard that is still live** ("two transfers of one file share a `.part`") —
+  the fact is present tense even if a bug is what taught it.
+
 ## Commands
 
 All `flutter`/`dart` commands run from `mod_manager_flutter/`, where the standard
@@ -98,7 +125,7 @@ mistake.
 > |---|---|
 > | [`app-architecture.md`](docs/app-architecture.md) | The **layers of `lib/`** — service layer, platform abstraction, our GameBanana client |
 > | [`gamebanana-api.md`](docs/gamebanana-api.md) | GameBanana's **remote protocol** — which of the two APIs and why, browsing/filtering/sorting, every field, NSFW, downloads, the category tree |
-> | [`downloads.md`](docs/downloads.md) | **Fetching archives** — the isolate pump, resume, backpressure, the stall timeout |
+> | [`downloads.md`](docs/downloads.md) | **Fetching archives** — the isolate pump, resume, backpressure, the stall timeout, the background queue |
 > | [`marketplace.md`](docs/marketplace.md) | The **native browser screens** |
 > | [`library-screen.md`](docs/library-screen.md) | The **Mods tab** — card, status slot, toolbar, bulk actions |
 > | [`notifications.md`](docs/notifications.md) | **What the app tells the user** — whether to speak, the two levels, the card |
