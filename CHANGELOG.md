@@ -65,6 +65,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Importing or deleting a mod no longer plays the whole "switched character" animation across the Mods grid — sliding everything out to the left, back in from the right, and re-animating every card. That transition now happens only when you actually switch character, which is what it was for.
+- Turning a mod on or off no longer rebuilds its card from scratch, so the card keeps its hover lift instead of dropping it under your cursor until you move the mouse away and back. The active border and glow now ease in rather than snapping.
 - "Detect tags for all mods" no longer blanks the Settings page behind a blocking dialog and then replays the whole page's entrance animation on the way back. The button reports on itself — it spins and disables while the pass runs — and nothing else on the page moves. The work is a scan of your mod folder names, so it is usually over in a moment.
 - Collapsing or expanding the sidebar no longer causes an exception across the navigation buttons. A label that does not yet fit the sidebar's animating width now shortens with an ellipsis instead of spilling out of it.
 - Mod cover images are decoded at the size they are shown rather than their full resolution, cutting the app's image memory dramatically — a 49-cover library previously held over 200 MB of decoded image data, enough that scrolling the library could push other images out of memory and force them to reload.

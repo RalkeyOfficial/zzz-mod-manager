@@ -955,14 +955,6 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
               switchInCurve: Curves.easeOutCubic,
               switchOutCurve: Curves.easeInCubic,
               transitionBuilder: (Widget child, Animation<double> animation) {
-                // Для старого контенту (що виходить)
-                final isOldWidget =
-                    child.key !=
-                        ValueKey(
-                          'character_${selectedIndex}_${currentSkins.length}',
-                        ) &&
-                    child.key != const ValueKey('empty');
-
                 // Старий контент йде вліво
                 final outOffset =
                     Tween<Offset>(
@@ -1006,10 +998,25 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                   ),
                 );
               },
+              // **Keyed on which character is shown, and nothing else.**
+              // This switcher's whole job is the 500 ms slide-out/slide-in that
+              // says "you are looking at a different character now", so the key
+              // has to change on exactly that and never on a change to what is
+              // *in* the current view.
+              //
+              // It used to carry `currentSkins.length`, which made importing or
+              // deleting a mod — or retagging one out of this character — play
+              // the character-switch transition over the whole grid. Worse, the
+              // `AnimationLimiter` below lives inside this subtree, so a re-key
+              // remounts it and every card replays its 500 ms staggered scale-in
+              // on top of the slide. Adding one mod re-rendered the entire tab.
+              //
+              // The **id** rather than the index: `loadMods` preserves the
+              // selection by id and recomputes the index, so a group appearing
+              // or disappearing can shift the index while the user is still
+              // looking at the same character.
               child: Padding(
-                key: ValueKey(
-                  'character_${selectedIndex}_${currentSkins.length}',
-                ),
+                key: ValueKey('character_$selectedCharacterId'),
                 padding: EdgeInsets.all(AppConstants.defaultPadding),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
@@ -1127,9 +1134,21 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
 
                                           final mod = visibleSkins[index];
                                           return AnimationConfiguration.staggeredGrid(
-                                            key: ValueKey(
-                                              'mod_${mod.id}_${mod.isActive}',
-                                            ),
+                                            // The folder id alone. Folding
+                                            // `isActive` in re-keys the card on
+                                            // every toggle, which throws away
+                                            // `_ModCardWidgetState` — including
+                                            // `isHovered`, so the card you just
+                                            // clicked drops its hover lift and
+                                            // does not get it back until the
+                                            // pointer leaves and returns.
+                                            // Nothing needs the re-key: the card
+                                            // takes `mod` as a prop, and its
+                                            // `AnimatedContainer` eases the
+                                            // active border and gradient in,
+                                            // which is what the state change
+                                            // should look like anyway.
+                                            key: ValueKey('mod_${mod.id}'),
                                             position: index,
                                             columnCount: 4,
                                             duration: const Duration(

@@ -1793,6 +1793,27 @@ is exactly right.
 
 ### Filed while surfacing the settings
 
+- [x] **Two widget keys on the Mods tab were built from mutable state, so an
+  ordinary action tore the subtree down.** Both are the same mistake: **a key
+  answers "is this the same thing?", never "has this thing changed?"**
+  - The grid's `AnimatedSwitcher` was keyed
+    `character_<index>_<currentSkins.length>`, so importing, deleting or
+    retagging a mod played the 500 ms character-switch transition over the whole
+    grid — *and* remounted the `AnimationLimiter` inside it, restarting every
+    card's staggered scale-in on top. Now keyed on the character **id** (the
+    index moves under a stable selection when a group appears or disappears).
+  - The card was keyed `mod_<id>_<isActive>`, so every toggle discarded
+    `_ModCardWidgetState.isHovered` and the card dropped its hover lift under the
+    cursor. Now the folder id alone; the `AnimatedContainer` eases the active
+    border in, which is the better rendering of the change anyway.
+  `test/mod_card_identity_test.dart` pins the surviving `State` rather than the
+  key, and was checked against the old key to confirm it fails. Written up in
+  [`docs/library-screen.md`](docs/library-screen.md) §1.
+  Worth knowing for anything else on this tab: `loadMods(showLoading: false)` is
+  already the norm, `isLoading` is only the first load and the error retry, and
+  toggle/rename/edit/delete/favourite all patch the list in place rather than
+  rescanning. The re-render was never the rescan — it was the keys.
+
 - [ ] **The Settings tab has no widget tests, and the auto-tag section cannot get
   one.** `_SettingsScreenState.initState` calls `ApiService.getConfig()`, which
   lazily builds a `ConfigService` against the developer's **real**

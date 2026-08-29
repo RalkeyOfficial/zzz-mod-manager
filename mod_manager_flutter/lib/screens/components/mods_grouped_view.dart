@@ -114,7 +114,10 @@ class _ModsGroupedViewState extends ConsumerState<ModsGroupedView> {
             delegate: SliverChildBuilderDelegate((context, index) {
               final mod = mods[index];
               return AnimationConfiguration.staggeredGrid(
-                key: ValueKey('mod_${mod.id}_${mod.isActive}'),
+                // The folder id alone — folding `isActive` in re-keys the card
+                // on every toggle and throws away its hover state. See the same
+                // key in `mods_screen.dart` for the whole reason.
+                key: ValueKey('mod_${mod.id}'),
                 position: index,
                 columnCount: 6,
                 duration: const Duration(milliseconds: 500),

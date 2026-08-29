@@ -27,6 +27,42 @@ the user switched tabs. Nothing threw.
 model has `==` at all — so new *origin* fields are covered automatically. Nothing
 else on `ModInfo` is.
 
+### Two keys decide whether a rebuild is felt
+
+Getting past that guard is only half of it. What a rebuild *costs* the user is
+decided by the widget keys below it, and both of these were built from mutable
+state, so an ordinary action re-keyed them and Flutter threw the subtree away.
+
+**The character switcher is keyed on the character, not on how many mods it
+holds.** The `AnimatedSwitcher` around the grid exists for one thing: the 500 ms
+slide-out/slide-in that says *you are looking at a different character now*. Its
+key used to be `character_<index>_<currentSkins.length>`, so **importing or
+deleting a mod, or retagging one out of the current character, played that
+transition over the whole grid**. It compounded: the `AnimationLimiter` lives
+inside the switched subtree, and remounting it hands every card a fresh
+`AnimationExecutor` whose `initState` starts the 500 ms staggered scale-in again
+(`animation_executor.dart` sets `value = 1.0` instead only when the limiter says
+the first frame has passed). Adding one mod re-rendered the entire tab.
+
+It is keyed on the character **id** rather than the index, because `loadMods`
+preserves the selection by id and recomputes the index — so a group appearing or
+disappearing can move the index while the user is still looking at the same
+character.
+
+**A card is keyed on its folder id, and nothing about its state.** The key used to
+be `mod_<id>_<isActive>`, so every activate/deactivate re-created the card and
+discarded `_ModCardWidgetState` — including `isHovered`, so the card you had just
+clicked dropped its hover lift and did not get it back until the pointer left and
+returned. Nothing needed the re-key: the card takes the mod as a prop, and its
+`AnimatedContainer` eases the active border and gradient in, which is what the
+change should look like anyway. `test/mod_card_identity_test.dart` pins the
+surviving `State` rather than the key, since the surviving state is the property
+that matters.
+
+The general rule both of these break: **a key answers "is this the same thing?",
+never "has this thing changed?"** Folding changing state into one turns every
+update into a teardown.
+
 ## 2. `ModStatusSlot`
 
 **Bottom-left of the cover**, the one corner `ModCardWidget` had free (top-left is
