@@ -45,6 +45,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Mods toolbar is search plus a **Library** menu on one row, with every filter on the row below. The three things that act on the whole library — check for updates, sort out mod tracking, mark all as current — live in that menu with a count each.
 - Downloads now run in the background, so you can keep browsing — or queue up several mods — instead of watching one archive arrive. Two run at a time and the rest wait their turn; each one installs itself as it lands, and only stops to ask you something when it has to. A button appears in the title bar while anything is in flight, listing every download with its size, rate and time remaining, and a button to cancel, retry a failed one, or clear the finished.
 - A download still reports itself while it runs: one notification in the corner shows how far along everything is, how fast, and how long is left, and stays until the last one is done. It doesn't block anything, it names the mod when there's only one, and you can close it if you'd rather watch the list instead.
+- Settings can now check for updates when the app starts, so the blue marks are already on your mods instead of waiting for you to find the button. It's off until you turn it on, it only speaks up when it actually found something, and it never downloads or installs anything — updates are always applied by you.
+- The Settings tab has an **Updates** section for that, and a **Marketplace** section holding the adult-content setting that until now only existed in the Marketplace toolbar. Both places change the same setting, so it reads the same wherever you look.
 
 ### Changed
 
@@ -63,6 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- "Detect tags for all mods" no longer blanks the Settings page behind a blocking dialog and then replays the whole page's entrance animation on the way back. The button reports on itself — it spins and disables while the pass runs — and nothing else on the page moves. The work is a scan of your mod folder names, so it is usually over in a moment.
 - Collapsing or expanding the sidebar no longer causes an exception across the navigation buttons. A label that does not yet fit the sidebar's animating width now shortens with an ellipsis instead of spilling out of it.
 - Mod cover images are decoded at the size they are shown rather than their full resolution, cutting the app's image memory dramatically — a 49-cover library previously held over 200 MB of decoded image data, enough that scrolling the library could push other images out of memory and force them to reload.
 - Certificate validation is no longer disabled when downloading mods.

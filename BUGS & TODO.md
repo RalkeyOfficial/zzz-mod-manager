@@ -42,8 +42,14 @@ decisions made so far, not *how* to implement it. Items are grouped by area.
   system, not a guarantee.
 - **Destructive paths require exact knowledge; guesses may only inform.** Every
   piece of origin data carries a confidence (§7.2). Anything short of `exact` can
-  suggest, badge, and prompt — but never overwrite files unattended. Auto-update
-  is gated on `exact` confidence, always.
+  suggest, badge, and prompt; only `exact` lets the app stop hedging about which
+  file is installed.
+- **No update is applied without the user present.** Automatic updating is
+  **refused**, not deferred — see §4. *Checking* is a different act and is
+  automatable, opt-in and off by default. Confidence is not a licence for the
+  first: `exact` is a claim about which remote file this is, and says nothing
+  about what the mod folder holds, which is where every hazard of applying an
+  update lives.
 - **An update overwrites, it never replaces.** New files are copied *over* the mod
   folder; the folder is never emptied, moved or deleted. A mod folder frequently
   holds files from a second download — a *patch mod*, or a hand-merge — and
@@ -358,8 +364,46 @@ on Windows, and it has never been hit.
   **Never exercised against the live API**, and that is the gap: two large
   archives arriving while the user browses, and an install running while a second
   transfer is still coming in.
-- [ ] **§4** — opt-in auto-update (global + per-mod) with notification.
-- [ ] **§6** — surface all new settings in the Settings tab.
+- [x] **§4** — the *checking* half of what this line used to call auto-update:
+  an opt-in **update check on launch**, off by default, reporting through one
+  notification. `services/launch_update_check.dart` is the pure pair (whether to
+  run, whether to speak), `screens/components/launch_update_check_host.dart` the
+  host above the tab switcher, and `services/update_check_run.dart` the request
+  and merge rule now shared with the toolbar so the two cannot drift.
+  [`docs/update-checks.md`](docs/update-checks.md) §5.1 owns it.
+  **Applying an update automatically is refused** — see §4 below. The line's
+  "global + per-mod" belonged to that half: a per-mod opt-out of *checking* is
+  not a useful control, since one `Mod/Multi` request covers the library and
+  `tracking: "off"` already silences a mod entirely.
+  Three rules a future change must not undo:
+  - **Off by default is the safety property**, not a courtesy. "No network on
+    launch" is not softened for anyone who has not asked; it is opted out of.
+  - **It speaks only when it found updates.** A "nothing new" card every launch
+    is noise, and a "couldn't reach N mods" card on every offline start is what
+    gets the setting switched off. That does not break §4's "we could not look"
+    rule — a silent pass asserts *neither* claim, and the manual check is still
+    the one that reports.
+  - **It never opens the bulk resolution screen.** A modal over an app the user
+    has just opened is the interruption the notification-or-screen split exists
+    to avoid; that screen is reachable from the library menu, from the records
+    this pass leaves behind.
+  One thing the design did not budget for and the decision is worth keeping:
+  **the startup moment has to end even when the check was switched off.** Hence
+  three states (`wait` / `close` / `run`) rather than a bool — otherwise
+  enabling the setting and then favouriting a mod fires a pass at a moment the
+  label *when the app starts* does not describe. An unscanned library must
+  **not** close it, though, or the commonest ordering there is — the host
+  mounts, the scan lands a moment later — skips the check every time.
+- [x] **§6** — surface all new settings in the Settings tab. Two new sections,
+  **Updates** (the launch check) and **Marketplace** (the content filter, which
+  §1 always said belonged here as well as in the toolbar). Both are widgets in
+  `screens/components/settings/` with a writer seam, because
+  `settings_screen.dart` is already over a thousand lines and because a section
+  that reached the real `ApiService` would rewrite the developer's own config in
+  a widget test. `SettingsRow` adds the **description** slot the older row has
+  no room for — a switch that contacts the network needs a sentence, not a
+  label. What the §6 list asked for and did *not* get an entry, each with its
+  reason, is in [`docs/configuration.md`](docs/configuration.md) §5.
 - [ ] **§1** — empty/error/loading/offline states.
 
 ### Later — backlog
@@ -798,23 +842,34 @@ The block:
   the session verdict so the card still shows exactly one mark. Blue at the same
   weight as amber, per M2's note that the two must differ by hue rather than
   volume. The **marketplace** card's equivalent is separate and still open (§1).
-- [ ] **Opt-in auto-update** (global and/or per-mod), with notification. Eligible
-  only at `exact` confidence (§7.2) — which includes hash-matched hand-imported mods,
-  not just ones we downloaded. **Signed off:** a checksum match and our own download
-  are the same epistemic state (the match identifies the file with certainty and we
-  extracted that archive ourselves, so the folder provably came from it), and
-  re-coupling the gate to `provenance == "downloaded"` would partly undo the
-  confidence/provenance split §7.2 deliberately made. The residual risk is a
-  base-rate one, not a logical one — people who hand-import are likelier to have
-  since edited or merged those folders — and it is carried entirely by the two
-  guarantees below, which therefore stop being merely "planned":
-  - The §4 snapshot is **unconditional** for auto-update. No snapshot, no unattended
-    write — this is the whole reason the sign-off is safe.
-  - §4.2's retention cap must not prune a backup before the user could plausibly have
-    noticed a bad silent update. An age-based floor beats a pure count cap here.
-  - Note the interaction with `ingest` (§3): one banked hash can mark a **sibling
-    group** of folders `exact`, so a single auto-update rewrites all of them at once.
-    Snapshot the group, not the folder.
+- **Opt-in auto-update — considered and refused.** Kept as a record so it isn't
+  re-proposed; the whole confidence model reads like a runway towards it, and it
+  is not one. Written up in
+  [`docs/applying-updates.md`](docs/applying-updates.md) §7.
+  **The reason is the subject of §4.1.** An update overwrites a live install,
+  and this scene has no standard. Everything §4.1 describes is the app doing its
+  careful best with folders that are frequently two downloads deep, `.ini` files
+  hand-written against a case-insensitive loader, and archives whose layout the
+  author changed between releases. When that goes wrong the recovery is a person
+  looking at a mod folder and working out what happened — and that person has to
+  be **at the keyboard when it lands**, not finding out days later that a mod
+  they have since edited was silently replaced.
+  Two things that look like mitigations and are not, which is the part worth
+  keeping:
+  - **Confidence is not one.** `exact` on both axes is a strong claim about
+    *which remote file this is*. It says nothing about what the folder holds,
+    which is where every hazard in §4.1 lives — a byte-perfect identification of
+    the right successor still overwrites a hand-merged second mod.
+  - **The snapshot is not one either.** It is unconditional already, on its own
+    grounds, and the age floor beating the count cap is there because none of
+    the accepted losses announce themselves. A recovery nobody knows to reach
+    for is not a substitute for having seen the change happen. (Both of those
+    stand unchanged; they were never contingent on this feature.)
+  **Checking is a different act and *is* automatable**, because it reads a mod
+  page and draws a badge — nothing it does is hard to undo. That half shipped as
+  M4's opt-in launch check.
+  `ModOrigin.allowsUnattendedUpdate` consequently has no reader in `lib/`; it is
+  kept as the one place the "`exact` on both axes" rule is code, and filed below.
 - [x] **Changelog display** from GameBanana before updating.
   **Done**, in the update dialog, scoped to releases published *after* the file
   you have — a mod with forty update posts is not offering to tell you about all
@@ -1004,14 +1059,20 @@ The block:
     says it is gone offers to *clear* the flag, pre-ticked. Without it the first
     write would be permanent in practice, since nothing else ever revisits it —
     and a mod page coming back (unwithheld, un-privated) is an ordinary thing.
-- [ ] **Verdicts are session state, and that is a decision worth revisiting
+- [x] **Verdicts are session state, and that is a decision worth revisiting
   once, not a gap.** Nothing is persisted, so the badges are empty on every
   launch until a check is pressed. That is right on the merits — a verdict
   restored from disk asserts something about a mod page nobody has looked at
   since — but the *user-visible* consequence is that the feature looks off
   until they find the button. The fix if it is ever wanted is a nudge or an
-  opt-in check-on-launch (M4's auto-update territory), **not** caching the
-  verdict.
+  opt-in check-on-launch, **not** caching the verdict.
+  **Done, and exactly as this predicted: the opt-in check-on-launch, with the
+  verdicts still never persisted.** The distinction is the whole point — the
+  badges are filled in by a *fresh* pass rather than a remembered one, so the
+  appearance the complaint asked for is bought without asserting anything
+  nobody has checked. Off by default, so a user who never finds the setting
+  still gets today's behaviour and no launch traffic. §5.1 of
+  [`docs/update-checks.md`](docs/update-checks.md) owns it.
 - [ ] **The per-mod check fetches a whole `ProfilePage` when `DownloadPage`
   would do.** `Mod/<id>/DownloadPage` returns `_aFiles` + `_aArchivedFiles`
   plus the upstream-gone flags and nothing else — everything the comparator
@@ -1594,17 +1655,38 @@ is exactly right.
 
 ## 6. Config / persistence
 
-- [ ] New `config.json` + `SharedPreferences` keys for: download directory (only if
+- [x] New `config.json` + `SharedPreferences` keys for: download directory (only if
   §5's fixed location is ever made configurable), auto-install-after-download,
   update-check behaviour (manual/auto), auto-update opt-in. (Remember the dual-storage
   pattern: getter/setter **and** the `_saveToFile` / `loadFromFile` map.)
-- [ ] Key for §1: the **content filter** — whether `warn`/`hide` mods are blurred,
+  **Settled: one of the four exists, and the other three should not.**
+  `update_check_on_launch` is the "manual/auto" one, off by default. The download
+  directory is not configurable at all, so a key would have to come *after*
+  making it one; there is no auto-install-after-download behaviour to configure
+  (a queued download installs itself, which is the feature, not a setting); and
+  auto-update is refused (§4). Each reason is restated in
+  [`docs/configuration.md`](docs/configuration.md) §5 so the doc stands alone.
+  One thing the dual-storage note does not cover and a bool needs: **read it on
+  `containsKey`, never on truthiness.** This is the first key a user can switch
+  back *off*, and a load treating a stored `false` as "nothing stored" would
+  fall through to the default and re-enable it next launch — a switch that
+  cannot be un-switched, with nothing on screen to say why. A test turns it on,
+  off, and restarts.
+- [x] Key for §1: the **content filter** — whether `warn`/`hide` mods are blurred,
   shown, or omitted. Needed in M1, since it's the first thing a user hits on the
-  results grid.
+  results grid. **Done in M1**; its Settings-tab entry landed with M4 — see the
+  filed item below.
 - [ ] Keys for §7: the post-upgrade nudge's dismissed flag, and the remote-lookup
   response cache — the latter should honour the API's own `max-age=600` (§2), and
   probably belongs in app-data rather than config.
-- [ ] Key for §4.2: backup retention (count or age), once a cap is chosen.
+  Neither is due yet and both are waiting on their feature rather than on the
+  key: the nudge (§7.4) is not built, and the client's ten-minute cache is
+  in-memory and per session, so there is no persisted cache to configure.
+- [ ] Key for §4.2: backup retention (count or age), once a cap is chosen. The cap
+  is chosen (30 days / 3 per mod / 5 GB) and is deliberately **not** exposed —
+  §4.2's own argument is that presenting the age floor and the count cap as two
+  independent numbers invites exactly the configuration it rejects. Kept open
+  rather than closed, since "if anyone asks" is still the standing answer.
 
 - [x] **The marketplace sort and content filter persist between sessions.**
   `marketplace_sort` (a `GbModSort` **Dart name**, not the `_sSort` wire value — an
@@ -1709,6 +1791,44 @@ is exactly right.
     and startup decode cost. New feature, not a bug fix — hence filed rather than
     folded in.
 
+### Filed while surfacing the settings
+
+- [ ] **The Settings tab has no widget tests, and the auto-tag section cannot get
+  one.** `_SettingsScreenState.initState` calls `ApiService.getConfig()`, which
+  lazily builds a `ConfigService` against the developer's **real**
+  `<appData>/config.json` — so mounting the screen in a test would rewrite their
+  library paths. The two new sections dodge this by living in
+  `components/settings/` with a writer seam; the auto-tag section wants the same
+  treatment and did not get it, because its `_buildRequirement` helper is shared
+  with the F10 section and moving it would refactor a section nobody has
+  complained about. Whoever does it should make that helper a small shared widget
+  first. Until then the busy-state fix above is verified by clicking, not by a
+  test.
+- [ ] **`isLoading` is one flag doing two jobs, and only one of them is safe.**
+  It swaps the whole page body, which unmounts the `AnimationLimiter` and makes
+  every section replay its staggered entrance. That is correct for the first
+  load and wrong for anything else, and nothing in the code says so except a
+  comment on the field. A separate first-load flag — or a limiter that is not
+  inside the swapped subtree — would make the mistake unavailable rather than
+  merely documented.
+
+- [ ] **Dark mode and auto-F10 are surfaced but do not persist.**
+  `isDarkModeProvider` and `autoF10ReloadProvider` are plain `StateProvider`s
+  written by their Settings switches and by nothing else, so both reset on every
+  launch. `config.json` even carries a `theme` key — written by `_saveToFile`,
+  read back by `loadFromFile`, and **read by no UI at all**, so the value is
+  round-tripped and then ignored. Not folded into §6's work: those two are
+  already *surfaced*, which is what §6 was about, and persisting them is a
+  separate three-place change each plus a decision about what `theme` should
+  hold now that it stores `'dark-blue'` rather than a boolean.
+- [ ] **`ModOrigin.allowsUnattendedUpdate` has no reader and now never will.**
+  With auto-update refused (§4) the predicate guards nothing. Deleting it is not
+  a drive-by: it is the only place the "`exact` on **both** axes" rule is
+  written as code, and sixteen assertions across five test files use it to pin
+  the tier table — so whoever removes it has to decide where that rule lives
+  instead. Left in place with its doc comment corrected to say what it expresses
+  rather than what it was for.
+
 ### Filed by §1 (found while building the native browser)
 
 - [x] **Featured "best of" carousel on the unfiltered view.** Not in the original
@@ -1788,11 +1908,18 @@ is exactly right.
   `_tsDateAdded` is still correct and load-bearing — it is the mod's **creation**
   date, which is what the `assumed_latest` baseline clamps to.
 
-- [ ] **The content filter has no Settings-tab entry.** The key and the decision logic
+- [x] **The content filter has no Settings-tab entry.** The key and the decision logic
   shipped with M1, and the control lives in the marketplace toolbar where it is first
   needed — but §1 said "put the toggle in Settings (§6)" and that half is not done.
   Belongs with M4's "surface all new settings in the Settings tab"; noted here so it
   isn't assumed shipped because the *key* is.
+  **Done**, and the two homes are deliberate rather than a duplication to clean
+  up later: the toolbar is where a user *meets* the filter, beside the grid it
+  acts on, and Settings is where anyone looks for a preference they set once.
+  Both write `content_filter` and both read `contentFilterProvider`, so they
+  cannot disagree. The shapes differ on purpose — an icon menu is enough beside
+  the thing it filters, where a settings list has to name the current value
+  without being hovered, so this one is a dropdown.
 - [ ] **Three marketplace l10n keys are dead and predate M1**:
   `download_progress_unknown`, `install_7zip_missing`, `install_extract_failed`. All
   three exist in `en.json`/`uk.json` with no reference anywhere in `lib/`. Left alone
@@ -1870,8 +1997,10 @@ rather than collapsed into one enum:
   a mod the user dragged in themselves.
 - [ ] Tiers, and what each one may drive:
   - **`exact`** — we know precisely which file this is: we downloaded it, or its
-    archive md5 matched GameBanana's published checksum. The *only* tier eligible
-    for unattended auto-update (and see the second gate in §4).
+    archive md5 matched GameBanana's published checksum. The only tier at which
+    the app stops hedging: an uncapped verdict ("an update **is** available"
+    rather than "possibly outdated"). It is **not** a licence to write
+    unattended — nothing does, see §4.
   - **`user`** — the user told us. Trusted; manual updates with a normal confirm.
   - **`inferred`** — we guessed from local data (URL parse, name match, single
     unambiguous remote file). May badge and suggest; every update through it is
@@ -2667,6 +2796,13 @@ work that already opens the same file, so they cost nothing extra.
   list of ticks somebody rubber-stamps and one they can disagree with. The
   subtitle carries the other load-bearing sentence, *nothing is saved until you
   press Apply*, which is a promise rather than a label.
+  **M4's launch check and Settings sections added 7** — the smallest share yet,
+  and the observation still holds: **two of the seven are the switch's
+  description**, and that sentence is the feature's whole safety property. It
+  has to say that the app contacts GameBanana at startup (the cost, not the
+  benefit) *and* that nothing is downloaded or installed, because a switch a
+  user could read as consenting to automatic updates would promise something
+  §4 deliberately refuses.
 - [ ] **Name the tests, because the risky parts are pure functions.** The pieces most
   likely to be quietly wrong need no network and no UI: `source_url` → `mod_id`
   parsing (§7.3); the confidence state machine and what each tier permits (§7.2); the

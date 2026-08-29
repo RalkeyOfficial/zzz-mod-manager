@@ -62,6 +62,11 @@ resolving a character from an id must handle both, plus the `unknown` placeholde
 - **An update overwrites a mod folder; it never empties, moves or replaces it**,
   and **never writes without a snapshot first**. A mod folder frequently holds a
   second download that replacing would destroy.
+- **No update is applied without the user present.** Automatic updating is
+  refused rather than unbuilt ([`applying-updates.md`](../docs/applying-updates.md)
+  §7). *Checking* is automatable and is opt-in
+  ([`update-checks.md`](../docs/update-checks.md) §5.1); nothing about `exact`
+  confidence licenses an unattended write.
 - Guesses may inform, never drive. A suggestion is never preselected, and nothing
   but a checksum match ever reaches `exact`.
 

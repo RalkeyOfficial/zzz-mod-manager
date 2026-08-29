@@ -65,7 +65,7 @@
     "filter_all": "All",
     "search_scope_note": "Search covers all ZZZ mods; category and sort filters don't apply to search results.",
     "content_filter": "Adult content",
-    "content_filter_blur": "Blur (recommended)",
+    "content_filter_blur": "Blur",
     "content_filter_show": "Show without blur",
     "content_filter_hide": "Hide entirely",
     "content_reveal": "Click to reveal",
@@ -449,6 +449,8 @@
       "bulk_none_partial": "No updates among the mods we could check",
       "bulk_checked_single": "Checked 1 mod.",
       "bulk_checked_plural": "Checked {count} mods.",
+      "launch_checked_single": "Checked 1 mod when the app started.",
+      "launch_checked_plural": "Checked {count} mods when the app started.",
       "bulk_failed_single": "1 mod couldn't be checked",
       "bulk_failed_plural": "{count} mods couldn't be checked",
       "dismiss": "Ignore this update",
@@ -544,7 +546,16 @@
       "language": "Language",
       "auto_tag": "Automatic tagging",
       "auto_f10": "Automatic mod reload",
-      "appearance": "Appearance"
+      "appearance": "Appearance",
+      "updates": "Updates",
+      "marketplace": "Marketplace"
+    },
+    "updates": {
+      "check_on_launch": "Check for updates when the app starts",
+      "check_on_launch_hint": "Contacts GameBanana once at startup and marks mods that have a newer version published. Nothing is downloaded or installed — updates are always applied by you."
+    },
+    "marketplace": {
+      "content_filter_hint": "How mods GameBanana flags as adult appear while you browse. The same setting as the one in the Marketplace toolbar."
     },
     "paths": {
       "mods": "Mods folder",
@@ -577,8 +588,7 @@
       "naming_hint": "Folder name should include character name (e.g. \"Ellen_Summer\")",
       "example": "Example: folder \"Miyabi_Kimono\" will be tagged as Miyabi",
       "run_action": "Detect tags for all mods",
-      "dialog_title": "Detecting tags...",
-      "dialog_message": "Analyzing mod names",
+      "running": "Detecting tags...",
       "no_mods_title": "Nothing to tag",
       "no_mods_body": "Every mod already has a character, or your library is empty.",
       "success_title": "Tags detected!",

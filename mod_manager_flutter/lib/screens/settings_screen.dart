@@ -8,6 +8,8 @@ import '../utils/notifications.dart';
 import '../utils/state_providers.dart';
 import '../utils/zzz_characters.dart';
 import '../l10n/app_localizations.dart';
+import 'components/settings/marketplace_section.dart';
+import 'components/settings/updates_section.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -19,9 +21,16 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProviderStateMixin {
   final _modsPathController = TextEditingController();
   final _saveModsPathController = TextEditingController();
+  /// The **first** load only, where there is nothing on screen yet.
+  ///
+  /// It swaps the whole page body, which disposes the [AnimationLimiter] below
+  /// — so anything that sets it makes the entire page replay its staggered
+  /// entrance on the way back. That is right exactly once, on the way in.
+  /// A long-running *action* reports on the control that started it instead.
   bool isLoading = false;
   String _selectedLanguage = 'en';
   bool _isUpdatingLanguage = false;
+  bool _autoTagging = false;
   late AnimationController _loadingAnimationController;
   late Animation<double> _loadingAnimation;
 
@@ -224,6 +233,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
                           _buildSectionTitle(loc.t('settings.sections.language')),
                           const SizedBox(height: 16),
                           _buildLanguageSelector(loc, isDarkMode),
+                          const SizedBox(height: 32),
+                          // Updates Section
+                          _buildSectionTitle(loc.t('settings.sections.updates')),
+                          const SizedBox(height: 16),
+                          const UpdatesSettingsSection(),
+                          const SizedBox(height: 32),
+                          // Marketplace Section
+                          _buildSectionTitle(
+                            loc.t('settings.sections.marketplace'),
+                          ),
+                          const SizedBox(height: 16),
+                          const MarketplaceSettingsSection(),
                           const SizedBox(height: 32),
                           // Auto-Tagging Section
                           _buildSectionTitle(loc.t('settings.sections.auto_tag')),
@@ -472,9 +493,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: _autoTagAllMods,
-              icon: const Icon(Icons.auto_awesome, size: 18),
-              label: Text(loc.t('settings.auto_tag.run_action')),
+              // Disabled while it runs, which is the whole guard: the work is a
+              // pass over every mod folder, and two of them interleaving would
+              // race on the same sidecars.
+              onPressed: _autoTagging ? null : _autoTagAllMods,
+              icon: _autoTagging
+                  // Sized to the icon it replaces, so the label does not shift
+                  // sideways when the spinner appears.
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Icon(Icons.auto_awesome, size: 18),
+              label: Text(
+                _autoTagging
+                    ? loc.t('settings.auto_tag.running')
+                    : loc.t('settings.auto_tag.run_action'),
+              ),
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF8B5CF6),
                 padding: const EdgeInsets.symmetric(vertical: 14),
@@ -499,58 +538,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
     );
   }
 
+  /// Tags every mod whose folder name names a character.
+  ///
+  /// **The progress is on the button, not over the page.** This used to do two
+  /// things at once for one press: set [isLoading], which swaps the entire page
+  /// body for the first-load spinner, *and* raise a blocking modal on top of
+  /// it. The modal hid the swap on the way in, so what the user actually saw
+  /// was the way out — tearing the page down disposes the [AnimationLimiter],
+  /// and rebuilding it hands every section a fresh `_shouldRunAnimation`, so
+  /// the whole settings page replayed its 375 ms staggered entrance. The page
+  /// appeared to reload for a change that touches nothing on it.
+  ///
+  /// [isLoading] is for the **first** load, where there is genuinely nothing to
+  /// show yet. Everything else on this page reports where it happens — the
+  /// language dropdown already spins in place beside itself.
+  ///
+  /// The result still gets a dialog: the tagging happens to mods on another
+  /// tab, so it is a change the user cannot see, and those may report their
+  /// success.
   Future<void> _autoTagAllMods() async {
     final loc = context.loc;
-    setState(() => isLoading = true);
+    setState(() => _autoTagging = true);
 
     try {
-      bool dialogShown = false;
-      if (mounted) {
-        dialogShown = true;
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => PopScope(
-            canPop: false,
-            child: AlertDialog(
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(
-                    width: 50,
-                    height: 50,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 4,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        Color(0xFF8B5CF6),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    loc.t('settings.auto_tag.dialog_title'),
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    loc.t('settings.auto_tag.dialog_message'),
-                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      }
-
       final autoTags = await ApiService.autoTagAllMods();
-
-      if (mounted && dialogShown) {
-        Navigator.of(context).pop();
-      }
 
       if (autoTags.isEmpty) {
         if (mounted) {
@@ -682,7 +693,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
       }
     } finally {
       if (mounted) {
-        setState(() => isLoading = false);
+        setState(() => _autoTagging = false);
       }
     }
   }

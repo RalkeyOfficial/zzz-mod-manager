@@ -19,6 +19,7 @@ class ConfigService implements ModCharacterTagStore {
   static const String _keySortMode = 'sort_mode';
   static const String _keyContentFilter = 'content_filter';
   static const String _keyMarketplaceSort = 'marketplace_sort';
+  static const String _keyUpdateCheckOnLaunch = 'update_check_on_launch';
 
   final SharedPreferences _prefs;
   File? _configFile;
@@ -83,7 +84,20 @@ class ConfigService implements ModCharacterTagStore {
   /// this layer having to know what that is. Parsed by `GbModSort.byName`, which
   /// degrades an unrecognised value to null.
   String get marketplaceSort => _prefs.getString(_keyMarketplaceSort) ?? '';
-  
+
+  /// Whether the whole-library update check runs on its own at startup.
+  ///
+  /// **Defaults to false, and that is the setting's whole safety property.** The
+  /// rule everywhere else is that a check never runs without an explicit press —
+  /// no network on launch, ever. This is the one opt-in out of it, so turning it
+  /// on has to be a decision the user made rather than one they inherited.
+  ///
+  /// It governs *checking* only. Nothing in this app writes over an installed mod
+  /// without the user present.
+  bool get updateCheckOnLaunch =>
+      _prefs.getBool(_keyUpdateCheckOnLaunch) ?? false;
+
+
   @override
   Map<String, String> get modCharacterTags {
     final json = _prefs.getString(_keyModCharacterTags);
@@ -309,6 +323,16 @@ class ConfigService implements ModCharacterTagStore {
     }
   }
 
+  Future<bool> setUpdateCheckOnLaunch(bool enabled) async {
+    try {
+      await _prefs.setBool(_keyUpdateCheckOnLaunch, enabled);
+      await _saveToFile();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<bool> setFirstRunComplete() async {
     try {
       await _prefs.setBool(_keyFirstRun, false);
@@ -358,6 +382,12 @@ class ConfigService implements ModCharacterTagStore {
         final List<String> mods = List<String>.from(config['favorite_mods']);
         await _prefs.setStringList(_keyFavoriteMods, mods);
       }
+      if (config.containsKey('update_check_on_launch')) {
+        await _prefs.setBool(
+          _keyUpdateCheckOnLaunch,
+          config['update_check_on_launch'],
+        );
+      }
       if (config.containsKey('first_run')) {
         await _prefs.setBool(_keyFirstRun, config['first_run']);
       }
@@ -382,6 +412,7 @@ class ConfigService implements ModCharacterTagStore {
         'sort_mode': sortMode,
         'content_filter': contentFilter,
         'marketplace_sort': marketplaceSort,
+        'update_check_on_launch': updateCheckOnLaunch,
         'mod_character_tags': modCharacterTags,
         'first_run': false,
       };

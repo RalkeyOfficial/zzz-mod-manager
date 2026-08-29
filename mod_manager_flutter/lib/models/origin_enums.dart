@@ -38,8 +38,13 @@ enum OriginConfidence {
 
   final String wire;
 
-  /// Whether this tier may drive an unattended overwrite. Deliberately a
-  /// property of the enum rather than a scattered `== exact` check.
+  /// Whether this tier is the strongest one — we know the file itself, not
+  /// merely who claims it. Deliberately a property of the enum rather than a
+  /// scattered `== exact` check.
+  ///
+  /// Named for a feature that is **refused** rather than unbuilt: nothing in
+  /// this app updates a mod unattended (`docs/applying-updates.md` §7). See
+  /// `ModOrigin.allowsUnattendedUpdate` for why the predicate is kept anyway.
   bool get allowsUnattendedUpdate => this == OriginConfidence.exact;
 
   /// Whether somebody actually *established* this, as opposed to us guessing.

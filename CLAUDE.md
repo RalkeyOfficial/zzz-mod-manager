@@ -172,3 +172,8 @@ Repeated here so they are never missed, even before opening the app source:
   it **never writes without a snapshot first**. A mod folder frequently holds a
   second download (a patch, or a hand-merge) that replacing would destroy — see
   [`docs/applying-updates.md`](docs/applying-updates.md) §1.
+- **No update is ever applied without the user present.** Automatic updating is
+  *refused*, not unbuilt: overwriting a live install in a scene with no standard
+  means the person who has to repair it must be there when it happens. Checking
+  is a different act and is opt-in automatable. Confidence is not a licence —
+  see [`docs/applying-updates.md`](docs/applying-updates.md) §7.

@@ -44,11 +44,17 @@ Provenance values are `downloaded`, `imported_archive` and `imported_folder`.
 
 Three rules follow from the split, and they govern everything below:
 
-- **Only `exact` may drive an unattended overwrite** — on *both* axes, since knowing
+- **Only `exact` names a file with certainty** — and on *both* axes, since knowing
   the mod but not the file is not enough to know what to replace it with. Anything
-  weaker may badge, suggest and prompt. `inferred` in particular came from a
-  free-form text field a human typed, so it must be confirmed once before any update
-  acts on it.
+  weaker may badge, suggest and prompt, but its verdict is capped at "possibly
+  outdated" ([`update-checks.md`](update-checks.md#the-cap-that-confidence-imposes)).
+  `inferred` in particular came from a free-form text field a human typed, so it must
+  be confirmed once before any update acts on it.
+  **This is not a licence to overwrite unattended.** `exact` is a claim about
+  *which remote file this is*; it says nothing about what the mod folder holds,
+  which is where every hazard of applying an update actually lives. No update is
+  applied without the user present, and that is refused rather than unbuilt —
+  [`applying-updates.md` §7](applying-updates.md#automatic-updating--considered-and-refused).
 - **Identity and version are separate unknowns.** "Which remote mod is this?" is
   often recoverable offline by parsing an existing `source_url`; "which file of it?"
   almost never is, because the archive is deleted after extraction. So they carry
@@ -76,9 +82,9 @@ Three rules follow from the split, and they govern everything below:
 A download starts from a chosen row of a chosen mod's file list, so mod id, file id,
 version and variant label are all known before the first byte. `exact` there is the
 honest tier rather than an optimistic one: the user picked this file of this mod and
-we fetched exactly that file id, with nothing inferred. Note the consequence —
-`exact` is the one tier eligible for unattended auto-update, so in-app downloads are
-what makes future auto-update possible at all.
+we fetched exactly that file id, with nothing inferred. What it buys is an
+**uncapped verdict** — "an update is available" rather than "possibly outdated" —
+so a download is what lets the check speak plainly about that mod afterwards.
 
 Manual imports land at `unknown`, correctly. A dragged-in folder or a hand-supplied
 archive carries no remote identity; its route to `exact` is an `archive_md5` match at
@@ -86,8 +92,9 @@ resolution time, not the install path.
 
 **On any ingest we did not download ourselves, the inbound `origin` block is
 dropped.** A mod folder passed around on Discord arrives carrying somebody else's
-sidecar — a claim about a remote file we never made, on the field that gates
-unattended updates. The user-facing fields are kept, since those travelling is the
+sidecar — a claim about a remote file we never made, on the field that decides
+which mod page this folder is checked against and which file the Update button
+would write over it. The user-facing fields are kept, since those travelling is the
 whole point of a sidecar. This is enforced by construction rather than by a branch;
 see [`metadata-schema.md`](metadata-schema.md#the-origin-block) for how.
 
@@ -160,9 +167,9 @@ What it writes, and what it deliberately doesn't:
 |---|---|---|
 | `source` | `gamebanana` | The only service the parser understands. |
 | `mod_id` | from `source_url` | `/mods/<id>` and `/mods/download/<id>` only. A `/dl/<id>` link is a **file** id in a different id space and yields null. |
-| `mod_id_confidence` | `inferred` | It came from a free-form text field, so it may be a wrong paste or a different mod. May badge and suggest; never drives an unattended overwrite, and must be confirmed once before any update acts on it. |
+| `mod_id_confidence` | `inferred` | It came from a free-form text field, so it may be a wrong paste or a different mod. May badge and suggest, but caps every verdict at "possibly outdated", and must be confirmed once before any update acts on it. |
 | `installed_at` | oldest file mtime | With `installed_at_is_proxy: true`. |
-| `provenance` | `imported_folder` | Genuinely unknown for a legacy mod — it may have been downloaded by an old build, imported, or hand-copied. Takes the least-privileged of the three, matching `OriginProvenance.parse`'s own fallback. It is not the auto-update gate, so understating it costs nothing. |
+| `provenance` | `imported_folder` | Genuinely unknown for a legacy mod — it may have been downloaded by an old build, imported, or hand-copied. Takes the least-privileged of the three, matching `OriginProvenance.parse`'s own fallback. Nothing gates on it — the confidences do that — so understating it costs nothing. |
 | `file_id`, `version`, `version_confidence` | **not written** | Identity and version are separate unknowns. The archive is deleted after extraction, so nothing local remains to match against the per-file checksums the remote publishes. Sniffing a version out of folder names or `.ini` comments is deliberately not done: mods embed ZZMI and game versions indistinguishable from mod versions, and a wrong stored version is worse than none. |
 | `ingest.sibling_group` | **not written** | Unrecoverable — see the known limit below. |
 
@@ -337,8 +344,9 @@ Rules worth knowing before changing any of it:
 
 - **Re-picking the recorded file never lowers its tier.** Confirming a file we
   downloaded ourselves is `user`-grade evidence on its own, so a plain
-  `exact ? exact : user` would demote it — and `exact` is the tier that gates
-  unattended updates. Harmless while nothing preselected the recorded row; the moment
+  `exact ? exact : user` would demote it — and dropping out of `exact` turns every
+  later verdict about that mod into a hedge. Harmless while nothing preselected the
+  recorded row; the moment
   the dialog does, pressing Save is enough. The rule is one-directional: re-picking a
   row recorded at `inferred` still *raises* it to `user`, which is precisely the
   confirmation that tier waits for.
@@ -564,8 +572,9 @@ model in miniature:
   recorded at **`inferred`**.
 
 `inferred` rather than `user` because the user consented to a plan; they did not look
-at a file list and recognise their download. It never drives an unattended update and
-it renders as a guess on the card, which is what makes offering it safe.
+at a file list and recognise their download. It caps every verdict it produces at
+"possibly outdated" and renders as a guess on the card, which is what makes offering
+it safe.
 
 The install-date test on the single-file case is easy to drop and is load-bearing: a
 mod whose only file was published *after* the install is one whose original file has

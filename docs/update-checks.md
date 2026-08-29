@@ -306,7 +306,8 @@ and keeps the next release loud.
 ## 5. Checking the whole library
 
 `services/bulk_update_check.dart`, driven from the mods toolbar. It runs **only
-when pressed** — no network on launch, ever.
+when pressed** — with one opt-in exception, [§5.1](#51-checking-at-startup),
+which is off by default.
 
 It runs in **two phases**. Phase one is `Mod/Multi`, which fetches many mods'
 chosen fields in one request, so an 80-mod library is two requests rather than
@@ -388,6 +389,75 @@ edge of the grid changes mods the user never enumerated. A check writes nothing;
 its only effect is badges, and badges are drawn on every character tab, so
 scoping it to one would leave the rest looking checked-and-clean.
 
+### 5.1 Checking at startup
+
+`update_check_on_launch` (`docs/configuration.md`), surfaced in the Settings
+tab's **Updates** section and **off by default**. Turned on, the same pass above
+runs once per session as soon as the library has been scanned.
+
+**Off by default is what keeps the rule above true.** "No network on launch" is
+not softened for anyone who has not asked; it is opted out of, by someone who
+read a switch that says so. The setting's description states the cost — it
+contacts GameBanana at startup — rather than the benefit, because that is the
+half a user might object to.
+
+**It checks; it never installs.** The switch says *check* and never *update*,
+and its description says so a second time in a sentence. Applying an update is
+not automated in this app at all, and that is a rejected design rather than an
+unbuilt one — [`applying-updates.md` §7](applying-updates.md#7-what-is-not-built-and-what-is-refused).
+A control a user could read as consenting to automatic installs would be
+promising something that does not exist.
+
+Four decisions, all in `services/launch_update_check.dart` (pure) and
+`screens/components/launch_update_check_host.dart`:
+
+- **It waits for the library, not for a timer.** The plan is derived from the
+  scan `ModsScreen` runs on the way in, so it is empty until that lands — and
+  empty forever for a library with no tracked mods. The first plan with
+  anything checkable in it is the signal, which is why there is no "has the
+  scan finished" condition and no special case for an unconfigured mods path.
+- **Once per session, not once per scan.** A favourite, an import, a rename and
+  a resolve each rebuild the plan; without the guard an ordinary afternoon
+  issues the batch a dozen times. The flag is set *before* the first await, so
+  two passes cannot overlap and race their results into one map.
+  **The startup moment ends whether or not a check ran**, which is why
+  `launchCheckAction` returns three states rather than a bool: `wait`, `close`,
+  `run`. Switching the setting on mid-session must not fire a pass on the next
+  rescan — the switch says *when the app starts*, and the next start is when it
+  takes effect. An **unscanned** library does not close the moment, though, or
+  the commonest ordering there is — the host mounts, the scan lands a moment
+  later — would skip the check every time.
+- **It speaks only when it found updates.** Two silences, and neither is an
+  oversight. A "nothing new" card on every launch is noise nobody asked for,
+  and the badges carry that answer anyway. A "couldn't reach N mods" card on
+  every offline start is what gets the setting switched off — and it does not
+  break §5's rule that *"no updates"* and *"no updates among the mods we could
+  reach"* are different statements, because a silent pass asserts **neither**.
+  The manual check is still the loud one and is one click away. A pass that
+  found updates *and* failed reports the updates: that is the actionable half.
+  The card's body says the check happened *at startup*, since a notification
+  nobody pressed for has to explain its own presence.
+- **It never opens the resolution screen.** The manual check does when there is
+  something to sort out ([§6](#the-results-screen)); a modal thrown over an app
+  the user has just opened is exactly the interruption that arrangement exists
+  to avoid. The screen stays reachable from *Sort out mod tracking…*, which
+  rebuilds from the records this pass leaves behind and therefore costs no
+  second request.
+
+**It is hosted above the tab switcher**, beside `DownloadQueueHost`, because
+nobody pressed anything to start it and it outlives whatever the user does
+next. `ModsToolbar` — which owns the manual check — is inside the Mods tab, and
+the tabs are keyed `AnimatedSwitcher` children with no keep-alive, so a pass
+owned by it dies the moment the user looks at the marketplace. Unlike the
+download host it raises no dialog, so it does not need to sit below the
+`Navigator`.
+
+**Both surfaces run the same code.** `services/update_check_run.dart` holds the
+request (including the cache bypass, for the reason the marketplace's refresh
+button has one) and the merge rule — *merge, never replace*, since a per-mod
+check the user ran on a mod this pass could not reach is still the best answer
+available for it. Two copies of that would be wrong in a way nobody notices.
+
 ---
 
 ## 6. Where a result lives, and what it looks like
@@ -395,7 +465,12 @@ scoping it to one would leave the rest looking checked-and-clean.
 **Session-scoped and deliberately not persisted.** A verdict restored from disk
 would be an assertion about a mod page nobody has looked at since, on a surface
 whose whole job is to say what is true now. Emptying on restart costs one press
-and cannot be stale. It is keyed by mod folder id, which is also the rename key —
+and cannot be stale — and for anyone who has turned on
+[§5.1](#51-checking-at-startup) it costs not even that, since the badges are
+filled in by a fresh pass rather than by a remembered one. That is the fix for
+"the feature looks off until you find the button", and it is the *only*
+acceptable one: caching the verdict would buy the same appearance by asserting
+something nobody has checked. It is keyed by mod folder id, which is also the rename key —
 so renaming a mod orphans its verdict until the next check, which is the correct
 way round.
 

@@ -9,6 +9,7 @@ import 'core/constants.dart';
 import 'screens/mods_screen.dart';
 import 'screens/components/download_queue_host.dart';
 import 'screens/components/downloads_button.dart';
+import 'screens/components/launch_update_check_host.dart';
 import 'screens/components/notification_overlay.dart';
 import 'screens/components/sidebar_nav_item.dart';
 import 'screens/settings_screen.dart';
@@ -276,8 +277,13 @@ class _MainScreenState extends ConsumerState<MainScreen>
     // download by installing it, which can raise a dialog, and `showDialog`
     // needs a `Navigator` ancestor. Here rather than inside a tab because the
     // tabs are disposed as the user moves between them — see the host itself.
+    // `LaunchUpdateCheckHost` wraps the screen for the same reason, and needs
+    // it more: nobody pressed anything to start its pass, so there is no screen
+    // it belongs to. It raises no dialog, so its position relative to the
+    // `Navigator` does not matter.
     return DownloadQueueHost(
-      child: Scaffold(
+      child: LaunchUpdateCheckHost(
+        child: Scaffold(
       body: Column(
         children: [
           // Custom title bar
@@ -554,6 +560,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
             ),
           ),
         ],
+      ),
       ),
       ),
     );

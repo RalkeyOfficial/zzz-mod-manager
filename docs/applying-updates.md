@@ -536,7 +536,45 @@ semantics.
 
 ---
 
-## 7. Known gaps
+## 7. What is not built, and what is refused
+
+### Automatic updating — considered and refused
+
+**No update is ever applied without the user present.** This is a rule about the
+feature, not a gap in it, and it is recorded here so it is not re-proposed as an
+obvious convenience.
+
+The reason is the subject of this whole document: **an update overwrites a live
+install, and ZZZ modding has no standard.** Everything §1 to §3 describes is the
+app doing its careful best with folders that are frequently two downloads deep,
+`.ini` files written against a case-insensitive loader by hand, and archives
+whose layout the author changed between releases. When that goes wrong the
+recovery is a person looking at a mod folder and working out what happened —
+and that person has to be **at the keyboard when it lands**, not discovering
+days later that a mod they have since edited was silently replaced.
+
+Two things follow, and the second is the one that is easy to get wrong:
+
+- **Confidence is not the mitigation.** `ModOrigin.allowsUnattendedUpdate`
+  demands `exact` on both axes, which is a strong statement about *which file
+  this is*. It says nothing about what the folder holds, which is where every
+  hazard in this document lives. A byte-perfect identification of the right
+  successor still overwrites a hand-merged second mod.
+- **Nor is the snapshot.** §5 makes it unconditional, so recovery exists — but
+  none of the accepted losses announce themselves, which is exactly why the age
+  floor beats the count cap. A recovery nobody knows to reach for is not a
+  substitute for the user having seen the change happen.
+
+**Checking is a different act and is automatable**, because it reads a mod page
+and draws a badge: nothing it does is hard to undo. That half is opt-in and
+shipped — [`update-checks.md` §5.1](update-checks.md#51-checking-at-startup).
+
+`allowsUnattendedUpdate` consequently has no reader in `lib/`. It is kept
+because it is the only place the "`exact` on both axes" rule is written as code,
+and its tests are what pin the tier table
+([`origin-tracking.md` §1](origin-tracking.md#1-two-axes-confidence-and-provenance)).
+
+### Known gaps
 
 Stated because each one bounds what this feature currently promises.
 
@@ -561,10 +599,6 @@ Stated because each one bounds what this feature currently promises.
   a file manager and the app is reduced to inferring it afterwards from `.ini`
   contents. An explicit "apply as a patch to…" install would make it a recorded fact
   at write time.
-- **Auto-update is not built.** `ModOrigin.allowsUnattendedUpdate` still gates it and
-  nothing calls this path unattended. When it lands, note that one banked hash can
-  mark a whole sibling group `exact`, so a single auto-update would rewrite all of
-  them — snapshot the group, not the folder.
 - **`ModManagerService._copyDirectory` is a second copy of the same walk** as
   `utils/directory_copy.dart`, with one behavioural difference: it follows links,
   where the shared one does not. Unifying them changes the *import* path's behaviour,

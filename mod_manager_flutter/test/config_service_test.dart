@@ -86,6 +86,43 @@ void main() {
     });
   });
 
+  group('update check on launch', () {
+    test('defaults to off, so no launch contacts the network', () async {
+      // The standing rule is that a check never runs unpressed. This opt-in is
+      // the only way out of it, so inheriting it would be the bug.
+      expect((await build()).updateCheckOnLaunch, isFalse);
+    });
+
+    test('survives into a fresh session', () async {
+      await (await build()).setUpdateCheckOnLaunch(true);
+
+      SharedPreferences.setMockInitialValues({});
+      final next = await build();
+      await next.loadFromFile();
+      expect(next.updateCheckOnLaunch, isTrue);
+    });
+
+    test('a fresh session with no file keeps the safe default', () async {
+      final next = await build();
+      expect(await next.loadFromFile(), isFalse, reason: 'no file to load');
+      expect(next.updateCheckOnLaunch, isFalse);
+    });
+
+    test('turning it back off survives too', () async {
+      // A bool round-trip has a failure the string settings do not: a
+      // `containsKey` guard that reads a stored `false` as "nothing stored"
+      // would make the setting impossible to switch off again.
+      final service = await build();
+      await service.setUpdateCheckOnLaunch(true);
+      await service.setUpdateCheckOnLaunch(false);
+
+      SharedPreferences.setMockInitialValues({});
+      final next = await build();
+      await next.loadFromFile();
+      expect(next.updateCheckOnLaunch, isFalse);
+    });
+  });
+
   test('both marketplace preferences persist together', () async {
     final service = await build();
     await service.setMarketplaceSort('latestModified');
@@ -127,6 +164,7 @@ void main() {
     await service.setSortMode('nameAsc');
     await service.setContentFilter('hide');
     await service.setMarketplaceSort('mostDownloaded');
+    await service.setUpdateCheckOnLaunch(true);
     await service.addActiveMod('SomeMod');
     await service.addFavoriteMod('SomeMod');
     await service.setModCharacterTag('SomeMod', 'ellen');
@@ -144,6 +182,7 @@ void main() {
       'sort_mode': next.sortMode,
       'content_filter': next.contentFilter,
       'marketplace_sort': next.marketplaceSort,
+      'update_check_on_launch': next.updateCheckOnLaunch,
       'active_mods': next.activeMods,
       'favorite_mods': next.favoriteMods,
       'mod_character_tags': next.modCharacterTags,
@@ -155,8 +194,13 @@ void main() {
         reason: 'a key is written to config.json but never read back');
     for (final entry in restored.entries) {
       if (entry.key == 'first_run') continue;
+      // A bool cannot be "empty", so the emptiness probe says nothing about one
+      // and is asserted directly below instead.
+      if (entry.value is bool) continue;
       expect(entry.value, isNot(anyOf(isNull, '', isEmpty)),
           reason: '${entry.key} did not survive the restart');
     }
+    expect(next.updateCheckOnLaunch, isTrue,
+        reason: 'update_check_on_launch did not survive the restart');
   });
 }

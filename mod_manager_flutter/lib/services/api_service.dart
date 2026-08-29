@@ -44,6 +44,8 @@ class ApiService {
       _container!.read(marketplaceSortProvider.notifier).state =
           GbModSort.byName(_configService!.marketplaceSort) ??
               kDefaultMarketplaceSort;
+      _container!.read(updateCheckOnLaunchProvider.notifier).state =
+          _configService!.updateCheckOnLaunch;
     }
 
     _modManager ??= ModManagerService(_configService!, _container!);
@@ -203,6 +205,16 @@ class ApiService {
     await initialize();
     await _configService!.setMarketplaceSort(sort.name);
     _container?.read(marketplaceSortProvider.notifier).state = sort;
+  }
+
+  /// Persists whether the update check runs on its own at startup.
+  ///
+  /// Checking only. Nothing here consents to an update being *applied* — that
+  /// stays a thing the user presses, per `docs/applying-updates.md` §7.
+  static Future<void> setUpdateCheckOnLaunch(bool enabled) async {
+    await initialize();
+    await _configService!.setUpdateCheckOnLaunch(enabled);
+    _container?.read(updateCheckOnLaunchProvider.notifier).state = enabled;
   }
 
   static Future<String> updateConfig({

@@ -21,10 +21,7 @@ void showUpdateCheckOutcome(
   BulkUpdateCheckOutcome outcome,
 ) {
   final loc = context.loc;
-  String plural(String key, int count) => loc.t(
-        '$key${count == 1 ? '_single' : '_plural'}',
-        params: {'count': '$count'},
-      );
+  String plural(String key, int count) => _plural(loc, key, count);
 
   final found = outcome.updatesFound;
   final incomplete = outcome.failed.isNotEmpty;
@@ -66,3 +63,33 @@ void showUpdateCheckOutcome(
     icon: found > 0 ? Icons.system_update_alt_rounded : null,
   );
 }
+
+/// What the **opt-in startup check** reports, and it reports only findings.
+///
+/// A second function rather than a flag on the one above, because the two
+/// differ in the thing that matters: this one is raised for a pass the user did
+/// not start. So the failure and the nothing-found branches are absent by
+/// construction rather than by a condition someone could later relax — see
+/// `launchCheckFindings`, which is what decides that this is called at all.
+///
+/// The body says *when* the check happened rather than only how many mods it
+/// covered. A card nobody pressed for has to explain its own presence, and "at
+/// startup" is the whole explanation.
+void showLaunchUpdateCheckOutcome(
+  BuildContext context,
+  BulkUpdateCheckOutcome outcome,
+  int found,
+) {
+  final loc = context.loc;
+  context.notify.show(
+    _plural(loc, 'mods.update.bulk_found', found),
+    body: _plural(loc, 'mods.update.launch_checked', outcome.checks.length),
+    severity: NotificationSeverity.info,
+    icon: Icons.system_update_alt_rounded,
+  );
+}
+
+String _plural(AppLocalizations loc, String key, int count) => loc.t(
+      '$key${count == 1 ? '_single' : '_plural'}',
+      params: {'count': '$count'},
+    );

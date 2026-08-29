@@ -67,6 +67,7 @@ void main() {
     'mods.update.bulk_found_',
     'mods.update.bulk_failed_',
     'mods.update.bulk_checked_',
+    'mods.update.launch_checked_',
     'marketplace.content_filter_',
     'language_names.',
     // Chosen at runtime by a ternary *inside* `t(...)`, so the call-site regex

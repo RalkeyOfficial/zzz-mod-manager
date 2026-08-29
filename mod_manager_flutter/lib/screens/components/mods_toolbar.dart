@@ -8,6 +8,7 @@ import '../../l10n/app_localizations.dart';
 import '../../services/api_service.dart';
 import '../../services/bulk_resolution.dart';
 import '../../services/bulk_update_check.dart';
+import '../../services/update_check_run.dart';
 import '../../utils/state_providers.dart';
 import '../dialogs/assume_current_dialog.dart';
 import '../dialogs/bulk_resolution_dialog.dart';
@@ -633,22 +634,13 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
     setState(() => _checkingUpdates = true);
     final BulkUpdateCheckOutcome outcome;
     try {
-      final client = ref.read(gameBananaClientProvider);
-      outcome = await runBulkUpdateCheck(
+      // Shared with the opt-in startup check, so the two cannot disagree about
+      // the cache or about what a pass leaves behind.
+      outcome = await runLibraryUpdateCheck(
         plan: plan,
-        fetchUpdates: widget.updatesFetcher ??
-            (modId) => client.modUpdates(modId, refresh: true),
-        fetch: widget.updateFetcher ??
-            // Bypasses the response cache for the same reason the marketplace's
-            // refresh button does: a "check for updates" that can be answered
-            // from a ten-minute-old copy is a control that sometimes cannot
-            // check for updates, and the user has no way to tell which press
-            // was which.
-            (ids) => client.modsMulti(
-                  ids,
-                  properties: updateCheckProperties,
-                  refresh: true,
-                ),
+        client: ref.read(gameBananaClientProvider),
+        fetch: widget.updateFetcher,
+        fetchUpdates: widget.updatesFetcher,
       );
     } finally {
       // Cleared **before** the results screen opens, not after it closes. The
@@ -658,14 +650,10 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
       if (mounted) setState(() => _checkingUpdates = false);
     }
     if (!mounted) return;
-    // Merged rather than replaced: a per-mod check the user ran on a mod this
-    // pass could not reach is still the best answer available for it. The
-    // records are kept so the resolution screen can be re-opened without a
-    // second request.
     final checks = ref.read(modUpdateChecksProvider.notifier);
-    checks.state = {...checks.state, ...outcome.checks};
+    checks.state = mergedChecks(checks.state, outcome);
     final records = ref.read(modUpdateRecordsProvider.notifier);
-    records.state = {...records.state, ...outcome.records};
+    records.state = mergedRecords(records.state, outcome);
 
     // The results screen opens by itself only when it has something to ask —
     // otherwise a modal stands between the user and the badges they pressed

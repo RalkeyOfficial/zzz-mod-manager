@@ -100,10 +100,24 @@ class ModOrigin {
   /// tracked and keeps the next release loud.
   final DateTime? updatesDismissedUntil;
 
-  /// Whether an unattended update may overwrite this mod's files.
+  /// The strongest thing this block can say: we know exactly which remote file
+  /// is installed here, the user has not declared the mod their own, and the
+  /// page is still there.
   ///
-  /// Both axes must be exact: knowing the mod but not the file is not enough to
-  /// know what to replace it with.
+  /// Both axes must be `exact`, because knowing the mod but not the file is not
+  /// enough to know what would replace it.
+  ///
+  /// **It has no reader in `lib/`, and that is not an oversight.** It was
+  /// written as the gate for unattended auto-update, which is *refused* rather
+  /// than unbuilt — no update is applied without the user present, because
+  /// overwriting a live install in a scene with no standard means the person
+  /// who has to repair it must be there when it happens. See
+  /// `docs/applying-updates.md` §7.
+  ///
+  /// Kept because it is the one place the "`exact` on **both** axes" rule is
+  /// written as code, and `test/mod_origin_test.dart` is what pins the tier
+  /// table to it. Anything wanting "is this a guess?" wants
+  /// [OriginConfidence.isConfirmed], which is a weaker and different line.
   bool get allowsUnattendedUpdate =>
       tracking == OriginTracking.auto &&
       !remoteMissing &&

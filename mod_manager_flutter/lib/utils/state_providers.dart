@@ -162,6 +162,17 @@ final contentFilterProvider =
 final marketplaceSortProvider =
     StateProvider<GbModSort>((ref) => kDefaultMarketplaceSort);
 
+/// Whether the whole-library update check runs on its own at startup.
+///
+/// Hydrated from `config.json` in `ApiService.initialize` and written through
+/// `ApiService.setUpdateCheckOnLaunch`, like the two preferences above.
+/// **Defaults to false**: the standing rule is that a check never runs without an
+/// explicit press, and this is the one opt-in out of it.
+///
+/// It governs *checking*. Applying an update is never automated — see
+/// `docs/applying-updates.md` §7.
+final updateCheckOnLaunchProvider = StateProvider<bool>((ref) => false);
+
 /// The sort a fresh install starts on: newest submissions first.
 ///
 /// Worth knowing what this trades away — `Generic_Newest` orders by

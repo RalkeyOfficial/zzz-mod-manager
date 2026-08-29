@@ -146,8 +146,9 @@ Three rules are load-bearing rather than stylistic:
 - **On any ingest we did not download ourselves, the inbound `origin` is
   dropped.** `_copyDirectory` copies a source folder's `.zzz-mod-manager/`
   wholesale, so a mod passed around on Discord arrives carrying someone else's
-  block — a claim about a remote file we never made, on the field that gates
-  unattended updates. `recordOrigin` enforces this *by construction*: it never
+  block — a claim about a remote file we never made, on the field that decides
+  which mod page this folder is checked against and which file the Update button
+  would write over it. `recordOrigin` enforces this *by construction*: it never
   reads or merges the inbound block, and `ModMetadata.withOrigin()` replaces the
   field outright. There is no branch where a stranger's block survives, and so
   none to get wrong. The user-facing fields are kept — those travelling is the
@@ -288,8 +289,9 @@ preserved faithfully, forever.
 That is why dropping the inbound `origin` on any ingest we did not download ourselves
 is **load-bearing** rather than merely prudent, and why it is enforced by
 construction ([above](#the-origin-block)). Without it, a stranger's folder asserts
-`exact` confidence we never established, on the one tier gated for unattended
-auto-update.
+`exact` confidence we never established — the tier at which the app stops hedging,
+points the update check at a mod page nobody chose, and offers to write a file
+from it over the user's folder.
 
 #### The failure mode this prevents
 
