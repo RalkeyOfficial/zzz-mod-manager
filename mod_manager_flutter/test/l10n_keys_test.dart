@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/l10n/plural_rules.dart';
 
 /// Keeps the two locale files honest against the code.
 ///
@@ -108,10 +109,69 @@ void main() {
   test('en and uk carry exactly the same keys', () {
     // A translated string that only exists in one locale is a UI that falls back to
     // a dotted path for half the users.
-    expect((en.keys.toSet().difference(uk.keys.toSet())).toList()..sort(), isEmpty,
+    //
+    // `_few` is the one exception and it is a real asymmetry, not an oversight:
+    // English has two plural forms and Ukrainian three, so the middle form
+    // exists only where a locale's grammar has one. It is checked on its own
+    // terms below.
+    Set<String> comparable(Map<String, String> m) =>
+        m.keys.where((k) => !k.endsWith('_few')).toSet();
+
+    expect((comparable(en).difference(comparable(uk))).toList()..sort(), isEmpty,
         reason: 'in en.json only');
-    expect((uk.keys.toSet().difference(en.keys.toSet())).toList()..sort(), isEmpty,
+    expect((comparable(uk).difference(comparable(en))).toList()..sort(), isEmpty,
         reason: 'in uk.json only');
+  });
+
+  test('_few exists only where the locale has three plural forms', () {
+    // English would render an identical second copy of `_plural`, free to drift
+    // from it and never selected by `pluralSuffix`.
+    for (final entry in {'en': en, 'uk': uk}.entries) {
+      final few = entry.value.keys.where((k) => k.endsWith('_few'));
+      if (pluralFewLocales.contains(entry.key)) continue;
+      expect(few, isEmpty,
+          reason: '${entry.key}.json has _few keys but two plural forms');
+    }
+  });
+
+  test('a three-form locale interpolates the count in its _single strings too',
+      () {
+    // The trap this exists for, and it is invisible in English. There,
+    // `_single` is reached at exactly 1, so hardcoding "1 mod" is correct. In
+    // Ukrainian the same form is reached at **1, 21, 31, 101** — every count
+    // ending in 1 but not 11 — so a hardcoded "1" silently reports the wrong
+    // number, and a demonstrative ("this mod") drops the count entirely.
+    //
+    // The rule is therefore conditional on the _plural sibling: if the plural
+    // wording names a count, the singular has to as well.
+    for (final entry in {'en': en, 'uk': uk}.entries) {
+      if (!pluralFewLocales.contains(entry.key)) continue;
+      for (final key in entry.value.keys.where((k) => k.endsWith('_single'))) {
+        final plural =
+            entry.value['${key.substring(0, key.length - '_single'.length)}_plural'];
+        if (plural == null || !plural.contains('{count}')) continue;
+        expect(entry.value[key], contains('{count}'),
+            reason: '${entry.key}.json $key is reached at 21, 31 and 101 too, '
+                'so it cannot hardcode the number');
+      }
+    }
+  });
+
+  test('every _few key has the pair it is the middle of', () {
+    // `_few` is optional — `AppLocalizations.plural` falls back to `_plural`
+    // where a string's grammar doesn't change at 2–4, which is common (Ukrainian
+    // often phrases the count as "модів: 3", which no numeral affects). What is
+    // not allowed is a `_few` with no pair, which would be a string nothing can
+    // reach at any other count.
+    for (final entry in {'en': en, 'uk': uk}.entries) {
+      for (final key in entry.value.keys.where((k) => k.endsWith('_few'))) {
+        final base = key.substring(0, key.length - '_few'.length);
+        expect(entry.value.containsKey('${base}_single'), isTrue,
+            reason: '${entry.key}.json has $key but no ${base}_single');
+        expect(entry.value.containsKey('${base}_plural'), isTrue,
+            reason: '${entry.key}.json has $key but no ${base}_plural');
+      }
+    }
   });
 
   test('interpolated key groups are still populated', () {

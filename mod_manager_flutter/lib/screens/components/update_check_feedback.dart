@@ -89,7 +89,5 @@ void showLaunchUpdateCheckOutcome(
   );
 }
 
-String _plural(AppLocalizations loc, String key, int count) => loc.t(
-      '$key${count == 1 ? '_single' : '_plural'}',
-      params: {'count': '$count'},
-    );
+String _plural(AppLocalizations loc, String key, int count) =>
+    loc.plural(key, count, params: {'count': '$count'});

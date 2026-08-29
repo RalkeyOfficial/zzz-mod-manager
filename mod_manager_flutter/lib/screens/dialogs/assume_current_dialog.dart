@@ -113,10 +113,8 @@ void showAssumeCurrentOutcome(
   BulkAssumeCurrentOutcome outcome,
 ) {
   final loc = context.loc;
-  String plural(String key, int count) => loc.t(
-        '$key${count == 1 ? '_single' : '_plural'}',
-        params: {'count': '$count'},
-      );
+  String plural(String key, int count) =>
+      loc.plural(key, count, params: {'count': '$count'});
 
   // Each half is pluralised on the count it is actually about: the title on
   // what was written, the body on what failed.
@@ -165,10 +163,8 @@ class _AssumeCurrentConfirmation extends StatelessWidget {
     // and "Mark 1 mods" is not what you want to read immediately before a bulk
     // rewrite. `t` has no plural machinery, so this follows the pattern the
     // import summary already uses: a `_single` / `_plural` key pair.
-    String plural(String key, int count) => loc.t(
-          '$key${count == 1 ? '_single' : '_plural'}',
-          params: {'count': '$count'},
-        );
+    String plural(String key, int count) =>
+        loc.plural(key, count, params: {'count': '$count'});
 
     return AlertDialog(
       title: Text(plural('mods.assume_current.title', plan.eligible.length)),

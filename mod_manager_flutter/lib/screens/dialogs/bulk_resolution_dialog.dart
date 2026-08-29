@@ -134,10 +134,8 @@ Future<BulkResolutionOutcome> _applyAnswers(
 
 void _showOutcome(BuildContext context, BulkResolutionOutcome outcome) {
   final loc = context.loc;
-  String plural(String key, int count) => loc.t(
-        '$key${count == 1 ? '_single' : '_plural'}',
-        params: {'count': '$count'},
-      );
+  String plural(String key, int count) =>
+      loc.plural(key, count, params: {'count': '$count'});
 
   // Each half is pluralised on the count it is actually about: the title on
   // what was written, the body on what failed.
@@ -344,8 +342,9 @@ class _BulkResolutionDialogState extends State<BulkResolutionDialog> {
           onPressed: answers.isEmpty
               ? null
               : () => Navigator.pop(context, Map.of(answers)),
-          child: Text(loc.t(
-            'mods.bulk_resolve.apply${answers.length == 1 ? '_single' : '_plural'}',
+          child: Text(loc.plural(
+            'mods.bulk_resolve.apply',
+            answers.length,
             params: {'count': '${answers.length}'},
           )),
         ),
@@ -403,10 +402,8 @@ class _BulkResolutionDialogState extends State<BulkResolutionDialog> {
   /// opens — two reports of one press, one behind the other, is how a user ends
   /// up reading neither.
   Widget _checkSummary(AppLocalizations loc, ColorScheme scheme) {
-    String plural(String key, int count) => loc.t(
-          '$key${count == 1 ? '_single' : '_plural'}',
-          params: {'count': '$count'},
-        );
+    String plural(String key, int count) =>
+        loc.plural(key, count, params: {'count': '$count'});
     final parts = <String>[
       if (widget.updatesFound > 0)
         plural('mods.update.bulk_found', widget.updatesFound),
@@ -425,10 +422,8 @@ class _BulkResolutionDialogState extends State<BulkResolutionDialog> {
   /// exclusions: "eleven mods" out of a library of fifty reads as though it
   /// covered the library unless the other thirty-nine are accounted for.
   Widget _excluded(AppLocalizations loc) {
-    String plural(String key, int count) => loc.t(
-          '$key${count == 1 ? '_single' : '_plural'}',
-          params: {'count': '$count'},
-        );
+    String plural(String key, int count) =>
+        loc.plural(key, count, params: {'count': '$count'});
     final lines = <String>[
       if (widget.plan.untracked.isNotEmpty)
         plural('mods.bulk_resolve.excluded_untracked',

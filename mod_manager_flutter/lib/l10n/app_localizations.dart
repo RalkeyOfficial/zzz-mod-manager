@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'plural_rules.dart';
+
 class AppLocalizations {
   final Locale locale;
   late final Map<String, dynamic> _localizedValues;
@@ -45,6 +47,39 @@ class AppLocalizations {
     }
 
     return fallback ?? key;
+  }
+
+  /// A counted string, picking the wording [count] needs in this locale.
+  ///
+  /// Call this rather than appending `_single` / `_plural` at the call site.
+  /// That choice is `count == 1` in English and a three-way rule in Ukrainian
+  /// ([pluralSuffix]), and a call site that spells it out can only ever get one
+  /// language right.
+  ///
+  /// **A missing `_few` falls back to `_plural`**, so a locale that has grown a
+  /// third form but not yet the string for it reads exactly as it did before
+  /// rather than rendering a raw dotted key — which is what `t` does with a key
+  /// that isn't there, silently. `test/l10n_keys_test.dart` is what stops that
+  /// fallback becoming permanent.
+  String plural(String baseKey, int count, {Map<String, String>? params}) {
+    final suffix = pluralSuffix(locale.languageCode, count);
+    final key = '$baseKey$suffix';
+    if (suffix != '_plural' && !_has(key)) {
+      return t('${baseKey}_plural', params: params);
+    }
+    return t(key, params: params);
+  }
+
+  /// Whether [key] resolves to a string in this locale's bundle.
+  bool _has(String key) {
+    dynamic current = _localizedValues;
+    for (final segment in key.split('.')) {
+      if (current is! Map<String, dynamic> || !current.containsKey(segment)) {
+        return false;
+      }
+      current = current[segment];
+    }
+    return current is String;
   }
 }
 

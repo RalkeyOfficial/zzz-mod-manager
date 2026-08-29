@@ -38,9 +38,7 @@ void showInstallResult(BuildContext context, InstallResult result) {
       }
       final imported = mods.join(', ');
       notify.success(
-        loc.t(mods.length == 1
-            ? 'marketplace.install_success_title_single'
-            : 'marketplace.install_success_title_plural'),
+        loc.plural('marketplace.install_success_title', mods.length),
         body: imported.isEmpty
             ? loc.t('marketplace.install_success_default')
             : imported,

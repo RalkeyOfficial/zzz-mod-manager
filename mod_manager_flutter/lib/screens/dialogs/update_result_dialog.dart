@@ -128,10 +128,9 @@ class _UpdateResultDialog extends StatelessWidget {
     return [
       const SizedBox(height: 18),
       DialogSection(
-        title: loc.t(
-          count == 1
-              ? 'mods.update_apply.keybinds_heading_single'
-              : 'mods.update_apply.keybinds_heading_plural',
+        title: loc.plural(
+          'mods.update_apply.keybinds_heading',
+          count,
           params: {'count': '$count'},
         ),
         subtitle: loc.t('mods.update_apply.keybinds_explainer'),

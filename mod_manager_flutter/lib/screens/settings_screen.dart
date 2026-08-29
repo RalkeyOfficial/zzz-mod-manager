@@ -572,9 +572,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
         }
       } else {
         if (mounted) {
-          final tagLabel = autoTags.length == 1
-              ? loc.t('settings.auto_tag.tag_single')
-              : loc.t('settings.auto_tag.tag_plural');
+          final tagLabel =
+              loc.plural('settings.auto_tag.tag', autoTags.length);
           final summaryText = loc.t(
             'settings.auto_tag.summary',
             params: {

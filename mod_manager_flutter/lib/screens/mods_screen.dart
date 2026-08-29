@@ -1723,10 +1723,9 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  loc.t(
-                    importedMods.length == 1
-                        ? 'mods.import.success_single'
-                        : 'mods.import.success_plural',
+                  loc.plural(
+                    'mods.import.success',
+                    importedMods.length,
                     params: {'count': importedMods.length.toString()},
                   ),
                   style: const TextStyle(

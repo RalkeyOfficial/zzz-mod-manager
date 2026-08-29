@@ -188,10 +188,8 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
 
     final count = progress.active.length;
     final parts = <String>[
-      count == 1
-          ? loc.t('downloads.notification_title_single')
-          : loc.t('downloads.notification_title_plural',
-              params: {'count': '$count'}),
+      loc.plural('downloads.notification_title', count,
+          params: {'count': '$count'}),
     ];
 
     final fraction = progress.fraction;

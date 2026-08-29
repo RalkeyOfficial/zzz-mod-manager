@@ -250,10 +250,9 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
                 contentPadding: EdgeInsets.zero,
                 controlAffinity: ListTileControlAffinity.leading,
                 title: Text(
-                  loc.t(
-                    preview.staleInis.stale.length == 1
-                        ? 'mods.update_apply.remove_stale_single'
-                        : 'mods.update_apply.remove_stale_plural',
+                  loc.plural(
+                    'mods.update_apply.remove_stale',
+                    preview.staleInis.stale.length,
                     params: {
                       'count': '${preview.staleInis.stale.length}',
                       // The real spelling, not the normalised one this rule

@@ -65,6 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Ukrainian counted messages now use the right form of the noun. The language has three where English has two, so anything between 2 and 4 read as "2 модів" instead of "2 моди" — and messages about a single mod said "1 мод" even when there were 21 of them, since Ukrainian uses that same form for every count ending in 1.
 - Importing or deleting a mod no longer plays the whole "switched character" animation across the Mods grid — sliding everything out to the left, back in from the right, and re-animating every card. That transition now happens only when you actually switch character, which is what it was for.
 - Turning a mod on or off no longer rebuilds its card from scratch, so the card keeps its hover lift instead of dropping it under your cursor until you move the mouse away and back. The active border and glow now ease in rather than snapping.
 - "Detect tags for all mods" no longer blanks the Settings page behind a blocking dialog and then replays the whole page's entrance animation on the way back. The button reports on itself — it spins and disables while the pass runs — and nothing else on the page moves. The work is a scan of your mod folder names, so it is usually over in a moment.

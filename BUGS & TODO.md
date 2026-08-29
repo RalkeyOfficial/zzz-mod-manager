@@ -2590,16 +2590,26 @@ mod context menu, and the edit-mod dialog.
   shape (wrap the transform, notice the decline at the call site). Two
   workarounds for one missing result type is the point at which the durable fix
   is cheaper than the next copy.
-- [ ] **Ukrainian plurals are 1-vs-many, and the language has three forms.**
-  `AppLocalizations.t` has no plural machinery, so counted strings use a
-  `_single` / `_plural` key pair chosen in Dart — the pattern
-  `mods.import.success_single` established and the bulk action follows. That is
-  correct for English and correct for Ukrainian at 1 and at 5+, but **wrong for
-  2–4** ("2 модів" should be "2 моди"). Pre-existing and app-wide rather than
-  new, but now spread across a dozen more strings. The fix is a small plural
-  selector keyed on the locale, not another key per string. A test already pins
-  that every `_single` has a `_plural` sibling, which is the half that fails
-  silently.
+- [x] **Ukrainian plurals are 1-vs-many, and the language has three forms.**
+  Fixed as the item proposed — one selector keyed on the locale
+  (`l10n/plural_rules.dart`), reached through `loc.plural(base, count)`, and no
+  call site picks a suffix any more. Five copies of the same
+  `count == 1 ? '_single' : '_plural'` helper went with it.
+  `_few` is **optional**: most Ukrainian strings phrase the count as
+  "модів: {count}", which no numeral affects, so a missing `_few` falls back to
+  `_plural` rather than rendering a raw key — eleven strings needed one.
+  **The fix exposed a second bug the two-form rule was hiding, and it is the
+  more interesting half.** `_single` is not "exactly one": Ukrainian reaches it
+  at **1, 21, 31, 101** — every count ending in 1 but not 11. So nineteen uk
+  strings that hardcoded "1 мод", or said "цей мод" ("this mod") with no count
+  at all, were about to start reporting the wrong number at 21 rather than
+  merely the wrong case at 2. All nineteen now interpolate `{count}`, and a test
+  pins the rule: in a three-form locale, a `_single` whose `_plural` names a
+  count must name one too. English is unaffected and untouched — there `_single`
+  really is only ever 1, which is exactly why the trap is invisible from it.
+  **Worth a native review.** The `_few` wordings and the reworded singulars are
+  my grammar, not a translator's; they are right about *form* (nominative plural
+  at 2–4, singular agreement at 21) but a native speaker may phrase them better.
 - [ ] **Two constants hold the string `gamebanana`.** `gameBananaSource`
   (`utils/gamebanana_url.dart`, where offline code can reach it) and
   `AppConstants.gameBananaSourceName` (`core/constants.dart`, used by the

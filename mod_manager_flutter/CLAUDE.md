@@ -110,6 +110,17 @@ Custom JSON i18n (not ARB/gen-l10n). Strings live in `assets/l10n/en.json` and
   `_single`/`_plural` and `_title`/`_body` sibling pairs.
 - Keys built by interpolation or a ternary are invisible to that test's regex;
   register their prefix in `interpolatedKeyPrefixes`.
+- **A counted string goes through `loc.plural(base, count)`, never a hand-written
+  `count == 1 ? _single : _plural`.** English has two plural forms and Ukrainian
+  three, so a call site that picks the suffix itself can only be right in one
+  language. `l10n/plural_rules.dart` owns the rule. Two consequences that are
+  invisible from English:
+  - `_few` is **optional** and exists only in `pluralFewLocales`; a locale
+    without one falls back to `_plural`. Adding one to `en.json` is a second
+    copy of a string nothing selects.
+  - `_single` is **not "exactly one"** — Ukrainian reaches it at 1, 21, 31, 101.
+    So a `_single` string whose `_plural` names a count must name one too;
+    hardcoding "1 mod" or writing "this mod" is wrong at 21. Pinned by a test.
 - Much of the codebase still has legacy Ukrainian comments and strings. Per the
   root `CLAUDE.md`, write all new and edited code in English regardless — a bulk
   translation of the legacy text is not being done right now.
