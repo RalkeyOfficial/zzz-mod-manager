@@ -62,8 +62,8 @@ markdown would otherwise flatten `<br>`×6 to the same break as `<br>`×2.
 - **`IniParserService`** — parses mod `.ini` files into keybinds.
 - **`ArchiveService`** — extracts `.zip` in-process (`archive` package) and
   `.rar`/`.7z` by shelling out to `7z`/`7za`/`7zr`, which must be installed.
-- **`F10ReloadService`** / `f10_reload.py` — sends F10 to the running game so it
-  picks up mod changes.
+- **`F10ReloadService`** — sends F10 to the running game so it picks up mod
+  changes, through `xdotool` on X11 or `ydotool` on Wayland.
 
 ### The platform abstraction
 

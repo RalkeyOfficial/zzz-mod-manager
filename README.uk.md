@@ -307,9 +307,6 @@ ps aux | grep ydotool
 
 **Перевірка 3: Тест F10**
 ```bash
-# Тест Python скрипту
-python3 /opt/zzz-mod-manager/scripts/f10_reload.py /шлях/до/модів
-
 # Ручний тест з ydotool
 ydotool key 67:1 67:0
 ```

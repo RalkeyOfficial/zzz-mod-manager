@@ -295,36 +295,6 @@ endif
     return 'unknown';
   }
 
-  /// Використовує Python скрипт як резервний метод
-  Future<bool> _callPythonScript(String modsPath) async {
-    try {
-      final scriptPath = path.join(
-        Directory.current.path, 
-        'scripts', 
-        'f10_reload.py'
-      );
-      
-      final scriptFile = File(scriptPath);
-      if (!await scriptFile.exists()) {
-        print('F10ReloadService: Python скрипт не знайдено: $scriptPath');
-        return false;
-      }
-
-      final result = await Process.run('python3', [scriptPath, modsPath]);
-      
-      if (result.exitCode == 0) {
-        print('F10ReloadService: Python скрипт виконано успішно');
-        return true;
-      } else {
-        print('F10ReloadService: Python скрипт завершився з помилкою: ${result.stderr}');
-        return false;
-      }
-    } catch (e) {
-      print('F10ReloadService: Помилка виконання Python скрипту: $e');
-      return false;
-    }
-  }
-
   /// Основний метод для перезавантаження модів
   Future<bool> reloadMods(String? modsPath) async {
     if (modsPath == null || modsPath.isEmpty) {
@@ -364,14 +334,6 @@ endif
     // Метод 4: Спроба через обидва інструменти (резервний)
     if (!success) {
       if (await _sendF10ViaXdotool() || await _sendF10ViaYdotool()) {
-        success = true;
-      }
-    }
-
-    // Метод 5: Використання Python скрипту (крайній резерв)
-    if (!success) {
-      print('F10ReloadService: Використовуємо Python скрипт як резервний метод...');
-      if (await _callPythonScript(modsPath)) {
         success = true;
       }
     }

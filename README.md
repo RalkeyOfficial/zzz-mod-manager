@@ -307,9 +307,6 @@ ps aux | grep ydotool
 
 **Check 3: Test F10**
 ```bash
-# Test the Python script
-python3 /opt/zzz-mod-manager/scripts/f10_reload.py /path/to/mods
-
 # Manual test with ydotool
 ydotool key 67:1 67:0
 ```

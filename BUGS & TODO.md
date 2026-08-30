@@ -3179,12 +3179,25 @@ work that already opens the same file, so they cost nothing extra.
   x86-64 / x86 / arm64 / arm separately, where Windows takes one), a lookup
   beside the executable before PATH — on `PlatformService`, not a
   `Platform.isX` branch — and 7-Zip's LGPL text in the bundle.
-- [ ] **`scripts/f10_reload.py` is unreachable in an installed build.**
-  `F10ReloadService` resolves it against `Directory.current.path`, which for a
-  packaged app is wherever the user happened to launch from, and the PKGBUILD
-  does not install the file at all. It sits at the end of a fallback chain, so it
-  fails silently and the paths above it carry the feature. Either install it and
-  resolve against the bundle, or drop the branch.
+- [x] **`scripts/f10_reload.py` was unreachable, and is deleted.** Dead three
+  times over, which is why installing it was the wrong fix. It sat behind
+  `if (!success)` at the end of `reloadMods`, and method 1 — writing
+  `.reload_signal` into the mods folder — sets `success` before it, so the
+  branch never ran on any machine. Even reached, it resolved against
+  `Directory.current.path`, and the PKGBUILD never installed the file. And what
+  it did was reimplement methods 1 and 2 in Python. Both READMEs documented
+  running it by hand from `/opt/zzz-mod-manager/scripts/`, a path that never
+  existed.
+- [ ] **Does a signal file actually reload anything?** Found while deleting the
+  above and left open because it needs knowledge of ZZMI, not of this code.
+  `reloadMods` returns `true` as soon as `_createReloadSignalFile` writes
+  `.reload_signal` / `.mod_timestamp` into the mods folder, which essentially
+  always succeeds — so `mods_screen.dart` reports **"Mods reloaded — F10 was
+  sent to the running game"** even when `xdotool` is absent and no key was sent.
+  If 3DMigoto watches for those files the return value is honest and there is
+  nothing to fix; if it does not, then methods 1 and 2 write litter on every
+  press and the success message is a lie. `optdepends` makes running without
+  `xdotool` more likely, not less.
 
 ## Planned: rethink the whole UI
 
