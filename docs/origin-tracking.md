@@ -253,10 +253,10 @@ Three of those rows are decisions rather than mechanics:
   page, because a stale `source_url` is exactly why somebody might have set it. The
   second is not amber, for the reason amber cannot be honoured here: that state's
   entire offer is *click to set the version*, which means reading a mod page that is
-  private, trashed or withheld. It is not silence either. It used to be, and that was
-  correct only while nothing wrote the flag — the bulk resolution pass
-  ([§7](#7-the-bulk-resolution-pass)) writes it now, and a mod that quietly stops
-  being watched with no wording anywhere is a hole rather than a tidy default.
+  private, trashed or withheld. It is not silence either: silence is defensible only
+  while nothing writes the flag, and the bulk resolution pass
+  ([§7](#7-the-bulk-resolution-pass)) writes it — so a mod that quietly stops being
+  watched with no wording anywhere is a hole rather than a tidy default.
 - **Only `unknown` is actionable.** `assumed_latest` is the user having already
   answered "I don't know which, I got it around then", and `inferred` is a guess we
   recorded and label as one. Re-ambering either would make the dialog impossible to
@@ -427,10 +427,10 @@ Four rules, in the order they matter:
   search box and the two come apart, and a control that rewrites more mods than it is
   showing is the failure this rule exists to avoid.
 - **The action turns the needs-attention filter on before it asks, and puts it
-  back if it doesn't go through.** The rule has always been that the user must have
-  *seen* the set being rewritten; it used to be enforced by hiding the button until
-  that filter happened to be on, which is what put a bulk write in a row that
-  appears and disappears. The menu entry flips the filter itself, so the grid behind
+  back if it doesn't go through.** The rule is that the user must have *seen* the
+  set being rewritten. Enforcing that by hiding the button until the filter happens
+  to be on is the rejected alternative: it puts a bulk write in a row that appears
+  and disappears. The menu entry flips the filter itself, so the grid behind
   the confirmation shows exactly those mods — and restores it on cancel, since
   turning it on *for* a confirmation means declining the one thing a confirmation
   exists to allow would otherwise leave the grid filtered behind the user's back.
@@ -544,10 +544,10 @@ user-confirmed, in the per-mod dialog, forever.
 
 ### Nothing is written until Apply
 
-This is a **correction** to the plan the screen was built from, which said to write
-the safe inferences immediately and offer an undo afterwards. Two things argue
-against it. The control that gets the user here says *check for updates* and nothing
-about rewriting sidecars; and the placement rule this codebase already follows
+Writing the safe inferences immediately and offering an undo afterwards was
+considered and loses on two counts. The control that gets the user here says
+*check for updates* and nothing about rewriting sidecars; and the placement rule
+this codebase already follows
 ([§6](#6-assume-current-in-bulk)) is that a bulk rewrite acts only on a set the user
 has seen. A pre-ticked row costs one glance and one press, where an undo costs
 noticing a summary nobody asked for.
@@ -594,12 +594,12 @@ mod's own file list is a stronger statement that it is your mod than ticking a b
 beside its name, and a banked checksum matching a file the page publishes is proof
 rather than testimony.
 
-**A file at `inferred` does not**, and an earlier version of this screen had that
-wrong. The pass pre-ticks its own single-file inference, so pressing Save on a row
-whose *"yes, this is the right mod page"* was deliberately left unticked raised
-`mod_id_confidence` to `user` anyway — laundering a guess parsed out of a pasted url
-into the tier that lets an update overwrite files, on the one screen where the user
-had visibly declined to confirm it. It is the "never-confirmed ≠ safe" rule
+**A file at `inferred` does not**, and the trap is worth stating plainly. The pass
+pre-ticks its own single-file inference, so letting a file answer raise identity
+would mean pressing Save on a row whose *"yes, this is the right mod page"* was
+deliberately left unticked still lifting `mod_id_confidence` to `user` — laundering
+a guess parsed out of a pasted url into the tier that lets an update overwrite
+files, on the one screen where the user has visibly declined to confirm it. It is the "never-confirmed ≠ safe" rule
 ([§1](#1-two-axes-confidence-and-provenance)) inverted. Both axes stay guesses
 instead, which caps that mod's verdict at *possibly outdated* — honest, and exactly
 what two separate confidences are for.

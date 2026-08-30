@@ -36,9 +36,9 @@ state, so an ordinary action re-keyed them and Flutter threw the subtree away.
 **The character switcher is keyed on the character, not on how many mods it
 holds.** The `AnimatedSwitcher` around the grid exists for one thing: the 500 ms
 slide-out/slide-in that says *you are looking at a different character now*. Its
-key used to be `character_<index>_<currentSkins.length>`, so **importing or
-deleting a mod, or retagging one out of the current character, played that
-transition over the whole grid**. It compounded: the `AnimationLimiter` lives
+key must not carry the mod count: at `character_<index>_<currentSkins.length>`,
+**importing or deleting a mod, or retagging one out of the current character,
+plays that transition over the whole grid**. It compounds: the `AnimationLimiter` lives
 inside the switched subtree, and remounting it hands every card a fresh
 `AnimationExecutor` whose `initState` starts the 500 ms staggered scale-in again
 (`animation_executor.dart` sets `value = 1.0` instead only when the limiter says
@@ -87,11 +87,11 @@ folds to `none` and is precisely the mod best placed to have a *confirmed* updat
 
 ## 3. The toolbar
 
-**Two rows: search plus the library menu, then every filter.** Actions and filters
-used to be interleaved — the check overloaded onto a filter toggle, "check again"
-and "assume current" in a row that appeared only while some filter was on — which
-left the bulk resolution screen with nowhere to be re-opened from. Row two is always
-present: it costs a row of height and buys every control a fixed place.
+**Two rows: search plus the library menu, then every filter.** Interleaving the two
+— a check overloaded onto a filter toggle, "check again" and "assume current" in a
+row that appears only while some filter is on — leaves the bulk resolution screen
+with nowhere to be re-opened from. Row two is always present: it costs a row of
+height and buys every control a fixed place.
 
 **The needs-attention toggle carries a count and hides itself at zero.** The answer
 is usually either nothing or most of the library, and both are worth knowing before

@@ -412,11 +412,10 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
 
 /// The refresh button, which spins while the request is in flight.
 ///
-/// The spin is not decoration. Refresh previously gave no signal whatsoever — and
-/// worse, no *result*, because it re-read the client's 10-minute cache and got the
-/// identical page back (see `refreshMarketplaceResults`). Now that it genuinely
-/// re-fetches, the animation is what tells the user the click landed, since a
-/// listing that has not changed upstream looks exactly the same afterwards.
+/// The spin is not decoration: it is the only thing that tells the user the click
+/// landed, since a listing that has not changed upstream looks identical
+/// afterwards. `refreshMarketplaceResults` bypasses the client's 10-minute cache
+/// so the press has a result at all.
 class _RefreshButton extends ConsumerStatefulWidget {
   const _RefreshButton();
 

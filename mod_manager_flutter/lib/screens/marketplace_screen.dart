@@ -29,7 +29,7 @@ import 'components/marketplace/gb_detail_view.dart';
 ///   which is a guess about someone else's browser;
 /// - anything the user downloaded for unrelated reasons was a false positive.
 ///
-/// Two screens only, per the plan: a results grid and a mod detail view.
+/// Two screens only: a results grid and a mod detail view.
 /// Everything else GameBanana hosts — comments, threads, member pages — is
 /// reached through the "open in browser" escape hatch rather than rendered here.
 class MarketplaceScreen extends ConsumerStatefulWidget {

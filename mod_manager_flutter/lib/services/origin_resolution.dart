@@ -6,7 +6,8 @@
 /// allowed to claim*, and that is all here so it can be tested against real
 /// captured profiles instead of clicked through.
 ///
-/// Two rules from the plan's locked decisions govern every function below:
+/// Two locked rules govern every function below
+/// (`docs/origin-tracking.md` §4):
 ///
 /// - **Destructive paths require exact knowledge; guesses may only inform.** So
 ///   a suggestion carries a stated [FileMatchReason] and is never preselected —

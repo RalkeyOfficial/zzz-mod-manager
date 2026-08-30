@@ -2,8 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_coerce.dart';
 
 /// The coercion helpers absorb GameBanana's wire-format quirks. They are pure
-/// functions with no network and no UI, which per the plan makes them exactly
-/// the kind of thing that has to be tested — a wrong answer here is silent and
+/// functions with no network and no UI, which makes them exactly the kind of
+/// thing that has to be tested — a wrong answer here is silent and
 /// surfaces much later as bad update verdicts.
 void main() {
   group('gbInt', () {

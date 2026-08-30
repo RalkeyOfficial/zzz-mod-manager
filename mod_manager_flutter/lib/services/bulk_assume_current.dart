@@ -3,8 +3,8 @@
 ///
 /// The per-mod escape hatch ("I don't know which file — I got it around then")
 /// already exists in the resolve dialog. This is the same answer applied to a
-/// whole library in one press, and it is the cheapest thing in the plan that
-/// turns a dead legacy library into a working update-notification system: it
+/// whole library in one press, and it is the cheapest way to turn a dead legacy
+/// library into a working update-notification system: it
 /// needs no network, no mod page and no knowledge from the user, and it records
 /// an honest *date* rather than a fabricated version string.
 ///

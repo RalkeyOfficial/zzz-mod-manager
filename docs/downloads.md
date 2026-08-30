@@ -198,10 +198,9 @@ three things happens:
 **Where the host is mounted is the whole design.** It wraps the tab switcher in
 `main.dart`: the three tabs are keyed `AnimatedSwitcher` children with no
 keep-alive and are *disposed* as the user moves between them, so an install owned
-by `MarketplaceScreen` — which is where it used to live — dies on the first tab
-switch with the archive already on disk. That was only ever safe because the
-modal dialog made walking away impossible, and removing that barrier is the whole
-point of a queue. It must also sit **below** the `Navigator`, unlike
+by `MarketplaceScreen` dies on the first tab switch with the archive already on
+disk. Owning it there is safe only behind a modal dialog that makes walking away
+impossible, and removing that barrier is the whole point of a queue. It must also sit **below** the `Navigator`, unlike
 `NotificationHost`, because `showDialog` needs one as an ancestor.
 
 **One install at a time.** Installing runs `7z`, writes into the mods folder

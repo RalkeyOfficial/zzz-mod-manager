@@ -7,13 +7,11 @@
 ///
 /// ## Why this exists at all
 ///
-/// Every message used to be a `ScaffoldMessenger` snackbar raised inline at the
-/// call site, ~60 of them, each choosing its own colour, width and duration.
-/// Material's messenger shows **one at a time and queues the rest**, so a burst
-/// — an install that reports auto-tags, then missing `.ini` files, then a patch
-/// — was read as three bars in sequence, each covering the bottom of the window
-/// for its turn. This replaces the queue with a *stack*: everything raised is
-/// visible at once, in the corner, and any of it can be dismissed by hand.
+/// `ScaffoldMessenger` shows **one snackbar at a time and queues the rest**, so
+/// a burst — an install that reports auto-tags, then missing `.ini` files, then
+/// a patch — arrives as three bars in sequence, each covering the bottom of the
+/// window for its turn. This is a *stack* instead: everything raised is visible
+/// at once, in the corner, and any of it can be dismissed by hand.
 ///
 /// ## Raising one
 ///

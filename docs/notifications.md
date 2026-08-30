@@ -117,10 +117,10 @@ otherwise ask the bundle for `cat_misc.png` and hit `errorBuilder` on every rend
 
 **Severity is the only thing a call site decides.** Colour, icon and duration are
 derived from it in one place (`notificationColor` / `notificationIcon` /
-`kNotificationDurations`). They used to be chosen per call site from whatever was
-nearest — `Colors.red` here, `colorScheme.error` there, `Colors.orange` for a
-warning in one file and nothing in the next — so the same kind of event looked
-different depending on which screen raised it.
+`kNotificationDurations`). Chosen per call site they come from whatever is nearest
+— `Colors.red` here, `colorScheme.error` there, `Colors.orange` for a warning in
+one file and nothing in the next — so the same kind of event looks different
+depending on which screen raised it.
 
 ## 5. The stack and the clock
 

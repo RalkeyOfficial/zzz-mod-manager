@@ -152,12 +152,11 @@ So a "has this mod been removed?" check behaves identically on v13.
 
 ### Caching and rate limits
 
-- **apiv13 sends no `cache-control` at all.** apiv11 answered every request with
-  `public, max-age=600`, and the advice used to be "mirror that 10-minute TTL rather
-  than inventing one". There is now nothing to mirror, so a client cache has to pick
-  its own number — 10 minutes remains a defensible one, inherited from what v11 used
-  to advertise, but be honest that it is a choice rather than the server's
-  instruction. Honour a `max-age` if one reappears.
+- **apiv13 sends no `cache-control` at all**, where apiv11 answered every request
+  with `public, max-age=600`. There is nothing to mirror, so a client cache has to
+  pick its own number — 10 minutes is a defensible one, inherited from what v11
+  advertised, but it is a choice rather than the server's instruction. Honour a
+  `max-age` if one reappears.
 - **No published rate limit** — no `RateLimit-*`, no `Retry-After` on normal
   responses. 30 concurrent requests in a burst all returned `200` with no throttling.
   That is *not* a licence to hammer it: treat backoff as reactive (on `429`/`503`),
@@ -751,10 +750,10 @@ building on it:
   nowhere else.
 - It is a *substitute image*, not a flag: using it means the explicit pixels are
   never downloaded until the user asks, which is the real argument for it.
-- **It is not a reliable stand-in for the rating either**, and an earlier version of
-  this section said it was ("appears on *exactly* the `hide`/`warn` records"). The
-  correlation is perfect across those 150 *recent* records and does not hold in
-  general: mod `541825` reports `_sInitialVisibility: hide` with
+- **It is not a reliable stand-in for the rating either**, however much it looks
+  like one. The correlation is perfect across 150 *recent* records — which is
+  exactly the trap — and does not hold in general: mod `541825` reports
+  `_sInitialVisibility: hide` with
   `{sa, nu}` content ratings, and its cover carries **no** `Sfw` key in a listing, a
   profile or a `Mod/Multi` response. Its thumbnail filenames also lack the `_220`
   suffix the others carry, so the copies look to be generated per image by a pipeline

@@ -1748,15 +1748,24 @@ is exactly right.
   The set was not the one this item named: `image_fetcher.dart` had already been
   corrected, and `install_date_proxy.dart` had a bare `§3` nobody had noticed.
   Grep for `§[0-9]` and check each one names a doc — that is the whole check.
-- [ ] **Prose in `lib/` still says "the plan" meaning this file.**
-  `marketplace_screen.dart` ("two screens only, per the plan"),
-  `origin_resolution.dart` ("the plan's locked decisions"),
-  `bulk_assume_current.dart`, `installed_mods_index.dart`,
-  `retention.dart` and `file_selection.dart` all defer to a document that is
-  going away. Weaker than the `§` citations, and harder to sweep: most hits for
-  "the plan" in `lib/` are the *data structures* called plans
-  (`BulkUpdateCheckPlan`, the snapshot retention plan), so this needs reading
-  rather than grepping. Each wants the rule stated or the owning doc named.
+- [x] **Prose said "the plan" meaning this file.** Swept: 61 mentions across the
+  project, of which **10** deferred to this document and are gone — 6 in `lib/`,
+  3 in `test/`, 1 in `docs/origin-tracking.md`. Each states the rule outright or
+  names the doc that owns it.
+  The other 52 stay and are not the same thing: most are the **data structures**
+  called plans (`BulkUpdateCheckPlan`, `RetentionPlan`, the bulk-resolution and
+  assume-current plans), and the rest are this file talking about itself. That
+  is why it needed reading rather than grepping — `retention.dart`'s "the plan
+  says so" looks like a citation and is a `[RetentionPlan]` reference.
+  Two of them were worth more than the reference: *"this is a correction to the
+  plan"* also broke the no-history rule, which prompted a second sweep for that
+  rule across `lib/` and `docs/`. **14 more passages** narrated the code's own
+  past — *"used to be"*, *"an earlier version"*, *"was the first attempt"* — and
+  each now states the rule, the constraint or the rejected alternative in the
+  present tense, keeping the durable half.
+  What deliberately stays is the same phrasing about **mods**: "the old version's
+  `.ini`", "what the keybind used to be". That is domain vocabulary, not history,
+  and a grep cannot tell the two apart.
 - [ ] **There is no preflight free-space check.**
   `InsufficientSpaceException` has existed since M1 and nothing throws it. It
   matters more with a queue than it did with one download at a time: several

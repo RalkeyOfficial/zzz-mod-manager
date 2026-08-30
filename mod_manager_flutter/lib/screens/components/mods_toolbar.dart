@@ -125,11 +125,11 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // **Row one is search plus the library menu; row two is every
-          // filter.** Actions and filters used to be interleaved across three
-          // places, including a second row that appeared and disappeared with a
-          // filter reset beside two bulk writes. Row two is always present now:
-          // it costs a row of height on an unfiltered library and buys every
-          // control a fixed place.
+          // filter.** Interleaving actions with filters puts a bulk write beside
+          // a filter reset in a row that appears and disappears, which is how
+          // the bulk resolution screen ended up with nowhere to be re-opened
+          // from. Row two is always present: it costs a row of height on an
+          // unfiltered library and buys every control a fixed place.
           Row(
             children: [
               Expanded(

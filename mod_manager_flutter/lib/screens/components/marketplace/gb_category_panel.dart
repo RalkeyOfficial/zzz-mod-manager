@@ -15,13 +15,12 @@ BorderSide _panelDivider(ColorScheme scheme) =>
 /// The category column's header cell, which sits in the **same horizontal band as
 /// the search bar** rather than inside the panel.
 ///
-/// That placement is the whole point. Previously the header lived at the top of the
-/// panel with its own padding, so its height was tuned independently of the filter
-/// bar's — the two didn't line up, the title had more space above than below, and
-/// the mismatch would have reappeared whenever the filter bar grew (it gains a
-/// second line while searching). Putting both cells in one `Row` makes them the
-/// same height by construction, gives them one continuous bottom border, and lets
-/// the title centre itself in whatever height the band ends up.
+/// That placement is the whole point. Inside the panel the header carries its own
+/// padding, so its height is tuned independently of the filter bar's and the two
+/// stop lining up — reliably again whenever the filter bar grows, which it does
+/// when searching adds a second line. Putting both cells in one `Row` makes them
+/// the same height by construction, gives them one continuous bottom border, and
+/// lets the title centre itself in whatever height the band ends up.
 class GbCategoryPanelHeader extends StatelessWidget {
   const GbCategoryPanelHeader({super.key});
 

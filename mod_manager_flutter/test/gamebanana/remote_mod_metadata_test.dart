@@ -10,9 +10,9 @@ import '../support/fixtures.dart';
 ///
 /// Driven by real captured profiles rather than hand-written maps, because every
 /// judgement in this unit is a judgement about what GameBanana actually sends —
-/// and the plan's assumptions about two of those fields turned out to be wrong
-/// (tags are `{_sTitle, _sValue}` objects on a profile, and only the *cover*
-/// publishes a small variant).
+/// and two of those fields do not send what a reader would assume: tags are
+/// `{_sTitle, _sValue}` objects on a profile, and only the *cover* publishes a
+/// small variant.
 void main() {
   GbMod profile(String name) => GbMod.fromJson(parseObject(loadGbFixture(name)))!;
 

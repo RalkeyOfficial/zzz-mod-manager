@@ -16,10 +16,9 @@ implemented, it says so.
 >
 > **Applying** an update — writing the newer download over the folder, patch
 > detection, snapshots and rollback — is
-> [`applying-updates.md`](applying-updates.md). An earlier version of this line
-> said it would want a section here rather than a second doc; that was wrong on
-> this directory's own rule, which is that the scope line decides. Nothing in the
-> applying half is about *turning identity into a verdict*: it is filesystem
+> [`applying-updates.md`](applying-updates.md) — a second doc rather than a
+> section here, on this directory's own rule that the scope line decides.
+> Nothing in the applying half is about *turning identity into a verdict*: it is filesystem
 > semantics, and it shares no vocabulary with the comparator below. The two docs
 > meet at exactly one point — the Update button, described at the end of
 > [§6](#the-dialog).
@@ -527,11 +526,10 @@ what it writes is origin data:
 ### Where the controls live
 
 The Mods toolbar is **two rows: search plus a library menu, then every filter.**
-That split replaced an arrangement where actions and filters were interleaved
-across three places, and it is what this feature needed rather than a tidy-up —
-the results screen above had no home in the old one, so it could only ever be
-seen as a side effect of pressing a filter toggle, and dismissing it meant it was
-gone until the next check.
+The split is what this feature needs rather than a tidy-up: with actions and
+filters interleaved the results screen above has no home, so it can only be seen
+as a side effect of pressing a filter toggle, and dismissing it means it is gone
+until the next check.
 
 **The library menu holds the three things you can do to the whole library**:
 *Check for updates*, *Sort out mod tracking…* and *Mark all as current*. Each row
@@ -671,9 +669,9 @@ the usual way yields an empty changelog for every mod, silently; that is exactly
 how the `_aTags` two-shape bug went unnoticed, so it is pinned by a fixture test.
 
 They live in a **collapsible section, closed by default**, whose header doubles
-as the divider — an earlier version dropped them into the middle of the dialog
-with no boundary and no way to put them away, so an author's three paragraphs
-pushed the verdict off the top of a scroll view nobody had asked to grow.
+as the divider. Dropped into the middle of the dialog with no boundary and no way
+to put them away, an author's three paragraphs push the verdict off the top of a
+scroll view nobody asked to grow.
 
 The notes are **fetched on demand when that section is first opened**, so
 expanding it is also what fetches and one gesture does both — there is

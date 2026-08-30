@@ -7,8 +7,9 @@ import '../models/origin_enums.dart';
 /// No filesystem, no network, no widgets — the marketplace asks it "do I already
 /// have this?" while rendering, so it has to be a lookup rather than a fetch.
 ///
-/// **Three keys, because they answer three different questions**, and the plan's
-/// locked decision is to badge on identity while marking rows on file identity:
+/// **Three keys, because they answer three different questions.** The locked
+/// rule is to badge on mod identity while marking rows on file identity
+/// (`docs/origin-tracking.md` §9):
 ///
 /// - `mod_id` — "this mod is in your library", possibly as a different file. Two
 ///   skins of one GameBanana page are two folders, and that is the common case

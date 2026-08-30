@@ -7,7 +7,7 @@ import 'package:mod_manager_flutter/services/origin_resolution.dart';
 import 'support/fixtures.dart';
 
 /// The two captured profiles this suite leans on, because they are the two
-/// shapes the plan's file rules were designed around:
+/// shapes the file-selection rules were designed around:
 ///
 /// - `531649` — a main file at 7.7 beside patchers and demos, plus eight
 ///   archived releases. The "you have an old one" case.

@@ -3,11 +3,10 @@ import 'package:flutter/material.dart';
 /// What a notification *means*, which is the only thing a call site has to
 /// decide.
 ///
-/// Deliberately not a colour and not an icon. Both used to be picked at each of
-/// the ~60 call sites, by hand, from whatever was nearest — `Colors.red` in one
-/// place and `colorScheme.error` in the next, `Colors.orange` for a warning here
-/// and nothing at all there — so the same kind of event looked different
-/// depending on which screen raised it. The severity is the input; the look is
+/// Deliberately not a colour and not an icon. Picked per call site — across ~60
+/// of them — the same kind of event looks different depending on which screen
+/// raised it, because whatever is nearest wins: `Colors.red` in one place and
+/// `colorScheme.error` in the next. The severity is the input; the look is
 /// derived from it in exactly one place (`notification_overlay.dart`).
 enum NotificationSeverity {
   /// Something the user asked for finished. The default for "done".

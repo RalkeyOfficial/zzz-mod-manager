@@ -84,13 +84,12 @@ class GbThumbnail extends StatelessWidget {
       // Two layers, no cross-fade: the small copy sits underneath and the large one
       // paints straight over it the moment it decodes.
       //
-      // Hand-rolled rather than `FadeInImage`, which was the first attempt and was
-      // wrong twice over. It cross-faded (unwanted), and it hard-codes
-      // `gaplessPlayback: true` while never resetting its internal `targetLoaded`
-      // flag — so on a provider change its documented behaviour is to keep showing
-      // the *previously loaded* image. That turned "blank while loading" into "the
-      // wrong image while loading", with the selected thumbnail and the preview
-      // disagreeing.
+      // Hand-rolled rather than `FadeInImage`, which is wrong twice over here. It
+      // cross-fades (unwanted), and it hard-codes `gaplessPlayback: true` while
+      // never resetting its internal `targetLoaded` flag — so on a provider change
+      // its documented behaviour is to keep showing the *previously loaded* image.
+      // That is not "blank while loading" but "the **wrong image** while loading",
+      // with the selected thumbnail and the preview disagreeing.
       //
       // A plain `Image` defaults to `gaplessPlayback: false`, which is exactly what
       // is wanted here: on a new url it paints nothing until the new frame is ready,

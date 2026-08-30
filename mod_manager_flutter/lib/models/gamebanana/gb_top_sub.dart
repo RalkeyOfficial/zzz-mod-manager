@@ -51,10 +51,10 @@ enum GbTopSubPeriod {
 /// category but never a character. Forcing it into `GbMod` would make that type
 /// lie about which fields a response can carry.
 ///
-/// Images used to be a second reason and are no longer: apiv11 sent two finished
-/// urls (`_sImageUrl`, `_sThumbnailUrl`) with no size to negotiate, where apiv13
-/// sends the same `_aPreviewContent` ladder as everything else — so [image] is an
-/// ordinary [GbImage] whose `_sFile` happens to be the 800px render.
+/// Images are **not** a second reason: apiv13 sends the same
+/// `_aPreviewContent` ladder here as everywhere else — only apiv11 sent finished
+/// urls with no size to negotiate — so [image] is an ordinary [GbImage] whose
+/// `_sFile` happens to be the 800px render.
 ///
 /// [idRow] is a real mod id, so opening one goes through the normal
 /// `Mod/<id>/ProfilePage` detail path — nothing about the detail view needs to

@@ -540,14 +540,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
 
   /// Tags every mod whose folder name names a character.
   ///
-  /// **The progress is on the button, not over the page.** This used to do two
-  /// things at once for one press: set [isLoading], which swaps the entire page
-  /// body for the first-load spinner, *and* raise a blocking modal on top of
-  /// it. The modal hid the swap on the way in, so what the user actually saw
-  /// was the way out — tearing the page down disposes the [AnimationLimiter],
-  /// and rebuilding it hands every section a fresh `_shouldRunAnimation`, so
-  /// the whole settings page replayed its 375 ms staggered entrance. The page
-  /// appeared to reload for a change that touches nothing on it.
+  /// **The progress is on the button, not over the page.** Setting [isLoading]
+  /// here swaps the entire page body for the first-load spinner, and tearing the
+  /// page down disposes the [AnimationLimiter] — so rebuilding it hands every
+  /// section a fresh `_shouldRunAnimation` and the whole settings page replays
+  /// its 375 ms staggered entrance. A blocking modal on top would hide the swap
+  /// on the way in and not on the way out, which is the half the user sees: the
+  /// page appearing to reload for a change that touches nothing on it.
   ///
   /// [isLoading] is for the **first** load, where there is genuinely nothing to
   /// show yet. Everything else on this page reports where it happens — the

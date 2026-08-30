@@ -25,10 +25,9 @@
 /// - **Guesses may inform, never drive.** A file this pass works out on its own
 ///   is recorded at `inferred`, not at `user`: the user consented to a plan,
 ///   they did not look at a file list and recognise their download.
-/// - **Nothing is written until the user presses Apply**, and that is a
-///   correction to the plan this was built from. The plan said to write the
-///   safe inferences immediately and offer an undo afterwards. Two things
-///   argue against it. The control that runs this says "check for updates" and
+/// - **Nothing is written until the user presses Apply.** Writing the safe
+///   inferences immediately and offering an undo afterwards was considered and
+///   loses twice over. The control that runs this says "check for updates" and
 ///   nothing about rewriting sidecars, and the placement rule the bulk "assume
 ///   current" action already follows is that a bulk rewrite acts only on a set
 ///   the user has *seen*. A pre-ticked row costs the user one glance and one

@@ -170,9 +170,8 @@ the first frame after its own `initState`, so tearing the body down and putting 
 back hands every section a fresh limiter and the whole page replays its 375 ms
 staggered entrance. A change that touches nothing on the page appears to reload it.
 
-*Detect tags for all mods* used to do both at once: set `isLoading` **and** raise a
-blocking modal over the result. The modal hid the swap on the way in, so what the
-user saw was the replay on the way out.
+Raising a blocking modal over the swap does not rescue it: the modal hides the swap
+on the way in, leaving the user only the replay on the way out.
 
 So a long-running action reports **where it was started**: the language dropdown
 spins in place beside itself, and the auto-tag button spins in place of its own

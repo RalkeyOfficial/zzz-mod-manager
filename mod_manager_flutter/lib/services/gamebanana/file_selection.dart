@@ -58,7 +58,7 @@ class FileDefault {
 ///   *demo* archives. Newest-upload happens to be right there and would be wrong
 ///   the moment an author uploads a demo last.
 ///
-/// Falling back to a guess is specifically what the plan forbids: a guess may
+/// Falling back to a guess is exactly what the locked rule forbids: a guess may
 /// inform, never drive. So the honest implementation of "single clear highest
 /// version" is "there is only one file".
 ///

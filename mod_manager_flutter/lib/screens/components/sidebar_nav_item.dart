@@ -19,10 +19,9 @@ import 'package:flutter/material.dart';
 ///   the narrowest the row ever gets is `80 - 32 - 24 = 24`, which the icon
 ///   always fits inside.
 /// - **The label and the gap before it are one [Flexible] unit**, ellipsising
-///   together. The gap used to be a rigid `SizedBox`, so `22 + 14` exceeded the
-///   24 available before the text was even measured. Flexed, the pair simply
-///   collapses to nothing mid-animation and grows to its natural size once
-///   there is room.
+///   together. A rigid `SizedBox` gap cannot give way, so `22 + 14` exceeds the
+///   24 available before the text is even measured. Flexed, the pair collapses
+///   to nothing mid-animation and grows to its natural size once there is room.
 ///
 /// The icon fitting the narrowest row is therefore the single invariant the
 /// whole widget rests on, and it holds with 2px to spare.
