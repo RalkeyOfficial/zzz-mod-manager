@@ -2309,12 +2309,24 @@ been renamed). Strictly local: scans run offline on every launch.
 
 #### Open around the backfill (known, deliberately not built)
 
-- [ ] **`ModSort.added` still sorts by scan order.** `installed_at` now exists on
-  every backfilled mod, so the sort finally *can* have a real timestamp — but
-  wiring it is UI work and the backfill was scoped local-only. Two things to
-  handle when it lands: it visibly reorders existing libraries the first time it
-  runs, and it must fall back gracefully for mods with **no** origin block at
-  all, which is most of a library that has never had a `source_url` pasted in.
+- [x] **`ModSort.added` still sorts by scan order.** It sorts by
+  `origin.installed_at` now, newest first — `utils/mod_sorting.dart`, pure, so
+  the undated case can be tested directly. The label went from *Default* to
+  *Recently added*, which it had no right to be called before.
+  **The undated majority is what shapes it.** A library that never had a
+  `source_url` pasted into it has no origin block anywhere, and those mods go
+  **last in the order they arrived**, not shuffled and not alphabetised: their
+  scan order is the only thing describing them, and "recently added" is a claim
+  we cannot make about a mod we cannot date.
+  That is also why it partitions rather than passing `List.sort` a comparator
+  returning 0 for undated pairs — **Dart's sort is not stable**, so equal
+  elements are free to be reordered on every scan and the undated majority
+  would shuffle under the user for nothing. Equal *dates* break ties by name for
+  the same reason: one archive installing as several mods gives them the same
+  timestamp to the second.
+  A **proxy** date sorts alongside a real one. It is the oldest file mtime and
+  can read years early, but demoting it would drop most of a legacy library into
+  the tail, which is the state the backfill exists to get out of.
 - [x] **Nothing writes `source_url` on install — only the edit dialog does.**
   Verified: `edit_mod_dialog.dart` is the field's sole write site, so a mod
   downloaded through today's marketplace gets neither a remote id (the webview

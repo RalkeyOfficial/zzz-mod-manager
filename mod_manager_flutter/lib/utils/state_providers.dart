@@ -14,6 +14,7 @@ import '../services/installed_mods_index.dart';
 import '../services/mod_manager_service.dart';
 import '../services/origin_status.dart';
 import '../services/update_check.dart';
+import 'mod_sorting.dart';
 
 // The marketplace's own browsing state (query, results, categories, open mod)
 // lives in `marketplace_providers.dart` — one screen's session rather than
@@ -305,10 +306,11 @@ final visibleModsProvider = Provider<List<ModInfo>>((ref) {
         : m.tags.any(activeTags.contains));
   }
 
-  final list = result.toList();
+  var list = result.toList();
   switch (sort) {
     case ModSort.added:
-      break; // keep scan/add order
+      list = sortedByInstallDate(list);
+      break;
     case ModSort.nameAsc:
       list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
       break;
