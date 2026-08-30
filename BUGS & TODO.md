@@ -878,14 +878,22 @@ The block:
   test near it — the page is a lazy `ListView` and a real profile's 16:9
   gallery is ~650px, so anything below the fold has to be scrolled to before it
   exists to `find`.
-- [ ] **A truncated gallery doesn't say it was truncated.** `RemoteModMetadata.maxImages`
-  is 10 and real galleries reach 26+ (measured), so a mod can quietly arrive with 10
-  of its 26 screenshots. The install message names "preview images" without a count
-  — deliberately, since the only number available is a *cross-mod file total* rather
-  than a gallery length — so nothing currently claims the gallery is complete either.
-  What is missing is the other half: a way to say "10 of 26", or to pull the rest from
-  the mod page in the edit dialog. Not a silent cap on correctness (the mod page is
-  one click away), but the user has no way to know there is more.
+- **A truncated gallery doesn't say it was truncated**, and on inspection that is
+  a feature request rather than a gap — unboxed on those grounds.
+  `RemoteModMetadata.maxImages` is 10 and real galleries reach 26+, so a mod can
+  arrive with 10 of its 26 screenshots. The cap is deliberate and argued
+  (`metadata_autofill.dart`): a real library's hand-built galleries run 1–7
+  images, so copying a 26-shot marketing gallery into every folder is clutter.
+  Two corrections to the original filing. **The install message does not name
+  "preview images"** — it reports the autofill not at all, on the grounds that
+  filling a description and a gallery is what an install is *for*. And **nothing
+  records how many images there were**: `RemoteModMetadata` carries only the
+  capped list, so "10 of 26" would need the total threaded through it and into
+  the **sidecar** — a `metadata-schema.md` change — to still be sayable when the
+  user later looks at the mod.
+  A schema field to disclose a deliberate cap, on data the mod page shows in
+  full one click away. If it is ever wanted, the cheaper half is the edit
+  dialog offering to re-fetch the gallery, which needs no stored count.
 - **The install-summary merge rests on an unasserted invariant.**
   `autoTags.addAll(fill.characterTags)` in `_installArchive` is correct only because
   the two maps are disjoint by construction — the autofill assigns a character solely
@@ -1340,13 +1348,22 @@ The block:
   with §6's Settings work, and the age floor has to keep beating the count cap in
   the UI too — a settings screen that presents them as two independent numbers
   would invite exactly the configuration §4.2 argues against.
-- [ ] **`ModManagerService._copyDirectory` and `utils/directory_copy.dart` are two
-  copies of the same walk.** The update path needed an excluding copy, and the
-  private one has a behavioural difference — it follows links, the shared one does
-  not — so delegating would change the **import** path's behaviour for symlinked
-  content inside an imported folder. Left alone rather than fixed as a drive-by.
-  Whoever unifies them has to decide what an import should do with a link, which
-  is a real question and not a refactor.
+- [x] **`ModManagerService._copyDirectory` and `utils/directory_copy.dart` are two
+  copies of the same walk.** Unified on the shared one, and the question the item
+  reserved — what an import should do with a link — turned out to have a clear
+  answer, which makes this a **safety fix rather than a dedup**.
+  The private copy listed with `followLinks` defaulting to **true**, so on the
+  import path a link out of the folder copied an unbounded amount of unrelated
+  disk into the library under whatever name the folder chose, and a link
+  pointing at an *ancestor* recursed forever — there was no cycle guard. Neither
+  is exotic to construct; both are silent.
+  Not following costs the case where somebody drags in a hand-made folder whose
+  content is genuinely behind a link, which archives cannot carry and nothing
+  this app installs contains. Skipping beats hanging.
+  `copyDirectory` had **no test file at all** despite being on both the import
+  and update paths. It has one now, and the three link tests all fail if
+  `followLinks: false` is removed — including the infinite recursion, caught by
+  a timeout.
 - [ ] **The update flow is silent between the download finishing and the
   confirmation appearing.** Extraction plus two folder walks, with no modal up:
   the same shape as the install path's already-filed quiet window, and the same

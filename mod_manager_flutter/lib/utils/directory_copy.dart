@@ -53,9 +53,14 @@ Future<int> _copy(
       await entity.copy(target);
       written++;
     }
-    // Links are deliberately not followed and not recreated. Nothing this app
-    // installs contains one, and reproducing a link that points outside the
-    // folder would make a snapshot claim to hold data it does not.
+    // Links are deliberately not followed and not recreated — `followLinks:
+    // false` yields a `Link`, which matches neither branch above.
+    //
+    // Nothing this app installs contains one, and reproducing a link that
+    // points outside the folder would make a snapshot claim to hold data it
+    // does not. Following them is worse than useless on the **import** path
+    // too: a link out of the folder copies an unbounded amount of unrelated
+    // disk into the library, and one pointing at an ancestor recurses forever.
   }
 
   return written;

@@ -5,6 +5,7 @@ import '../models/character_info.dart';
 import '../models/mod_origin.dart';
 import '../models/mod_origin_seed.dart';
 import '../models/keybind_info.dart';
+import '../utils/directory_copy.dart';
 import '../utils/shipped_preview.dart';
 import '../utils/state_providers.dart';
 import '../utils/zzz_characters.dart';
@@ -518,7 +519,7 @@ class ModManagerService {
         }
 
         // Копіюємо папку з модом
-        await _copyDirectory(sourceDir, targetDir);
+        await copyDirectory(sourceDir, targetDir);
         importedMods.add(modName);
         sourceOf[modName] = folderPath;
 
@@ -632,7 +633,7 @@ class ModManagerService {
       for (final folderPath in folderPaths) {
         final sourceDir = Directory(folderPath);
         if (!await sourceDir.exists()) continue;
-        await _copyDirectory(
+        await copyDirectory(
           sourceDir,
           Directory(path.join(targetPath, path.basename(folderPath))),
         );
@@ -726,26 +727,6 @@ class ModManagerService {
   }
 
   /// Рекурсивно копіює директорію
-  Future<void> _copyDirectory(Directory source, Directory destination) async {
-    await destination.create(recursive: true);
-    
-    await for (final entity in source.list(recursive: false)) {
-      if (entity is Directory) {
-        final newDirectory = Directory(path.join(
-          destination.path,
-          path.basename(entity.path),
-        ));
-        await _copyDirectory(entity, newDirectory);
-      } else if (entity is File) {
-        final newFile = File(path.join(
-          destination.path,
-          path.basename(entity.path),
-        ));
-        await entity.copy(newFile.path);
-      }
-    }
-  }
-
   /// Зчитує keybinds для конкретного персонажа (моду)
   /// characterId - назва папки персонажа в modsPath
   Future<CharacterKeybinds?> getCharacterKeybinds(String characterId) async {
