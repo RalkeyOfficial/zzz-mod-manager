@@ -568,6 +568,12 @@ class ModManagerService {
     return failures;
   }
 
+  /// The same question for the **scan-time backfill**, which has its own
+  /// failures because it writes from a different place. Rules and I/O live in
+  /// [ModMetadataRepository]; this is the public entry point.
+  List<String> takeBackfillWriteFailures() =>
+      _metadata.takeBackfillWriteFailures();
+
   Future<void> _recordOrigin(String modName, ModOrigin origin) async {
     final ok = await _metadata.recordOrigin(modName, origin);
     if (!ok) {

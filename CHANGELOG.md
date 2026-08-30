@@ -65,6 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A mod whose folder can't be written to now says so instead of failing quietly. Its update-tracking data can't be saved, so it is never checked for updates and looks like an ordinary untracked mod; the library now names it, and keeps saying so until the folder is fixed.
 - Editing a mod's hotkey now updates the mod straight away. The new key was written to the `.ini` correctly, but the library kept showing the old one — in the right-click menu, the details dialog and the hotkey editor itself — until you switched tabs and back.
 - Ukrainian counted messages now use the right form of the noun. The language has three where English has two, so anything between 2 and 4 read as "2 модів" instead of "2 моди" — and messages about a single mod said "1 мод" even when there were 21 of them, since Ukrainian uses that same form for every count ending in 1.
 - Importing or deleting a mod no longer plays the whole "switched character" animation across the Mods grid — sliding everything out to the left, back in from the right, and re-animating every card. That transition now happens only when you actually switch character, which is what it was for.

@@ -441,7 +441,7 @@ void main() {
           reason: 'and the backfill still contributes its own key');
     });
 
-    test('stops re-walking a folder whose write cannot succeed', () async {
+    test('keeps re-attempting a folder whose write cannot succeed', () async {
       var probes = 0;
       final counted = ModMetadataRepository(
         config,
@@ -464,9 +464,85 @@ void main() {
       await counted.loadOrMigrate('Locked Repeat', dir.path);
       await counted.loadOrMigrate('Locked Repeat', dir.path);
 
-      expect(probes, 1,
-          reason: 'otherwise every scan re-walks the whole mod tree to '
-              're-attempt a write that cannot work');
+      expect(probes, 3,
+          reason: 'a scan has to re-attempt, or it cannot tell a fixed folder '
+              'from a still-broken one');
+    }, skip: Platform.isWindows ? 'chmod is POSIX-only' : false);
+
+    group('reporting a write it could not make', () {
+      /// A repository whose backfill probe is counted, over a mod whose sidecar
+      /// has been made read-only.
+      (ModMetadataRepository, int Function()) lockedMod(String name) {
+        var probes = 0;
+        final repo = ModMetadataRepository(
+          config,
+          modsPath: () => modsDir.path,
+          legacyImagesPath: () => legacyImages.path,
+          backfill: OriginBackfill(installDateProbe: (_) async {
+            probes++;
+            return DateTime(2024, 5, 6);
+          }),
+        );
+        final dir = sidecarMod(name, {
+          'source_url': 'https://gamebanana.com/mods/531649',
+        });
+        final sidecar = path.join(dir.path, '.zzz-mod-manager', 'metadata.json');
+        Process.runSync('chmod', ['a-w', sidecar]);
+        addTearDown(() => Process.runSync('chmod', ['u+w', sidecar]));
+        return (repo, () => probes);
+      }
+
+      test('names the mod it could not record, by name and not by path',
+          () async {
+        final (repo, _) = lockedMod('Locked Report');
+
+        expect(repo.takeBackfillWriteFailures(), isEmpty,
+            reason: 'nothing has been scanned yet');
+
+        await repo.loadOrMigrate(
+            'Locked Report', path.join(modsDir.path, 'Locked Report'));
+
+        expect(repo.takeBackfillWriteFailures(), ['Locked Report']);
+      });
+
+      test('names it again on every scan that still cannot write', () async {
+        // The mod is unusable for update checking until this is fixed, so the
+        // warning is not a once-per-session notice.
+        final (repo, _) = lockedMod('Locked Repeatedly');
+        final dir = path.join(modsDir.path, 'Locked Repeatedly');
+
+        for (var scan = 1; scan <= 3; scan++) {
+          await repo.loadOrMigrate('Locked Repeatedly', dir);
+          expect(repo.takeBackfillWriteFailures(), ['Locked Repeatedly'],
+              reason: 'scan $scan');
+        }
+      });
+
+      test('stops naming it once the folder is writable again', () async {
+        // What retrying buys: no restart needed to notice the fix.
+        final (repo, _) = lockedMod('Locked Then Fixed');
+        final dir = path.join(modsDir.path, 'Locked Then Fixed');
+        final sidecar = path.join(dir, '.zzz-mod-manager', 'metadata.json');
+
+        await repo.loadOrMigrate('Locked Then Fixed', dir);
+        expect(repo.takeBackfillWriteFailures(), ['Locked Then Fixed']);
+
+        Process.runSync('chmod', ['u+w', sidecar]);
+
+        await repo.loadOrMigrate('Locked Then Fixed', dir);
+        expect(repo.takeBackfillWriteFailures(), isEmpty);
+        expect((sidecarOf('Locked Then Fixed')!['origin'] as Map)['mod_id'],
+            531649);
+      });
+
+      test('a folder that writes fine is never named', () async {
+        final dir = sidecarMod('Writable Mod', {
+          'source_url': 'https://gamebanana.com/mods/531649',
+        });
+        await repo.loadOrMigrate('Writable Mod', dir.path);
+
+        expect(repo.takeBackfillWriteFailures(), isEmpty);
+      });
     }, skip: Platform.isWindows ? 'chmod is POSIX-only' : false);
 
     test('a mod with no sidecar is left to the legacy migration', () async {

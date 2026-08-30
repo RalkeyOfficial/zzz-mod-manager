@@ -52,15 +52,19 @@ class ModMetadataRepository {
   final String Function() _legacyImagesPath;
   final OriginBackfill _backfill;
 
-  /// Mod folders whose backfill write failed this session — a read-only folder,
-  /// or an odd network share. Without it the folder walk repeats on every
-  /// single scan to re-attempt a write that keeps failing, which is the one
-  /// case where the backfill stops being a once-per-mod cost.
+  /// Mods whose scan-time origin backfill could not be written, drained by the
+  /// UI once it has reported them.
   ///
-  /// Deliberately not persisted: it is a fact about this run, not about the
-  /// mod. Surfacing it to the user is still open — see "a failed origin write
-  /// is a state, not a shrug" in the plan.
-  final Set<String> _unwritableBackfills = {};
+  /// Refilled by every scan, so the warning repeats while the problem lasts —
+  /// the mod cannot be checked for updates until the folder is writable, and a
+  /// once-per-session notice would make a permanent problem look transient.
+  final Set<String> _backfillWriteFailures = {};
+
+  List<String> takeBackfillWriteFailures() {
+    final failures = _backfillWriteFailures.toList()..sort();
+    _backfillWriteFailures.clear();
+    return failures;
+  }
 
   ModMetadataRepository(
     this._tagStore, {
@@ -116,7 +120,7 @@ class ModMetadataRepository {
   /// library.
   Future<ModMetadata> loadOrMigrate(String modName, String modFolder) async {
     final existing = await _service.read(modFolder);
-    if (existing != null) return _backfillOrigin(modFolder, existing);
+    if (existing != null) return _backfillOrigin(modName, modFolder, existing);
 
     // No sidecar yet — gather legacy data to migrate. config.json may hold the
     // runtime "unknown" placeholder; that means "untagged", so it migrates to
@@ -152,13 +156,14 @@ class ModMetadataRepository {
   /// this off the hot path: an untracked mod costs one string parse per scan
   /// and no I/O, and a mod that has been backfilled once no longer qualifies,
   /// so the folder walk never runs for it again.
+  /// [modName] rides along only so a failure is reported by the name the user
+  /// knows the mod by rather than its full path.
   Future<ModMetadata> _backfillOrigin(
+    String modName,
     String modFolder,
     ModMetadata existing,
   ) async {
     try {
-      if (_unwritableBackfills.contains(modFolder)) return existing;
-
       final modId = OriginBackfill.recoverableModId(existing);
       if (modId == null) return existing;
 
@@ -183,13 +188,12 @@ class ModMetadataRepository {
         ),
       );
 
-      // Best-effort, like the legacy migration: an unwritable folder still
-      // yields the derived identity in memory. But remember the failure, or
-      // every subsequent scan re-walks the entire mod tree to re-attempt a
-      // write that cannot succeed. Session-scoped on purpose — a folder that
-      // becomes writable should be retried, just not on every rescan.
+      // Best-effort: an unwritable folder still yields the derived identity in
+      // memory, and loses it on restart. Retried on every scan rather than
+      // suppressed — a successful write stops the mod qualifying above, so only
+      // failing mods pay the walk, measured at 0.51 ms each.
       if (!await _service.write(modFolder, updated)) {
-        _unwritableBackfills.add(modFolder);
+        _backfillWriteFailures.add(modName);
       }
       return updated;
     } catch (e) {

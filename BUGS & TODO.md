@@ -833,12 +833,21 @@ The block:
   opens — which is correct and cheap, but two independent readers of the same
   library is a shape worth revisiting if a third appears (§7.4's status slot is
   rendered from `charactersProvider`, so it will not need one).
-- [ ] **A failed origin write is still not surfaced for the *backfill* path.** §3
-  already files this for ingest, and that half is done — `takeOriginWriteFailures`
-  is drained and reported. The scan-time backfill has its own equivalent
-  (`_unwritableBackfills`, session-scoped) and nothing shows it, so a mod in a
-  read-only folder silently never gains an identity and now silently never gets a
-  badge either. Same fix shape, different source.
+- [x] **A failed origin write is still not surfaced for the *backfill* path.**
+  Done, in the shape the item predicted: `takeBackfillWriteFailures()` drains
+  from the repository through `ModManagerService`, and `loadMods` reports it —
+  reusing the ingest path's own wording, because from the user's side it is one
+  fact ("this mod won't be checked for updates, and here is why") and which of
+  our two writers hit the read-only folder is our business.
+  **It repeats for as long as the problem does**, rather than once per session:
+  the mod cannot be checked for updates until the folder is writable, and saying
+  so once — possibly during a launch nobody was watching — makes a permanent
+  problem look transient.
+  That required dropping the retry suppression this path used to have, which
+  turned out to be guarding nothing: the walk it avoided measures **0.51 ms per
+  mod** against a real 71-mod / 3722-file library, and only failing mods pay it,
+  since a successful write stops a mod qualifying. Retrying is also what lets
+  the warning stop on its own when the permissions are fixed, with no restart.
 
 ### Open around metadata autofill (known, deliberately not built)
 

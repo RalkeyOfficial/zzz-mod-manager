@@ -232,6 +232,9 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         ref.read(selectedCharacterIndexProvider.notifier).state = 0;
       }
 
+      // Reported here because the scan is the only thing that runs the backfill.
+      await _reportBackfillWriteFailures();
+
       if (showLoading) {
         setState(() => isLoading = false);
       } else if (mounted) {
@@ -245,6 +248,24 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     } finally {
       _isLoadingMods = false;
     }
+  }
+
+  /// Says which mods the scan could not record an identity for.
+  ///
+  /// Shares the ingest path's wording: the user's loss is the same either way,
+  /// and which of our two writers hit the read-only folder is our business.
+  Future<void> _reportBackfillWriteFailures() async {
+    final service = await ApiService.getModManagerService();
+    final failures = service.takeBackfillWriteFailures();
+    if (failures.isEmpty || !mounted) return;
+
+    context.notify.warning(
+      context.loc.t('mods.snackbar.origin_write_failed_title'),
+      body: context.loc.t(
+        'mods.snackbar.origin_write_failed_body',
+        params: {'mods': failures.join(', ')},
+      ),
+    );
   }
 
   /// Groups a flat mod list into the sidebar structure: an "ALL" group, the
