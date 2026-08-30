@@ -3158,6 +3158,34 @@ work that already opens the same file, so they cost nothing extra.
 
 ---
 
+## Packaging
+
+- [x] **The AUR package declared none of the tools the app shells out to.**
+  `depends` was `gtk3`/`glib2`/`libx11`, so installing `zzz-mod-manager-git`
+  gave an app that could not extract `.rar` or `.7z` mods — most of GameBanana —
+  and could not open a mod page or folder. Now `depends` adds **`7zip`** (the
+  current Arch package; `p7zip` is the older independent port, and the app's own
+  docs named it) and **`xdg-utils`**, with `xdotool` / `ydotool` / `wmctrl` as
+  `optdepends` for F10 auto-reload, which is genuinely optional. `.SRCINFO`
+  regenerated for everything but `pkgver`, which the release skill says to leave.
+- [ ] **The portable Linux tarball and the Windows installer ship no extractor.**
+  `.github/workflows/build-linux.yml` publishes a `.tar.gz` and
+  `windows_installer/setup.iss` an installer, neither behind a package manager,
+  so both have the gap the AUR entry above just closed. Bundling is the answer
+  there rather than a dependency — no pub package covers it (`archive` has the
+  7z *codec* but not the container and no RAR; `rar` skips Linux and Windows
+  entirely; `unrar` is RAR-only), so it means shipping 7-Zip's own binary.
+  Three things it needs: a per-architecture download in CI (7-zip.org publishes
+  x86-64 / x86 / arm64 / arm separately, where Windows takes one), a lookup
+  beside the executable before PATH — on `PlatformService`, not a
+  `Platform.isX` branch — and 7-Zip's LGPL text in the bundle.
+- [ ] **`scripts/f10_reload.py` is unreachable in an installed build.**
+  `F10ReloadService` resolves it against `Directory.current.path`, which for a
+  packaged app is wherever the user happened to launch from, and the PKGBUILD
+  does not install the file at all. It sits at the end of a fallback chain, so it
+  fails silently and the paths above it carry the feature. Either install it and
+  resolve against the bundle, or drop the branch.
+
 ## Planned: rethink the whole UI
 
 - [ ] Redesign the entire UI from scratch. Until that happens, leave UI layout

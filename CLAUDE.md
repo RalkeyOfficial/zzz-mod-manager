@@ -95,7 +95,8 @@ project. The **Android toolchain** and **Chrome/web** ✗ marks are expected and
 ignore — this app targets Linux/Windows desktop only, not Android or web.
 
 System dependencies (Linux dev): the C++ toolchain (`clang`, `cmake`, `ninja`,
-`pkg-config`) + `gtk3` for building; `7z`/`7za`/`7zr` (p7zip) for archive imports; and
+`pkg-config`) + `gtk3` for building; `7z`/`7za`/`7zr` (Arch: `7zip`, **not** the
+older `p7zip` port) for archive imports; and
 `xdotool` (X11) or `ydotool` (Wayland) for the F10 auto-reload feature.
 
 Clipboard HTML (for paste-as-markdown) is read natively: on Linux via the GTK

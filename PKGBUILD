@@ -10,6 +10,18 @@ depends=(
     'gtk3'
     'glib2'
     'libx11'
+    # Extracting .rar and .7z mod archives, which is most of GameBanana.
+    # `ArchiveService` shells out to 7z/7za/7zr; without it those mods cannot
+    # be installed at all, only .zip.
+    '7zip'
+    # `xdg-open`, for "open mod page" and "open mod folder". url_launcher_linux
+    # calls it too, so it is the mechanism on both paths.
+    'xdg-utils'
+)
+optdepends=(
+    'xdotool: F10 auto-reload on X11'
+    'ydotool: F10 auto-reload on Wayland'
+    'wmctrl: window focusing fallback for F10 auto-reload'
 )
 makedepends=(
     'git'
