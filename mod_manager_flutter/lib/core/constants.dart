@@ -28,9 +28,6 @@ class AppConstants {
   /// GameBanana ids, so it cannot substitute for this list as a filter source.
   static const int gameBananaCharacterSkinsCategoryId = 30305;
 
-  /// The GameBanana source name recorded in a mod's origin block.
-  static const String gameBananaSourceName = 'gamebanana';
-
   // UI Scaling
   static const double minScale = 0.8;
   static const double maxScale = 1.5;

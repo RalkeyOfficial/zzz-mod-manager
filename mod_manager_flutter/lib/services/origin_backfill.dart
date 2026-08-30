@@ -87,8 +87,9 @@ class OriginBackfill {
     // - anything weaker — including our own earlier backfill — came from this
     //   very field, so it has to follow the field. Otherwise a user who pasted
     //   the wrong mod page once is stuck with it: correcting the url would be
-    //   a silent no-op, and until §7.5's resolve dialog ships there is no other
-    //   way to fix the binding.
+    //   a silent no-op, and the resolve dialog
+    //   (`docs/origin-tracking.md` §5) is the only other way to fix the
+    //   binding.
     if (_confirmedTiers.contains(origin.modIdConfidence)) return null;
     return parsed;
   }

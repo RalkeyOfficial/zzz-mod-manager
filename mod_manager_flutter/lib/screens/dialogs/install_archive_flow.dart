@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
 
-import '../../core/constants.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/gamebanana/gamebanana.dart';
 import '../../models/install_result.dart';
@@ -15,6 +14,7 @@ import '../../services/archive_service.dart';
 import '../../services/gamebanana/remote_mod_metadata.dart';
 import '../../services/mod_manager_service.dart';
 import '../../services/patch_scan.dart';
+import '../../utils/gamebanana_url.dart';
 import '../../utils/notifications.dart';
 import '../components/extract_failure_message.dart';
 import 'duplicate_archive_dialog.dart';
@@ -272,7 +272,7 @@ ModOriginSeed _seedFor(GbMod mod, GbFile file, {String? archiveMd5}) {
   return ModOriginSeed(
     provenance: OriginProvenance.downloaded,
     archiveMd5: archiveMd5,
-    source: AppConstants.gameBananaSourceName,
+    source: gameBananaSource,
     modId: mod.idRow,
     modIdConfidence: OriginConfidence.exact,
     fileId: file.idRow,

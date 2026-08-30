@@ -1,7 +1,8 @@
 /// Deriving a stand-in install date for a mod that predates the origin block.
 ///
-/// The real install date was never recorded for anything installed before §3's
-/// origin block existed, and it cannot be recovered — so the backfill uses the
+/// The real install date was never recorded for anything installed before the
+/// origin block existed (`docs/origin-tracking.md`), and it cannot be recovered
+/// — so the backfill uses the
 /// **oldest file mtime inside the mod folder** as a proxy. Folder mtime and
 /// ctime are both bumped by an `.ini` edit, so they skew *later* than the true
 /// install and would hide updates; the oldest contained file is the earliest

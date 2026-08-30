@@ -1740,14 +1740,23 @@ is exactly right.
 
 ### Filed while building the queue
 
-- [ ] **Three source comments cite a section of this file.**
-  `apply_update_flow.dart:293` and `image_fetcher.dart:41` cite "§0";
-  `origin_backfill.dart:90` cites "§7.5". All three predate M4 and are the docs
-  rule one layer down — this file gets deleted as its contents ship, taking the
-  meaning and leaving a dead reference. Each wants its figure or rule inlined,
-  or a pointer to the doc that now owns it (`docs/downloads.md` §2 and
-  `docs/origin-tracking.md` §5 respectively). Not fixed with the queue because
-  none of them is about the queue.
+- [x] **Source comments cite a section of this file**, which gets deleted as its
+  contents ship — taking the meaning and leaving a dead reference. Every `§` in
+  `lib/` now names the doc it belongs to. The figure went inline where the doc
+  did not own it (`apply_update_flow.dart` keeps the 1.24 GB directly), and the
+  other two point at `docs/origin-tracking.md`.
+  The set was not the one this item named: `image_fetcher.dart` had already been
+  corrected, and `install_date_proxy.dart` had a bare `§3` nobody had noticed.
+  Grep for `§[0-9]` and check each one names a doc — that is the whole check.
+- [ ] **Prose in `lib/` still says "the plan" meaning this file.**
+  `marketplace_screen.dart` ("two screens only, per the plan"),
+  `origin_resolution.dart` ("the plan's locked decisions"),
+  `bulk_assume_current.dart`, `installed_mods_index.dart`,
+  `retention.dart` and `file_selection.dart` all defer to a document that is
+  going away. Weaker than the `§` citations, and harder to sweep: most hits for
+  "the plan" in `lib/` are the *data structures* called plans
+  (`BulkUpdateCheckPlan`, the snapshot retention plan), so this needs reading
+  rather than grepping. Each wants the rule stated or the owning doc named.
 - [ ] **There is no preflight free-space check.**
   `InsufficientSpaceException` has existed since M1 and nothing throws it. It
   matters more with a queue than it did with one download at a time: several
@@ -2611,13 +2620,11 @@ mod context menu, and the edit-mod dialog.
   **Worth a native review.** The `_few` wordings and the reworded singulars are
   my grammar, not a translator's; they are right about *form* (nominative plural
   at 2–4, singular agreement at 21) but a native speaker may phrase them better.
-- [ ] **Two constants hold the string `gamebanana`.** `gameBananaSource`
-  (`utils/gamebanana_url.dart`, where offline code can reach it) and
-  `AppConstants.gameBananaSourceName` (`core/constants.dart`, used by the
-  marketplace's ingest seed). They agree today; a typo in either would create a
-  silent second, unqueryable service rather than an error — which is the exact
-  failure `gameBananaSource`'s doc comment was written to prevent. One of them
-  should go.
+- [x] **Two constants hold the string `gamebanana`.** `AppConstants.gameBananaSourceName`
+  is gone and its two call sites use `gameBananaSource`, which is the one that
+  had a reason to exist: it sits beside the url parser that produces the mod id
+  it accompanies, in `utils/` where offline code reaches it without the API
+  client. Four write sites now, one spelling.
 - [ ] **The resolve dialog cannot be reached from the edit-mod dialog.** §7.5
   names three entry points; the status slot and the context menu are wired, the
   edit dialog is not. That is the dialog where `source_url` is shown and edited,

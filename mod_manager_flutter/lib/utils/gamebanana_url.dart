@@ -24,10 +24,9 @@ const Set<String> _gameBananaHosts = {
 /// generic, and everything GameBanana-specific about identity is in this file,
 /// where offline code can reach it without the API client.
 ///
-/// It has one write site today (the offline backfill). The point of naming it
-/// is the second one: when §1's browser supplies identity at ingest it must
-/// write the same string, and a typo there would create a silent second,
-/// unqueryable service rather than an error.
+/// **The only spelling of it.** Four write sites now — the backfill, the
+/// resolve dialog, an install and an update — and a typo in any of them would
+/// create a silent second, unqueryable service rather than an error.
 const String gameBananaSource = 'gamebanana';
 
 /// Extracts the mod id from a GameBanana **mod page** url, or null.

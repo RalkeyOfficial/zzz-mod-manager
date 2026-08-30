@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
 
-import '../../core/constants.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../models/gamebanana/gamebanana.dart';
@@ -16,6 +15,7 @@ import '../../services/archive_service.dart';
 import '../../services/update_apply/mod_activation_port.dart';
 import '../../services/update_apply/update_applier.dart';
 import '../../services/update_apply/update_layout.dart';
+import '../../utils/gamebanana_url.dart';
 import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
 import '../components/extract_failure_message.dart';
@@ -218,7 +218,7 @@ Future<void> _recordOrigin({
     final base = current ??
         const ModOrigin(provenance: OriginProvenance.downloaded);
     return base.updatedTo(
-      source: AppConstants.gameBananaSourceName,
+      source: gameBananaSource,
       modId: remoteModId,
       fileId: file.idRow,
       version: file.version,
@@ -290,7 +290,7 @@ Future<void> _cleanupExtract(Directory? root) async {
 /// is set once the extraction succeeds and the dialog comes after. Backing out
 /// therefore costs a full re-download. Deliberate rather than overlooked: the
 /// alternative is keeping every declined archive in a folder the user does not
-/// manage, and §0 measured a 1.24 GB tail. Revisit if anyone reports it.
+/// manage, and mod archives reach 1.24 GB. Revisit if anyone reports it.
 Future<void> _deleteArchive(File archive) async {
   try {
     if (await archive.exists()) await archive.delete();
