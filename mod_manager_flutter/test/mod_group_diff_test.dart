@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/keybind_info.dart';
@@ -179,6 +181,99 @@ void main() {
     expect(modGroupsChanged(groups([mod('A')]), groups([mod('B')])), isTrue);
     expect(modGroupsChanged(groups([mod('A')]), groups([])), isTrue);
     expect(modGroupsChanged(groups([mod('A')]), []), isTrue);
+  });
+
+  group('ModInfo value equality', () {
+    // What replaced the hand-written field list. The list missed `origin` and
+    // then `keybinds`, each time leaving a surface showing stale data with
+    // nothing thrown; the guard now asks the model instead.
+    ModInfo full({
+      String id = 'A',
+      String name = 'A',
+      String characterId = 'ellen',
+      bool isActive = false,
+      String? imagePath = '/img/a.png',
+      String? description = 'notes',
+      String? sourceUrl = 'https://gamebanana.com/mods/1',
+      List<String> tags = const ['x'],
+      List<String> images = const ['/img/a.png'],
+      bool isFavorite = false,
+      List<KeybindInfo>? keybinds,
+      ModOrigin? origin,
+    }) =>
+        ModInfo(
+          id: id,
+          name: name,
+          characterId: characterId,
+          isActive: isActive,
+          imagePath: imagePath,
+          description: description,
+          sourceUrl: sourceUrl,
+          tags: tags,
+          images: images,
+          isFavorite: isFavorite,
+          keybinds: keybinds ?? [bind('KeySwap', 'VK_F7')],
+          origin: origin ?? untracked,
+        );
+
+    test('two mods built the same way are equal, and hash the same', () {
+      expect(full(), full());
+      expect(full().hashCode, full().hashCode);
+    });
+
+    test('a difference in any field breaks equality', () {
+      final cases = <String, ModInfo>{
+        'id': full(id: 'B'),
+        'name': full(name: 'B'),
+        'characterId': full(characterId: 'miyabi'),
+        'isActive': full(isActive: true),
+        'imagePath': full(imagePath: '/img/b.png'),
+        'description': full(description: 'other'),
+        'sourceUrl': full(sourceUrl: 'https://gamebanana.com/mods/2'),
+        'tags': full(tags: const ['y']),
+        'images': full(images: const ['/img/b.png']),
+        'isFavorite': full(isFavorite: true),
+        'keybinds': full(keybinds: [bind('KeySwap', 'VK_F9')]),
+        'origin': full(
+          origin: const ModOrigin(
+            source: 'gamebanana',
+            modId: 9,
+            provenance: OriginProvenance.importedFolder,
+          ),
+        ),
+      };
+      for (final entry in cases.entries) {
+        expect(full(), isNot(entry.value), reason: '${entry.key} was ignored');
+        expect(modChanged(full(), entry.value), isTrue, reason: entry.key);
+      }
+    });
+
+    test('every constructor parameter is covered by one of those cases', () {
+      // The assertion that makes this list self-maintaining rather than a
+      // second hand-written one: adding a field to `ModInfo` without adding a
+      // case above fails here.
+      const compared = {
+        'id', 'name', 'characterId', 'isActive', 'imagePath', 'description',
+        'sourceUrl', 'tags', 'images', 'isFavorite', 'keybinds', 'origin',
+      };
+      final source = File('lib/models/character_info.dart').readAsStringSync();
+      final body = source.substring(source.indexOf('class ModInfo'));
+      final ctor = body.substring(
+          body.indexOf('ModInfo({'), body.indexOf('ModInfo copyWith('));
+      final fields = RegExp(r'this\.(\w+)')
+          .allMatches(ctor)
+          .map((m) => m.group(1)!)
+          .toSet();
+
+      expect(fields.difference(compared), isEmpty,
+          reason: 'ModInfo gained a field with no equality case above');
+      expect(compared.difference(fields), isEmpty,
+          reason: 'a case above names a field ModInfo no longer has');
+    });
+
+    test('null and empty lists are different values', () {
+      expect(full(keybinds: const []), isNot(full(keybinds: null)));
+    });
   });
 
   group('ModOrigin value equality', () {

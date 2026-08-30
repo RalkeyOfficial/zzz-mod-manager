@@ -129,4 +129,58 @@ class ModInfo {
       origin: origin ?? this.origin,
     );
   }
+
+  /// Value equality over **every** field, which is what `modGroupsChanged` uses
+  /// to decide whether a rescan may refresh the grid.
+  ///
+  /// It replaced a hand-written field list there, and that list had failed
+  /// silently twice — `origin`, then `keybinds` — each time leaving a surface
+  /// rendering yesterday's data until the tab was switched. A field added here
+  /// is covered the moment someone adds it to the constructor, because leaving
+  /// it out breaks nothing loudly *here* either but the compiler is no help
+  /// either way: what changes is that there is now one list to keep, not two.
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ModInfo &&
+          other.id == id &&
+          other.name == name &&
+          other.characterId == characterId &&
+          other.isActive == isActive &&
+          other.imagePath == imagePath &&
+          other.description == description &&
+          other.sourceUrl == sourceUrl &&
+          other.isFavorite == isFavorite &&
+          other.origin == origin &&
+          _sameList(other.tags, tags) &&
+          _sameList(other.images, images) &&
+          _sameList(other.keybinds, keybinds);
+
+  @override
+  int get hashCode => Object.hash(
+        id,
+        name,
+        characterId,
+        isActive,
+        imagePath,
+        description,
+        sourceUrl,
+        isFavorite,
+        origin,
+        Object.hashAll(tags),
+        Object.hashAll(images),
+        keybinds == null ? null : Object.hashAll(keybinds!),
+      );
+
+  /// Order-sensitive, and nullable because `keybinds` is: a mod with no `.ini`
+  /// bindings never has the field set, which is a different value from a mod
+  /// that was parsed and found none.
+  static bool _sameList<T>(List<T>? a, List<T>? b) {
+    if (identical(a, b)) return true;
+    if (a == null || b == null || a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
 }

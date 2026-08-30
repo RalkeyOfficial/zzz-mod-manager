@@ -2639,19 +2639,17 @@ mod context menu, and the edit-mod dialog.
   Both directions are pinned, which is the point — one test fails if the
   comparison goes away (the bug returns) and a different one fails if the value
   equality does (the guard fires every scan).
-- [ ] **The rescan guard's field list is a silent-staleness trap in general.**
-  `origin` and now `keybinds` are self-maintaining (compared through their own
-  `==`), but every other field on `ModInfo` is a line someone has to remember to
-  add, and forgetting it produces no error — just a surface that renders
-  yesterday's data until the tab is switched. It has caught two fields out
-  already, which is the argument: the durable fix is value equality on `ModInfo`
-  itself, so `modChanged` collapses to `before != after`.
-  **The blocker is gone.** This waited on "whether enrichment produces stable
-  values", and it does — `KeybindInfo` was the only field on `ModInfo` without a
-  value identity, and giving it one turned out to need no decision about the
-  parse at all. What is left is mechanical: `==`/`hashCode` over `ModInfo`'s
-  ~14 fields, with the list-valued ones (`tags`, `images`, `keybinds`) compared
-  element-wise as the guard already does.
+- [x] **The rescan guard's field list is a silent-staleness trap in general.**
+  `ModInfo` has `==`/`hashCode` over all twelve fields now and `modChanged` is
+  `before != after`, so a field is covered by being a field. The list had caught
+  two out — `origin`, then `keybinds` — each leaving a surface rendering
+  yesterday's data with nothing thrown.
+  Safe to add because nothing keyed on identity: no `Set<ModInfo>`, no
+  `Map<ModInfo, …>`, and every `contains`/`remove` in the codebase works on
+  `mod.id`.
+  The one hand-written list that remains is in the **test**, and it is
+  self-maintaining: it reads `ModInfo`'s constructor and fails naming any field
+  it has no equality case for.
 - [ ] **`CharacterInfo.keybinds` is never written, and one widget renders it.**
   Found while fixing the guard above. `enrichCharactersWithKeybinds` sets
   keybinds on each `ModInfo` and carries the group through with
