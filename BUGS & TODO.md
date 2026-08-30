@@ -833,14 +833,6 @@ The block:
   opens — which is correct and cheap, but two independent readers of the same
   library is a shape worth revisiting if a third appears (§7.4's status slot is
   rendered from `charactersProvider`, so it will not need one).
-- [ ] **A file-list row overflows at a 2× OS text scale**, and has since before any
-  of this: at that scale the row's outer layout — the scan-result chip plus the
-  Download button, neither of which can shrink — exceeds a minimum-width window on
-  its own, with no badges involved. Measured at 530px and 600px, chips or not. The
-  *label* half of the row is now safe — it became a `Wrap` when a second chip
-  landed there and broke it at 1.3× — so what is left is the trailing controls.
-  Filed rather than fixed: making the button shrink or move below the label is a
-  layout decision for the row as a whole, not a drive-by.
 - [ ] **A failed origin write is still not surfaced for the *backfill* path.** §3
   already files this for ingest, and that half is done — `takeOriginWriteFailures`
   is drained and reported. The scan-time backfill has its own equivalent
@@ -3115,3 +3107,15 @@ work that already opens the same file, so they cost nothing extra.
     fields. The old `dateUpdated ?? dateAdded` fallback was worse than missing:
     `_tsDateUpdated` is null until a mod is actually updated, so it labelled a
     first release as an update.
+
+---
+
+## Planned: rethink the whole UI
+
+- [ ] Redesign the entire UI from scratch. Until that happens, leave UI layout
+  and polish bugs alone — the fix would be thrown away.
+
+Waiting on it:
+
+- [ ] A marketplace file row overflows at 2× text scale. The scan chip and
+  Download button can't shrink. Seen at 530px and 600px window widths.
