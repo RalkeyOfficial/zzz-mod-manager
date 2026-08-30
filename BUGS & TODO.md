@@ -895,13 +895,22 @@ The block:
   the name's, and the two would disagree silently. The wiring has no widget test
   either (it needs `ApiService`'s singletons and a configured library), which is
   acceptable for UI plumbing but is why the invariant is worth writing down.
-- [ ] **An unwritable folder swallows the autofill too.**
-  `RemoteMetadataFill.unwritable` is returned and only logged, on the same grounds
-  as the two items above it: the origin write for the same folder already reports
-  the failure, so a second message would be noise. That reasoning stops holding the
-  moment the origin write succeeds and this one doesn't (a folder that becomes
-  read-only mid-install, an odd network share). Third instance of the same fix
-  shape — one place that reports "couldn't write to `<mod>`" for all of them.
+- [x] **An unwritable folder swallows the autofill too.** Fixed by
+  *consolidating* rather than adding the third report the item asked for:
+  `ModManagerService.applyRemoteMetadata` folds `RemoteMetadataFill.unwritable`
+  into `_originWriteFailures`, so the drain and the message that already exist
+  cover it and one read-only folder still produces one card. The drain
+  deduplicates, because both writes target the same sidecar and the usual case
+  is that a folder fails both.
+  **One imprecision is knowingly accepted.** In the rare case where the origin
+  write succeeds and only the autofill fails — a folder that turns read-only
+  mid-install — the message still says the mod "won't be checked for updates",
+  which is then untrue: tracking did save, the description and gallery did not.
+  Wording that covered every case exactly would either hedge or lose the
+  update-checking consequence, which is the one the user cannot otherwise
+  notice. An over-broad warning beats today's silence.
+  The producer had no test at all; a read-only sidecar now pins that
+  `unwritable` names the mod.
 
 ## 4. Mod updating
 

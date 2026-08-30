@@ -78,9 +78,12 @@ class RemoteMetadataFill {
   /// this figure would be read as the length of one gallery.
   final int images;
 
-  /// Mods whose sidecar could not be written. Already surfaced by the origin
-  /// write for the same folder, so this exists for logging rather than a second
-  /// message.
+  /// Mods whose sidecar could not be written.
+  ///
+  /// Drained into `ModManagerService`'s origin-write failures by
+  /// `applyRemoteMetadata`, so it is reported through the one message rather
+  /// than a second card naming the same read-only folder. Both writes target
+  /// the same file, so the usual case is that both fail.
   final List<String> unwritable;
 
   bool get isEmpty =>

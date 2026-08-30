@@ -1006,6 +1006,24 @@ void main() {
       expect(fill.unwritable, isEmpty);
     });
 
+    test('names a folder it could not write to', () async {
+      // The half that had no reader: `unwritable` was populated and only
+      // printed, so an install into a read-only folder filled nothing and said
+      // nothing. `ModManagerService.applyRemoteMetadata` folds this into the
+      // origin-write failures, which the install flow already reports.
+      final dir = makeMod('Locked Fill');
+      final sidecar = path.join(dir.path, '.zzz-mod-manager', 'metadata.json');
+      File(sidecar)
+        ..createSync(recursive: true)
+        ..writeAsStringSync('{"schema_version": 1}');
+      Process.runSync('chmod', ['a-w', sidecar]);
+      addTearDown(() => Process.runSync('chmod', ['u+w', sidecar]));
+
+      final fill = await repo.applyRemoteMetadata(['Locked Fill'], remote());
+
+      expect(fill.unwritable, ['Locked Fill']);
+    }, skip: Platform.isWindows ? 'chmod is POSIX-only' : false);
+
     test('mirrors the character into config.json, like setCharacter does',
         () async {
       makeMod('Ellen Swimsuit');

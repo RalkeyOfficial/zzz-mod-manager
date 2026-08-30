@@ -182,11 +182,19 @@ class ModManagerService {
   /// Fills the blanks in freshly-installed mods' metadata from the mod page they
   /// came from. Rules and I/O both live in [ModMetadataRepository]; this is the
   /// public entry point, like [saveModMetadata].
+  ///
+  /// A folder it could not write joins [takeOriginWriteFailures] rather than
+  /// getting a report of its own. Both writes target the same sidecar, so the
+  /// usual case is that both fail and one message covers them — and a second
+  /// card naming the same read-only folder is the noise this avoids.
   Future<RemoteMetadataFill> applyRemoteMetadata(
     Iterable<String> modNames,
     RemoteModMetadata remote,
-  ) =>
-      _metadata.applyRemoteMetadata(modNames, remote);
+  ) async {
+    final fill = await _metadata.applyRemoteMetadata(modNames, remote);
+    _originWriteFailures.addAll(fill.unwritable);
+    return fill;
+  }
 
   /// Amends an existing mod's origin block — the resolve dialog's write path.
   /// Rules and re-read-before-write both live in [ModMetadataRepository].
@@ -562,8 +570,10 @@ class ModManagerService {
   /// failure that stayed in this list would have no second chance to be shown.
   final List<String> _originWriteFailures = [];
 
+  /// Deduplicated: the origin write and the autofill target the same sidecar,
+  /// so one read-only folder lands here twice and must be named once.
   List<String> takeOriginWriteFailures() {
-    final failures = List<String>.from(_originWriteFailures);
+    final failures = _originWriteFailures.toSet().toList();
     _originWriteFailures.clear();
     return failures;
   }
