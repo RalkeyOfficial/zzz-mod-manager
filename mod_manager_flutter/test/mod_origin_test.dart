@@ -204,6 +204,43 @@ void main() {
       expect(const ModIngest().toJson(), {'mode': 'separate'});
       expect(const ModIngest().isEmpty, isTrue);
     });
+
+    group('patch_shaped', () {
+      // Knowable only at install — after the base mod's files are dragged in
+      // around a patch, the folder is indistinguishable from an ordinary one.
+      // So it has to survive the sidecar, or it is worth nothing.
+      test('round-trips', () {
+        const ingest = ModIngest(patchShaped: true);
+        expect(ingest.toJson()['patch_shaped'], true);
+        expect(ModIngest.fromJson(ingest.toJson())!.patchShaped, isTrue);
+      });
+
+      test('is absent from the json when false', () {
+        // Every sidecar in existence lacks the key, and writing `false` into
+        // all of them would be churn saying nothing.
+        expect(const ModIngest().toJson().containsKey('patch_shaped'), isFalse);
+        expect(ModIngest.fromJson({'mode': 'separate'})!.patchShaped, isFalse);
+      });
+
+      test('anything but true reads as false', () {
+        for (final raw in [null, 'true', 1, 'yes']) {
+          expect(
+            ModIngest.fromJson({'mode': 'separate', 'patch_shaped': raw})!
+                .patchShaped,
+            isFalse,
+            reason: '$raw',
+          );
+        }
+      });
+
+      test('is part of the value identity', () {
+        // `ModOrigin` compares by value and the rescan guard depends on it, so
+        // a flag it ignored would leave the card showing the old verdict.
+        expect(const ModIngest(patchShaped: true),
+            isNot(const ModIngest()));
+        expect(const ModIngest(patchShaped: true).isEmpty, isFalse);
+      });
+    });
   });
 
   group('allowsUnattendedUpdate', () {

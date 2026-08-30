@@ -12,6 +12,7 @@ class ModIngest {
     this.mode = IngestMode.separate,
     this.folders = const [],
     this.siblingGroup,
+    this.patchShaped = false,
   });
 
   final IngestMode mode;
@@ -42,8 +43,28 @@ class ModIngest {
   /// updatable.
   final String? siblingGroup;
 
+  /// This download shipped `.ini` files and none of the content they reference
+  /// — it is a **patch**, expecting a mod already in the folder.
+  ///
+  /// Recorded because it is knowable **only at install**. A patch folder is
+  /// legible exactly once: before the user drags the base mod's files in
+  /// around it. Afterwards every reference resolves and the folder is
+  /// byte-for-byte indistinguishable from an ordinary one-download mod, so no
+  /// later scan can recover this. See `docs/applying-updates.md` §1.
+  ///
+  /// What it is *for* is stopping a lie rather than enabling a feature: the
+  /// origin block names the **patch's** page, so a check against it reports
+  /// "up to date" while the mod the folder actually contains goes versions
+  /// ahead. Knowing the folder is two things is enough to refuse that claim.
+  /// It is not enough to *watch* the other one — that needs a second identity
+  /// only the user can supply.
+  final bool patchShaped;
+
   bool get isEmpty =>
-      folders.isEmpty && siblingGroup == null && mode == IngestMode.separate;
+      folders.isEmpty &&
+      siblingGroup == null &&
+      mode == IngestMode.separate &&
+      !patchShaped;
 
   /// Value equality, so [ModOrigin] can have it — see the note there.
   @override
@@ -51,6 +72,7 @@ class ModIngest {
       other is ModIngest &&
       other.mode == mode &&
       other.siblingGroup == siblingGroup &&
+      other.patchShaped == patchShaped &&
       _sameFolders(other.folders);
 
   bool _sameFolders(List<String> other) {
@@ -62,12 +84,14 @@ class ModIngest {
   }
 
   @override
-  int get hashCode => Object.hash(mode, siblingGroup, Object.hashAll(folders));
+  int get hashCode =>
+      Object.hash(mode, siblingGroup, patchShaped, Object.hashAll(folders));
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'mode': mode.wire,
         if (folders.isNotEmpty) 'folders': folders,
         if (siblingGroup != null) 'sibling_group': siblingGroup,
+        if (patchShaped) 'patch_shaped': true,
       };
 
   /// Never throws; anything unusable degrades to a safe default.
@@ -84,6 +108,7 @@ class ModIngest {
           : const [],
       siblingGroup:
           raw['sibling_group'] is String ? raw['sibling_group'] as String : null,
+      patchShaped: raw['patch_shaped'] == true,
     );
   }
 }

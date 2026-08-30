@@ -955,6 +955,13 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
         Icons.check_circle_outline,
         Theme.of(context).colorScheme.primary,
       ),
+      // Amber rather than the primary tick: this is the absence of an answer,
+      // not a clean bill of health, and it reads next to the tick it replaces.
+      UpdateOutcome.tracksPatchOnly => (
+        'mods.update.verdict_patch_only',
+        Icons.call_split,
+        ModStatusSlot.amber,
+      ),
       UpdateOutcome.versionUnknown => (
         'mods.update.verdict_version_unknown',
         Icons.priority_high,

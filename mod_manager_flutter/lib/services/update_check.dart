@@ -137,6 +137,16 @@ enum UpdateOutcome {
   /// Nothing has been published that could be newer than what is installed.
   upToDate,
 
+  /// The folder holds a **patch** and the origin block names the patch's page,
+  /// so nothing here is a statement about the mod the folder actually contains.
+  ///
+  /// Distinct from [upToDate] for the reason [indeterminate] is: the patch
+  /// genuinely has no newer file, and saying so would be true about the page we
+  /// asked and false about the folder the user is looking at. Distinct from
+  /// [indeterminate] because the cause is ours to explain rather than the
+  /// server's silence — and the remedy is different.
+  tracksPatchOnly,
+
   /// Something newer exists, but which file it corresponds to — or whether the
   /// installed file is even what we think it is — is a guess. The strongest
   /// claim available for anything short of confirmed evidence.
@@ -174,6 +184,25 @@ class UpdateCheck {
     this.newerFiles = const <GbFile>[],
     this.candidateMatchesVariant = false,
   });
+
+  /// The same evidence under a different verdict.
+  ///
+  /// Narrow on purpose rather than a general `copyWith`: the one caller
+  /// downgrades [UpdateOutcome.upToDate] for a patch-shaped folder, and
+  /// everything else it found — which file is installed, what evidence named
+  /// it — is still true and still worth showing.
+  UpdateCheck withOutcome(UpdateOutcome next) => UpdateCheck(
+        outcome: next,
+        installedFile: installedFile,
+        candidate: candidate,
+        evidence: evidence,
+        isGuess: isGuess,
+        isObsolete: isObsolete,
+        comparedAgainst: comparedAgainst,
+        dismissed: dismissed,
+        newerFiles: newerFiles,
+        candidateMatchesVariant: candidateMatchesVariant,
+      );
 
   final UpdateOutcome outcome;
 
@@ -343,6 +372,31 @@ UpdateCheck? verdictWithoutAsking(ModOrigin? origin) {
 /// `_bIsArchived` is the authority in both, which is what [GbMod.currentFiles]
 /// reads.
 UpdateCheck checkForUpdate({
+  required ModOrigin? origin,
+  required GbMod remote,
+  ReleaseGroups releases = ReleaseGroups.empty,
+}) {
+  final check = _checkForUpdate(
+    origin: origin,
+    remote: remote,
+    releases: releases,
+  );
+
+  // **A patch-shaped folder may not be called up to date.** The origin block
+  // names the patch's page, so "nothing newer" is true about the page we asked
+  // and says nothing about the mod the folder actually contains — which is the
+  // false clean §4 calls the one failure this feature cannot afford.
+  //
+  // Only that verdict is downgraded. A patch with a genuine new release is
+  // still [UpdateOutcome.updateAvailable], and that is a real finding.
+  if (check.outcome == UpdateOutcome.upToDate &&
+      (origin?.ingest?.patchShaped ?? false)) {
+    return check.withOutcome(UpdateOutcome.tracksPatchOnly);
+  }
+  return check;
+}
+
+UpdateCheck _checkForUpdate({
   required ModOrigin? origin,
   required GbMod remote,
   ReleaseGroups releases = ReleaseGroups.empty,

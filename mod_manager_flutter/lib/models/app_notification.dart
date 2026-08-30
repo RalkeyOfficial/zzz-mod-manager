@@ -30,17 +30,29 @@ enum NotificationSeverity {
 /// and would gain nothing from being wrapped.
 @immutable
 class NotificationLines {
-  const NotificationLines(this.title, this.body);
+  const NotificationLines(this.title, this.body, {this.pinned = false});
 
   final String title;
   final String body;
 
-  @override
-  bool operator ==(Object other) =>
-      other is NotificationLines && other.title == title && other.body == body;
+  /// Stays until dismissed instead of timing out.
+  ///
+  /// For the warning the user must not read over. An install raises up to four
+  /// cards at once and a warning clears itself in eight seconds, so the one
+  /// that says *this mod will not work until you do something* competes with
+  /// the one that says the install succeeded — and loses, because the success
+  /// is the line they were waiting for.
+  final bool pinned;
 
   @override
-  int get hashCode => Object.hash(title, body);
+  bool operator ==(Object other) =>
+      other is NotificationLines &&
+      other.title == title &&
+      other.body == body &&
+      other.pinned == pinned;
+
+  @override
+  int get hashCode => Object.hash(title, body, pinned);
 }
 
 /// One message on the notification stack.

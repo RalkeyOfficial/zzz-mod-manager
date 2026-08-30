@@ -588,12 +588,21 @@ Stated because each one bounds what this feature currently promises.
   currently-installed mod, and re-downloading the old archive to reconstruct it is
   both a second full transfer and unavailable exactly for the old mods most likely to
   have been patched.
-- **A mixed folder can make the app watch the wrong mod page.** Exactly one origin
-  block describes a folder, and in the common ordering it names the *patch* — so the
-  check compares against the patch's published files and never looks at the base mod.
-  Applying an update is **not** the broken part; overwrite does the right thing there.
-  The fix is one folder carrying more than one origin block, which is its own piece of
-  work.
+- **A mixed folder makes the app watch the patch rather than the mod.** Exactly one
+  origin block describes a folder, and in the common ordering it names the *patch* —
+  so the check compares against the patch's published files and never looks at the
+  base mod. Applying an update is **not** the broken part; overwrite does the right
+  thing there.
+  It no longer reports that as *up to date*: the install records
+  `ingest.patch_shaped` and `checkForUpdate` downgrades only the clean verdict to
+  [`UpdateOutcome.tracksPatchOnly`]. That is the whole of what one origin block can
+  buy — knowing the folder is two things is enough to refuse the claim, and not
+  enough to watch the other one. **Recorded rather than derived because the folder
+  is legible only at install**: once the base mod's files are dragged in around the
+  patch, every reference resolves and no later scan can tell it apart
+  ([§1](#1-overwrite-never-replace)). Nothing helps a folder that is already mixed.
+  Watching both still needs one folder carrying more than one origin block, which
+  is its own piece of work.
 - **There is no "install this into that mod's folder" operation.** Both install paths
   refuse a name collision, so every mixed folder in existence was assembled by hand in
   a file manager and the app is reduced to inferring it afterwards from `.ini`

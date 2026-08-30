@@ -3,6 +3,7 @@ import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_page.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_update.dart';
+import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/update_check.dart';
@@ -34,6 +35,7 @@ void main() {
     DateTime? baseline,
     DateTime? dismissedUntil,
     OriginTracking tracking = OriginTracking.auto,
+    bool patchShaped = false,
   }) =>
       ModOrigin(
         source: 'gamebanana',
@@ -47,6 +49,7 @@ void main() {
         baselineRemoteDate: baseline,
         updatesDismissedUntil: dismissedUntil,
         tracking: tracking,
+        ingest: patchShaped ? const ModIngest(patchShaped: true) : null,
       );
 
   // RabbitFX file ids, from the fixture.
@@ -840,6 +843,62 @@ void main() {
       );
       expect(check.outcome, UpdateOutcome.updateAvailable);
       expect(check.candidate?.idRow, mainV77);
+    });
+  });
+
+  group('a folder that holds a patch', () {
+    // The failure this exists for: the origin block names the *patch's* page,
+    // so "nothing newer there" is true about the page we asked and says nothing
+    // about the mod the folder actually contains. A patch folder is legible
+    // only at install — once the base mod's files are dragged in around it,
+    // every reference resolves and no scan can tell it apart.
+    test('is never called up to date', () {
+      final check = checkForUpdate(
+        origin: origin(
+          fileId: mainV77,
+          versionLabel: 'Main file',
+          patchShaped: true,
+        ),
+        remote: rabbitFx,
+      );
+
+      expect(check.outcome, UpdateOutcome.tracksPatchOnly);
+      expect(check.hasUpdate, isFalse, reason: 'nothing newer was found');
+    });
+
+    test('keeps the evidence it gathered', () {
+      // The verdict is downgraded, not thrown away — which file is installed
+      // and how we know are still true and still worth showing.
+      final plain = checkForUpdate(
+        origin: origin(fileId: mainV77, versionLabel: 'Main file'),
+        remote: rabbitFx,
+      );
+      final patched = checkForUpdate(
+        origin: origin(
+          fileId: mainV77,
+          versionLabel: 'Main file',
+          patchShaped: true,
+        ),
+        remote: rabbitFx,
+      );
+
+      expect(plain.outcome, UpdateOutcome.upToDate);
+      expect(patched.installedFile?.idRow, plain.installedFile?.idRow);
+      expect(patched.evidence, plain.evidence);
+      expect(patched.isGuess, plain.isGuess);
+    });
+
+    test('a real update to the patch itself still reports', () {
+      // Only the clean verdict is suppressed. If the patch has genuinely been
+      // superseded that is a true finding about the page we track, and hiding
+      // it would trade one silence for another.
+      final check = checkForUpdate(
+        origin: origin(fileId: mainV74, patchShaped: true),
+        remote: rabbitFx,
+      );
+
+      expect(check.outcome, UpdateOutcome.updateAvailable);
+      expect(check.hasUpdate, isTrue);
     });
   });
 }

@@ -30,6 +30,15 @@ void showInstallResult(BuildContext context, InstallResult result) {
       // success is the one pushed off, and it is the line that concludes the
       // install. Last also puts it at the bottom, where the eye lands.
       for (final warning in warnings) {
+        if (warning.pinned) {
+          notify.pinned(
+            warning.title,
+            body: warning.body,
+            severity: NotificationSeverity.warning,
+            characterId: characterId,
+          );
+          continue;
+        }
         notify.warning(
           warning.title,
           body: warning.body,

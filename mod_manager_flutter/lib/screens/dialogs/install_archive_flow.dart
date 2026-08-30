@@ -7,6 +7,7 @@ import 'package:path/path.dart' as path;
 import '../../l10n/app_localizations.dart';
 import '../../models/gamebanana/gamebanana.dart';
 import '../../models/install_result.dart';
+import '../../models/mod_ingest.dart';
 import '../../models/mod_origin_seed.dart';
 import '../../models/origin_enums.dart';
 import '../../services/api_service.dart';
@@ -196,6 +197,29 @@ Future<InstallResult> installArchiveFlow(
       importedMods.where((name) => !noIni.contains(name)),
     );
 
+    // Written down, not just said. This is the only moment a patch folder is
+    // legible: the user is about to drag the base mod's files in around it,
+    // and once they do every reference resolves and the folder is
+    // indistinguishable from an ordinary one. Without the flag the check goes
+    // on asking the patch's page forever and calling the answer "up to date".
+    //
+    // A second write rather than part of the ingest seed, because the seed is
+    // built before the folders exist and this can only be assessed after.
+    for (final name in patches) {
+      await modManager.updateModOrigin(name, (current) {
+        if (current == null) return null;
+        final ingest = current.ingest ?? const ModIngest();
+        return current.copyWith(
+          ingest: ModIngest(
+            mode: ingest.mode,
+            folders: ingest.folders,
+            siblingGroup: ingest.siblingGroup,
+            patchShaped: true,
+          ),
+        );
+      });
+    }
+
     // Drained, so it is reported at most once: nothing re-attempts an origin
     // write, because it happens at ingest and never during a scan. Drained
     // *before* the mounted check below on purpose — if this context is gone the
@@ -240,6 +264,10 @@ Future<InstallResult> installArchiveFlow(
           loc.t('mods.snackbar.import_patch_title'),
           loc.t('mods.snackbar.import_patch_body',
               params: {'mods': patches.join(', ')}),
+          // The one install warning that must not time out: the mod does not
+          // work until the user acts, and this card is raised beside the
+          // success line they were actually waiting for.
+          pinned: true,
         ),
       if (originFailures.isNotEmpty)
         NotificationLines(

@@ -1064,30 +1064,51 @@ The block:
 
 ### Open around the update check (known, deliberately not built)
 
-- [ ] **A mixed folder makes us watch the wrong mod page, and we report it as
-  clean.** Live today, not introduced by §4.1. When a folder holds a patch plus the
-  base mod it patches, exactly one origin block describes it — and in the common
-  ordering (§4.1) that block names the **patch**. So `checkForUpdate()` compares
-  against the patch's published files and never looks at the base mod, which can go
-  three versions ahead while the card says nothing. That is a clean verdict about a
-  page nobody asked about, and §4 already names a false "up to date" as the one
+- [x] **A mixed folder makes us watch the wrong mod page, and we report it as
+  clean.** The **lie is fixed**; watching the other mod is not, and is planned
+  separately (see the two open items below).
+  When a folder holds a patch plus the mod it patches, one origin block
+  describes it and in the common ordering that block names the **patch**. So a
+  check against the patch's page returned `upToDate` while the mod the folder
+  actually contains went versions ahead — the false clean §4 calls the one
   failure this feature cannot afford.
-  - **Applying an update is not the broken part** — overwrite does the right thing
-    here, replacing the patch's files and leaving the base mod alone. The damage is
-    purely the missed base-mod releases.
-  - The detection signal is §4.1's dangling-reference scan: an `.ini` in the tracked
-    download that references files it does not ship is precisely the shape of "we are
-    tracking the patch, not the mod".
-  - **The destination is one folder carrying more than one origin block**, which is a
-    `docs/metadata-schema.md` + `docs/origin-tracking.md` change and its own piece of
-    work. Named now so §4.1 does not accrete workarounds pointing the other way.
-  - **The root cause is upstream of all of it: there is no "install this into that
-    mod's folder" operation.** Both install paths refuse a name collision
-    (`mod_manager_service.dart:499` skips, `:594` aborts), so every mixed folder in
-    existence was assembled by hand in a file manager and we are reduced to inferring
-    it afterwards from `.ini` contents. An explicit "apply as a patch to…" install
-    would make it a recorded fact at write time, and most of the detective work — and
-    the single-origin limitation above — would stop being necessary.
+  **`ingest.patch_shaped`, written at install.** That is the only moment the
+  folder is legible: the dangling-reference scan already fires there, and once
+  the user drags the base mod's files in around the patch every reference
+  resolves and the folder is byte-for-byte indistinguishable from an ordinary
+  one. No later scan can recover it, which is why the flag is recorded rather
+  than derived. A second `updateOrigin` write, because the ingest seed is built
+  before the folders exist and this can only be assessed after they do.
+  `checkForUpdate` then downgrades **only** `upToDate` to the new
+  `UpdateOutcome.tracksPatchOnly`, in one wrapper rather than at each of the
+  three sites that produce it. A genuine update *to the patch* still reports:
+  suppressing that would trade one silence for another.
+  The install warning is now **pinned** — it is raised beside the success line
+  the user was actually waiting for, and an eight-second warning next to that
+  loses. It also says outright that update checking will follow the patch.
+  **What this does not do**, and the honest gap: the card's status slot is
+  unchanged, because it keys on `hasUpdate` and the origin state, and a fourth
+  slot state is the fix this codebase resists. So the verdict is visible in the
+  update dialog and nowhere else. **And none of it helps a folder that is
+  already mixed** — the evidence for those is gone.
+- [ ] **A folder should be able to carry more than one origin block.** So the
+  mod *and* the patch applied into it are both watched. Needs
+  `docs/metadata-schema.md` + `docs/origin-tracking.md` changes and every reader
+  updated (status slot, check, resolve dialog, bulk pass, installed index) — and
+  the second identity can only come from the user, since they dragged those
+  files in by hand from a source the app never saw, so it needs a resolve-dialog
+  flow too. Plan it with the item below rather than separately.
+- [ ] **There is no "install this into that mod's folder" operation.** Both
+  install paths refuse a name collision (`mod_manager_service.dart` skips in
+  `importMods`, aborts in `importCombinedMod`), so every mixed folder in
+  existence was assembled by hand in a file manager and the app is reduced to
+  inferring afterwards. An explicit "apply as a patch to…" install would make it
+  a fact at write time with both identities known, and stop new ones being
+  created. **Not a replacement for the item above**: some patches go well beyond
+  "changes a small thing", so this belongs as one option inside that flow rather
+  than as the whole answer. Whatever is designed has to fit the modals the
+  install already raises — the multiple-root-folder picker and the duplicate
+  archive prompt.
 - [x] **A found update cannot be acted on.** The dialog lists the newer files and
   then offers a mod page and a marketplace shortcut, because installing from
   the marketplace creates a **second mod folder** rather than updating the
