@@ -1,4 +1,5 @@
 import '../models/character_info.dart';
+import '../models/keybind_info.dart';
 
 /// Whether a fresh scan differs from what the mods screen is already showing.
 ///
@@ -20,12 +21,18 @@ import '../models/character_info.dart';
 /// It lives in `utils/` rather than as a private method on the screen's `State`
 /// precisely so that rule can be pinned by a test instead of remembered.
 ///
-/// Two deliberate omissions:
+/// **It happened a second time, to `keybinds`.** They were omitted on the
+/// grounds that they are re-parsed from `.ini` on every scan and `KeybindInfo`
+/// had no value equality, so comparing them would report a change every time and
+/// turn this guard off entirely — with the note that keybind edits "refresh
+/// through their own dialog's callback instead". They did not: that callback is
+/// `loadMods`, which runs this guard, so editing a hotkey wrote the `.ini`,
+/// dropped the mod's keybind cache, re-parsed correctly, and then had the whole
+/// result discarded here. `KeybindInfo` has value equality now and they are
+/// compared like everything else.
 ///
-/// - **`keybinds`.** They are enriched from `.ini` files on every scan and
-///   `KeybindInfo` has no value equality, so comparing them would report a
-///   change every single time and turn this guard off entirely. Keybind edits
-///   refresh through their own dialog's callback instead.
+/// One deliberate omission remains:
+///
 /// - **Group *ordering*.** Groups are compared pairwise by index, matching how
 ///   `_buildGroups` builds them deterministically. A reordering with identical
 ///   contents would be missed, which cannot happen while the builder is stable.
@@ -71,10 +78,23 @@ bool modChanged(ModInfo before, ModInfo after) =>
     before.imagePath != after.imagePath ||
     before.origin != after.origin ||
     !_sameStrings(before.tags, after.tags) ||
-    !_sameStrings(before.images, after.images);
+    !_sameStrings(before.images, after.images) ||
+    !_sameKeybinds(before.keybinds, after.keybinds);
 
 bool _sameStrings(List<String> a, List<String> b) {
   if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
+}
+
+/// Nullable because a mod with no `.ini` bindings never gets the field set at
+/// all, which is a different state from "parsed and found none" only in that it
+/// costs nothing — both are stable across scans, which is what matters here.
+bool _sameKeybinds(List<KeybindInfo>? a, List<KeybindInfo>? b) {
+  if (identical(a, b)) return true;
+  if (a == null || b == null || a.length != b.length) return false;
   for (var i = 0; i < a.length; i++) {
     if (a[i] != b[i]) return false;
   }

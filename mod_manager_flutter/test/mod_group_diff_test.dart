@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
+import 'package:mod_manager_flutter/models/keybind_info.dart';
 import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
@@ -13,14 +14,25 @@ import 'package:mod_manager_flutter/utils/mod_group_diff.dart';
 /// re-read correctly, judged "unchanged", and kept its amber "needs attention"
 /// mark on screen until the tab was switched away and back.
 void main() {
-  ModInfo mod(String name, {ModOrigin? origin, bool isActive = false}) =>
+  ModInfo mod(
+    String name, {
+    ModOrigin? origin,
+    bool isActive = false,
+    List<KeybindInfo>? keybinds,
+  }) =>
       ModInfo(
         id: name,
         name: name,
         characterId: 'ellen',
         isActive: isActive,
         origin: origin,
+        keybinds: keybinds,
       );
+
+  /// A freshly built binding, as a scan would produce it — never the same
+  /// instance twice, which is the condition the guard has to survive.
+  KeybindInfo bind(String section, String key) =>
+      KeybindInfo(section: section, keys: {'key': key});
 
   List<CharacterInfo> groups(List<ModInfo> mods) => [
         CharacterInfo(id: 'all', name: 'All', skins: mods),
@@ -44,6 +56,65 @@ void main() {
       modGroupsChanged(groups([mod('A'), mod('B')]), groups([mod('A'), mod('B')])),
       isFalse,
     );
+  });
+
+  group('keybinds', () {
+    // The second instance of the guard's one failure mode. Keybinds were left
+    // out of the field list on the grounds that comparing them would fire on
+    // every scan — true while `KeybindInfo` had no value equality — with the
+    // note that keybind edits refreshed "through their own dialog's callback".
+    // That callback is `loadMods`, which runs this guard, so the edit was
+    // written, re-parsed and then thrown away here.
+    test('editing a hotkey counts as a change', () {
+      expect(
+        modGroupsChanged(
+          groups([mod('A', keybinds: [bind('KeySwap', 'VK_F7')])]),
+          groups([mod('A', keybinds: [bind('KeySwap', 'VK_F9')])]),
+        ),
+        isTrue,
+        reason: 'the grid would keep showing the old hotkey',
+      );
+    });
+
+    test('an unchanged rescan still does not, despite fresh instances', () {
+      // The half that made the omission look necessary: every scan re-parses
+      // the `.ini` into new objects. Comparing them by identity reported a
+      // change every time, which would turn the guard off entirely.
+      expect(
+        modGroupsChanged(
+          groups([
+            mod('A', keybinds: [bind('KeySwap', 'VK_F7'), bind('KeyUp', 'VK_UP')])
+          ]),
+          groups([
+            mod('A', keybinds: [bind('KeySwap', 'VK_F7'), bind('KeyUp', 'VK_UP')])
+          ]),
+        ),
+        isFalse,
+        reason: 'the guard fires on every scan and stops guarding anything',
+      );
+    });
+
+    test('gaining or losing bindings counts', () {
+      final one = [bind('KeySwap', 'VK_F7')];
+      final two = [bind('KeySwap', 'VK_F7'), bind('KeyUp', 'VK_UP')];
+
+      expect(modGroupsChanged(groups([mod('A', keybinds: one)]),
+          groups([mod('A', keybinds: two)])), isTrue);
+      expect(modGroupsChanged(groups([mod('A', keybinds: two)]),
+          groups([mod('A', keybinds: one)])), isTrue);
+    });
+
+    test('a mod that never had any is not mistaken for one that lost them', () {
+      // `null` (never parsed a binding) and `[]` (parsed, found none) are
+      // different values, and both are stable across scans — what would be a
+      // bug is either of them flickering into the other.
+      expect(modGroupsChanged(groups([mod('A')]), groups([mod('A')])), isFalse);
+      expect(
+        modGroupsChanged(
+            groups([mod('A')]), groups([mod('A', keybinds: const [])])),
+        isTrue,
+      );
+    });
   });
 
   test('resolving a mod counts as a change', () {

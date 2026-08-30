@@ -43,4 +43,52 @@ void main() {
       expect(kb.keyValue, 'alt VK_DOWN');
     });
   });
+
+  group('value equality', () {
+    // Load-bearing rather than tidiness: these are re-parsed from `.ini` on
+    // every library scan, so `modGroupsChanged` compares two fresh instances
+    // describing identical bindings. Without `==` that guard saw a change every
+    // scan, which is why it skipped keybinds — and why editing a hotkey then
+    // left the grid showing the old one.
+    KeybindInfo bind(Map<String, String> keys) =>
+        KeybindInfo(section: 'KeySwap', keys: keys);
+
+    test('two separately-built bindings with the same content are equal', () {
+      expect(bind({'key': 'VK_F7'}), bind({'key': 'VK_F7'}));
+      expect(bind({'key': 'VK_F7'}).hashCode, bind({'key': 'VK_F7'}).hashCode);
+    });
+
+    test('a different key value is not equal', () {
+      expect(bind({'key': 'VK_F7'}), isNot(bind({'key': 'VK_F9'})));
+    });
+
+    test('a different section is not equal', () {
+      expect(
+        KeybindInfo(section: 'KeySwap', keys: const {'key': 'VK_F7'}),
+        isNot(KeybindInfo(section: 'KeyUp', keys: const {'key': 'VK_F7'})),
+      );
+    });
+
+    test('an extra or missing entry is not equal', () {
+      expect(bind({'key': 'VK_F7'}),
+          isNot(bind({'key': 'VK_F7', 'type': 'cycle'})));
+    });
+
+    test('entry order does not affect identity', () {
+      // The map is a `LinkedHashMap` ordered by where the lines happen to sit
+      // in the file, which is not part of what a binding *is*. `hashCode` has
+      // to agree with that or the two disagree inside a Set or a Map.
+      final a = bind({'key': 'VK_F7', 'type': 'cycle'});
+      final b = bind({'type': 'cycle', 'key': 'VK_F7'});
+      expect(a, b);
+      expect(a.hashCode, b.hashCode);
+      expect({a, b}, hasLength(1));
+    });
+
+    test('a same-length map with a different key name is not equal', () {
+      // The comparison walks one map and looks each entry up in the other, so
+      // equal lengths alone must not be enough.
+      expect(bind({'key': 'VK_F7'}), isNot(bind({'back': 'VK_F7'})));
+    });
+  });
 }

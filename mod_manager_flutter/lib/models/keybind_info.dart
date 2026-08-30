@@ -66,6 +66,43 @@ class KeybindInfo {
       keys: keys ?? this.keys,
     );
   }
+
+  /// Value equality, and it is load-bearing rather than tidiness.
+  ///
+  /// These are re-parsed from `.ini` on **every** library scan, so each scan
+  /// produces fresh instances describing identical bindings. Without this,
+  /// `modGroupsChanged` comparing them would see two different objects every
+  /// time and report a change on every scan — which is why that guard used to
+  /// skip keybinds entirely, and why editing a hotkey then left the grid
+  /// showing the old one.
+  ///
+  /// Compared **order-independently on [keys]**, and [hashCode] has to agree:
+  /// the map is a `LinkedHashMap` whose order follows the order lines appear in
+  /// the file, which is not something a binding's identity should depend on.
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is KeybindInfo &&
+          other.section == section &&
+          _sameEntries(other.keys, keys);
+
+  @override
+  int get hashCode => Object.hash(
+        section,
+        Object.hashAllUnordered(
+          [for (final e in keys.entries) Object.hash(e.key, e.value)],
+        ),
+      );
+
+  static bool _sameEntries(Map<String, String> a, Map<String, String> b) {
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      // A missing key and a key holding null are the same answer here, because
+      // the map's values are non-nullable.
+      if (b[entry.key] != entry.value) return false;
+    }
+    return true;
+  }
 }
 
 /// Модель для зберігання всіх keybinds з INI файлу

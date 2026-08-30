@@ -2621,22 +2621,47 @@ mod context menu, and the edit-mod dialog.
   names three entry points; the status slot and the context menu are wired, the
   edit dialog is not. That is the dialog where `source_url` is shown and edited,
   so it is where a user most plausibly notices the binding is wrong.
-- [ ] **A keybind edit probably doesn't refresh the grid either — same guard,
-  same shape.** `modGroupsChanged` deliberately does **not** compare
-  `ModInfo.keybinds`, because they are re-parsed from `.ini` on every scan and
-  `KeybindInfo` has no value equality, so comparing them would report a change
-  every time and switch the guard off entirely. But the keybinds dialog's
-  `onSaved` calls `loadMods`, which means an edit whose only effect is on
-  keybinds hits exactly the failure the origin block just hit. Not verified by
-  clicking, and not fixed here: the fix is value equality on `KeybindInfo` plus a
-  decision about whether enrichment produces stable values, which is a keybinds
-  question rather than an origin one.
+- [x] **A keybind edit doesn't refresh the grid either — same guard, same
+  shape.** Confirmed by reading the path rather than by clicking, and it is the
+  full chain: the dialog writes the `.ini`, calls
+  `ApiService.invalidateKeybinds`, and `onSaved` runs `loadMods`, which
+  re-parses correctly — and then `modGroupsChanged` discards the whole result
+  because `keybinds` was not in its field list.
+  **The reason for the omission was real and is now gone.** `KeybindInfo` had no
+  value equality, so comparing re-parsed instances reported a change on every
+  scan and would have turned the guard off entirely. It has `==`/`hashCode` now,
+  compared order-independently on `keys` (a `LinkedHashMap` ordered by where the
+  lines sit in the file, which is not part of what a binding is), and the guard
+  compares keybinds like everything else. The enrichment is stable: nothing in
+  `KeybindInfo` is derived from the clock, a counter or the filesystem, so the
+  same `.ini` parses equal every time.
+  Both directions are pinned, which is the point — one test fails if the
+  comparison goes away (the bug returns) and a different one fails if the value
+  equality does (the guard fires every scan).
 - [ ] **The rescan guard's field list is a silent-staleness trap in general.**
-  `origin` is now self-maintaining (it is compared through `ModOrigin.==`), but
-  every other field on `ModInfo` is a line someone has to remember to add, and
-  forgetting it produces no error — just a surface that renders yesterday's data
-  until the tab is switched. The durable fix is value equality on `ModInfo`
-  itself, which needs the keybinds question above answered first.
+  `origin` and now `keybinds` are self-maintaining (compared through their own
+  `==`), but every other field on `ModInfo` is a line someone has to remember to
+  add, and forgetting it produces no error — just a surface that renders
+  yesterday's data until the tab is switched. It has caught two fields out
+  already, which is the argument: the durable fix is value equality on `ModInfo`
+  itself, so `modChanged` collapses to `before != after`.
+  **The blocker is gone.** This waited on "whether enrichment produces stable
+  values", and it does — `KeybindInfo` was the only field on `ModInfo` without a
+  value identity, and giving it one turned out to need no decision about the
+  parse at all. What is left is mechanical: `==`/`hashCode` over `ModInfo`'s
+  ~14 fields, with the list-valued ones (`tags`, `images`, `keybinds`) compared
+  element-wise as the guard already does.
+- [ ] **`CharacterInfo.keybinds` is never written, and one widget renders it.**
+  Found while fixing the guard above. `enrichCharactersWithKeybinds` sets
+  keybinds on each `ModInfo` and carries the group through with
+  `character.copyWith(skins: …)`, so the group-level field keeps whatever it had
+  — and nothing anywhere constructs a `CharacterInfo` with one. It is therefore
+  permanently null, which makes
+  `components/character_cards_list_widget.dart`'s `if (character.keybinds !=
+  null && …)` branch unreachable. Either the group level was meant to carry the
+  union of its mods' bindings and never got wired, or the field is left over
+  from before they moved to the mod — whoever looks has to decide which, so it
+  is filed rather than deleted.
 - **The dialog is per-mod only, by design, and that leaves the two-variant
   case tedious.** Two folders from one mod page are common (measured: two in a
   23-mod library), and each needs its own trip through the dialog even though the
