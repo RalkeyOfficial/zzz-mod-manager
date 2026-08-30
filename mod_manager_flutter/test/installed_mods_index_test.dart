@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
+import 'package:mod_manager_flutter/models/mod_companion.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/installed_mods_index.dart';
@@ -221,6 +222,83 @@ void main() {
       expect(index.installsOfArchive(''), isEmpty);
       expect(index.installsOfArchive('   '), isEmpty);
       expect(index.matchFile(fileId: 1, md5: null).isInstalled, isFalse);
+    });
+  });
+
+  group('companions', () {
+    // The one place a second identity is a straight gain rather than a cost:
+    // the base mod's files really are in the library, and until now its page
+    // showed no badge because the folder is named after the patch.
+    ModInfo mixed(
+      String name, {
+      required int primary,
+      required int companion,
+      int? companionFileId,
+      OriginTracking tracking = OriginTracking.auto,
+    }) =>
+        ModInfo(
+          id: name,
+          name: name,
+          characterId: 'unknown',
+          isActive: false,
+          origin: ModOrigin(
+            source: 'gamebanana',
+            modId: primary,
+            modIdConfidence: OriginConfidence.exact,
+            provenance: OriginProvenance.downloaded,
+            tracking: tracking,
+            companions: [
+              ModCompanion(
+                role: CompanionRole.base,
+                modId: companion,
+                modIdConfidence: OriginConfidence.user,
+                fileId: companionFileId,
+              ),
+            ],
+          ),
+        );
+
+    test('the base mod counts as installed, under the folder it is in', () {
+      final index = InstalledModsIndex.fromMods([
+        mixed('EllenBikini', primary: 222, companion: 111),
+      ]);
+      expect(index.hasMod(222), isTrue);
+      expect(index.hasMod(111), isTrue);
+      expect(index.installsOfMod(111), ['EllenBikini']);
+    });
+
+    test('a companion file id marks that row as installed', () {
+      final index = InstalledModsIndex.fromMods([
+        mixed('EllenBikini',
+            primary: 222, companion: 111, companionFileId: 1490003),
+      ]);
+      final match = index.matchFile(fileId: 1490003);
+      expect(match.isInstalled, isTrue);
+      expect(match.evidence, InstalledFileEvidence.fileId);
+      expect(match.folders, ['EllenBikini']);
+    });
+
+    test('one page installed as a folder and as a companion lists both', () {
+      // Nothing stops a user owning the base mod in its own folder *and*
+      // having it inside a patched one, and both are true answers to "where
+      // is this in my library".
+      final index = InstalledModsIndex.fromMods([
+        mod('Ellen Bikini', modId: 111),
+        mixed('EllenBikini Patched', primary: 222, companion: 111),
+      ]);
+      expect(index.installsOfMod(111), ['Ellen Bikini', 'EllenBikini Patched']);
+    });
+
+    test('tracking off excludes the companion too', () {
+      // The switch is about the folder, which is exactly why a companion does
+      // not carry one of its own. A stale identity of either kind must not
+      // badge somebody else's mod page.
+      final index = InstalledModsIndex.fromMods([
+        mixed('EllenBikini',
+            primary: 222, companion: 111, tracking: OriginTracking.off),
+      ]);
+      expect(index.hasMod(222), isFalse);
+      expect(index.hasMod(111), isFalse);
     });
   });
 

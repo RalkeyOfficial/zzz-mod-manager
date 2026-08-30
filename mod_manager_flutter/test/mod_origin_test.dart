@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/models/mod_companion.dart';
 import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_metadata.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
@@ -239,6 +240,194 @@ void main() {
         expect(const ModIngest(patchShaped: true),
             isNot(const ModIngest()));
         expect(const ModIngest(patchShaped: true).isEmpty, isFalse);
+      });
+    });
+  });
+
+  group('companions', () {
+    const base = ModCompanion(
+      role: CompanionRole.base,
+      modId: 111,
+      modIdConfidence: OriginConfidence.user,
+    );
+
+    ModOrigin withCompanions(
+      List<ModCompanion> companions, {
+      int? modId = 222,
+      bool patchShaped = false,
+    }) =>
+        ModOrigin(
+          source: 'gamebanana',
+          modId: modId,
+          modIdConfidence: OriginConfidence.exact,
+          provenance: OriginProvenance.downloaded,
+          ingest: patchShaped ? const ModIngest(patchShaped: true) : null,
+          companions: companions,
+        );
+
+    test('round-trip through the origin block', () {
+      final back = ModOrigin.fromJson(withCompanions([base]).toJson())!;
+      expect(back.companions, [base]);
+    });
+
+    test('an empty list is absent from the json', () {
+      // Every sidecar in existence lacks the key. Writing "companions": []
+      // into all of them is churn saying nothing.
+      expect(
+        withCompanions(const []).toJson().containsKey('companions'),
+        isFalse,
+      );
+    });
+
+    test('a companions value that is not a list is ignored', () {
+      // Machine-owned garbage is dropped rather than round-tripped, and the
+      // rest of the block must survive it — the same rule the whole sidecar
+      // rests on.
+      final origin = ModOrigin.fromJson({
+        'provenance': 'downloaded',
+        'mod_id': 222,
+        'companions': 'the other one',
+      })!;
+      expect(origin.modId, 222);
+      expect(origin.companions, isEmpty);
+    });
+
+    test('unusable entries are dropped and the usable ones survive', () {
+      final origin = ModOrigin.fromJson({
+        'provenance': 'downloaded',
+        'mod_id': 222,
+        'companions': [
+          'not an object',
+          {'role': 'base'}, // no id
+          {'mod_id': 111}, // no role
+          {'role': 'base', 'mod_id': 111},
+          42,
+        ],
+      })!;
+      expect(origin.companions.length, 1);
+      expect(origin.companions.single.modId, 111);
+    });
+
+    test('a companion naming the primary is dropped', () {
+      // Not a second thing in the folder — the same thing said twice. Keeping
+      // it would make the check ask one page twice and report two verdicts for
+      // one mod.
+      final origin = ModOrigin.fromJson({
+        'provenance': 'downloaded',
+        'mod_id': 222,
+        'companions': [
+          {'role': 'base', 'mod_id': 222},
+          {'role': 'base', 'mod_id': 111},
+        ],
+      })!;
+      expect(origin.companions.map((c) => c.modId), [111]);
+    });
+
+    test('a repeated companion id keeps the first entry only', () {
+      final origin = ModOrigin.fromJson({
+        'provenance': 'downloaded',
+        'mod_id': 222,
+        'companions': [
+          {'role': 'base', 'mod_id': 111, 'version': 'first'},
+          {'role': 'patch', 'mod_id': 111, 'version': 'second'},
+        ],
+      })!;
+      expect(origin.companions.length, 1);
+      expect(origin.companions.single.version, 'first');
+    });
+
+    test('is part of the value identity, order-independently', () {
+      // Part of it, because the rescan guard compares the whole block and a
+      // companion added through the resolve dialog must reach the card.
+      expect(withCompanions([base]), isNot(withCompanions(const [])));
+
+      // Order-independently, because the list is a set of identities and
+      // rewriting it in a different order is not a change the user can see.
+      const other = ModCompanion(role: CompanionRole.patch, modId: 333);
+      expect(withCompanions([base, other]), withCompanions([other, base]));
+      expect(
+        withCompanions([base, other]).hashCode,
+        withCompanions([other, base]).hashCode,
+      );
+    });
+
+    group('needsCompanion', () {
+      test('a patch-shaped folder with no base named needs one', () {
+        expect(withCompanions(const [], patchShaped: true).needsCompanion,
+            isTrue);
+      });
+
+      test('naming the base answers it', () {
+        expect(
+          withCompanions([base], patchShaped: true).needsCompanion,
+          isFalse,
+        );
+      });
+
+      test('a companion in the other role does not answer it', () {
+        // A folder recorded as holding a patch needs to know what that patch
+        // applies to. Another patch is not that.
+        expect(
+          withCompanions(
+            const [ModCompanion(role: CompanionRole.patch, modId: 333)],
+            patchShaped: true,
+          ).needsCompanion,
+          isTrue,
+        );
+      });
+
+      test('an ordinary folder never needs one', () {
+        expect(withCompanions(const []).needsCompanion, isFalse);
+        expect(withCompanions([base]).needsCompanion, isFalse);
+      });
+    });
+
+    group('what survives a rewrite of the primary', () {
+      test('boundTo keeps them — the folder\'s contents did not change', () {
+        // Rebinding changes what we believe about the *primary*. A companion
+        // is still a true statement about what else is in the folder.
+        final rebound = withCompanions([base]).boundTo(
+          modId: 333,
+          confidence: OriginConfidence.user,
+          source: 'gamebanana',
+        );
+        expect(rebound.companions, [base]);
+      });
+
+      test('boundTo onto a companion\'s own id collapses the two', () {
+        // Otherwise the folder claims mod 111 twice, once in each role.
+        final rebound = withCompanions([base]).boundTo(
+          modId: 111,
+          confidence: OriginConfidence.user,
+          source: 'gamebanana',
+        );
+        expect(rebound.modId, 111);
+        expect(rebound.companions, isEmpty);
+      });
+
+      test('updatedTo keeps them', () {
+        // An update overwrites and touches nothing else, so the companion's
+        // files are still there. They may now be inert — the update can
+        // replace a patch's .ini — but "installed and possibly not applied"
+        // is not "not installed", and the entry is the only record of what
+        // the snapshot holds.
+        final updated = withCompanions([base]).updatedTo(
+          source: 'gamebanana',
+          modId: 222,
+          fileId: 9,
+          installedAt: DateTime.utc(2026, 8, 30),
+        );
+        expect(updated.companions, [base]);
+      });
+
+      test('withUpdatesUndismissed keeps them', () {
+        expect(withCompanions([base]).withUpdatesUndismissed().companions,
+            [base]);
+      });
+
+      test('copyWith keeps them when not asked to change them', () {
+        expect(withCompanions([base]).copyWith(version: '2').companions,
+            [base]);
       });
     });
   });

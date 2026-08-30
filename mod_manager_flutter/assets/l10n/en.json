@@ -308,6 +308,7 @@
     },
     "origin": {
       "version_unknown_tooltip": "Installed version unknown — click to set it",
+      "second_identity_tooltip": "This folder holds a patch — click to name the mod it patches",
       "untracked_tooltip": "Not tracked for updates — click to link it to a mod page",
       "version_guessed_tooltip": "Tracked by date only — no file recorded. Click to say which file you have.",
       "update_available_tooltip": "An update is published — click for details",

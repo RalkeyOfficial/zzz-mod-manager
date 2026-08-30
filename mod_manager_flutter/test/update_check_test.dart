@@ -3,6 +3,7 @@ import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_page.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_update.dart';
+import 'package:mod_manager_flutter/models/mod_companion.dart';
 import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
@@ -36,6 +37,7 @@ void main() {
     DateTime? dismissedUntil,
     OriginTracking tracking = OriginTracking.auto,
     bool patchShaped = false,
+    List<ModCompanion> companions = const [],
   }) =>
       ModOrigin(
         source: 'gamebanana',
@@ -50,12 +52,37 @@ void main() {
         updatesDismissedUntil: dismissedUntil,
         tracking: tracking,
         ingest: patchShaped ? const ModIngest(patchShaped: true) : null,
+        companions: companions,
+      );
+
+  /// A second identity in the same folder, at the tier the resolve dialog
+  /// writes — `user`, never `exact`: we did not download it.
+  ModCompanion companion(
+    int modId, {
+    int? fileId,
+    CompanionRole role = CompanionRole.base,
+  }) =>
+      ModCompanion(
+        role: role,
+        modId: modId,
+        modIdConfidence: OriginConfidence.user,
+        fileId: fileId,
+        versionConfidence:
+            fileId == null ? OriginConfidence.unknown : OriginConfidence.user,
       );
 
   // RabbitFX file ids, from the fixture.
   const mainV77 = 1732269; // current, newest, "Main file"
   const mainV74 = 1696178; // archived, "Main file"
   const glowDemo = 1492636; // current, "Glow demo"
+
+  // Megalodon, used as the *other* mod in a mixed folder. It writes its
+  // versions into `_sDescription` — the variant field — so no two files share
+  // a label and the strongest verdict its data supports is `possiblyOutdated`.
+  // That is the realistic case rather than a weakness of the fixture.
+  const megalodonId = 528481;
+  const megalodonOldFile = 1258541; // "v3.0"
+  const megalodonNewestFile = 1462303; // "v3.4", the current newest
 
   group('nothing to check', () {
     test('a mod with no origin block is untracked', () {
@@ -898,6 +925,189 @@ void main() {
       );
 
       expect(check.outcome, UpdateOutcome.updateAvailable);
+      expect(check.hasUpdate, isTrue);
+    });
+
+    test('naming the base mod retires the verdict', () {
+      // `tracksPatchOnly` is a statement that we cannot answer the question,
+      // and it stops being true the moment there is a second identity to ask
+      // about. Note the base's record is supplied: without one, the check has
+      // still not looked (below).
+      final check = checkForUpdate(
+        origin: origin(
+          fileId: mainV77,
+          versionLabel: 'Main file',
+          patchShaped: true,
+          companions: [companion(megalodonId)],
+        ),
+        remote: rabbitFx,
+        companionRemotes: {megalodonId: megalodon},
+      );
+
+      expect(check.outcome, isNot(UpdateOutcome.tracksPatchOnly));
+    });
+  });
+
+  group('two identities in one folder', () {
+    // The payoff. The folder's primary is the patch (RabbitFX, up to date on
+    // its newest file); the companion is the mod it patches, which has
+    // published something newer.
+    UpdateCheck folded({
+      required ModOrigin primary,
+      Map<int, GbMod> remotes = const {},
+    }) =>
+        checkForUpdate(
+          origin: primary,
+          remote: rabbitFx,
+          companionRemotes: remotes,
+        );
+
+    test('an update on the companion is reported for the folder', () {
+      final check = folded(
+        primary: origin(
+          fileId: mainV77,
+          versionLabel: 'Main file',
+          companions: [companion(megalodonId, fileId: megalodonOldFile)],
+        ),
+        remotes: {megalodonId: megalodon},
+      );
+
+      expect(check.outcome, UpdateOutcome.possiblyOutdated,
+          reason: 'the base mod stamps its versions into the variant field, so '
+              'no label matches and "possibly" is the honest ceiling');
+      expect(check.hasUpdate, isTrue);
+      expect(
+        check.subjectModId,
+        megalodonId,
+        reason: 'the top-level fields describe the identity that won the fold, '
+            'so the dialog can say which mod the files belong to',
+      );
+      expect(check.candidate?.idRow, megalodonNewestFile);
+    });
+
+    test('every identity keeps its own verdict', () {
+      // The card folds to one state; the dialog shows both. Losing the
+      // per-identity answers would make "up to date" and "update available"
+      // indistinguishable from "we only looked at one of them".
+      final check = folded(
+        primary: origin(
+          fileId: mainV77,
+          versionLabel: 'Main file',
+          companions: [companion(megalodonId, fileId: megalodonOldFile)],
+        ),
+        remotes: {megalodonId: megalodon},
+      );
+
+      expect(check.companions.length, 1);
+      expect(check.companions.single.companion.modId, megalodonId);
+      expect(check.companions.single.check.outcome,
+          UpdateOutcome.possiblyOutdated);
+    });
+
+    test('up to date is only claimed when every identity agrees', () {
+      final check = folded(
+        primary: origin(fileId: mainV77, versionLabel: 'Main file'),
+        remotes: {},
+      );
+      expect(check.outcome, UpdateOutcome.upToDate,
+          reason: 'no companions at all is the ordinary case, unchanged');
+
+      final withUnasked = folded(
+        primary: origin(
+          fileId: mainV77,
+          versionLabel: 'Main file',
+          companions: [companion(megalodonId)],
+        ),
+        remotes: const {},
+      );
+      expect(
+        withUnasked.outcome,
+        UpdateOutcome.indeterminate,
+        reason: 'a companion we never fetched a record for is silence, and '
+            'silence is not evidence — claiming clean here is the false clean '
+            'this whole feature exists to avoid',
+      );
+    });
+
+    test('the primary still wins when it is the one with the update', () {
+      final check = folded(
+        primary: origin(
+          fileId: mainV74, // archived — superseded
+          companions: [companion(megalodonId, fileId: megalodonNewestFile)],
+        ),
+        remotes: {megalodonId: megalodon},
+      );
+      expect(check.outcome, UpdateOutcome.updateAvailable);
+      expect(check.subjectModId, isNull,
+          reason: 'null means the folder\'s own primary identity');
+    });
+
+    test('a companion that cannot be judged is not silently clean', () {
+      // Identity known, file unknown, nothing local to identify it — the
+      // resolve dialog's job, and the folder should say so rather than
+      // reporting the primary's clean bill for both.
+      final check = folded(
+        primary: origin(
+          fileId: mainV77,
+          versionLabel: 'Main file',
+          companions: [companion(megalodonId)],
+        ),
+        remotes: {megalodonId: megalodon},
+      );
+
+      expect(check.outcome, UpdateOutcome.versionUnknown);
+    });
+
+    test('"it\'s my own" silences the whole folder, companions included', () {
+      // One switch per folder, which is exactly why a companion carries no
+      // tracking of its own. It must not be possible for a muted mod to speak
+      // through its second identity.
+      final check = folded(
+        primary: origin(
+          tracking: OriginTracking.off,
+          companions: [companion(megalodonId, fileId: megalodonOldFile)],
+        ),
+        remotes: {megalodonId: megalodon},
+      );
+      expect(check.outcome, UpdateOutcome.trackingOff);
+      expect(check.companions, isEmpty,
+          reason: 'nothing is asked about a folder the user declared local');
+    });
+
+    test('a dismissal on one identity does not silence the other', () {
+      // `updates_dismissed_until` is per identity for this reason: waving away
+      // the patch's release must not hide the base mod's.
+      final check = folded(
+        primary: origin(
+          fileId: mainV74, // superseded, so the primary has a finding
+          dismissedUntil: DateTime.utc(2030),
+          companions: [companion(megalodonId, fileId: megalodonOldFile)],
+        ),
+        remotes: {megalodonId: megalodon},
+      );
+
+      expect(check.hasUpdate, isTrue);
+      expect(check.subjectModId, megalodonId);
+      expect(
+        check.companions.single.check.dismissed,
+        isFalse,
+        reason: 'the dismissal was written against the primary\'s releases',
+      );
+    });
+
+    test('the fold prefers a live finding over a dismissed stronger one', () {
+      // Pinned because the naive fold — rank by outcome alone — picks the
+      // primary's `updateAvailable` and then reports `hasUpdate: false`,
+      // leaving a folder that has a real update rendering as if it had none.
+      final check = folded(
+        primary: origin(
+          fileId: mainV74,
+          dismissedUntil: DateTime.utc(2030),
+          companions: [companion(megalodonId, fileId: megalodonOldFile)],
+        ),
+        remotes: {megalodonId: megalodon},
+      );
+      expect(check.outcome, UpdateOutcome.possiblyOutdated);
       expect(check.hasUpdate, isTrue);
     });
   });

@@ -1,3 +1,4 @@
+import 'mod_companion.dart';
 import 'mod_ingest.dart';
 import 'origin_enums.dart';
 
@@ -31,6 +32,7 @@ class ModOrigin {
     this.tracking = OriginTracking.auto,
     this.remoteMissing = false,
     this.updatesDismissedUntil,
+    this.companions = const <ModCompanion>[],
   });
 
   /// Which service, e.g. `gamebanana`. Null when the mod isn't tracked.
@@ -100,6 +102,41 @@ class ModOrigin {
   /// tracked and keeps the next release loud.
   final DateTime? updatesDismissedUntil;
 
+  /// **The other downloads in this folder**, when the user has named any.
+  ///
+  /// A mod folder is frequently two downloads — a patch plus the mod it patches
+  /// — and the fields above describe exactly one of them. In the common
+  /// ordering they describe the *patch*, so a check against them reports
+  /// nothing newer while the mod the folder actually contains goes versions
+  /// ahead. This is the rest of the folder.
+  ///
+  /// Empty is the overwhelmingly common case and is never written to disk. The
+  /// second identity can only come from the user: they assembled the folder by
+  /// hand, possibly from a source this app never saw. See
+  /// `ModCompanion` for why it is a narrower type than this one.
+  final List<ModCompanion> companions;
+
+  /// The companion filling [role], or null. First match — the list is
+  /// deduplicated by mod id on read, so there is at most one per mod.
+  ModCompanion? companionOfRole(CompanionRole role) {
+    for (final companion in companions) {
+      if (companion.role == role) return companion;
+    }
+    return null;
+  }
+
+  /// This folder is recorded as holding a **patch** and nobody has said what it
+  /// patches — so the app knows the folder is two things and can only ask about
+  /// one of them.
+  ///
+  /// The one state the resolve dialog can clear and nothing else can: the
+  /// evidence was captured at install (`ingest.patch_shaped`) because that is
+  /// the only moment a patch folder is legible, and the missing half can only
+  /// come from the person who assembled it.
+  bool get needsCompanion =>
+      (ingest?.patchShaped ?? false) &&
+      companionOfRole(CompanionRole.base) == null;
+
   /// The strongest thing this block can say: we know exactly which remote file
   /// is installed here, the user has not declared the mod their own, and the
   /// page is still there.
@@ -158,7 +195,19 @@ class ModOrigin {
       other.archiveMd5 == archiveMd5 &&
       other.tracking == tracking &&
       other.remoteMissing == remoteMissing &&
-      other.updatesDismissedUntil == updatesDismissedUntil;
+      other.updatesDismissedUntil == updatesDismissedUntil &&
+      _sameCompanions(other.companions);
+
+  /// Order-independent, because the list is a **set of identities**: rewriting
+  /// it in a different order is not a change the user can see, and a rescan
+  /// that judged it one would rebuild the grid for nothing.
+  bool _sameCompanions(List<ModCompanion> other) {
+    if (other.length != companions.length) return false;
+    for (final companion in companions) {
+      if (!other.contains(companion)) return false;
+    }
+    return true;
+  }
 
   @override
   int get hashCode => Object.hash(
@@ -178,6 +227,7 @@ class ModOrigin {
         tracking,
         remoteMissing,
         updatesDismissedUntil,
+        Object.hashAllUnordered(companions),
       );
 
   /// Points this block at remote mod [modId] at [confidence], clearing whatever
@@ -225,6 +275,18 @@ class ModOrigin {
       // A dismissal is a statement about one mod page's releases, so it means
       // nothing once the folder points at a different mod.
       updatesDismissedUntil: rebinding ? null : updatesDismissedUntil,
+      // **Companions survive a rebind.** What changed is our belief about the
+      // primary, not the folder's contents — the other download is still in
+      // there and the entry is still true.
+      //
+      // Except when the folder is rebound *onto* one of them: that is the user
+      // saying the companion was the folder's real subject all along, and
+      // keeping the entry would leave the block claiming one mod twice, once in
+      // each role.
+      companions: [
+        for (final companion in companions)
+          if (companion.modId != modId) companion,
+      ],
     );
   }
 
@@ -256,6 +318,10 @@ class ModOrigin {
         if (updatesDismissedUntil != null)
           'updates_dismissed_until':
               updatesDismissedUntil!.toUtc().toIso8601String(),
+        // Absent rather than `[]`: every sidecar in existence lacks this key,
+        // and writing an empty list into all of them is churn saying nothing.
+        if (companions.isNotEmpty)
+          'companions': [for (final c in companions) c.toJson()],
       };
 
   /// Parses a stored block. **Never throws, for any input.**
@@ -274,9 +340,10 @@ class ModOrigin {
   /// is dropped rather than round-tripped, unlike genuinely unknown keys.
   static ModOrigin? fromJson(Object? raw) {
     if (raw is! Map) return null;
+    final modId = _int(raw['mod_id']);
     return ModOrigin(
       source: _string(raw['source']),
-      modId: _int(raw['mod_id']),
+      modId: modId,
       modIdConfidence: OriginConfidence.parse(raw['mod_id_confidence']),
       fileId: _int(raw['file_id']),
       version: _string(raw['version']),
@@ -291,7 +358,36 @@ class ModOrigin {
       tracking: OriginTracking.parse(raw['tracking']),
       remoteMissing: raw['remote_missing'] == true,
       updatesDismissedUntil: _date(raw['updates_dismissed_until']),
+      companions: _companions(raw['companions'], primaryModId: modId),
     );
+  }
+
+  /// Parses the companion list, dropping every entry it cannot use.
+  ///
+  /// Three rules, and each removes an entry that would otherwise make the
+  /// update check ask a wrong question:
+  ///
+  /// - **Unusable entries go, the list survives.** A sidecar travels with its
+  ///   folder and can arrive from a stranger holding anything; one bad entry
+  ///   must not cost the others, and none of them may cost the primary block.
+  /// - **A companion naming the primary goes.** It is not a second thing in the
+  ///   folder, it is the same thing said twice — and kept, it would have the
+  ///   check ask one page twice and report two verdicts for one mod.
+  /// - **A repeated mod id keeps the first.** Same reason, between companions.
+  static List<ModCompanion> _companions(
+    Object? raw, {
+    required int? primaryModId,
+  }) {
+    if (raw is! List) return const <ModCompanion>[];
+    final parsed = <ModCompanion>[];
+    final seen = <int>{if (primaryModId != null) primaryModId};
+    for (final entry in raw) {
+      final companion = ModCompanion.fromJson(entry);
+      if (companion == null) continue;
+      if (!seen.add(companion.modId)) continue;
+      parsed.add(companion);
+    }
+    return parsed;
   }
 
   ModOrigin copyWith({
@@ -311,6 +407,7 @@ class ModOrigin {
     OriginTracking? tracking,
     bool? remoteMissing,
     DateTime? updatesDismissedUntil,
+    List<ModCompanion>? companions,
   }) =>
       ModOrigin(
         source: source ?? this.source,
@@ -330,6 +427,7 @@ class ModOrigin {
         remoteMissing: remoteMissing ?? this.remoteMissing,
         updatesDismissedUntil:
             updatesDismissedUntil ?? this.updatesDismissedUntil,
+        companions: companions ?? this.companions,
       );
 
   /// The block after this mod's files were **replaced in place** by a file the
@@ -383,6 +481,14 @@ class ModOrigin {
         // Observed, not proxied: we watched it happen.
         archiveMd5: archiveMd5 ?? this.archiveMd5,
         tracking: tracking,
+        // **Companions survive an update**, because overwrite copies over the
+        // folder and touches nothing else — the other download's files are
+        // still in there. They may now be *inert*: an update can replace a
+        // patch's `.ini`, which §5 of `docs/applying-updates.md` names as an
+        // accepted loss paid for by the snapshot. "Installed and possibly no
+        // longer applied" is not "not installed", and dropping the entry would
+        // lose the only record of what that snapshot holds.
+        companions: companions,
       );
 
   /// Clears [updatesDismissedUntil], which [copyWith] cannot express.
@@ -402,6 +508,9 @@ class ModOrigin {
         archiveMd5: archiveMd5,
         tracking: tracking,
         remoteMissing: remoteMissing,
+        // Untouched: this clears the *primary's* dismissal, and a companion
+        // carries its own precisely so the two cannot silence each other.
+        companions: companions,
       );
 
   static String? _string(Object? value) {

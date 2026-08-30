@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/models/mod_companion.dart';
+import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/origin_status.dart';
@@ -8,6 +10,8 @@ ModOrigin origin({
   OriginConfidence versionConfidence = OriginConfidence.unknown,
   OriginTracking tracking = OriginTracking.auto,
   bool remoteMissing = false,
+  bool patchShaped = false,
+  List<ModCompanion> companions = const [],
 }) =>
     ModOrigin(
       source: modId == null ? null : 'gamebanana',
@@ -18,7 +22,15 @@ ModOrigin origin({
       provenance: OriginProvenance.importedFolder,
       tracking: tracking,
       remoteMissing: remoteMissing,
+      ingest: patchShaped ? const ModIngest(patchShaped: true) : null,
+      companions: companions,
     );
+
+const ModCompanion namedBase = ModCompanion(
+  role: CompanionRole.base,
+  modId: 111,
+  modIdConfidence: OriginConfidence.user,
+);
 
 void main() {
   group('modOriginStatus', () {
@@ -116,6 +128,75 @@ void main() {
       );
     });
 
+    test('a patch-shaped folder with no base named is its own state', () {
+      // The version here is as known as it gets — we downloaded the patch and
+      // recorded its file id — so nothing else on the card would say a word.
+      // What is unknown is the *other* mod in the folder.
+      expect(
+        modOriginStatus(origin(
+          modId: 222,
+          versionConfidence: OriginConfidence.exact,
+          patchShaped: true,
+        )),
+        ModOriginStatus.secondIdentityUnknown,
+      );
+    });
+
+    test('naming the base mod clears it', () {
+      // The property the "needs attention" filter depends on: this state can be
+      // reached zero by doing work, which is what disqualifies `sourceGone`.
+      expect(
+        modOriginStatus(origin(
+          modId: 222,
+          versionConfidence: OriginConfidence.exact,
+          patchShaped: true,
+          companions: const [namedBase],
+        )),
+        ModOriginStatus.none,
+      );
+    });
+
+    test('it is not returned for a folder that was never patch-shaped', () {
+      expect(
+        modOriginStatus(
+            origin(modId: 222, versionConfidence: OriginConfidence.exact)),
+        ModOriginStatus.none,
+      );
+    });
+
+    test('tracking off and a gone source still win over it', () {
+      // Both are promises about the slot going quiet, and a folder being two
+      // things is not a reason to break either one.
+      for (final quiet in [
+        origin(modId: 222, patchShaped: true, tracking: OriginTracking.off),
+        origin(modId: 222, patchShaped: true, remoteMissing: true),
+      ]) {
+        expect(modOriginStatus(quiet),
+            isNot(ModOriginStatus.secondIdentityUnknown));
+      }
+    });
+
+    test('an untracked folder is untracked before it is anything else', () {
+      // Without a primary identity there is no folder-is-two-things claim to
+      // make: `patch_shaped` says the download brought no content, and with no
+      // mod id we cannot ask about either half.
+      expect(
+        modOriginStatus(origin(patchShaped: true)),
+        ModOriginStatus.untracked,
+      );
+    });
+
+    test('it outranks an unknown version', () {
+      // Both are true and one dialog answers both, so the ordering is
+      // low-stakes — but it is pinned rather than left to chance. "Which file
+      // of the patch is installed" is an ambiguous question while the folder is
+      // known to be two things and only one is named.
+      expect(
+        modOriginStatus(origin(modId: 222, patchShaped: true)),
+        ModOriginStatus.secondIdentityUnknown,
+      );
+    });
+
     test('identity is checked before version', () {
       // Both are unknown here; only one of them is actionable, and claiming the
       // version is the missing piece would promise a check we cannot run.
@@ -146,6 +227,27 @@ void main() {
       expect(modNeedsAttention(guessed), isFalse);
     });
 
+    test('an unnamed second identity is outstanding work', () {
+      // It belongs in the filter for the reason `sourceGone` does not: the user
+      // can finish it, and finishing it moves the count.
+      final unnamed = origin(
+        modId: 222,
+        versionConfidence: OriginConfidence.exact,
+        patchShaped: true,
+      );
+      expect(modNeedsAttention(unnamed), isTrue);
+      expect(
+        modNeedsAttention(origin(
+          modId: 222,
+          versionConfidence: OriginConfidence.exact,
+          patchShaped: true,
+          companions: const [namedBase],
+        )),
+        isFalse,
+        reason: 'naming the base is what takes it off the list',
+      );
+    });
+
     test('drops resolved mods and opted-out ones', () {
       expect(
         modNeedsAttention(
@@ -168,6 +270,7 @@ void main() {
       const outstanding = {
         ModOriginStatus.untracked,
         ModOriginStatus.versionUnknown,
+        ModOriginStatus.secondIdentityUnknown,
       };
       for (final candidate in [
         null,
@@ -179,6 +282,8 @@ void main() {
         origin(modId: 1, versionConfidence: OriginConfidence.inferred),
         origin(modId: 1, tracking: OriginTracking.off),
         origin(modId: 1, remoteMissing: true),
+        origin(modId: 1, patchShaped: true),
+        origin(modId: 1, patchShaped: true, companions: const [namedBase]),
       ]) {
         expect(
           modNeedsAttention(candidate),

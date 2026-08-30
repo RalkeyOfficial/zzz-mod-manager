@@ -71,6 +71,22 @@ class InstalledModsIndex {
         if (origin.fileId case final fileId?) {
           byFileId.putIfAbsent(fileId, () => <String>[]).add(mod.id);
         }
+        // **The other downloads in the folder count as installed too**, and
+        // this is the one place a second identity is a straight gain rather
+        // than a cost: the base mod's files really are in the library, and its
+        // page showed no badge at all because the folder is named after the
+        // patch. One folder legitimately appears under both ids.
+        //
+        // Inside the `tracking: "off"` guard on purpose — the switch is about
+        // the folder, which is exactly why a companion carries none of its own.
+        for (final companion in origin.companions) {
+          byModId
+              .putIfAbsent(companion.modId, () => <String>[])
+              .add(mod.id);
+          if (companion.fileId case final fileId?) {
+            byFileId.putIfAbsent(fileId, () => <String>[]).add(mod.id);
+          }
+        }
       }
 
       if (normalizeArchiveMd5(origin.archiveMd5) case final md5?) {

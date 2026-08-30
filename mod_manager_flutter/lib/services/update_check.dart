@@ -66,6 +66,7 @@ library;
 import '../models/gamebanana/gb_file.dart';
 import '../models/gamebanana/gb_mod.dart';
 import '../models/gamebanana/gb_update.dart';
+import '../models/mod_companion.dart';
 import '../models/mod_origin.dart';
 import '../models/origin_enums.dart';
 import 'installed_mods_index.dart';
@@ -183,6 +184,8 @@ class UpdateCheck {
     this.dismissed = false,
     this.newerFiles = const <GbFile>[],
     this.candidateMatchesVariant = false,
+    this.subjectModId,
+    this.companions = const <CompanionCheck>[],
   });
 
   /// The same evidence under a different verdict.
@@ -202,6 +205,27 @@ class UpdateCheck {
         dismissed: dismissed,
         newerFiles: newerFiles,
         candidateMatchesVariant: candidateMatchesVariant,
+        subjectModId: subjectModId,
+        companions: companions,
+      );
+
+  /// The same verdict, re-attributed to [modId] and carrying [others].
+  ///
+  /// Used only by [foldCompanions], where the winning identity's fields become
+  /// the folder's.
+  UpdateCheck asSubject(int? modId, List<CompanionCheck> others) => UpdateCheck(
+        outcome: outcome,
+        installedFile: installedFile,
+        candidate: candidate,
+        evidence: evidence,
+        isGuess: isGuess,
+        isObsolete: isObsolete,
+        comparedAgainst: comparedAgainst,
+        dismissed: dismissed,
+        newerFiles: newerFiles,
+        candidateMatchesVariant: candidateMatchesVariant,
+        subjectModId: modId,
+        companions: others,
       );
 
   final UpdateOutcome outcome;
@@ -271,6 +295,22 @@ class UpdateCheck {
   /// in [checkForUpdate].
   final DateTime? comparedAgainst;
 
+  /// Which identity the fields above describe, when it is **not** the folder's
+  /// own primary. Null means the primary, which is every ordinary mod.
+  ///
+  /// A mixed folder is checked against two mod pages and the card still shows
+  /// one verdict, so the top-level fields carry whichever identity won the fold
+  /// — see [foldCompanions]. Without this the UI would render a verdict about
+  /// one mod under the name of another.
+  final int? subjectModId;
+
+  /// Every companion's own verdict, in the order the block records them.
+  ///
+  /// The card folds to one state; the dialog shows all of them. Empty for an
+  /// ordinary mod, and empty for a folder the user declared local — nothing is
+  /// asked about those at all.
+  final List<CompanionCheck> companions;
+
   /// The user has seen this much and said "not this one".
   ///
   /// The verdict is **kept**, not rewritten: the dialog still shows what is
@@ -332,7 +372,17 @@ class UpdateCheck {
         isObsolete: isObsolete,
         comparedAgainst: comparedAgainst,
         dismissed: value,
+        subjectModId: subjectModId,
+        companions: companions,
       );
+}
+
+/// One companion identity's own verdict, kept beside the folded one.
+class CompanionCheck {
+  const CompanionCheck({required this.companion, required this.check});
+
+  final ModCompanion companion;
+  final UpdateCheck check;
 }
 
 /// The verdict for a mod **no request could improve on**, or null when a mod
@@ -371,29 +421,157 @@ UpdateCheck? verdictWithoutAsking(ModOrigin? origin) {
 /// `_aArchivedFiles`, while `Mod/Multi` returns the **union** under `_aFiles`.
 /// `_bIsArchived` is the authority in both, which is what [GbMod.currentFiles]
 /// reads.
+/// [companionRemotes] and [companionReleases] are keyed by remote mod id and
+/// supply the records for the folder's *other* downloads. **A caller that omits
+/// one for a companion the block names gets [UpdateOutcome.indeterminate]**,
+/// never a clean bill — see [foldCompanions].
 UpdateCheck checkForUpdate({
   required ModOrigin? origin,
   required GbMod remote,
   ReleaseGroups releases = ReleaseGroups.empty,
+  Map<int, GbMod> companionRemotes = const <int, GbMod>{},
+  Map<int, ReleaseGroups> companionReleases = const <int, ReleaseGroups>{},
 }) {
-  final check = _checkForUpdate(
+  // "It's my own" and "no identity at all" are answers about the **folder**,
+  // and they short-circuit before a single companion is consulted. That is the
+  // folder-level mute doing its job, and it is why a companion carries no
+  // `tracking` of its own.
+  if (verdictWithoutAsking(origin) case final settled?) return settled;
+
+  final primary = _checkForUpdate(
     origin: origin,
     remote: remote,
     releases: releases,
   );
+
+  final companions = <CompanionCheck>[
+    for (final companion in origin!.companions)
+      CompanionCheck(
+        companion: companion,
+        check: _checkCompanion(
+          origin: origin,
+          companion: companion,
+          remote: companionRemotes[companion.modId],
+          releases: companionReleases[companion.modId] ?? ReleaseGroups.empty,
+        ),
+      ),
+  ];
 
   // **A patch-shaped folder may not be called up to date.** The origin block
   // names the patch's page, so "nothing newer" is true about the page we asked
   // and says nothing about the mod the folder actually contains — which is the
   // false clean §4 calls the one failure this feature cannot afford.
   //
-  // Only that verdict is downgraded. A patch with a genuine new release is
-  // still [UpdateOutcome.updateAvailable], and that is a real finding.
-  if (check.outcome == UpdateOutcome.upToDate &&
-      (origin?.ingest?.patchShaped ?? false)) {
-    return check.withOutcome(UpdateOutcome.tracksPatchOnly);
+  // Only that verdict is downgraded, and only while nobody has said what the
+  // patch applies to. A patch with a genuine new release is still
+  // [UpdateOutcome.updateAvailable], and that is a real finding; a folder whose
+  // base mod *has* been named gets a real answer about both halves instead of
+  // this admission.
+  final settledPrimary = primary.outcome == UpdateOutcome.upToDate &&
+          (origin.needsCompanion)
+      ? primary.withOutcome(UpdateOutcome.tracksPatchOnly)
+      : primary;
+
+  return foldCompanions(settledPrimary, companions);
+}
+
+/// One companion identity, judged the same way the primary is.
+///
+/// The companion's fields are lifted into a `ModOrigin` shape because that is
+/// what the comparator takes — and the fields it does **not** carry are lifted
+/// from the folder: [ModOrigin.source] and [ModOrigin.tracking] belong to the
+/// folder rather than to either download in it.
+UpdateCheck _checkCompanion({
+  required ModOrigin origin,
+  required ModCompanion companion,
+  required GbMod? remote,
+  required ReleaseGroups releases,
+}) {
+  // **Never fetched is not "nothing new".** Silence is not evidence — the same
+  // rule this file applies to a response that carried no file list — and
+  // reporting clean because we only looked at half the folder is precisely the
+  // false clean the whole feature exists to remove.
+  if (remote == null) {
+    return const UpdateCheck(outcome: UpdateOutcome.indeterminate);
   }
-  return check;
+  return _checkForUpdate(
+    origin: ModOrigin(
+      source: origin.source,
+      modId: companion.modId,
+      modIdConfidence: companion.modIdConfidence,
+      fileId: companion.fileId,
+      version: companion.version,
+      versionLabel: companion.versionLabel,
+      versionConfidence: companion.versionConfidence,
+      provenance: origin.provenance,
+      archiveMd5: companion.archiveMd5,
+      baselineRemoteDate: companion.baselineRemoteDate,
+      remoteMissing: companion.remoteMissing,
+      updatesDismissedUntil: companion.updatesDismissedUntil,
+      tracking: origin.tracking,
+    ),
+    remote: remote,
+    releases: releases,
+  );
+}
+
+/// Most actionable first. The fold reports the first outcome any identity
+/// reached, so `upToDate` is only claimed when every one of them agrees.
+///
+/// The order is the file's existing asymmetry applied across identities: a
+/// false "up to date" hides an update silently and the feature fails, while a
+/// false "possibly outdated" costs one look at a file list.
+const List<UpdateOutcome> _foldOrder = <UpdateOutcome>[
+  UpdateOutcome.updateAvailable,
+  UpdateOutcome.possiblyOutdated,
+  UpdateOutcome.versionUnknown,
+  UpdateOutcome.tracksPatchOnly,
+  UpdateOutcome.indeterminate,
+  UpdateOutcome.sourceGone,
+  UpdateOutcome.upToDate,
+];
+
+/// Collapses a folder's identities into the one verdict its card can show.
+///
+/// **The winner's fields become the folder's**, which is load-bearing rather
+/// than convenient: every existing consumer reads `candidate` and `newerFiles`,
+/// and [UpdateCheck.dismissableUpTo] is computed from the latter. An outcome
+/// taken from the companion sitting on top of the primary's file list would
+/// illustrate a verdict about one mod with another's files — and would write a
+/// dismissal cutoff derived from the wrong mod's dates.
+///
+/// **A live finding beats a dismissed stronger one.** Ranking by outcome alone
+/// picks a dismissed `updateAvailable` and then reports `hasUpdate: false`,
+/// leaving a folder with a real update on its other identity rendering as
+/// though it had none. A dismissal is a statement about one page's releases, so
+/// it disqualifies that identity from winning rather than the whole folder.
+UpdateCheck foldCompanions(
+  UpdateCheck primary,
+  List<CompanionCheck> companions,
+) {
+  if (companions.isEmpty) return primary;
+
+  final candidates = <(int?, UpdateCheck)>[
+    (null, primary),
+    for (final entry in companions) (entry.companion.modId, entry.check),
+  ];
+
+  (int?, UpdateCheck)? best;
+  for (final live in [true, false]) {
+    for (final outcome in _foldOrder) {
+      for (final candidate in candidates) {
+        if (candidate.$2.outcome != outcome) continue;
+        if (candidate.$2.hasUpdate != live) continue;
+        best = candidate;
+        break;
+      }
+      if (best != null) break;
+    }
+    if (best != null) break;
+  }
+
+  final winner = best ?? (null, primary);
+  return winner.$2.asSubject(winner.$1, companions);
 }
 
 UpdateCheck _checkForUpdate({

@@ -31,6 +31,7 @@ library;
 
 import '../models/character_info.dart';
 import '../models/mod_origin.dart';
+import '../models/origin_enums.dart';
 import 'origin_resolution.dart';
 import 'origin_status.dart';
 
@@ -109,7 +110,22 @@ BulkAssumeCurrentPlan planBulkAssumeCurrent(Iterable<ModInfo> mods) {
         continue;
       case ModOriginStatus.untracked:
         untracked.add(mod);
+      // **The badge's precedence is not this pass's.** A folder holding an
+      // unnamed patch shows `secondIdentityUnknown` because that is the louder
+      // thing to say about it, but this pass asks a narrower question — can a
+      // baseline be written for the *primary*? — and the patch half changes
+      // nothing about the answer. Reading the badge instead would quietly stop
+      // the bulk action dating mods it used to date.
+      //
+      // Guarded on the version, though, and that guard is the point: a folder
+      // whose patch we downloaded knows its file `exact`ly, and writing
+      // `assumed_latest` over that would **demote** it — trading a known file
+      // for a date, in a pass the user ran to gain information.
+      case ModOriginStatus.secondIdentityUnknown
+          when mod.origin?.versionConfidence != OriginConfidence.unknown:
+        continue;
       case ModOriginStatus.versionUnknown:
+      case ModOriginStatus.secondIdentityUnknown:
         if (mod.origin?.installedAt == null) {
           undatable.add(mod);
         } else {

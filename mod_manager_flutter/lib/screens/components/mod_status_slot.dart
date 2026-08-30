@@ -114,7 +114,12 @@ class ModStatusSlot extends ConsumerWidget {
     final muted = Colors.white.withValues(alpha: 0.55);
     final fill = switch (status) {
       ModOriginStatus.updateAvailable => updateBlue.withValues(alpha: 0.92),
-      ModOriginStatus.versionUnknown => amber.withValues(alpha: 0.9),
+      // The unnamed second identity shares amber's pixels exactly. It is the
+      // same ask — "tell us what this is, and one dialog fixes it permanently"
+      // — and the card has no room for a sixth treatment.
+      ModOriginStatus.versionUnknown ||
+      ModOriginStatus.secondIdentityUnknown =>
+        amber.withValues(alpha: 0.9),
       _ => Colors.black.withValues(alpha: 0.35),
     };
 
@@ -136,6 +141,12 @@ class ModStatusSlot extends ConsumerWidget {
               ? 'mods.origin.update_available_tooltip'
               : 'mods.origin.possibly_outdated_tooltip',
         ModOriginStatus.versionUnknown => 'mods.origin.version_unknown_tooltip',
+        // The same pill, a different sentence — and the sentence is the whole
+        // reason this is its own state. "We don't know which file you have" is
+        // false for a patch we downloaded and recorded exactly; what is
+        // unknown is the other mod in the folder.
+        ModOriginStatus.secondIdentityUnknown =>
+          'mods.origin.second_identity_tooltip',
         ModOriginStatus.versionGuessed => 'mods.origin.version_guessed_tooltip',
         ModOriginStatus.sourceGone => 'mods.origin.source_gone_tooltip',
         ModOriginStatus.untracked ||
@@ -161,7 +172,9 @@ class ModStatusSlot extends ConsumerWidget {
                     size: 18,
                     color: Colors.white,
                   ),
-                ModOriginStatus.versionUnknown => const Icon(
+                ModOriginStatus.versionUnknown ||
+                ModOriginStatus.secondIdentityUnknown =>
+                  const Icon(
                     Icons.priority_high,
                     size: 18,
                     color: Colors.white,

@@ -42,6 +42,22 @@ enum ModOriginStatus {
   /// pass through the resolve dialog fixes it.
   versionUnknown,
 
+  /// The folder is recorded as holding a **patch** and nobody has said what it
+  /// patches, so the app can only ask about one of the two mods in it.
+  ///
+  /// **A new state, deliberately not a new visual.** It renders as the same
+  /// amber pill and the same glyph as [versionUnknown] and differs only in its
+  /// tooltip — the pattern the slot already uses for `updateAvailable` versus
+  /// `possiblyOutdated`. Folding it into [versionUnknown] outright would make
+  /// the card say "we don't know which file you have", which is false for a
+  /// patch we downloaded and recorded at `exact`; the unknown is the *other*
+  /// mod.
+  ///
+  /// Like [versionUnknown] and unlike [sourceGone], it can be cleared by doing
+  /// work — naming the base mod — which is what earns it a place in the "needs
+  /// attention" filter.
+  secondIdentityUnknown,
+
   /// The mod page this folder is bound to is private, trashed or withheld, and
   /// the bulk resolution pass recorded that.
   ///
@@ -98,6 +114,11 @@ ModOriginStatus modOriginStatus(ModOrigin? origin) {
   if (origin.tracking == OriginTracking.off) return ModOriginStatus.none;
   if (origin.remoteMissing) return ModOriginStatus.sourceGone;
   if (!origin.hasIdentity) return ModOriginStatus.untracked;
+  // Above the version switch: "which file of the patch is installed" is an
+  // ambiguous question while the folder is known to be two things and only one
+  // of them is named. The ordering is low-stakes — one pass through the resolve
+  // dialog answers both — but it is decided here rather than left to chance.
+  if (origin.needsCompanion) return ModOriginStatus.secondIdentityUnknown;
   return switch (origin.versionConfidence) {
     OriginConfidence.unknown => ModOriginStatus.versionUnknown,
     // A recorded guess. `inferred` is included even though nothing writes it
@@ -180,7 +201,12 @@ ModOriginStatus modSlotStatus(ModOrigin? origin, UpdateCheck? update) {
 /// noise. The mark on the card still says what happened, and the resolve dialog
 /// still rebinds the folder for anyone whose mod was reuploaded elsewhere.
 bool modNeedsAttention(ModOrigin? origin) => switch (modOriginStatus(origin)) {
-      ModOriginStatus.untracked || ModOriginStatus.versionUnknown => true,
+      ModOriginStatus.untracked ||
+      ModOriginStatus.versionUnknown ||
+      // In, for the same reason `sourceGone` is out: the user can finish it,
+      // and finishing it moves the count. Naming the base mod is the work.
+      ModOriginStatus.secondIdentityUnknown =>
+        true,
       ModOriginStatus.versionGuessed ||
       ModOriginStatus.sourceGone ||
       ModOriginStatus.updateAvailable ||
