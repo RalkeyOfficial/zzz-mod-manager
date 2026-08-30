@@ -2095,13 +2095,25 @@ is exactly right.
   cannot disagree. The shapes differ on purpose — an icon menu is enough beside
   the thing it filters, where a settings list has to name the current value
   without being hovered, so this one is a dropdown.
-- [ ] **Three marketplace l10n keys are dead and predate M1**:
-  `download_progress_unknown`, `install_7zip_missing`, `install_extract_failed`. All
-  three exist in `en.json`/`uk.json` with no reference anywhere in `lib/`. Left alone
-  because they were already dead before this work and deleting a translated string is
-  not something to do as a drive-by — but either the messages should be wired up (the
-  7-Zip one in particular looks like it *should* be reachable from `ArchiveService`) or
-  the keys should go.
+- [x] **Three marketplace l10n keys are dead and predate M1.** All three are
+  gone, and the hunch in this item was right: `install_7zip_missing` *should*
+  have been reachable, and what it was hiding is a real failure.
+  **A missing 7-Zip was reported as a broken archive.** `_extractWith7Zip`
+  returned a hardcoded Ukrainian sentence saying to install it,
+  `extractFailureMessage` dropped that string on the floor by design (it is
+  untranslated tool output), and the user got *"Couldn't extract the archive —
+  the file is still at …, so you can extract it by hand"*. For a `.rar` on a
+  machine without 7-Zip that is the opposite of the truth: the download is fine
+  and the fix is to install a tool, where the wording says the app has done all
+  it can.
+  Fixed with a typed reason — `ExtractFailure.missingSevenZip` / `.other` on
+  `ArchiveExtractionResult` — so the UI branches on the *kind* of failure while
+  the message string stays diagnostics-only, which was the right rule and the
+  wrong classification. New `extract_no_7zip_title`/`_body` replace
+  `install_7zip_missing`, whose one-sentence shape does not fit the
+  title-and-body API. The other two keys had no home and are simply deleted.
+  Three hardcoded Ukrainian strings in `ArchiveService` went to English on the
+  way past.
 - [ ] **The grid blanks itself on every page turn, and that was nobody's decision.**
   `results.when(loading:)` replaces the whole grid with a centred spinner
   whenever the *query* changes — page, sort, category, search — but not when the

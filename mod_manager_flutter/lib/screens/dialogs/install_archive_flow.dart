@@ -68,7 +68,11 @@ Future<InstallResult> installArchiveFlow(
     if (!extractionResult.success) {
       // Keep the archive: the user can still extract it by hand, and telling
       // them where it is turns a dead end into a workaround.
-      final lines = extractFailureMessage(loc, archivePath: archiveFile.path);
+      final lines = extractFailureMessage(
+        loc,
+        archivePath: archiveFile.path,
+        reason: extractionResult.failure ?? ExtractFailure.other,
+      );
       return InstallResult.error(lines.title, lines.body);
     }
     archiveConsumed = true;

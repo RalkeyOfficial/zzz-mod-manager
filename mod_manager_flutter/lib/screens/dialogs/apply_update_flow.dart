@@ -101,8 +101,11 @@ Future<bool> applyUpdateFlow(
     if (!extraction.success) {
       // The archive is kept on purpose: the user can still extract it by hand,
       // and saying where it is turns a dead end into a workaround.
-      final lines =
-          extractFailureMessage(loc, archivePath: download.file.path);
+      final lines = extractFailureMessage(
+        loc,
+        archivePath: download.file.path,
+        reason: extraction.failure ?? ExtractFailure.other,
+      );
       fail(lines.title, lines.body);
       return false;
     }

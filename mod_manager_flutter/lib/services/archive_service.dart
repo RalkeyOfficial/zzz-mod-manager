@@ -4,9 +4,27 @@ import 'package:path/path.dart' as path;
 
 import 'archive_hash.dart';
 
+/// Why an extraction failed, where the answer changes what the user does next.
+///
+/// The message beside it is diagnostics — tool output, a `FormatException` —
+/// and is not shown. This is the part the UI is allowed to branch on.
+enum ExtractFailure {
+  /// A RAR or 7z archive with no 7-Zip on the system. The one failure the user
+  /// can fix: nothing about the archive is wrong, we just cannot open it.
+  missingSevenZip,
+
+  /// Everything else — a corrupt archive, a permission error, a format the
+  /// tool rejected. Nothing to tell the user beyond where the file is.
+  other,
+}
+
 class ArchiveExtractionResult {
   final bool success;
   final String? error;
+
+  /// Set whenever [success] is false.
+  final ExtractFailure? failure;
+
   final List<String>? extractedFolders;
 
   /// md5 of the archive these folders came out of, when it could be computed.
@@ -24,6 +42,7 @@ class ArchiveExtractionResult {
   const ArchiveExtractionResult({
     required this.success,
     this.error,
+    this.failure,
     this.extractedFolders,
     this.archiveMd5,
   });
@@ -40,10 +59,14 @@ class ArchiveExtractionResult {
 
   /// Deliberately carries no md5: a failed extraction installs nothing, so
   /// there is no sidecar for a hash to be attached to.
-  factory ArchiveExtractionResult.failure(String error) =>
+  factory ArchiveExtractionResult.failure(
+    String error, {
+    ExtractFailure reason = ExtractFailure.other,
+  }) =>
       ArchiveExtractionResult(
         success: false,
         error: error,
+        failure: reason,
       );
 }
 
@@ -116,6 +139,7 @@ class ArchiveService {
       final extension = path.extension(archiveFile.path).toLowerCase();
       bool isExtracted = false;
       String? extractionError;
+      var failure = ExtractFailure.other;
 
       if (extension == '.zip') {
         print('ArchiveService: ZIP архів');
@@ -125,12 +149,13 @@ class ArchiveService {
         final result = await _extractWith7Zip(archiveFile, tempExtractDir);
         isExtracted = result.success;
         extractionError = result.error;
+        failure = result.failure;
       }
 
       if (!isExtracted) {
-        final error = extractionError ?? 'Формат архіву не підтримується';
+        final error = extractionError ?? 'Unsupported archive format';
         print('ArchiveService: Помилка: $error');
-        return ArchiveExtractionResult.failure(error);
+        return ArchiveExtractionResult.failure(error, reason: failure);
       }
 
       // After the success check, so a failed extraction (e.g. no 7-Zip
@@ -201,9 +226,10 @@ class ArchiveService {
   ) async {
     final sevenZipPath = await _locate7Zip();
     if (sevenZipPath == null) {
-      return _7ZipResult(
+      return const _7ZipResult(
         false,
-        '7-Zip не знайдено. Встановіть 7-Zip для розпаковки RAR/7z.',
+        '7-Zip not found on PATH',
+        ExtractFailure.missingSevenZip,
       );
     }
 
@@ -221,7 +247,7 @@ class ArchiveService {
       print('ArchiveService: 7-Zip помилка: $errorOutput');
       return _7ZipResult(
         false,
-        errorOutput.isNotEmpty ? errorOutput : 'Не вдалося розпакувати архів',
+        errorOutput.isNotEmpty ? errorOutput : 'Extraction failed',
       );
     }
 
@@ -363,6 +389,11 @@ class ArchiveService {
 class _7ZipResult {
   final bool success;
   final String? error;
+  final ExtractFailure failure;
 
-  const _7ZipResult(this.success, [this.error]);
+  const _7ZipResult(
+    this.success, [
+    this.error,
+    this.failure = ExtractFailure.other,
+  ]);
 }
