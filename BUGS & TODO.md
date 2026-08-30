@@ -864,12 +864,20 @@ The block:
   the original filing was right about the shape of the fix (a phase of the same
   surface, not a spinner bolted onto one step) and wrong about which surface it
   would be.
-- [ ] **A mod page's tags are now parsed but still shown nowhere.** `GbMod.tags` had
-  no reader at all before the autofill, which is why the two-shape parsing bug
-  (§3 above) could sit there unnoticed. The autofill stores them on install; the
-  detail view still doesn't display them, so a mod you *browse* shows no tags while
-  the same mod once *installed* does. Cheap, and it would make the parse
-  self-evidently correct instead of only test-correct.
+- [x] **A mod page's tags are now parsed but still shown nowhere.** The detail
+  view renders them as a chip row between the metadata and the file list — tags
+  describe the mod, so they belong with its facts rather than after the author's
+  prose, which on a real profile is several screens down.
+  Shown in the **same `"Title: Value"` form the library stores**, because an
+  install copies these strings straight onto the mod: a tag has to read
+  identically on the page and on the folder it became. Absent rather than empty
+  for a mod with none — 4 of 20 captured records carry any.
+  It does what the item predicted for the parse: the fixture-driven test walks
+  `mod_profile_tagged` through the widget, so the profile shape is
+  self-evidently correct rather than only test-correct. Worth knowing for any
+  test near it — the page is a lazy `ListView` and a real profile's 16:9
+  gallery is ~650px, so anything below the fold has to be scrolled to before it
+  exists to `find`.
 - [ ] **A truncated gallery doesn't say it was truncated.** `RemoteModMetadata.maxImages`
   is 10 and real galleries reach 26+ (measured), so a mod can quietly arrive with 10
   of its 26 screenshots. The install message names "preview images" without a count

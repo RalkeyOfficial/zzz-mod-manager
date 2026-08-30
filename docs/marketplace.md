@@ -196,7 +196,28 @@ height decouples them: the text always gets its room and the cover absorbs the
 remainder, which also survives the OS text scale growing the title. Covered by
 `test/gb_mod_card_test.dart` across the whole width range.
 
-## 9. What the two screens say when they have nothing to show
+## 9. The detail view's category is a link
+
+Tapping it filters the grid by that category and goes back, which for a ZZZ mod
+usually means *every other mod for this character* — the one piece of metadata a
+reader is most likely to want more of, and the browse filter already takes
+exactly this id.
+
+It also **expands that category's root in the panel**. The panel highlights a
+child only while its parent is open, so without it the grid returns filtered and
+the panel looks untouched.
+
+**Plain text when the record carries no id.** A listing's `_aRootCategory` has no
+`_idRow` and `GbCategoryRef.idRow` recovers it from `_sProfileUrl`, so a record
+with neither would otherwise offer a link that filters by nothing — inert reads
+better than broken.
+
+The mod's **tags** sit below it, between the metadata and the file list, and are
+shown in the same `"Title: Value"` form the library stores: an install copies
+those strings straight onto the mod, so a tag has to read identically on the page
+and on the folder it became.
+
+## 10. What the two screens say when they have nothing to show
 
 `services/gamebanana/gb_failure.dart` decides, `components/marketplace/gb_state_view.dart`
 renders. **One decision, one surface, both screens.** The grid and the detail view
@@ -289,7 +310,7 @@ gaps:
   has failed.** Left as the loading string it sat as a title over a message saying
   the load had failed.
 
-## 10. Descriptions
+## 11. Descriptions
 
 `_sText` is HTML while every description this app renders is markdown, so it goes
 through `utils/html_to_markdown.dart` — shared with the description editors'

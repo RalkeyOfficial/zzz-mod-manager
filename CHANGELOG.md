@@ -50,6 +50,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - RAR and 7z mods now install without you setting anything up first. The Windows and Linux portable builds ship with 7-Zip included, and the Arch package installs it for you — previously the app needed one you had already installed yourself, and most mods on GameBanana come as .rar or .7z.
 - The Arch package also pulls in the tool behind "open mod page" and "open mod folder", and lists xdotool and ydotool as optional extras for F10 auto-reload, so a fresh install has what it needs.
 - The Mods tab's default sort is now **Recently added** and sorts by when each mod was installed, newest first. Mods with no known install date stay at the end in the order they were already in, rather than being shuffled into a guess.
+- A mod's page in the Marketplace now shows the author's tags, in the same form they get stored under when you install it — so a mod reads the same whether you're browsing it or looking at the folder it became.
+- The category on a mod's page is now a link. Clicking "Ellen Joe" — or "Bangboo Skins", or whatever it's filed under — takes you back to the grid showing everything else in that category.
 
 ### Changed
 

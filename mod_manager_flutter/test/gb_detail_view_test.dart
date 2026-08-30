@@ -1,11 +1,14 @@
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gb_category.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_enums.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_image.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gb_page.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/components/marketplace/gb_detail_view.dart';
@@ -15,6 +18,7 @@ import 'package:mod_manager_flutter/utils/markdown_style.dart';
 import 'package:mod_manager_flutter/utils/marketplace_providers.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
+import 'support/fixtures.dart';
 import 'support/localized_harness.dart';
 
 /// The mod detail screen, with its gallery navigation.
@@ -354,6 +358,179 @@ void main() {
       expect(
         find.text('In your library as Remielle Swim'),
         findsOneWidget,
+      );
+    });
+  });
+
+  group('the category links to everything else under it', () {
+    /// The detail view over [category], with a container so the query it writes
+    /// can be read back.
+    Future<ProviderContainer> pumpCategory(
+      WidgetTester tester,
+      GbCategoryRef? category, {
+      GbCategoryRef? root,
+      VoidCallback? onBack,
+    }) async {
+      final container = ProviderContainer(overrides: [
+        modProfileProvider(700727).overrideWith((ref) async => GbMod(
+              idRow: 700727,
+              name: 'A Mod',
+              visibility: GbVisibility.show,
+              files: const [],
+              category: category,
+              rootCategory: root,
+            )),
+        contentFilterProvider.overrideWith((ref) => ContentFilterMode.show),
+        installedModsIndexProvider
+            .overrideWith((ref) async => InstalledModsIndex.empty),
+      ]);
+      addTearDown(container.dispose);
+
+      await pumpLocalized(
+        tester,
+        GbDetailView(
+          modId: 700727,
+          onBack: onBack ?? () {},
+          onDownload: (_, __) {},
+          onOpenInBrowser: (_) {},
+        ),
+        container: container,
+      );
+      expectBuilt(GbDetailView);
+      return container;
+    }
+
+    testWidgets('tapping it filters the grid and goes back', (tester) async {
+      var wentBack = false;
+      final container = await pumpCategory(
+        tester,
+        const GbCategoryRef(idRow: 30306, name: 'Ellen Joe'),
+        root: const GbCategoryRef(idRow: 30305, name: 'Character Skins'),
+        onBack: () => wentBack = true,
+      );
+
+      await tester.tap(find.text('Ellen Joe'));
+      await tester.pumpAndSettle();
+
+      final query = container.read(marketplaceQueryProvider);
+      expect(query.categoryId, 30306);
+      expect(query.page, 1, reason: 'a new filter starts at the first page');
+      expect(query.mode, MarketplaceMode.browse);
+      expect(wentBack, isTrue, reason: 'the grid has to be on screen to see it');
+    });
+
+    testWidgets('expands the root so the selection is visible', (tester) async {
+      // The panel highlights a child only while its parent is open; without
+      // this the grid comes back filtered and the panel looks untouched.
+      final container = await pumpCategory(
+        tester,
+        const GbCategoryRef(idRow: 30306, name: 'Ellen Joe'),
+        root: const GbCategoryRef(idRow: 30305, name: 'Character Skins'),
+      );
+
+      await tester.tap(find.text('Ellen Joe'));
+      await tester.pumpAndSettle();
+
+      expect(container.read(expandedCategoryProvider), 30305);
+    });
+
+    testWidgets('a root category works the same way', (tester) async {
+      // "Bangboo Skins" and the rest are reached through `displayCategory`'s
+      // fallback, so they take the identical path.
+      final container = await pumpCategory(
+        tester,
+        null,
+        root: const GbCategoryRef(idRow: 30702, name: 'Bangboo Skins'),
+      );
+
+      await tester.tap(find.text('Bangboo Skins'));
+      await tester.pumpAndSettle();
+
+      expect(container.read(marketplaceQueryProvider).categoryId, 30702);
+    });
+
+    testWidgets('is inert when the record carries no id', (tester) async {
+      // A listing's `_aRootCategory` has no `_idRow`, and the url fallback only
+      // helps when there is a url. A link that filtered by nothing would look
+      // broken rather than absent.
+      var wentBack = false;
+      final container = await pumpCategory(
+        tester,
+        const GbCategoryRef(name: 'Unknown Category'),
+        onBack: () => wentBack = true,
+      );
+
+      expect(find.text('Unknown Category'), findsOneWidget);
+      await tester.tap(find.text('Unknown Category'));
+      await tester.pumpAndSettle();
+
+      expect(wentBack, isFalse);
+      expect(container.read(marketplaceQueryProvider).categoryId, isNull);
+    });
+  });
+
+  group('tags', () {
+    // `GbMod.tags` had no reader at all, which is exactly how the two-shape
+    // parse bug survived: a profile's tags came back empty and nothing showed
+    // them, so nothing looked wrong. Driving the captured profile through the
+    // widget is what makes the parse self-evidently correct rather than only
+    // test-correct.
+    testWidgets('a profile response renders its own tags', (tester) async {
+      final tagged = GbMod.fromJson(
+        parseObject(loadGbFixture('mod_profile_tagged')),
+      )!;
+
+      await pumpDetail(tester, profile: tagged);
+
+      expect(tagged.tags, isNotEmpty, reason: 'the fixture must carry tags');
+      for (final tag in tagged.tags) {
+        // Scrolled to rather than found where it lands: the page is a lazy
+        // `ListView` and this profile's 16:9 gallery is ~650px on its own, so
+        // the tags start below the fold and are not built yet.
+        await tester.scrollUntilVisible(find.text(tag), 200,
+            scrollable: find.byType(Scrollable).first);
+        expect(find.text(tag), findsOneWidget, reason: tag);
+      }
+    });
+
+    testWidgets('shown in the form the library stores', (tester) async {
+      // An install copies these strings straight onto the mod, so a tag has to
+      // read identically on the page and on the folder it became.
+      await pumpDetail(
+        tester,
+        profile: GbMod(
+          idRow: 700727,
+          name: 'A Mod',
+          visibility: GbVisibility.show,
+          files: const [],
+          tags: const ['Software Used: Blender', 'Ellen: school uniform'],
+        ),
+      );
+
+      expect(find.text('Software Used: Blender'), findsOneWidget);
+      expect(find.text('Ellen: school uniform'), findsOneWidget);
+    });
+
+    testWidgets('sits above the file list, not below the description',
+        (tester) async {
+      // Where they go is the only layout decision here: tags describe the mod,
+      // so they belong with its metadata rather than after the author's prose,
+      // which on a real profile is several screens down.
+      await pumpDetail(
+        tester,
+        profile: GbMod(
+          idRow: 700727,
+          name: 'A Mod',
+          text: 'Some description',
+          visibility: GbVisibility.show,
+          files: const [],
+          tags: const ['Ellen: school uniform'],
+        ),
+      );
+
+      expect(
+        tester.getTopLeft(find.text('Ellen: school uniform')).dy,
+        lessThan(tester.getTopLeft(find.text('Description')).dy),
       );
     });
   });

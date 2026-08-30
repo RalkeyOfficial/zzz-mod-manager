@@ -11,6 +11,7 @@ import '../../../utils/markdown_description.dart';
 import '../../../utils/markdown_style.dart';
 import '../../../utils/marketplace_providers.dart';
 import '../../../utils/state_providers.dart';
+import 'gb_category_panel.dart' show selectCategory;
 import 'gb_file_list.dart';
 import 'gb_state_view.dart';
 import 'gb_thumbnail.dart';
@@ -183,6 +184,10 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
         _gallery(context, loc, mod, treatment),
         const SizedBox(height: 16),
         _meta(context, loc, mod),
+        if (mod.tags.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _tags(context, mod),
+        ],
         const SizedBox(height: 16),
         GbFileList(
           files: mod.files,
@@ -429,8 +434,9 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
       children: [
         if (mod.submitter?.name case final author?)
           _pair(Icons.person_outline, author, style),
-        if (mod.displayCategory?.name case final category?)
-          _pair(Icons.folder_outlined, category, style),
+        if (mod.displayCategory case final category?
+            when category.name != null)
+          _categoryPair(context, mod, category, style),
         // The mod-level version, clearly the mod's own and not a file's.
         if (mod.version case final version? when version.isNotEmpty)
           _pair(Icons.sell_outlined, version, style),
@@ -457,6 +463,89 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
           _pair(Icons.visibility_outlined, '$n', style),
         if (mod.downloadCount case final n?)
           _pair(Icons.download_outlined, '$n', style),
+      ],
+    );
+  }
+
+  /// The category, as a link to everything else filed under it.
+  ///
+  /// For a ZZZ mod this is usually the *character* ("Ellen Joe"), which is the
+  /// one piece of metadata a reader is most likely to want more of — and the
+  /// browse filter already takes exactly this id.
+  ///
+  /// **Plain text when there is no id.** A listing's `_aRootCategory` carries
+  /// no `_idRow` and [GbCategoryRef.idRow] recovers it from `_sProfileUrl`, so
+  /// a record with neither would otherwise offer a link that filters by
+  /// nothing. Better to look inert than to look broken.
+  Widget _categoryPair(
+    BuildContext context,
+    GbMod mod,
+    GbCategoryRef category,
+    TextStyle style,
+  ) {
+    final id = category.idRow;
+    if (id == null) {
+      return _pair(Icons.folder_outlined, category.name!, style);
+    }
+
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: () {
+        // The panel highlights a child only while its parent is open, so
+        // expanding the root is what makes the selection visible when the grid
+        // comes back rather than looking like nothing happened.
+        if (mod.rootCategory?.idRow case final rootId?) {
+          ref.read(expandedCategoryProvider.notifier).state = rootId;
+        }
+        selectCategory(ref, id);
+        widget.onBack();
+      },
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+        child: _pair(
+          Icons.folder_outlined,
+          category.name!,
+          style.copyWith(
+            color: scheme.primary,
+            decoration: TextDecoration.underline,
+            decorationColor: scheme.primary.withValues(alpha: 0.4),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The author's own tags, verbatim.
+  ///
+  /// Shown in the **same `"Title: Value"` form the library stores**, because an
+  /// install copies these strings straight onto the mod — so a tag reads
+  /// identically whether you are browsing the page or looking at the folder it
+  /// became. Splitting them for display here would make the two disagree.
+  ///
+  /// Absent rather than empty on a mod with none: 4 of 20 captured records carry
+  /// any, so a permanent empty row would be the common case.
+  Widget _tags(BuildContext context, GbMod mod) {
+    final scheme = Theme.of(context).colorScheme;
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (final tag in mod.tags)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: scheme.outlineVariant.withValues(alpha: 0.4),
+              ),
+            ),
+            child: Text(
+              tag,
+              style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+            ),
+          ),
       ],
     );
   }
