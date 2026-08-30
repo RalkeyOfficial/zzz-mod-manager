@@ -1966,17 +1966,17 @@ is exactly right.
   toggle/rename/edit/delete/favourite all patch the list in place rather than
   rescanning. The re-render was never the rescan — it was the keys.
 
-- [ ] **The Settings tab has no widget tests, and the auto-tag section cannot get
-  one.** `_SettingsScreenState.initState` calls `ApiService.getConfig()`, which
-  lazily builds a `ConfigService` against the developer's **real**
-  `<appData>/config.json` — so mounting the screen in a test would rewrite their
-  library paths. The two new sections dodge this by living in
-  `components/settings/` with a writer seam; the auto-tag section wants the same
-  treatment and did not get it, because its `_buildRequirement` helper is shared
-  with the F10 section and moving it would refactor a section nobody has
-  complained about. Whoever does it should make that helper a small shared widget
-  first. Until then the busy-state fix above is verified by clicking, not by a
-  test.
+- [ ] **The auto-tag and F10 sections cannot get a widget test.**
+  `_SettingsScreenState.initState` calls `ApiService.getConfig()`, which lazily
+  builds a `ConfigService` against the developer's **real**
+  `<appData>/config.json`, so mounting the screen in a test would rewrite their
+  library paths. Anything extracted to `components/settings/` with a writer seam
+  escapes that — `test/settings_sections_test.dart` covers the Updates and
+  Marketplace sections on exactly those terms — but the auto-tag section did not
+  get the treatment, because its `_buildRequirement` helper is shared with the
+  F10 section and moving it would refactor a section nobody has complained
+  about. Whoever does it should make that helper a small shared widget first.
+  Until then the busy-state fix above is verified by clicking, not by a test.
 - [ ] **`isLoading` is one flag doing two jobs, and only one of them is safe.**
   It swaps the whole page body, which unmounts the `AnimationLimiter` and makes
   every section replay its staggered entrance. That is correct for the first
@@ -1994,13 +1994,15 @@ is exactly right.
   already *surfaced*, which is what §6 was about, and persisting them is a
   separate three-place change each plus a decision about what `theme` should
   hold now that it stores `'dark-blue'` rather than a boolean.
-- [ ] **`ModOrigin.allowsUnattendedUpdate` has no reader and now never will.**
-  With auto-update refused (§4) the predicate guards nothing. Deleting it is not
-  a drive-by: it is the only place the "`exact` on **both** axes" rule is
-  written as code, and sixteen assertions across five test files use it to pin
-  the tier table — so whoever removes it has to decide where that rule lives
-  instead. Left in place with its doc comment corrected to say what it expresses
-  rather than what it was for.
+- [ ] **Two `allowsUnattendedUpdate` predicates have no reader and now never
+  will.** `ModOrigin.allowsUnattendedUpdate` and
+  `OriginConfidence.allowsUnattendedUpdate` (`origin_enums.dart`) — with
+  auto-update refused (§4) neither guards anything. Deleting them is not a
+  drive-by: between them they are the only place the "`exact` on **both** axes"
+  rule is written as code, and sixteen assertions across five test files use
+  them to pin the tier table — so whoever removes them has to decide where that
+  rule lives instead. Left in place with their doc comments corrected to say
+  what they express rather than what they were for.
 
 ### Filed by §1 (found while building the native browser)
 
@@ -2325,12 +2327,17 @@ been renamed). Strictly local: scans run offline on every launch.
   real 23-mod library (two variants of one mod, installed as separate folders).
   §4 and §7.6 must treat "same `mod_id`, no group" as **independent mods that
   happen to share a page**, not as a group to rewrite together.
-- [ ] **No UI links to a mod's GameBanana page from `origin.mod_id`.** The detail
-  screen has "open in browser" for a mod you're *browsing*, but a mod already in the
-  library has no equivalent, even when its origin block knows exactly which page it
-  came from. The edit dialog shows `source_url`, which a downloaded mod never has (see
-  the resolved item above). Cheap and squarely M2's territory, since that's where the
-  library starts reading the origin block.
+- [ ] **A mod resolved by *search* gets no "open mod page" link.** `openModLink`
+  (`utils/url_utils.dart`) reads `mod.sourceUrl` and nothing else, so a mod whose
+  origin block knows the page but whose `source_url` is empty has no way to reach
+  it. That is now a narrow set rather than "every downloaded mod": an install
+  writes `source_url` through the autofill
+  (`mod_metadata_repository.dart`), and the backfill derives `mod_id` *from*
+  `source_url`, so both of those routes leave one behind. What does not is the
+  resolve dialog — neither it nor `origin_resolution.dart` touches `sourceUrl`
+  at all, so picking a mod out of its search box records `mod_id` at `user` and
+  leaves the link empty. Either that path should normalise `source_url` to the
+  mod page, or `openModLink` should fall back to `origin.mod_id`.
 - [x] **Re-decide the `ModInfo` origin ban in M2 rather than inheriting it.**
   §3's correction says the origin block must not go on `ModInfo`, because a
   later unrelated edit would rebuild the sidecar from the runtime view and erase
@@ -2601,14 +2608,20 @@ mod context menu, and the edit-mod dialog.
   and both spell that rationale out. One shared typedef would stop them
   drifting. Small, and it belongs with the item above, since fixing
   `updateOrigin`'s return type has to touch both anyway.
-  **Still two seams, now three call sites**: the bulk resolution screen imports
-  `BulkOriginWriter` rather than declaring a third, so the drift did not get
-  worse — but it now lives in `assume_current_dialog.dart` and is used by two
-  other files, which is the wrong home for it. And the bool-return conflation
-  the item above describes is worked around a *second* time there, in the same
-  shape (wrap the transform, notice the decline at the call site). Two
+  **Still two of that signature, now three call sites**: the bulk resolution
+  screen imports `BulkOriginWriter` rather than declaring a third, so the drift
+  did not get worse — but it now lives in `assume_current_dialog.dart` and is
+  used by two other files, which is the wrong home for it. And the bool-return
+  conflation the item above describes is worked around a *second* time there, in
+  the same shape (wrap the transform, notice the decline at the call site). Two
   workarounds for one missing result type is the point at which the durable fix
   is cheaper than the next copy.
+  **A third seam of the same shape but a different signature** is
+  `ContentFilterWriter` (`components/settings/marketplace_section.dart`, reused
+  by the marketplace's filtered-empty state). It writes a setting rather than an
+  origin block, so unifying it with these two would be forcing one typedef over
+  two different writes — but it is the same rationale spelled out a third time,
+  which is the thing worth noticing.
 - [x] **Ukrainian plurals are 1-vs-many, and the language has three forms.**
   Fixed as the item proposed — one selector keyed on the locale
   (`l10n/plural_rules.dart`), reached through `loc.plural(base, count)`, and no
