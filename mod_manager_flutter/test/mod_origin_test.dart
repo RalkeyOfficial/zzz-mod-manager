@@ -430,6 +430,45 @@ void main() {
             [base]);
       });
     });
+
+    group('withDismissal', () {
+      final until = DateTime.utc(2026, 5, 5);
+
+      test('a null subject means the folder\'s own releases', () {
+        final block = withCompanions([base])
+            .withDismissal(subject: null, until: until);
+        expect(block.updatesDismissedUntil, until);
+        expect(block.companions.single.updatesDismissedUntil, isNull);
+      });
+
+      test('a subject means that companion\'s, and only its', () {
+        // The failure this exists to prevent: written onto the primary, a
+        // companion's dismissal silences nothing — the check reads the
+        // companion's own field — while stamping another mod's release date
+        // onto this block, where it can silence a real finding.
+        final block = withCompanions([base])
+            .withDismissal(subject: 111, until: until);
+        expect(block.updatesDismissedUntil, isNull);
+        expect(block.companions.single.updatesDismissedUntil, until);
+      });
+
+      test('a null until lifts it from the same identity', () {
+        final dismissed = withCompanions([base])
+            .withDismissal(subject: 111, until: until);
+        final lifted = dismissed.withDismissal(subject: 111, until: null);
+        expect(lifted.companions.single.updatesDismissedUntil, isNull);
+      });
+
+      test('a subject this block no longer carries writes nothing', () {
+        // The verdict was computed against a block that has since moved on —
+        // the companion was renamed or removed. Falling back to the primary
+        // would dismiss the wrong mod's releases.
+        final block = withCompanions([base])
+            .withDismissal(subject: 999, until: until);
+        expect(block.updatesDismissedUntil, isNull);
+        expect(block.companions, [base]);
+      });
+    });
   });
 
   group('allowsUnattendedUpdate', () {

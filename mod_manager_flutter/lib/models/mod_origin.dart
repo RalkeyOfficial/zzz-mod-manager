@@ -513,6 +513,35 @@ class ModOrigin {
         companions: companions,
       );
 
+  /// A dismissal — or its undo, with a null [until] — recorded against **one
+  /// identity**. [subject] names a companion, or is null for the folder's own.
+  ///
+  /// One rule with more than one caller, and they must not disagree: the write
+  /// and the re-fold that follows it. A dismissal is a statement about one mod
+  /// page's releases, so applied to the primary a companion's dismissal
+  /// silences nothing and stamps another mod's release date onto this block —
+  /// where it can go on to hide a finding that was never dismissed.
+  ///
+  /// A [subject] this block no longer carries changes nothing. Falling back to
+  /// the primary would dismiss the wrong mod's releases, and a verdict computed
+  /// against a block that has since moved on is exactly when that happens.
+  ModOrigin withDismissal({required int? subject, required DateTime? until}) {
+    if (subject == null) {
+      return until == null
+          ? withUpdatesUndismissed()
+          : copyWith(updatesDismissedUntil: until);
+    }
+    return copyWith(companions: [
+      for (final companion in companions)
+        if (companion.modId != subject)
+          companion
+        else if (until != null)
+          companion.copyWith(updatesDismissedUntil: until)
+        else
+          companion.withUpdatesUndismissed(),
+    ]);
+  }
+
   static String? _string(Object? value) {
     if (value is! String) return null;
     final trimmed = value.trim();

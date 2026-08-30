@@ -1,0 +1,46 @@
+{
+  "_idRow": 900460,
+  "_sName": "Character A Body - Retexture Fix",
+  "_nStatus": "0",
+  "_bIsPrivate": false,
+  "_bIsTrashed": false,
+  "_bIsWithheld": false,
+  "_bIsObsolete": false,
+  "_tsDateAdded": 1751901846,
+  "_tsDateModified": 1751901846,
+  "_sProfileUrl": "https://gamebanana.com/mods/900460",
+  "_sVersion": "",
+  "_aGame": {
+    "_idRow": 19567,
+    "_sName": "Zenless Zone Zero",
+    "_sAbbreviation": "ZZZ"
+  },
+  "_aCategory": {
+    "_idRow": 35673,
+    "_sName": "Character A",
+    "_sModelName": "ModCategory"
+  },
+  "_aSuperCategory": {
+    "_idRow": 30305,
+    "_sName": "Character Skins",
+    "_sModelName": "ModCategory"
+  },
+  "_aFiles": [
+    {
+      "_idRow": 1900174,
+      "_sFile": "character_a_body_retexture_fix.rar",
+      "_nFilesize": 6769250,
+      "_tsDateAdded": 1751901510,
+      "_nDownloadCount": 4456,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1900174",
+      "_sMd5Checksum": "00000000000000000000000000000001",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": false,
+      "_bHasContents": true
+    }
+  ]
+}

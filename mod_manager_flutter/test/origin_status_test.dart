@@ -26,10 +26,15 @@ ModOrigin origin({
       companions: companions,
     );
 
+/// A companion the user has **fully** answered for: which mod, and which file
+/// of it. Anything less is still outstanding work — see the half-answered case
+/// below.
 const ModCompanion namedBase = ModCompanion(
   role: CompanionRole.base,
   modId: 111,
   modIdConfidence: OriginConfidence.user,
+  fileId: 9,
+  versionConfidence: OriginConfidence.user,
 );
 
 void main() {
@@ -183,6 +188,49 @@ void main() {
       expect(
         modOriginStatus(origin(patchShaped: true)),
         ModOriginStatus.untracked,
+      );
+    });
+
+    test('a companion whose file is unknown still asks for something', () {
+      // The hole this closes: naming the base mod clears `needsCompanion`, and
+      // the slot then reads only the *primary's* version confidence — which for
+      // a downloaded patch is `exact`. So a folder we cannot judge rendered
+      // nothing at all: no amber, and no blue either, because the check answers
+      // `versionUnknown` rather than finding an update.
+      expect(
+        modOriginStatus(origin(
+          modId: 222,
+          versionConfidence: OriginConfidence.exact,
+          patchShaped: true,
+          companions: const [
+            ModCompanion(
+              role: CompanionRole.base,
+              modId: 111,
+              modIdConfidence: OriginConfidence.user,
+            ),
+          ],
+        )),
+        ModOriginStatus.versionUnknown,
+        reason: 'one pass through the resolve dialog fixes it, which is exactly '
+            'what the amber state is for',
+      );
+      expect(
+        modOriginStatus(origin(
+          modId: 222,
+          versionConfidence: OriginConfidence.exact,
+          patchShaped: true,
+          companions: const [
+            ModCompanion(
+              role: CompanionRole.base,
+              modId: 111,
+              modIdConfidence: OriginConfidence.user,
+              fileId: 9,
+              versionConfidence: OriginConfidence.user,
+            ),
+          ],
+        )),
+        ModOriginStatus.none,
+        reason: 'picking a file for it is what finishes the job',
       );
     });
 

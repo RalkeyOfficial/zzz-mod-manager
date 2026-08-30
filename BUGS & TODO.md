@@ -1091,13 +1091,27 @@ The block:
   slot state is the fix this codebase resists. So the verdict is visible in the
   update dialog and nowhere else. **And none of it helps a folder that is
   already mixed** — the evidence for those is gone.
-- [ ] **A folder should be able to carry more than one origin block.** So the
-  mod *and* the patch applied into it are both watched. Needs
-  `docs/metadata-schema.md` + `docs/origin-tracking.md` changes and every reader
-  updated (status slot, check, resolve dialog, bulk pass, installed index) — and
-  the second identity can only come from the user, since they dragged those
-  files in by hand from a source the app never saw, so it needs a resolve-dialog
-  flow too. Plan it with the item below rather than separately.
+- [x] **A folder can carry more than one origin block.** The mod *and* the patch
+  applied into it are both watched. `origin.companions` holds the second
+  identity — a narrower type than `ModOrigin`, since six of its fields describe
+  *this folder's ingest* and a companion is a download the app did not perform.
+  It sits inside the `origin` object, which keeps the change additive: an older
+  build round-trips it through `extra` rather than untracking the mod.
+  `checkForUpdate` folds the identities into the one verdict a card can show,
+  with the **winner's** fields on top and `subjectModId` naming it — the dialog
+  renders `candidate` and `newerFiles`, and a dismissal cutoff is computed from
+  the latter, so folding an outcome onto another mod's file list would write the
+  wrong dates. The bulk pass lists a mixed folder under both ids and folds after
+  every record lands; folding on arrival wrote one identity's answer and
+  overwrote it with the other's.
+  The second identity can only come from the user, so it is a **pushed step** off
+  the resolve dialog — inline it spends a height budget the escape hatches cannot
+  afford. It writes at `user`, never `exact`: we did not download those bytes.
+  **What this does not do:** nothing helps a folder that is already mixed, because
+  the app has no way to know it should ask — the user has to open the dialog
+  themselves. And an unnamed patch-shaped folder now shows an amber badge, which
+  is the one state that says "tell us what this is" rather than "we found
+  something".
 - [ ] **There is no "install this into that mod's folder" operation.** Both
   install paths refuse a name collision (`mod_manager_service.dart` skips in
   `importMods`, aborts in `importCombinedMod`), so every mixed folder in
@@ -1109,6 +1123,19 @@ The block:
   than as the whole answer. Whatever is designed has to fit the modals the
   install already raises — the multiple-root-folder picker and the duplicate
   archive prompt.
+- [ ] **A patch dragged in by hand is recognised and then forgotten.** Both
+  import paths run both patch rules and both raise the warning, but only the
+  marketplace one writes `ingest.patch_shaped`
+  (`install_archive_flow.dart` against `mods_screen.dart:1636-1663`). Without
+  that flag the folder never reaches `needsCompanion`, so it gets no amber
+  badge, no row offering to name the mod it patches, and a plain "up to date"
+  from the check — the false clean the flag exists to refuse. The asset rule
+  makes this worse rather than better: it identifies *which library mod* the
+  download replaces, which is the strongest evidence there will ever be, and
+  the drag path discards it. The marketplace path's warning is also pinned and
+  this one's is not, so the eight seconds are the whole of it. Half the fix is
+  a `pinned: true`; the other half needs the block that path frequently has no
+  origin for at all.
 - [x] **A found update cannot be acted on.** The dialog lists the newer files and
   then offers a mod page and a marketplace shortcut, because installing from
   the marketplace creates a **second mod folder** rather than updating the

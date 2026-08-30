@@ -73,7 +73,8 @@ No network, no filesystem, no widgets.
 | `untracked` | No remote identity at all. |
 | `trackingOff` | The user declared the mod their own. |
 | `sourceGone` | The mod page is private, trashed or withheld — read from the remote's own flags, not inferred from a status code. |
-| `indeterminate` | The response carried no current file list. **Silence is not evidence**: concluding "nothing newer" from a question never asked is the one way this fails invisibly. |
+| `indeterminate` | The response carried no current file list, or a companion's page was never fetched. **Silence is not evidence**: concluding "nothing newer" from a question never asked is the one way this fails invisibly. |
+| `tracksPatchOnly` | The folder holds a patch and nobody has said what it patches, so nothing here is a statement about the mod the folder actually contains. Distinct from `upToDate` because the patch genuinely has no newer file — that answer is true about the page asked and false about the folder. |
 
 `isObsolete` rides alongside, never folded in. `_bIsObsolete` is the author
 flagging a mod superseded; the mod still exists, still downloads, and can be
@@ -87,6 +88,60 @@ stale `source_url` still sitting in the block must not talk the user out of a
 decision they made. That prefix — the answers no request could improve on — is
 `verdictWithoutAsking()`, shared with the bulk planner so a mod can never be
 requested and then given an answer that ignores the response.
+
+### A folder with two identities still gets one verdict
+
+A mixed folder is checked against two mod pages
+([`origin-tracking.md` §10](origin-tracking.md#10-a-folder-that-holds-two-downloads)),
+and the card has one slot, `modUpdateChecksProvider` is keyed by folder, and the
+toolbar counts one number. So `checkForUpdate` **folds** rather than fanning out.
+
+**The top-level fields describe whichever identity won**, not always the primary,
+and `subjectModId` names it (null = the primary). This is load-bearing: every
+consumer reads `candidate` and `newerFiles`, and `dismissableUpTo` is computed from
+the latter — a verdict folded from the companion sitting on the primary's file list
+would illustrate one mod's finding with another's files, and would write a dismissal
+cutoff from the wrong mod's dates. `companions` carries each identity's own verdict
+for the dialog.
+
+The fold applies the file's existing asymmetry across identities — the most
+actionable verdict wins, and `upToDate` is claimed only when every identity says it.
+Three rules follow, none of them obvious:
+
+- **A live finding beats a dismissed stronger one.** Ranking by outcome alone picks a
+  dismissed `updateAvailable` and then reports `hasUpdate: false`, leaving a folder
+  with a real update on its other identity rendering as though it had none. A
+  dismissal is per identity, so it disqualifies that identity rather than the folder.
+- **A companion whose record was never fetched is `indeterminate`.** Claiming clean
+  after looking at half a folder is the false clean this whole feature exists to
+  remove.
+- **`tracking: "off"` short-circuits before any of it.** No companion is consulted,
+  which is the folder-level switch doing its job.
+
+`tracksPatchOnly` is therefore produced only while `ingest.patch_shaped` is set *and*
+no `base` companion is named. Naming one retires it, per folder.
+
+**A companion's finding is reported but never applied**, and this is a rule rather
+than an unfinished edge. The apply path writes the named file over *this* folder and
+records it against `origin.mod_id`
+([`applying-updates.md` §4](applying-updates.md#after-a-successful-update)), so
+handing it a companion's file overwrites one mod's folder with another mod's archive
+and then stamps a foreign file id onto the block at `exact` — after which every later
+check asks the wrong page for a file it has never published. Two guards enforce it:
+the Update button is not offered when `subjectModId` is set, and the apply call
+refuses the same condition, because the first is a widget condition a later edit
+could stop satisfying and the second is the call that touches a live folder.
+
+There is no destination this could work out on its own. A companion says the other
+download is *in this folder*; whether a new archive of it should land here, beside
+it, or not at all is the question an explicit "apply as a patch to…" install exists
+to ask, and until that exists the dialog states the finding and offers the mod page —
+the same answer it already gives when it can name no successor.
+
+**Every caller must supply the companion records**, or a mixed folder reads
+`indeterminate`: the bulk pass batches both ids ([§5](#5-checking-the-whole-library))
+and the per-mod dialog fetches the companion's profile and feed alongside the
+primary's.
 
 ---
 
@@ -274,7 +329,7 @@ author publishes something newer. A dismissal keyed on a file id would either be
 permanent or need re-dismissing per variant, and neither is what *not this one*
 means.
 
-Four rules:
+Six rules:
 
 - **It is written as the date of the thing being dismissed, never as "now".** A
   mod page can publish something between the check and the press, and dismissing
@@ -286,6 +341,14 @@ Four rules:
   candidate, a dismissal left every later file silenced while this section
   promised the opposite. The user was shown the whole list and ignored the whole
   finding, so the dismissal covers the whole list.
+- **It belongs to the identity whose releases it waves away.** A folded verdict
+  names its identity in `subjectModId`, and the cutoff goes on that companion's
+  entry rather than on the folder's own block — one rule, `ModOrigin.withDismissal`,
+  shared by the write and by the re-fold that follows it so the two cannot
+  disagree. Written on the primary a companion's dismissal fails twice at once:
+  it silences nothing, because the check reads each identity's own field, and it
+  stamps another mod's release date where it can hide a finding nobody
+  dismissed.
 - **The verdict is kept, not rewritten.** Only `hasUpdate` — the badge — goes
   quiet. The dialog goes on saying what is published, because "there is an
   update and you dismissed it" and "there is nothing new" are different facts,
@@ -351,7 +414,34 @@ look".
 never answered — an outage, an abort, a batch it never reached — come back in
 `failed`, and the summary says so. "No updates" and "no updates among the mods we
 could actually reach" are different statements, and reporting the second as the
-first turns a network failure into false reassurance across a whole library.
+first turns a network failure into false reassurance across a whole library. A
+folder whose *companion* could not be reached is in `failed` too: it still gets a
+verdict, which refuses to claim clean without the missing half, but half an answer
+is not an answer.
+
+### A mixed folder is two requests and one answer
+
+A folder carrying a companion is listed under **both** mod ids, so both pages are
+fetched. Two consequences shape the pass:
+
+- **Nothing is folded as records arrive.** The two ids can land in different
+  batches, and folding on arrival writes one identity's verdict and then overwrites
+  it with the other's — whichever came last silently becoming the folder's whole
+  answer, computed by comparing one mod's origin against another mod's page. Every
+  record is banked first; each folder is folded once afterwards.
+- **`checkableCount` counts folders, `requests` counts pages.** The user counts
+  cards, so the toolbar button must not promise more work than they can see.
+
+A page the server says does not exist is banked as a record flagged missing rather
+than short-circuited to a verdict, so a *companion* that has gone reads as
+`sourceGone` instead of collapsing into "never asked".
+
+Phase two asks the feed of **the identity that produced the finding**
+(`subjectModId`), which for a mixed folder is frequently not its primary — groups
+refine one mod's verdict, and the patch's grouping says nothing about the base mod's
+files. The result is re-**folded** rather than patched in: if the groups withdraw the
+finding the folder was reporting, the folder falls back to what its other identity
+said.
 
 **Cost, measured against a real 17-mod library** (16 distinct mod ids, all
 tracked): **five requests, 226 ms** warm — one `Mod/Multi` plus one release feed

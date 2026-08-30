@@ -119,6 +119,18 @@ ModOriginStatus modOriginStatus(ModOrigin? origin) {
   // of them is named. The ordering is low-stakes — one pass through the resolve
   // dialog answers both — but it is decided here rather than left to chance.
   if (origin.needsCompanion) return ModOriginStatus.secondIdentityUnknown;
+  // **A folder is only as resolved as its least-resolved identity.** Naming the
+  // other mod clears `needsCompanion`, and without this the slot then reads the
+  // *primary's* version confidence alone — `exact` for a patch we downloaded —
+  // so a folder whose second half we cannot judge rendered nothing at all. Not
+  // amber, and not blue either: the check answers `versionUnknown` for that
+  // half rather than finding an update, so there was no verdict to show and no
+  // mark to explain it.
+  for (final companion in origin.companions) {
+    if (companion.versionConfidence == OriginConfidence.unknown) {
+      return ModOriginStatus.versionUnknown;
+    }
+  }
   return switch (origin.versionConfidence) {
     OriginConfidence.unknown => ModOriginStatus.versionUnknown,
     // A recorded guess. `inferred` is included even though nothing writes it

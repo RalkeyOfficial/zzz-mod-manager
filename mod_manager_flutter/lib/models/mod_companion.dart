@@ -181,6 +181,20 @@ class ModCompanion {
             updatesDismissedUntil ?? this.updatesDismissedUntil,
       );
 
+  /// Clears [updatesDismissedUntil], which [copyWith] cannot express.
+  ModCompanion withUpdatesUndismissed() => ModCompanion(
+        role: role,
+        modId: modId,
+        modIdConfidence: modIdConfidence,
+        fileId: fileId,
+        version: version,
+        versionLabel: versionLabel,
+        versionConfidence: versionConfidence,
+        archiveMd5: archiveMd5,
+        baselineRemoteDate: baselineRemoteDate,
+        remoteMissing: remoteMissing,
+      );
+
   /// Value equality over **every** field, for the reason [ModOrigin] has it:
   /// the mods screen's rescan guard compares the whole block, so a field left
   /// out here is a card that goes on rendering its old verdict after a write

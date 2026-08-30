@@ -721,3 +721,107 @@ flow fills them in. Nothing may be built on file-level knowledge being present.
 (Checked against the live API: those backfilled ids resolve to real mods whose names
 match the local folders, and each publishes 3–4 files — which is the ambiguity the
 file-level marker exists for.)
+
+A folder's **companions** are indexed alongside its own identity — see
+[§10](#10-a-folder-that-holds-two-downloads).
+
+---
+
+## 10. A folder that holds two downloads
+
+A mod folder is frequently two downloads: a *patch* plus the mod it patches. The
+`origin` block's own fields describe one of them, and in the common ordering they
+describe the patch — so everything above answers about the wrong half.
+`origin.companions` is the rest of the folder.
+
+### What a companion is, and the six fields it does not carry
+
+`ModCompanion` (`models/mod_companion.dart`) is a **remote identity plus what is
+known about which file of it**: `role`, `mod_id`, `mod_id_confidence`, `file_id`,
+`version`, `version_label`, `version_confidence`, `archive_md5`,
+`baseline_remote_date`, `remote_missing`, `updates_dismissed_until`.
+
+It is deliberately **not** a second `ModOrigin`. Six of that type's fields describe
+*this folder's ingest*, and a companion is a statement about a download the app did
+not perform:
+
+| Dropped | Why |
+|---|---|
+| `provenance` | Describes how we put the folder here. We didn't put this part of it here. |
+| `ingest` | There was no ingest — the user dragged the files in. |
+| `installed_at` / `installed_at_is_proxy` | The folder has one install date, not two. |
+| `source` | One folder, one service. Inherited from the primary. |
+| `tracking` | "Not from GameBanana / it's my own" is about the **folder**. One mute switch, and the installed-mods index depends on there being exactly one. |
+
+The three date-and-state fields it *does* keep are the ones that genuinely differ
+between two downloads: a baseline, whether that page has gone, and whether the user
+has waved its releases away. A dismissal on the patch must not silence the base mod.
+
+### It lives inside `origin`, and that is what keeps it additive
+
+`companions` is a key **inside** the `origin` object rather than a restructuring of
+it. Making `origin` an array instead would have an older build's `fromJson` return
+null and silently untrack the mod; as a key it round-trips through
+`ModMetadata.extra`, `ModInfo.origin` is unchanged, no schema bump is required, and
+the rescan guard rides the value equality `ModOrigin` already has
+([`metadata-schema.md`](metadata-schema.md#modinfoorigin-is-read-only-and-why-that-was-allowed)).
+
+Equality over the list is **order-independent**: it is a set of identities, and a
+rewrite in a different order is not a change the user can see.
+
+### Parse rules
+
+The sidecar's three load-bearing rules apply, with consequences specific to a list:
+
+- **An entry that cannot say what it is, is dropped** — no parseable `mod_id`, or no
+  recognised `role`. An unknown role does *not* degrade to `base`: role decides which
+  page is treated as which, and guessing costs more than losing the entry. Everything
+  else degrades to absence, because an entry that still names a page is worth keeping.
+- **One bad entry costs only itself.** The rest of the list and the primary block
+  survive it.
+- **Duplicate ids collapse.** A companion naming the primary is the same thing said
+  twice; a repeated companion id keeps the first. Either would have the check ask one
+  page twice and report two verdicts for one folder.
+- **No nesting.** A companion carries no companions of its own.
+- Absent from the json when empty, which is every sidecar that has never needed one.
+
+### Naming one
+
+Only the user can. They assembled the folder by hand, possibly from a source the app
+never saw, so there is nothing to infer from and no bulk pass can propose it — folder
+names match one mod at most.
+
+The route is a **pushed step** off the resolve dialog
+(`screens/dialogs/companion_resolve_dialog.dart`), reached from a row that appears
+only when the folder is recorded as patch-shaped or already carries a companion. It
+is pushed rather than inline because that dialog is at its height budget and its two
+escape hatches must stay one click from the bottom ([§5](#5-the-resolve-dialog)) — a
+second identity card inline is exactly what pushes them off it.
+
+Both steps share `IdentitySearchPanel` and `FileChoicePanel`
+(`screens/components/resolve/`), so "on record" and "our best guess" cannot come to
+mean different things on the two screens.
+
+What it may write is narrower than the primary step:
+
+| Answer | Writes |
+|---|---|
+| Pick a mod page | `mod_id` at **`user`**, `role: base`. Never `exact` — we did not download these bytes. |
+| Pick a file | `file_id`, `version`, `version_label` at `user`. A banked-hash row's `exact` is discarded: the hash is a fact about the archive the *primary* came from. |
+| "I don't know which" | `assumed_latest` plus the other mod's **own creation date** as the baseline. The folder's install date belongs to the download we performed. |
+
+Changing the identity clears whatever was answered about the previous one, and the
+baseline is read from the profile **when the answer is written** rather than held
+from when the tile was tapped. A held date outlives the mod it describes: recorded
+against a mod created earlier it sits in that mod's future, and a baseline later
+than its subject hides every file published before it — silently, which is the one
+direction this feature cannot afford.
+| "This folder is one mod after all" | Removes the entry. A wrong answer has to be undoable, or naming one is a trap. |
+
+`role` is never asked. Reached from a patch-shaped folder, the primary is the patch
+and the companion is the `base`; asking the user to classify their own folder is a
+quiz whose answer the app already has.
+
+The write happens on its own rather than folding into Save — it is a decision about a
+different mod, and making the user press Save afterwards invites them to close the
+dialog believing they already had.

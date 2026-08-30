@@ -3,6 +3,8 @@ import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_exceptions.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gb_update.dart';
+import 'package:mod_manager_flutter/models/mod_companion.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/bulk_update_check.dart';
@@ -82,6 +84,280 @@ void main() {
       ]);
       expect(plan.modIds, [7]);
       expect(plan.checkableCount, 2);
+    });
+  });
+
+  group('a folder with two identities', () {
+    /// A mixed folder: the origin block names [modId] (the patch we installed)
+    /// and a companion names [baseId] (the mod it patches, which the user told
+    /// us about).
+    ModInfo mixed(
+      String name, {
+      required int modId,
+      int fileId = 10,
+      required int baseId,
+      int? baseFileId = 10,
+    }) =>
+        mod(
+          name,
+          origin: origin(modId: modId, fileId: fileId).copyWith(
+            companions: [
+              ModCompanion(
+                role: CompanionRole.base,
+                modId: baseId,
+                modIdConfidence: OriginConfidence.user,
+                fileId: baseFileId,
+                versionConfidence: baseFileId == null
+                    ? OriginConfidence.unknown
+                    : OriginConfidence.user,
+              ),
+            ],
+          ),
+        );
+
+    test('is asked about under both of its ids', () {
+      final plan = planBulkUpdateCheck([
+        mixed('EllenBikini', modId: 222, baseId: 111),
+      ]);
+      expect(plan.modIds..sort(), [111, 222]);
+      expect(plan.byModId[222]?.map((m) => m.id), ['EllenBikini']);
+      expect(plan.byModId[111]?.map((m) => m.id), ['EllenBikini']);
+    });
+
+    test('counts as one mod however many pages answer for it', () {
+      // What the toolbar button promises. The user counts cards, and a mixed
+      // folder is one card — the *request* count is the internal number and is
+      // reported separately as `outcome.requests`.
+      final plan = planBulkUpdateCheck([
+        mixed('EllenBikini', modId: 222, baseId: 111),
+      ]);
+      expect(plan.modIds.length, 2, reason: 'two pages to ask');
+      expect(plan.checkableCount, 1, reason: 'one mod to report on');
+    });
+
+    test('a folder the user declared their own asks about neither half', () {
+      // The folder-level switch, which is exactly why a companion carries no
+      // `tracking` of its own. A muted mod must not be able to speak through
+      // its second identity.
+      final plan = planBulkUpdateCheck([
+        mod(
+          'mine',
+          origin: origin(modId: 222, tracking: OriginTracking.off).copyWith(
+            companions: const [
+              ModCompanion(role: CompanionRole.base, modId: 111),
+            ],
+          ),
+        ),
+      ]);
+      expect(plan.modIds, isEmpty);
+      expect(plan.skipped['mine']?.outcome, UpdateOutcome.trackingOff);
+    });
+
+    test('a finding on the other mod reaches the folder', () async {
+      final outcome = await runBulkUpdateCheck(
+        plan: planBulkUpdateCheck([
+          // The patch is on its newest file — nothing newer there.
+          mixed('EllenBikini', modId: 222, fileId: 10, baseId: 111,
+              baseFileId: 99),
+        ]),
+        // Both mods publish only file 10, so the base's recorded file 99 is
+        // gone from its page: a real finding, and one only the second identity
+        // can produce.
+        fetch: (ids) async => [for (final id in ids) record(id)],
+        batchSize: 1,
+      );
+
+      final check = outcome.checks['EllenBikini']!;
+      expect(check.outcome, UpdateOutcome.updateAvailable);
+      expect(check.subjectModId, 111,
+          reason: 'the finding belongs to the base mod, and the verdict has to '
+              'say so or the dialog shows one mod\'s files under another\'s name');
+      expect(outcome.updatesFound, 1);
+    });
+
+    test('a verdict is not overwritten by a later batch', () async {
+      // **The failure §2d names.** The pass used to fold as each record
+      // arrived, so a folder under two ids was written twice and the second
+      // write won — the primary's origin compared against the *companion's*
+      // page, which is nonsense that happens to look like an answer.
+      //
+      // Catching it needs the two records to disagree about the primary's own
+      // file. 222 no longer publishes file 99, so the primary is superseded;
+      // 111 does publish it, so the same origin folded against 111's page
+      // reads as up to date and the finding vanishes.
+      //
+      // `modIds` is insertion-ordered, primary before companion, so batchSize 1
+      // lands 222 first and 111 last — the losing order for fold-on-arrival.
+      final asked = <List<int>>[];
+      final outcome = await runBulkUpdateCheck(
+        plan: planBulkUpdateCheck([
+          mixed('EllenBikini', modId: 222, fileId: 99, baseId: 111,
+              baseFileId: 10),
+        ]),
+        fetch: (ids) async {
+          asked.add(ids);
+          return [
+            for (final id in ids)
+              GbMod(
+                idRow: id,
+                files: [
+                  GbFile(idRow: 10, dateAdded: DateTime.utc(2026)),
+                  // Only the base mod still offers the file the *patch* was
+                  // installed from. Nothing about that is odd — the two pages
+                  // number their files independently.
+                  if (id == 111)
+                    GbFile(idRow: 99, dateAdded: DateTime.utc(2026)),
+                ],
+              ),
+          ];
+        },
+        batchSize: 1,
+      );
+
+      expect(asked, [
+        [222],
+        [111],
+      ], reason: 'the finding must land before the answer that would mask it, '
+          'or this test cannot fail');
+
+      final check = outcome.checks['EllenBikini']!;
+      expect(check.outcome, UpdateOutcome.updateAvailable);
+      expect(check.subjectModId, isNull, reason: 'null names the primary');
+    });
+
+    test('a companion whose page could not be reached is never clean',
+        () async {
+      // The pass got a real answer for the patch and nothing for the base. The
+      // folder is *not* up to date — it is unanswered, and saying otherwise is
+      // the false clean this whole feature exists to remove.
+      final outcome = await runBulkUpdateCheck(
+        plan: planBulkUpdateCheck([
+          mixed('EllenBikini', modId: 222, fileId: 10, baseId: 111),
+        ]),
+        fetch: (ids) async {
+          if (ids.contains(111)) throw Exception('offline');
+          return [for (final id in ids) record(id)];
+        },
+        batchSize: 1,
+      );
+
+      expect(outcome.checks['EllenBikini']?.outcome,
+          isNot(UpdateOutcome.upToDate));
+      expect(outcome.failed, contains('EllenBikini'));
+    });
+
+    test('the reported case: a patch folder whose base has a newer variant',
+        () async {
+      // Reproduces a real pair, with real dates. The folder is a patch
+      // installed from its own page; the mod it patches published a second
+      // variant six days after the one recorded here, in its own update post —
+      // so no release group suppresses it.
+      final outcome = await runBulkUpdateCheck(
+        plan: planBulkUpdateCheck([
+          mod(
+            'the patch',
+            origin: origin(modId: 605460, fileId: 1473174).copyWith(
+              companions: const [
+                ModCompanion(
+                  role: CompanionRole.base,
+                  modId: 585282,
+                  modIdConfidence: OriginConfidence.user,
+                  fileId: 1430055,
+                  versionLabel: 'SFW Variants Only',
+                  versionConfidence: OriginConfidence.user,
+                ),
+              ],
+            ),
+          ),
+        ]),
+        fetch: (ids) async => [
+          for (final id in ids)
+            if (id == 605460)
+              GbMod(idRow: id, files: [
+                GbFile(
+                    idRow: 1473174,
+                    dateAdded: DateTime.utc(2025, 7, 7, 15, 18, 30)),
+              ])
+            else
+              GbMod(idRow: id, files: [
+                GbFile(
+                  idRow: 1430055,
+                  description: 'SFW Variants Only',
+                  dateAdded: DateTime.utc(2025, 4, 29, 18, 6, 59),
+                ),
+                GbFile(
+                  idRow: 1433843,
+                  description: 'NSFW Variants Included',
+                  dateAdded: DateTime.utc(2025, 5, 5, 13, 18, 22),
+                ),
+              ]),
+        ],
+        // Two posts, one file each — `ReleaseGroups` keeps only groups of more
+        // than one, so this is empty and suppresses nothing.
+        fetchUpdates: (modId) async => [
+          GbUpdate(idRow: 338426, fileRowIds: const {1433843}),
+          GbUpdate(idRow: 337261, fileRowIds: const {1430055}),
+        ],
+      );
+
+      final check = outcome.checks['the patch']!;
+      expect(check.hasUpdate, isTrue);
+      expect(check.subjectModId, 585282);
+      expect(check.candidate?.idRow, 1433843);
+    });
+
+    test('the release feed is pulled for the identity that flagged', () async {
+      // Phase two only runs for mods that flagged, and here that is the
+      // companion. Asking the patch's feed would refine the wrong verdict and
+      // leave the real finding unrefined.
+      final feedsAsked = <int>[];
+      await runBulkUpdateCheck(
+        plan: planBulkUpdateCheck([
+          mixed('EllenBikini', modId: 222, fileId: 10, baseId: 111,
+              baseFileId: 99),
+        ]),
+        fetch: (ids) async => [for (final id in ids) record(id)],
+        fetchUpdates: (modId) async {
+          feedsAsked.add(modId);
+          return const [];
+        },
+      );
+
+      expect(feedsAsked, [111],
+          reason: 'only the identity that produced the finding — release groups '
+              'refine one mod\'s verdict, and the patch\'s groups say nothing '
+              'about the base mod\'s files');
+    });
+
+    test('a release group on the companion re-folds the folder', () async {
+      // Phase two can turn a flag *off*, and when it turns off the one the
+      // folder was reporting, the folder falls back to what its other identity
+      // said rather than keeping a verdict that has just been withdrawn.
+      final outcome = await runBulkUpdateCheck(
+        plan: planBulkUpdateCheck([
+          mixed('EllenBikini', modId: 222, fileId: 10, baseId: 111,
+              baseFileId: 99),
+        ]),
+        fetch: (ids) async => [
+          for (final id in ids)
+            GbMod(
+              idRow: id,
+              files: [
+                GbFile(idRow: 10, dateAdded: DateTime.utc(2026)),
+                if (id == 111) GbFile(idRow: 99, dateAdded: DateTime.utc(2025)),
+              ],
+            ),
+        ],
+        // The author shipped 99 and 10 together, so 10 is the other variant of
+        // the installed file rather than its successor.
+        fetchUpdates: (modId) async => [
+          GbUpdate(idRow: 1, fileRowIds: const {10, 99}),
+        ],
+      );
+
+      final check = outcome.checks['EllenBikini']!;
+      expect(check.hasUpdate, isFalse);
+      expect(outcome.updatesFound, 0);
     });
   });
 

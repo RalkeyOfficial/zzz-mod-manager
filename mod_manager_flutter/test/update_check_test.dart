@@ -1095,6 +1095,28 @@ void main() {
       );
     });
 
+    test('"I don\'t know which file" on the companion still reports', () {
+      // The answer a user gives when they cannot say which variant of the
+      // other mod is in the folder. It compares against a baseline instead of
+      // a file, and it must still be able to find something.
+      final check = checkForUpdate(
+        origin: origin(fileId: mainV77, versionLabel: 'Main file', companions: [
+          ModCompanion(
+            role: CompanionRole.base,
+            modId: megalodonId,
+            modIdConfidence: OriginConfidence.user,
+            versionConfidence: OriginConfidence.assumedLatest,
+            baselineRemoteDate: DateTime.utc(2024),
+          ),
+        ]),
+        remote: rabbitFx,
+        companionRemotes: {megalodonId: megalodon},
+      );
+
+      expect(check.outcome, UpdateOutcome.possiblyOutdated);
+      expect(check.subjectModId, megalodonId);
+    });
+
     test('the fold prefers a live finding over a dismissed stronger one', () {
       // Pinned because the naive fold — rank by outcome alone — picks the
       // primary's `updateAvailable` and then reports `hasUpdate: false`,

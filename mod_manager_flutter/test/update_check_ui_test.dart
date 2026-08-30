@@ -5,6 +5,8 @@ import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_exceptions.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
+import 'package:mod_manager_flutter/models/mod_companion.dart';
+import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/components/mods_toolbar.dart';
@@ -904,6 +906,226 @@ void main() {
 
       expect(transport.callCount, 0);
       expect(find.text('This is the latest file'), findsOneWidget);
+    });
+
+    group('a folder holding two mods', () {
+      /// The same fake client, plus the **other** mod in the folder — a second
+      /// captured page whose newest file is not the one recorded here.
+      (GameBananaClient, FakeHttpTransport) mixedClient({
+        bool companionReachable = true,
+      }) {
+        final transport = FakeHttpTransport();
+        final endpoints = GameBananaEndpoints(gameId: 19567);
+        transport.stub(
+          endpoints.modProfile(531649),
+          body: loadGbFixture('mod_profile_531649'),
+        );
+        transport.stub(
+          endpoints.modUpdates(531649),
+          body: '{"_aMetadata":{"_nRecordCount":0},"_aRecords":[]}',
+        );
+        if (companionReachable) {
+          transport.stub(
+            endpoints.modProfile(528481),
+            body: loadGbFixture('mod_profile_rated'),
+          );
+          transport.stub(
+            endpoints.modUpdates(528481),
+            body: '{"_aMetadata":{"_nRecordCount":0},"_aRecords":[]}',
+          );
+        }
+        return (
+          GameBananaClient(transport: transport, endpoints: endpoints),
+          transport,
+        );
+      }
+
+      /// A folder whose primary is RabbitFX's newest file — up to date on its
+      /// own — with the other mod recorded as a companion.
+      ModInfo mixedMod({int? companionFileId = 1258541}) => mod(
+            'EllenBikini',
+            origin: origin(fileId: 1732269).copyWith(
+              companions: [
+                ModCompanion(
+                  role: CompanionRole.base,
+                  modId: 528481,
+                  modIdConfidence: OriginConfidence.user,
+                  fileId: companionFileId,
+                  versionConfidence: companionFileId == null
+                      ? OriginConfidence.unknown
+                      : OriginConfidence.user,
+                ),
+              ],
+            ),
+          );
+
+      testWidgets('the other mod\'s page is fetched too', (tester) async {
+        // Without this the fold sees no record for the companion and the
+        // dialog reads "nothing may be concluded" — on the one screen the user
+        // opened deliberately to find out.
+        await tester.pumpWidget(const SizedBox());
+        final (client, transport) = mixedClient();
+        final target = mixedMod();
+        await pumpLocalized(
+          tester,
+          ModUpdateDialog(
+            mod: target,
+            gateway: _RecordingGateway(target.origin, <ModOrigin?>[]),
+          ),
+          overrides: [gameBananaClientProvider.overrideWithValue(client)],
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          transport.requests,
+          contains(GameBananaEndpoints(gameId: 19567).modProfile(528481)),
+          reason: 'the other mod in the folder has to be asked about by name — '
+              'a call count would pass on any second request at all',
+        );
+        // The patch is on its newest file, so this verdict can only have come
+        // from the other mod's page.
+        expect(find.text('Possibly outdated'), findsOneWidget);
+        expect(find.text('This is the latest file'), findsNothing);
+      });
+
+      testWidgets('a companion page that will not load is not reported clean',
+          (tester) async {
+        // The primary answered and the other half did not. "Up to date" would
+        // be a claim about half a folder.
+        await tester.pumpWidget(const SizedBox());
+        final (client, _) = mixedClient(companionReachable: false);
+        final target = mixedMod();
+        await pumpLocalized(
+          tester,
+          ModUpdateDialog(
+            mod: target,
+            gateway: _RecordingGateway(target.origin, <ModOrigin?>[]),
+          ),
+          overrides: [gameBananaClientProvider.overrideWithValue(client)],
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('This is the latest file'), findsNothing);
+      });
+
+      testWidgets('an update on the other mod is never applied from here',
+          (tester) async {
+        // **The destructive case.** The apply path writes the named file over
+        // *this* folder and records it against `origin.mod_id`, so applying a
+        // companion's file would overwrite one mod's folder with another mod's
+        // archive and then stamp a foreign file id onto this block at `exact` —
+        // after which every check asks the wrong page for a file it has never
+        // published.
+        await tester.pumpWidget(const SizedBox());
+        final (client, _) = mixedClient();
+        final target = mixedMod();
+        await pumpLocalized(
+          tester,
+          ModUpdateDialog(
+            mod: target,
+            gateway: _RecordingGateway(target.origin, <ModOrigin?>[]),
+          ),
+          overrides: [gameBananaClientProvider.overrideWithValue(client)],
+        );
+        await tester.pumpAndSettle();
+
+        // The finding is real and is shown…
+        expect(find.text('Possibly outdated'), findsOneWidget);
+        // …and the one control that touches the mod folder is not offered.
+        expect(find.text('Update'), findsNothing);
+        // The mod page is, which is the same answer the dialog already gives
+        // when it can name no successor.
+        expect(find.text('View in marketplace'), findsOneWidget);
+      });
+
+      testWidgets('an update on this mod is still applied normally',
+          (tester) async {
+        // The guard must key on *whose* finding it is, not on the folder having
+        // a companion at all — otherwise naming the other mod would silently
+        // disable updating the mod you actually installed.
+        await tester.pumpWidget(const SizedBox());
+        final (client, _) = mixedClient();
+        // The primary is on an archived file, so the finding is the patch's
+        // own; the companion is on its newest and has nothing to report.
+        final target = mod(
+          'EllenBikini',
+          origin: origin(fileId: 1696178).copyWith(
+            companions: [
+              const ModCompanion(
+                role: CompanionRole.base,
+                modId: 528481,
+                modIdConfidence: OriginConfidence.user,
+                fileId: 1462303,
+                versionConfidence: OriginConfidence.user,
+              ),
+            ],
+          ),
+        );
+        await pumpLocalized(
+          tester,
+          ModUpdateDialog(
+            mod: target,
+            gateway: _RecordingGateway(target.origin, <ModOrigin?>[]),
+          ),
+          overrides: [gameBananaClientProvider.overrideWithValue(client)],
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('An update is available'), findsOneWidget);
+        expect(find.text('Update'), findsOneWidget);
+      });
+
+      testWidgets('ignoring a companion\'s update writes it on the companion',
+          (tester) async {
+        // Written on the primary it silences nothing — the companion carries
+        // its own dismissal — and stamps another mod's release date onto this
+        // folder's block.
+        await tester.pumpWidget(const SizedBox());
+        final (client, _) = mixedClient();
+        final target = mixedMod();
+        final written = <ModOrigin?>[];
+        await pumpLocalized(
+          tester,
+          ModUpdateDialog(
+            mod: target,
+            gateway: _RecordingGateway(target.origin, written),
+          ),
+          overrides: [gameBananaClientProvider.overrideWithValue(client)],
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Ignore this update'));
+        await tester.pumpAndSettle();
+
+        final block = written.single!;
+        expect(block.updatesDismissedUntil, isNull,
+            reason: 'the folder\'s own releases were never in question');
+        expect(block.companions.single.updatesDismissedUntil, isNotNull);
+      });
+
+      testWidgets('an unnamed patch still says only the patch is tracked',
+          (tester) async {
+        // The shipped half, unchanged: with no companion named there is
+        // nothing to fetch and nothing to fold, and the folder gets the
+        // admission rather than a clean bill.
+        await tester.pumpWidget(const SizedBox());
+        final (client, _) = mixedClient();
+        final target = mod(
+          'EllenBikini',
+          origin: origin(fileId: 1732269)
+              .copyWith(ingest: const ModIngest(patchShaped: true)),
+        );
+        await pumpLocalized(
+          tester,
+          ModUpdateDialog(
+            mod: target,
+            gateway: _RecordingGateway(target.origin, <ModOrigin?>[]),
+          ),
+          overrides: [gameBananaClientProvider.overrideWithValue(client)],
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Only the patch is tracked here'), findsOneWidget);
+      });
     });
   });
 }

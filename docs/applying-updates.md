@@ -98,14 +98,29 @@ want from the archive.
 
 ## 2. Patch detection
 
-**A patch ships no content.** Its `.ini` is a full replacement for the host mod's
-`.ini`, and the textures and meshes are expected to be in the folder already. So the
-test is: the download has at least one `.ini`, its `.ini` files reference resources
-that are absent, and **not one referenced resource is present**.
+**A patch replaces rather than adds**, and it comes in two shapes that need two
+rules. Both live in `services/patch_detection.dart`, both are pure, and
+`services/patch_scan.dart` is the thin I/O wrapper the install paths use.
 
-`services/ini_resources.dart` collects what the `.ini` files ask for;
-`services/patch_detection.dart` compares that against what the folder holds. Both are
-pure. `services/patch_scan.dart` is the thin I/O wrapper the install paths use.
+| Shape | What it ships | The test |
+|---|---|---|
+| **`.ini` patch** | A replacement `.ini`, no assets | It has an `.ini`, that `.ini` references resources that are absent, and **not one referenced resource is present** |
+| **Asset patch** | Bare assets, **no `.ini` at all** | It has no `.ini`, and some one mod folder in the library already holds **every** file it ships |
+
+**Neither rule can answer for the other's shape**, and that is structural rather
+than a tuning problem. `assessPatchShape` is defined over what the `.ini` files
+reference; an asset patch has no `.ini`, so there are no references, nothing to
+compare, and no threshold that would help. `assessAssetPatch` is defined over
+overlap with the library; a download carrying an `.ini` is the first rule's
+question, and two rules answering for one folder is how they come to disagree
+about it. So each declines the other's input outright.
+
+The two rules share their shape, which is the thing to preserve if either is ever
+revisited: **no threshold, and a fact about the download rather than a proportion
+of one.** "Brought none of what it references" and "brought nothing the library
+does not already have" are the same sentence about different evidence.
+
+`services/ini_resources.dart` collects what the `.ini` files ask for.
 
 ### Why it is not "references a file it does not ship"
 
@@ -220,21 +235,74 @@ not redundant:
   is about overlap rather than absence, so a dead declaration there changes the
   answer.
 
+### The asset patch, and why the library is the only evidence
+
+A patch that replaces one texture ships that texture and nothing else. Measured on
+a real pair: one is a 6.7 MB `.rar` containing **exactly one `.dds`**, and the mod
+it patches ships 17 files including a `.dds` of that name, whose `.ini` references
+it. Drop the first into the second's folder and one texture is replaced, every
+reference still resolves, and the folder is indistinguishable from an ordinary
+mod — [§1](#1-the-mechanism-is-overwrite)'s mixed folder, arrived at without a
+single `.ini` being involved.
+
+There is nothing inside such a download to judge it by. The only evidence is what
+is *already installed*, so `assessAssetPatch` takes the library and asks whether
+some folder already holds everything the download brings.
+
+Three rules keep that from reporting ordinary mods:
+
+- **Every file, not any file.** A mod shipping one familiar texture beside its own
+  new meshes is a mod. Only a download with nothing new in it is a replacement.
+  "Any" would flag every retexture that reuses a name.
+- **Matching is on the file name, not the path.** A patch author has no idea what
+  layout the folder ended up with — they ship the file bare and expect it dropped
+  in. Requiring the same relative path would miss every base mod that keeps its
+  textures in a subfolder.
+- **Auxiliary names never match** (`preview.png`, `thumbnail.png`, `icon.png`,
+  `readme.txt`, `readme.md`). Every mod in a library has one, so counting them
+  would let a single shared name carry a whole download and make a screenshot pack
+  read as a patch. Excluding them is also what lets a real patch ship a screenshot
+  beside its texture without that breaking the match.
+
+**The folder being judged is excluded from the library it is compared against.**
+The check runs after the copy, so without that every no-`.ini` import matches
+itself perfectly and reports itself as its own patch.
+
+**Several candidates are all reported and none is chosen.** Two variants of one mod
+installed side by side both hold the file, and picking would be a guess where the
+user has the answer.
+
+The cost is one walk of the library, which is why it is asked **only of downloads
+that have no `.ini` at all** — the ones that would otherwise be called incomplete.
+That walk is the same one the scan-time backfill does, measured at **0.51 ms per
+mod** (36 ms for 71 mods across 3722 files), against an operation that has just
+unpacked an archive.
+
 ### Two uses, one implementation
 
 - **At install.** Both ingest paths report a patch-shaped import in the same place
   they already report a mod with no `.ini` at all, so the user is told rather than
-  discovering it when the game shows nothing.
+  discovering it when the game shows nothing. An asset patch is reported
+  *instead of* the "may be incomplete" warning rather than beside it — the two are
+  answers to the same question, and it can name what the download replaces, which
+  is the whole of what the user needs in order to act.
 - **Before an update.** If the *incoming* download has dangling references, the
   folder being written into must be mixed. The confirmation says so, and states that
   only part of the folder is being replaced. This works on the existing library with
   no recorded data and no extra request, because the new archive is already in hand.
+  Only the `.ini` rule is used here: the asset rule's evidence is the library, and
+  an update is a download for a folder that is *already* in it.
 
-**The limit bounds the whole feature and is stated rather than papered over:** this
-cannot see a mixed folder whose *tracked* download is the base mod with a patch
-applied on top. Nothing is missing there, so nothing looks wrong. That direction is
-accepted loss, and it is the milder one — the base mod's own update usually contains
-the same fix.
+**The limit bounds the whole feature and is stated rather than papered over:**
+neither rule can see a mixed folder whose *tracked* download is the base mod with a
+patch applied on top. Nothing is missing and nothing is unfamiliar, so nothing looks
+wrong. That direction is accepted loss, and it is the milder one — the base mod's
+own update usually contains the same fix.
+
+A second limit, specific to the asset rule: it can only see a patch **installed
+after** the mod it patches. Arriving first, there is nothing in the library to
+overlap with, and it is reported as an incomplete download — which is what it is,
+until the other half turns up.
 
 ---
 
@@ -588,26 +656,27 @@ Stated because each one bounds what this feature currently promises.
   currently-installed mod, and re-downloading the old archive to reconstruct it is
   both a second full transfer and unavailable exactly for the old mods most likely to
   have been patched.
-- **A mixed folder makes the app watch the patch rather than the mod.** Exactly one
-  origin block describes a folder, and in the common ordering it names the *patch* —
-  so the check compares against the patch's published files and never looks at the
-  base mod. Applying an update is **not** the broken part; overwrite does the right
-  thing there.
-  It no longer reports that as *up to date*: the install records
-  `ingest.patch_shaped` and `checkForUpdate` downgrades only the clean verdict to
-  [`UpdateOutcome.tracksPatchOnly`]. That is the whole of what one origin block can
-  buy — knowing the folder is two things is enough to refuse the claim, and not
-  enough to watch the other one. **Recorded rather than derived because the folder
-  is legible only at install**: once the base mod's files are dragged in around the
-  patch, every reference resolves and no later scan can tell it apart
-  ([§1](#1-overwrite-never-replace)). Nothing helps a folder that is already mixed.
-  Watching both still needs one folder carrying more than one origin block, which
-  is its own piece of work.
+- **A mixed folder is only watched in full once the user says what else is in it.**
+  The origin block's own fields describe one download, and in the common ordering
+  they name the *patch* — so a check against them alone never looks at the base mod.
+  Applying an update is **not** the broken part; overwrite does the right thing there.
+  Two things close it, and the second needs a person:
+  `ingest.patch_shaped` is recorded at install, which is enough to refuse the clean
+  verdict ([`UpdateOutcome.tracksPatchOnly`]) but not to watch the other mod; naming
+  that mod adds a **companion** to the block, and the check then folds both pages
+  into one verdict ([`origin-tracking.md`](origin-tracking.md#10-a-folder-that-holds-two-downloads)).
+  **The flag is recorded rather than derived because the folder is legible only at
+  install**: once the base mod's files are dragged in around the patch, every
+  reference resolves — and for an asset patch the two downloads have merged into
+  one set of files — so no later scan can tell it apart
+  ([§1](#1-the-mechanism-is-overwrite)). That is also why **nothing can offer to fix
+  a folder that is already mixed** — the app has no way to know it should ask, and the
+  resolve dialog is the only route in.
 - **There is no "install this into that mod's folder" operation.** Both install paths
   refuse a name collision, so every mixed folder in existence was assembled by hand in
   a file manager and the app is reduced to inferring it afterwards from `.ini`
   contents. An explicit "apply as a patch to…" install would make it a recorded fact
-  at write time.
+  at write time, at `exact` rather than the `user` tier a person's answer earns.
 - **`ModManagerService._copyDirectory` is a second copy of the same walk** as
   `utils/directory_copy.dart`, with one behavioural difference: it follows links,
   where the shared one does not. Unifying them changes the *import* path's behaviour,

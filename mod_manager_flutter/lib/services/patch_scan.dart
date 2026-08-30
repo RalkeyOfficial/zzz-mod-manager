@@ -37,6 +37,58 @@ Future<List<String>> modsThatLookLikePatches(
   return patches;
 }
 
+/// What each of [modNames] replaces, for mods that ship **no `.ini`**.
+///
+/// The other half of patch detection. `modsThatLookLikePatches` asks what a
+/// download's `.ini` files reference; a patch replacing one texture has no
+/// `.ini`, so that question has no answer and this one asks a different one:
+/// does this download bring anything the library does not already have?
+///
+/// Only worth calling for mods that have no `.ini` at all — the ones that
+/// otherwise get the "may be incomplete" warning, which is right for a broken
+/// download and wrong for a patch.
+///
+/// **Walks the whole library**, which is why it is called only for that narrow
+/// case. The walk is the same one the scan-time backfill does, measured at
+/// **0.51 ms per mod** (36 ms for 71 mods across 3722 files) — nothing beside an
+/// operation that has just unpacked an archive.
+///
+/// Returns mod name -> what it patches, and omits any mod that patches nothing.
+Future<Map<String, AssetPatchAssessment>> assetPatchesAmong(
+  String modsPath,
+  Iterable<String> modNames,
+) async {
+  final candidates = modNames.toList();
+  if (candidates.isEmpty) return const <String, AssetPatchAssessment>{};
+
+  final library = <String, Set<String>>{};
+  final root = Directory(modsPath);
+  if (!await root.exists()) return const <String, AssetPatchAssessment>{};
+  await for (final entity in root.list(followLinks: false)) {
+    if (entity is! Directory) continue;
+    final name = path.basename(entity.path);
+    library[name] = (await readFolderContents(entity)).files;
+  }
+
+  final found = <String, AssetPatchAssessment>{};
+  for (final name in candidates) {
+    final contents = library[name];
+    if (contents == null) continue;
+    final assessment = assessAssetPatch(
+      files: contents,
+      // Known by construction: the caller passes only mods with no `.ini`. Read
+      // from the walk anyway rather than trusted, so the two cannot drift.
+      hasIni: contents.any((f) => f.endsWith('.ini')),
+      library: library,
+      // Itself. The check runs after the copy, so without this every one of
+      // these mods matches itself perfectly and reports itself as its own patch.
+      exclude: {name},
+    );
+    if (assessment.looksLikePatch) found[name] = assessment;
+  }
+  return found;
+}
+
 /// One mod an import is **about to** create, and the folders it will be made of.
 ///
 /// [sources] maps each source folder's absolute path to the subfolder it lands

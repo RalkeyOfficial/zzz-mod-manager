@@ -1,0 +1,67 @@
+{
+  "_idRow": 900282,
+  "_sName": "Character A Body - Alt Proportions",
+  "_nStatus": "0",
+  "_bIsPrivate": false,
+  "_bIsTrashed": false,
+  "_bIsWithheld": false,
+  "_bIsObsolete": false,
+  "_tsDateAdded": 1743462584,
+  "_tsDateUpdated": 1746451612,
+  "_tsDateModified": 1746451612,
+  "_sProfileUrl": "https://gamebanana.com/mods/900282",
+  "_sVersion": "1.02",
+  "_aGame": {
+    "_idRow": 19567,
+    "_sName": "Zenless Zone Zero",
+    "_sAbbreviation": "ZZZ"
+  },
+  "_aCategory": {
+    "_idRow": 35673,
+    "_sName": "Character A",
+    "_sModelName": "ModCategory"
+  },
+  "_aSuperCategory": {
+    "_idRow": 30305,
+    "_sName": "Character Skins",
+    "_sModelName": "ModCategory"
+  },
+  "_aContentRatings": {
+    "sa": "Skimpy Attire",
+    "nu": "Full Nudity"
+  },
+  "_aFiles": [
+    {
+      "_idRow": 1900055,
+      "_sFile": "character_a_body_alt_proportions.zip",
+      "_nFilesize": 21113901,
+      "_tsDateAdded": 1743462400,
+      "_nDownloadCount": 12000,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1900055",
+      "_sMd5Checksum": "00000000000000000000000000000002",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_sDescription": "SFW Variants Only",
+      "_bIsArchived": false,
+      "_bHasContents": true
+    },
+    {
+      "_idRow": 1900843,
+      "_sFile": "character_a_body_alt_proportions_nsfw_.zip",
+      "_nFilesize": 21114229,
+      "_tsDateAdded": 1743899000,
+      "_nDownloadCount": 30000,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1900843",
+      "_sMd5Checksum": "00000000000000000000000000000003",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_sDescription": "NSFW Variants Included",
+      "_bIsArchived": false,
+      "_bHasContents": true
+    }
+  ]
+}

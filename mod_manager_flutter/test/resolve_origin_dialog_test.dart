@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
+import 'package:mod_manager_flutter/models/mod_companion.dart';
+import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/dialogs/resolve_origin_dialog.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_client.dart';
 import 'package:mod_manager_flutter/services/gamebanana/remote_mod_metadata.dart';
+import 'package:mod_manager_flutter/services/update_check.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
 import 'support/fake_http_transport.dart';
@@ -695,6 +699,353 @@ void main() {
 
       expect(transport.requests, isEmpty);
       expect(gateway.probeCalls, 0);
+    });
+  });
+
+  group('the other mod in the folder', () {
+    // The second identity can only come from the user: they assembled the
+    // folder by hand, possibly from a source the app never saw. This is the
+    // only route by which one is ever recorded.
+    // `ellen joe cheongsam`, the first record in the captured search.
+    const otherModId = 527697;
+    final companionProfileUrl = Uri.parse(
+        'https://gamebanana.com/apiv13/Mod/$otherModId/ProfilePage');
+    final companionSearchUrl = Uri.parse(
+      'https://gamebanana.com/apiv13/Util/Search/Results'
+      '?_sModelName=Mod&_sSearchString=RabbitFX&_idGameRow=19567&_nPage=1',
+    );
+
+    FakeHttpTransport bothPages() => FakeHttpTransport()
+      ..stub(profileUrl, body: loadGbFixture('mod_profile_531649'))
+      // Any captured page with a file list will do for the *other* mod; this
+      // one publishes ten, which is what makes the picker worth testing.
+      ..stub(companionProfileUrl, body: loadGbFixture('mod_profile_rated'))
+      ..stub(companionSearchUrl, body: loadGbFixture('search_ellen'));
+
+    ModOrigin patchShaped({List<ModCompanion> companions = const []}) =>
+        tracked(
+          modIdConfidence: OriginConfidence.exact,
+          fileId: 1732269,
+          versionConfidence: OriginConfidence.exact,
+          provenance: OriginProvenance.downloaded,
+        ).copyWith(
+          ingest: const ModIngest(patchShaped: true),
+          companions: companions,
+        );
+
+    testWidgets('an ordinary mod is never asked about a second one',
+        (tester) async {
+      // The row exists only where there is something to say. Offering it on
+      // every mod would turn a rare, specific question into furniture.
+      await pumpDialog(tester, target: mod(origin: tracked(fileId: 1732269)));
+      await tester.pumpAndSettle();
+
+      expect(find.text('This folder holds a patch'), findsNothing);
+    });
+
+    testWidgets('a patch-shaped folder offers to name what it patches',
+        (tester) async {
+      await pumpDialog(
+        tester,
+        target: mod(origin: patchShaped()),
+        transport: bothPages(),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('This folder holds a patch'), findsOneWidget);
+      expect(find.text('Name the mod it patches'), findsOneWidget);
+      // The two escape hatches must still be reachable — the new row sits
+      // above them, not in front of them.
+      expect(find.text('I don\'t know which file'), findsOneWidget);
+      expect(find.text('Not from GameBanana, or it\'s my own'), findsOneWidget);
+    });
+
+    testWidgets('naming the other mod writes it as a companion',
+        (tester) async {
+      final gateway = await pumpDialog(
+        tester,
+        target: mod(origin: patchShaped()),
+        transport: bothPages(),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Name the mod it patches'));
+      await tester.pumpAndSettle();
+
+      // The search is seeded with the folder name and has already run.
+      await tester.tap(find.text('ellen joe cheongsam').first);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
+
+      final companion = gateway.written!.companions.single;
+      expect(companion.modId, otherModId);
+      expect(companion.role, CompanionRole.base);
+      expect(
+        companion.modIdConfidence,
+        OriginConfidence.user,
+        reason: 'the user told us; nothing here is exact, because we did not '
+            'download these bytes',
+      );
+      // The folder's own identity is untouched by the second one.
+      expect(gateway.written!.modId, 531649);
+      expect(gateway.written!.fileId, 1732269);
+    });
+
+    testWidgets('picking a file for it records that too', (tester) async {
+      final gateway = await pumpDialog(
+        tester,
+        target: mod(origin: patchShaped()),
+        transport: bothPages(),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Name the mod it patches'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ellen joe cheongsam').first);
+      await tester.pumpAndSettle();
+
+      // v3.4, the newest file the other mod publishes.
+      await tester.tap(find.textContaining('v3.4').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
+
+      final companion = gateway.written!.companions.single;
+      expect(companion.fileId, 1462303);
+      expect(companion.versionConfidence, OriginConfidence.user);
+    });
+
+    testWidgets('the file picker claims no reason it does not have',
+        (tester) async {
+      // The two mods in a mixed folder have unrelated names, unrelated
+      // archives and unrelated dates — so every ranking signal the primary
+      // picker uses describes the wrong download. Ranking the base mod's files
+      // by the *patch's* folder name is the one that could put a chip on a row
+      // for a reason that is not true of it.
+      await pumpDialog(
+        tester,
+        target: mod(origin: patchShaped()),
+        transport: bothPages(),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Name the mod it patches'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ellen joe cheongsam').first);
+      await tester.pumpAndSettle();
+
+      for (final chip in const [
+        'matches your folder name',
+        'newest file that existed when you installed this',
+        'byte-identical to your archive',
+      ]) {
+        expect(find.text(chip), findsNothing, reason: chip);
+      }
+      // And it says so, rather than leaving unranked rows to imply it tried.
+      expect(find.textContaining('Nothing here records which of these'),
+          findsOneWidget);
+    });
+
+    testWidgets('"I don\'t know which file" records a baseline for it',
+        (tester) async {
+      // The answer for a folder whose other half you cannot identify. It has to
+      // reach the sidecar as `assumed_latest` **plus a date** — with neither,
+      // the check has nothing to compare and the folder goes quiet.
+      final gateway = await pumpDialog(
+        tester,
+        target: mod(origin: patchShaped()),
+        transport: bothPages(),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Name the mod it patches'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ellen joe cheongsam').first);
+      await tester.pumpAndSettle();
+
+      // `.last`: the dialog underneath still has its own copy of this hatch,
+      // mounted behind the barrier. The pushed one is the later of the two.
+      await tester.tap(find.text('I don\'t know which file').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
+
+      final companion = gateway.written!.companions.single;
+      expect(companion.versionConfidence, OriginConfidence.assumedLatest);
+      expect(companion.baselineRemoteDate, isNotNull);
+      expect(companion.fileId, isNull);
+    });
+
+    testWidgets('changing the mod drops the answer given about the last one',
+        (tester) async {
+      // "I don't know which file" resolves to **that mod's** creation date, so
+      // an answer held across a change of identity is recorded against a mod it
+      // was never about. It fails silently in the worst direction: a baseline
+      // later than the mod it describes hides every file published before it,
+      // which is the false clean this whole feature exists to remove.
+      const firstPick = 640237;
+      final transport = bothPages()
+        // Created a year *after* the mod picked second, so a leaked baseline
+        // lands in that mod's future rather than being clamped harmlessly back.
+        ..stub(
+          Uri.parse('https://gamebanana.com/apiv13/Mod/$firstPick/ProfilePage'),
+          body: loadGbFixture('mod_profile_asset_patch'),
+        );
+      final gateway = await pumpDialog(
+        tester,
+        target: mod(origin: patchShaped()),
+        transport: transport,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Name the mod it patches'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Perfect Ellen Joe').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('I don\'t know which file').last);
+      await tester.pumpAndSettle();
+
+      // `.last` again: the dialog underneath has its own identity card.
+      await tester.tap(find.text('Change').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ellen joe cheongsam').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
+
+      final companion = gateway.written!.companions.single;
+      expect(companion.modId, otherModId);
+      expect(
+        companion.baselineRemoteDate,
+        isNull,
+        reason: 'the date belonged to the mod that was picked and unpicked',
+      );
+      expect(
+        companion.versionConfidence,
+        OriginConfidence.unknown,
+        reason: 'a new identity has not been answered for yet',
+      );
+    });
+
+    testWidgets('naming one voids the verdict already on screen',
+        (tester) async {
+      // The update dialog does not re-check when a verdict is stored, so one
+      // computed before the folder gained a second identity would go on being
+      // shown as current — the mod's own "you have the latest file", about a
+      // folder that is now known to be two things.
+      await tester.pumpWidget(const SizedBox());
+      final container = ProviderContainer(overrides: [
+        gameBananaClientProvider.overrideWithValue(
+          GameBananaClient(transport: bothPages(), maxRetries: 0),
+        ),
+      ]);
+      addTearDown(container.dispose);
+      container.read(modUpdateChecksProvider.notifier).state = {
+        'RabbitFX': const UpdateCheck(outcome: UpdateOutcome.upToDate),
+      };
+
+      final target = mod(origin: patchShaped());
+      await pumpLocalized(
+        tester,
+        ResolveOriginDialog(
+          mod: target,
+          gateway: _FakeGateway(current: target.origin),
+        ),
+        container: container,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Name the mod it patches'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ellen joe cheongsam').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
+
+      expect(
+        container.read(modUpdateChecksProvider)['RabbitFX'],
+        isNull,
+        reason: 'the next open has to ask again rather than repeat an answer '
+            'about what the folder used to be',
+      );
+    });
+
+    testWidgets('an already-named companion is shown and can be removed',
+        (tester) async {
+      final gateway = await pumpDialog(
+        tester,
+        target: mod(
+          origin: patchShaped(companions: const [
+            ModCompanion(
+              role: CompanionRole.base,
+              modId: otherModId,
+              modIdConfidence: OriginConfidence.user,
+            ),
+          ]),
+        ),
+        transport: bothPages(),
+      );
+      await tester.pumpAndSettle();
+
+      // Named, so the row states the answer rather than asking for one.
+      expect(find.text('Name the mod it patches'), findsNothing);
+      await tester.tap(find.text('This folder holds a patch'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('This folder is one mod after all'));
+      await tester.pumpAndSettle();
+
+      expect(gateway.written!.companions, isEmpty,
+          reason: 'a wrong answer has to be undoable, or naming one is a trap');
+    });
+
+    testWidgets('cancelling the second step writes nothing', (tester) async {
+      final gateway = await pumpDialog(
+        tester,
+        target: mod(origin: patchShaped()),
+        transport: bothPages(),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Name the mod it patches'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel').last);
+      await tester.pumpAndSettle();
+
+      expect(gateway.writes, 0);
+    });
+
+    testWidgets('the folder cannot be named as its own companion',
+        (tester) async {
+      // It is the same mod said twice, and it would have the check ask one
+      // page twice and report two verdicts for one folder. The search
+      // legitimately returns it — the folder *is* that mod — so the refusal
+      // has to be here rather than in the results.
+      final transport = FakeHttpTransport()
+        ..stub(profileUrl, body: loadGbFixture('mod_profile_531649'))
+        ..stub(
+          companionSearchUrl,
+          body: '{"_aMetadata":{"_nRecordCount":1},"_aRecords":'
+              '[{"_idRow":531649,"_sName":"RabbitFX Ellen"}]}',
+        );
+      await pumpDialog(
+        tester,
+        target: mod(origin: patchShaped()),
+        transport: transport,
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Name the mod it patches'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('RabbitFX Ellen').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('That is this mod, not another one'), findsOneWidget);
+      expect(
+        tester
+            .widget<FilledButton>(find.byType(FilledButton).last)
+            .onPressed,
+        isNull,
+      );
     });
   });
 }

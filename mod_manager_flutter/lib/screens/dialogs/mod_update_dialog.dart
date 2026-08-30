@@ -87,6 +87,15 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   ReleaseGroups _releases = ReleaseGroups.empty;
   List<GbUpdate> _updates = const <GbUpdate>[];
 
+  /// The **other** mods in this folder, by remote id.
+  ///
+  /// A mixed folder holds a patch plus the mod it patches, and the origin block
+  /// names one of them. Without these the fold has nothing to say about the
+  /// other half and answers `indeterminate` — on the one screen the user
+  /// deliberately opened to find out.
+  Map<int, GbMod> _companionProfiles = const <int, GbMod>{};
+  Map<int, ReleaseGroups> _companionReleases = const <int, ReleaseGroups>{};
+
   /// Whether the release feed has been asked for at all.
   ///
   /// Opened from a card badge this dialog fetches nothing — the bulk pass
@@ -111,6 +120,11 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// Mirrors the sidecar edit this dialog has made, so the verdict on screen
   /// tracks it without waiting for a rescan the caller owns.
   DateTime? _dismissedUntil;
+
+  /// Which identity that edit was written against — a companion's mod id, or
+  /// null for the folder's own. Carried because re-applying it to the wrong one
+  /// is silent in both directions at once.
+  int? _dismissedSubject;
   bool _dismissalEdited = false;
   bool _wrote = false;
 
@@ -180,12 +194,42 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       } catch (_) {
         updates = const <GbUpdate>[];
       }
+
+      // The other downloads in this folder. Sequential rather than concurrent:
+      // there is at most a handful, and the client's own throttling is what
+      // keeps a burst from being answered with a 429 the user would read as a
+      // failed check.
+      //
+      // A companion whose page will not load is simply **left out** — the fold
+      // reads that as "not asked" and refuses to call the folder clean, which
+      // is the honest answer and the safe direction.
+      final companionProfiles = <int, GbMod>{};
+      final companionReleases = <int, ReleaseGroups>{};
+      for (final companion in origin!.companions) {
+        try {
+          companionProfiles[companion.modId] =
+              await client.modProfile(companion.modId, refresh: refresh);
+        } catch (_) {
+          continue;
+        }
+        try {
+          companionReleases[companion.modId] = ReleaseGroups.fromUpdates(
+            await client.modUpdates(companion.modId, refresh: refresh),
+          );
+        } catch (_) {
+          // As above: groups can only ever remove a flag, so their absence
+          // leaves the louder, honest answer.
+        }
+      }
+
       if (!mounted) return;
       setState(() {
         _checking = false;
         _profile = profile;
         _releases = ReleaseGroups.fromUpdates(updates);
         _updates = updates;
+        _companionProfiles = companionProfiles;
+        _companionReleases = companionReleases;
         // The check already paid for the feed, so the notes are simply there.
         _notesRequested = true;
       });
@@ -251,11 +295,21 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     if (profile == null) return null;
     var origin = widget.mod.origin;
     if (_dismissalEdited && origin != null) {
-      origin = _dismissedUntil == null
-          ? origin.withUpdatesUndismissed()
-          : origin.copyWith(updatesDismissedUntil: _dismissedUntil);
+      // **Onto the identity it was written to.** Re-applied to the primary, a
+      // companion's dismissal both fails to silence the companion and silences
+      // the folder's own mod.
+      origin = origin.withDismissal(
+        subject: _dismissedSubject,
+        until: _dismissedUntil,
+      );
     }
-    return checkForUpdate(origin: origin, remote: profile, releases: _releases);
+    return checkForUpdate(
+      origin: origin,
+      remote: profile,
+      releases: _releases,
+      companionRemotes: _companionProfiles,
+      companionReleases: _companionReleases,
+    );
   }
 
   /// "Ignore this update" and its undo.
@@ -271,18 +325,23 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     final until = dismissed ? current.dismissableUpTo : null;
     if (dismissed && until == null) return;
 
+    // A dismissal belongs to the identity whose releases it waves away, not to
+    // the folder. Written onto the primary, a companion's dismissal silences
+    // nothing — the companion carries its own — and stamps another mod's date
+    // onto this block.
+    final subject = current.subjectModId;
+
     setState(() => _writing = true);
-    final ok = await widget.gateway.writeOrigin(widget.mod.id, (current) {
-      if (current == null) return null;
-      return dismissed
-          ? current.copyWith(updatesDismissedUntil: until)
-          : current.withUpdatesUndismissed();
-    });
+    final ok = await widget.gateway.writeOrigin(
+      widget.mod.id,
+      (block) => block?.withDismissal(subject: subject, until: until),
+    );
     if (!mounted) return;
     setState(() {
       _writing = false;
       if (!ok) return;
       _dismissedUntil = until;
+      _dismissedSubject = subject;
       _dismissalEdited = true;
       _wrote = true;
     });
@@ -330,6 +389,9 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   Future<void> _applyUpdate(GbFile file) async {
     final modId = widget.mod.origin?.modId;
     if (modId == null) return;
+    // Not redundant with `build`'s guard: that one is a widget condition, this
+    // is the call that overwrites a live folder.
+    if (_stored?.subjectModId != null) return;
     setState(() => _writing = true);
     final changed = await applyUpdateFlow(
       context,
@@ -368,8 +430,15 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     // action has to be here rather than only while the mark is showing.
     final hasFinding =
         check != null && (check.hasUpdate || check.dismissed);
-    final installable =
-        modId == null || !hasFinding ? null : _fileToInstall(check);
+    // The applier writes the named file over this folder and records it against
+    // `origin.mod_id`, so a companion's file would overwrite one mod with
+    // another and stamp a foreign file id at `exact`. Where it *should* land is
+    // the question "apply as a patch to…" exists to ask, so until that exists
+    // the finding is stated and the mod page offered instead.
+    final foreignFinding = hasFinding && check.subjectModId != null;
+    final installable = modId == null || !hasFinding || foreignFinding
+        ? null
+        : _fileToInstall(check);
 
     // Tapping the barrier or pressing Escape pops with **null**, which the
     // caller reads as "nothing was written" — so a dismissal saved and then
@@ -499,6 +568,24 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     final scheme = Theme.of(context).colorScheme;
     return [
       _headline(check),
+      // Everything below describes a different mod from the one the folder is
+      // named after, so it is said before any of it rather than left to notice.
+      if (check.subjectModId case final subject?) ...[
+        const SizedBox(height: 8),
+        _notice(
+          loc.t('mods.update.about_companion', params: {
+            // The bulk pass's records too, not just this dialog's own fetch:
+            // opened from a card badge nothing is fetched here, and that is
+            // the common way to arrive at a verdict somebody wants explained.
+            'mod': (_companionProfiles[subject] ??
+                        ref.read(modUpdateRecordsProvider)[subject])
+                    ?.name ??
+                '#$subject',
+            'folder': widget.mod.name,
+          }),
+          Icons.call_split,
+        ),
+      ],
       if (check.isObsolete) ...[
         const SizedBox(height: 8),
         // Its own line, never folded into the verdict: an obsolete mod still

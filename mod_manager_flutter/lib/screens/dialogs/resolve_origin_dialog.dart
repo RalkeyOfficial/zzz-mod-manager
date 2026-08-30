@@ -4,20 +4,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../models/gamebanana/gamebanana.dart';
+import '../../models/mod_companion.dart';
 import '../../models/mod_origin.dart';
 import '../../models/origin_enums.dart';
 import '../../services/api_service.dart';
 import '../../utils/notifications.dart';
-import '../../services/gamebanana/content_filter.dart';
-import '../../services/gamebanana/file_selection.dart';
 import '../../services/gamebanana/remote_mod_metadata.dart';
 import '../../services/origin_resolution.dart';
 import '../../services/origin_summary.dart';
 import '../../utils/gamebanana_url.dart';
 import '../../utils/state_providers.dart';
 import '../../utils/url_utils.dart';
-import '../components/marketplace/gb_thumbnail.dart';
-import '../components/mod_status_slot.dart';
+import '../components/resolve/file_choice_panel.dart';
+import '../components/resolve/identity_search_panel.dart';
+import '../components/resolve/resolve_fragments.dart';
+import 'companion_resolve_dialog.dart';
 
 /// Binds one library folder to one remote mod and file.
 ///
@@ -101,10 +102,10 @@ class ResolveOriginDialog extends ConsumerStatefulWidget {
 }
 
 class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
-  final TextEditingController _searchController = TextEditingController();
-
   /// The identity currently on the table — from the sidecar, or whatever the
-  /// user has since picked. Null puts the dialog in its search state.
+  /// user has since picked. Null puts the dialog in its search state, which
+  /// [IdentitySearchPanel] owns entirely — including the seeded search it runs
+  /// on the way in.
   int? _modId;
 
   /// The install date used for ranking and for the "assume current" baseline.
@@ -115,14 +116,6 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
   GbMod? _profile;
   Object? _profileError;
   bool _loadingProfile = false;
-
-  List<GbMod>? _searchResults;
-  Object? _searchError;
-  bool _searching = false;
-
-  /// Set when a pasted url is a `/dl/` file link — which cannot name a mod. See
-  /// [gameBananaFileIdFromUrl].
-  bool _pastedFileLink = false;
 
   GbFile? _selectedFile;
   bool _selectionIsExact = false;
@@ -136,23 +129,12 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     super.initState();
     _modId = _origin?.modId;
     _installedAt = _origin?.installedAt;
-    _searchController.text = widget.mod.name;
     // A mod the user declared their own renders one notice and one button, and
     // `build` shows nothing a mod page could fill in — so fetching one is a
     // round trip whose result can never be displayed.
     if (_origin?.tracking == OriginTracking.off) return;
-    if (_modId case final id?) {
-      _loadProfile(id);
-    } else {
-      _search();
-    }
+    if (_modId case final id?) _loadProfile(id);
     if (_installedAt == null) _probeInstallDate();
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
   }
 
   AppLocalizations get loc => context.loc;
@@ -248,47 +230,6 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
       installedAt: _installedAt,
       archiveMd5: _origin?.archiveMd5,
     );
-  }
-
-  Future<void> _search() async {
-    final query = _searchController.text.trim();
-    setState(() {
-      _pastedFileLink = false;
-      _searchError = null;
-    });
-
-    // A pasted mod page resolves without searching at all.
-    if (gameBananaModIdFromUrl(query) case final pastedId?) {
-      setState(() => _modId = pastedId);
-      await _loadProfile(pastedId);
-      return;
-    }
-    // A pasted `/dl/` link names a *file*, and neither API can say which mod
-    // owns it — so say that instead of searching for the url as if it were text.
-    if (gameBananaFileIdFromUrl(query) != null) {
-      setState(() {
-        _pastedFileLink = true;
-        _searchResults = const <GbMod>[];
-      });
-      return;
-    }
-    if (query.isEmpty) return;
-
-    setState(() => _searching = true);
-    try {
-      final page = await ref.read(gameBananaClientProvider).searchMods(query);
-      if (!mounted) return;
-      setState(() {
-        _searchResults = page.records;
-        _searching = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _searchError = e;
-        _searching = false;
-      });
-    }
   }
 
   // ------------------------------------------------------------------ saving
@@ -437,6 +378,15 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
       }
     }
 
+    if (ok) {
+      // **A verdict outlives the block it was computed from, and must not.**
+      // The update dialog skips re-checking when one is stored, so a folder
+      // rebound or given a second identity here would go on showing an answer
+      // about what it used to be. Dropping it makes the next open ask again.
+      final checks = ref.read(modUpdateChecksProvider.notifier);
+      checks.state = {...checks.state}..remove(widget.mod.id);
+    }
+
     if (!mounted) return;
     if (!ok) {
       setState(() => _saving = false);
@@ -518,125 +468,18 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          loc.t('mods.resolve.identity_heading'),
-          style: Theme.of(context)
-              .textTheme
-              .titleSmall
-              ?.copyWith(fontWeight: FontWeight.w700),
+        IdentitySearchPanel(
+          seed: widget.mod.name,
+          heading: loc.t('mods.resolve.identity_heading'),
+          onPicked: (modId) {
+            setState(() => _modId = modId);
+            _loadProfile(modId);
+          },
         ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: _searchController,
-          autofocus: true,
-          onSubmitted: (_) => _search(),
-          decoration: InputDecoration(
-            isDense: true,
-            hintText: loc.t('mods.resolve.search_hint'),
-            prefixIcon: const Icon(Icons.search, size: 18),
-            suffixIcon: IconButton(
-              icon: const Icon(Icons.arrow_forward, size: 18),
-              tooltip: loc.t('mods.resolve.search_button'),
-              onPressed: _search,
-            ),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (_pastedFileLink)
-          _notice(loc.t('mods.resolve.paste_is_file_link'), Icons.link_off)
-        else if (_searching)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
-            child: Center(child: CircularProgressIndicator()),
-          )
-        else if (_searchError != null)
-          _notice(loc.t('mods.resolve.load_failed'), Icons.cloud_off)
-        else if (_searchResults?.isEmpty ?? false)
-          _notice(loc.t('mods.resolve.no_results'), Icons.search_off)
-        else
-          // Bounded for the same reason as the file list: search returns up to
-          // fifteen, and the escape hatch underneath has to stay one click away.
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 300),
-            child: ListView(
-              shrinkWrap: true,
-              padding: EdgeInsets.zero,
-              children: [
-                for (final result in _searchResults ?? const <GbMod>[])
-                  _searchResultRow(result),
-              ],
-            ),
-          ),
         const SizedBox(height: 8),
         const Divider(),
         _stopTrackingTile(),
       ],
-    );
-  }
-
-  Widget _searchResultRow(GbMod mod) {
-    final filter = ref.watch(contentFilterProvider);
-    // Never omit here — see the class doc. A mod the user owns must stay
-    // reachable whatever the setting says about how to render it.
-    final treatment = contentTreatment(
-      mod.visibility ?? GbVisibility.warn,
-      filter == ContentFilterMode.hide ? ContentFilterMode.blur : filter,
-    );
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: () {
-          setState(() => _modId = mod.idRow);
-          _loadProfile(mod.idRow);
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(6),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: GbThumbnail(
-                  image: mod.images.isEmpty ? null : mod.images.first,
-                  treatment: treatment,
-                  width: 64,
-                  height: 40,
-                  minWidth: 220,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      mod.name ?? '#${mod.idRow}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    Text(
-                      [
-                        if (mod.submitter?.name case final by? when by.isNotEmpty)
-                          by,
-                        if (mod.subCategory?.name case final cat?) cat,
-                      ].join(' · '),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -675,10 +518,79 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
           ),
         ),
         const Divider(),
+        if (_companionRow() case final row?) row,
         _assumeCurrentTile(),
         _stopTrackingTile(),
       ],
     ];
+  }
+
+  /// The way into naming the **other download in this folder** — one row, and
+  /// only where there is something to say.
+  ///
+  /// Shown when the folder is recorded as patch-shaped (so the app knows it is
+  /// two things and can only ask about one) or when a companion is already
+  /// named (so the answer can be corrected). Offering it on every mod would
+  /// turn a rare, specific question into furniture.
+  ///
+  /// A pushed step rather than a section: this dialog's escape hatches must
+  /// stay one click from the bottom, and a second identity card inline is what
+  /// pushes them off it.
+  Widget? _companionRow() {
+    final origin = _origin;
+    if (origin == null) return null;
+    final existing = origin.companionOfRole(CompanionRole.base);
+    if (existing == null && !origin.needsCompanion) return null;
+
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      enabled: !_saving,
+      leading: const Icon(Icons.call_split, size: 20),
+      title: Text(
+        loc.t('mods.resolve.companion_row_title'),
+        style: const TextStyle(fontSize: 13),
+      ),
+      subtitle: Text(
+        existing == null
+            ? loc.t('mods.resolve.companion_row_unnamed')
+            : loc.t('mods.resolve.companion_row_named',
+                params: {'mod': '#${existing.modId}'}),
+        style: const TextStyle(fontSize: 11),
+      ),
+      trailing: const Icon(Icons.chevron_right, size: 18),
+      onTap: () => _editCompanion(existing),
+    );
+  }
+
+  Future<void> _editCompanion(ModCompanion? existing) async {
+    final modId = _modId;
+    if (modId == null) return;
+    final outcome = await showCompanionResolveDialog(
+      context,
+      modName: widget.mod.name,
+      primaryModId: modId,
+      role: CompanionRole.base,
+      existing: existing,
+    );
+    if (outcome == null || !mounted) return;
+
+    // Written on its own rather than folded into Save: this is a decision about
+    // a different mod, and making the user press Save afterwards invites them
+    // to close the dialog believing they already had.
+    await _write((current) {
+      if (current == null) return null;
+      final rest = [
+        for (final companion in current.companions)
+          if (companion.role != CompanionRole.base) companion,
+      ];
+      return current.copyWith(
+        companions: switch (outcome) {
+          CompanionNamed(:final companion) => [...rest, companion],
+          CompanionRemoved() => rest,
+        },
+      );
+    });
   }
 
   /// The bound mod, and — while this dialog is still looking at the mod the
@@ -740,20 +652,17 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
                     launchExternalUrl(context, gameBananaModUrl(modId)),
               ),
               TextButton(
-                onPressed: () {
-                  setState(() {
-                    _modId = null;
-                    _profile = null;
-                    _profileError = null;
-                    _selectedFile = null;
-                    _searchResults = null;
-                  });
-                  // Run the seeded search straight away, as opening on an
-                  // untracked mod does. Dropping back to an empty box with the
-                  // folder name already typed in it looks like a control that
-                  // did nothing.
-                  _search();
-                },
+                // Dropping `_modId` mounts a fresh [IdentitySearchPanel], which
+                // runs the seeded search on the way in — the same thing opening
+                // on an untracked mod does. Landing on an empty box with the
+                // folder name already typed in it looks like a control that did
+                // nothing.
+                onPressed: () => setState(() {
+                  _modId = null;
+                  _profile = null;
+                  _profileError = null;
+                  _selectedFile = null;
+                }),
                 child: Text(loc.t('mods.resolve.identity_change')),
               ),
             ],
@@ -835,167 +744,24 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
 
   // ------------------------------------------------------------- file picker
 
+  /// The picker, bounded at 230 rather than the 280 it started at: the identity
+  /// card grew two "currently tracked" lines and this is what paid for them.
+  /// The right trade rather than an arbitrary one — this list scrolls inside
+  /// itself so it loses no content, while the escape hatches beneath it have
+  /// nowhere to go. A test taps them at the minimum window size for exactly
+  /// this reason.
   Widget _fileSection() {
-    final resolution = _resolution;
-    if (resolution.isEmpty) {
-      return _notice(loc.t('mods.resolve.no_files'), Icons.block);
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          loc.t('mods.resolve.file_heading'),
-          style: Theme.of(context)
-              .textTheme
-              .titleSmall
-              ?.copyWith(fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 6),
-        // The picker is *skipped* rather than hidden when a banked hash settles
-        // it: the rows stay, so the user can still see what it resolved to and
-        // disagree. What changes is that they no longer have to decide.
-        if (resolution.isSettled)
-          _notice(
-            loc.t('mods.resolve.settled'),
-            Icons.check_circle_outline,
-            // Not the amber every other notice here uses: this one is the
-            // answer, not a caveat. It is still only a *match*, though — no
-            // checkmark colour scheme borrowed from "verified", since md5 is a
-            // matching key and nothing more.
-            colour: Theme.of(context).colorScheme.primary,
-          ),
-        // Bounded and separately scrollable, so the two escape hatches below
-        // stay **one click** away rather than sliding off the bottom. Not
-        // hypothetical: a captured profile publishes six current files beside
-        // eight archived ones, and every one of them is a row here.
-        //
-        // The bound came down from 280 when the identity card grew its two
-        // "currently tracked" lines, and that is the right trade rather than an
-        // arbitrary one: this list scrolls inside itself, so it loses no
-        // content, while the hatches beneath it have nowhere to go. A test taps
-        // them at the minimum window size for exactly this reason.
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 230),
-          child: ListView(
-            shrinkWrap: true,
-            padding: EdgeInsets.zero,
-            children: [
-              for (final candidate in resolution.candidates) _fileRow(candidate),
-            ],
-          ),
-        ),
-      ],
+    return FileChoicePanel(
+      resolution: _resolution,
+      heading: loc.t('mods.resolve.file_heading'),
+      recordedFileId: _summary.fileId,
+      selectedFileId: _selectedFile?.idRow,
+      onSelected: (file, isExact) => setState(() {
+        _selectedFile = file;
+        _selectionIsExact = isExact;
+      }),
     );
   }
-
-  Widget _fileRow(ResolveCandidate candidate) {
-    final scheme = Theme.of(context).colorScheme;
-    final selected = _selectedFile?.idRow == candidate.file.idRow;
-    final reason = _reasonLabel(candidate.reason);
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: () => setState(() {
-          _selectedFile = candidate.file;
-          _selectionIsExact = candidate.isExact;
-        }),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: selected
-                  ? scheme.primary.withValues(alpha: 0.7)
-                  : scheme.outlineVariant.withValues(alpha: 0.4),
-            ),
-            color: selected ? scheme.primary.withValues(alpha: 0.06) : null,
-          ),
-          child: Row(
-            children: [
-              Icon(
-                selected
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked,
-                size: 18,
-                color: selected ? scheme.primary : scheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // A Wrap, not a Row: the chips are three-word labels with
-                    // nothing to ellipsise, so in a Row the filename is the only
-                    // thing that can give way and the row overflows once it has.
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 2,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text(
-                          fileDisplayName(candidate.file),
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        if (candidate.file.isArchived)
-                          _chip(loc.t('marketplace.badge_archived'),
-                              scheme.onSurfaceVariant),
-                        // "This is the answer already on file" is a different
-                        // claim from "this is our best guess", and the row is
-                        // the only place the difference can be seen. Filled
-                        // rather than tinted, so it wins the glance against the
-                        // suggestion chip beside it.
-                        if (_summary.fileId == candidate.file.idRow)
-                          _chip(
-                            loc.t('mods.resolve.on_record'),
-                            scheme.onPrimary,
-                            background: scheme.primary,
-                          ),
-                        // Always spelled out, never implied by position: a
-                        // ranking with no stated reason cannot be argued with.
-                        if (reason != null) _chip(reason, scheme.primary),
-                      ],
-                    ),
-                    // The author's label sits *under* the filename rather than
-                    // replacing it. It is free text and often a sentence, so
-                    // leading with it hid which file the row actually is.
-                    if (fileDisplayDetail(candidate.file) case final detail?)
-                      Text(
-                        detail,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    if (candidate.file.dateAdded case final date?)
-                      Text(
-                        _formatDate(date),
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  String? _reasonLabel(FileMatchReason reason) => switch (reason) {
-        FileMatchReason.archiveHash => loc.t('mods.resolve.reason_hash'),
-        FileMatchReason.folderName => loc.t('mods.resolve.reason_folder'),
-        FileMatchReason.installDate => loc.t('mods.resolve.reason_date'),
-        FileMatchReason.onlyFile => loc.t('mods.resolve.reason_only'),
-        FileMatchReason.none => null,
-      };
 
   // --------------------------------------------------------- escape hatches
 
@@ -1048,49 +814,8 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
 
   // -------------------------------------------------------------- fragments
 
-  Widget _chip(String label, Color color, {Color? background}) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: background ?? color.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            color: color,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      );
+  Widget _notice(String message, IconData icon, {Color? colour}) =>
+      resolveNotice(context, message, icon, colour: colour);
 
-  Widget _notice(String message, IconData icon, {Color? colour}) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 15, color: colour ?? ModStatusSlot.amber),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              message,
-              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static String _formatDate(DateTime date) {
-    final d = date.toLocal();
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${d.year}-${two(d.month)}-${two(d.day)}';
-  }
+  static String _formatDate(DateTime date) => formatResolveDate(date);
 }

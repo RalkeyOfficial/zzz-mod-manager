@@ -1014,6 +1014,20 @@ it as the case the orphaned-`.ini` rule exists to protect. It wants
 unknown-role-is-dropped rule in [§1](#parse-rules-inherited-rather-than-invented)
 makes adding it later safe, and nothing today produces one.
 
+**Q8b — where does an update to the *companion* get applied?**
+Newly forced, and not previously in this plan. The check can now find an update on
+a folder's second identity, and the apply path cannot take it: it writes the named
+file over the folder and records it against `origin.mod_id`, so a companion's file
+would overwrite one mod with another and stamp a foreign file id at `exact`. The
+Update button is disabled for such a finding today, and the dialog offers the mod
+page instead.
+Branch B is what unblocks it — the same "where do these files go" question, asked of
+an update rather than an install — so answering it here means answering
+[Q1](#2-open-questions) and the placement grid first. Note the two are not the same
+write: an install into a folder is additive, while this one replaces a download
+already in it, and the orphaned-`.ini` rule then applies to whichever `.ini` the
+*other* download left behind.
+
 **Q9 — one destination per run, or several?**
 A patch can genuinely apply to both `Ellen v1` and `Ellen v2`. Each is a live
 folder needing its own snapshot, so "several" is N sequential update-shaped

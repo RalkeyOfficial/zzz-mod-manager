@@ -1634,13 +1634,32 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
           modsPath,
           importedMods,
         );
-        if (noIni.isNotEmpty && mounted) {
+        // A download of bare assets that replaces files a mod in the library
+        // already has is a patch, not an incomplete mod — and the `.ini` rule
+        // below cannot see it, because there is no `.ini` to read references
+        // from. Asked only of the mods about to be called incomplete.
+        final assetPatches = await assetPatchesAmong(modsPath, noIni);
+        final incomplete = [
+          for (final name in noIni)
+            if (!assetPatches.containsKey(name)) name,
+        ];
+        if (incomplete.isNotEmpty && mounted) {
           context.notify.warning(
             loc.t('mods.snackbar.import_no_ini_title'),
             body: loc.t(
               'mods.snackbar.import_no_ini_body',
-              params: {'mods': noIni.join(', ')},
+              params: {'mods': incomplete.join(', ')},
             ),
+          );
+        }
+        for (final entry in assetPatches.entries) {
+          if (!mounted) break;
+          context.notify.warning(
+            loc.t('mods.snackbar.import_asset_patch_title'),
+            body: loc.t('mods.snackbar.import_asset_patch_body', params: {
+              'mod': entry.key,
+              'targets': entry.value.targets.join(', '),
+            }),
           );
         }
 

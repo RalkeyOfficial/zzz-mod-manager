@@ -197,6 +197,18 @@ Future<InstallResult> installArchiveFlow(
       importedMods.where((name) => !noIni.contains(name)),
     );
 
+    // The other half, and the one the `.ini` rule cannot reach: a download of
+    // bare assets replacing files a mod in the library already has. It has no
+    // `.ini`, so there are no references to compare and no threshold that would
+    // help — the signal is that it brought nothing new. Asked only of the mods
+    // that were about to be called incomplete, which is where it belongs and
+    // what keeps the library walk off every other install.
+    final assetPatches = await assetPatchesAmong(modsPath, noIni);
+    final incomplete = [
+      for (final name in noIni)
+        if (!assetPatches.containsKey(name)) name,
+    ];
+
     // Written down, not just said. This is the only moment a patch folder is
     // legible: the user is about to drag the base mod's files in around it,
     // and once they do every reference resolves and the folder is
@@ -205,7 +217,7 @@ Future<InstallResult> installArchiveFlow(
     //
     // A second write rather than part of the ingest seed, because the seed is
     // built before the folders exist and this can only be assessed after.
-    for (final name in patches) {
+    for (final name in [...patches, ...assetPatches.keys]) {
       await modManager.updateModOrigin(name, (current) {
         if (current == null) return null;
         final ingest = current.ingest ?? const ModIngest();
@@ -253,11 +265,11 @@ Future<InstallResult> installArchiveFlow(
     // own warning beside the success rather than more body text under it, so
     // a mod that arrived broken doesn't read like a mod that arrived.
     final warnings = <NotificationLines>[
-      if (noIni.isNotEmpty)
+      if (incomplete.isNotEmpty)
         NotificationLines(
           loc.t('mods.snackbar.import_no_ini_title'),
           loc.t('mods.snackbar.import_no_ini_body',
-              params: {'mods': noIni.join(', ')}),
+              params: {'mods': incomplete.join(', ')}),
         ),
       if (patches.isNotEmpty)
         NotificationLines(
@@ -267,6 +279,18 @@ Future<InstallResult> installArchiveFlow(
           // The one install warning that must not time out: the mod does not
           // work until the user acts, and this card is raised beside the
           // success line they were actually waiting for.
+          pinned: true,
+        ),
+      // Named separately from the `.ini` case because this one can say *what*
+      // it patches — the collision is what identified it — and that is the
+      // whole of what the user needs in order to act.
+      for (final entry in assetPatches.entries)
+        NotificationLines(
+          loc.t('mods.snackbar.import_asset_patch_title'),
+          loc.t('mods.snackbar.import_asset_patch_body', params: {
+            'mod': entry.key,
+            'targets': entry.value.targets.join(', '),
+          }),
           pinned: true,
         ),
       if (originFailures.isNotEmpty)

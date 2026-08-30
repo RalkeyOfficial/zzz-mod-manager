@@ -74,9 +74,20 @@ the card paints its palette over *artwork*, so a themed colour would be the only
 thing on it that moved. Passing no `onResolveOrigin` hides it, which is what the
 drag-feedback copy of the card wants.
 
-**The two muted states are told apart by shape, not colour** — a dot for untracked,
-a clock for a version recorded only as a guess. Two muted colours at 9–15px are
-indistinguishable, and stay so for anyone colourblind.
+**The muted states are told apart by shape, not colour** — a dot for untracked, a
+clock for a version recorded only as a guess, a broken link for a page that is gone.
+Three muted colours at 9–15px are indistinguishable, and stay so for anyone
+colourblind.
+
+**Two states share one treatment and differ only in wording.**
+`secondIdentityUnknown` — the folder holds a patch and nobody has said what it
+patches — renders the same amber pill and glyph as `versionUnknown`, with its own
+tooltip. It is not folded into that state because the sentence would be false: a
+patch downloaded by this app knows its file exactly, and the unknown is the *other*
+mod in the folder. A shared treatment with a different sentence is the pattern the
+slot already uses for `updateAvailable` versus `possiblyOutdated`. Adding a sixth
+*visual* is what the card has no room for; adding a state that reuses one costs a
+precedence decision and nothing else.
 
 **`modSlotStatus()` is where the one slot is decided**, folding the origin block
 together with the session verdict, so precedence between "you have not sorted this
@@ -84,6 +95,13 @@ mod out" and "this mod has an update" is one decision in one place. The
 short-circuit that silences the slot is narrowly `tracking: "off"` and
 `remote_missing`, **not** every route to `none`: a mod recorded at `exact` also
 folds to `none` and is precisely the mod best placed to have a *confirmed* update.
+
+**The "needs attention" filter counts `secondIdentityUnknown`**, for the reason it
+excludes `sourceGone`: the user can finish it — naming the base mod clears it — and
+finishing it moves the count. A filter whose number can never reach zero is noise.
+Note the bulk "assume current" pass does **not** read the badge for its own
+eligibility: this state outranks `versionUnknown` there, and reading it would quietly
+stop that pass dating mods it used to date.
 
 ## 3. The toolbar
 
@@ -190,6 +208,17 @@ displays is exactly what this rule exists to prevent. See
   "currently tracked" lines — anything new in this dialog is paid for by the picker,
   which scrolls, never by the hatches, which have nowhere to go. A test taps them at
   the minimum window size for that reason.
+- **The search box and the file picker are their own widgets**
+  (`components/resolve/`), because a second screen now asks the same two questions
+  about the *other* download in a mixed folder. Two hand-written copies of the file
+  picker is how "on record" and "our best guess" come to mean different things on
+  two screens.
+- **Naming that other download is a pushed step, not a section.** One row appears —
+  only when the folder is recorded as patch-shaped or already carries a companion —
+  and opens a dialog of its own. Inline, a second identity card spends the height
+  budget again and pushes the hatches below the fold, which is the one thing this
+  dialog must not do. What that step may write is
+  [`origin-tracking.md` §10](origin-tracking.md#10-a-folder-that-holds-two-downloads).
 - **It states what is already recorded before offering to change it**, and
   preselects the recorded file rather than leaving the answer invisible. Every
   selected row carries a chip naming what put it there, so "on record" and "our best

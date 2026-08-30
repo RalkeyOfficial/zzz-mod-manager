@@ -98,16 +98,29 @@ class BulkUpdateCheckOutcome {
 class BulkUpdateCheckPlan {
   const BulkUpdateCheckPlan({
     required this.byModId,
+    required this.checkable,
     required this.skipped,
   });
 
-  /// Remote mod id -> the local folders bound to it.
+  /// Remote mod id -> the local folders that need it answered.
   ///
   /// A list rather than a single mod because **one mod page is routinely
   /// several folders** — two variants of one mod installed side by side, two
   /// occurrences in a real 23-mod library. They share one remote record and
   /// each gets its own verdict, since each has its own `file_id`.
+  ///
+  /// And **one folder is routinely under several ids**: a mixed folder holds a
+  /// patch plus the mod it patches, and both pages have to be asked before
+  /// anything can be said about it.
   final Map<int, List<ModInfo>> byModId;
+
+  /// One entry per folder that will get a verdict.
+  ///
+  /// Separate from [byModId] because the two count different things: that map
+  /// is the *requests*, this list is the *answers*. A mixed folder is two
+  /// entries there and one here, and conflating them makes the toolbar promise
+  /// more work than the user can see.
+  final List<ModInfo> checkable;
 
   /// Verdicts that need no network at all: untracked mods and ones the user
   /// declared their own. Included rather than dropped so the caller can render
@@ -116,29 +129,43 @@ class BulkUpdateCheckPlan {
 
   List<int> get modIds => byModId.keys.toList();
 
-  /// How many mods a run would look up. What the toolbar button counts.
-  int get checkableCount =>
-      byModId.values.fold(0, (sum, mods) => sum + mods.length);
+  /// How many **mods** a run would report on. What the toolbar button counts —
+  /// the user counts cards, not requests.
+  int get checkableCount => checkable.length;
 
   bool get hasWork => byModId.isNotEmpty;
 }
 
 BulkUpdateCheckPlan planBulkUpdateCheck(List<ModInfo> mods) {
   final byModId = <int, List<ModInfo>>{};
+  final checkable = <ModInfo>[];
   final skipped = <String, UpdateCheck>{};
 
   for (final mod in mods) {
     // The same rule `checkForUpdate` opens with, shared rather than restated:
     // if the two lists ever disagreed, a mod would be requested and then given
     // an answer that ignored the response.
+    //
+    // It settles the **folder**, companions included: "it's my own" is the
+    // folder-level switch, and a muted mod must not be able to speak through
+    // its second identity.
     if (verdictWithoutAsking(mod.origin) case final settled?) {
       skipped[mod.id] = settled;
       continue;
     }
-    byModId.putIfAbsent(mod.origin!.modId!, () => <ModInfo>[]).add(mod);
+    final origin = mod.origin!;
+    checkable.add(mod);
+    byModId.putIfAbsent(origin.modId!, () => <ModInfo>[]).add(mod);
+    for (final companion in origin.companions) {
+      byModId.putIfAbsent(companion.modId, () => <ModInfo>[]).add(mod);
+    }
   }
 
-  return BulkUpdateCheckPlan(byModId: byModId, skipped: skipped);
+  return BulkUpdateCheckPlan(
+    byModId: byModId,
+    checkable: checkable,
+    skipped: skipped,
+  );
 }
 
 /// Runs the plan: batch, fetch, fold.
@@ -170,13 +197,27 @@ Future<BulkUpdateCheckOutcome> runBulkUpdateCheck({
   var requests = 0;
   Object? aborted;
 
-  void recordAll(List<ModInfo> mods, UpdateCheck check) {
-    for (final mod in mods) {
-      checks[mod.id] = check;
+  /// A page the server says is not there.
+  ///
+  /// Recorded as a record rather than as an absence so that it reaches the
+  /// comparator as the *answer* it is. The distinction matters most for a
+  /// companion: "we asked and the mod is gone" and "we never asked" are
+  /// different facts, and only the first is `sourceGone`.
+  GbMod gone(int id) => GbMod(idRow: id, isTrashed: true);
+
+  void markGone(List<int> batch) {
+    for (final id in batch) {
+      records[id] = gone(id);
     }
   }
 
-  /// Fetches [batch] and folds it in, halving on a per-id input error.
+  /// Fetches [batch] and banks it, halving on a per-id input error.
+  ///
+  /// **Nothing is folded here.** A folder can be under two ids that land in
+  /// different batches, and folding on arrival would write one identity's
+  /// verdict and then overwrite it with the other's — whichever came last
+  /// silently becoming the folder's whole answer. Every record is collected
+  /// first and each folder is folded once, below.
   ///
   /// Returns false to stop the whole pass.
   Future<bool> resolve(List<int> batch) async {
@@ -203,10 +244,7 @@ Future<BulkUpdateCheckOutcome> runBulkUpdateCheck({
       if (batch.length == 1) {
         // Narrowed to one, and the server says it doesn't exist. That *is* the
         // answer: the mod page is gone. Not a failure to report.
-        recordAll(
-          plan.byModId[batch.single] ?? const <ModInfo>[],
-          const UpdateCheck(outcome: UpdateOutcome.sourceGone),
-        );
+        markGone(batch);
         return true;
       }
       final mid = batch.length ~/ 2;
@@ -230,21 +268,15 @@ Future<BulkUpdateCheckOutcome> runBulkUpdateCheck({
     for (final record in fetched) {
       seen.add(record.idRow);
       records[record.idRow] = record;
-      for (final mod in plan.byModId[record.idRow] ?? const <ModInfo>[]) {
-        checks[mod.id] = checkForUpdate(origin: mod.origin, remote: record);
-      }
     }
     // An id we asked for that came back in nothing. The endpoint errors on an
     // unknown id rather than omitting it, so this should not happen — but
     // "should not" is how a mod silently keeps its old verdict, and a mod page
     // that has been hidden rather than deleted is the plausible way in.
-    for (final id in batch) {
-      if (seen.contains(id)) continue;
-      recordAll(
-        plan.byModId[id] ?? const <ModInfo>[],
-        const UpdateCheck(outcome: UpdateOutcome.sourceGone),
-      );
-    }
+    markGone([
+      for (final id in batch)
+        if (!seen.contains(id)) id,
+    ]);
     return true;
   }
 
@@ -253,21 +285,69 @@ Future<BulkUpdateCheckOutcome> runBulkUpdateCheck({
     if (!await resolve(ids.sublist(start, end))) break;
   }
 
+  /// One folder's verdict, across every identity it carries.
+  ///
+  /// [groupsFor] supplies release groups per remote mod id; phase one has none
+  /// and phase two has them for exactly the identity that flagged.
+  UpdateCheck? foldFor(
+    ModInfo mod, {
+    Map<int, ReleaseGroups> groupsFor = const <int, ReleaseGroups>{},
+  }) {
+    final origin = mod.origin!;
+    final primary = records[origin.modId!];
+    if (primary == null) return null;
+    return checkForUpdate(
+      origin: origin,
+      remote: primary,
+      releases: groupsFor[origin.modId!] ?? ReleaseGroups.empty,
+      companionRemotes: <int, GbMod>{
+        for (final companion in origin.companions)
+          if (records[companion.modId] case final record?)
+            companion.modId: record,
+      },
+      companionReleases: groupsFor,
+    );
+  }
+
+  // ---- fold: one verdict per folder, after every record has landed ---------
+  for (final mod in plan.checkable) {
+    final check = foldFor(mod);
+    if (check == null) {
+      // The primary's page was never reached, so there is nothing to fold.
+      failed.add(mod.id);
+      continue;
+    }
+    checks[mod.id] = check;
+    // Half an answer is not an answer. The verdict is kept — it refuses to
+    // claim clean without the missing half — but the folder is reported
+    // unchecked, because the pass did not finish asking about it.
+    if (mod.origin!.companions
+        .any((companion) => !records.containsKey(companion.modId))) {
+      failed.add(mod.id);
+    }
+  }
+
   // ---- phase two: ask the author which files shipped together --------------
   //
-  // Only for mods that flagged, and only for the ones we have a remote record
-  // for. A release group can turn a flag *off* and can never turn one on, so a
-  // failure here is not an error state: the verdict simply stays as phase one
-  // left it, which is the direction that errs toward telling the user.
+  // Only for mods that flagged. A release group can turn a flag *off* and can
+  // never turn one on, so a failure here is not an error state: the verdict
+  // simply stays as phase one left it, which is the direction that errs toward
+  // telling the user.
+  //
+  // **The feed asked for is the one belonging to the identity that produced the
+  // finding**, which for a mixed folder is frequently not its primary. Groups
+  // refine one mod's verdict; the patch's grouping says nothing about the base
+  // mod's files, so asking the wrong page spends a request and refines nothing.
   if (fetchUpdates != null) {
-    for (final entry in plan.byModId.entries) {
-      final flagged = [
-        for (final mod in entry.value)
-          if (checks[mod.id]?.hasUpdate ?? false) mod,
-      ];
-      if (flagged.isEmpty) continue;
-      final record = records[entry.key];
-      if (record == null) continue;
+    final needFeed = <int, List<ModInfo>>{};
+    for (final mod in plan.checkable) {
+      final check = checks[mod.id];
+      if (!(check?.hasUpdate ?? false)) continue;
+      final subject = check!.subjectModId ?? mod.origin!.modId!;
+      needFeed.putIfAbsent(subject, () => <ModInfo>[]).add(mod);
+    }
+
+    for (final entry in needFeed.entries) {
       final ReleaseGroups groups;
       try {
         requests++;
@@ -278,12 +358,12 @@ Future<BulkUpdateCheckOutcome> runBulkUpdateCheck({
         continue;
       }
       if (groups.isEmpty) continue;
-      for (final mod in flagged) {
-        checks[mod.id] = checkForUpdate(
-          origin: mod.origin,
-          remote: record,
-          releases: groups,
-        );
+      for (final mod in entry.value) {
+        // Re-folded rather than patched: suppressing the finding the folder was
+        // reporting means its *other* identity's verdict is now the folder's,
+        // and only a fold can work that out.
+        final refolded = foldFor(mod, groupsFor: {entry.key: groups});
+        if (refolded != null) checks[mod.id] = refolded;
       }
     }
   }
@@ -293,10 +373,8 @@ Future<BulkUpdateCheckOutcome> runBulkUpdateCheck({
   // library" to the caller — so say so explicitly rather than letting the
   // summary quietly describe a third of the work as if it were all of it.
   if (aborted != null) {
-    for (final mods in plan.byModId.values) {
-      for (final mod in mods) {
-        if (!checks.containsKey(mod.id)) failed.add(mod.id);
-      }
+    for (final mod in plan.checkable) {
+      if (!checks.containsKey(mod.id)) failed.add(mod.id);
     }
   }
 
