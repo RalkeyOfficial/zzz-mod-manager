@@ -3,6 +3,7 @@ import 'package:archive/archive.dart';
 import 'package:path/path.dart' as path;
 
 import 'archive_hash.dart';
+import 'platform_service_factory.dart';
 
 /// Why an extraction failed, where the answer changes what the user does next.
 ///
@@ -255,7 +256,32 @@ class ArchiveService {
     return const _7ZipResult(true);
   }
 
+  /// A 7-Zip shipped alongside the app, or null.
+  ///
+  /// Checked **before** the system one so a portable build is self-contained
+  /// rather than depending on what happens to be installed. The AUR package
+  /// bundles nothing and falls straight through to the `7zip` it declares.
+  ///
+  /// `Platform.resolvedExecutable` rather than `Directory.current`: the working
+  /// directory is wherever the user launched from, which is how the F10 Python
+  /// fallback ended up unreachable in every installed build.
+  static Future<String?> _locateBundled7Zip() async {
+    final bundleDir = path.dirname(Platform.resolvedExecutable);
+    for (final name in PlatformServiceFactory.getInstance().bundledSevenZipNames) {
+      for (final candidate in [
+        path.join(bundleDir, name),
+        path.join(bundleDir, 'tools', name),
+      ]) {
+        if (await File(candidate).exists()) return candidate;
+      }
+    }
+    return null;
+  }
+
   static Future<String?> _locate7Zip() async {
+    final bundled = await _locateBundled7Zip();
+    if (bundled != null) return bundled;
+
     if (Platform.isWindows) {
       final whereResult = await Process.run('where', ['7z']);
       if (whereResult.exitCode == 0) {

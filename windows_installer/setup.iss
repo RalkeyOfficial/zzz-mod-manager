@@ -48,6 +48,17 @@ Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescrip
 Source: "..\mod_manager_flutter\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; Іконка
 Source: "..\assets\icon.png"; DestDir: "{app}\data\flutter_assets\assets"; Flags: ignoreversion
+; Bundled 7-Zip, so .rar and .7z mods install without the user fetching a tool.
+; `ArchiveService` looks in {app}\tools before falling back to an installed
+; 7-Zip on PATH.
+;
+; 7z.exe *and* 7z.dll — the pair, not 7za.exe from "7-Zip Extra", which 7-Zip's
+; own readme calls "reduced formats support" and which cannot read RAR. Take
+; both from 7z<ver>-x64.exe, which extracts with any 7-Zip. License.txt travels
+; with them: 7-Zip is LGPL.
+Source: "tools\7z.exe"; DestDir: "{app}\tools"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "tools\7z.dll"; DestDir: "{app}\tools"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "tools\7-Zip-License.txt"; DestDir: "{app}\tools"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

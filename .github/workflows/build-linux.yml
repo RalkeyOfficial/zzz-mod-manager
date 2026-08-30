@@ -40,12 +40,37 @@ jobs:
           cd mod_manager_flutter
           flutter build linux --release
 
+      # The portable build has no package manager behind it, so it ships its own
+      # extractor — without one, .rar and .7z mods (most of GameBanana) cannot
+      # be installed at all. The AUR package deliberately bundles nothing and
+      # declares `7zip` instead, so pacman keeps it current.
+      #
+      # `7zzs` is the statically linked build: the target distro's libstdc++ is
+      # unknown, and a dynamic binary is exactly what breaks on the older ones a
+      # portable tarball exists to serve. `ArchiveService` looks for it beside
+      # the executable before falling back to PATH.
+      - name: Fetch bundled 7-Zip
+        run: |
+          # Pinned. 7-zip.org serves each build at its own /a/ URL and does not
+          # keep a "latest" alias, so this is a version to bump deliberately
+          # rather than a moving target.
+          VER=2602
+          curl -fsSL -o /tmp/7z.tar.xz \
+            "https://www.7-zip.org/a/7z${VER}-linux-x64.tar.xz"
+          mkdir -p /tmp/7z && tar -xf /tmp/7z.tar.xz -C /tmp/7z
+          # Fail the build rather than ship a tarball that cannot open a .rar.
+          test -x /tmp/7z/7zzs
+          /tmp/7z/7zzs i | grep -q 'Rar5'
+
       - name: Create Portable Tarball
         run: |
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then VERSION="${GITHUB_REF_NAME#v}"; else VERSION="dev"; fi
           NAME="zzz-mod-manager-${VERSION}-linux-x86_64"
-          mkdir -p "output/$NAME"
+          mkdir -p "output/$NAME/tools"
           cp -r mod_manager_flutter/build/linux/x64/release/bundle/* "output/$NAME/"
+          install -m755 /tmp/7z/7zzs "output/$NAME/tools/7zzs"
+          # LGPL, so the licence travels with the binary.
+          install -m644 /tmp/7z/License.txt "output/$NAME/tools/7-Zip-License.txt"
           tar -C output -czf "output/${NAME}.tar.gz" "$NAME"
           ls -lh output
 

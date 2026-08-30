@@ -283,6 +283,14 @@ class LinuxPlatformService implements PlatformService {
   static const MethodChannel _clipboardChannel =
       MethodChannel('mod_manager/clipboard');
 
+  /// `7zzs` is 7-Zip's **statically linked** Linux build and what the portable
+  /// tarball ships — the target distro's libstdc++ is unknown, and a dynamic
+  /// binary is what breaks on the older ones a portable build exists to serve.
+  /// `7zz` is the same thing dynamically linked. `7za` is deliberately absent:
+  /// it is the reduced-format build and cannot read RAR.
+  @override
+  List<String> get bundledSevenZipNames => const ['7zzs', '7zz'];
+
   @override
   Future<String?> getClipboardHtml() async {
     // Read the clipboard's text/html target straight from the GTK clipboard

@@ -3168,17 +3168,29 @@ work that already opens the same file, so they cost nothing extra.
   docs named it) and **`xdg-utils`**, with `xdotool` / `ydotool` / `wmctrl` as
   `optdepends` for F10 auto-reload, which is genuinely optional. `.SRCINFO`
   regenerated for everything but `pkgver`, which the release skill says to leave.
-- [ ] **The portable Linux tarball and the Windows installer ship no extractor.**
-  `.github/workflows/build-linux.yml` publishes a `.tar.gz` and
-  `windows_installer/setup.iss` an installer, neither behind a package manager,
-  so both have the gap the AUR entry above just closed. Bundling is the answer
-  there rather than a dependency — no pub package covers it (`archive` has the
-  7z *codec* but not the container and no RAR; `rar` skips Linux and Windows
-  entirely; `unrar` is RAR-only), so it means shipping 7-Zip's own binary.
-  Three things it needs: a per-architecture download in CI (7-zip.org publishes
-  x86-64 / x86 / arm64 / arm separately, where Windows takes one), a lookup
-  beside the executable before PATH — on `PlatformService`, not a
-  `Platform.isX` branch — and 7-Zip's LGPL text in the bundle.
+- [x] **The portable builds ship their own extractor now.** `ArchiveService`
+  looks beside `Platform.resolvedExecutable` — and in a `tools/` beside it —
+  before falling back to PATH, with the filenames on
+  `PlatformService.bundledSevenZipNames` rather than a `Platform.isX` branch.
+  Both CI workflows fetch the binary and **fail the build if it cannot report
+  `Rar5`**, so the packaging cannot silently regress to shipping nothing.
+  No pub package covers this: `archive` has the 7z *codec* but not the
+  container and no RAR, `rar` skips Linux and Windows entirely, and `unrar` is
+  RAR-only.
+  Two details worth keeping, both of which the obvious choice gets wrong:
+  - **Never `7za`.** 7-Zip's own readme calls it "reduced formats support", and
+    RAR is among what it drops — so it would find a binary, run it, and decline
+    the one format the bundle exists for. Windows needs the **`7z.exe` +
+    `7z.dll` pair** from `7z<ver>-x64.exe`, not `7za.exe` from "7-Zip Extra".
+  - **Linux takes `7zzs`, the statically linked build.** A portable tarball
+    runs against a libstdc++ it cannot know, which is what a dynamic binary
+    cannot promise. It is 3.6 MB against `7zz`'s 2.9 MB.
+  The versions are **pinned** in both workflows because 7-zip.org serves each
+  build at its own `/a/` URL with no "latest" alias — bumping them is a
+  deliberate act. 7-Zip's `License.txt` ships beside the binary; it is LGPL.
+  **Not verified from a built artifact.** The Linux fetch was run by hand and
+  the binary confirmed to list `Rar5`; the Windows step and the installer's
+  `[Files]` entries have not been exercised.
 - [x] **`scripts/f10_reload.py` was unreachable, and is deleted.** Dead three
   times over, which is why installing it was the wrong fix. It sat behind
   `if (!success)` at the end of `reloadMods`, and method 1 — writing

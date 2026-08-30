@@ -40,4 +40,13 @@ abstract class PlatformService {
   /// clipboard holds no HTML (or the platform tool needed to read it is
   /// unavailable). Used to paste formatted text as markdown.
   Future<String?> getClipboardHtml();
+
+  /// Filenames to look for when hunting a **bundled** 7-Zip beside the app's
+  /// own executable, most preferred first.
+  ///
+  /// A bundled copy is how the portable builds — the Linux tarball and the
+  /// Windows installer — guarantee an extractor without a package manager. The
+  /// AUR package does not need one: it declares `7zip` and lets pacman keep it
+  /// current, which vendoring would undo.
+  List<String> get bundledSevenZipNames;
 }

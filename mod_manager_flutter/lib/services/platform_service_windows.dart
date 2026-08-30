@@ -288,6 +288,13 @@ class WindowsPlatformService implements PlatformService {
     }
   }
 
+  /// **`7z.exe`, which needs `7z.dll` beside it** — deliberately not `7za.exe`.
+  /// 7-Zip's own readme calls that one "reduced formats support", and the
+  /// formats it drops include RAR, which is the whole reason for bundling
+  /// anything. `7zz.exe` is the newer single-file equivalent if it ever ships.
+  @override
+  List<String> get bundledSevenZipNames => const ['7z.exe', '7zz.exe'];
+
   @override
   Future<String?> getClipboardHtml() async {
     try {

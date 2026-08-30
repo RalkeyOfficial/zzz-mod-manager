@@ -47,6 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A download still reports itself while it runs: one notification in the corner shows how far along everything is, how fast, and how long is left, and stays until the last one is done. It doesn't block anything, it names the mod when there's only one, and you can close it if you'd rather watch the list instead.
 - Settings can now check for updates when the app starts, so the blue marks are already on your mods instead of waiting for you to find the button. It's off until you turn it on, it only speaks up when it actually found something, and it never downloads or installs anything — updates are always applied by you.
 - The Settings tab has an **Updates** section for that, and a **Marketplace** section holding the adult-content setting that until now only existed in the Marketplace toolbar. Both places change the same setting, so it reads the same wherever you look.
+- RAR and 7z mods now install without you setting anything up first. The Windows and Linux portable builds ship with 7-Zip included, and the Arch package installs it for you — previously the app needed one you had already installed yourself, and most mods on GameBanana come as .rar or .7z.
+- The Arch package also pulls in the tool behind "open mod page" and "open mod folder", and lists xdotool and ydotool as optional extras for F10 auto-reload, so a fresh install has what it needs.
 
 ### Changed
 

@@ -43,6 +43,29 @@ jobs:
           cd mod_manager_flutter
           flutter build windows --release
 
+      # Dropped into the build output before the ZIP is made, so the existing
+      # copy step picks it up. Without it the portable build cannot install a
+      # .rar or .7z mod — most of GameBanana — and there is no package manager
+      # behind it to supply one.
+      #
+      # 7z.exe *and* 7z.dll: 7za.exe from "7-Zip Extra" is the reduced-format
+      # build and cannot read RAR, which is the format this exists for.
+      - name: Fetch bundled 7-Zip
+        run: |
+          # Pinned deliberately — 7-zip.org serves each build at its own /a/ URL
+          # with no "latest" alias.
+          $ver = "2602"
+          $tools = "mod_manager_flutter\build\windows\x64\runner\Release\tools"
+          New-Item -ItemType Directory -Path $tools -Force | Out-Null
+          Invoke-WebRequest -Uri "https://www.7-zip.org/a/7z$ver-x64.exe" -OutFile "$env:TEMP\7zsetup.exe"
+          & 7z x -y "-o$env:TEMP\7zwin" "$env:TEMP\7zsetup.exe" | Out-Null
+          Copy-Item "$env:TEMP\7zwin\7z.exe" $tools
+          Copy-Item "$env:TEMP\7zwin\7z.dll" $tools
+          Copy-Item "$env:TEMP\7zwin\License.txt" "$tools\7-Zip-License.txt"
+          # Fail the build rather than ship a ZIP that cannot open a .rar.
+          if (-not (& "$tools\7z.exe" i | Select-String -Quiet 'Rar5')) { exit 1 }
+        shell: pwsh
+
       - name: Create Portable ZIP
         run: |
           $version = "${{ github.ref_name }}".TrimStart("v")
