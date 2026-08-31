@@ -612,7 +612,22 @@
       "auto_f10": "Automatic mod reload",
       "appearance": "Appearance",
       "updates": "Updates",
-      "marketplace": "Marketplace"
+      "marketplace": "Marketplace",
+      "diagnostics": "Diagnostics"
+    },
+    "diagnostics": {
+      "write_log": "Write a log file",
+      "write_log_hint": "Records what the app does — the mods it touches, the folders it writes to and the pages it fetches — so a problem can be looked into afterwards. Your username is removed and file paths are shortened. The last seven runs are kept.",
+      "open_folder": "Log files",
+      "open_folder_hint": "One file per run, newest last. This is the one to attach to a bug report.",
+      "open_folder_action": "Open folder",
+      "open_failed_title": "Couldn't open the log folder",
+      "open_failed_body": "Nothing has been written there yet, or the file manager didn't start.",
+      "copy": "Copy diagnostics",
+      "copy_hint": "Your system details and the most recent log lines, ready to paste into a bug report.",
+      "copy_action": "Copy",
+      "copied_title": "Copied",
+      "copied_body": "Your system details and the most recent log lines are on the clipboard."
     },
     "updates": {
       "check_on_launch": "Check for updates when the app starts",

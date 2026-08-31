@@ -156,6 +156,7 @@ mistake.
 > | [`applying-updates.md`](docs/applying-updates.md) | How an update **is written over an installed mod** |
 > | [`patch-destinations.md`](docs/patch-destinations.md) | **Which mod folder a patch goes into** — the signals, what each measures, why the list is ordered and never narrowed |
 > | [`configuration.md`](docs/configuration.md) | The app's **own settings** |
+> | [`logging.md`](docs/logging.md) | **What the app records about itself** — levels, the rotating file, redaction |
 >
 > **Each doc owns one subject.** A fact that doesn't fit any of them wants a new
 > file, not the nearest existing one — the scope line at the top of each doc is

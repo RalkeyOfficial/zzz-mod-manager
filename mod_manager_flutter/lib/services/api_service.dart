@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/character_info.dart';
 import 'config_service.dart';
+import 'log/log_setup.dart';
 import '../models/gamebanana/gb_enums.dart';
 import '../models/mod_origin.dart';
 import 'gamebanana/content_filter.dart';
@@ -46,6 +47,8 @@ class ApiService {
               kDefaultMarketplaceSort;
       _container!.read(updateCheckOnLaunchProvider.notifier).state =
           _configService!.updateCheckOnLaunch;
+      _container!.read(fileLoggingProvider.notifier).state =
+          _configService!.fileLogging;
     }
 
     _modManager ??= ModManagerService(_configService!, _container!);
@@ -215,6 +218,17 @@ class ApiService {
     await initialize();
     await _configService!.setUpdateCheckOnLaunch(enabled);
     _container?.read(updateCheckOnLaunchProvider.notifier).state = enabled;
+  }
+
+  /// Persists the setting **and applies it now**, in that order.
+  ///
+  /// Writing first means a crash between the two leaves the file matching what
+  /// the user asked for on the next launch, which is the half that lasts.
+  static Future<void> setFileLogging(bool enabled) async {
+    await initialize();
+    await _configService!.setFileLogging(enabled);
+    _container?.read(fileLoggingProvider.notifier).state = enabled;
+    applyFileLogging(enabled);
   }
 
   static Future<String> updateConfig({

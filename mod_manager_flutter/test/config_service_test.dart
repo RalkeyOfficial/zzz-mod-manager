@@ -123,6 +123,37 @@ void main() {
     });
   });
 
+  group('writing a log file', () {
+    test('defaults to on, so the run that broke was already recorded', () async {
+      // The opposite default from the startup check above, and deliberately:
+      // that one reaches the network unasked, this one reaches nothing. A log
+      // switched off by default is a log nobody has when they need it.
+      expect((await build()).fileLogging, isTrue);
+    });
+
+    test('turning it off survives into a fresh session', () async {
+      // The case a `?? true` default gets wrong: a stored `false` read back as
+      // "nothing stored" would make the setting impossible to switch off.
+      await (await build()).setFileLogging(false);
+
+      SharedPreferences.setMockInitialValues({});
+      final next = await build();
+      await next.loadFromFile();
+      expect(next.fileLogging, isFalse);
+    });
+
+    test('and turning it back on survives too', () async {
+      final service = await build();
+      await service.setFileLogging(false);
+      await service.setFileLogging(true);
+
+      SharedPreferences.setMockInitialValues({});
+      final next = await build();
+      await next.loadFromFile();
+      expect(next.fileLogging, isTrue);
+    });
+  });
+
   test('both marketplace preferences persist together', () async {
     final service = await build();
     await service.setMarketplaceSort('latestModified');
@@ -183,6 +214,7 @@ void main() {
       'content_filter': next.contentFilter,
       'marketplace_sort': next.marketplaceSort,
       'update_check_on_launch': next.updateCheckOnLaunch,
+      'file_logging': next.fileLogging,
       'active_mods': next.activeMods,
       'favorite_mods': next.favoriteMods,
       'mod_character_tags': next.modCharacterTags,

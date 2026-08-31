@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/screens/components/settings/diagnostics_section.dart';
 import 'package:mod_manager_flutter/screens/components/settings/marketplace_section.dart';
 import 'package:mod_manager_flutter/screens/components/settings/updates_section.dart';
 import 'package:mod_manager_flutter/services/gamebanana/content_filter.dart';
@@ -158,6 +159,112 @@ void main() {
       ]) {
         expect(find.text(label), findsWidgets, reason: '$label is missing');
       }
+    });
+  });
+
+  group('diagnostics', () {
+    testWidgets('says what goes in the file, since you may send it to somebody',
+        (tester) async {
+      // The wording is the load-bearing part, as with the updates switch. A
+      // control that produces a document about the user has to say what the
+      // document contains — and, just as importantly, what it does not.
+      await pumpLocalized(
+        tester,
+        DiagnosticsSettingsSection(writer: _noopBool),
+        container: container,
+      );
+      expectBuilt(DiagnosticsSettingsSection);
+
+      expect(find.text('Write a log file'), findsOneWidget);
+      expect(find.textContaining('username is removed'), findsOneWidget);
+      expect(find.textContaining('last seven runs'), findsOneWidget);
+    });
+
+    testWidgets('is on to begin with', (tester) async {
+      await pumpLocalized(
+        tester,
+        DiagnosticsSettingsSection(writer: _noopBool),
+        container: container,
+      );
+
+      expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+    });
+
+    testWidgets('turning it off moves the switch and writes the setting',
+        (tester) async {
+      bool? written;
+      await pumpLocalized(
+        tester,
+        DiagnosticsSettingsSection(writer: (value) async => written = value),
+        container: container,
+      );
+
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+
+      expect(container.read(fileLoggingProvider), isFalse);
+      expect(written, isFalse);
+    });
+
+    testWidgets('opens the folder rather than the file', (tester) async {
+      // The user is being sent to pick the run that broke out of the last
+      // seven, which means seeing all of them.
+      String? opened;
+      await pumpLocalized(
+        tester,
+        DiagnosticsSettingsSection(
+          writer: _noopBool,
+          openFolder: (path) async {
+            opened = path;
+            return true;
+          },
+        ),
+        container: container,
+      );
+
+      await tester.tap(find.text('Open folder'));
+      await tester.pumpAndSettle();
+
+      expect(opened, isNotNull);
+      expect(opened, endsWith('logs'));
+    });
+
+    testWidgets('a folder that will not open says so', (tester) async {
+      await pumpLocalized(
+        tester,
+        DiagnosticsSettingsSection(
+          writer: _noopBool,
+          openFolder: (_) async => false,
+        ),
+        container: container,
+      );
+
+      await tester.tap(find.text('Open folder'));
+      await tester.pumpAndSettle();
+
+      expect(find.text("Couldn't open the log folder"), findsOneWidget);
+    });
+
+    testWidgets('copying puts the diagnostics on the clipboard and says so',
+        (tester) async {
+      String? copied;
+      await pumpLocalized(
+        tester,
+        DiagnosticsSettingsSection(
+          writer: _noopBool,
+          buildDiagnostics: () => 'the diagnostics',
+          writeClipboard: (text) async => copied = text,
+        ),
+        container: container,
+      );
+
+      await tester.tap(find.text('Copy'));
+      await tester.pumpAndSettle();
+
+      expect(copied, 'the diagnostics');
+      // This one *does* report success: the clipboard gives no other sign that
+      // anything happened, unlike a file manager opening.
+      expect(find.text('Copied'), findsOneWidget);
     });
   });
 }

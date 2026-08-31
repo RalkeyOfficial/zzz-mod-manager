@@ -22,6 +22,7 @@ before changing anything it covers.
 | [`update-checks.md`](../docs/update-checks.md) | Whether a mod **has a newer version** |
 | [`applying-updates.md`](../docs/applying-updates.md) | How an update **is written over an installed mod** |
 | [`patch-destinations.md`](../docs/patch-destinations.md) | **Which mod folder a patch goes into** — the signals and their measurements; ranked, never narrowed or preselected |
+| [`logging.md`](../docs/logging.md) | **What the app records about itself** — levels, tags, the rotating file, redaction |
 | [`configuration.md`](../docs/configuration.md) | The app's **own settings** |
 
 ## How mods work
@@ -79,6 +80,16 @@ resolving a character from an id must handle both, plus the `unknown` placeholde
   Both required. The body names the subject; it never describes the work.
 - Severity is the only thing a call site decides — colour, icon and duration are
   derived from it in one place.
+
+**Diagnostics** — full rules in [`logging.md`](../docs/logging.md)
+- Never `print` or `debugPrint`. `final _log = Logger('<tag>')` at the top of the
+  file; `avoid_print` is on and `test/no_prints_test.dart` catches the other one.
+- **Message says what happened, fields say what it happened to.** No interpolated
+  values in the message, and an exception goes in `error:`, never in the string.
+- **Never pre-censor a path** — redaction runs at the sink, on the rendered line,
+  because an exception's own `toString()` carries the path no call site touched.
+- Mutations are itemised, reads are summarised: a symlink logs a line, a 71-mod
+  scan logs one. Never log progress, queries, or a response body.
 
 **Timeouts**
 - Download timeouts are **stall timeouts, never a total duration**. A legitimate

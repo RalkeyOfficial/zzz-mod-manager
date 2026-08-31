@@ -21,6 +21,11 @@ class ConfigService implements ModCharacterTagStore {
   static const String _keyMarketplaceSort = 'marketplace_sort';
   static const String _keyUpdateCheckOnLaunch = 'update_check_on_launch';
 
+  /// Mirrored by `services/log/log_setup.dart`, which reads the same key
+  /// straight off `config.json` during bootstrap — `SharedPreferences` does not
+  /// exist yet at the moment the first line is written.
+  static const String _keyFileLogging = 'file_logging';
+
   final SharedPreferences _prefs;
   File? _configFile;
 
@@ -96,6 +101,15 @@ class ConfigService implements ModCharacterTagStore {
   /// without the user present.
   bool get updateCheckOnLaunch =>
       _prefs.getBool(_keyUpdateCheckOnLaunch) ?? false;
+
+  /// Whether each run writes a log file.
+  ///
+  /// **Defaults to true, and that is the opposite call from the one above for
+  /// the opposite reason.** A startup check reaches the network without being
+  /// asked, so it has to be opted into; a log reaches nothing, costs a few
+  /// kilobytes, and is worthless if it was switched off on the run that broke.
+  /// Turning it off is a privacy choice the user makes deliberately.
+  bool get fileLogging => _prefs.getBool(_keyFileLogging) ?? true;
 
 
   @override
@@ -333,6 +347,16 @@ class ConfigService implements ModCharacterTagStore {
     }
   }
 
+  Future<bool> setFileLogging(bool enabled) async {
+    try {
+      await _prefs.setBool(_keyFileLogging, enabled);
+      await _saveToFile();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<bool> setFirstRunComplete() async {
     try {
       await _prefs.setBool(_keyFirstRun, false);
@@ -388,6 +412,9 @@ class ConfigService implements ModCharacterTagStore {
           config['update_check_on_launch'],
         );
       }
+      if (config.containsKey('file_logging')) {
+        await _prefs.setBool(_keyFileLogging, config['file_logging']);
+      }
       if (config.containsKey('first_run')) {
         await _prefs.setBool(_keyFirstRun, config['first_run']);
       }
@@ -413,6 +440,7 @@ class ConfigService implements ModCharacterTagStore {
         'content_filter': contentFilter,
         'marketplace_sort': marketplaceSort,
         'update_check_on_launch': updateCheckOnLaunch,
+        'file_logging': fileLogging,
         'mod_character_tags': modCharacterTags,
         'first_run': false,
       };

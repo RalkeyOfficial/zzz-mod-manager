@@ -231,6 +231,12 @@ miss the key.
   installed. Use the id the work already had (`remote.characterId`,
   `mod.characterId`) rather than looking one up at report time. Never fall back to
   `detectCharacterId(name)` — a substring guess this codebase refuses to trust.
+- **Every notification is also logged**, once, from inside
+  `NotificationCenter.show` — the funnel every raise already passes through.
+  Call sites do nothing for this. The line carries the severity, title and body
+  as the user saw them, localized text and all, so the log shows what was on
+  screen beside the failure that put it there. See
+  [`logging.md`](logging.md).
 
 ## 9. Testing
 

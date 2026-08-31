@@ -51,6 +51,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - A patch whose files don't belong in the mod you picked installs as its own mod instead, and says which of the two reasons it was.
   - A folder holding a patch plus the mod it patches can be told about both, and both are checked for updates.
   - An update to either mod in such a folder can be installed: the base mod goes in and the patch is put back over the top. Folders you merged by hand say so first, since the app can't tell which files are which.
+- The app writes a log file for each run, keeping the last seven, with your username removed and file paths shortened.
+  - Each log opens with your system details: OS, distro, display server, and which required tools are installed and at what version.
+  - Settings has a **Diagnostics** section to turn the log file off, open its folder, or copy a summary to the clipboard for a bug report.
 - Installing an archive you have installed before asks first.
 - The Mods toolbar is search plus a **Library** menu, with the filters on their own row.
 - The Mods tab sorts by **Recently added** by default.

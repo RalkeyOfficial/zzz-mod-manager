@@ -94,29 +94,81 @@ LogRouter buildProductionRouter({
   ];
 
   if (fileLogging ?? readFileLoggingFromDisk()) {
-    Directory? directory = logsDirectory;
-    if (directory == null) {
-      try {
-        directory = Directory(PathHelper.getLogsPath());
-      } catch (_) {
-        // No home directory to put it in. The terminal and the memory sink
-        // still work, and "Copy diagnostics" still has something to copy.
-        directory = null;
-      }
-    }
-    if (directory != null) {
-      sinks.add(FileLogSink(
-        directory: directory,
-        now: clock,
-        onDisabled: (reason) =>
-            Log.of('log').warning('file logging stopped', fields: {
-          'reason': reason,
-        }),
-      ));
-    }
+    final file = buildFileSink(logsDirectory: logsDirectory, now: clock);
+    if (file != null) sinks.add(file);
   }
 
   return LogRouter(sinks: sinks, redactor: buildRedactor(), now: clock);
+}
+
+/// The file sink a real run uses, or null when there is nowhere to put it.
+///
+/// Shared by [buildProductionRouter] and the Settings toggle, so a file opened
+/// mid-session is identical to one opened at launch — same directory, same
+/// retention, same failure handling.
+FileLogSink? buildFileSink({
+  Directory? logsDirectory,
+  DateTime Function()? now,
+}) {
+  Directory? directory = logsDirectory;
+  if (directory == null) {
+    try {
+      directory = Directory(PathHelper.getLogsPath());
+    } catch (_) {
+      // No home directory to put it in. The terminal and the memory sink still
+      // work, and "Copy diagnostics" still has something to copy.
+      return null;
+    }
+  }
+  return FileLogSink(
+    directory: directory,
+    now: now ?? DateTime.now,
+    onDisabled: (reason) => Log.of('log').warning(
+      'file logging stopped',
+      fields: {'reason': reason},
+    ),
+  );
+}
+
+/// Starts or stops the file for the rest of this session, and says so in it.
+///
+/// The "stopping" line is written **before** the sink goes, so the file it
+/// lands in explains its own last line rather than simply ending.
+void applyFileLogging(bool enabled, {Directory? logsDirectory}) {
+  if (enabled == Log.writesToFile) return;
+  if (enabled) {
+    Log.setFileSink(buildFileSink(logsDirectory: logsDirectory));
+    logStartupHeader(fileLogging: true);
+    Log.of('log').info('file logging turned on');
+  } else {
+    Log.of('log').info('file logging turned off, this file ends here');
+    Log.setFileSink(null);
+  }
+}
+
+/// What "Copy diagnostics" puts on the clipboard.
+///
+/// A short header plus the lines still in memory. **Not read from the file**:
+/// this has to work with the file switched off, must not be slow, and the ring
+/// buffer already holds redacted lines — so what reaches the clipboard is
+/// censored by the same single guarantee, not by a second implementation.
+///
+/// The header is rebuilt rather than taken from the top of the buffer, which on
+/// a long session has scrolled away — and a paste with no version in it is the
+/// one thing whoever reads it will ask for first.
+String diagnosticsText() {
+  final redactor = Log.router.redactor;
+  final buffer = StringBuffer()
+    ..writeln('zzz-mod-manager ${AppConstants.appVersion} · '
+        '${Platform.operatingSystem} · '
+        '${Platform.operatingSystemVersion} · '
+        'locale=${Platform.localeName}')
+    ..writeln('log=${redactor(Log.filePath ?? 'off')}')
+    ..writeln('--- recent log lines ---');
+  for (final line in Log.recent) {
+    buffer.writeln(line);
+  }
+  return buffer.toString();
 }
 
 /// Routes Flutter's own error channels into the log.

@@ -29,6 +29,7 @@
 /// nothing would ever reach the file. Every test would still pass.
 library;
 
+import '../../utils/path_helper.dart';
 import 'log_format.dart';
 import 'log_level.dart';
 import 'log_record.dart';
@@ -202,6 +203,17 @@ class Log {
     return const <String>[];
   }
 
+  /// The folder the logs live in — **uncensored**, because this is what gets
+  /// handed to a file manager rather than written into a file.
+  static String get logsDirectory {
+    for (final sink in router.sinks) {
+      if (sink is FileLogSink) return sink.directory.path;
+    }
+    // Nothing has been written this session (the setting is off), and the
+    // folder is still where the previous seven runs left their files.
+    return PathHelper.getLogsPath();
+  }
+
   /// The file this session is writing to, if any.
   static String? get filePath {
     for (final sink in router.sinks) {
@@ -213,4 +225,28 @@ class Log {
   /// Flush and close every sink. Called when the window is closing, where
   /// otherwise the tail of every clean exit is lost.
   static Future<void> shutdown() => router.close();
+
+  /// Starts or stops writing to a file, without restarting the app.
+  ///
+  /// **Turning it off closes the file and leaves it on disk.** Deleting
+  /// somebody's logs as a side effect of a toggle would throw away the very
+  /// thing they may be about to attach to a report; the folder button is how
+  /// they remove them.
+  ///
+  /// Turning it on opens a **new** file, with its own header, rather than
+  /// appending to whatever the last session left. The alternative is a file
+  /// whose header describes a run that already ended.
+  static void setFileSink(FileLogSink? sink) {
+    final sinks = router.sinks;
+    final existing = sinks.whereType<FileLogSink>().toList();
+    for (final old in existing) {
+      unawaited(old.close());
+      sinks.remove(old);
+    }
+    if (sink != null) sinks.add(sink);
+  }
+
+  /// Whether this session is writing to a file right now.
+  static bool get writesToFile =>
+      router.sinks.whereType<FileLogSink>().isNotEmpty;
 }

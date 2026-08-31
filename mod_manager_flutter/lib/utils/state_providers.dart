@@ -174,6 +174,15 @@ final marketplaceSortProvider =
 /// `docs/applying-updates.md` §7.
 final updateCheckOnLaunchProvider = StateProvider<bool>((ref) => false);
 
+/// Whether each run writes a log file.
+///
+/// **Defaults to true**, unlike the setting above, and for the opposite reason:
+/// a log reaches nothing and costs kilobytes, and is worthless if it happened to
+/// be switched off on the run that broke. This provider is only what the
+/// *Settings switch* reads — the actual sink is decided in `main()` by reading
+/// `config.json` directly, long before `SharedPreferences` exists.
+final fileLoggingProvider = StateProvider<bool>((ref) => true);
+
 /// The sort a fresh install starts on: newest submissions first.
 ///
 /// Worth knowing what this trades away — `Generic_Newest` orders by
