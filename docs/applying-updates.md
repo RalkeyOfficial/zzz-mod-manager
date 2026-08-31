@@ -290,10 +290,12 @@ way, and they can decline to answer and move on.
   scoped by the import picker, since patch-shape is a property of a resulting mod
   and not of a folder (`scanPlannedMods`) — and raises the question there
   ([`origin-tracking.md` §10](origin-tracking.md#the-install-asks-too-at-the-moment-it-finds-a-patch)).
-  The **drag/drop** path scans after the copy and only warns: a hand-dragged folder
-  frequently has no `origin` block at all, so there is nothing to record
-  `patch_shaped` on, and without that flag the folder never reaches the state that
-  would offer to name what it patches.
+  The **drag/drop** path scans after the copy and only warns — it records no
+  `patch_shaped`, so the folder never reaches the state that would offer to name
+  what it patches. There is a block to record it on: that path seeds every folder
+  it imports (`ModOriginSeed.importedFolder`, or `importedArchive` for one out of
+  an archive), so `importMods` writes an origin for each. Only the write is
+  missing.
 - **Before an update.** If the *incoming* download has dangling references, the
   folder being written into must be mixed. The confirmation says so, and states that
   only part of the folder is being replaced. This works on the existing library with

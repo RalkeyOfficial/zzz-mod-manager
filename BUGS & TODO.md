@@ -1144,9 +1144,17 @@ The block:
   makes this worse rather than better: it identifies *which library mod* the
   download replaces, which is the strongest evidence there will ever be, and
   the drag path discards it. The marketplace path's warning is also pinned and
-  this one's is not, so the eight seconds are the whole of it. Half the fix is
-  a `pinned: true`; the other half needs the block that path frequently has no
-  origin for at all.
+  this one's is not, so the eight seconds are the whole of it.
+  **Cheaper than Q5 in the plan assumed.** That question was posed on the
+  premise that a hand-dragged folder has no `origin` block to amend, and it
+  does: `mods_screen.dart:1376` seeds every dropped folder
+  (`ModOriginSeed.importedFolder`) and `:1420` every folder out of an archive
+  (`importedArchive`), so `importMods` writes one for each and
+  `updateModOrigin` has something to find. No sidecar exception and no
+  don't-litter argument are needed — the write is simply absent. What is left to
+  decide is whether that path also raises the destination prompt, which needs
+  the scan moved before its copy the way `scanPlannedMods` was for the
+  marketplace.
 - [x] **A found update cannot be acted on.** The dialog lists the newer files and
   then offers a mod page and a marketplace shortcut, because installing from
   the marketplace creates a **second mod folder** rather than updating the
