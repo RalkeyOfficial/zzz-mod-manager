@@ -9,94 +9,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- The Marketplace is now a built-in GameBanana browser, working the same way on Linux and Windows: search or browse ZZZ mods, filter by category or character, sort, then open a mod to see its screenshots, description and full file list and download from there. Opening a mod and coming back leaves the results exactly where you had scrolled to. Linux no longer has to send you to an external browser.
-- A "best of" carousel above the Marketplace grid cycles through GameBanana's top three mods for each of seven periods — today, this week, this month, 3 and 6 months, this year, and all time. Each card shows the mod's cover full-width with its title over the top; click it to open the mod. It advances on its own, and pauses while your cursor is over it or while you have a mod open, so you come back to the card you left.
-- Mods flagged as adult content on GameBanana are blurred until you click to reveal them, with a Marketplace toolbar setting to show them unblurred or hide them entirely. Your choice is remembered between sessions, as is the Marketplace sort order.
-- Marketplace mod cards show how long ago each mod was first released and last updated, with the exact dates on hover.
-- The mod detail view shows the author, category, when the mod was first released and when it was last updated, and each file's name, size, upload date and GameBanana's own virus-scan result, and can list older superseded versions. When a mod offers more than one file, you choose which to download.
-- Marketplace downloads now resume where they left off instead of starting over, survive the app being closed mid-download, and show a transfer rate and estimated time remaining.
-- Marketplace downloads can now be cancelled while in progress.
-- Mods now record where they came from, so a future release can tell you when an update is available. A Marketplace download records exactly which mod and which file it was; an archive or folder you import yourself records how it arrived and, for archives, its checksum.
-- Mods you already have are now linked back to their GameBanana page automatically, using the source URL already stored on them, so update checking will work for your existing library and not just for new installs. No new files appear in mods that have no source URL.
-- The Marketplace now marks mods you already have. Cards and the mod page show which of your mod folders came from that page — several, when you have installed more than one variant — and the file list marks the exact file you installed, or notes when a file is byte-identical to an archive you installed.
-- Installing an archive you have installed before now asks first, naming the mods it produced, instead of quietly making a second copy. Applies to Marketplace downloads and to archives you import yourself. It can only recognise archives this version installed, and never a re-packed copy of the same mod.
-- Mods installed from the Marketplace arrive with their description and screenshots (up to ten) already filled in from their GameBanana page, and are tagged with the character the mod is filed under there rather than with whatever the folder name reads as — so a Zhao skin called "Zhao Nicole" lands under Zhao. Mods not filed under a character still fall back to the name. Anything the mod folder already carried is kept, including a preview image shipped inside the archive, which stays the cover.
-- Mod cards now show how well each mod is set up for update checking, in one mark at the corner of the cover: amber when we know which GameBanana mod it is but not which version you have, a quiet clock when only the install date is recorded, a quiet broken link when its GameBanana page has been taken down, and a quiet dot when it isn't linked to a mod page at all. Nothing is shown once the exact file is known. A new toolbar button lists how many mods still need attention — the amber and the unlinked ones — and filters the library down to them.
-- Clicking that mark — or "Update tracking…" in a mod's right-click menu — opens a dialog to link a mod to its GameBanana page and say which file you have. It states what it already has on record first: which mod page, whether that came from a download, from you confirming it or from a link you pasted, and which file and version — or that only a date is recorded, and which date. Then it searches for the folder name or takes a pasted mod page link, marks the file you already chose, and says *why* it thinks a particular file is yours rather than just guessing.
-- If you don't know which file you have, the same dialog will settle for remembering the date and telling you about anything published after it; if the mod isn't from GameBanana at all, one click stops it asking. It can also fill in a description, screenshots and tags the mod is missing.
-- That same answer can be given to a whole library at once: "Mark all as current" in the Mods toolbar's Library menu settles every mod that is linked to a mod page but has no known version, using each mod's install date. It filters the library down to exactly those mods before asking, makes no network requests, invents no version numbers, and says up front how many mods it will change and how many it can't touch.
-- The app can now check your mods for updates — one mod at a time from its right-click menu, or the whole library from the Library menu, and only ever when you press it. Mods with something newer published get a blue mark at the corner of their cover; clicking it says what you have, what has been published since, and when.
-- Update checks say how sure they are. "An update is available" is only used when the file you installed has actually been superseded, or when a newer file carries the same variant label; anything resting on a guessed link or a guessed version is reported as "possibly outdated" instead, with the reason spelled out. GameBanana publishes no comparable version numbers, so this is a best guess by design and never claims otherwise.
-- The whole-library check reports mods it could not reach separately from mods it found nothing for, so a connection problem can never read as "everything is up to date". A mod page that has been removed is reported as such, and one mod with a bad link no longer spoils the check for the rest.
-- Update checks read the mod's release history, so a *different variant* of a mod is no longer mistaken for a newer version of yours: files the author published together — an SFW and an NSFW build, or four proportion variants in one post — are treated as one release. Two files the author stamped with the same version number are too, even when they were posted weeks apart.
-- An update you don't want can be ignored from its dialog. The mark disappears from the mod's card, the mod stays tracked, and anything the author publishes afterwards shows up again on its own. One click undoes it.
-- Once the update check has found something, a toolbar filter narrows the library down to just those mods — so three updates among a hundred and twenty-eight mods are one click away rather than something to scroll for. Once you've dealt with the last update the filter switches itself off rather than leaving you looking at an empty library.
-- When a mod has published more than one file since the one you have — an SFW and an NSFW build, say — the update dialog lists them all rather than picking for you, and marks the one it would choose along with why: because it matches your variant's label, or merely because it's the newest. Where the labels match, your variant wins even if the other one is newer.
-- Found an update? You can now install it. The update dialog's "Update" button downloads the file and writes it over the mod's own folder — the mod keeps its name, its place in your library, its character tag, its favourite star and its on/off state. Where a mod offers several files, click the one you want first.
-- Updating never empties a mod folder, only writes over the files the new version replaces. Anything you added yourself — a patch you applied on top, a second mod you merged in, your own textures — stays where it is.
-- Every update saves a copy of the mod first, and "Restore a previous version…" in a mod's right-click menu puts it back. Restoring saves a copy too, so it can be undone. Copies are kept for at least a month, up to three per mod, within an overall size budget.
-- The update dialog shows the author's release notes for anything published since the version you have — their changelog and their write-up — so you can see what you're getting before you install it. They sit in a collapsible section you open when you want them and close when you're done.
-- After an update, any hotkey the new version moved is listed as "Skin — F7 → F9", with an explanation of why nothing was carried over and where to set it again. Keys the update left alone aren't listed, so the section only appears when something actually changed.
-- Before an update is applied you're told what will happen: that a copy is being saved, that keys you rebound inside the mod's .ini will go back to the author's, and — if the download turns out to be a patch rather than a whole mod — that only its .ini files are being replaced.
-- An update to **either** mod in a folder that holds a patch plus the mod it patches can now be installed. The base mod is written in and the patch is put straight back over the top of it, so updating the mod underneath no longer undoes the fix on top — the app remembers which files came from the patch, so it works even if the patch's page has since been taken down. Updating the patch itself places its files where that mod actually keeps them rather than where the archive happened to put them. For folders you merged by hand before this release the app can't tell which files are which, so it says so before writing and the saved copy is the way back.
-- A folder holding a patch plus the mod it patches can now be told about both, and both are checked for updates. The update-tracking dialog gains a row for naming the mod a patch applies to; once named, that mod's page is checked alongside the patch's and either one having something newer marks the card. The mod also stops being invisible in the Marketplace — its page shows it as already in your library. Only you can say what the second mod is, since you put those files there, so a folder is never guessed at.
-- If a new version renames its .ini file, the old one is offered up for deletion — leaving both means two are loaded at once, which usually shows up as broken hotkeys. An .ini belonging to a *different* mod merged into the same folder is never offered, and is named so you know why.
-- Installing something that turns out to be a patch — .ini files with none of the content they need — now says so straight away, instead of leaving you to work it out when the game shows nothing. Mods that only replace part of a character, which is most of them, are not mistaken for patches. It is also written down, so the mod's update-tracking dialog offers to name the mod it patches later; this works the same whether the patch came from the Marketplace or from a folder or archive you dragged in yourself.
-- Installing a patch now asks where it should go, while you are still looking at it — whether it came from the Marketplace or from a folder or archive you dragged in. You can give it a folder of its own and say **which mod and which file** it patches, and that mod is then downloaded into the same folder for you, with the patch written over the top — so the folder works straight away instead of waiting for you to go and fetch the base mod yourself. Or install it straight **into** a mod you already have, picked from a searchable list that shows each mod's cover image rather than a wall of folder names. That second option writes its files over that mod, putting each one where that mod actually keeps it. A copy of the folder is saved first, so it can be put back from the mod's backups. A patch from the Marketplace is also recorded against that mod, so it is checked for updates too; one you dragged in has no mod page to record, so only the mod it went into stays tracked. You can also install without answering anything, or decide not to install it at all, since the question comes up before anything is copied.
-- If a patch's files don't belong in the mod you picked, it says which of the two reasons it is and installs the patch as its own mod instead of guessing — either none of its files are in that mod, so it's for a different one, or that mod's folder holds two copies of them and needs sorting out first. Nothing is written to the mod you picked either way, and the import report says "Installed, but not as you asked" rather than reporting a success it didn't deliver.
-- A download that is just a replacement texture, with no .ini at all, is now recognised as a patch too, instead of being reported as "the mod may be incomplete" — which pointed at the wrong fix. Nothing in the game loads a texture or a mesh except through an .ini, so a download that brings those and no .ini is one that needs another mod. It doesn't matter whether you've installed the mod it patches yet, and it costs nothing to work out. A folder of screenshots is still reported as incomplete, since nothing in it is waiting for an .ini.
-- When the app can't tell where a downloaded archive's folders should go — because the mod predates this version, or the archive is laid out differently now — it stops and says so rather than guessing. Download it as a new mod instead.
-- Checking the whole library now doubles as a way to sort out where your mods came from, in one pass: mods whose link to a mod page was only worked out from a URL are listed side by side with the page they point at for you to confirm, mods with no known version get theirs filled in where the answer is obvious or a file picker where it isn't, and mod pages that have been taken down are recorded as gone so nothing keeps asking about them. It uses the check's own results, so it costs no extra requests, and nothing is saved until you press Save. Reachable at any time from "Sort out mod tracking…" in the Mods toolbar's Library menu, not only right after a check.
-- The Mods toolbar is search plus a **Library** menu on one row, with every filter on the row below. The three things that act on the whole library — check for updates, sort out mod tracking, mark all as current — live in that menu with a count each.
-- Downloads now run in the background, so you can keep browsing — or queue up several mods — instead of watching one archive arrive. Two run at a time and the rest wait their turn; each one installs itself as it lands, and only stops to ask you something when it has to. A button appears in the title bar while anything is in flight, listing every download with its size, rate and time remaining, and a button to cancel, retry a failed one, or clear the finished.
-- A download still reports itself while it runs: one notification in the corner shows how far along everything is, how fast, and how long is left, and stays until the last one is done. It doesn't block anything, it names the mod when there's only one, and you can close it if you'd rather watch the list instead.
-- Settings can now check for updates when the app starts, so the blue marks are already on your mods instead of waiting for you to find the button. It's off until you turn it on, it only speaks up when it actually found something, and it never downloads or installs anything — updates are always applied by you.
-- The Settings tab has an **Updates** section for that, and a **Marketplace** section holding the adult-content setting that until now only existed in the Marketplace toolbar. Both places change the same setting, so it reads the same wherever you look.
-- RAR and 7z mods now install without you setting anything up first. The Windows and Linux portable builds ship with 7-Zip included, and the Arch package installs it for you — previously the app needed one you had already installed yourself, and most mods on GameBanana come as .rar or .7z.
-- The Arch package also pulls in the tool behind "open mod page" and "open mod folder", and lists xdotool and ydotool as optional extras for F10 auto-reload, so a fresh install has what it needs.
-- The Mods tab's default sort is now **Recently added** and sorts by when each mod was installed, newest first. Mods with no known install date stay at the end in the order they were already in, rather than being shuffled into a guess.
-- A mod's page in the Marketplace now shows the author's tags, in the same form they get stored under when you install it — so a mod reads the same whether you're browsing it or looking at the folder it became.
-- The category on a mod's page is now a link. Clicking "Ellen Joe" — or "Bangboo Skins", or whatever it's filed under — takes you back to the grid showing everything else in that category.
+- The Marketplace is a built-in GameBanana browser on Linux and Windows: search, browse, filter by category or character, sort, and open a mod for its screenshots, description and file list.
+  - A carousel above the grid shows GameBanana's top mods across seven periods, from today to all time.
+  - Adult content can be shown, blurred until you click it, or hidden entirely.
+  - Cards show when each mod was released and last updated.
+  - A mod's page shows its author, category (which links back to the grid), tags, dates, and every file with its size, upload date and virus-scan result.
+  - The Marketplace marks which mods and which files you have already installed.
+  - Marketplace installs arrive with their description, screenshots and character tag filled in from the mod page.
+- Downloads run in the background, two at a time, and install themselves as they land.
+  - Downloads resume where they left off and survive the app closing.
+  - Downloads can be cancelled while running.
+  - A title-bar button opens the list of downloads, where a failed one can be retried and finished ones cleared.
+  - One notification shows overall download progress until the last one finishes.
+- Mods record where they came from, so they can be checked for updates.
+  - Existing mods are linked back to their GameBanana page from the source URL they already carry.
+  - Mod cards show a mark for how well each mod is set up for update checking, and a toolbar button filters the library to the ones that need attention.
+  - "Update tracking…" in a mod's right-click menu links it to its GameBanana page and records which file you have.
+  - That dialog can settle for the install date instead, or stop asking if the mod isn't from GameBanana.
+  - "Mark all as current" settles every tracked mod with no known version, using each mod's install date.
+  - "Sort out mod tracking…" turns a library check into one pass for confirming mod pages, filling in versions and recording dead links.
+- Mods can be checked for updates, one at a time or the whole library, and only when you press it. A blue mark shows what has something newer.
+  - Update checks say whether they are sure or guessing.
+  - The library check reports mods it couldn't reach separately from mods with nothing new.
+  - Files an author published together count as one release, so another variant isn't read as an update.
+  - An update can be ignored from its dialog, and one click undoes it.
+  - A toolbar filter narrows the library to mods with updates.
+  - Settings can check for updates at startup. Off by default, and it never installs anything.
+- Updates can be installed from the update dialog. The mod keeps its name, character tag, favourite star and on/off state.
+  - The dialog lists every newer file and marks the one it would pick.
+  - Updating writes over the files the new version replaces and leaves anything you added yourself alone.
+  - Every update saves a copy of the mod first, and "Restore a previous version…" puts it back.
+  - The dialog shows the author's release notes for anything published since your version.
+  - Hotkeys the new version moved are listed after an update.
+  - You're told what an update will do before it runs.
+  - When a new version renames its .ini, the old one is offered for deletion.
+  - An update whose archive layout no longer matches the mod stops and says so rather than guessing.
+- An install that turns out to be a patch says so, and remembers it for later.
+  - Installing a patch asks where it goes: its own folder with the mod it patches fetched in for you, or straight into a mod you already have, picked from a searchable list with cover images.
+  - A patch whose files don't belong in the mod you picked installs as its own mod instead, and says which of the two reasons it was.
+  - A folder holding a patch plus the mod it patches can be told about both, and both are checked for updates.
+  - An update to either mod in such a folder can be installed: the base mod goes in and the patch is put back over the top. Folders you merged by hand say so first, since the app can't tell which files are which.
+- Installing an archive you have installed before asks first.
+- The Mods toolbar is search plus a **Library** menu, with the filters on their own row.
+- The Mods tab sorts by **Recently added** by default.
+- Settings has an **Updates** section for the startup check, and a **Marketplace** section for the adult-content filter.
+- RAR and 7z mods install with no setup: 7-Zip ships with the app, and the Arch package installs it.
+- The Arch package pulls in what "open mod page" and "open mod folder" need, and lists xdotool and ydotool as optional.
 
 ### Changed
 
-- The "which mod is this?" search box now starts with the mod's name read as words, so a mod that arrived as `Ellen_Joe_Cheongsam` searches for "Ellen Joe Cheongsam" and finds something on the first try instead of nothing. Applies both to update tracking and to saying what a patch patches. Hyphens, dots and version numbers are left exactly as the author wrote them.
-- Notifications are now small cards in the bottom-right corner instead of one wide bar across the bottom: several can be on screen at once, any of them can be closed, and hovering anywhere over them pauses the countdown on all of them — so you can take your time reading without one vanishing mid-sentence. Moving away starts the countdowns again from the top. The longest-standing one drops off once four are showing.
-- Every notification now says two things: what happened, and what it happened to. "Mod installed" carries the mod's name, "Couldn't extract the archive" carries where the file was left. Messages about one of your mods lead with that character's portrait; mods filed under UI, Texture, Audio or Misc show that category's icon instead.
-- The app no longer confirms things you can already see. Enabling a mod, favouriting one, renaming one, editing its tags, refreshing the library, changing language and deleting a mod all report only when they *fail* — the switch, the star, the name and the card itself already tell you when they work. Deleting in particular now only ever speaks in red.
-- Notifications raised while a dialog is open are now visible — they used to be drawn behind it, which covered most messages from renaming, deleting, editing keybinds and the whole update flow.
-- Install confirmations now name the mod that arrived and say nothing more about the work — the auto-tags and the list of fields copied from the mod page are gone. Anything you need to act on (a mod with no `.ini`, a download that turned out to be a patch, tracking that couldn't be saved) arrives as its own separate warning beside it, rather than several problems joined into one paragraph you have to read to the end to count.
-- Mod descriptions are easier to read: body text is larger, lines are more generously spaced, and headings, lists, quotes, code, tables and horizontal rules now follow one consistent style everywhere a description is shown. A `---` divider is a hairline instead of a thick bar.
-- Descriptions keep the spacing their author gave them: blank lines between paragraphs are a full line tall rather than a hairline gap, and a run of several stays as tall as it was written instead of collapsing into a single break.
-- Downloaded archives now always land in the app's own downloads folder and are deleted once installed; an archive that fails to extract is kept for the rest of the session, and the app tells you where to find it. Anything still sitting there is cleared when you next start the app, so the folder no longer grows forever.
+- The "which mod is this?" search starts with the mod's name read as words, so `Ellen_Joe_Cheongsam` searches for "Ellen Joe Cheongsam".
+- Notifications are small cards in the bottom-right corner. Several can show at once, any can be closed, and hovering pauses their countdowns.
+- Every notification says what happened and what it happened to, led by the character's portrait.
+- Enabling, favouriting, renaming, retagging, refreshing and deleting report only when they fail.
+- Notifications are drawn above dialogs instead of behind them.
+- Install confirmations name the mod that arrived, and anything you need to act on comes as its own warning beside it.
+- Mod descriptions are larger, better spaced, and consistently styled everywhere they're shown.
+- Descriptions keep the paragraph spacing their author gave them.
+- Downloaded archives land in the app's own downloads folder and are deleted once installed. Anything left over is cleared when you next start the app.
 
 ### Removed
 
-- The embedded webview (Windows) and the Downloads-folder watcher (Linux) are gone, replaced by the built-in browser above. The watcher could only notice a file appearing and had to guess when your browser had finished writing it, so it also picked up unrelated downloads and could never tell which mod a file belonged to.
+- The embedded webview (Windows) and the Downloads-folder watcher (Linux), replaced by the built-in browser.
 
 ### Fixed
 
-- A mod is no longer named `something (2)` because of a leftover download. Archives never overwrite each other in the downloads folder, so a second copy of the same file gets a `(2)` — and for an archive that is just a pile of files with no folder inside it, that filename was becoming the mod's name. The install now uses the name the download asked for.
-- A RAR or 7z mod that can't be unpacked because 7-Zip isn't installed now says so, and says the download itself is fine. It used to report the same "couldn't extract the archive, extract it by hand" as a genuinely broken file, which points away from the actual fix.
-- A mod folder holding a patch is no longer reported as up to date. Update checking follows the patch's page there, so a clean result said nothing about the mod the folder actually contains — which could be several versions behind. It now says only the patch is tracked. Recognising this depends on the app having installed the patch itself, so folders you assembled before this release aren't covered.
-- The "this looks like a patch" warning after an install now stays until you dismiss it, instead of disappearing after eight seconds beside the success message, and says that update checking will follow the patch rather than the mod it patches. Both routes in — the Marketplace, and dragging a folder or archive in — warn the same way. "The mod may be incomplete" still times out, since there is nothing there to finish.
-- Importing a folder that contains a symbolic link no longer follows it. A link pointing outside the folder used to copy unrelated files into your library, and one pointing back at the folder itself would loop until it filled the disk.
-- A mod whose folder can't be written to now says so instead of failing quietly. Its update-tracking data can't be saved, so it is never checked for updates and looks like an ordinary untracked mod; the library now names it, and keeps saying so until the folder is fixed.
-- Editing a mod's hotkey now updates the mod straight away. The new key was written to the `.ini` correctly, but the library kept showing the old one — in the right-click menu, the details dialog and the hotkey editor itself — until you switched tabs and back.
-- Ukrainian counted messages now use the right form of the noun. The language has three where English has two, so anything between 2 and 4 read as "2 модів" instead of "2 моди" — and messages about a single mod said "1 мод" even when there were 21 of them, since Ukrainian uses that same form for every count ending in 1.
-- Importing or deleting a mod no longer plays the whole "switched character" animation across the Mods grid — sliding everything out to the left, back in from the right, and re-animating every card. That transition now happens only when you actually switch character, which is what it was for.
-- Turning a mod on or off no longer rebuilds its card from scratch, so the card keeps its hover lift instead of dropping it under your cursor until you move the mouse away and back. The active border and glow now ease in rather than snapping.
-- "Detect tags for all mods" no longer blanks the Settings page behind a blocking dialog and then replays the whole page's entrance animation on the way back. The button reports on itself — it spins and disables while the pass runs — and nothing else on the page moves. The work is a scan of your mod folder names, so it is usually over in a moment.
-- Collapsing or expanding the sidebar no longer causes an exception across the navigation buttons. A label that does not yet fit the sidebar's animating width now shortens with an ellipsis instead of spilling out of it.
-- Mod cover images are decoded at the size they are shown rather than their full resolution, cutting the app's image memory dramatically — a 49-cover library previously held over 200 MB of decoded image data, enough that scrolling the library could push other images out of memory and force them to reload.
+- A missing 7-Zip is reported as a missing tool rather than a broken archive.
+- Importing a folder no longer follows symbolic links out of it.
+- A mod whose folder can't be written to is named instead of failing quietly.
+- Editing a mod's hotkey updates the library straight away instead of after a tab switch.
+- Ukrainian counted messages use the right form of the noun.
+- Importing or deleting a mod no longer replays the "switched character" animation across the grid.
+- Turning a mod on or off no longer rebuilds its card, so it keeps its hover lift.
+- "Detect tags for all mods" no longer blanks the Settings page behind a blocking dialog.
+- Collapsing the sidebar no longer throws an exception across the navigation buttons.
+- Cover images are decoded at the size they're shown, cutting the app's image memory.
 - Certificate validation is no longer disabled when downloading mods.
 - Installing a mod no longer risks deleting the folder its archive was sitting in.
-- A failed or interrupted marketplace download no longer leaves a partial file and an open file handle behind.
-- Mod downloads ran several times slower than the connection allowed — pinned near 3 MB/s no matter how fast the server was. They now run at whatever speed the server will give: about four times faster on an average-sized mod, closer to five on a large one, and limited only by the connection.
-- Mods downloaded from the Marketplace now carry a link back to their GameBanana page, so "open mod page" works on them straight away. A link already stored on a mod is never replaced.
-
-- Metadata written into a mod's `.zzz-mod-manager/metadata.json` by a newer version of the app (or another tool) is no longer erased when you edit that mod's description, tags or character.
-- Saving the edit dialog for a mod with no character assigned no longer records the placeholder "unknown" as its character, and mods carrying that placeholder from an older version are now treated as untagged.
+- Metadata written by a newer version of the app is no longer erased when you edit a mod's description, tags or character.
+- Saving a mod with no character no longer records "unknown" as its character.
 
 ## [2.2.2] - 2026-07-19
 

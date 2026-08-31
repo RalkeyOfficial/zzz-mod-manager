@@ -73,8 +73,7 @@ counts and analyzer numbers, in a line — evidence, not the report.
 State a limit as the behaviour I will meet, never as the reason in the code: "a
 patch you dragged in has no mod page, so only the mod it went into stays tracked",
 not "a companion record requires a mod id". The reasoning is not dropped, it
-moves — decisions, rejected alternatives and the constraints behind them still go
-in `docs/` and the code comments in full.
+moves — decisions and rejected alternatives still go in `docs/` in full.
 
 ## Commands
 
@@ -127,8 +126,9 @@ clipboard in the runner (`linux/runner/my_application.cc`, channel
 `CHANGELOG.md` (repo root) follows [Keep a Changelog](https://keepachangelog.com)
 and [Semantic Versioning](https://semver.org). **Update it as part of every
 change**: new entries go under the top `## [Unreleased]` section, grouped under
-`### Added` / `### Changed` / `### Fixed` / `### Removed`, one line each (two at
-most), describing behaviour and intent rather than implementation detail.
+`### Added` / `### Changed` / `### Fixed` / `### Removed`. **One line each** —
+"the app does x", no rationale. Entries may nest one level to group one feature,
+and a sub-bullet is another such line rather than an explanation of its parent.
 
 For cutting a release or bumping the version, use the **`release` skill**
 (`.claude/skills/release/SKILL.md`) — it holds the release steps and every file

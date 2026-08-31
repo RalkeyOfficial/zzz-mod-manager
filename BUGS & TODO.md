@@ -3347,3 +3347,7 @@ Waiting on it:
 
 - [ ] A marketplace file row overflows at 2× text scale. The scan chip and
   Download button can't shrink. Seen at 530px and 600px window widths.
+
+Other todo's:
+
+- [ ] Add a disk usage page, where you can see with graphs how much disk is being used and for what (images, mods, backups / previous versions, etc.)
