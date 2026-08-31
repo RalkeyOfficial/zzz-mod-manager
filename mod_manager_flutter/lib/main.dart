@@ -22,6 +22,7 @@ import 'services/api_service.dart';
 import 'services/download/download_queue.dart';
 import 'services/log/log_setup.dart';
 import 'services/log/logger.dart';
+import 'services/log/system_probe.dart';
 import 'l10n/app_localizations.dart';
 
 void main() async {
@@ -45,6 +46,11 @@ void main() async {
     logStartupHeader(fileLogging: fileLogging);
 
     await _startUp();
+
+    // Unawaited, and after the UI is on its way up: this spawns processes to
+    // ask what is installed, and the first frame must not wait on a
+    // diagnostic. See `system_probe.dart`.
+    unawaited(logSystemReport());
   }, (error, stack) {
     Log.of('zone').critical('unhandled error', error: error, stack: stack);
   });

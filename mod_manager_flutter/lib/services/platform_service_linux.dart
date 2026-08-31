@@ -2,6 +2,8 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import 'package:url_launcher/url_launcher.dart';
+import '../utils/process_probe.dart';
+import 'log/system_report.dart';
 import 'platform_service.dart';
 
 /// Linux-специфічна реалізація PlatformService
@@ -290,6 +292,80 @@ class LinuxPlatformService implements PlatformService {
   /// it is the reduced-format build and cannot read RAR.
   @override
   List<String> get bundledSevenZipNames => const ['7zzs', '7zz'];
+
+  /// Distro from `/etc/os-release`, display server from the environment, and a
+  /// version out of each tool that will give one.
+  ///
+  /// The kernel costs nothing: `Platform.operatingSystemVersion` on Linux is
+  /// already the full `uname` string, so no process is spawned for it.
+  @override
+  Future<SystemReport> describeSystem({
+    ProcessProbe probe = const ProcessProbe(),
+  }) async {
+    String? distro;
+    String? distroId;
+    try {
+      final release = File('/etc/os-release');
+      if (await release.exists()) {
+        final fields = parseOsRelease(await release.readAsString());
+        distro = fields['PRETTY_NAME'] ?? fields['NAME'];
+        distroId = fields['ID'];
+      }
+    } catch (_) {
+      // A distro that does not ship the file, or one we cannot read. The rest
+      // of the header is still worth having.
+    }
+
+    return SystemReport(
+      os: OsDescription(
+        name: Platform.operatingSystem,
+        version: Platform.operatingSystemVersion,
+        distro: distro,
+        distroId: distroId,
+        displayServer: getDisplayServerType(),
+        desktop: Platform.environment['XDG_CURRENT_DESKTOP'],
+      ),
+      tools: [
+        await _describeTool('7-zip', const ['7z', '7za', '7zr'], probe,
+            versionArguments: const []),
+        await _describeTool('xdotool', const ['xdotool'], probe),
+        await _describeTool('ydotool', const ['ydotool'], probe),
+        await _describeTool('wmctrl', const ['wmctrl'], probe,
+            versionArguments: const ['-V']),
+      ],
+    );
+  }
+
+  /// Looks for each of [commands] on `PATH`, then asks the first one it finds
+  /// for a version.
+  ///
+  /// `7z` with no arguments prints its banner and **exits non-zero** on some
+  /// builds, so the exit code is ignored and only the output is read — the
+  /// question here is "what version", and a tool that answered it has answered
+  /// it whatever it then returned.
+  Future<ToolStatus> _describeTool(
+    String name,
+    List<String> commands,
+    ProcessProbe probe, {
+    List<String> versionArguments = const ['--version'],
+  }) async {
+    for (final command in commands) {
+      final located = await probe.run('which', [command]);
+      final path = located?.stdout.trim();
+      if (located == null || located.exitCode != 0 || path == null || path.isEmpty) {
+        continue;
+      }
+      final version = await probe.run(path, versionArguments);
+      return ToolStatus(
+        name: name,
+        state: ToolState.present,
+        path: path.split('\n').first.trim(),
+        version: version == null ? null : parseVersionToken(version.output),
+        note: 'system',
+      );
+    }
+    return ToolStatus.missing(name);
+  }
 
   /// `USER`, falling back to `LOGNAME` — the second is what a login shell sets
   /// and the first is what most desktop sessions set; a container or a systemd

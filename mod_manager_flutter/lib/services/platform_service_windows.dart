@@ -5,6 +5,8 @@ import 'package:path/path.dart' as path;
 import 'package:win32/win32.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:pasteboard/pasteboard.dart';
+import '../utils/process_probe.dart';
+import 'log/system_report.dart';
 import 'platform_service.dart';
 
 /// Windows-специфічна реалізація PlatformService
@@ -294,6 +296,74 @@ class WindowsPlatformService implements PlatformService {
   /// anything. `7zz.exe` is the newer single-file equivalent if it ever ships.
   @override
   List<String> get bundledSevenZipNames => const ['7z.exe', '7zz.exe'];
+
+  /// Windows has no distro and no display server, and its F10 path is win32
+  /// rather than an external tool — so the X11/Wayland helpers are reported
+  /// **not applicable** rather than missing. A Windows log that said
+  /// `xdotool: missing` would send every reader down a dead end.
+  @override
+  Future<SystemReport> describeSystem({
+    ProcessProbe probe = const ProcessProbe(),
+  }) async {
+    return SystemReport(
+      os: OsDescription(
+        name: Platform.operatingSystem,
+        // Already the build string on Windows; no `wmic`, no `systeminfo`.
+        version: Platform.operatingSystemVersion,
+        displayServer: getDisplayServerType(),
+      ),
+      tools: [
+        await _describeSevenZip(probe),
+        const ToolStatus.notApplicable('xdotool', note: 'win32 sends F10'),
+        const ToolStatus.notApplicable('ydotool', note: 'win32 sends F10'),
+      ],
+    );
+  }
+
+  /// `where 7z` first, then the install locations the extractor already knows
+  /// about, so the header agrees with what an extraction would actually use.
+  Future<ToolStatus> _describeSevenZip(ProcessProbe probe) async {
+    String? found;
+    final located = await probe.run('where', ['7z']);
+    if (located != null && located.exitCode == 0) {
+      final first = located.stdout
+          .split(RegExp(r'[\r\n]+'))
+          .map((line) => line.trim())
+          .where((line) => line.isNotEmpty);
+      if (first.isNotEmpty) found = first.first;
+    }
+
+    found ??= await _firstExisting([
+      for (final root in [
+        Platform.environment['ProgramFiles'],
+        Platform.environment['ProgramFiles(x86)'],
+      ])
+        if (root != null && root.isNotEmpty) '$root\\7-Zip\\7z.exe',
+    ]);
+
+    if (found == null) return const ToolStatus.missing('7-zip');
+
+    // No arguments: `7z` prints its banner and may exit non-zero doing it.
+    final version = await probe.run(found, const []);
+    return ToolStatus(
+      name: '7-zip',
+      state: ToolState.present,
+      path: found,
+      version: version == null ? null : parseVersionToken(version.output),
+      note: 'system',
+    );
+  }
+
+  Future<String?> _firstExisting(List<String> candidates) async {
+    for (final candidate in candidates) {
+      try {
+        if (await File(candidate).exists()) return candidate;
+      } catch (_) {
+        // An unreadable drive is not a reason to fail a header.
+      }
+    }
+    return null;
+  }
 
   @override
   String? get osUserName => Platform.environment['USERNAME'];

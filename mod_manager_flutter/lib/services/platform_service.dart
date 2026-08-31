@@ -1,3 +1,6 @@
+import '../utils/process_probe.dart';
+import 'log/system_report.dart';
+
 /// Абстрактний клас для платформно-специфічних операцій
 abstract class PlatformService {
   /// Відправляє F10 у вікно гри для перезавантаження модів
@@ -58,6 +61,20 @@ abstract class PlatformService {
   /// logger bootstrap, before the Flutter binding exists, and must not be able
   /// to block or throw. It must never be *logged*; see `docs/logging.md`.
   String? get osUserName;
+
+  /// Everything the log header reports about this machine that costs a process
+  /// or a file read.
+  ///
+  /// **One method returning one struct, rather than a getter per fact.** The two
+  /// platforms differ in *which questions exist*: there is no distro on Windows,
+  /// no display server, and no xdotool — F10 goes through win32. A pile of
+  /// nullable getters would push "is this meaningful here?" back to the caller
+  /// and invite a `Platform.isWindows` at the call site, which is the rule this
+  /// exists to protect.
+  ///
+  /// Never throws, and every probe is bounded: a header is a nice-to-have and
+  /// must not be able to delay or break a launch.
+  Future<SystemReport> describeSystem({ProcessProbe probe});
 
   /// The user's home directory, or null when the environment does not say.
   ///
