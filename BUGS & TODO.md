@@ -3264,11 +3264,20 @@ work that already opens the same file, so they cost nothing extra.
   preselected. **Measure it first**: `test/patch_detection_corpus_test.dart` runs
   the real rule over extracted archives when `ZZZ_PATCH_CORPUS` points at one,
   and that is the population to measure against. Until then the unranked
-  searchable list is a perfectly good version. *Filtering* the list is the
-  sharper question and the answer is probably no: narrowing to folders sharing
-  the patch's own `mod_id` is right whenever the patch's page names what it
-  patches and wrong whenever it doesn't, which is common — and a filter that
-  hides the correct answer is worse than a list that doesn't rank it.
+  searchable list is a perfectly good version.
+  **Character is the other signal, and a cheaper one.** A Marketplace patch knows
+  its character from the mod page's own category, and every library mod carries
+  one — so mods for that character come first. It costs nothing and needs no
+  file comparison, which makes it worth having whether or not the fingerprint
+  measures well.
+  **Rank on both, and let neither shorten the list.** A filter that hides the
+  correct answer is worse than a list that doesn't sort it, and every signal here
+  can be absent or wrong: a hand-dragged patch has no page and therefore no
+  character, a library mod's tag can be missing or misdetected, and narrowing to
+  folders sharing the patch's own `mod_id` is right only when the patch's page
+  names what it patches — which often it doesn't. If a narrowing control is
+  offered at all it is a toggle the user can see and switch off, never the
+  default state of the list.
 - [ ] **`role: separate` for a folder holding two independent mods.** `base` and
   `patch` cover the two-download case; a folder where the user hand-merged two
   unrelated mods is a different thing, and forcing it into `base` says something
