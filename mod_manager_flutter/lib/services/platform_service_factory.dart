@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'log/logger.dart';
 import 'platform_service.dart';
 import 'platform_service_linux.dart';
 import 'platform_service_windows.dart';
@@ -25,10 +26,10 @@ class PlatformServiceFactory {
   
   static PlatformService _createService() {
     if (Platform.isWindows) {
-      print('PlatformServiceFactory: Creating Windows service');
+      Logger('platform').debug('service created', fields: {'os': 'windows'});
       return WindowsPlatformService();
     } else if (Platform.isLinux) {
-      print('PlatformServiceFactory: Creating Linux service');
+      Logger('platform').debug('service created', fields: {'os': 'linux'});
       return LinuxPlatformService();
     } else if (Platform.isMacOS) {
       throw UnsupportedError('MacOS is not supported yet. Please contribute!');

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../services/bulk_update_check.dart';
 import '../../services/launch_update_check.dart';
+import '../../services/log/logger.dart';
 import '../../services/update_check_run.dart';
 import '../../utils/state_providers.dart';
 import 'update_check_feedback.dart';
@@ -127,7 +128,7 @@ class _LaunchUpdateCheckHostState extends ConsumerState<LaunchUpdateCheckHost> {
       // is starting the app offline. A card saying "couldn't check for updates"
       // on every offline launch is what gets the setting switched off. The
       // toolbar's check is the one that reports, and it is one click away.
-      debugPrint('LaunchUpdateCheckHost: startup check failed: $e');
+      Logger('update.check').warning('startup check failed', error: e);
       return;
     }
 

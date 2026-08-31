@@ -12,6 +12,7 @@ import '../core/constants.dart';
 import '../models/character_info.dart';
 import '../models/mod_origin_seed.dart';
 import '../services/api_service.dart';
+import '../services/log/logger.dart';
 import '../services/archive_service.dart';
 import '../services/ingest_origin_builder.dart';
 import '../services/update_apply/mod_activation_port.dart';
@@ -44,6 +45,9 @@ import 'dialogs/mod_update_dialog.dart';
 import 'dialogs/patch_install_flow.dart';
 import 'dialogs/resolve_origin_dialog.dart';
 import '../utils/url_utils.dart';
+
+final Logger _log = Logger('mods');
+final Logger _files = Logger('fileops');
 
 class ModsScreen extends ConsumerStatefulWidget {
   const ModsScreen({super.key});
@@ -205,7 +209,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
           characters,
         );
       } catch (e) {
-        print('Failed to load keybinds: $e');
+        _log.warning('could not load keybinds', error: e);
         // Продовжуємо без keybinds у разі помилки
       }
 
@@ -1370,7 +1374,6 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         // Перевіряємо чи це архів
         if (ArchiveService.isArchiveFile(file.path)) {
           archivesToExtract.add(file);
-          print('ModsScreen: Знайдено архів: ${file.path}');
         } else {
           // Перевіряємо чи це папка
           final dir = Directory(file.path);
@@ -1383,15 +1386,18 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
 
       // Розархівуємо архіви
       if (archivesToExtract.isNotEmpty) {
-        print(
-          'ModsScreen: Розархівування ${archivesToExtract.length} архівів...',
-        );
+        // One line for the batch. The archive service logs each extraction
+        // with its own name and result, so a line per file here would say the
+        // same thing twice.
+        _log.info('extracting dropped archives',
+            fields: {'archives': archivesToExtract.length});
 
         for (final archiveFile in archivesToExtract) {
           final file = File(archiveFile.path);
 
           if (!await file.exists()) {
-            print('ModsScreen: Файл не існує: ${archiveFile.path}');
+            _log.warning('dropped file is gone',
+                fields: {'path': archiveFile.path});
             continue;
           }
 
@@ -1424,13 +1430,9 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                 archiveMd5: result.archiveMd5,
               );
             }
-            print(
-              'ModsScreen: Розархівовано ${result.extractedFolders!.length} папок з ${archiveFile.name}',
-            );
+            // The archive service already logged the result with the folder
+            // count and how long it took.
           } else {
-            print(
-              'ModsScreen: Помилка розархівування ${archiveFile.name}: ${result.error}',
-            );
             if (mounted) {
               context.notify.warning(
                 loc.t('mods.snackbar.import_error_title'),
@@ -1456,7 +1458,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
               }
             }
           } catch (e) {
-            print('ModsScreen: temp cleanup error $tempPath: $e');
+            _files.debug('temp cleanup failed',
+                fields: {'path': tempPath, 'reason': '$e'});
           }
         }
       }
@@ -1630,9 +1633,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       if (importedMods.isEmpty && (patchDecision?.writes.isEmpty ?? true)) {
         // Очищаємо тимчасові папки якщо імпорт не вдався
         if (tempFoldersToCleanup.isNotEmpty) {
-          print(
-            'ModsScreen: Очищення ${tempFoldersToCleanup.length} тимчасових папок (імпорт не вдався)...',
-          );
+          _files.debug('cleaning up after a failed import',
+              fields: {'folders': tempFoldersToCleanup.length});
           for (final tempPath in tempFoldersToCleanup) {
             try {
               final tempDir = Directory(tempPath);
@@ -1640,15 +1642,11 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                 final parentDir = tempDir.parent;
                 if (parentDir.path.contains('zzz_archive_extract_')) {
                   await parentDir.delete(recursive: true);
-                  print(
-                    'ModsScreen: Видалено тимчасову директорію: ${parentDir.path}',
-                  );
                 }
               }
             } catch (e) {
-              print(
-                'ModsScreen: Помилка очищення тимчасової папки $tempPath: $e',
-              );
+              _files.debug('temp cleanup failed',
+                  fields: {'path': tempPath, 'reason': '$e'});
             }
           }
         }
@@ -1717,27 +1715,25 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
 
       // Видаляємо успішно імпортовані архіви
       if (successfullyExtractedArchives.isNotEmpty) {
-        print(
-          'ModsScreen: Видалення ${successfullyExtractedArchives.length} архівів...',
-        );
+        _files.debug('deleting consumed archives',
+            fields: {'archives': successfullyExtractedArchives.length});
         for (final archivePath in successfullyExtractedArchives) {
           try {
             final archiveFile = File(archivePath);
             if (await archiveFile.exists()) {
               await archiveFile.delete();
-              print('ModsScreen: Видалено архів: $archivePath');
             }
           } catch (e) {
-            print('ModsScreen: Помилка видалення архіву $archivePath: $e');
+            _files.warning('could not delete a consumed archive',
+                error: e, fields: {'archive': archivePath});
           }
         }
       }
 
       // Очищаємо тимчасові папки після успішного імпорту
       if (tempFoldersToCleanup.isNotEmpty) {
-        print(
-          'ModsScreen: Очищення ${tempFoldersToCleanup.length} тимчасових папок...',
-        );
+        _files.debug('cleaning up after an import',
+            fields: {'folders': tempFoldersToCleanup.length});
         for (final tempPath in tempFoldersToCleanup) {
           try {
             final tempDir = Directory(tempPath);
@@ -1746,15 +1742,11 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
               final parentDir = tempDir.parent;
               if (parentDir.path.contains('zzz_archive_extract_')) {
                 await parentDir.delete(recursive: true);
-                print(
-                  'ModsScreen: Видалено тимчасову директорію: ${parentDir.path}',
-                );
               }
             }
           } catch (e) {
-            print(
-              'ModsScreen: Помилка очищення тимчасової папки $tempPath: $e',
-            );
+            _files.debug('temp cleanup failed',
+                fields: {'path': tempPath, 'reason': '$e'});
           }
         }
       }

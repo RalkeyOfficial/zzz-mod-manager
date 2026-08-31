@@ -5,7 +5,10 @@ import 'package:path/path.dart' as path;
 
 import '../../utils/directory_copy.dart';
 import '../../utils/path_helper.dart';
+import '../log/logger.dart';
 import 'retention.dart';
+
+final Logger _log = Logger('snapshot');
 
 /// Pre-update snapshots of a mod folder, and the way back from a bad update.
 ///
@@ -92,7 +95,12 @@ class SnapshotService {
           .writeAsString(const JsonEncoder.withIndent('  ').convert(snapshot.toJson()));
       return snapshot;
     } catch (e) {
-      print('SnapshotService: could not snapshot $modName: $e');
+      // **Critical, and the only place that earns it.** The applier's contract
+      // is that no update is written without a snapshot first; this is the
+      // moment that contract breaks, and the user's folder is about to be
+      // overwritten with no way back.
+      _log.critical('could not take a snapshot',
+          error: e, fields: {'mod': modName});
       return null;
     }
   }
@@ -109,7 +117,8 @@ class SnapshotService {
         if (snapshot != null) snapshots.add(snapshot);
       }
     } catch (e) {
-      print('SnapshotService: could not list snapshots for $modName: $e');
+      _log.warning('could not list snapshots',
+          error: e, fields: {'mod': modName});
     }
     snapshots.sort((a, b) => b.takenAt.compareTo(a.takenAt));
     return snapshots;
@@ -129,7 +138,7 @@ class SnapshotService {
       }
       return names;
     } catch (e) {
-      print('SnapshotService: could not list backup folders: $e');
+      _log.warning('could not list backup folders', error: e);
       return const <String>{};
     }
   }
@@ -144,7 +153,7 @@ class SnapshotService {
         all.addAll(await list(path.basename(entity.path)));
       }
     } catch (e) {
-      print('SnapshotService: could not list snapshots: $e');
+      _log.warning('could not list snapshots', error: e);
     }
     return all;
   }
@@ -166,7 +175,10 @@ class SnapshotService {
       await copyDirectory(files, modFolder);
       return true;
     } catch (e) {
-      print('SnapshotService: could not restore ${snapshot.modName}: $e');
+      _log.error('could not restore a snapshot', error: e, fields: {
+        'mod': snapshot.modName,
+        'snapshot': snapshot.id,
+      });
       return false;
     }
   }
@@ -184,7 +196,8 @@ class SnapshotService {
       }
       return true;
     } catch (e) {
-      print('SnapshotService: could not delete ${snapshot.id}: $e');
+      _log.warning('could not delete a snapshot',
+          error: e, fields: {'snapshot': snapshot.id});
       return false;
     }
   }

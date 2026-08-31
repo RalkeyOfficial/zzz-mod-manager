@@ -3,19 +3,21 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import 'package:url_launcher/url_launcher.dart';
 import '../utils/process_probe.dart';
+import 'log/logger.dart';
 import 'log/system_report.dart';
 import 'platform_service.dart';
 
+final Logger _log = Logger('platform');
+final Logger _files = Logger('fileops');
+
 /// Linux-специфічна реалізація PlatformService
 class LinuxPlatformService implements PlatformService {
-  
+
   @override
   Future<bool> sendF10ToGame() async {
-    print('LinuxPlatformService: Відправка F10...');
-    
     final displayServer = getDisplayServerType();
-    print('LinuxPlatformService: Display server: $displayServer');
-    
+    _log.debug('sending F10', fields: {'display': displayServer});
+
     bool success = false;
     
     // Метод 1: Відправка F10 через відповідний інструмент
@@ -37,11 +39,13 @@ class LinuxPlatformService implements PlatformService {
     }
     
     if (success) {
-      print('LinuxPlatformService: F10 успішно відправлено');
+      _log.debug('F10 sent', fields: {'display': displayServer});
     } else {
-      print('LinuxPlatformService: Не вдалося відправити F10');
+      // Not an error: the game may simply not be running, which is the
+      // ordinary case for a press with no window to send to.
+      _log.warning('F10 not sent', fields: {'display': displayServer});
     }
-    
+
     return success;
   }
   
@@ -57,10 +61,18 @@ class LinuxPlatformService implements PlatformService {
       }
       
       await link.create(sourcePath, recursive: false);
-      print('LinuxPlatformService: Symlink створено: $linkPath -> $sourcePath');
+      _files.info('link created', fields: {
+        'kind': 'symlink',
+        'link': linkPath,
+        'target': sourcePath,
+      });
       return true;
-    } catch (e) {
-      print('LinuxPlatformService: Помилка створення symlink: $e');
+    } catch (error, stack) {
+      _files.error('link failed', error: error, stack: stack, fields: {
+        'kind': 'symlink',
+        'link': linkPath,
+        'target': sourcePath,
+      });
       return false;
     }
   }
@@ -70,15 +82,18 @@ class LinuxPlatformService implements PlatformService {
     try {
       final isLink = await FileSystemEntity.isLink(linkPath);
       if (!isLink) {
-        print('LinuxPlatformService: $linkPath не є symlink');
+        // Refused rather than failed: deleting a real folder because it was
+        // mistaken for a link is the one outcome this app must never have.
+        _files.warning('not a link, left alone', fields: {'path': linkPath});
         return false;
       }
-      
+
       await Link(linkPath).delete();
-      print('LinuxPlatformService: Symlink видалено: $linkPath');
+      _files.info('link removed', fields: {'link': linkPath});
       return true;
-    } catch (e) {
-      print('LinuxPlatformService: Помилка видалення symlink: $e');
+    } catch (error, stack) {
+      _files.error('link removal failed',
+          error: error, stack: stack, fields: {'link': linkPath});
       return false;
     }
   }
@@ -106,63 +121,46 @@ class LinuxPlatformService implements PlatformService {
     return path.join(xdgDataHome, 'zzz-mod-manager');
   }
   
+  /// **Records that the instructions were asked for; it does not print them.**
+  ///
+  /// This used to write twenty lines of `sudo` commands to stdout — a terminal
+  /// a packaged app does not have, and which the person who needs them is
+  /// certainly not watching. The instructions themselves belong on screen, and
+  /// the Settings tab already renders them from
+  /// `settings.auto_f10.instructions.*`; what the log wants is the fact that
+  /// somebody got far enough to ask, and on which display server.
   @override
   void showSetupInstructions() {
-    print('\n═══════════════════════════════════════════════════════════');
-    print('F10 Auto-Reload Setup Instructions (Linux)');
-    print('═══════════════════════════════════════════════════════════\n');
-    
-    final displayServer = getDisplayServerType();
-    
-    if (displayServer == 'x11') {
-      print('X11 detected. Install xdotool:');
-      print('  Ubuntu/Debian: sudo apt install xdotool');
-      print('  Arch: sudo pacman -S xdotool');
-      print('  Fedora: sudo dnf install xdotool');
-    } else if (displayServer == 'wayland') {
-      print('Wayland detected. Install ydotool and wmctrl:');
-      print('  Ubuntu/Debian: sudo apt install ydotool wmctrl');
-      print('  Arch: yay -S ydotool wmctrl');
-      print('  Fedora: sudo dnf install ydotool wmctrl');
-      print('\nAdditional setup for ydotool:');
-      print('  sudo usermod -a -G input \$USER');
-      print('  sudo systemctl enable --now ydotool.service');
-      print('  sudo reboot  # Required!');
-    } else {
-      print('Unknown display server. Try installing both:');
-      print('  xdotool (for X11)');
-      print('  ydotool + wmctrl (for Wayland)');
-    }
-    
-    print('\n═══════════════════════════════════════════════════════════\n');
+    _log.info('setup instructions requested', fields: {
+      'display': getDisplayServerType(),
+    });
   }
   
   @override
   Future<bool> checkDependencies() async {
-    print('LinuxPlatformService: Перевірка залежностей...');
-    
     final displayServer = getDisplayServerType();
-    bool hasTools = false;
-    
-    if (displayServer == 'x11') {
-      final result = await Process.run('which', ['xdotool']);
-      hasTools = result.exitCode == 0;
-      if (hasTools) {
-        print('LinuxPlatformService: xdotool встановлений ✓');
-      } else {
-        print('LinuxPlatformService: xdotool НЕ встановлений ✗');
-      }
-    } else if (displayServer == 'wayland') {
-      final result = await Process.run('which', ['ydotool']);
-      hasTools = result.exitCode == 0;
-      if (hasTools) {
-        print('LinuxPlatformService: ydotool встановлений ✓');
-      } else {
-        print('LinuxPlatformService: ydotool НЕ встановлений ✗');
-      }
+    final tool = switch (displayServer) {
+      'x11' => 'xdotool',
+      'wayland' => 'ydotool',
+      _ => null,
+    };
+    if (tool == null) {
+      _log.warning('cannot check dependencies', fields: {
+        'display': displayServer,
+      });
+      return false;
     }
-    
-    return hasTools;
+
+    final result = await Process.run('which', [tool]);
+    final present = result.exitCode == 0;
+    if (present) {
+      _log.debug('dependency present',
+          fields: {'tool': tool, 'display': displayServer});
+    } else {
+      _log.warning('dependency missing',
+          fields: {'tool': tool, 'display': displayServer});
+    }
+    return present;
   }
   
   @override
@@ -182,10 +180,10 @@ class LinuxPlatformService implements PlatformService {
         }
       }
       
-      print('LinuxPlatformService: Знайдено процесів гри: ${processes.length}');
+      _log.debug('game processes', fields: {'found': processes.length});
       return processes;
-    } catch (e) {
-      print('LinuxPlatformService: Помилка пошуку процесів: $e');
+    } catch (error, stack) {
+      _log.warning('could not list processes', error: error, stack: stack);
       return [];
     }
   }
@@ -217,21 +215,25 @@ class LinuxPlatformService implements PlatformService {
           mode: LaunchMode.externalApplication,
         );
         if (result) {
-          print('LinuxPlatformService: Браузер відкрито: $url');
+          _log.debug('browser opened', fields: {'via': 'url_launcher'});
           return true;
         }
       }
-      
+
       final xdgResult = await Process.run('xdg-open', [url]);
       if (xdgResult.exitCode == 0) {
-        print('LinuxPlatformService: Браузер відкрито через xdg-open: $url');
+        _log.debug('browser opened', fields: {'via': 'xdg-open'});
         return true;
       }
-      
-      print('LinuxPlatformService: Не вдалося відкрити браузер');
+
+      _log.warning('could not open browser', fields: {
+        'url': url,
+        'xdg_exit': xdgResult.exitCode,
+      });
       return false;
-    } catch (e) {
-      print('LinuxPlatformService: Помилка відкриття браузера: $e');
+    } catch (error, stack) {
+      _log.warning('could not open browser',
+          error: error, stack: stack, fields: {'url': url});
       return false;
     }
   }
@@ -258,8 +260,9 @@ class LinuxPlatformService implements PlatformService {
       }
       
       return downloadsDir;
-    } catch (e) {
-      print('LinuxPlatformService: Помилка отримання Downloads директорії: $e');
+    } catch (error, stack) {
+      _log.warning('could not resolve the Downloads folder',
+          error: error, stack: stack);
       return null;
     }
   }
@@ -269,13 +272,17 @@ class LinuxPlatformService implements PlatformService {
     try {
       final result = await Process.run('xdg-open', [folderPath]);
       if (result.exitCode == 0) {
-        print('LinuxPlatformService: Папку відкрито: $folderPath');
+        _log.debug('folder opened', fields: {'path': folderPath});
         return true;
       }
-      print('LinuxPlatformService: xdg-open завершився з кодом ${result.exitCode}');
+      _log.warning('could not open folder', fields: {
+        'path': folderPath,
+        'exit': result.exitCode,
+      });
       return false;
-    } catch (e) {
-      print('LinuxPlatformService: Помилка відкриття папки: $e');
+    } catch (error, stack) {
+      _log.warning('could not open folder',
+          error: error, stack: stack, fields: {'path': folderPath});
       return false;
     }
   }
@@ -385,8 +392,9 @@ class LinuxPlatformService implements PlatformService {
       final html =
           await _clipboardChannel.invokeMethod<String>('getClipboardHtml');
       if (html != null && html.trim().isNotEmpty) return html;
-    } catch (e) {
-      print('LinuxPlatformService: Помилка читання HTML з буфера: $e');
+    } catch (error) {
+      // Paste-as-markdown falls back to plain text; not worth a stack.
+      _log.debug('no HTML on the clipboard', fields: {'reason': '$error'});
     }
     return null;
   }
@@ -411,7 +419,8 @@ class LinuxPlatformService implements PlatformService {
           
           if (windowResult.exitCode == 0 && windowResult.stdout.toString().trim().isNotEmpty) {
             windowId = windowResult.stdout.toString().trim().split('\n').first;
-            print('LinuxPlatformService: Знайдено вікно гри: $name (ID: $windowId)');
+            _log.debug('found the game window',
+                fields: {'match': name, 'window': windowId});
             break;
           }
         } catch (e) {
@@ -433,7 +442,7 @@ class LinuxPlatformService implements PlatformService {
 
       return keyResult.exitCode == 0;
     } catch (e) {
-      print('LinuxPlatformService: Помилка xdotool: $e');
+      _log.warning('xdotool failed', error: e, fields: {'tool': 'xdotool'});
       return false;
     }
   }
@@ -455,10 +464,10 @@ class LinuxPlatformService implements PlatformService {
         }
       }
 
-      print('LinuxPlatformService: F10 відправлено через ydotool');
+      _log.debug('F10 sent', fields: {'tool': 'ydotool'});
       return true;
     } catch (e) {
-      print('LinuxPlatformService: Помилка ydotool: $e');
+      _log.warning('ydotool failed', error: e, fields: {'tool': 'ydotool'});
       return false;
     }
   }
@@ -471,7 +480,8 @@ class LinuxPlatformService implements PlatformService {
         for (final name in windowNames) {
           try {
             await Process.run('wmctrl', ['-a', name]);
-            print('LinuxPlatformService: Активовано вікно через wmctrl: $name');
+            _log.debug('game window focused',
+                fields: {'tool': 'wmctrl', 'match': name});
             return;
           } catch (e) {
             continue;
@@ -489,7 +499,8 @@ class LinuxPlatformService implements PlatformService {
             if (result.exitCode == 0 && result.stdout.toString().trim().isNotEmpty) {
               final windowId = result.stdout.toString().trim().split('\n').first;
               await Process.run('xdotool', ['windowactivate', windowId]);
-              print('LinuxPlatformService: Активовано вікно через xdotool: $name');
+              _log.debug('game window focused',
+                  fields: {'tool': 'xdotool', 'match': name});
               return;
             }
           } catch (e) {
@@ -498,7 +509,7 @@ class LinuxPlatformService implements PlatformService {
         }
       }
     } catch (e) {
-      print('LinuxPlatformService: Не вдалося активувати вікно гри: $e');
+      _log.debug('could not focus the game window', fields: {'reason': '$e'});
     }
   }
 }

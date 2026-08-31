@@ -3,6 +3,9 @@ import 'dart:io';
 import 'package:path/path.dart' as path;
 import '../core/constants.dart';
 import '../models/mod_metadata.dart';
+import 'log/logger.dart';
+
+final Logger _log = Logger('metadata');
 
 /// Reads and writes the per-mod metadata sidecar stored inside each mod folder
 /// at `<mod>/.zzz-mod-manager/metadata.json`. All paths are based off the mod
@@ -29,7 +32,10 @@ class ModMetadataService {
       if (decoded is! Map<String, dynamic>) return null;
       return ModMetadata.fromJson(decoded);
     } catch (e) {
-      print('ModMetadataService: failed to read metadata in $modFolderPath: $e');
+      // Recoverable: the mod still works, it just loses its description and
+      // tags until the sidecar is rewritten.
+      _log.warning('could not read a sidecar',
+          error: e, fields: {'mod': modFolderPath});
       return null;
     }
   }
@@ -50,7 +56,10 @@ class ModMetadataService {
       await file.writeAsString(json);
       return true;
     } catch (e) {
-      print('ModMetadataService: failed to write metadata in $modFolderPath: $e');
+      // An edit the user made is now lost, which is an error rather than a
+      // warning however quietly it returns false.
+      _log.error('could not write a sidecar',
+          error: e, fields: {'mod': modFolderPath});
       return false;
     }
   }
@@ -74,7 +83,8 @@ class ModMetadataService {
       await dest.writeAsBytes(bytes);
       return path.relative(dest.path, from: modFolderPath);
     } catch (e) {
-      print('ModMetadataService: failed to add image in $modFolderPath: $e');
+      _log.error('could not save an image',
+          error: e, fields: {'mod': modFolderPath});
       return null;
     }
   }
@@ -92,7 +102,8 @@ class ModMetadataService {
       if (ext.isEmpty) ext = 'png';
       return addImageBytes(modFolderPath, bytes, extension: ext);
     } catch (e) {
-      print('ModMetadataService: failed to import image into $modFolderPath: $e');
+      _log.error('could not import an image',
+          error: e, fields: {'mod': modFolderPath});
       return null;
     }
   }

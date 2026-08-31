@@ -3,7 +3,10 @@ import 'package:archive/archive.dart';
 import 'package:path/path.dart' as path;
 
 import 'archive_hash.dart';
+import 'log/logger.dart';
 import 'platform_service_factory.dart';
+
+final Logger _log = Logger('archive');
 
 /// Why an extraction failed, where the answer changes what the user does next.
 ///
@@ -128,22 +131,24 @@ class ArchiveService {
     /// where the file's own name is the right one.
     String? nameHint,
   }) async {
+    final started = DateTime.now();
     try {
-      print('ArchiveService: Розархівування ${archiveFile.path}');
-
       final tempExtractDir = destinationDir ??
           await Directory.systemTemp.createTemp('zzz_archive_extract_');
 
       final extension = path.extension(archiveFile.path).toLowerCase();
+      _log.info('extracting', fields: {
+        'archive': path.basename(archiveFile.path),
+        'format': extension,
+      });
+
       bool isExtracted = false;
       String? extractionError;
       var failure = ExtractFailure.other;
 
       if (extension == '.zip') {
-        print('ArchiveService: ZIP архів');
         isExtracted = await _extractZip(archiveFile, tempExtractDir);
       } else if (extension == '.rar' || extension == '.7z') {
-        print('ArchiveService: RAR/7Z архів');
         final result = await _extractWith7Zip(archiveFile, tempExtractDir);
         isExtracted = result.success;
         extractionError = result.error;
@@ -152,7 +157,12 @@ class ArchiveService {
 
       if (!isExtracted) {
         final error = extractionError ?? 'Unsupported archive format';
-        print('ArchiveService: Помилка: $error');
+        _log.error('extraction failed', fields: {
+          'archive': path.basename(archiveFile.path),
+          'format': extension,
+          'reason': failure.name,
+          'detail': error,
+        });
         return ArchiveExtractionResult.failure(error, reason: failure);
       }
 
@@ -168,33 +178,50 @@ class ArchiveService {
       );
 
       if (directories.isEmpty) {
-        print('ArchiveService: Архів порожній');
-        return ArchiveExtractionResult.failure('Архів не містить папок модів');
+        _log.error('archive held no mod folders', fields: {
+          'archive': path.basename(archiveFile.path),
+        });
+        // English: this string is shown to the user verbatim by the drag-in
+        // path, which renders `error` into a notification body.
+        return ArchiveExtractionResult.failure(
+          'The archive contains no mod folders',
+        );
       }
 
-      print('ArchiveService: Знайдено ${directories.length} папок');
+      _log.info('extracted', fields: {
+        'archive': path.basename(archiveFile.path),
+        'folders': directories.length,
+        'took': DateTime.now().difference(started),
+      });
       return ArchiveExtractionResult.successResult(directories, archiveMd5: md5);
-    } catch (e) {
-      print('ArchiveService: Виняток: $e');
-      return ArchiveExtractionResult.failure('Помилка розархівування: $e');
+    } catch (error, stack) {
+      _log.error('extraction failed',
+          error: error,
+          stack: stack,
+          fields: {'archive': path.basename(archiveFile.path)});
+      return ArchiveExtractionResult.failure('Extraction failed: $error');
     }
   }
 
   static Future<bool> _extractZip(File archiveFile, Directory destination) async {
     try {
-      print('ArchiveService: Читання ZIP файлу...');
       final bytes = await archiveFile.readAsBytes();
-      print('ArchiveService: Прочитано ${bytes.length} bytes');
-
-      print('ArchiveService: Декодування ZIP...');
       final archive = ZipDecoder().decodeBytes(bytes, verify: true);
-      print('ArchiveService: ZIP містить ${archive.length} файлів');
+      _log.debug('zip decoded', fields: {
+        'bytes': bytes.length,
+        'entries': archive.length,
+      });
 
       int extracted = 0;
       for (final file in archive) {
         final sanitizedPath = _sanitizeArchivePath(destination.path, file.name);
         if (sanitizedPath == null) {
-          print('ArchiveService: Пропущено небезпечний шлях: ${file.name}');
+          // An entry trying to escape the destination. A security event, not
+          // a note — somebody built this archive deliberately.
+          _log.warning('unsafe archive path skipped', fields: {
+            'entry': file.name,
+            'archive': path.basename(archiveFile.path),
+          });
           continue;
         }
 
@@ -211,10 +238,13 @@ class ArchiveService {
         }
       }
 
-      print('ArchiveService: ZIP успішно розархівовано, файлів: $extracted');
+      _log.debug('zip written', fields: {'files': extracted});
       return true;
-    } catch (e) {
-      print('ArchiveService: Помилка розархівування ZIP: $e');
+    } catch (error, stack) {
+      _log.error('zip extraction failed',
+          error: error,
+          stack: stack,
+          fields: {'archive': path.basename(archiveFile.path)});
       return false;
     }
   }
@@ -232,7 +262,7 @@ class ArchiveService {
       );
     }
 
-    print('ArchiveService: Використання 7-Zip: $sevenZipPath');
+    _log.debug('using 7-Zip', fields: {'path': sevenZipPath});
 
     final result = await Process.run(sevenZipPath, [
       'x',
@@ -243,14 +273,17 @@ class ArchiveService {
 
     if (result.exitCode != 0) {
       final errorOutput = result.stderr.toString().trim();
-      print('ArchiveService: 7-Zip помилка: $errorOutput');
+      _log.error('7-Zip failed', fields: {
+        'exit': result.exitCode,
+        'stderr': errorOutput,
+      });
       return _7ZipResult(
         false,
         errorOutput.isNotEmpty ? errorOutput : 'Extraction failed',
       );
     }
 
-    print('ArchiveService: 7-Zip успішно розпакував');
+    _log.debug('7-Zip finished');
     return const _7ZipResult(true);
   }
 

@@ -10,6 +10,7 @@ import '../../models/origin_enums.dart';
 import '../../services/api_service.dart';
 import '../../utils/notifications.dart';
 import '../../services/gamebanana/remote_mod_metadata.dart';
+import '../../services/log/logger.dart';
 import '../../services/origin_resolution.dart';
 import '../../services/origin_summary.dart';
 import '../../utils/gamebanana_url.dart';
@@ -374,7 +375,8 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
           RemoteModMetadata.fromMod(_profile!),
         );
       } catch (e) {
-        debugPrint('ResolveOriginDialog: metadata fill failed: $e');
+        Logger('metadata').warning('could not fill from the mod page',
+            error: e);
       }
     }
 

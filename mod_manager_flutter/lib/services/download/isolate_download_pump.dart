@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:isolate';
 
 import '../../core/constants.dart';
+import '../log/logger.dart';
 import 'download_exceptions.dart';
 import 'download_pump.dart';
 import 'download_transport.dart';
@@ -60,7 +61,10 @@ class IsolateDownloadPump implements DownloadPump {
       // strictly better than a failed one, so drop to the inline pump for this
       // attempt rather than surfacing an error nobody can act on. This doubles
       // as the kill switch if the isolate path ever misbehaves in the field.
-      print('IsolateDownloadPump: spawn failed, falling back inline: $error');
+      Logger('download.pump').warning(
+        'isolate spawn failed, downloading inline',
+        error: error,
+      );
       final fallback = _fallback ??= InlineDownloadPump(
         IoDownloadTransport(userAgent: _userAgent),
       );

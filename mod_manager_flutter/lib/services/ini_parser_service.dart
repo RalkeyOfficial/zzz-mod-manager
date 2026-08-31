@@ -1,6 +1,9 @@
 import 'dart:io';
 import 'package:path/path.dart' as path;
 import '../models/keybind_info.dart';
+import 'log/logger.dart';
+
+final Logger _log = Logger('ini');
 
 /// Крос-платформний сервіс для парсингу INI файлів
 /// Працює як на Windows, так і на Linux
@@ -91,7 +94,8 @@ class IniParserService {
 
       return keybinds;
     } catch (e) {
-      print('IniParserService: Помилка парсингу INI файлу $filePath: $e');
+      _log.warning('could not parse an .ini',
+          error: e, fields: {'file': filePath});
       return [];
     }
   }
@@ -159,7 +163,8 @@ class IniParserService {
         iniFilePath: iniFiles.first, // Зберігаємо шлях до першого знайденого файлу
       );
     } catch (e) {
-      print('IniParserService: Помилка парсингу директорії $directoryPath: $e');
+      _log.warning('could not scan a folder for .ini files',
+          error: e, fields: {'folder': directoryPath});
       return null;
     }
   }

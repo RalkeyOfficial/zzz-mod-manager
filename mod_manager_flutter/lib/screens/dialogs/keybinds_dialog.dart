@@ -5,6 +5,7 @@ import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../models/keybind_info.dart';
 import '../../services/api_service.dart';
+import '../../services/log/logger.dart';
 import '../../utils/notifications.dart';
 
 /// Lists a mod's keybinds as chips; tapping one opens [showEditKeybindDialog].
@@ -343,7 +344,7 @@ Future<void> _saveKeybindChange(
       }
     }
   } catch (e) {
-    print('Error saving keybind: $e');
+    Logger('mods').error('could not save a keybind', error: e);
     notify.error(
       loc.t('mods.keybinds.error_save'),
       body: e.toString(),

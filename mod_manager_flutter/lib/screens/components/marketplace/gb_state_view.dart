@@ -102,7 +102,9 @@ class GbFailureState extends StatelessWidget {
     final loc = context.loc;
     final failure = describeGbFailure(error);
 
-    debugPrint('GameBanana request failed (${failure.kind.name}): $error');
+    // **Not logged here.** This is a `build`, so it would write a line per
+    // rebuild — and the client already logged the failure where it happened,
+    // with the url and the status this never had.
 
     // One exhaustive switch, so adding a kind fails to compile here — at the
     // only place that has to decide what it looks like. Both keys are spelled

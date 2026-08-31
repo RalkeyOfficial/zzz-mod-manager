@@ -6,16 +6,23 @@ import 'package:win32/win32.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:pasteboard/pasteboard.dart';
 import '../utils/process_probe.dart';
+import 'log/logger.dart';
 import 'log/system_report.dart';
 import 'platform_service.dart';
 
 /// Windows-специфічна реалізація PlatformService
+/// The same two tags the Linux implementation uses, and the same event names
+/// under them — so a Windows bug report and a Linux one are filtered the same
+/// way, and only the `kind`/`tool` fields differ.
+final Logger _log = Logger('platform');
+final Logger _files = Logger('fileops');
+
 class WindowsPlatformService implements PlatformService {
   
   @override
   Future<bool> sendF10ToGame() async {
-    print('WindowsPlatformService: Відправка F10...');
-    
+    _log.debug('sending F10', fields: {'display': getDisplayServerType()});
+
     try {
       // Знаходимо вікно гри через FindWindow
       final windowNames = [
@@ -31,7 +38,8 @@ class WindowsPlatformService implements PlatformService {
         try {
           hwnd = FindWindow(nullptr, namePtr);
           if (hwnd != 0) {
-            print('WindowsPlatformService: Знайдено вікно гри: $name (HWND: $hwnd)');
+            _log.debug('found the game window',
+                fields: {'match': name, 'window': hwnd});
             break;
           }
         } finally {
@@ -40,15 +48,16 @@ class WindowsPlatformService implements PlatformService {
       }
       
       if (hwnd == 0) {
-        print('WindowsPlatformService: Вікно гри не знайдено');
-        // Спробуємо відправити до активного вікна
+        _log.debug('no game window, trying the foreground one');
         return await _sendF10ToForegroundWindow();
       }
-      
+
       // Перевіряємо чи вікно видиме
       final isVisible = IsWindowVisible(hwnd);
       if (isVisible == FALSE) {
-        print('WindowsPlatformService: Вікно гри не видиме');
+        _log.warning('the game window is not visible', fields: {
+          'window': hwnd,
+        });
         return false;
       }
       
@@ -63,10 +72,11 @@ class WindowsPlatformService implements PlatformService {
       // Відпускання клавіші
       PostMessage(hwnd, WM_KEYUP, VK_F10, 0);
       
-      print('WindowsPlatformService: F10 успішно відправлено');
+      _log.debug('F10 sent', fields: {'tool': 'win32', 'window': hwnd});
       return true;
-    } catch (e) {
-      print('WindowsPlatformService: Помилка відправки F10: $e');
+    } catch (error, stack) {
+      _log.warning('F10 not sent',
+          error: error, stack: stack, fields: {'tool': 'win32'});
       return false;
     }
   }
@@ -74,40 +84,57 @@ class WindowsPlatformService implements PlatformService {
   @override
   Future<bool> createModLink(String sourcePath, String linkPath) async {
     try {
-      print('WindowsPlatformService: Створення link: $linkPath -> $sourcePath');
-      
       // Спочатку видаляємо якщо вже існує
       if (await Directory(linkPath).exists() || await File(linkPath).exists()) {
         await removeModLink(linkPath);
       }
-      
+
       // Спроба 1: Звичайний symbolic link (потребує Developer Mode або прав адміна)
       try {
         final link = Link(linkPath);
         await link.create(sourcePath, recursive: false);
-        print('WindowsPlatformService: Symlink створено успішно');
+        _files.info('link created', fields: {
+          'kind': 'symlink',
+          'link': linkPath,
+          'target': sourcePath,
+        });
         return true;
-      } catch (e) {
-        print('WindowsPlatformService: Не вдалося створити symlink: $e');
-        print('WindowsPlatformService: Спроба створити Junction...');
+      } catch (error) {
+        // Expected without Developer Mode or admin rights, and the reason the
+        // junction below exists — a warning rather than an error, because the
+        // operation has not failed yet.
+        _files.warning('symlink refused, falling back to a junction',
+            error: error, fields: {'link': linkPath});
       }
-      
+
       // Спроба 2: Directory Junction (не потребує прав адміна)
       final result = await Process.run(
         'cmd',
         ['/c', 'mklink', '/J', linkPath, sourcePath],
         runInShell: true,
       );
-      
+
       if (result.exitCode == 0) {
-        print('WindowsPlatformService: Junction створено успішно');
+        _files.info('link created', fields: {
+          'kind': 'junction',
+          'link': linkPath,
+          'target': sourcePath,
+        });
         return true;
       } else {
-        print('WindowsPlatformService: Помилка створення Junction: ${result.stderr}');
+        _files.error('link failed', fields: {
+          'kind': 'junction',
+          'link': linkPath,
+          'exit': result.exitCode,
+          'stderr': result.stderr.toString().trim(),
+        });
         return false;
       }
-    } catch (e) {
-      print('WindowsPlatformService: Помилка створення link: $e');
+    } catch (error, stack) {
+      _files.error('link failed', error: error, stack: stack, fields: {
+        'link': linkPath,
+        'target': sourcePath,
+      });
       return false;
     }
   }
@@ -121,24 +148,28 @@ class WindowsPlatformService implements PlatformService {
         // Можливо це звичайна директорія, видаляємо її
         final dir = Directory(linkPath);
         if (await dir.exists()) {
+          // Non-recursive on purpose: this succeeds only for an empty
+          // directory, so a real mod folder mistaken for a link is refused by
+          // the filesystem rather than deleted.
           await dir.delete(recursive: false);
-          print('WindowsPlatformService: Директорію видалено: $linkPath');
+          _files.info('empty directory removed', fields: {'path': linkPath});
           return true;
         }
         return false;
       }
-      
+
       // Для junction/symlink використовуємо Link
       final link = Link(linkPath);
       if (await link.exists()) {
         await link.delete();
-        print('WindowsPlatformService: Link видалено: $linkPath');
+        _files.info('link removed', fields: {'link': linkPath});
         return true;
       }
-      
+
       return false;
-    } catch (e) {
-      print('WindowsPlatformService: Помилка видалення link: $e');
+    } catch (error, stack) {
+      _files.error('link removal failed',
+          error: error, stack: stack, fields: {'link': linkPath});
       return false;
     }
   }
@@ -172,42 +203,35 @@ class WindowsPlatformService implements PlatformService {
     return path.join(appData, 'zzz-mod-manager');
   }
   
+  /// Records the request; the instructions themselves belong on screen.
+  ///
+  /// See the Linux implementation for the reasoning — twenty lines of setup
+  /// help written to a console a packaged app does not have helped nobody.
   @override
   void showSetupInstructions() {
-    print('\n═══════════════════════════════════════════════════════════');
-    print('F10 Auto-Reload Setup Instructions (Windows)');
-    print('═══════════════════════════════════════════════════════════\n');
-    print('✓ F10 auto-reload працює через Windows API');
-    print('✓ Не потребує додаткових інструментів\n');
-    print('Для роботи Symbolic Links:');
-    print('  Варіант 1 (Рекомендовано): Увімкніть Developer Mode');
-    print('    Settings → Update & Security → For developers');
-    print('    → Developer Mode (ON)');
-    print('\n  Варіант 2: Програма автоматично використає Directory Junctions');
-    print('    (працюють без прав адміністратора)\n');
-    print('  Варіант 3: Запустіть програму як адміністратор');
-    print('    (правий клік → Run as administrator)');
-    print('\n═══════════════════════════════════════════════════════════\n');
+    _log.info('setup instructions requested', fields: {
+      'display': getDisplayServerType(),
+    });
   }
-  
+
   @override
   Future<bool> checkDependencies() async {
-    print('WindowsPlatformService: Перевірка залежностей...');
-    
     // На Windows всі необхідні API вже є в системі
     try {
-      // Перевіряємо чи можемо викликати Windows API
       final hwnd = GetForegroundWindow();
       if (hwnd != 0) {
-        print('WindowsPlatformService: Windows API доступний ✓');
+        _log.debug('dependency present', fields: {'tool': 'win32'});
         return true;
       }
-    } catch (e) {
-      print('WindowsPlatformService: Помилка доступу до Windows API: $e');
+    } catch (error, stack) {
+      _log.error('the Windows API is not answering',
+          error: error, stack: stack);
       return false;
     }
-    
-    print('WindowsPlatformService: Всі залежності доступні ✓');
+
+    // No foreground window is not a missing dependency — nothing was focused.
+    _log.debug('dependency present',
+        fields: {'tool': 'win32', 'foreground': 'none'});
     return true;
   }
   
@@ -228,10 +252,10 @@ class WindowsPlatformService implements PlatformService {
         }
       }
       
-      print('WindowsPlatformService: Знайдено процесів гри: ${processes.length}');
+      _log.debug('game processes', fields: {'found': processes.length});
       return processes;
-    } catch (e) {
-      print('WindowsPlatformService: Помилка пошуку процесів: $e');
+    } catch (error, stack) {
+      _log.warning('could not list processes', error: error, stack: stack);
       return [];
     }
   }
@@ -251,14 +275,15 @@ class WindowsPlatformService implements PlatformService {
         mode: LaunchMode.externalApplication,
       );
       if (result) {
-        print('WindowsPlatformService: Браузер відкрито: $url');
+        _log.debug('browser opened', fields: {'via': 'url_launcher'});
         return true;
       }
-      
-      print('WindowsPlatformService: Не вдалося відкрити браузер');
+
+      _log.warning('could not open browser', fields: {'url': url});
       return false;
-    } catch (e) {
-      print('WindowsPlatformService: Помилка відкриття браузера: $e');
+    } catch (error, stack) {
+      _log.warning('could not open browser',
+          error: error, stack: stack, fields: {'url': url});
       return false;
     }
   }
@@ -270,8 +295,9 @@ class WindowsPlatformService implements PlatformService {
       if (userProfile == null) return null;
       
       return path.join(userProfile, 'Downloads');
-    } catch (e) {
-      print('WindowsPlatformService: Помилка отримання Downloads директорії: $e');
+    } catch (error, stack) {
+      _log.warning('could not resolve the Downloads folder',
+          error: error, stack: stack);
       return null;
     }
   }
@@ -282,10 +308,11 @@ class WindowsPlatformService implements PlatformService {
       // explorer.exe returns a non-zero exit code even on success, so treat a
       // clean launch as success rather than checking the exit code.
       await Process.start('explorer', [folderPath]);
-      print('WindowsPlatformService: Папку відкрито: $folderPath');
+      _log.debug('folder opened', fields: {'path': folderPath});
       return true;
-    } catch (e) {
-      print('WindowsPlatformService: Помилка відкриття папки: $e');
+    } catch (error, stack) {
+      _log.warning('could not open folder',
+          error: error, stack: stack, fields: {'path': folderPath});
       return false;
     }
   }
@@ -380,8 +407,9 @@ class WindowsPlatformService implements PlatformService {
       final raw = await Pasteboard.html;
       if (raw == null || raw.isEmpty) return null;
       return _extractCfHtmlFragment(raw);
-    } catch (e) {
-      print('WindowsPlatformService: Помилка читання HTML з буфера: $e');
+    } catch (error) {
+      // Paste-as-markdown falls back to plain text; not worth a stack.
+      _log.debug('no HTML on the clipboard', fields: {'reason': '$error'});
       return null;
     }
   }
@@ -414,18 +442,26 @@ class WindowsPlatformService implements PlatformService {
       // Відправляємо F10 до активного вікна
       final hwnd = GetForegroundWindow();
       if (hwnd == 0) {
-        print('WindowsPlatformService: Не вдалося отримати активне вікно');
+        _log.warning('F10 not sent', fields: {
+          'tool': 'win32',
+          'reason': 'no foreground window',
+        });
         return false;
       }
-      
+
       PostMessage(hwnd, WM_KEYDOWN, VK_F10, 0);
       await Future.delayed(const Duration(milliseconds: 50));
       PostMessage(hwnd, WM_KEYUP, VK_F10, 0);
-      
-      print('WindowsPlatformService: F10 відправлено до активного вікна');
+
+      _log.debug('F10 sent', fields: {
+        'tool': 'win32',
+        'window': hwnd,
+        'target': 'foreground',
+      });
       return true;
-    } catch (e) {
-      print('WindowsPlatformService: Помилка: $e');
+    } catch (error, stack) {
+      _log.warning('F10 not sent',
+          error: error, stack: stack, fields: {'tool': 'win32'});
       return false;
     }
   }

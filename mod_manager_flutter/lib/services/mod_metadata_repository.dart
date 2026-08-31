@@ -8,6 +8,7 @@ import '../utils/shipped_preview.dart';
 import '../utils/zzz_characters.dart';
 import 'gamebanana/remote_mod_metadata.dart';
 import 'http/image_fetcher.dart';
+import 'log/logger.dart';
 import 'metadata_autofill.dart';
 import 'mod_metadata_service.dart';
 import 'origin_backfill.dart';
@@ -45,6 +46,8 @@ abstract class ModCharacterTagStore {
 /// confidence tiers — reach disk through [loadOrMigrate], and they need tests
 /// that don't require a running app. The decisions themselves live one level
 /// further out still, in [OriginBackfill], which needs no filesystem at all.
+final Logger _log = Logger('metadata');
+
 class ModMetadataRepository {
   final ModCharacterTagStore _tagStore;
   final ModMetadataService _service;
@@ -197,7 +200,8 @@ class ModMetadataRepository {
       }
       return updated;
     } catch (e) {
-      print('ModMetadataRepository: origin backfill failed in $modFolder: $e');
+      _log.warning('origin backfill failed',
+          error: e, fields: {'folder': modFolder});
       return existing;
     }
   }
@@ -233,7 +237,7 @@ class ModMetadataRepository {
       );
       return await _service.write(modFolder, metadata);
     } catch (e) {
-      print('ModMetadataRepository: failed to save metadata for ${mod.id}: $e');
+      _log.error('could not save a sidecar', error: e, fields: {'mod': mod.id});
       return false;
     }
   }
@@ -264,7 +268,8 @@ class ModMetadataRepository {
       final existing = await _service.read(modFolder) ?? const ModMetadata();
       return await _service.write(modFolder, existing.withOrigin(origin));
     } catch (e) {
-      print('ModMetadataRepository: failed to record origin for $modName: $e');
+      _log.error('could not record an origin',
+          error: e, fields: {'mod': modName});
       return false;
     }
   }
@@ -302,7 +307,8 @@ class ModMetadataRepository {
       if (next == null) return false;
       return await _service.write(modFolder, existing.withOrigin(next));
     } catch (e) {
-      print('ModMetadataRepository: failed to update origin for $modName: $e');
+      _log.error('could not update an origin',
+          error: e, fields: {'mod': modName});
       return false;
     }
   }
@@ -329,7 +335,8 @@ class ModMetadataRepository {
     try {
       return await _backfill.probeInstallDate(modFolder);
     } catch (e) {
-      print('ModMetadataRepository: install-date probe failed for $modName: $e');
+      _log.debug('could not read an install date',
+          fields: {'mod': modName, 'reason': '$e'});
       return null;
     }
   }
@@ -375,7 +382,8 @@ class ModMetadataRepository {
         targets[modName] = (folder: folder, preview: preview);
         wanted.addAll(plan.imageUrls);
       } catch (e) {
-        print('ModMetadataRepository: autofill planning failed for $modName: $e');
+        _log.warning('autofill planning failed',
+            error: e, fields: {'mod': modName});
       }
     }
     if (targets.isEmpty) return const RemoteMetadataFill();
@@ -395,7 +403,7 @@ class ModMetadataRepository {
       try {
         return await _fetcher.fetch(url);
       } catch (e) {
-        print('ModMetadataRepository: image fetch threw for $url: $e');
+        _log.debug('image fetch failed', fields: {'url': url, 'reason': '$e'});
         return null;
       }
     }));
@@ -472,7 +480,7 @@ class ModMetadataRepository {
         );
         if (!await _service.write(folder, metadata)) {
           unwritable.add(modName);
-          print('ModMetadataRepository: could not autofill metadata for $modName');
+          _log.warning('could not autofill', fields: {'mod': modName});
           continue;
         }
 
@@ -488,7 +496,7 @@ class ModMetadataRepository {
           await _tagStore.setModCharacterTag(modName, characterId);
         }
       } catch (e) {
-        print('ModMetadataRepository: autofill failed for $modName: $e');
+        _log.warning('autofill failed', error: e, fields: {'mod': modName});
       }
     }
 
@@ -545,7 +553,8 @@ class ModMetadataRepository {
         ),
       );
     } catch (e) {
-      print('ModMetadataRepository: failed to set character for $modName: $e');
+      _log.error('could not set the character',
+          error: e, fields: {'mod': modName});
       return false;
     }
   }

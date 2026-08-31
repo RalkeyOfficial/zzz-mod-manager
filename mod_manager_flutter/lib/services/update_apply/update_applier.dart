@@ -8,6 +8,7 @@ import '../../models/mod_ingest.dart';
 import '../../utils/directory_copy.dart';
 import '../backup/snapshot_service.dart';
 import '../folder_contents.dart';
+import '../log/logger.dart';
 import '../ini_parser_service.dart';
 import '../ini_resources.dart';
 import '../patch_detection.dart';
@@ -59,6 +60,11 @@ import 'update_layout.dart';
 /// The decisions are all in pure units next door: [planUpdateLayout],
 /// [assessPatchShape], [assessStaleInis]. This file does the I/O and the
 /// ordering.
+/// One tag with a `phase` field, rather than a tag per phase: the five places
+/// this can fail are five stages of one operation, and a reader wants them
+/// together.
+final Logger _log = Logger('update.apply');
+
 class UpdateApplier {
   UpdateApplier({required this.snapshots, required this.activation});
 
@@ -273,7 +279,8 @@ class UpdateApplier {
         );
       }
     } catch (e) {
-      print('UpdateApplier: copy failed for $modName: $e');
+      _log.error('update failed',
+          error: e, fields: {'mod': modName, 'phase': 'copy'});
       if (wasActive) await activation.activate(modName);
       return UpdateApplyResult.failed(
         UpdateApplyFailure.copy,
@@ -371,7 +378,8 @@ class UpdateApplier {
       try {
         await File(path.join(modFolder.path, onDisk)).delete();
       } catch (e) {
-        print('UpdateApplier: could not set aside $onDisk: $e');
+        _log.warning('could not set a patch file aside',
+            error: e, fields: {'file': onDisk, 'phase': 'aside'});
       }
     }
     return _PatchAside(taken: taken, missing: missing);
@@ -405,7 +413,8 @@ class UpdateApplier {
         await File(path.join(source.path, entry.value)).copy(destination.path);
         placed.add(onDisk);
       } catch (e) {
-        print('UpdateApplier: could not place $onDisk: $e');
+        _log.error('could not put a patch file back',
+            error: e, fields: {'file': onDisk, 'phase': 'place'});
       }
     }
     return placed;
@@ -481,7 +490,8 @@ class UpdateApplier {
         placed.add(to);
       }
     } catch (e) {
-      print('UpdateApplier: patch copy failed for $modName: $e');
+      _log.error('patch write failed',
+          error: e, fields: {'mod': modName, 'phase': 'copy'});
       if (wasActive) await activation.activate(modName);
       return UpdateApplyResult.failed(
         UpdateApplyFailure.copy,
@@ -609,7 +619,8 @@ class UpdateApplier {
           deleted.add(onDisk);
         }
       } catch (e) {
-        print('UpdateApplier: could not remove $onDisk: $e');
+        _log.warning('could not remove a stale file',
+            error: e, fields: {'file': onDisk, 'phase': 'remove'});
       }
     }
     return deleted;

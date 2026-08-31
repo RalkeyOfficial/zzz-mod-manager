@@ -12,6 +12,7 @@ import '../utils/zzz_characters.dart';
 import 'config_service.dart';
 import 'gamebanana/remote_mod_metadata.dart';
 import 'ingest_origin_builder.dart';
+import 'log/logger.dart';
 import 'metadata_autofill.dart';
 import 'mod_metadata_repository.dart';
 import 'mod_metadata_service.dart';
@@ -20,6 +21,12 @@ import 'platform_service_factory.dart';
 import 'ini_parser_service.dart';
 
 /// Головний сервіс для керування модами через symbolic links
+final Logger _log = Logger('mods');
+
+/// Anything that changes the filesystem goes under one tag, whoever did it, so
+/// "what did this app do to my folders" is a single filter.
+final Logger _files = Logger('fileops');
+
 class ModManagerService {
   final ConfigService _configService;
   final PlatformService _platformService;
@@ -276,7 +283,9 @@ class ModManagerService {
       // Використовуємо platformService для створення link
       final success = await _platformService.createModLink(srcPath, dstPath);
       if (!success) {
-        print('ModManagerService: Не вдалося створити link для $modName');
+        // The platform service already logged why; this says which mod the
+        // user was trying to switch on when it happened.
+        _log.error('could not activate', fields: {'mod': modName});
         return false;
       }
 
@@ -289,8 +298,9 @@ class ModManagerService {
       }
 
       return true;
-    } catch (e) {
-      print('ModManagerService: Помилка активації мода: $e');
+    } catch (error, stack) {
+      _log.error('could not activate',
+          error: error, stack: stack, fields: {'mod': modName});
       return false;
     }
   }
@@ -306,7 +316,7 @@ class ModManagerService {
       // Використовуємо platformService для видалення link
       final success = await _platformService.removeModLink(linkPath);
       if (!success) {
-        print('ModManagerService: Не вдалося видалити link для $modName');
+        _log.error('could not deactivate', fields: {'mod': modName});
         return false;
       }
 
@@ -319,8 +329,9 @@ class ModManagerService {
       }
 
       return true;
-    } catch (e) {
-      print('ModManagerService: Помилка деактивації мода: $e');
+    } catch (error, stack) {
+      _log.error('could not deactivate',
+          error: error, stack: stack, fields: {'mod': modName});
       return false;
     }
   }
@@ -369,8 +380,9 @@ class ModManagerService {
       await _configService.migrateModName(oldName, newName);
       invalidateKeybinds(oldName);
       return true;
-    } catch (e) {
-      print('ModManagerService: Помилка перейменування мода "$oldName": $e');
+    } catch (error, stack) {
+      _files.error('rename failed',
+          error: error, stack: stack, fields: {'mod': oldName});
       return false;
     }
   }
@@ -401,8 +413,9 @@ class ModManagerService {
       await _configService.removeModCharacterTag(modName);
       invalidateKeybinds(modName);
       return true;
-    } catch (e) {
-      print('ModManagerService: Помилка видалення мода "$modName": $e');
+    } catch (error, stack) {
+      _files.error('delete failed',
+          error: error, stack: stack, fields: {'mod': modName});
       return false;
     }
   }
@@ -461,8 +474,9 @@ class ModManagerService {
       } else if (entity == FileSystemEntityType.file) {
         await File(filePath).delete();
       }
-    } catch (e) {
-      print('ModManagerService: Помилка _safeRemove: $e');
+    } catch (error, stack) {
+      _files.warning('could not remove',
+          error: error, stack: stack, fields: {'path': filePath});
     }
   }
 
@@ -588,7 +602,8 @@ class ModManagerService {
   Future<void> _recordOrigin(String modName, ModOrigin origin) async {
     final ok = await _metadata.recordOrigin(modName, origin);
     if (!ok) {
-      print('ModManagerService: could not record origin for $modName');
+      _log.warning('could not record where a mod came from',
+          fields: {'mod': modName, 'mod_id': origin.modId});
       _originWriteFailures.add(modName);
     }
   }
@@ -688,7 +703,9 @@ class ModManagerService {
       final detected = detectCharacterId(name);
       if (detected != null) return detected;
     }
-    print('ModManager: Не вдалося визначити персонажа для "$modName"');
+    // Debug, not info: this fires for every untagged mod on every scan, and a
+    // library with a dozen of them would otherwise bury the scan summary.
+    _log.debug('no character detected', fields: {'mod': modName});
     return null;
   }
 
@@ -740,7 +757,8 @@ class ModManagerService {
 
       return await _iniParser.parseCharacterDirectory(characterId, characterPath);
     } catch (e) {
-      print('ModManagerService: Помилка зчитування keybinds для $characterId: $e');
+      _log.warning('could not read keybinds',
+          error: e, fields: {'character': characterId});
       return null;
     }
   }
@@ -753,7 +771,7 @@ class ModManagerService {
       
       return await _iniParser.parseAllCharacters(modsPath!);
     } catch (e) {
-      print('ModManagerService: Помилка зчитування keybinds для всіх персонажів: $e');
+      _log.warning('could not read keybinds for the library', error: e);
       return {};
     }
   }

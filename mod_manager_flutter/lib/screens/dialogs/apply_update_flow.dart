@@ -13,6 +13,7 @@ import '../../models/origin_enums.dart';
 import '../../services/api_service.dart';
 import '../../services/archive_service.dart';
 import '../../services/folder_contents.dart';
+import '../../services/log/logger.dart';
 import '../../services/patch_placement.dart';
 import '../../services/patch_record.dart';
 import '../../services/update_apply/mod_activation_port.dart';
@@ -490,7 +491,8 @@ Future<void> _cleanupExtract(Directory? root) async {
     if (!root.path.contains('zzz_archive_extract_')) return;
     if (await root.exists()) await root.delete(recursive: true);
   } catch (e) {
-    print('applyUpdateFlow: temp cleanup error ${root.path}: $e');
+    Logger('fileops').debug('temp cleanup failed',
+        fields: {'path': root.path, 'reason': '$e'});
   }
 }
 
@@ -507,6 +509,7 @@ Future<void> _deleteArchive(File archive) async {
   try {
     if (await archive.exists()) await archive.delete();
   } catch (e) {
-    print('applyUpdateFlow: could not delete archive ${archive.path}: $e');
+    Logger('fileops').warning('could not delete a consumed archive',
+        error: e, fields: {'archive': archive.path});
   }
 }

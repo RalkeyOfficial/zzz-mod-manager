@@ -12,6 +12,7 @@ import '../../models/origin_enums.dart';
 import '../../services/api_service.dart';
 import '../../services/archive_service.dart';
 import '../../services/gamebanana/remote_mod_metadata.dart';
+import '../../services/log/logger.dart';
 import '../../services/mod_manager_service.dart';
 import '../../services/update_apply/mod_activation_port.dart';
 import '../../services/update_apply/update_applier.dart';
@@ -363,7 +364,9 @@ Future<void> _cleanupExtractedFolders(List<String> folderPaths) async {
         await parentDir.delete(recursive: true);
       }
     } catch (e) {
-      print('installArchiveFlow: temp cleanup error $folderPath: $e');
+      // Scratch we own, not the user's data: debug is the right level.
+      Logger('fileops').debug('temp cleanup failed',
+          fields: {'path': folderPath, 'reason': '$e'});
     }
   }
 }
@@ -378,7 +381,9 @@ Future<void> _safeDeleteArchive(File archiveFile) async {
   try {
     await archiveFile.delete();
   } catch (e) {
-    print('installArchiveFlow: could not delete archive '
-        '${archiveFile.path}: $e');
+    // Left behind, it becomes `mod (2).rar` on the next download — the launch
+    // sweep is what cleans up after this.
+    Logger('fileops').warning('could not delete a consumed archive',
+        error: e, fields: {'archive': archiveFile.path});
   }
 }
