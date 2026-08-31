@@ -3257,27 +3257,19 @@ work that already opens the same file, so they cost nothing extra.
 - [ ] **Conflict detection** — warn when two mods target the same character/slot.
 - [ ] **Storage view + orphan cleanup** — disk usage per mod, prune dead links /
   stale downloads.
-- [ ] **Rank the destination picker when installing a patch.** A patch's `.ini`
-  names files it does not ship, which is a fingerprint of the base mod's
-  contents, so a library folder holding exactly those files is a strong candidate
-  — offered with a stated reason ("references three files this mod has"), never
-  preselected. **Measure it first**: `test/patch_detection_corpus_test.dart` runs
-  the real rule over extracted archives when `ZZZ_PATCH_CORPUS` points at one,
-  and that is the population to measure against. Until then the unranked
-  searchable list is a perfectly good version.
-  **Character is the other signal, and a cheaper one.** A Marketplace patch knows
-  its character from the mod page's own category, and every library mod carries
-  one — so mods for that character come first. It costs nothing and needs no
-  file comparison, which makes it worth having whether or not the fingerprint
-  measures well.
-  **Rank on both, and let neither shorten the list.** A filter that hides the
-  correct answer is worse than a list that doesn't sort it, and every signal here
-  can be absent or wrong: a hand-dragged patch has no page and therefore no
-  character, a library mod's tag can be missing or misdetected, and narrowing to
-  folders sharing the patch's own `mod_id` is right only when the patch's page
-  names what it patches — which often it doesn't. If a narrowing control is
-  offered at all it is a toggle the user can see and switch off, never the
-  default state of the list.
+- [x] **Rank the destination picker when installing a patch.** A patch names the
+  files it replaces, so a library folder holding those names is a candidate, and
+  those folders now come first with the count stated on the row. Where the
+  patch's page declares a requirement naming a mod in the library, that mod leads
+  with the author's claim attributed to them. Measured before building, and the
+  measurement is why nothing is preselected or filtered: with the real target
+  *not* installed, a wrong folder still scores a perfect 100% in 3 of 67 `.ini`
+  cases and 12 of 68 asset cases. Full numbers and both harnesses in
+  [`docs/patch-destinations.md`](docs/patch-destinations.md).
+  - **Character was measured and dropped**, which settles the idea rather than
+    deferring it: in every measured case the folders tied at the top already
+    shared the subject's character, so narrowing to it removes nothing the
+    filenames kept. It is the same discrimination twice, not a second signal.
 - [ ] **`role: separate` for a folder holding two independent mods.** `base` and
   `patch` cover the two-download case; a folder where the user hand-merged two
   unrelated mods is a different thing, and forcing it into `base` says something

@@ -3,6 +3,7 @@ import 'gb_coerce.dart';
 import 'gb_enums.dart';
 import 'gb_file.dart';
 import 'gb_image.dart';
+import 'gb_requirement.dart';
 import 'gb_submitter.dart';
 
 /// A GameBanana mod record.
@@ -45,6 +46,7 @@ class GbMod {
     this.subCategory,
     this.rootCategory,
     this.tags = const [],
+    this.requirements = const [],
     this.images = const [],
     this.files,
     this.archivedFiles,
@@ -120,6 +122,14 @@ class GbMod {
   /// character a mod is for. The wire shape differs between listing and profile
   /// responses; [gbTags] absorbs that.
   final List<String> tags;
+
+  /// `_aRequirements` — what the author says the mod needs. Profile responses
+  /// only; empty on every listing.
+  ///
+  /// For a patch, a requirement linking a mod page is often the mod being
+  /// patched, which is the one question the app cannot answer for itself. It is
+  /// a claim to attribute, not a fact: see [GbRequirement].
+  final List<GbRequirement> requirements;
 
   /// `_aPreviewContent` — the gallery. First entry is the cover.
   ///
@@ -222,6 +232,7 @@ class GbMod {
       subCategory: GbCategoryRef.fromJson(json['_aSubCategory']),
       rootCategory: GbCategoryRef.fromJson(json['_aRootCategory']),
       tags: gbTags(json['_aTags']),
+      requirements: GbRequirement.listFrom(json['_aRequirements']),
       images: GbImage.listFromPreviewContent(json['_aPreviewContent']),
       // Absent key -> null (not requested); present key -> a list, even empty.
       files: json.containsKey('_aFiles') ? GbFile.listFrom(json['_aFiles']) : null,

@@ -7,6 +7,7 @@ import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/dialogs/patch_install_prompt.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_client.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_endpoints.dart';
+import 'package:mod_manager_flutter/services/patch_destination_ranking.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
 import 'support/fake_http_transport.dart';
@@ -327,6 +328,170 @@ void main() {
 
       expect(find.text('Install it into an existing mod'), findsNothing);
       expect(find.textContaining('one combined mod'), findsOneWidget);
+    });
+  });
+
+  /// Ordering the list, and stopping there.
+  ///
+  /// The signals are measured in `docs/patch-destinations.md`, and the one they
+  /// do not support is a decision: with the patch's real target not installed, a
+  /// wrong folder still comes top with a perfect score often enough that a
+  /// preselected answer would be a wrong answer nobody looked at. So these
+  /// pin the two halves — the order changes, and nothing else does.
+  group('which folder it offers first', () {
+    /// Row titles top to bottom, which is the whole claim being made.
+    List<String> rows(WidgetTester tester) => [
+          for (final tile in tester.widgetList<ListTile>(find.byType(ListTile)))
+            if (tile.title case final Text title) title.data!,
+        ];
+
+    Future<void> openRanked(
+      WidgetTester tester, {
+      required List<ModInfo> mods,
+      required List<DestinationRank> ranks,
+    }) async {
+      await open(
+        tester,
+        mods: mods,
+        subjects: [
+          PatchInstallSubject(
+            modName: 'Ellen Patch',
+            patchModId: 605460,
+            kind: PatchKind.assets,
+            destinations: ranks,
+          ),
+        ],
+      );
+      await tester.tap(find.text('Install it into an existing mod'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('the folder holding the patch\'s files comes first',
+        (tester) async {
+      await openRanked(
+        tester,
+        mods: [
+          libraryMod('Ellen Bikini'),
+          libraryMod('Miyabi Kimono'),
+          libraryMod('Ellen School'),
+        ],
+        ranks: const [
+          DestinationRank(modId: 'Ellen School', matched: 3, fingerprint: 3),
+          DestinationRank(modId: 'Ellen Bikini', matched: 1, fingerprint: 3),
+          DestinationRank(modId: 'Miyabi Kimono', matched: 0, fingerprint: 3),
+        ],
+      );
+
+      expect(rows(tester), ['Ellen School', 'Ellen Bikini', 'Miyabi Kimono']);
+    });
+
+    testWidgets('a folder with nothing going for it is still in the list',
+        (tester) async {
+      // The list may be reordered and must not be shortened: the patch's real
+      // target is often not installed at all, and a folder that matches nothing
+      // is exactly what the user picks when they know better than the files do.
+      await openRanked(
+        tester,
+        mods: [libraryMod('Ellen School'), libraryMod('Miyabi Kimono')],
+        ranks: const [
+          DestinationRank(modId: 'Ellen School', matched: 2, fingerprint: 2),
+          DestinationRank(modId: 'Miyabi Kimono', matched: 0, fingerprint: 2),
+        ],
+      );
+
+      expect(rows(tester), hasLength(2));
+      expect(find.text('Miyabi Kimono'), findsOneWidget);
+    });
+
+    testWidgets('a row that is up there says why, and the others stay quiet',
+        (tester) async {
+      await openRanked(
+        tester,
+        mods: [libraryMod('Ellen School'), libraryMod('Miyabi Kimono')],
+        ranks: const [
+          DestinationRank(modId: 'Ellen School', matched: 2, fingerprint: 3),
+          DestinationRank(modId: 'Miyabi Kimono', matched: 0, fingerprint: 3),
+        ],
+      );
+
+      expect(
+        find.text('Holds 2 of the 3 files this patch replaces'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Holds'), findsOneWidget);
+    });
+
+    testWidgets('one file is phrased as one file', (tester) async {
+      await openRanked(
+        tester,
+        mods: [libraryMod('Ellen School')],
+        ranks: const [
+          DestinationRank(modId: 'Ellen School', matched: 1, fingerprint: 1),
+        ],
+      );
+
+      expect(find.text('Holds the file this patch replaces'), findsOneWidget);
+    });
+
+    testWidgets('what the author said leads, and is attributed to them',
+        (tester) async {
+      // The author's own claim outranks the files, and is worded as a claim:
+      // measured over ZZZ, two of six such links named a shared prerequisite
+      // rather than the mod being patched.
+      await openRanked(
+        tester,
+        mods: [libraryMod('Ellen School'), libraryMod('Ellen Bikini')],
+        ranks: const [
+          DestinationRank(
+            modId: 'Ellen Bikini',
+            matched: 0,
+            fingerprint: 4,
+            requiredByAuthor: true,
+          ),
+          DestinationRank(modId: 'Ellen School', matched: 4, fingerprint: 4),
+        ],
+      );
+
+      expect(rows(tester).first, 'Ellen Bikini');
+      expect(
+        find.text('The patch\'s author lists this mod as required'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the top of the list is not an answer', (tester) async {
+      await openRanked(
+        tester,
+        mods: [libraryMod('Ellen School'), libraryMod('Miyabi Kimono')],
+        ranks: const [
+          DestinationRank(modId: 'Ellen School', matched: 3, fingerprint: 3),
+          DestinationRank(modId: 'Miyabi Kimono', matched: 0, fingerprint: 3),
+        ],
+      );
+
+      for (final tile
+          in tester.widgetList<ListTile>(find.byType(ListTile))) {
+        expect(tile.selected, isFalse,
+            reason: 'a perfect score is not evidence the right folder is even '
+                'in the library');
+      }
+      final install = find.widgetWithText(FilledButton, 'Install');
+      expect(tester.widget<FilledButton>(install).onPressed, isNull,
+          reason: 'ranked but unanswered is still unanswered');
+    });
+
+    testWidgets('an unranked library is left exactly as it was',
+        (tester) async {
+      // Nothing to go on — a patch of one oddly-named file. The plain order is
+      // the honest one, and reordering it would imply a signal that is absent.
+      await openRanked(
+        tester,
+        mods: [libraryMod('Miyabi Kimono'), libraryMod('Ellen School')],
+        ranks: const [],
+      );
+
+      expect(rows(tester), ['Miyabi Kimono', 'Ellen School']);
+      expect(find.textContaining('Holds'), findsNothing);
     });
   });
 

@@ -32,6 +32,8 @@ import '../../models/gamebanana/gamebanana.dart';
 import '../../models/mod_companion.dart';
 import '../../models/origin_enums.dart';
 import '../../services/folder_contents.dart';
+import '../../services/library_file_index.dart';
+import '../../services/patch_destination_ranking.dart';
 import '../../services/patch_placement.dart';
 import '../../services/patch_record.dart';
 import '../../services/patch_scan.dart';
@@ -204,6 +206,11 @@ typedef PatchDestinationPrompt = Future<Map<String, PatchDestination>?>
 /// [patchModId] is the download's own mod page, when it has one. It is refused
 /// as an answer to "what does this patch?" — a folder cannot patch itself — and
 /// a hand-dragged folder simply has none.
+///
+/// [patchRequirements] is what that page's author declared it needs. A
+/// requirement linking a mod page is sometimes the mod being patched, and where
+/// the library holds that mod it goes to the top of the destinations with the
+/// author's own words on it. It is never an answer — see [GbRequirement].
 Future<PatchInstallDecision?> decidePatchInstall(
   BuildContext context, {
   required ImportPlan plan,
@@ -211,6 +218,7 @@ Future<PatchInstallDecision?> decidePatchInstall(
   required String modsPath,
   required List<ModInfo> library,
   int? patchModId,
+  List<GbRequirement> patchRequirements = const <GbRequirement>[],
   PatchDestinationPrompt prompt = showPatchInstallPrompt,
 }) async {
   // Scoped by the import picker, which is what decides where one resulting mod
@@ -218,6 +226,17 @@ Future<PatchInstallDecision?> decidePatchInstall(
   // ships its textures in one folder and its `.ini` in another reads as a patch.
   final scan = await scanPlannedMods(plannedMods(plan, folders));
   if (scan.patchShaped.isEmpty) return PatchInstallDecision(scan: scan);
+
+  // Only where a library destination is on offer at all: a combined install
+  // does not get that choice, so the walk would have no reader.
+  final ranked = plan.combine
+      ? const <String, List<DestinationRank>>{}
+      : await rankPatchDestinations(
+          scan: scan,
+          library: library,
+          modsPath: modsPath,
+          patchRequirements: patchRequirements,
+        );
 
   // **Unable to ask is not the same as declined.** The scan is disk I/O and the
   // caller's context can be gone by the time it finishes. Answering "no
@@ -236,6 +255,7 @@ Future<PatchInstallDecision?> decidePatchInstall(
           kind: scan.assetPatches.containsKey(name)
               ? PatchKind.assets
               : PatchKind.references,
+          destinations: ranked[name] ?? const <DestinationRank>[],
         ),
     ],
     library: library,
@@ -249,6 +269,53 @@ Future<PatchInstallDecision?> decidePatchInstall(
     folders: folders,
     modsPath: modsPath,
   );
+}
+
+/// Puts each patch's likeliest destinations first, per patch-shaped mod.
+///
+/// Composition only: the walk is `library_file_index.dart`, the order is
+/// `patch_destination_ranking.dart`, and the one judgement made here is that a
+/// **library folder** answers for an author's requirement when that folder's
+/// recorded origin is the mod the author linked. An untracked folder can never
+/// match one, which is correct — nothing says what it is.
+///
+/// Runs before the prompt opens rather than inside it, so the dialog stays a
+/// widget that renders what it is given.
+Future<Map<String, List<DestinationRank>>> rankPatchDestinations({
+  required PlannedPatchScan scan,
+  required List<ModInfo> library,
+  required String modsPath,
+  List<GbRequirement> patchRequirements = const <GbRequirement>[],
+}) async {
+  if (library.isEmpty || scan.patchShaped.isEmpty) {
+    return const <String, List<DestinationRank>>{};
+  }
+
+  final names = await readLibraryFileNames(
+    modIds: [for (final mod in library) mod.id],
+    modsPath: modsPath,
+  );
+
+  final declared = <int>{
+    for (final requirement in patchRequirements)
+      if (requirement.modId != null) requirement.modId!,
+  };
+  final required = <String>{
+    for (final mod in library)
+      if (mod.origin?.modId != null && declared.contains(mod.origin!.modId))
+        mod.id,
+  };
+
+  return <String, List<DestinationRank>>{
+    for (final name in scan.patchShaped)
+      name: rankDestinations(
+        fingerprint: destinationFingerprint(
+          scan.contents[name] ?? FolderContents.empty,
+        ),
+        libraryFiles: names,
+        requiredMods: required,
+      ),
+  };
 }
 
 /// What the answers mean for the copy that is about to run.

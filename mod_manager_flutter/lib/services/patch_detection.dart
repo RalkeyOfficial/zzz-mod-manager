@@ -216,7 +216,7 @@ AssetPatchAssessment assessAssetPatch({
 
   var assets = 0;
   for (final path in files) {
-    if (_isGameAsset(path)) assets++;
+    if (isGameAsset(path)) assets++;
   }
   return AssetPatchAssessment(assets: assets);
 }
@@ -231,7 +231,7 @@ AssetPatchAssessment assessAssetPatch({
 /// overwhelmingly a screenshot, and counting them would make a `previews`
 /// folder installed as its own mod read as a patch — which is the one case the
 /// "may be incomplete" warning is genuinely for.
-bool _isGameAsset(String path) {
+bool isGameAsset(String path) {
   final dot = path.lastIndexOf('.');
   if (dot < 0) return false;
   return _gameAssetExtensions.contains(path.substring(dot));

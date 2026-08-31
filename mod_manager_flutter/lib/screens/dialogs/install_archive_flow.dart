@@ -145,6 +145,10 @@ Future<InstallResult> installArchiveFlow(
       modsPath: modsPath,
       library: ref.read(modsProvider),
       patchModId: mod.idRow,
+      // What the author says this needs. For a patch that is sometimes the mod
+      // being patched, and where the library holds it, it leads the
+      // destinations with the author's own words on it.
+      patchRequirements: mod.requirements,
     );
     // Null is "don't install it", which only that prompt can offer: it is the
     // last point before the copy, and a patch with nothing to patch is a folder

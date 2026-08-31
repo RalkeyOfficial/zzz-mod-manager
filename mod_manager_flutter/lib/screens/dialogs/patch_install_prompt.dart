@@ -9,6 +9,7 @@ import '../../models/character_info.dart';
 import '../../models/gamebanana/gamebanana.dart';
 import '../../models/mod_companion.dart';
 import '../../services/origin_summary.dart';
+import '../../services/patch_destination_ranking.dart';
 import '../components/resolve/resolve_fragments.dart';
 import 'companion_resolve_dialog.dart';
 
@@ -24,6 +25,7 @@ class PatchInstallSubject {
     required this.modName,
     required this.patchModId,
     required this.kind,
+    this.destinations = const <DestinationRank>[],
   });
 
   /// The name the mod will have, which is what the prompt calls it.
@@ -37,6 +39,14 @@ class PatchInstallSubject {
   final int? patchModId;
 
   final PatchKind kind;
+
+  /// Every library folder, ordered by how well it answers for this patch.
+  ///
+  /// Empty when there was nothing to rank on, or when a combined install means
+  /// no library destination is offered at all. Ordering is the whole of what it
+  /// does: nothing is filtered out of it and nothing in it is selected — see
+  /// `patch_destination_ranking.dart` for the measurement that settles that.
+  final List<DestinationRank> destinations;
 }
 
 /// Where one patch's files go.
@@ -108,10 +118,16 @@ class InstallIntoMod extends PatchDestination {
 /// install**, which only this prompt can offer because it is the last point
 /// before anything is copied.
 ///
-/// **Nothing here is suggested.** Both patch rules can tell that a download
-/// needs another mod; neither can tell *which*, because what gets recorded is a
-/// mod page and the only thing that names one is the person who went and found
-/// the patch.
+/// **Nothing here is answered for the user.** The destinations are ordered by
+/// what the patch's own files and its author's requirement point at, and that is
+/// where it stops: nothing is preselected, nothing is hidden, and the confirm
+/// button stays dead until a folder is actually chosen. The measurement that
+/// rules out anything stronger is in `docs/patch-destinations.md` — with the mod
+/// a patch really patches *not* installed, a wrong folder still comes top with a
+/// perfect score often enough that a preselected row would be a wrong answer
+/// nobody looked at. The second question is stricter still: what gets recorded
+/// there is a **mod page**, and the only thing that names one is the person who
+/// went and found the patch.
 Future<Map<String, PatchDestination>?> showPatchInstallPrompt(
   BuildContext context, {
   required List<PatchInstallSubject> subjects,
@@ -381,12 +397,20 @@ class _PatchInstallPromptState extends ConsumerState<PatchInstallPrompt> {
     );
   }
 
-  /// The library: **searchable, with covers**, unranked and unpreselected.
+  /// Every library folder, in the order the patch's own files suggest, **with
+  /// nothing preselected**.
   ///
   /// A real library is long, and scrolling it reading every folder name was the
   /// whole cost this picker was adding — while the user arrives already knowing
   /// which mod they mean. So the box comes first and the picture does the
   /// recognising; a name is the slow way to know which mod you are looking at.
+  ///
+  /// **Ordering is as far as it goes.** A row that has something going for it
+  /// says so, in one line, and every other folder is still in the list under it.
+  /// `patch_destination_ranking.dart` holds the measurement that rules out
+  /// anything stronger: with the patch's real target not installed, a wrong
+  /// folder still comes top with a perfect score often enough that a preselected
+  /// answer would be a wrong answer nobody looked at.
   ///
   /// Rows carry **folder name plus the recorded variant label**, because one
   /// archive routinely becomes several mods and several folders can be bound to
@@ -399,11 +423,14 @@ class _PatchInstallPromptState extends ConsumerState<PatchInstallPrompt> {
     final picked = destination is InstallIntoMod ? destination.modId : null;
     final query = (_queries[subject.modName] ?? '').trim().toLowerCase();
     final matches = [
-      for (final mod in widget.library)
+      for (final candidate in _ordered(subject))
         if (query.isEmpty ||
-            mod.name.toLowerCase().contains(query) ||
-            (mod.origin?.versionLabel?.toLowerCase().contains(query) ?? false))
-          mod,
+            candidate.mod.name.toLowerCase().contains(query) ||
+            (candidate.mod.origin?.versionLabel
+                    ?.toLowerCase()
+                    .contains(query) ??
+                false))
+          candidate,
     ];
 
     return Column(
@@ -437,17 +464,28 @@ class _PatchInstallPromptState extends ConsumerState<PatchInstallPrompt> {
               shrinkWrap: true,
               itemCount: matches.length,
               itemBuilder: (_, index) {
-                final mod = matches[index];
+                final mod = matches[index].mod;
+                final rank = matches[index].rank;
                 final label = mod.origin?.versionLabel;
+                final reason = _reasonFor(rank);
                 return ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                   selected: mod.id == picked,
                   leading: _thumbnail(mod, selected: mod.id == picked),
                   title: Text(mod.name, style: const TextStyle(fontSize: 13)),
-                  subtitle: label == null
+                  isThreeLine: label != null && reason != null,
+                  subtitle: label == null && reason == null
                       ? null
-                      : Text(label, style: const TextStyle(fontSize: 11)),
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (label != null)
+                              Text(label,
+                                  style: const TextStyle(fontSize: 11)),
+                            if (reason != null) reason,
+                          ],
+                        ),
                   onTap: () => setState(() {
                     _chosen[subject.modName] =
                         InstallIntoMod(modId: mod.id, modName: mod.name);
@@ -457,6 +495,64 @@ class _PatchInstallPromptState extends ConsumerState<PatchInstallPrompt> {
             ),
           ),
       ],
+    );
+  }
+
+  /// The library in ranked order, each folder with its standing if it has one.
+  ///
+  /// **Nothing is dropped.** A folder the ranking never covered — one added to
+  /// the library between the walk and the render — keeps its place at the end
+  /// rather than disappearing from a list the user can see.
+  List<({ModInfo mod, DestinationRank? rank})> _ordered(
+    PatchInstallSubject subject,
+  ) {
+    if (subject.destinations.isEmpty) {
+      return [for (final mod in widget.library) (mod: mod, rank: null)];
+    }
+
+    final byId = {for (final mod in widget.library) mod.id: mod};
+    final ordered = <({ModInfo mod, DestinationRank? rank})>[];
+    final placed = <String>{};
+    for (final rank in subject.destinations) {
+      final mod = byId[rank.modId];
+      if (mod == null) continue;
+      ordered.add((mod: mod, rank: rank));
+      placed.add(rank.modId);
+    }
+    for (final mod in widget.library) {
+      if (!placed.contains(mod.id)) ordered.add((mod: mod, rank: null));
+    }
+    return ordered;
+  }
+
+  /// One line saying what puts a folder where it is, or nothing.
+  ///
+  /// Shown only where there is something to say, so the reason means "this is
+  /// why this row is up here" rather than decorating every row alike. Phrased as
+  /// what was observed — files held, an author's claim — and never as a verdict
+  /// about the folder.
+  Widget? _reasonFor(DestinationRank? rank) {
+    if (rank == null || !rank.hasSignal) return null;
+    final theme = Theme.of(context);
+    final (text, color) = rank.requiredByAuthor
+        ? (
+            loc.t('mods.patch_install.destination_required'),
+            theme.colorScheme.primary,
+          )
+        : (
+            loc.plural(
+              'mods.patch_install.destination_match',
+              rank.fingerprint,
+              params: {
+                'matched': '${rank.matched}',
+                'count': '${rank.fingerprint}',
+              },
+            ),
+            theme.colorScheme.onSurfaceVariant,
+          );
+    return Text(
+      text,
+      style: TextStyle(fontSize: 11, color: color),
     );
   }
 

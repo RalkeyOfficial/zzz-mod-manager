@@ -271,7 +271,38 @@ _nUpdatesCount _bHasUpdates _nAllTodosCount _bHasTodos
 _bIsObsolete _bIsPrivate _bIsTrashed _bIsWithheld _bIsPorted _bCreatedBySubmitter
 _bAcceptsDonations _bAccessorIsSubmitter _bFollowLinks _bGenerateTableOfContents
 _nStatus _sInitialVisibility _bShowRipePromo
+_aRequirements _bAdvancedRequirementsExist
 ```
+
+#### `_aRequirements` — the author's own dependency list
+
+The site's *"Dependencies and prerequisites required to use this Mod"*, and the one
+field on a mod page that can name **another mod**. Wire shape is a list of
+`[label, url]` pairs, both free-form and either possibly empty:
+
+```jsonc
+// Mod 605460, a patch, naming the mod it patches
+"_aRequirements": [["Pulchra - Bottom Heavy", "https://gamebanana.com/mods/585282"]]
+
+// Mod 531649 — the ordinary case: a tool, off-site
+"_aRequirements": [["XXMI", "https://github.com/SpectrumQT/XXMI-Launcher"]]
+
+// Labels with no link at all are common, including graphics settings
+"_aRequirements": [["Character Quality -> High", ""]]
+```
+
+**Only the url is machine-readable, and only when it points at a GameBanana mod.**
+The label is whatever the author typed. Measured coverage over ZZZ:
+
+| Population | Declares any requirement | Links a GameBanana mod |
+|---|---|---|
+| 100 recently-modified mods | 16% | 6%, *every one* a shader tool (531649) |
+| 68 patch-sized mods (≤ 12 MB) | 18% | 9% — four of six named the mod being patched, two a shared normal-map fix |
+
+So it is worth reading and never worth trusting: see
+[`patch-destinations.md`](patch-destinations.md) for what the app does with it.
+`_bAdvancedRequirementsExist` sits beside it and only says the author used the site's
+structured editor; it is not modelled.
 
 ### Update checks — `Mod/<id>/DownloadPage`
 

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/l10n/app_localizations.dart';
 import 'package:mod_manager_flutter/models/app_notification.dart';
+import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gamebanana.dart';
 import 'package:mod_manager_flutter/models/mod_companion.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
@@ -14,6 +15,7 @@ import 'package:mod_manager_flutter/services/backup/snapshot_service.dart';
 import 'package:mod_manager_flutter/services/mod_metadata_repository.dart';
 import 'package:mod_manager_flutter/services/mod_metadata_service.dart';
 import 'package:mod_manager_flutter/services/origin_status.dart';
+import 'package:mod_manager_flutter/services/patch_destination_ranking.dart';
 import 'package:mod_manager_flutter/services/patch_detection.dart';
 import 'package:mod_manager_flutter/services/patch_scan.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_applier.dart';
@@ -159,6 +161,157 @@ void main() {
         folders: folders,
         modsPath: modsPath,
       );
+
+  /// Which library folder the prompt offers first.
+  ///
+  /// Composition over a real directory: the fingerprint comes out of the walk
+  /// the patch verdict was reached on, the names out of the library on disk, and
+  /// the author's requirement is matched against **recorded origins**. The
+  /// ordering rule itself is `patch_destination_ranking_test.dart`.
+  group('which folder a patch is offered', () {
+    ModInfo mod(String name, {int? modId}) => ModInfo(
+          id: name,
+          name: name,
+          characterId: 'ellen',
+          isActive: false,
+          origin: modId == null
+              ? null
+              : ModOrigin(
+                  source: 'gamebanana',
+                  modId: modId,
+                  modIdConfidence: OriginConfidence.exact,
+                  provenance: OriginProvenance.downloaded,
+                ),
+        );
+
+    Future<List<DestinationRank>> rank(
+      String patchFolder, {
+      required List<ModInfo> library,
+      List<GbRequirement> requirements = const <GbRequirement>[],
+    }) async {
+      final scan = await scanPlannedMods([
+        PlannedMod(name: p.basename(patchFolder), sources: {patchFolder: ''}),
+      ]);
+      final ranked = await rankPatchDestinations(
+        scan: scan,
+        library: library,
+        modsPath: modsPath,
+        patchRequirements: requirements,
+      );
+      return ranked[p.basename(patchFolder)]!;
+    }
+
+    test('the folder holding the files the patch replaces comes first',
+        () async {
+      library('Ellen Bikini', {'ellen.ini': 'x', 'EllenHairADiffuse.dds': 'a'});
+      library('Ellen School', {
+        'ellen.ini': 'x',
+        'Textures/EllenBodyADiffuse.dds': 'a',
+        'EllenHairADiffuse.dds': 'a',
+      });
+      final patch = incoming('Ellen Fix', {
+        'EllenBodyADiffuse.dds': 'new',
+        'EllenHairADiffuse.dds': 'new',
+      });
+
+      final ranked = await rank(
+        patch,
+        library: [mod('Ellen Bikini'), mod('Ellen School')],
+      );
+
+      expect(ranked.first.modId, 'Ellen School');
+      expect(ranked.first.matched, 2,
+          reason: 'matched by name, wherever the folder keeps them');
+      expect(ranked.last.matched, 1);
+    });
+
+    test('the mod the author linked leads, matching nothing at all', () async {
+      library('Ellen School', {'ellen.ini': 'x', 'EllenBodyADiffuse.dds': 'a'});
+      library('Ellen Bikini', {'ellen.ini': 'x'}, );
+      final patch = incoming('Ellen Fix', {'EllenBodyADiffuse.dds': 'new'});
+
+      final ranked = await rank(
+        patch,
+        library: [mod('Ellen School'), mod('Ellen Bikini', modId: 585282)],
+        requirements: const [
+          GbRequirement(
+            label: 'Ellen Bikini',
+            url: 'https://gamebanana.com/mods/585282',
+          ),
+        ],
+      );
+
+      expect(ranked.first.modId, 'Ellen Bikini');
+      expect(ranked.first.requiredByAuthor, isTrue);
+      expect(ranked.first.matched, 0);
+    });
+
+    test('an untracked folder can never answer for a requirement', () async {
+      // Nothing on it says what it is, so nothing can match the author's link —
+      // and it is still offered, like every other folder.
+      library('Ellen School', {'ellen.ini': 'x', 'EllenBodyADiffuse.dds': 'a'});
+      final patch = incoming('Ellen Fix', {'EllenBodyADiffuse.dds': 'new'});
+
+      final ranked = await rank(
+        patch,
+        library: [mod('Ellen School')],
+        requirements: const [
+          GbRequirement(
+            label: 'Some mod',
+            url: 'https://gamebanana.com/mods/585282',
+          ),
+        ],
+      );
+
+      expect(ranked.single.requiredByAuthor, isFalse);
+      expect(ranked.single.matched, 1);
+    });
+
+    test('a requirement that names no mod changes nothing', () async {
+      library('Ellen School', {'ellen.ini': 'x', 'EllenBodyADiffuse.dds': 'a'});
+      final patch = incoming('Ellen Fix', {'EllenBodyADiffuse.dds': 'new'});
+
+      final ranked = await rank(
+        patch,
+        library: [mod('Ellen School', modId: 585282)],
+        requirements: const [
+          GbRequirement(
+            label: 'XXMI',
+            url: 'https://github.com/SpectrumQT/XXMI-Launcher',
+          ),
+        ],
+      );
+
+      expect(ranked.single.requiredByAuthor, isFalse);
+    });
+
+    test('a folder that is gone is offered with nothing said about it',
+        () async {
+      // The list must hold every folder the user can see, and a folder we could
+      // not read is one we know nothing about rather than one to hide.
+      final patch = incoming('Ellen Fix', {'EllenBodyADiffuse.dds': 'new'});
+
+      final ranked = await rank(patch, library: [mod('Never Existed')]);
+
+      expect(ranked.single.modId, 'Never Existed');
+      expect(ranked.single.hasSignal, isFalse);
+    });
+
+    test('an empty library is not walked at all', () async {
+      final patch = incoming('Ellen Fix', {'EllenBodyADiffuse.dds': 'new'});
+      final scan = await scanPlannedMods([
+        PlannedMod(name: 'Ellen Fix', sources: {patch: ''}),
+      ]);
+
+      final ranked = await rankPatchDestinations(
+        scan: scan,
+        library: const [],
+        modsPath: modsPath,
+      );
+
+      expect(ranked, isEmpty);
+    });
+  });
 
   group('what the answers mean for the copy', () {
     test('a folder going into an existing mod is taken out of the import',

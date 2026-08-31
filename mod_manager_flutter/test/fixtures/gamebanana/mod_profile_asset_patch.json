@@ -10,6 +10,9 @@
   "_tsDateModified": 1751901846,
   "_sProfileUrl": "https://gamebanana.com/mods/900460",
   "_sVersion": "",
+  "_aRequirements": [
+    ["Character A Body - Alt Proportions", "https://gamebanana.com/mods/900282"]
+  ],
   "_aGame": {
     "_idRow": 19567,
     "_sName": "Zenless Zone Zero",

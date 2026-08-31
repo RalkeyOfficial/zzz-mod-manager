@@ -21,6 +21,7 @@ before changing anything it covers.
 | [`metadata-autofill.md`](../docs/metadata-autofill.md) | What an install **copies from a mod page** |
 | [`update-checks.md`](../docs/update-checks.md) | Whether a mod **has a newer version** |
 | [`applying-updates.md`](../docs/applying-updates.md) | How an update **is written over an installed mod** |
+| [`patch-destinations.md`](../docs/patch-destinations.md) | **Which mod folder a patch goes into** — the signals and their measurements; ranked, never narrowed or preselected |
 | [`configuration.md`](../docs/configuration.md) | The app's **own settings** |
 
 ## How mods work

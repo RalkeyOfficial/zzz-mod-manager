@@ -965,9 +965,11 @@ can point at them, and there it stops.
 
 Two rules it holds:
 
-- **It suggests nothing.** Both rules can tell that a download needs another mod;
-  neither can tell *which*, because what gets recorded is a **mod page** and nothing
-  on disk names one. The prompt states the evidence it has and asks.
+- **It answers nothing for the user.** The destinations are *ordered* by what the
+  patch's files and its author's requirement point at
+  ([`patch-destinations.md`](patch-destinations.md)), and nothing is preselected or
+  hidden. What gets **recorded** is stricter still: that is a **mod page**, and
+  nothing on disk names one. The prompt states the evidence it has and asks.
 - **A prompt per install, not per folder.** An archive can produce several
   patch-shaped mods; a modal each is a queue to clear rather than a question.
 

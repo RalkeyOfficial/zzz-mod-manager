@@ -65,6 +65,7 @@ void main() {
     'mods.bulk_resolve.done_',
     'mods.bulk_resolve.excluded_untracked_',
     'mods.bulk_resolve.already_known_',
+    'mods.patch_install.destination_match_',
     'mods.update.bulk_found_',
     'mods.update.bulk_failed_',
     'mods.update.bulk_checked_',

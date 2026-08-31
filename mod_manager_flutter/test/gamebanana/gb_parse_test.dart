@@ -98,6 +98,47 @@ void main() {
       expect(mod.contentRatings, isEmpty);
       expect(mod.hasContentRatings, isFalse);
     });
+
+    group('_aRequirements', () {
+      test('a requirement pointing off-site names no mod', () {
+        expect(mod.requirements, hasLength(1));
+        expect(mod.requirements.single.label, 'XXMI');
+        expect(mod.requirements.single.url,
+            'https://github.com/SpectrumQT/XXMI-Launcher');
+        expect(mod.requirements.single.modId, isNull,
+            reason: 'a launcher on GitHub is the most common value in the wild, '
+                'and it is not a mod this could be installed into');
+      });
+
+      test('a label with no link at all survives as a label', () {
+        final tagged =
+            GbMod.fromJson(parseObject(loadGbFixture('mod_profile_tagged')))!;
+
+        expect(
+          tagged.requirements.map((r) => r.label),
+          ['XXMI', 'Character Quality -> High',
+              'High-Precision Character Animation -> Disable'],
+        );
+        expect(tagged.requirements.every((r) => r.modId == null), isTrue,
+            reason: 'graphics settings are requirements too, and name nothing');
+      });
+
+      test('a patch naming the mod it patches carries that mod id', () {
+        final patch = GbMod.fromJson(
+            parseObject(loadGbFixture('mod_profile_asset_patch')))!;
+
+        expect(patch.requirements.single.modId, 900282);
+        expect(patch.requirements.single.label,
+            'Character A Body - Alt Proportions');
+      });
+
+      test('a mod with no requirements block reads as empty, not null', () {
+        final target = GbMod.fromJson(
+            parseObject(loadGbFixture('mod_profile_patch_target')))!;
+
+        expect(target.requirements, isEmpty);
+      });
+    });
   });
 
   group('a content-rated ProfilePage', () {
@@ -267,6 +308,42 @@ void main() {
       expect(GbFile.listFrom(json['_aFiles']), hasLength(6));
       expect(GbFile.listFrom(json['_aArchivedFiles']), hasLength(8));
       expect(json.containsKey('_idRow'), isFalse);
+    });
+  });
+
+  group('GbRequirement.modId', () {
+    int? idOf(String url) => GbRequirement(label: '', url: url).modId;
+
+    test('reads the mod id out of the forms authors paste', () {
+      expect(idOf('https://gamebanana.com/mods/585282'), 585282);
+      expect(idOf('http://gamebanana.com/mods/585282'), 585282);
+      expect(idOf('https://www.gamebanana.com/mods/585282'), 585282);
+      expect(idOf('//gamebanana.com/mods/585282'), 585282);
+      expect(idOf('https://gamebanana.com/mods/585282#Files'), 585282);
+      expect(idOf(' https://gamebanana.com/mods/585282 '), 585282);
+    });
+
+    test('another site\'s /mods/ path is not a mod id', () {
+      expect(idOf('https://example.com/mods/585282'), isNull);
+      expect(idOf('https://notgamebanana.com/mods/585282'), isNull);
+    });
+
+    test('a GameBanana page that is not a mod names no mod', () {
+      expect(idOf('https://gamebanana.com/tools/18156'), isNull);
+      expect(idOf('https://gamebanana.com/games/19567'), isNull);
+    });
+
+    test('no link and nonsense both come back null rather than throwing', () {
+      expect(GbRequirement(label: 'XXMI').modId, isNull);
+      expect(idOf(''), isNull);
+      expect(idOf('gamebanana'), isNull);
+    });
+
+    test('a malformed entry contributes nothing to the list', () {
+      expect(GbRequirement.listFrom(null), isEmpty);
+      expect(GbRequirement.listFrom('not a list'), isEmpty);
+      expect(GbRequirement.listFrom([[], <String>[]]), isEmpty);
+      expect(GbRequirement.listFrom([['XXMI']]).single.label, 'XXMI');
     });
   });
 }

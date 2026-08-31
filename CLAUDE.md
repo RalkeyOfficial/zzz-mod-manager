@@ -144,7 +144,7 @@ mistake.
 > | Doc | Owns |
 > |---|---|
 > | [`app-architecture.md`](docs/app-architecture.md) | The **layers of `lib/`** — service layer, platform abstraction, our GameBanana client |
-> | [`gamebanana-api.md`](docs/gamebanana-api.md) | GameBanana's **remote protocol** — which of the two APIs and why, browsing/filtering/sorting, every field, NSFW, downloads, the category tree |
+> | [`gamebanana-api.md`](docs/gamebanana-api.md) | GameBanana's **remote protocol** — which of the two APIs and why, browsing/filtering/sorting, every field, NSFW, downloads, the category tree. Read it before writing any request: the surface is undocumented upstream, so guessing costs more than looking |
 > | [`downloads.md`](docs/downloads.md) | **Fetching archives** — the isolate pump, resume, backpressure, the stall timeout, the background queue |
 > | [`marketplace.md`](docs/marketplace.md) | The **native browser screens** |
 > | [`library-screen.md`](docs/library-screen.md) | The **Mods tab** — card, status slot, toolbar, bulk actions |
@@ -154,10 +154,8 @@ mistake.
 > | [`metadata-autofill.md`](docs/metadata-autofill.md) | What an install **copies from a mod page** |
 > | [`update-checks.md`](docs/update-checks.md) | Whether a mod **has a newer version** |
 > | [`applying-updates.md`](docs/applying-updates.md) | How an update **is written over an installed mod** |
+> | [`patch-destinations.md`](docs/patch-destinations.md) | **Which mod folder a patch goes into** — the signals, what each measures, why the list is ordered and never narrowed |
 > | [`configuration.md`](docs/configuration.md) | The app's **own settings** |
->
-> Read the API doc before writing any request; its surface is undocumented upstream,
-> so guessing costs more than looking.
 >
 > **Each doc owns one subject.** A fact that doesn't fit any of them wants a new
 > file, not the nearest existing one — the scope line at the top of each doc is

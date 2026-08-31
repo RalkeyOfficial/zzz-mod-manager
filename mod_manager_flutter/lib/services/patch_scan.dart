@@ -46,6 +46,7 @@ class PlannedPatchScan {
     this.iniPatches = const <String>{},
     this.assetPatches = const <String, AssetPatchAssessment>{},
     this.incomplete = const <String>{},
+    this.contents = const <String, FolderContents>{},
   });
 
   static const PlannedPatchScan empty = PlannedPatchScan();
@@ -60,6 +61,15 @@ class PlannedPatchScan {
   /// Mods that ship no `.ini` and replace nothing either — the broken download
   /// the "may be incomplete" warning exists for.
   final Set<String> incomplete;
+
+  /// What the walk found in each planned mod, by mod name.
+  ///
+  /// Carried rather than discarded because the destination ranking
+  /// (`patch_destination_ranking.dart`) needs the same walk this verdict was
+  /// reached on. Walking again would cost a second traversal and could disagree
+  /// with the verdict — the temp folders are still being written to on one path,
+  /// so the two walks are not guaranteed to see the same thing.
+  final Map<String, FolderContents> contents;
 
   /// Every mod this scan calls a patch, whichever rule found it.
   Set<String> get patchShaped => {...iniPatches, ...assetPatches.keys};
@@ -133,6 +143,7 @@ Future<PlannedPatchScan> scanPlannedMods(Iterable<PlannedMod> planned) async {
     iniPatches: iniPatches,
     assetPatches: assetPatches,
     incomplete: incomplete,
+    contents: contents,
   );
 }
 
