@@ -2229,7 +2229,12 @@ is exactly right.
   title-and-body API. The other two keys had no home and are simply deleted.
   Three hardcoded Ukrainian strings in `ArchiveService` went to English on the
   way past.
-- [ ] **The grid blanks itself on every page turn, and that was nobody's decision.**
+- [x] **The grid blanks itself on every page turn** — and it stays that way, as a
+  decision rather than an oversight. A page or filter already visited comes back
+  from cache fast enough that the spinner is never really seen, and a change that
+  *isn't* cached (a sort, above all) takes long enough that a spinner is the
+  honest thing to show. The retained-and-dimmed alternative below would buy
+  nothing for the case that actually has latency.
   `results.when(loading:)` replaces the whole grid with a centred spinner
   whenever the *query* changes — page, sort, category, search — but not when the
   same query is refreshed. The asymmetry is a Riverpod default rather than a
@@ -2246,10 +2251,10 @@ is exactly right.
   reads as page 2's content under page 2's label, and the scroll offset then has
   to be reset when the new page lands, which the blanking was accidentally
   providing.
-- [ ] **The results grid has no infinite scroll and no result-count display.** Paging
-  is prev/next with "Page N of M", which is honest but tedious across 866 pages. Also
-  worth showing `_nRecordCount` so the user knows the search narrowed anything.
-  Deliberately plain per M1; revisit with M4's polish.
+- [x] **No infinite scroll and no result count** — not wanted. The prev/next page
+  tabs with "Page N of M" are good as they are; `_nRecordCount` is available if a
+  reason for it ever turns up, but "the search narrowed something" has not been a
+  question anyone asked.
 - **Images are fetched with `Image.network` and cached only in memory.** Fine and
   measured-adequate for a browsing session — Flutter's `ImageCache` de-duplicates and
   holds decoded frames — but thumbnails are re-fetched from scratch after a restart. No
@@ -3270,11 +3275,15 @@ work that already opens the same file, so they cost nothing extra.
     deferring it: in every measured case the folders tied at the top already
     shared the subject's character, so narrowing to it removes nothing the
     filenames kept. It is the same discrimination twice, not a second signal.
-- [ ] **`role: separate` for a folder holding two independent mods.** `base` and
-  `patch` cover the two-download case; a folder where the user hand-merged two
-  unrelated mods is a different thing, and forcing it into `base` says something
-  false about it. Nothing produces one today, and an unrecognised role is dropped
-  on read rather than defaulted, so adding it later is safe.
+- [ ] **Mod grouping — only when someone asks for it.** The need is "handle these
+  two mods together"; the answer is a grouping in the library listing, not a
+  folder holding both. **A folder must never hold two independent mods**: they
+  share one on/off state, one snapshot and one set of `.ini` files, so
+  activating, updating or rolling back either acts on both. `base` and `patch`
+  are therefore the complete set of companion roles, and `role: separate` is
+  refused rather than unbuilt (`mod_companion.dart`).
+  Doing it properly means reworking the mod list's UI/UX, which is reason enough
+  to wait for a real request rather than guess at the shape.
 
 ---
 
@@ -3369,3 +3378,14 @@ Waiting on it:
 Other todo's:
 
 - [ ] Add a disk usage page, where you can see with graphs how much disk is being used and for what (images, mods, backups / previous versions, etc.)
+- [ ] **Proper logging throughout the app.** What exists is `debugPrint` at
+  scattered call sites, which means a failure a user hits leaves nothing behind:
+  the empty-`200` bug reported only `GameBanana request failed (generic):
+  GbFormatException: Response was not valid JSON: Unexpected end of input` — no
+  url, no status, no body length, and nothing to say the body was *empty* rather
+  than malformed. Every one of those four would have named the cause instantly.
+  What it needs to answer: **which request**, **what came back** (status, size,
+  a bounded snippet), **which decision was taken** (retried, cached, evicted),
+  and **where the file operations went** for imports and updates. Wanted as a
+  file on disk the user can attach to a report, with levels, a size cap and no
+  secrets — not a bigger pile of prints. Its own task and its own commit.

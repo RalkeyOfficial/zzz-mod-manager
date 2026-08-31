@@ -6,6 +6,15 @@ import 'origin_enums.dart';
 /// a default. Role decides which page the update check treats as the folder's
 /// patch and which as the mod it patches, so a future build inventing a third
 /// value must not have it read as one of the two this build acts on.
+///
+/// **These two are the whole set, and that is a decision rather than a gap.**
+/// Both describe one relationship — two halves of one thing, one written over
+/// the other — which is the only reason a folder holds two downloads. A folder
+/// holding two *independent* mods is a shape the app does not support: they
+/// share one on/off state, one snapshot and one set of `.ini` files, so
+/// activating, updating or rolling back either one acts on both. Wanting two
+/// mods handled together is a request for **grouping in the library**, which is
+/// a listing concern and belongs nowhere near this sidecar.
 enum CompanionRole {
   /// The mod the folder's primary download patches.
   base('base'),
