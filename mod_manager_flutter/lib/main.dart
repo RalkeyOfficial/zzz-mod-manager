@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -18,11 +20,37 @@ import 'screens/marketplace_screen.dart';
 import 'utils/state_providers.dart';
 import 'services/api_service.dart';
 import 'services/download/download_queue.dart';
+import 'services/log/log_setup.dart';
+import 'services/log/logger.dart';
 import 'l10n/app_localizations.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  // **Logging first, before the binding and before window_manager.** Nothing
+  // here needs Flutter — the app-data path is environment-based and the file
+  // opens lazily — and everything after this line can fail. A
+  // `windowManager.ensureInitialized()` that throws on a broken display is
+  // otherwise a completely silent death.
+  final fileLogging = readFileLoggingFromDisk();
+  Log.install(buildProductionRouter(fileLogging: fileLogging));
 
+  // The binding must be initialised in the **same zone** that guards `runApp`,
+  // or the framework reports a zone mismatch and errors bypass the handler —
+  // which is why everything below sits inside, rather than only `runApp`.
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+
+    // After `ensureInitialized`, not before: the binding installs its own
+    // `FlutterError.onError` in its constructor.
+    installErrorHandlers();
+    logStartupHeader(fileLogging: fileLogging);
+
+    await _startUp();
+  }, (error, stack) {
+    Log.of('zone').critical('unhandled error', error: error, stack: stack);
+  });
+}
+
+Future<void> _startUp() async {
   // No webview platform to register any more: the marketplace is a native
   // GameBanana browser on both platforms, which is what removed the last
   // Windows-only initialisation step here.
@@ -73,6 +101,17 @@ class _MyAppState extends ConsumerState<MyApp> {
   }
 
   Future<void> _checkFirstRun() async {
+    try {
+      await _initialise();
+    } catch (error, stack) {
+      // Previously this left the spinner turning forever with nothing said
+      // anywhere. It still leaves the spinner — recovering is a different
+      // question — but the reason is now in the file.
+      Log.of('app').critical('startup failed', error: error, stack: stack);
+    }
+  }
+
+  Future<void> _initialise() async {
     await ApiService.initialize(container: ProviderScope.containerOf(context));
     // At launch, where nothing is queued yet, so every completed archive still
     // sitting in the downloads folder is one whose install never ran. Left
@@ -260,7 +299,14 @@ class _MainScreenState extends ConsumerState<MainScreen>
 
   @override
   void onWindowClose() async {
-    // Швидко закриваємо без очікування
+    // The buffered tail of the log, on its way to disk before the process
+    // goes. Without this every clean exit loses its last seconds, which is
+    // the half of a session most worth reading. Bounded, because a hung
+    // volume must not be able to stop the window closing.
+    await Log.shutdown().timeout(
+      const Duration(milliseconds: 250),
+      onTimeout: () {},
+    );
     await windowManager.destroy();
     exit(0);
   }

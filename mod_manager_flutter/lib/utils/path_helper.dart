@@ -96,6 +96,17 @@ class PathHelper {
   /// user-configurable; add a config key only if it's actually asked for.
   static String getDownloadsPath() => path.join(getAppDataPath(), 'downloads');
 
+  /// Where this run's log file is written, alongside the last six.
+  ///
+  ///   Windows: `%APPDATA%\zzz-mod-manager\logs`
+  ///   Linux:   `~/.local/share/zzz-mod-manager/logs`
+  ///
+  /// A directory of its own rather than a single file beside `config.json`,
+  /// because the user is invited to open it: "the log from the run where it
+  /// broke" has to be one file they can pick out and attach, and the folder is
+  /// what the Settings button opens.
+  static String getLogsPath() => path.join(getAppDataPath(), 'logs');
+
   /// Ensure the downloads directory exists.
   static Future<void> ensureDownloadsDirectoryExists() async {
     final dir = Directory(getDownloadsPath());

@@ -49,4 +49,20 @@ abstract class PlatformService {
   /// AUR package does not need one: it declares `7zip` and lets pacman keep it
   /// current, which vendoring would undo.
   List<String> get bundledSevenZipNames;
+
+  /// The account name this app is running as, or null when the environment
+  /// does not say.
+  ///
+  /// **For censoring it out of the log, and nothing else.** Reading the
+  /// environment only — no process is spawned — because this is asked during
+  /// logger bootstrap, before the Flutter binding exists, and must not be able
+  /// to block or throw. It must never be *logged*; see `docs/logging.md`.
+  String? get osUserName;
+
+  /// The user's home directory, or null when the environment does not say.
+  ///
+  /// Same purpose and the same constraint as [osUserName]: every app-owned path
+  /// begins with this, so it is what turns `/home/someone/.local/share/…` into
+  /// `~/.local/share/…` on the way to a log line.
+  String? get homeDirectoryPath;
 }

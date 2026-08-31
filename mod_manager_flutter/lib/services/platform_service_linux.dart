@@ -291,6 +291,16 @@ class LinuxPlatformService implements PlatformService {
   @override
   List<String> get bundledSevenZipNames => const ['7zzs', '7zz'];
 
+  /// `USER`, falling back to `LOGNAME` — the second is what a login shell sets
+  /// and the first is what most desktop sessions set; a container or a systemd
+  /// unit may set neither, hence nullable.
+  @override
+  String? get osUserName =>
+      Platform.environment['USER'] ?? Platform.environment['LOGNAME'];
+
+  @override
+  String? get homeDirectoryPath => Platform.environment['HOME'];
+
   @override
   Future<String?> getClipboardHtml() async {
     // Read the clipboard's text/html target straight from the GTK clipboard

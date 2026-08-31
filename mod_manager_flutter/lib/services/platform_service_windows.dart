@@ -296,6 +296,15 @@ class WindowsPlatformService implements PlatformService {
   List<String> get bundledSevenZipNames => const ['7z.exe', '7zz.exe'];
 
   @override
+  String? get osUserName => Platform.environment['USERNAME'];
+
+  /// `USERPROFILE` — `C:\Users\<name>`, the prefix of both the library paths a
+  /// user picks and `%APPDATA%`, which is why censoring it covers nearly every
+  /// path that reaches a log line.
+  @override
+  String? get homeDirectoryPath => Platform.environment['USERPROFILE'];
+
+  @override
   Future<String?> getClipboardHtml() async {
     try {
       final raw = await Pasteboard.html;
