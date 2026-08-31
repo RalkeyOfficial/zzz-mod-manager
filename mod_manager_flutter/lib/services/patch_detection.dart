@@ -161,31 +161,21 @@ PatchAssessment assessPatchShape({
   );
 }
 
-/// What an **asset-only** download replaces, and in which mod.
+/// What an **asset-only** download carries that is waiting for an `.ini`.
 class AssetPatchAssessment {
-  const AssetPatchAssessment({
-    this.targets = const <String>[],
-    this.replaced = 0,
-  });
+  const AssetPatchAssessment({this.assets = 0});
 
   static const AssetPatchAssessment none = AssetPatchAssessment();
 
-  /// Library mod folders holding **every** file this download brings, sorted.
-  ///
-  /// Several is an ordinary answer, not an error: two variants of one mod
-  /// installed side by side both hold the file. They are all reported and none
-  /// is chosen — guesses may inform, never drive.
-  final List<String> targets;
+  /// How many of the download's files are game assets — things the loader can
+  /// only reach through an `.ini`.
+  final int assets;
 
-  /// How many of the download's files are content that could be replaced —
-  /// auxiliary files excluded.
-  final int replaced;
-
-  bool get looksLikePatch => replaced > 0 && targets.isNotEmpty;
+  bool get looksLikePatch => assets > 0;
 }
 
 /// Whether a download that ships **no `.ini`** is a patch rather than a broken
-/// mod, and what it patches.
+/// mod.
 ///
 /// ## Why the reference rule cannot answer this
 ///
@@ -194,87 +184,63 @@ class AssetPatchAssessment {
 /// all**, so there are no references, nothing to compare, and no threshold that
 /// would help. Measured on a real pair: GameBanana **605460** is a 6.7 MB `.rar`
 /// containing exactly one file, `PulchraBodyADiffuse.dds`, and it patches
-/// **585282**, whose download ships 17 files including that one. Today the first
-/// reads as "the mod may be incomplete", which points at the wrong fix and
-/// records nothing.
+/// **585282**, whose download ships 17 files including that one.
 ///
 /// ## The rule
 ///
-/// **A download that brings nothing the library does not already have is
-/// replacing rather than adding.** Concretely: no `.ini`, at least one
-/// replaceable file, and some single mod folder already holds **every** one of
-/// them.
+/// **A download carrying game assets and no `.ini` to load them is waiting for
+/// somebody else's `.ini`.** Nothing in the game reaches a `.dds` or a `.buf`
+/// except through one, so an asset arriving without one is an asset meant to
+/// land beside a mod that has one.
 ///
-/// "Every" rather than "any" is the whole of it, and it is the same shape as the
-/// `.ini` rule's "brought no content at all". A mod shipping one familiar
-/// texture beside its own new meshes is a mod; only a download with nothing new
-/// in it is a replacement. "Any" would report every retexture that happens to
-/// reuse a name.
+/// It is a judgement about **this download and nothing else**, which is what
+/// makes it work in either order. Comparing against the library instead — "it
+/// brought nothing you don't already have" — reads as *incomplete* whenever the
+/// patch is downloaded before the mod it patches, and finding the patch first is
+/// an ordinary way round. A comparison is also a full library walk per install
+/// and a filename collision away from a wrong answer, and it can only ever
+/// suggest a folder anyway: what gets recorded is a **mod page**, and only the
+/// user can name that.
 ///
-/// Matching is on the **file name**, not the path: a patch author has no idea
-/// what layout the folder ended up with, and requiring the same relative path
-/// would miss every base mod keeping its textures in a subfolder.
-///
-/// [library] maps a mod folder's name to its contents in `FolderContents`
-/// spelling. [exclude] is the folder being judged — the check runs after the
-/// copy, so without it every no-`.ini` import matches itself perfectly and
-/// reports itself as its own patch.
-///
-/// Pure: the caller walks the library.
+/// The residue is the reverse mistake: a folder that really is a broken download
+/// of assets, reported as a patch. It is the milder one — the user is told the
+/// download cannot work alone and asked what it belongs to, which is true either
+/// way, and they can say nothing and move on.
 AssetPatchAssessment assessAssetPatch({
   required Set<String> files,
   required bool hasIni,
-  required Map<String, Set<String>> library,
-  Set<String> exclude = const <String>{},
 }) {
   // A download with an `.ini` is the reference rule's question. Two rules
   // answering for one folder is how they come to disagree about it.
   if (hasIni) return AssetPatchAssessment.none;
 
-  final wanted = <String>{
-    for (final path in files)
-      if (_replaceableName(path) case final name?) name,
-  };
-  if (wanted.isEmpty) return AssetPatchAssessment.none;
-
-  final targets = <String>[];
-  for (final entry in library.entries) {
-    if (exclude.contains(entry.key)) continue;
-    final held = <String>{
-      for (final path in entry.value) _basename(path),
-    };
-    if (wanted.every(held.contains)) targets.add(entry.key);
+  var assets = 0;
+  for (final path in files) {
+    if (_isGameAsset(path)) assets++;
   }
-
-  // Sorted, so what the user reads does not depend on the order the filesystem
-  // happened to enumerate the library in.
-  targets.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-  return AssetPatchAssessment(targets: targets, replaced: wanted.length);
+  return AssetPatchAssessment(assets: assets);
 }
 
-/// A name worth matching on, or null for something that replaces nothing.
+/// Whether the loader can only reach this file through an `.ini`.
 ///
-/// **Auxiliary files are excluded rather than counted.** Every mod in a library
-/// has a `preview.png`, so counting them would let one shared name carry a whole
-/// download — a screenshot pack would read as a patch of whatever it was
-/// compared against. Excluding them also lets a real patch ship a screenshot
-/// alongside its texture without that breaking the match.
-String? _replaceableName(String path) {
-  final name = _basename(path);
-  if (name.isEmpty) return null;
-  return _auxiliaryNames.contains(name) ? null : name;
-}
-
-String _basename(String path) {
-  final cut = path.lastIndexOf('/');
-  return cut < 0 ? path : path.substring(cut + 1);
+/// The list is the resource kinds an `.ini` names on the right of a
+/// `filename =` line (`ini_resources.dart`), which is exactly the question:
+/// these are the files that do nothing at all on their own.
+///
+/// **Images are deliberately absent.** A `.png` or `.jpg` in a mod folder is
+/// overwhelmingly a screenshot, and counting them would make a `previews`
+/// folder installed as its own mod read as a patch — which is the one case the
+/// "may be incomplete" warning is genuinely for.
+bool _isGameAsset(String path) {
+  final dot = path.lastIndexOf('.');
+  if (dot < 0) return false;
+  return _gameAssetExtensions.contains(path.substring(dot));
 }
 
 /// Lower-cased, to match `FolderContents` spelling.
-const Set<String> _auxiliaryNames = <String>{
-  'preview.png',
-  'thumbnail.png',
-  'icon.png',
-  'readme.txt',
-  'readme.md',
+const Set<String> _gameAssetExtensions = <String>{
+  '.dds',
+  '.buf',
+  '.ib',
+  '.vb',
 };

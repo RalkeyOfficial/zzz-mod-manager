@@ -37,52 +37,33 @@ Future<List<String>> modsThatLookLikePatches(
   return patches;
 }
 
-/// What each of [modNames] replaces, for mods that ship **no `.ini`**.
+/// Which of [modNames] are patches shipping **no `.ini`**.
 ///
 /// The other half of patch detection. `modsThatLookLikePatches` asks what a
 /// download's `.ini` files reference; a patch replacing one texture has no
-/// `.ini`, so that question has no answer and this one asks a different one:
-/// does this download bring anything the library does not already have?
+/// `.ini`, so that question has no answer and this one asks whether the folder
+/// carries assets that only an `.ini` could load.
 ///
 /// Only worth calling for mods that have no `.ini` at all — the ones that
 /// otherwise get the "may be incomplete" warning, which is right for a broken
 /// download and wrong for a patch.
 ///
-/// **Walks the whole library**, which is why it is called only for that narrow
-/// case. The walk is the same one the scan-time backfill does, measured at
-/// **0.51 ms per mod** (36 ms for 71 mods across 3722 files) — nothing beside an
-/// operation that has just unpacked an archive.
-///
-/// Returns mod name -> what it patches, and omits any mod that patches nothing.
+/// Reads only the folders named. The rule is intrinsic, so there is no library
+/// to walk and no ordering in which the answer changes.
 Future<Map<String, AssetPatchAssessment>> assetPatchesAmong(
   String modsPath,
   Iterable<String> modNames,
 ) async {
-  final candidates = modNames.toList();
-  if (candidates.isEmpty) return const <String, AssetPatchAssessment>{};
-
-  final library = <String, Set<String>>{};
-  final root = Directory(modsPath);
-  if (!await root.exists()) return const <String, AssetPatchAssessment>{};
-  await for (final entity in root.list(followLinks: false)) {
-    if (entity is! Directory) continue;
-    final name = path.basename(entity.path);
-    library[name] = (await readFolderContents(entity)).files;
-  }
-
   final found = <String, AssetPatchAssessment>{};
-  for (final name in candidates) {
-    final contents = library[name];
-    if (contents == null) continue;
+  for (final name in modNames) {
+    final contents = await readFolderContents(
+      Directory(path.join(modsPath, name)),
+    );
     final assessment = assessAssetPatch(
-      files: contents,
+      files: contents.files,
       // Known by construction: the caller passes only mods with no `.ini`. Read
-      // from the walk anyway rather than trusted, so the two cannot drift.
-      hasIni: contents.any((f) => f.endsWith('.ini')),
-      library: library,
-      // Itself. The check runs after the copy, so without this every one of
-      // these mods matches itself perfectly and reports itself as its own patch.
-      exclude: {name},
+      // from the folder anyway rather than trusted, so the two cannot drift.
+      hasIni: contents.hasIni,
     );
     if (assessment.looksLikePatch) found[name] = assessment;
   }
@@ -104,13 +85,42 @@ class PlannedMod {
   final Map<String, String> sources;
 }
 
-/// [modsThatLookLikePatches], asked **before** the copy about folders still in
-/// a temp directory.
+/// What a scan of the mods an import is **about to create** concluded.
 ///
-/// Moving the question earlier is what lets the install offer a destination
-/// instead of warning after the fact. What moving it costs is the scoping that
-/// the post-import scan got for free, and that scoping is the whole of this
-/// function:
+/// The three outcomes **partition**: a mod is patch-shaped by one rule or the
+/// other, or plainly incomplete, or none of them. Two answers about one mod
+/// would have the install say two different things about it — which is what the
+/// asset rule was added to stop, a patch being called incomplete.
+class PlannedPatchScan {
+  const PlannedPatchScan({
+    this.iniPatches = const <String>{},
+    this.assetPatches = const <String, AssetPatchAssessment>{},
+    this.incomplete = const <String>{},
+  });
+
+  static const PlannedPatchScan empty = PlannedPatchScan();
+
+  /// Mods whose `.ini` files ask for content the download does not carry.
+  final Set<String> iniPatches;
+
+  /// Mods that ship no `.ini` and bring nothing the library lacks, each with
+  /// the library folders holding every file it brings.
+  final Map<String, AssetPatchAssessment> assetPatches;
+
+  /// Mods that ship no `.ini` and replace nothing either — the broken download
+  /// the "may be incomplete" warning exists for.
+  final Set<String> incomplete;
+
+  /// Every mod this scan calls a patch, whichever rule found it.
+  Set<String> get patchShaped => {...iniPatches, ...assetPatches.keys};
+}
+
+/// Both patch rules, asked **before** the copy about folders still in a temp
+/// directory.
+///
+/// Moving the question earlier is what lets the install ask where a patch
+/// belongs instead of warning after the fact. What it costs is the scoping the
+/// post-import scan got for free, and that scoping is most of this function:
 ///
 /// - **The subject is a mod, not a folder.** The rule is "the download brought
 ///   no content at all", and for a combined install the download is the mod the
@@ -119,30 +129,59 @@ class PlannedMod {
 ///   second as a patch — and the user is asked where to apply a mod that needs
 ///   applying nowhere.
 /// - **The union is taken under the subfolder each source lands in.**
-///   References resolve relative to their own `.ini`
-///   (`ini_resources.dart`), so after the combine `Patch/patch.ini` asks for
-///   `Patch/body.dds` — which is not what `Extras/body.dds` is. A raw union
-///   compares basenames, calls the reference satisfied and loses the patch.
+///   References resolve relative to their own `.ini` (`ini_resources.dart`), so
+///   after the combine `Patch/patch.ini` asks for `Patch/body.dds` — which is
+///   not what `Extras/body.dds` is. A raw union compares basenames, calls the
+///   reference satisfied and loses the patch.
 ///
 /// Both are exactly what `readFolderContents` on the *installed* folder would
 /// produce, which is the property that keeps this answer and the post-import
 /// one from disagreeing about the same mod.
-Future<Set<String>> plannedPatchShapedMods(Iterable<PlannedMod> planned) async {
-  final patches = <String>{};
+///
+/// Nothing outside [planned] is read: both rules are judgements about the
+/// download itself.
+Future<PlannedPatchScan> scanPlannedMods(Iterable<PlannedMod> planned) async {
+  final contents = <String, FolderContents>{};
   for (final mod in planned) {
-    var contents = FolderContents.empty;
+    var merged = FolderContents.empty;
     for (final entry in mod.sources.entries) {
       final walked = await readFolderContents(Directory(entry.key));
-      contents = contents.merge(walked.underPrefix(entry.value));
+      merged = merged.merge(walked.underPrefix(entry.value));
     }
-    if (!contents.hasIni) continue;
+    contents[mod.name] = merged;
+  }
+
+  final iniPatches = <String>{};
+  final noIni = <String>[];
+  for (final entry in contents.entries) {
+    if (!entry.value.hasIni) {
+      noIni.add(entry.key);
+      continue;
+    }
     final assessment = assessPatchShape(
-      references: contents.references,
-      files: contents.files,
-      directories: contents.directories,
+      references: entry.value.references,
+      files: entry.value.files,
+      directories: entry.value.directories,
       hasIni: true,
     );
-    if (assessment.looksLikePatch) patches.add(mod.name);
+    if (assessment.looksLikePatch) iniPatches.add(entry.key);
   }
-  return patches;
+
+  final assetPatches = <String, AssetPatchAssessment>{};
+  final incomplete = <String>{};
+  for (final name in noIni) {
+    final assessment =
+        assessAssetPatch(files: contents[name]!.files, hasIni: false);
+    if (assessment.looksLikePatch) {
+      assetPatches[name] = assessment;
+    } else {
+      incomplete.add(name);
+    }
+  }
+
+  return PlannedPatchScan(
+    iniPatches: iniPatches,
+    assetPatches: assetPatches,
+    incomplete: incomplete,
+  );
 }

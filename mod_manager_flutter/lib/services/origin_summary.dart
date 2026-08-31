@@ -14,6 +14,7 @@
 /// same field at different tiers, and the difference is the whole point.
 library;
 
+import '../models/mod_companion.dart';
 import '../models/mod_origin.dart';
 import '../models/origin_enums.dart';
 
@@ -142,13 +143,49 @@ OriginSummary summarizeOrigin(ModOrigin? origin) {
   );
 }
 
+/// The same fold for a **companion** — the other download in the folder.
+///
+/// Shares this file rather than living beside the prompt that renders it, for
+/// the reason the two resolve steps share their panels: "on record" and "our
+/// best guess" must not come to mean different things depending on which half
+/// of a folder is being described.
+///
+/// Two of the version phrasings are unreachable here and that is a fact about
+/// the wording rather than a gap. "The file you downloaded" and "byte-identical
+/// to the archive you installed" are both claims about *this folder's* ingest,
+/// and a companion is a download the app did not perform — so a recorded file
+/// is reported as chosen however it came to be recorded.
+OriginSummary summarizeCompanion(ModCompanion companion) => OriginSummary(
+      identity: switch (companion.modIdConfidence) {
+        OriginConfidence.exact => IdentitySummary.downloaded,
+        OriginConfidence.user => IdentitySummary.confirmed,
+        OriginConfidence.inferred ||
+        OriginConfidence.assumedLatest ||
+        OriginConfidence.unknown =>
+          IdentitySummary.inferred,
+      },
+      version: switch (companion.versionConfidence) {
+        OriginConfidence.unknown => VersionSummary.none,
+        OriginConfidence.assumedLatest => VersionSummary.dateOnly,
+        OriginConfidence.inferred => VersionSummary.guessed,
+        OriginConfidence.user || OriginConfidence.exact =>
+          VersionSummary.chosen,
+      },
+      fileId: companion.fileId,
+      versionLabel: _joinVersion(companion.version, companion.versionLabel),
+      baseline: companion.baselineRemoteDate,
+    );
+
 /// `version` and `version_label` are two different strings that must not be
 /// conflated in storage — but for one line of display, joined is what reads:
 /// `3.0 · white hair ver`.
-String? _versionLabel(ModOrigin origin) {
+String? _versionLabel(ModOrigin origin) =>
+    _joinVersion(origin.version, origin.versionLabel);
+
+String? _joinVersion(String? version, String? label) {
   final parts = [
-    if (origin.version case final v? when v.isNotEmpty) v,
-    if (origin.versionLabel case final l? when l.isNotEmpty) l,
+    if (version case final v? when v.isNotEmpty) v,
+    if (label case final l? when l.isNotEmpty) l,
   ];
   return parts.isEmpty ? null : parts.join(' · ');
 }

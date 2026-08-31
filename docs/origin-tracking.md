@@ -809,6 +809,7 @@ What it may write is narrower than the primary step:
 | Pick a mod page | `mod_id` at **`user`**, `role: base`. Never `exact` — we did not download these bytes. |
 | Pick a file | `file_id`, `version`, `version_label` at `user`. A banked-hash row's `exact` is discarded: the hash is a fact about the archive the *primary* came from. |
 | "I don't know which" | `assumed_latest` plus the other mod's **own creation date** as the baseline. The folder's install date belongs to the download we performed. |
+| "This folder is one mod after all" | Removes the entry. A wrong answer has to be undoable, or naming one is a trap. |
 
 Changing the identity clears whatever was answered about the previous one, and the
 baseline is read from the profile **when the answer is written** rather than held
@@ -816,7 +817,6 @@ from when the tile was tapped. A held date outlives the mod it describes: record
 against a mod created earlier it sits in that mod's future, and a baseline later
 than its subject hides every file published before it — silently, which is the one
 direction this feature cannot afford.
-| "This folder is one mod after all" | Removes the entry. A wrong answer has to be undoable, or naming one is a trap. |
 
 `role` is never asked. Reached from a patch-shaped folder, the primary is the patch
 and the companion is the `base`; asking the user to classify their own folder is a
@@ -825,3 +825,109 @@ quiz whose answer the app already has.
 The write happens on its own rather than folding into Save — it is a decision about a
 different mod, and making the user press Save afterwards invites them to close the
 dialog believing they already had.
+
+### The install asks too, at the moment it finds a patch
+
+The resolve dialog is the route for a folder already on disk. For one the install is
+*about to create*, waiting is a research task: read a warning, understand it, switch
+tabs, find the folder among the rest of the library, press a badge. So the marketplace
+install raises the same question itself
+(`screens/dialogs/patch_install_prompt.dart`), reusing the pushed step above for the
+answer — one implementation, so the two cannot come to write different things.
+
+It sits **after** the patch scan and **before** the copy, which is what gives it a
+third answer nothing else can offer.
+
+**Two questions, with different search spaces.** *Where do the files go?* is
+answered by a **library folder**, because a destination has to exist. *What mod
+does this patch?* is answered by a **mod page**, because the mod being patched may
+not be installed at all — finding the patch first is an ordinary way round.
+Answering the first with a library mod answers the second for free (that folder's
+own `origin` *is* the base), so it stops being asked.
+
+| Answer | What the install does |
+|---|---|
+| Its own folder, naming what it patches | Writes `ingest.patch_shaped` **and** a `role: base` companion, and raises no warning — the user has just been told, in a modal they acted on |
+| Its own folder, saying nothing | Writes `patch_shaped` only, and the pinned warning stands |
+| Into a library mod | **No new folder at all** — see below |
+| Declines | Nothing is copied. A patch with nothing to patch is a folder the user may well not want |
+
+The second destination is not offered when the import picker already chose to
+combine several folders into one mod (different destinations), or when the library
+is empty (nowhere to install into). Both say why rather than hiding the control.
+
+**The library is searched, not scrolled, and every row carries the mod's cover.**
+A real library is long, and reading folder names down a list was the whole cost this
+picker added — while the user arrives already knowing which mod they mean, and
+recognises it by the picture faster than by the name. The search matches the folder
+name *and* the recorded variant label, because both are on the row and **a list that
+displays something it will not match on looks broken when you type the thing you can
+see.**
+
+Covers are decoded at row width (`AppConstants.modThumbnailDecodeWidth`) for the
+reason `modCardDecodeWidth` records — `ImageCache` is bounded by decoded bytes and a
+cover is a full screenshot — and it bites harder here, because a list scrolling a
+whole library decodes far more of them than a grid of cards does. A missing file
+falls to the placeholder through `errorBuilder` rather than an `existsSync` guard:
+rows build while the user scrolls and types, and that guard is synchronous disk I/O
+on the frame.
+
+### Installing a patch into a mod that already works
+
+The library mod the user picked is the one that ends up holding both downloads. It
+keeps its own identity — its `origin` is still the base mod, because that is still
+what it mostly is — and gains a **`role: patch` companion at `exact`**. That is the
+one path to `exact` on a companion: every other route is the user telling us about
+bytes they moved in themselves, which cannot be better than `user`.
+
+**Base first, then patch, whichever of the two the `origin` names.** A collision
+resolves in favour of the patch, always — not "the newer file", not "whichever we
+are writing now". Reversing it silently undoes the thing the user installed the
+patch for. That ordering is also what makes a folder rebuildable from its two
+identities rather than assembled once.
+
+The write is **update-shaped, not install-shaped** (`UpdateApplier.applyPatchInto`):
+deactivate, snapshot, place, reactivate, with no snapshot meaning no write. What
+differs from an ordinary update is only the copy — individual files, each where the
+target already keeps that name (`patch_placement.dart`), because the two downloads
+are by different authors and nothing makes their layouts agree. Placed at the root
+when the base keeps its textures in a subfolder, a file lands *beside* the mod
+rather than over it: every reference still resolves to the original and nothing
+changes in the game, with no error anywhere.
+
+Two placements are **refused rather than guessed**. The download becomes an
+ordinary new mod, nothing is written to the folder that was picked, and each
+refusal names its own cause — because they ask different things of the user:
+
+- **Nothing in the patch matches anything in the target.** Almost certainly the
+  wrong mod, and a snapshot is not a reason to find out the expensive way.
+- **The target holds its own files twice** (`sfw/body.dds` beside
+  `nsfw/body.dds`). **No install path creates that shape** — the import picker
+  settles separate-or-combined before anything is copied — so the folder was
+  merged by hand outside that flow. It is not asked about, because the question
+  has no good answer: writing a patch blind into a folder that is already wrong
+  makes it worse. The folder is what needs sorting out, and the message says so.
+
+That second one is why `resolvePatchPlacement` has no way to answer a
+`PatchPlacement.choices` and try again. It reports the candidates so the refusal
+can point at them, and there it stops.
+
+Two rules it holds:
+
+- **It suggests nothing.** Both rules can tell that a download needs another mod;
+  neither can tell *which*, because what gets recorded is a **mod page** and nothing
+  on disk names one. The prompt states the evidence it has and asks.
+- **A prompt per install, not per folder.** An archive can produce several
+  patch-shaped mods; a modal each is a queue to clear rather than a question.
+
+An unanswered prompt is the user declining to say, which is not the same as saying
+there is nothing — so the write only ever *adds* a companion and never clears one.
+
+Once answered, the row states **both axes**: which mod, and which file of it. Naming
+only the mod leaves a recorded file indistinguishable from "I don't know which" —
+two states that are checked differently and one of which puts an amber mark on the
+card. The file half is phrased by `describeRecordedFile`, the same function the
+resolve dialog's own "currently tracked" line uses
+(`summarizeCompanion` folds a companion into the summary that feeds it), so "the
+file you chose" cannot come to mean one thing about a folder's own download and
+another about the other one in it.

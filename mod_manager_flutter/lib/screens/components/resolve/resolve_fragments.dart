@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../l10n/app_localizations.dart';
+import '../../../services/origin_summary.dart';
 import '../mod_status_slot.dart';
 
 /// The small shared pieces the resolve surfaces are built from.
@@ -60,6 +62,39 @@ Widget resolveChip(String label, Color color, {Color? background}) => Container(
         ),
       ),
     );
+
+/// What is on record about **which file**, in one line.
+///
+/// Shared rather than restated at each call site: the resolve dialog says this
+/// about a folder's own download and the install prompt says it about the other
+/// one, and two phrasings for "the file you chose" would be two claims.
+///
+/// The recorded version string leads when there is one — it is the fact the
+/// reader came for — with how we know it after.
+String describeRecordedFile(AppLocalizations loc, OriginSummary summary) {
+  final how = switch (summary.version) {
+    VersionSummary.downloaded => loc.t('mods.resolve.tracked_file_downloaded'),
+    // A matching key, never an integrity claim — the same phrasing the file
+    // list and the duplicate-archive prompt use, deliberately.
+    VersionSummary.checksumMatched => loc.t('mods.resolve.tracked_file_hash'),
+    VersionSummary.chosen => loc.t('mods.resolve.tracked_file_chosen'),
+    VersionSummary.guessed => loc.t('mods.resolve.tracked_file_guessed'),
+    VersionSummary.dateOnly => loc.t(
+        'mods.resolve.tracked_file_date_only',
+        // Straight from the block, not recomputed: a stored baseline is clamped
+        // to the mod's creation date, so a value derived here could quote a
+        // cutoff that is not the one in force.
+        params: {
+          'date':
+              summary.baseline == null ? '?' : formatResolveDate(summary.baseline!),
+        },
+      ),
+    VersionSummary.none => loc.t('mods.resolve.tracked_file_none'),
+  };
+  return summary.versionLabel == null
+      ? how
+      : '${summary.versionLabel} — $how';
+}
 
 String formatResolveDate(DateTime date) {
   final d = date.toLocal();

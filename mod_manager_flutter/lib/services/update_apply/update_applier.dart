@@ -10,6 +10,7 @@ import '../backup/snapshot_service.dart';
 import '../folder_contents.dart';
 import '../ini_parser_service.dart';
 import '../patch_detection.dart';
+import '../patch_placement.dart';
 import 'keybind_changes.dart';
 import 'stale_ini.dart';
 import 'update_layout.dart';
@@ -212,6 +213,101 @@ class UpdateApplier {
       // used to have is unreadable and appears whether anything moved or not;
       // reporting only what differs makes the section self-explanatory, and
       // makes it vanish in the common case where the author changed nothing.
+      keybindChanges: keybindChanges(
+        before: keybindsBefore,
+        after: await _keybindsIn(modFolder, modName),
+      ),
+      reactivated: wasActive,
+    );
+  }
+
+  /// Writes a **patch** into a mod folder that already works.
+  ///
+  /// The same operation as [apply] and deliberately the same order — deactivate,
+  /// snapshot, copy, reactivate — because it carries the same risk: it writes
+  /// over a live folder and the snapshot is the only way back. What differs is
+  /// only the copy. An update replaces whole folders by layout; a patch replaces
+  /// **individual files, each where the target already keeps that name**
+  /// (`patch_placement.dart`), because the two downloads are by different
+  /// authors and nothing makes their layouts agree.
+  ///
+  /// [placement] must be settled — a caller passing one that still
+  /// [PatchPlacement.needsChoice] gets nothing written, since the alternative is
+  /// guessing which of two variant subfolders the user runs.
+  ///
+  /// The **wrapper problem solves itself here**: what is copied is the contents
+  /// of [source], never [source] itself, so an extraction folder invented for a
+  /// rootless archive cannot end up nested inside the target — which would leave
+  /// a second live `.ini` whose paths resolve beside itself.
+  Future<UpdateApplyResult> applyPatchInto({
+    required String modName,
+    required Directory modFolder,
+    required Directory source,
+    required FolderContents incoming,
+    required FolderContents existing,
+    required PatchPlacement placement,
+  }) async {
+    if (placement.needsChoice) {
+      return UpdateApplyResult.failed(UpdateApplyFailure.layout);
+    }
+    if (!await modFolder.exists()) {
+      return UpdateApplyResult.failed(UpdateApplyFailure.modMissing);
+    }
+
+    final wasActive = await activation.isActive(modName);
+    if (wasActive) await activation.deactivate(modName);
+
+    final snapshot = await snapshots.capture(
+      modName: modName,
+      modFolder: modFolder,
+      reason: SnapshotReason.beforeUpdate,
+    );
+    if (snapshot == null) {
+      // No snapshot, no write — the same trade [apply] refuses to make.
+      if (wasActive) await activation.activate(modName);
+      return UpdateApplyResult.failed(UpdateApplyFailure.snapshot);
+    }
+
+    final keybindsBefore = await _keybindsIn(
+      Directory(path.join(snapshot.directory.path, 'files')),
+      modName,
+    );
+
+    var written = 0;
+    try {
+      for (final entry in placement.mapping.entries) {
+        // Real on-disk spelling on both sides. The placement is computed over
+        // normalised paths so that a case-insensitive loader's `Body.dds` and
+        // `body.dds` are one file; the copy needs what is actually there.
+        final from = incoming.actualPaths[entry.key] ?? entry.key;
+        final to = existing.actualPaths[entry.value] ?? entry.value;
+        if (_isSidecar(entry.key)) continue;
+
+        final target = File(path.join(modFolder.path, to));
+        await target.parent.create(recursive: true);
+        await File(path.join(source.path, from)).copy(target.path);
+        written++;
+      }
+    } catch (e) {
+      print('UpdateApplier: patch copy failed for $modName: $e');
+      if (wasActive) await activation.activate(modName);
+      return UpdateApplyResult.failed(
+        UpdateApplyFailure.copy,
+        snapshot: snapshot,
+        error: '$e',
+      );
+    }
+
+    if (wasActive) await activation.activate(modName);
+
+    return UpdateApplyResult(
+      snapshot: snapshot,
+      filesWritten: written,
+      // Nothing is removed on this path. The stale-`.ini` rule looks for an
+      // `.ini` whose every resource the incoming download also carries — the
+      // renamed predecessor of an update — and a patch by definition carries
+      // less than the mod it patches, so the rule has nothing true to say here.
+      removedInis: const <String>[],
       keybindChanges: keybindChanges(
         before: keybindsBefore,
         after: await _keybindsIn(modFolder, modName),

@@ -105,15 +105,17 @@ void main() {
           },
         );
 
+    Future<PlannedPatchScan> scan(List<PlannedMod> planned) =>
+        scanPlannedMods(planned);
+
     test('a single folder answers exactly as it does after the copy', () async {
       write('Patch', 'fix.ini', modIni({'R': 'Body.dds'}));
       write('Complete', 'ellen.ini', modIni({'R': 'Body.dds'}));
       write('Complete', 'Body.dds', 'x');
 
-      expect(
-        await plannedPatchShapedMods([separate('Patch'), separate('Complete')]),
-        {'Patch'},
-      );
+      final result = await scan([separate('Patch'), separate('Complete')]);
+      expect(result.iniPatches, {'Patch'});
+      expect(result.incomplete, isEmpty);
     });
 
     test('a combined install is judged as one mod, not folder by folder',
@@ -128,13 +130,13 @@ void main() {
       write('Wings', 'wings.ini', modIni({'R': 'Wings.dds'}));
 
       expect(
-        await plannedPatchShapedMods([separate('Body'), separate('Wings')]),
+        (await scan([separate('Body'), separate('Wings')])).iniPatches,
         {'Wings'},
         reason: 'installed separately they really are two mods, and one of '
             'them really did bring nothing',
       );
       expect(
-        await plannedPatchShapedMods([combined('Ellen', ['Body', 'Wings'])]),
+        (await scan([combined('Ellen', ['Body', 'Wings'])])).iniPatches,
         isEmpty,
         reason: 'combined they are one mod, and it brought content',
       );
@@ -147,9 +149,8 @@ void main() {
       write('More Fixes', 'more.ini', modIni({'R': 'Hair.dds'}));
 
       expect(
-        await plannedPatchShapedMods([
-          combined('Ellen Fixes', ['Fixes', 'More Fixes']),
-        ]),
+        (await scan([combined('Ellen Fixes', ['Fixes', 'More Fixes'])]))
+            .iniPatches,
         {'Ellen Fixes'},
       );
     });
@@ -164,29 +165,97 @@ void main() {
       write('Extras', 'Body.dds', 'x');
 
       expect(
-        await plannedPatchShapedMods([
-          combined('Ellen', ['Patch', 'Extras']),
-        ]),
+        (await scan([combined('Ellen', ['Patch', 'Extras'])])).iniPatches,
         {'Ellen'},
         reason: 'and this is the answer the post-import scan gives, because '
             'the copy puts them in exactly those subfolders',
       );
     });
 
-    test('a planned mod with no .ini at all is skipped rather than judged',
-        () async {
-      write('Previews', 'shot.png', 'x');
-      expect(await plannedPatchShapedMods([separate('Previews')]), isEmpty);
-    });
-
     test('a source folder that vanished contributes nothing', () async {
       write('Patch', 'fix.ini', modIni({'R': 'Body.dds'}));
       expect(
-        await plannedPatchShapedMods([
-          combined('Ellen', ['Patch', 'Gone']),
-        ]),
+        (await scan([combined('Ellen', ['Patch', 'Gone'])])).iniPatches,
         {'Ellen'},
       );
+    });
+
+    group('a download with no .ini', () {
+      test('is a patch when it carries assets only an .ini could load',
+          () async {
+        // The measured real case: a 6.7 MB archive containing one `.dds`. The
+        // `.ini` rule cannot see it — there are no references — so the signal
+        // is the asset arriving with nothing to load it.
+        write('Retexture', 'Body.dds', 'new bytes');
+
+        final result = await scan([separate('Retexture')]);
+        expect(result.assetPatches.keys, ['Retexture']);
+        expect(
+          result.incomplete,
+          isEmpty,
+          reason: 'calling it incomplete points at the wrong fix, and the two '
+              'answers must not both be given about one mod',
+        );
+        expect(result.iniPatches, isEmpty);
+      });
+
+      test('does not need the mod it patches to be installed first', () async {
+        // The reported bug. Downloading the patch before its base mod is an
+        // ordinary way round, and the answer must not depend on which came
+        // first — nothing outside the folder is consulted, so it cannot.
+        write('Retexture', 'Body.dds', 'x');
+        expect((await scan([separate('Retexture')])).assetPatches.keys,
+            ['Retexture']);
+      });
+
+      test('is incomplete when it carries nothing an .ini would load',
+          () async {
+        // The case the "may be incomplete" warning is genuinely for: a
+        // `previews` folder installed as a mod of its own.
+        write('Previews', 'preview.png', 'x');
+        write('Previews', '01.jpg', 'x');
+
+        final result = await scan([separate('Previews')]);
+        expect(result.assetPatches, isEmpty);
+        expect(result.incomplete, {'Previews'});
+      });
+
+      test('is judged as one mod when the folders are combined', () async {
+        // The same scoping rule as the `.ini` half. Combined, the `.ini` in one
+        // folder covers the assets in the other and the mod is complete.
+        write('Textures', 'Body.dds', 'x');
+        write('Loader', 'ellen.ini', modIni({'R': 'Body.dds'}));
+
+        final combinedScan =
+            await scan([combined('Ellen', ['Loader', 'Textures'])]);
+        expect(combinedScan.assetPatches, isEmpty);
+        expect(combinedScan.incomplete, isEmpty);
+        expect(
+          (await scan([separate('Textures'), separate('Loader')]))
+              .assetPatches
+              .keys,
+          ['Textures'],
+          reason: 'installed on its own, Textures really is assets with no '
+              '.ini to load them',
+        );
+      });
+    });
+
+    test('patchShaped is both rules and nothing else', () async {
+      write('IniPatch', 'fix.ini', modIni({'R': 'Body.dds'}));
+      write('AssetPatch', 'Hair.dds', 'x');
+      write('Previews', 'shot.png', 'x');
+      write('Fine', 'ellen.ini', modIni({'R': 'Body.dds'}));
+      write('Fine', 'Body.dds', 'x');
+
+      final result = await scan([
+        separate('IniPatch'),
+        separate('AssetPatch'),
+        separate('Previews'),
+        separate('Fine'),
+      ]);
+      expect(result.patchShaped, {'IniPatch', 'AssetPatch'});
+      expect(result.incomplete, {'Previews'});
     });
   });
 }

@@ -1634,10 +1634,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
           modsPath,
           importedMods,
         );
-        // A download of bare assets that replaces files a mod in the library
-        // already has is a patch, not an incomplete mod — and the `.ini` rule
-        // below cannot see it, because there is no `.ini` to read references
-        // from. Asked only of the mods about to be called incomplete.
+        // A download of bare game assets is a patch, not an incomplete mod —
+        // nothing loads a `.dds` except an `.ini`, and the rule below cannot
+        // see it because there is no `.ini` to read references from. Asked only
+        // of the mods about to be called incomplete.
         final assetPatches = await assetPatchesAmong(modsPath, noIni);
         final incomplete = [
           for (final name in noIni)
@@ -1652,14 +1652,12 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
             ),
           );
         }
-        for (final entry in assetPatches.entries) {
+        for (final name in assetPatches.keys) {
           if (!mounted) break;
           context.notify.warning(
             loc.t('mods.snackbar.import_asset_patch_title'),
-            body: loc.t('mods.snackbar.import_asset_patch_body', params: {
-              'mod': entry.key,
-              'targets': entry.value.targets.join(', '),
-            }),
+            body: loc.t('mods.snackbar.import_asset_patch_body',
+                params: {'mod': name}),
           );
         }
 

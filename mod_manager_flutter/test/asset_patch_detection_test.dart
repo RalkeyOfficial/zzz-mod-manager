@@ -106,122 +106,103 @@ void main() {
   });
 
   group('assessAssetPatch', () {
-    test('names the library mod a bare asset replaces', () {
-      final assessment = assessAssetPatch(
-        files: assetPatch,
-        hasIni: false,
-        library: const {'CharA-AltProportions(NSFW)': baseMod},
-      );
-
+    test('a bare game asset with no .ini is a patch', () {
+      final assessment = assessAssetPatch(files: assetPatch, hasIni: false);
       expect(assessment.looksLikePatch, isTrue);
-      expect(assessment.targets, ['CharA-AltProportions(NSFW)']);
+      expect(assessment.assets, 1);
     });
 
-    test('a download that brings something new is not a patch', () {
-      // The distinction that matters, and the reason "every file" rather than
-      // "any file": a mod shipping one familiar texture beside its own new
-      // meshes is a mod. Only a download with **nothing new in it** is
-      // replacing rather than adding.
-      final assessment = assessAssetPatch(
-        files: const {'charabodyadiffuse.dds', 'brandnewmesh.ib'},
-        hasIni: false,
-        library: const {'CharA-AltProportions(NSFW)': baseMod},
+    test('it does not depend on the mod it patches being installed', () {
+      // **The whole reason the rule is intrinsic.** Downloading a patch before
+      // its base mod is ordinary — you find the patch, then go and get what it
+      // patches — and a rule that compared against the library called that
+      // ordering "the mod may be incomplete", which points at the wrong fix.
+      //
+      // The judgement is about this download and nothing else, so there is no
+      // ordering in which it can be wrong, and no library walk to pay for.
+      expect(
+        assessAssetPatch(files: assetPatch, hasIni: false).looksLikePatch,
+        isTrue,
       );
-      expect(assessment.looksLikePatch, isFalse);
-      expect(assessment.targets, isEmpty);
-    });
-
-    test('a genuinely incomplete download matches nothing', () {
-      // The case the "may be incomplete" warning is actually for. It must keep
-      // getting that warning rather than being told it is a patch.
-      final assessment = assessAssetPatch(
-        files: const {'somethingelse.dds'},
-        hasIni: false,
-        library: const {'CharA-AltProportions(NSFW)': baseMod},
+      expect(
+        assessAssetPatch(files: baseMod, hasIni: true).looksLikePatch,
+        isFalse,
       );
-      expect(assessment.looksLikePatch, isFalse);
     });
 
     test('a download carrying an .ini is left to the reference rule', () {
       // One question, one owner. A download with an `.ini` is judged on what it
       // references — two rules answering for the same folder is how they come
       // to disagree.
-      final assessment = assessAssetPatch(
-        files: assetPatch,
-        hasIni: true,
-        library: const {'CharA-AltProportions(NSFW)': baseMod},
+      expect(
+        assessAssetPatch(files: assetPatch, hasIni: true).looksLikePatch,
+        isFalse,
       );
-      expect(assessment.looksLikePatch, isFalse);
     });
 
     test('an empty download is nothing, not a patch of everything', () {
       expect(
+        assessAssetPatch(files: const <String>{}, hasIni: false).looksLikePatch,
+        isFalse,
+      );
+    });
+
+    test('buffers and index buffers count as much as textures', () {
+      // A patch can replace geometry rather than a texture. All three are
+      // things only an `.ini` can load, which is the whole of the rule.
+      for (final file in const [
+        'charabodyblend.buf',
+        'charabodya.ib',
+        'charabodyposition.vb',
+      ]) {
+        expect(
+          assessAssetPatch(files: {file}, hasIni: false).looksLikePatch,
+          isTrue,
+          reason: file,
+        );
+      }
+    });
+
+    test('a folder of screenshots is not a patch', () {
+      // The case the "may be incomplete" warning is actually for: a `previews`
+      // folder installed as its own mod. Images are not loaded through an
+      // `.ini`, so nothing here is waiting for one.
+      expect(
         assessAssetPatch(
-          files: const <String>{},
+          files: const {'preview.png', '01.jpg', 'readme.txt'},
           hasIni: false,
-          library: const {'A': baseMod},
         ).looksLikePatch,
         isFalse,
       );
     });
 
-    test('matching is on the file name, not on where it sits', () {
-      // The patch author has no idea what folder layout you used — they ship
-      // the file bare and expect you to drop it in. Requiring the same relative
-      // path would miss every base mod that keeps its textures in a subfolder.
-      final assessment = assessAssetPatch(
-        files: const {'charabodyadiffuse.dds'},
-        hasIni: false,
-        library: const {
-          'Base': {'res/textures/charabodyadiffuse.dds', 'chara.ini'},
-        },
-      );
-      expect(assessment.targets, ['Base']);
-    });
-
-    test('several candidates are all reported, never picked between', () {
-      // Two variants of one mod installed side by side is ordinary, and both
-      // hold the file. Guesses may inform, never drive — so the user chooses.
-      final assessment = assessAssetPatch(
-        files: assetPatch,
-        hasIni: false,
-        library: const {
-          'Base SFW': baseMod,
-          'Base NSFW': baseMod,
-        },
-      );
-      expect(assessment.targets, ['Base NSFW', 'Base SFW'],
-          reason: 'sorted, so what the user reads does not depend on the order '
-              'the filesystem enumerated the library in');
-    });
-
-    test('auxiliary files never make a match', () {
-      // Every mod in a library has a `preview.png`, so counting them would make
-      // a preview pack read as a patch of whatever it happened to be compared
-      // against — and would let one shared name carry a whole download.
-      final assessment = assessAssetPatch(
-        files: const {'preview.png', 'readme.txt'},
-        hasIni: false,
-        library: const {
-          'Some Mod': {'preview.png', 'readme.txt', 'body.dds'},
-        },
-      );
-      expect(assessment.looksLikePatch, isFalse);
-    });
-
-    test('an auxiliary file rides along without breaking a real match', () {
-      // A patch shipping its texture plus a screenshot is still a patch. The
-      // rule is about what it *replaces*, and a preview replaces nothing.
+    test('a patch shipping a screenshot beside its texture is still a patch',
+        () {
+      // The auxiliary file rides along. What decides is that *something* here
+      // needs an `.ini` that is not here.
       final assessment = assessAssetPatch(
         files: const {'charabodyadiffuse.dds', 'preview.png'},
         hasIni: false,
-        library: const {'CharA-AltProportions(NSFW)': baseMod},
       );
       expect(assessment.looksLikePatch, isTrue);
-      expect(assessment.targets, ['CharA-AltProportions(NSFW)']);
+      expect(assessment.assets, 1,
+          reason: 'the screenshot is not one of the files needing an .ini');
     });
 
-    test('against a real library, when one is present', () async {
+    test('an archive nested inside the folder is not an asset', () {
+      // A download that unpacked to another archive is a broken download, and
+      // telling the user it is a patch would send them looking for a mod to
+      // apply it to.
+      expect(
+        assessAssetPatch(
+          files: const {'mod.zip'},
+          hasIni: false,
+        ).looksLikePatch,
+        isFalse,
+      );
+    });
+
+    test('over a real library, when one is present', () async {
       // The I/O side, over actual extracted archives. Skipped unless
       // `ZZZ_ASSET_PATCH_LIBRARY` points at a directory laid out as a mods
       // folder — one extracted mod per subdirectory. Archives are hundreds of
@@ -242,8 +223,8 @@ void main() {
 
       for (final entry in found.entries) {
         // ignore: avoid_print
-        print('PATCH ${entry.key} -> ${entry.value.targets.join(", ")} '
-            '(${entry.value.replaced} file(s) replaced)');
+        print('PATCH ${entry.key} (${entry.value.assets} asset(s) needing '
+            'an .ini that is not there)');
       }
       for (final name in noIni) {
         if (found.containsKey(name)) continue;
@@ -251,28 +232,12 @@ void main() {
         print('incomplete $name');
       }
 
-      // The invariant that holds for any library: nothing reports itself, and
-      // a mod with an `.ini` is never in the no-`.ini` list to begin with.
+      // The invariant that holds for any library: every mod reported is one
+      // that actually ships an asset, and a mod with an `.ini` never reaches
+      // this list at all.
       for (final entry in found.entries) {
-        expect(entry.value.targets, isNot(contains(entry.key)));
+        expect(entry.value.assets, greaterThan(0));
       }
     }, skip: Platform.environment['ZZZ_ASSET_PATCH_LIBRARY'] == null);
-
-    test('the mod being installed is not compared against itself', () {
-      // The check runs after the copy, so the incoming folder is *in* the
-      // library by then. Every one of its files matches itself perfectly, and
-      // without excluding it every no-.ini import would report itself as its
-      // own patch.
-      final assessment = assessAssetPatch(
-        files: assetPatch,
-        hasIni: false,
-        library: const {
-          'character_a_body_retexture_fix': assetPatch,
-          'CharA-AltProportions(NSFW)': baseMod,
-        },
-        exclude: const {'character_a_body_retexture_fix'},
-      );
-      expect(assessment.targets, ['CharA-AltProportions(NSFW)']);
-    });
   });
 }

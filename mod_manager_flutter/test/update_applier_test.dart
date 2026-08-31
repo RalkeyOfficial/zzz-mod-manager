@@ -5,6 +5,8 @@ import 'package:mod_manager_flutter/core/constants.dart';
 import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/backup/snapshot_service.dart';
+import 'package:mod_manager_flutter/services/folder_contents.dart';
+import 'package:mod_manager_flutter/services/patch_placement.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_applier.dart';
 import 'package:path/path.dart' as p;
 
@@ -507,6 +509,191 @@ void main() {
       final listed = await snapshots.list('Ellen');
       expect(listed.length, 1);
       expect(listed.single.sizeBytes, greaterThan(0));
+    });
+  });
+
+  /// A **patch** written into a mod folder that already works.
+  ///
+  /// The same operation as an update and the same order, because it carries the
+  /// same risk. What differs is only the copy: individual files, each where the
+  /// target already keeps that name.
+  group('applyPatchInto', () {
+    /// Resolves and applies in one go, the way the install flow does.
+    Future<UpdateApplyResult> applyPatch(
+      String modName,
+      Directory folder,
+      Directory source,
+    ) async {
+      final incomingContents = await readFolderContents(source);
+      final existing = await readFolderContents(folder);
+      return applier.applyPatchInto(
+        modName: modName,
+        modFolder: folder,
+        source: source,
+        incoming: incomingContents,
+        existing: existing,
+        placement: resolvePatchPlacement(
+          incoming: incomingContents.files,
+          target: existing.files,
+        ),
+      );
+    }
+
+    test('a bare file replaces the one the target keeps in a subfolder',
+        () async {
+      // The failure this exists to prevent is silent: written at the root, the
+      // file lands beside the mod, every reference still resolves to the
+      // original, and nothing changes in the game with no error anywhere.
+      final folder = modFolder('Ellen');
+      write(folder, 'ellen.ini', '[TextureOverride]\nfilename = tex/body.dds');
+      write(folder, 'tex/body.dds', 'original');
+
+      final source = incoming('patch');
+      write(source, 'body.dds', 'patched');
+
+      final result = await applyPatch('Ellen', folder, source);
+
+      expect(result.success, isTrue);
+      expect(read(folder, 'tex/body.dds'), 'patched');
+      expect(
+        read(folder, 'body.dds'),
+        isNull,
+        reason: 'a copy at the root would be a file nothing reads',
+      );
+    });
+
+    test('the wrapper is never nested inside the target', () async {
+      // A rootless archive is wrapped in a folder named after the archive. Copy
+      // that folder in and the patch does not apply *and* there are two live
+      // `.ini` files, because a `filename` resolves beside its own `.ini`.
+      final folder = modFolder('Ellen');
+      write(folder, 'ellen.ini', 'x');
+      write(folder, 'body.dds', 'original');
+
+      final source = incoming('Ellen No Blur v2');
+      write(source, 'body.dds', 'patched');
+
+      await applyPatch('Ellen', folder, source);
+
+      expect(read(folder, 'body.dds'), 'patched');
+      expect(
+        Directory(p.join(folder.path, 'Ellen No Blur v2')).existsSync(),
+        isFalse,
+      );
+    });
+
+    test('a file the target does not have is added where it sits', () async {
+      final folder = modFolder('Ellen');
+      write(folder, 'ellen.ini', 'x');
+
+      final source = incoming('patch');
+      write(source, 'extra/glow.dds', 'new');
+
+      final result = await applyPatch('Ellen', folder, source);
+
+      expect(result.success, isTrue);
+      expect(read(folder, 'extra/glow.dds'), 'new');
+    });
+
+    test('nothing is written without a snapshot', () async {
+      // The same trade an update refuses to make: there is no other way back
+      // from an overwrite, so proceeding would turn a recoverable failure into
+      // an unrecoverable one.
+      final refusing = UpdateApplier(
+        snapshots: _RefusingSnapshots(rootPath: p.join(tmp.path, 'backups')),
+        activation: activation,
+      );
+      final folder = modFolder('Ellen');
+      write(folder, 'body.dds', 'original');
+      final source = incoming('patch');
+      write(source, 'body.dds', 'patched');
+
+      final contents = await readFolderContents(source);
+      final existing = await readFolderContents(folder);
+      final result = await refusing.applyPatchInto(
+        modName: 'Ellen',
+        modFolder: folder,
+        source: source,
+        incoming: contents,
+        existing: existing,
+        placement: resolvePatchPlacement(
+          incoming: contents.files,
+          target: existing.files,
+        ),
+      );
+
+      expect(result.success, isFalse);
+      expect(result.failure, UpdateApplyFailure.snapshot);
+      expect(read(folder, 'body.dds'), 'original');
+    });
+
+    test('the folder can be rolled back to before the patch', () async {
+      // What the snapshot is *for*. A patch applied to the wrong mod is one
+      // click from undone.
+      final folder = modFolder('Ellen');
+      write(folder, 'body.dds', 'original');
+      final source = incoming('patch');
+      write(source, 'body.dds', 'patched');
+
+      final result = await applyPatch('Ellen', folder, source);
+      expect(read(folder, 'body.dds'), 'patched');
+
+      await applier.restore(
+        modName: 'Ellen',
+        modFolder: folder,
+        snapshot: result.snapshot!,
+      );
+      expect(read(folder, 'body.dds'), 'original');
+    });
+
+    test('an unsettled placement writes nothing at all', () async {
+      // Two variant subfolders holding the same name. Picking would be a guess
+      // about which variant the user runs, invisible once written — so the
+      // caller has to ask first, and passing the question through unanswered
+      // must not be a way round that.
+      final folder = modFolder('Ellen');
+      write(folder, 'sfw/body.dds', 'sfw original');
+      write(folder, 'nsfw/body.dds', 'nsfw original');
+      final source = incoming('patch');
+      write(source, 'body.dds', 'patched');
+
+      final result = await applyPatch('Ellen', folder, source);
+
+      expect(result.success, isFalse);
+      expect(read(folder, 'sfw/body.dds'), 'sfw original');
+      expect(read(folder, 'nsfw/body.dds'), 'nsfw original');
+    });
+
+    test('an active mod is deactivated and switched back on', () async {
+      // For open file handles, never for link integrity — the same reason the
+      // update path does it.
+      final folder = modFolder('Ellen');
+      write(folder, 'body.dds', 'original');
+      final source = incoming('patch');
+      write(source, 'body.dds', 'patched');
+      activation.active.add('Ellen');
+
+      final result = await applyPatch('Ellen', folder, source);
+
+      expect(result.reactivated, isTrue);
+      expect(activation.log, ['deactivate:Ellen', 'activate:Ellen']);
+    });
+
+    test('our own sidecar is never copied into the target', () async {
+      // An archive can arrive carrying one. Copying it over would replace the
+      // target's own description, gallery and — worse — its origin block.
+      final folder = modFolder('Ellen');
+      write(folder, 'body.dds', 'original');
+      final source = incoming('patch');
+      write(source, 'body.dds', 'patched');
+      write(source, '${AppConstants.modMetadataDirName}/metadata.json', '{}');
+
+      await applyPatch('Ellen', folder, source);
+
+      expect(
+        read(folder, '${AppConstants.modMetadataDirName}/metadata.json'),
+        isNull,
+      );
     });
   });
 }

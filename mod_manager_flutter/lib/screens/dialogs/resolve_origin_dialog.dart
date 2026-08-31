@@ -691,38 +691,12 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
       IdentitySummary.none => null,
     };
 
-    final version = switch (summary.version) {
-      VersionSummary.downloaded =>
-        loc.t('mods.resolve.tracked_file_downloaded'),
-      // A matching key, never an integrity claim — the same phrasing the file
-      // list and the duplicate-archive prompt use, deliberately.
-      VersionSummary.checksumMatched =>
-        loc.t('mods.resolve.tracked_file_hash'),
-      VersionSummary.chosen => loc.t('mods.resolve.tracked_file_chosen'),
-      VersionSummary.guessed => loc.t('mods.resolve.tracked_file_guessed'),
-      VersionSummary.dateOnly => loc.t(
-          'mods.resolve.tracked_file_date_only',
-          // Straight from the block, not recomputed: the stored baseline is
-          // clamped to the mod's creation date, so a value derived here could
-          // quote a cutoff that is not the one in force.
-          params: {
-            'date':
-                summary.baseline == null ? '?' : _formatDate(summary.baseline!),
-          },
-        ),
-      VersionSummary.none => loc.t('mods.resolve.tracked_file_none'),
-    };
-
     return [
       const SizedBox(height: 6),
       if (identity != null) _trackedLine(Icons.link, identity),
       _trackedLine(
         Icons.insert_drive_file_outlined,
-        // The recorded version string leads when there is one — it is the fact
-        // the user came for — with how we know it after.
-        summary.versionLabel == null
-            ? version
-            : '${summary.versionLabel} — $version',
+        describeRecordedFile(loc, summary),
       ),
     ];
   }

@@ -108,11 +108,12 @@ void main() {
     expect(await modsThatLookLikePatches(modsPath, [modName]), isEmpty,
         reason: 'the .ini rule cannot see it, and must not pretend to');
 
-    // ---- 4. the asset rule names what it replaces --------------------------
+    // ---- 4. the asset rule sees it ----------------------------------------
     final found = await assetPatchesAmong(modsPath, noIni);
     expect(found.keys, [modName]);
-    expect(found[modName]!.targets, [baseName]);
-    expect(found[modName]!.replaced, greaterThan(0));
+    expect(found[modName]!.assets, greaterThan(0),
+        reason: 'the real archive is one .dds, which is exactly a file that '
+            'does nothing without an .ini to load it');
 
     // ---- 5. the flag reaches disk ------------------------------------------
     final repository = ModMetadataRepository(

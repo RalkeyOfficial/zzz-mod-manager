@@ -110,15 +110,16 @@ rules. Both live in `services/patch_detection.dart`, both are pure, and
 **Neither rule can answer for the other's shape**, and that is structural rather
 than a tuning problem. `assessPatchShape` is defined over what the `.ini` files
 reference; an asset patch has no `.ini`, so there are no references, nothing to
-compare, and no threshold that would help. `assessAssetPatch` is defined over
-overlap with the library; a download carrying an `.ini` is the first rule's
-question, and two rules answering for one folder is how they come to disagree
-about it. So each declines the other's input outright.
+compare, and no threshold that would help. `assessAssetPatch` is defined over what
+the download carries; a download carrying an `.ini` is the first rule's question,
+and two rules answering for one folder is how they come to disagree about it. So
+each declines the other's input outright.
 
 The two rules share their shape, which is the thing to preserve if either is ever
-revisited: **no threshold, and a fact about the download rather than a proportion
-of one.** "Brought none of what it references" and "brought nothing the library
-does not already have" are the same sentence about different evidence.
+revisited: **no threshold, and a fact about the download itself rather than a
+proportion of one or a comparison with something else.** "Brought none of what it
+references" and "brought content nothing here can load" are the same sentence about
+different evidence.
 
 `services/ini_resources.dart` collects what the `.ini` files ask for.
 
@@ -235,7 +236,7 @@ not redundant:
   is about overlap rather than absence, so a dead declaration there changes the
   answer.
 
-### The asset patch, and why the library is the only evidence
+### The asset patch: an asset with no `.ini` is waiting for someone else's
 
 A patch that replaces one texture ships that texture and nothing else. Measured on
 a real pair: one is a 6.7 MB `.rar` containing **exactly one `.dds`**, and the mod
@@ -245,64 +246,67 @@ reference still resolves, and the folder is indistinguishable from an ordinary
 mod — [§1](#1-the-mechanism-is-overwrite)'s mixed folder, arrived at without a
 single `.ini` being involved.
 
-There is nothing inside such a download to judge it by. The only evidence is what
-is *already installed*, so `assessAssetPatch` takes the library and asks whether
-some folder already holds everything the download brings.
+The rule is **intrinsic to the download**: nothing in the game reaches a `.dds`,
+`.buf`, `.ib` or `.vb` except through an `.ini`, so assets arriving without one are
+assets meant to land beside a mod that has one. `assessAssetPatch` takes the file
+set and `hasIni`, and nothing else.
 
-Three rules keep that from reporting ordinary mods:
+**Images are deliberately not assets** for this purpose. A `.png` or `.jpg` in a
+mod folder is overwhelmingly a screenshot, so counting them would make a `previews`
+folder installed as its own mod read as a patch — the one case the "may be
+incomplete" warning is genuinely for. A real patch shipping a screenshot beside its
+texture is still a patch, because something in it still needs an `.ini`.
 
-- **Every file, not any file.** A mod shipping one familiar texture beside its own
-  new meshes is a mod. Only a download with nothing new in it is a replacement.
-  "Any" would flag every retexture that reuses a name.
-- **Matching is on the file name, not the path.** A patch author has no idea what
-  layout the folder ended up with — they ship the file bare and expect it dropped
-  in. Requiring the same relative path would miss every base mod that keeps its
-  textures in a subfolder.
-- **Auxiliary names never match** (`preview.png`, `thumbnail.png`, `icon.png`,
-  `readme.txt`, `readme.md`). Every mod in a library has one, so counting them
-  would let a single shared name carry a whole download and make a screenshot pack
-  read as a patch. Excluding them is also what lets a real patch ship a screenshot
-  beside its texture without that breaking the match.
+#### The rejected alternative, and why it lost
 
-**The folder being judged is excluded from the library it is compared against.**
-The check runs after the copy, so without that every no-`.ini` import matches
-itself perfectly and reports itself as its own patch.
+The first version compared against the library instead: *a download that brings
+nothing you don't already have is replacing rather than adding*, naming the folder
+that held every file. It reads well and it is wrong in a way that matters.
 
-**Several candidates are all reported and none is chosen.** Two variants of one mod
-installed side by side both hold the file, and picking would be a guess where the
-user has the answer.
+- **It depends on install order.** Downloading a patch before the mod it patches is
+  an ordinary way round — you find the patch, then go and get what it patches. With
+  nothing to compare against, the patch was reported as *"the mod may be
+  incomplete"*, which points at the wrong fix.
+- **It is a filename collision away from a wrong answer**, in both directions.
+- **It costs a full library walk per install**, at 0.51 ms per mod, for an answer
+  the intrinsic rule gets from the folder already in hand.
+- **It could only ever suggest a folder.** What gets recorded is a **mod page**,
+  and no folder name yields one; the user names it either way
+  ([`origin-tracking.md` §10](origin-tracking.md#the-install-asks-too-at-the-moment-it-finds-a-patch)).
 
-The cost is one walk of the library, which is why it is asked **only of downloads
-that have no `.ini` at all** — the ones that would otherwise be called incomplete.
-That walk is the same one the scan-time backfill does, measured at **0.51 ms per
-mod** (36 ms for 71 mods across 3722 files), against an operation that has just
-unpacked an archive.
+The residue is the reverse mistake: a folder that really is a broken download of
+assets, reported as a patch. That is the milder direction — the user is told the
+download cannot work on its own and asked what it belongs to, which is true either
+way, and they can decline to answer and move on.
 
 ### Two uses, one implementation
 
-- **At install.** Both ingest paths report a patch-shaped import in the same place
-  they already report a mod with no `.ini` at all, so the user is told rather than
-  discovering it when the game shows nothing. An asset patch is reported
-  *instead of* the "may be incomplete" warning rather than beside it — the two are
-  answers to the same question, and it can name what the download replaces, which
-  is the whole of what the user needs in order to act.
+- **At install.** An asset patch is reported *instead of* the "may be incomplete"
+  warning rather than beside it — the two are answers to the same question about one
+  folder, and giving both would say two different things about it.
+
+  The two ingest paths ask at different moments, and only one of them acts on the
+  answer. The **marketplace** path scans the extracted folders *before* the copy —
+  scoped by the import picker, since patch-shape is a property of a resulting mod
+  and not of a folder (`scanPlannedMods`) — and raises the question there
+  ([`origin-tracking.md` §10](origin-tracking.md#the-install-asks-too-at-the-moment-it-finds-a-patch)).
+  The **drag/drop** path scans after the copy and only warns: a hand-dragged folder
+  frequently has no `origin` block at all, so there is nothing to record
+  `patch_shaped` on, and without that flag the folder never reaches the state that
+  would offer to name what it patches.
 - **Before an update.** If the *incoming* download has dangling references, the
   folder being written into must be mixed. The confirmation says so, and states that
   only part of the folder is being replaced. This works on the existing library with
   no recorded data and no extra request, because the new archive is already in hand.
-  Only the `.ini` rule is used here: the asset rule's evidence is the library, and
-  an update is a download for a folder that is *already* in it.
+  Only the `.ini` rule is used here: an update replaces a folder that already
+  works, so "it brought assets and no `.ini`" says nothing — the `.ini` it needs is
+  the one already on disk.
 
 **The limit bounds the whole feature and is stated rather than papered over:**
 neither rule can see a mixed folder whose *tracked* download is the base mod with a
 patch applied on top. Nothing is missing and nothing is unfamiliar, so nothing looks
 wrong. That direction is accepted loss, and it is the milder one — the base mod's
 own update usually contains the same fix.
-
-A second limit, specific to the asset rule: it can only see a patch **installed
-after** the mod it patches. Arriving first, there is nothing in the library to
-overlap with, and it is reported as an incomplete download — which is what it is,
-until the other half turns up.
 
 ---
 
@@ -601,6 +605,37 @@ decision inside it is in `services/update_apply/`, which knows nothing about dia
 and is tested against real temp directories rather than a fake filesystem — the point
 of the mechanism is what it does to files, so a fake would be asserting the fake's
 semantics.
+
+### The same order, for a patch installed into a mod
+
+`UpdateApplier.applyPatchInto` is the second caller of that order, and it is here
+rather than in the install path because it carries the update's risk rather than an
+install's: it writes over a folder the user is already using, and the snapshot is the
+only way back. Deactivate, snapshot, place, reactivate — with **no snapshot meaning
+no write**, the same trade §5 refuses to make.
+
+What differs is only the copy. An update replaces whole folders by
+[§4](#4-replaying-the-install-layout)'s layout; a patch replaces **individual files,
+each where the target already keeps that name** (`patch_placement.dart`), because
+the two downloads are by different authors and nothing makes their layouts agree.
+
+Three consequences of the file-by-file copy:
+
+- **The extraction wrapper cannot end up nested inside the target.** What is copied
+  is the *contents* of the source folder, never the folder — so a folder invented for
+  a rootless archive cannot become a subfolder holding a second live `.ini` whose
+  `filename` paths resolve beside itself.
+- **The orphaned-`.ini` rule has nothing true to say**, so nothing is removed. It
+  looks for an `.ini` whose every resource the incoming download also carries — the
+  renamed predecessor of an update — and a patch by definition carries less than the
+  mod it patches.
+- **Our own sidecar is skipped**, as on the update path. An archive can arrive
+  carrying one, and copying it over would replace the target's description, gallery
+  and origin block.
+
+Where the placement cannot be settled without a guess, the install falls back to an
+ordinary new mod and says why — see
+[`origin-tracking.md` §10](origin-tracking.md#installing-a-patch-into-a-mod-that-already-works).
 
 ---
 

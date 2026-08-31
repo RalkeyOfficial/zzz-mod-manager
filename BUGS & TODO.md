@@ -1123,6 +1123,17 @@ The block:
   than as the whole answer. Whatever is designed has to fit the modals the
   install already raises — the multiple-root-folder picker and the duplicate
   archive prompt.
+  **Half done.** The marketplace install now scans the extracted folders before
+  the copy — scoped by the picker, so an ordinary combined mod is not reported as
+  a patch — and asks what a patch patches right there, writing the answer as a
+  companion. What is left is the *destination*: the patch still lands in its own
+  folder, so the folder does not work until the base mod's files are in it. The
+  operation that puts them there is the remaining half, and it must obey update
+  rules rather than install ones — it writes over a live folder, so deactivate →
+  snapshot → overwrite → reactivate, with the extraction wrapper stripped
+  (copying it leaves a second live `.ini` whose paths resolve beside itself) and
+  a resolver for where inside a combined target the files go. That resolver is
+  also what unblocks applying a *companion's* update, which is refused today.
 - [ ] **A patch dragged in by hand is recognised and then forgotten.** Both
   import paths run both patch rules and both raise the warning, but only the
   marketplace one writes `ingest.patch_shaped`

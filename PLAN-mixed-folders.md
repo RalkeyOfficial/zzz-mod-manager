@@ -655,14 +655,14 @@ patch belong to" are **two questions**, not one:
         ▼                                                       ▼
   WHERE DO THE FILES GO?                          WHAT MOD DOES THIS PATCH?
   ──────────────────────                          ─────────────────────────
-  ⦿ Install as a new mod        ← DEFAULT         [ pick from library ]
-  ○ Apply into an existing        always            or  ○ I don't know
-    mod's folder ▸ [ pick ]
+  ⦿ Install as a new mod        ← DEFAULT         [ search GameBanana ]
+  ○ Install it into ▸                               or  ○ I don't know
+      [ pick a LIBRARY MOD ]
 
         │                                                       │
-        │  if "apply into <mod>"  ─────────────────────────────► answered
+        │  if "install it into <mod>"  ────────────────────────► answered
         │                                          for free: that folder's
-        │                                          primary origin IS the base
+        │                                          own origin IS the base
         ▼
   if "new mod": the second question is still worth asking, and
   its answer is written as a companion (§3).
@@ -672,6 +672,45 @@ That orthogonality is the point. A 400 MB "patch" that also reships the whole
 body mesh is a mod the user wants in its own folder **and** a thing that patches
 another mod. Forcing one answer to cover both is what makes option 3 look like it
 excludes option 2. It doesn't; it *feeds* it.
+
+**The two questions have different search spaces, and that is not a detail.**
+"What does this patch?" is answered by a **mod page** — the patch's base may not
+be installed at all, which is an ordinary state when the patch was found first —
+so it is a GameBanana search. "Where do the files go?" is answered by a **library
+folder**, because a destination has to exist. Conflating them puts a picker in
+front of the user that cannot answer the question it is under.
+
+### Base first, then patch — the whole of the ordering
+
+Every mixed folder is the same stack, whichever of the two downloads the `origin`
+block happens to name:
+
+```
+        ┌────────────────────────────┐
+        │   the patch's files        │  ← on top. wins every collision.
+        ├────────────────────────────┤
+        │   the base mod's files     │  ← underneath.
+        └────────────────────────────┘
+             one folder, two identities
+
+   branch A     origin = the patch      companion  role: base
+   branch B     origin = the base       companion  role: patch
+```
+
+The stack is identical; only which half *we* performed differs. That is what makes
+this **repeatable** rather than a one-shot assembly — a folder can be rebuilt from
+its two identities in that order, and re-running after either half publishes
+something newer lands in the same place.
+
+Two consequences, stated here because otherwise each gets decided by whichever
+code is written first:
+
+- **A collision resolves in favour of the patch. Always.** Not "the newer file",
+  not "whichever we are writing now" — the patch. Reversing it silently undoes the
+  thing the user installed the patch for, and leaves no error behind.
+- **`role` is not decoration.** It is what tells a rebuild which order to write in,
+  which is exactly why an unrecognised value is *dropped* rather than defaulted
+  ([§1](#parse-rules-inherited-rather-than-invented)).
 
 ### The two import branches
 
@@ -684,12 +723,25 @@ excludes option 2. It doesn't; it *feeds* it.
   → no pinned warning when the base was named. the warning exists to
     tell the user something is missing; it isn't.
 
-  branch B — "apply into <existing mod>'s folder"
+  branch B — "install it into <library mod>"
   ─────────────────────────────────────────────────────────────────────
-  NOT an install. This writes over a live mod folder, which makes it an
-  UPDATE-shaped operation and it must obey update rules:
+  NOT an install. **No new mod folder exists at the end of it.** The
+  library mod the user picked is the one that ends up holding both
+  downloads, and it keeps its own identity: its `origin` is still the
+  base mod, because that is still what the folder mostly is.
 
-     ⚠ deactivate → SNAPSHOT → overwrite-copy → reactivate
+  → writes on the TARGET's sidecar:
+        companions += { role: patch, mod_id: <the patch>,
+                        mod_id_confidence: EXACT,     ← we downloaded it
+                        file_id, version, version_label, archive_md5 }
+    **the one path to `exact` on a companion.** Every other route is the
+    user telling us about bytes they moved in themselves, which is `user`
+    and cannot be better than `user`.
+
+  It writes over a live mod folder, which makes it UPDATE-shaped and it
+  must obey update rules:
+
+     ⚠ deactivate → SNAPSHOT → place → reactivate
                     ▲
                     └── unconditional. applying-updates.md §5: if the
                         snapshot cannot be taken, NOTHING is written.
@@ -702,12 +754,16 @@ excludes option 2. It doesn't; it *feeds* it.
     the mod's filename and is overwritten rather than orphaned, so the
     prompt is rare here — but the rule still runs, because a patch that
     renames its .ini would leave two live ones.
-  → writes on the TARGET folder's sidecar:
-        companions += { role: patch, mod_id: <the patch>,
-                        mod_id_confidence: EXACT,     ← we downloaded it
-                        file_id, version, archive_md5 }
-    this is the one path that writes a companion at `exact`.
+  → the archive is KEPT rather than deleted. re-running is plausible on
+    this path in a way it is not on any other. see Q9.
 ```
+
+Branch B is also the answer to **Q8b**. Applying an update to a folder's
+*companion* is this same operation with a different trigger: fetch that identity's
+new file, place it into this folder, record it against that companion. The refusal
+in the update dialog today is "there is no operation for this", not a policy — one
+resolver serves both, and if they were built separately they would disagree about
+where a file goes.
 
 **Branch B is mutually exclusive with the multi-root "combine" option.** Merging
 three extracted folders into one *new* mod and writing them into an *existing*
@@ -759,40 +815,51 @@ outcomes. **Rule: branch B copies a wrapper's contents, never the wrapper.**
 Nothing downstream can currently tell a wrapper from a real folder — see
 [§7](#7-open-questions) Q10.
 
-**Second: where inside the target do the files go?** The mod's own shape decides,
-and only one row of the grid is unambiguous:
+**Second: each file goes where the target already keeps that name.** A patch ships
+its texture bare at the root; the base may keep textures in a subfolder. Writing at
+the root regardless is the failure this rule exists to prevent, and it is the
+silent kind:
 
 ```
-  target's recorded ingest    incoming              destination
-  ────────────────────────    ──────────────────    ───────────────────────────
-  separate (one folder)       one wrapper/folder    mod folder root        ✓
-  separate (one folder)       several folders       stop and ask           ⟦?⟧
-  combined (N subfolders)     one wrapper/folder    WHICH subfolder?       ⟦?⟧
-  combined (N subfolders)     several folders       name-match, else stop  ⟦?⟧
-  nothing recorded            one wrapper/folder    root — but the mod's
-                              (the pre-ingest        real .ini may live in
-                               library, i.e. most    a subfolder           ⟦?⟧
-                               of it)
+  patch ships            target holds                lands as
+  ──────────────────     ───────────────────────     ────────────────────────
+  Body.dds  (at root)    Textures/Body.dds           Textures/Body.dds     ✓
+  Body.dds  (at root)    Body.dds                    Body.dds              ✓
+  Body.dds  (at root)    SFW/Body.dds
+                         NSFW/Body.dds               ⟦ ask ⟧  — two of them
+  Body.dds  (at root)    nothing of that name        root, and said out loud
 ```
 
-The combined row is the one that bites, and it is your `previews/` case from the
-other side: the base was installed as several folders, the patch is a single bare
-`.ini`, and there is no name to match it against — the wrapper is called
-`Ellen No Blur v2`, which matches nothing.
+Placed at the root when the base keeps it in a subfolder, the file lands *beside*
+the mod rather than over it: every reference still resolves to the original, the
+folder gains a file nothing reads, and **nothing changes in the game with no error
+anywhere**. That is the same failure shape as the second live `.ini` above.
 
-`planUpdateLayout` **cannot** answer this. Its combined replay matches recorded
-folder names against incoming ones and returns `layoutChanged` when it can't.
-That refusal is correct and must be kept: it is the same two-outcomes-and-no-third
-discipline the update path already holds — *a set of mappings, or a stop-and-ask;
-there is no third where it picks something plausible*. Guessing a subfolder here
-writes a mod's `.ini` into the wrong half of itself.
+Three rules:
 
-So branch B needs its own resolver over the same discipline: replay where the
-shape answers itself, and otherwise **show the target's subfolders and let the
-user place it**, which is a question only they can answer and one they can answer
-from looking at the folder. The snapshot is what makes a wrong answer survivable,
-which is [§4](#the-two-import-branches)'s reason for routing through
-`update_applier` in the first place.
+- **Matched on the file name, never the path.** The patch author has no idea what
+  layout the folder ended up with — they ship the file bare and expect it dropped
+  in. This is the reasoning that was first applied to *detection*, wrongly: there
+  it made the verdict depend on install order and on filename luck. Here the target
+  is already chosen by the user, so a name collision is the **answer** rather than a
+  guess.
+- **Two matches stop and ask.** A mod installed as SFW and NSFW subfolders holds the
+  name twice, and choosing would be a guess about which variant the user runs. Same
+  discipline `planUpdateLayout` already holds: *a set of mappings, or a stop-and-ask,
+  and no third outcome where it picks something plausible.* That refusal is correct
+  and must be kept — `planUpdateLayout` cannot answer this question either, because
+  its replay matches recorded *folder* names and branch B has no recorded ingest to
+  replay.
+- **No match lands at the root and is reported.** One unmatched file beside several
+  matched ones is ordinary — a patch may add a texture the base never had. **Every**
+  file unmatched is the signal that the wrong target was picked, and that is said
+  *before* the write rather than discovered after it.
+
+The resolver needs no recorded `ingest` at all, which is what makes it work on the
+existing library — most of which predates any of this and has no ingest recorded.
+The snapshot is what makes a wrong answer survivable, which is
+[§4](#the-two-import-branches)'s reason for routing through `update_applier` in the
+first place.
 
 ### Where the destination picker's list comes from
 
@@ -802,9 +869,9 @@ thing the picker deliberately allows, and `sibling_group` exists to record it �
 so several library folders can be bound to the **same** `mod_id`:
 
 ```
-  ┌─ Apply into which mod? ─────────────────────────┐
+  ┌─ Where do these files go? ──────────────────────┐
   │  ⦿ Install as a new mod            ← default    │
-  │  ○ Apply into an existing mod's folder          │
+  │  ○ Install it into                              │
   │      ┌─────────────────────────────────────┐    │
   │      │ Ellen v1   Ellen Bikini · Main file │    │  both bound to
   │      │ Ellen v2   Ellen Bikini · NSFW ver  │    │  mod_id 111
@@ -817,8 +884,15 @@ so several library folders can be bound to the **same** `mod_id`:
                               and this is exactly that case.
 ```
 
-No preselection — guesses may inform, never drive. Ranking, and whether the list
-is filtered at all, are open questions with a real candidate signal: see
+**Every library folder is offered, tracked or not.** A destination does not need a
+remote identity: branch B writes the patch as a companion *onto* that folder, and
+`role: patch` needs the patch's id, not the base's. A folder with no `origin` at
+all gets one written — the same exception `tracking: "off"` already makes, and for
+the same reason: absence means "not looked at", which is not what is true once the
+user has installed something into it.
+
+No preselection — guesses may inform, never drive. Ranking, and whether the list is
+filtered at all, are open questions with a real candidate signal: see
 [§7](#7-open-questions) Q7.
 
 ---
@@ -915,27 +989,33 @@ becomes a field addition.
 **Recommended order within one piece of work:**
 
 ```
-  1  ModCompanion + parse/serialise + == + tests          no UI, no readers
-  2  checkForUpdate folds                                 pure, testable
-  2b every caller supplies companion records —            NOT optional: without
-     the bulk pass and the per-mod dialog                 it every mixed folder
+  ✓1  ModCompanion + parse/serialise + == + tests         no UI, no readers
+  ✓2  checkForUpdate folds                                pure, testable
+  ✓2b every caller supplies companion records —           NOT optional: without
+      the bulk pass and the per-mod dialog                 it every mixed folder
                                                           reads `indeterminate`
-  3  InstalledModsIndex + status slot + needs-attention   read-only surfaces
-  4  extract IdentitySearchPanel / FileChoicePanel        refactor, no behaviour
-  5  the pushed resolve step                              item 1 is now usable
-  6  move the patch scan before the import, SCOPED by     NOT a no-op — §4.
-     the picker (underPrefix/merge for combine)           gets it wrong and
+  ✓3  InstalledModsIndex + status slot + needs-attention  read-only surfaces
+  ✓4  extract IdentitySearchPanel / FileChoicePanel       refactor, no behaviour
+  ✓5  the pushed resolve step                             item 1 is now usable
+  ✓6  move the patch scan before the import, SCOPED by    NOT a no-op — §4.
+      the picker (underPrefix/merge for combine)           gets it wrong and
                                                           ordinary combined
                                                           mods read as patches
-  7  the destination prompt + branch A                    item 2, cheap half
-  8  branch B on top of update_applier, incl. the         item 2, expensive
-     wrapper rule and the placement resolver              half
+  ✓7  the prompt + branch A                               item 2, cheap half
+   8  branch B, on update_applier: the second radio,      item 2, expensive
+      role:patch at exact on the TARGET, the wrapper       half. answers Q8b
+      rule, and the placement resolver                     with it
 ```
 
-Steps 1–5 are shippable on their own and leave the app strictly better. **Step 8
-is the one that can be dropped** if it competes: without it, a patch still lands
-in its own folder and the companion still gets named, which is [§0](#0-what-is-already-true)'s
-"actually works" row. What is lost is only *not creating the second folder*.
+Steps 1–7 have shipped and each was shippable on its own. **Step 8 was written as
+the one that can be dropped, and that is no longer true.** Without it a patch lands
+in its own folder and the companion gets named — but the folder does not work until
+the base mod's files are in it, and there is no operation that puts them there. So
+the `base` companion recorded by branch A is a statement about a folder's *intended*
+contents, waiting on step 8 to become a statement about its actual ones.
+
+Step 8 is also the only route by which a companion ever reaches `exact`, and the
+only answer to Q8b. It is the remaining work.
 
 ---
 
@@ -1014,28 +1094,29 @@ it as the case the orphaned-`.ini` rule exists to protect. It wants
 unknown-role-is-dropped rule in [§1](#parse-rules-inherited-rather-than-invented)
 makes adding it later safe, and nothing today produces one.
 
-**Q8b — where does an update to the *companion* get applied?**
-Newly forced, and not previously in this plan. The check can now find an update on
-a folder's second identity, and the apply path cannot take it: it writes the named
-file over the folder and records it against `origin.mod_id`, so a companion's file
-would overwrite one mod with another and stamp a foreign file id at `exact`. The
-Update button is disabled for such a finding today, and the dialog offers the mod
-page instead.
-Branch B is what unblocks it — the same "where do these files go" question, asked of
-an update rather than an install — so answering it here means answering
-[Q1](#2-open-questions) and the placement grid first. Note the two are not the same
-write: an install into a folder is additive, while this one replaces a download
-already in it, and the orphaned-`.ini` rule then applies to whichever `.ini` the
-*other* download left behind.
+**Q8b — where does an update to the *companion* get applied? — ANSWERED**
+The check can find an update on a folder's second identity, and the apply path
+cannot take it: it writes the named file over the folder and records it against
+`origin.mod_id`, so a companion's file would overwrite one mod with another and
+stamp a foreign file id at `exact`. The Update button is disabled for such a
+finding today, and the dialog offers the mod page instead.
+**Branch B is the answer**, and it is the same operation rather than a similar one:
+fetch that identity's file, place it into this folder by the basename lookup, record
+it against that companion. Building the two separately is how they would come to
+disagree about where a file goes. The one difference to hold: an install into a
+folder is additive, while this replaces a download already in it, so the
+orphaned-`.ini` rule then applies to whichever `.ini` the *other* download left
+behind.
 
-**Q9 — one destination per run, or several?**
-A patch can genuinely apply to both `Ellen v1` and `Ellen v2`. Each is a live
-folder needing its own snapshot, so "several" is N sequential update-shaped
-writes rather than one. Against single-select: the archive is deleted after a
-successful install (`_safeDeleteArchive`), so a second application means a second
-download. Cheap mitigation either way — **keep the archive when the user chose
-branch B**, the one flow where re-running is plausible. Recommend single-select
-plus archive retention; revisit if anyone actually asks for both.
+**Q9 — one destination per run, or several? — ANSWERED: one, and keep the archive**
+A patch can genuinely apply to both `Ellen v1` and `Ellen v2`. Each is a live folder
+needing its own snapshot, so "several" is N sequential update-shaped writes rather
+than one — and each needs its own placement resolution, which may ask. **Single
+select**, and the archive is **kept** on this path rather than deleted
+(`_safeDeleteArchive`), so applying it to a second folder is a second run and not a
+second download. Retention matters more than it first looked: "base first, then
+patch" makes a folder rebuildable, and a rebuild it cannot fetch from is a rebuild
+in name only.
 
 **Q10 — should extraction report that it wrapped a rootless archive?**
 `_prepareDirectoriesForImport` invents a folder for a loose pile of files and

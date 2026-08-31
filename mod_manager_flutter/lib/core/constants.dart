@@ -66,6 +66,14 @@ class AppConstants {
   /// marketplace re-downloaded every preview. Decoding at display size instead
   /// takes those same 49 covers to roughly 5 MB.
   static const int modCardDecodeWidth = 640;
+
+  /// Width to decode a mod cover at when it is a **list row thumbnail** rather
+  /// than a card.
+  ///
+  /// Same argument as [modCardDecodeWidth] and it bites harder here: a picker
+  /// scrolling a whole library decodes far more covers than a grid of cards
+  /// does, at a fraction of the size. 2× a 48px row.
+  static const int modThumbnailDecodeWidth = 96;
   static const double modCardBorderRadius = 12;
   static const double modCardBorderWidthActive = 2;
   static const double modCardBorderWidthInactive = 1;

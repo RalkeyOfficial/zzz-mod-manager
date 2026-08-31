@@ -22,8 +22,16 @@ sealed class CompanionOutcome {
 }
 
 class CompanionNamed extends CompanionOutcome {
-  const CompanionNamed(this.companion);
+  const CompanionNamed(this.companion, {this.modName});
+
   final ModCompanion companion;
+
+  /// The mod page's own name, when this step had the profile in hand.
+  ///
+  /// Carried so a caller can say *which* mod was recorded rather than printing
+  /// an id. Not stored on the companion: a name is the remote's to change, and
+  /// a sidecar holding a stale copy would be a second source of truth for it.
+  final String? modName;
 }
 
 class CompanionRemoved extends CompanionOutcome {
@@ -190,6 +198,7 @@ class _CompanionResolveDialogState
                   : OriginConfidence.unknown,
           baselineRemoteDate: baseline,
         ),
+        modName: _profile?.name,
       ),
     );
   }
