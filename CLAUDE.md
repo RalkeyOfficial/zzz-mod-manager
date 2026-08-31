@@ -57,6 +57,25 @@ Two things that look like history and are not, so keep them:
 - **A hazard that is still live** ("two transfers of one file share a `.part`") —
   the fact is present tense even if a bug is what taught it.
 
+## Report finished work as user experience, never as code
+
+**When you tell me what shipped, describe what I can see, click and test.** Not
+the functions added or the files touched — I cannot test a function name. It is
+the `CHANGELOG.md` rule applied to the terminal. An identifier appears only where
+I would type or read it myself: a menu item, a file on disk, a command.
+
+In this order: **what is different when I use the app** (the screen, the wording,
+what it now does); **what did *not* change** where I'd expect it to, since an
+omission I find by trying it reads as a bug; **what to test**, as numbered steps
+in the running app, including the ones that must produce nothing; then test
+counts and analyzer numbers, in a line — evidence, not the report.
+
+State a limit as the behaviour I will meet, never as the reason in the code: "a
+patch you dragged in has no mod page, so only the mod it went into stays tracked",
+not "a companion record requires a mod id". The reasoning is not dropped, it
+moves — decisions, rejected alternatives and the constraints behind them still go
+in `docs/` and the code comments in full.
+
 ## Commands
 
 All `flutter`/`dart` commands run from `mod_manager_flutter/`, where the standard
