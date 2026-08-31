@@ -29,22 +29,7 @@ void showInstallResult(BuildContext context, InstallResult result) {
       // plus a success is exactly four — raised the other way round, the
       // success is the one pushed off, and it is the line that concludes the
       // install. Last also puts it at the bottom, where the eye lands.
-      for (final warning in warnings) {
-        if (warning.pinned) {
-          notify.pinned(
-            warning.title,
-            body: warning.body,
-            severity: NotificationSeverity.warning,
-            characterId: characterId,
-          );
-          continue;
-        }
-        notify.warning(
-          warning.title,
-          body: warning.body,
-          characterId: characterId,
-        );
-      }
+      showNotificationLines(context, warnings, characterId: characterId);
       final imported = mods.join(', ');
       notify.success(
         loc.plural('marketplace.install_success_title', mods.length),
@@ -57,4 +42,33 @@ void showInstallResult(BuildContext context, InstallResult result) {
     warning: (lines) => notify.warning(lines.title, body: lines.body),
     error: (lines) => notify.error(lines.title, body: lines.body),
   );
+}
+
+/// Raises one warning card per line, pinning the ones that say so.
+///
+/// **A pinned line is one the mod does not work without acting on.** Eight
+/// seconds is enough to read that something is wrong and not enough to do
+/// anything about it, and these are raised beside the success the user was
+/// actually waiting for.
+///
+/// Shared by the two install paths and by the drag/drop import, which has no
+/// [InstallResult] to report but the same things to say.
+void showNotificationLines(
+  BuildContext context,
+  Iterable<NotificationLines> lines, {
+  String? characterId,
+}) {
+  final notify = context.notify;
+  for (final line in lines) {
+    if (line.pinned) {
+      notify.pinned(
+        line.title,
+        body: line.body,
+        severity: NotificationSeverity.warning,
+        characterId: characterId,
+      );
+      continue;
+    }
+    notify.warning(line.title, body: line.body, characterId: characterId);
+  }
 }

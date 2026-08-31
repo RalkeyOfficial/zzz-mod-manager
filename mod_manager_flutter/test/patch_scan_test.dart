@@ -40,49 +40,59 @@ void main() {
     return buffer.toString();
   }
 
-  test('it names the patches and nothing else', () async {
-    write('Patch', 'fix.ini', modIni({'R': 'Body.dds'}));
+  /// One folder, one mod — the shape most installs are.
+  group('a folder at a time', () {
+    Future<PlannedPatchScan> scan(List<String> names) => scanPlannedMods([
+          for (final name in names)
+            PlannedMod(name: name, sources: {p.join(tmp.path, name): ''}),
+        ]);
 
-    write('Complete', 'ellen.ini', modIni({'R': 'Body.dds'}));
-    write('Complete', 'Body.dds', 'x');
+    test('it names the patches and nothing else', () async {
+      write('Patch', 'fix.ini', modIni({'R': 'Body.dds'}));
 
-    // The measured normal case: an .ini covering the whole character while the
-    // author shipped only the component they replaced.
-    write('Partial', 'wings.ini',
-        modIni({'R1': 'Wings.dds', 'R2': 'Jets.dds', 'R3': 'Extra.dds'}));
-    write('Partial', 'Wings.dds', 'x');
+      write('Complete', 'ellen.ini', modIni({'R': 'Body.dds'}));
+      write('Complete', 'Body.dds', 'x');
 
-    expect(
-      await modsThatLookLikePatches(tmp.path, ['Patch', 'Complete', 'Partial']),
-      ['Patch'],
-    );
-  });
+      // The measured normal case: an .ini covering the whole character while
+      // the author shipped only the component they replaced.
+      write('Partial', 'wings.ini',
+          modIni({'R1': 'Wings.dds', 'R2': 'Jets.dds', 'R3': 'Extra.dds'}));
+      write('Partial', 'Wings.dds', 'x');
 
-  test('a folder with no .ini is skipped rather than judged', () async {
-    // It has its own warning on both install paths, and reporting it twice
-    // would say two different things about one folder.
-    write('NoIni', 'readme.txt', 'hello');
-    expect(await modsThatLookLikePatches(tmp.path, ['NoIni']), isEmpty);
-  });
+      final result = await scan(['Patch', 'Complete', 'Partial']);
+      expect(result.iniPatches, {'Patch'});
+      expect(result.incomplete, isEmpty);
+    });
 
-  test('a folder that is not there answers nothing', () async {
-    expect(await modsThatLookLikePatches(tmp.path, ['Missing']), isEmpty);
-  });
+    test('a folder with no .ini is answered by the other rule', () async {
+      // Exactly one of the three outcomes per mod: the `.ini` rule has no
+      // references to read here, so it declines rather than guessing, and the
+      // partition is what stops two things being said about one folder.
+      write('NoIni', 'readme.txt', 'hello');
 
-  test('our own sidecar is never counted as the mod\'s content', () async {
-    // Otherwise a sidecar image would make a patch look like it shipped
-    // something.
-    write('Patch', 'fix.ini', modIni({'R': 'Body.dds'}));
-    write('Patch', '${AppConstants.modMetadataDirName}/images/01.png', 'x');
-    expect(await modsThatLookLikePatches(tmp.path, ['Patch']), ['Patch']);
-  });
+      final result = await scan(['NoIni']);
+      expect(result.iniPatches, isEmpty);
+      expect(result.assetPatches, isEmpty, reason: 'a readme loads nothing');
+      expect(result.incomplete, {'NoIni'});
+    });
 
-  test('names are resolved under the mods path, not the cwd', () async {
-    write('Nested Name With Spaces', 'fix.ini', modIni({'R': 'Body.dds'}));
-    expect(
-      await modsThatLookLikePatches(tmp.path, ['Nested Name With Spaces']),
-      ['Nested Name With Spaces'],
-    );
+    test('a folder that is not there is never called a patch', () async {
+      expect((await scan(['Missing'])).patchShaped, isEmpty);
+    });
+
+    test('our own sidecar is never counted as the mod\'s content', () async {
+      // Otherwise a sidecar image would make a patch look like it shipped
+      // something.
+      write('Patch', 'fix.ini', modIni({'R': 'Body.dds'}));
+      write('Patch', '${AppConstants.modMetadataDirName}/images/01.png', 'x');
+      expect((await scan(['Patch'])).iniPatches, {'Patch'});
+    });
+
+    test('names are resolved where the folder actually is', () async {
+      write('Nested Name With Spaces', 'fix.ini', modIni({'R': 'Body.dds'}));
+      expect((await scan(['Nested Name With Spaces'])).iniPatches,
+          {'Nested Name With Spaces'});
+    });
   });
 
   /// The same question asked **before** the copy, about folders that are still

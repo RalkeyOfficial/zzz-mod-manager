@@ -71,6 +71,30 @@ beside the success as **its own warning with its own two levels**, never as more
 text under it: a broken install must not be reported in the same colour as a clean
 one, and three problems joined by newlines are three notifications, not one.
 
+**A report may not open with a success the operation did not deliver.** The
+drag/drop import ends in a dialog of its own, and when a patch could not go into
+the mod the user picked it says *"Installed, but not as you asked"* over an amber
+mark, lists which of the reasons it was, and states what happened instead — the
+user asked for one thing and got another, and "Imported successfully" over that is
+the one sentence it must not print. Its button drops to **"Got it"** as well:
+"Great!" is the app being pleased with itself about an install that did not do what
+it was told, and the only honest control over a warning acknowledges it. It also stays shut when there is nothing new to
+report: with every folder written into a mod that already exists, no card appears
+in the library, and a dialog announcing "0 mods imported" is worse than none — the
+pinned *patch applied* notification is that install's report.
+
+The dialog carries the **headlines** (`patchRefusalHeadlines`) while the cards
+carry the full explanation and what to do about it. Two copies of one paragraph on
+screen at once is clutter; the same wording split by granularity is not.
+
+**A warning about a mod that does not work until the user acts is pinned**, on both
+import paths. Eight seconds is enough to read that something is wrong and not enough
+to do anything about it, and this card is raised beside the success line the user was
+actually waiting for. A patch is the case: until the mod it patches is in the folder
+with it, nothing happens in the game and there is no error anywhere to explain that.
+"The mod may be incomplete" is *not* pinned — it describes a folder that is simply
+not a mod, where there is nothing to finish.
+
 **Ordering falls out of the four-card cap.** Three warnings plus a success is
 exactly `kMaxVisibleNotifications`, so `install_result_feedback` raises the
 **warnings first and the success last** — the other way round, the concluding line

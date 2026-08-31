@@ -53,13 +53,15 @@ class CompanionRemoved extends CompanionOutcome {
 ///   the user is telling us what they put in the folder. `user` is the honest
 ///   ceiling, and the one path that beats it is an install that writes the
 ///   files itself.
-/// - **The folder's own mod is refused.** It is the same mod said twice, and
-///   recording it would have the update check ask one page twice and report two
-///   verdicts for one folder.
+/// - **The folder's own mod is refused**, when it has one. It is the same mod
+///   said twice, and recording it would have the update check ask one page twice
+///   and report two verdicts for one folder. A folder with no identity of its
+///   own — dragged off a disk — has nothing to collide with, so nothing is
+///   refused.
 Future<CompanionOutcome?> showCompanionResolveDialog(
   BuildContext context, {
   required String modName,
-  required int primaryModId,
+  required int? primaryModId,
   required CompanionRole role,
   ModCompanion? existing,
 }) {
@@ -88,8 +90,9 @@ class CompanionResolveDialog extends ConsumerStatefulWidget {
   /// patches, and the user edits it either way.
   final String modName;
 
-  /// The identity the folder already carries, refused as a companion.
-  final int primaryModId;
+  /// The identity the folder already carries, refused as a companion. Null when
+  /// it carries none, where there is nothing to refuse.
+  final int? primaryModId;
 
   /// Known from where this was opened, never asked. The folder is recorded as
   /// patch-shaped, so its primary is the patch and this is the mod it patches —
@@ -130,7 +133,8 @@ class _CompanionResolveDialogState
 
   AppLocalizations get loc => context.loc;
 
-  bool get _isSelf => _modId == widget.primaryModId;
+  bool get _isSelf =>
+      widget.primaryModId != null && _modId == widget.primaryModId;
 
   Future<void> _loadProfile(int modId) async {
     setState(() {

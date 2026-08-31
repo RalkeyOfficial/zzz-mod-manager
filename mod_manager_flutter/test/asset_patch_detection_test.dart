@@ -3,10 +3,10 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_page.dart';
-import 'package:mod_manager_flutter/services/archive_service.dart';
 import 'package:mod_manager_flutter/services/ini_resources.dart';
 import 'package:mod_manager_flutter/services/patch_detection.dart';
 import 'package:mod_manager_flutter/services/patch_scan.dart';
+import 'package:path/path.dart' as p;
 
 import 'support/fixtures.dart';
 
@@ -218,16 +218,18 @@ void main() {
         for (final e in dir.listSync())
           if (e is Directory) e.path.split(Platform.pathSeparator).last,
       ];
-      final noIni = await ArchiveService.modsWithoutIni(dir.path, names);
-      final found = await assetPatchesAmong(dir.path, noIni);
+      final scan = await scanPlannedMods([
+        for (final name in names)
+          PlannedMod(name: name, sources: {p.join(dir.path, name): ''}),
+      ]);
+      final found = scan.assetPatches;
 
       for (final entry in found.entries) {
         // ignore: avoid_print
         print('PATCH ${entry.key} (${entry.value.assets} asset(s) needing '
             'an .ini that is not there)');
       }
-      for (final name in noIni) {
-        if (found.containsKey(name)) continue;
+      for (final name in scan.incomplete) {
         // ignore: avoid_print
         print('incomplete $name');
       }

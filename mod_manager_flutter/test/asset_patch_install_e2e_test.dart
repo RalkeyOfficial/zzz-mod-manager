@@ -1,15 +1,19 @@
 import 'dart:io';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/l10n/app_localizations.dart';
 import 'package:mod_manager_flutter/models/mod_companion.dart';
-import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/archive_service.dart';
 import 'package:mod_manager_flutter/services/mod_metadata_repository.dart';
 import 'package:mod_manager_flutter/services/mod_metadata_service.dart';
+import 'package:mod_manager_flutter/screens/dialogs/patch_install_flow.dart';
+import 'package:mod_manager_flutter/services/backup/snapshot_service.dart';
 import 'package:mod_manager_flutter/services/origin_status.dart';
 import 'package:mod_manager_flutter/services/patch_scan.dart';
+import 'package:mod_manager_flutter/services/update_apply/update_applier.dart';
 import 'package:mod_manager_flutter/utils/directory_copy.dart';
 import 'package:path/path.dart' as p;
 
@@ -36,6 +40,18 @@ import 'package:path/path.dart' as p;
 /// The archives are hundreds of megabytes between them and are nobody's
 /// business to check in, which is why this cannot be a normal test. It exists
 /// so "the install path handles this" can be re-derived rather than trusted.
+/// Nothing here is activated, so nothing has to be linked or unlinked.
+class _NoActivation implements ModActivationPort {
+  @override
+  Future<bool> isActive(String modName) async => false;
+
+  @override
+  Future<bool> activate(String modName) async => true;
+
+  @override
+  Future<bool> deactivate(String modName) async => true;
+}
+
 class _FakeTagStore implements ModCharacterTagStore {
   final Map<String, String> tags = {};
 
@@ -101,21 +117,7 @@ void main() {
       Directory(p.join(modsPath, modName)),
     );
 
-    // ---- 3. the download really has no .ini, so the reference rule is out ---
-    final noIni = await ArchiveService.modsWithoutIni(modsPath, [modName]);
-    expect(noIni, [modName],
-        reason: 'this is the branch the asset rule exists to rescue');
-    expect(await modsThatLookLikePatches(modsPath, [modName]), isEmpty,
-        reason: 'the .ini rule cannot see it, and must not pretend to');
-
-    // ---- 4. the asset rule sees it ----------------------------------------
-    final found = await assetPatchesAmong(modsPath, noIni);
-    expect(found.keys, [modName]);
-    expect(found[modName]!.assets, greaterThan(0),
-        reason: 'the real archive is one .dds, which is exactly a file that '
-            'does nothing without an .ini to load it');
-
-    // ---- 5. the flag reaches disk ------------------------------------------
+    // ---- 3. both rules, and the write, exactly as the import calls them ----
     final repository = ModMetadataRepository(
       _FakeTagStore(),
       modsPath: () => modsPath,
@@ -132,19 +134,34 @@ void main() {
         versionConfidence: OriginConfidence.exact,
       ),
     );
-    final wrote = await repository.updateOrigin(modName, (current) {
-      final ingest = current?.ingest ?? const ModIngest();
-      return current?.copyWith(
-        ingest: ModIngest(
-          mode: ingest.mode,
-          folders: ingest.folders,
-          siblingGroup: ingest.siblingGroup,
-          patchShaped: true,
-        ),
-      );
-    });
-    expect(wrote, isTrue);
 
+    final scan = await scanPlannedMods([
+      PlannedMod(name: modName, sources: {p.join(modsPath, modName): ''}),
+    ]);
+    final loc = AppLocalizations(const Locale('en'));
+    await loc.load();
+    await applyPatchInstall(
+      loc,
+      decision: PatchInstallDecision(scan: scan),
+      importedMods: [modName],
+      modsPath: modsPath,
+      applier: UpdateApplier(
+        snapshots: SnapshotService(rootPath: p.join(tmp.path, 'backups')),
+        activation: _NoActivation(),
+      ),
+      amend: repository.updateOrigin,
+    );
+
+    expect(scan.iniPatches, isEmpty,
+        reason: 'the .ini rule cannot see it, and must not pretend to');
+    expect(scan.incomplete, isEmpty,
+        reason: 'this is the branch the asset rule exists to rescue');
+    expect(scan.assetPatches.keys, [modName]);
+    expect(scan.assetPatches[modName]!.assets, greaterThan(0),
+        reason: 'the real archive is one .dds, which is exactly a file that '
+            'does nothing without an .ini to load it');
+
+    // ---- 4. the flag reaches disk ------------------------------------------
     // Read back off the filesystem, not from the object we just wrote — the
     // question is whether it survives the round trip a scan makes.
     final sidecar =
@@ -152,7 +169,7 @@ void main() {
     expect(sidecar, isNotNull);
     expect(sidecar!.origin!.ingest!.patchShaped, isTrue);
 
-    // ---- 6. and the card asks the user to finish it ------------------------
+    // ---- 5. and the card asks the user to finish it ------------------------
     final origin = sidecar.origin!;
     expect(origin.needsCompanion, isTrue);
     expect(modOriginStatus(origin), ModOriginStatus.secondIdentityUnknown,
@@ -160,7 +177,7 @@ void main() {
     expect(modNeedsAttention(origin), isTrue,
         reason: 'and it is counted, because naming the base clears it');
 
-    // ---- 7. naming the base retires the state ------------------------------
+    // ---- 6. naming the base retires the state ------------------------------
     // The last link in the chain: the state is not a dead end.
     expect(
       modOriginStatus(origin.copyWith(companions: [

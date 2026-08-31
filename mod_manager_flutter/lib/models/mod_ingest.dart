@@ -43,8 +43,9 @@ class ModIngest {
   /// updatable.
   final String? siblingGroup;
 
-  /// This download shipped `.ini` files and none of the content they reference
-  /// — it is a **patch**, expecting a mod already in the folder.
+  /// This download is a **patch**, expecting a mod already in the folder —
+  /// either because its `.ini` files reference content it does not carry, or
+  /// because it carries assets and no `.ini` that could load them.
   ///
   /// Recorded because it is knowable **only at install**. A patch folder is
   /// legible exactly once: before the user drags the base mod's files in
@@ -65,6 +66,25 @@ class ModIngest {
       siblingGroup == null &&
       mode == IngestMode.separate &&
       !patchShaped;
+
+  /// Amends one field, keeping the rest.
+  ///
+  /// The alternative — rebuilding the object at each call site — drops any
+  /// field the caller forgot, and the fields here describe an install that
+  /// cannot be observed a second time. Clearing [siblingGroup] is deliberately
+  /// not offered: null means "keep", and nothing has cause to unset a group.
+  ModIngest copyWith({
+    IngestMode? mode,
+    List<String>? folders,
+    String? siblingGroup,
+    bool? patchShaped,
+  }) =>
+      ModIngest(
+        mode: mode ?? this.mode,
+        folders: folders ?? this.folders,
+        siblingGroup: siblingGroup ?? this.siblingGroup,
+        patchShaped: patchShaped ?? this.patchShaped,
+      );
 
   /// Value equality, so [ModOrigin] can have it — see the note there.
   @override

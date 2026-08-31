@@ -97,22 +97,6 @@ class ArchiveService {
     }
   }
 
-  /// Returns the subset of [modNames] whose folder under [modsPath] contains no
-  /// `.ini` anywhere — a strong sign the mod is incomplete (e.g. a broken
-  /// multi-folder archive). Used by both import paths for a post-install warning.
-  static Future<List<String>> modsWithoutIni(
-    String modsPath,
-    List<String> modNames,
-  ) async {
-    final missing = <String>[];
-    for (final name in modNames) {
-      if (!await containsIniFile(path.join(modsPath, name))) {
-        missing.add(name);
-      }
-    }
-    return missing;
-  }
-
   /// Extracts [archiveFile] and reports the top-level folders to import.
   ///
   /// Also fingerprints the archive — see [ArchiveExtractionResult.archiveMd5].

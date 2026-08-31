@@ -30,7 +30,10 @@ class PatchInstallSubject {
 
   /// The patch's **own** remote identity, refused as an answer: a folder cannot
   /// patch itself, and recording it would have the check ask one page twice.
-  final int patchModId;
+  ///
+  /// **Null for a folder dragged off a disk**, which has no mod page at all.
+  /// Nothing is refused then, because there is no identity to collide with.
+  final int? patchModId;
 
   final PatchKind kind;
 }
@@ -258,9 +261,13 @@ class _PatchInstallPromptState extends ConsumerState<PatchInstallPrompt> {
       // Only under the destination it belongs to. Chosen a library mod, the
       // question is already answered — that folder's own origin *is* the base —
       // and asking again invites a contradictory second answer.
+      //
+      // Given room of its own: it belongs to the destination above it but is a
+      // control rather than part of that option's text, and pressed up against
+      // both it reads as a third radio row.
       if (!wantsLibrary)
         Padding(
-          padding: const EdgeInsets.only(bottom: 4),
+          padding: const EdgeInsets.only(top: 6, bottom: 10),
           child: _baseRow(subject),
         ),
       if (_canOfferLibrary)

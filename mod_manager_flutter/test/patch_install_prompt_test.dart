@@ -426,6 +426,49 @@ void main() {
 
       expect(find.text('That is this mod, not another one'), findsOneWidget);
     });
+
+    testWidgets('a name out of an archive is searched as words', (tester) async {
+      // `Ellen_Patch` is what a folder inside an archive is actually called,
+      // and searched verbatim it finds nothing — leaving the user to retype
+      // what the app already knew. The stub answers the *spaced* url only, so
+      // results appearing at all is the assertion.
+      await open(
+        tester,
+        subjects: [assetPatch(name: 'Ellen_Patch')],
+      );
+      await tester.tap(find.text('Say what it patches'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ellen Patch'), findsOneWidget,
+          reason: 'the box shows words, not the filename');
+      expect(find.text('ellen joe cheongsam'), findsWidgets,
+          reason: 'and the search that ran is the one that finds something');
+    });
+
+    testWidgets('a folder with no mod page of its own refuses nothing',
+        (tester) async {
+      // A folder dragged off a disk. There is no identity to collide with, so
+      // any mod can be named as the one it patches — including one the user
+      // happens to have downloaded before.
+      await open(
+        tester,
+        subjects: const [
+          PatchInstallSubject(
+            modName: 'Ellen Patch',
+            patchModId: null,
+            kind: PatchKind.assets,
+          ),
+        ],
+      );
+      await tester.tap(find.text('Say what it patches'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ellen joe cheongsam').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('That is this mod, not another one'), findsNothing);
+      expect(find.text('Add'), findsOneWidget,
+          reason: 'the answer can be given, which is the whole point');
+    });
   });
 
   group('the three outcomes', () {

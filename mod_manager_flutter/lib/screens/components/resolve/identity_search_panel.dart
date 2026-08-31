@@ -9,6 +9,20 @@ import '../../../utils/state_providers.dart';
 import '../marketplace/gb_thumbnail.dart';
 import 'resolve_fragments.dart';
 
+/// [name] as a first search term.
+///
+/// A mod's name is a folder name out of an archive, so it routinely arrives as
+/// `Ellen_Joe_Cheongsam` — which finds nothing, leaving the user to retype what
+/// the app already knew. Underscores are the one substitution a filename makes
+/// for a space, so they are the one thing undone here.
+///
+/// **A first guess, not a parse.** Hyphens, dots and version suffixes are how
+/// mod pages are genuinely titled ("Ellen - Swimsuit v1.2"), and stripping them
+/// would change the words rather than restore them. The box is editable either
+/// way, and a clever guess that drops half the name is worse than a plain one.
+String searchSeedFromName(String name) =>
+    name.replaceAll('_', ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+
 /// "Which remote mod is this?" — the search box, its results, and the two ways
 /// a pasted url is answered without searching at all.
 ///
@@ -33,8 +47,10 @@ class IdentitySearchPanel extends ConsumerStatefulWidget {
     this.heading,
   });
 
-  /// What the box starts with — the folder name, normally. It is the best
-  /// available guess and the user edits it.
+  /// What the box starts with — the mod's name, normally. It is the best
+  /// available guess and the user edits it. Passed through
+  /// [searchSeedFromName] here rather than by each caller, so both dialogs
+  /// search the same thing.
   final String seed;
 
   /// A mod page the user chose, or pasted.
@@ -61,7 +77,7 @@ class _IdentitySearchPanelState extends ConsumerState<IdentitySearchPanel> {
   @override
   void initState() {
     super.initState();
-    _controller.text = widget.seed;
+    _controller.text = searchSeedFromName(widget.seed);
     _search();
   }
 

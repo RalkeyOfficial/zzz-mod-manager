@@ -14,7 +14,8 @@ import '../models/mod_origin_seed.dart';
 import '../services/api_service.dart';
 import '../services/archive_service.dart';
 import '../services/ingest_origin_builder.dart';
-import '../services/patch_scan.dart';
+import '../services/update_apply/mod_activation_port.dart';
+import '../services/update_apply/update_applier.dart';
 import '../utils/notifications.dart';
 import '../utils/state_providers.dart';
 import '../utils/categories.dart';
@@ -29,6 +30,7 @@ import 'components/mods_action_buttons.dart';
 import 'components/mods_empty_states.dart';
 import 'components/mods_grouped_view.dart';
 import 'components/own_scroll_controller.dart';
+import 'components/install_result_feedback.dart';
 import 'dialogs/rename_mod_dialog.dart';
 import 'dialogs/delete_mod_dialog.dart';
 import 'dialogs/duplicate_archive_dialog.dart';
@@ -39,6 +41,7 @@ import 'dialogs/edit_mod_dialog.dart';
 import 'dialogs/mod_details_dialog.dart';
 import 'dialogs/mod_backups_dialog.dart';
 import 'dialogs/mod_update_dialog.dart';
+import 'dialogs/patch_install_flow.dart';
 import 'dialogs/resolve_origin_dialog.dart';
 import '../utils/url_utils.dart';
 
@@ -1499,6 +1502,43 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       final combine = plan.combine;
       final combinedName = plan.combinedName;
       final combinedHint = sharedHint;
+
+      // Read here rather than after the copy: the patch question below needs
+      // the library on disk to offer a destination in it.
+      final modManagerService = await ref.read(
+        modManagerServiceProvider.future,
+      );
+      final modsPath = modManagerService.modsPath;
+
+      // **The patch question, before anything is copied.** The same prompt the
+      // marketplace install raises, so a patch dragged in gets the same offer:
+      // a folder of its own — saying which mod it patches — or straight into
+      // the mod it patches.
+      //
+      // No `patchModId` on this path: a folder off a disk has no mod page, so
+      // the write into an existing mod places the files and records nothing
+      // about where they came from. Nothing else about the two flows differs.
+      PatchInstallDecision? patchDecision;
+      if (modsPath != null) {
+        if (!mounted) return;
+        patchDecision = await decidePatchInstall(
+          context,
+          plan: plan,
+          folders: folderPaths,
+          modsPath: modsPath,
+          library: ref.read(modsProvider),
+        );
+        // Only this prompt can offer "don't install it at all", and only here,
+        // where nothing has been written yet.
+        if (patchDecision == null) {
+          await cleanupTempFolders();
+          return;
+        }
+        // A folder going into an existing mod creates no new mod folder, so it
+        // leaves the import entirely and is written afterwards.
+        folderPaths.removeWhere(patchDecision.excludes);
+      }
+
       // Merging folders from different sources yields a mod that is only partly
       // from any one archive, so combineSeeds drops to the least-trusted answer
       // rather than claiming a hash that would imply the whole folder matches a
@@ -1560,10 +1600,13 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       }
 
       // Імпортуємо моди
-      final modManagerService = await ref.read(
-        modManagerServiceProvider.future,
-      );
-      final (importedMods, autoTags) = combine
+      final (importedMods, autoTags) = folderPaths.isEmpty
+          // Every folder went into a mod that already exists. Calling
+          // `importMods` with nothing answers "no mods imported", which the
+          // guard below reads as a duplicate — a failure report for an install
+          // that is going fine.
+          ? (<String>[], <String, String>{})
+          : combine
           ? await modManagerService.importCombinedMod(
               folderPaths,
               combinedName,
@@ -1582,7 +1625,9 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         dialogShown = false;
       }
 
-      if (importedMods.isEmpty) {
+      // Nothing imported *and* nothing to write into an existing mod. With a
+      // patch write pending this is an install going fine, not a duplicate.
+      if (importedMods.isEmpty && (patchDecision?.writes.isEmpty ?? true)) {
         // Очищаємо тимчасові папки якщо імпорт не вдався
         if (tempFoldersToCleanup.isNotEmpty) {
           print(
@@ -1626,59 +1671,24 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       // Перезавантажуємо список модів
       await loadMods(showLoading: false);
 
-      // Safety net: warn about any imported mod that has no .ini at all — a
-      // strong sign the mod is incomplete (e.g. a broken multi-folder archive).
-      final modsPath = modManagerService.modsPath;
-      if (modsPath != null) {
-        final noIni = await ArchiveService.modsWithoutIni(
-          modsPath,
-          importedMods,
+      // **Everything the patch answers imply, now the folders exist.** Writes
+      // into an existing mod are update-shaped — deactivate, snapshot, place,
+      // reactivate — and every new patch folder is marked, which is the record
+      // that outlives the warning. Shared with the marketplace install, so the
+      // two cannot do different things with the same answer.
+      if (patchDecision != null && modsPath != null) {
+        final lines = await applyPatchInstall(
+          loc,
+          decision: patchDecision,
+          importedMods: importedMods,
+          modsPath: modsPath,
+          applier: UpdateApplier(
+            snapshots: ref.read(snapshotServiceProvider),
+            activation: ModManagerActivationPort(modManagerService),
+          ),
+          amend: modManagerService.updateModOrigin,
         );
-        // A download of bare game assets is a patch, not an incomplete mod —
-        // nothing loads a `.dds` except an `.ini`, and the rule below cannot
-        // see it because there is no `.ini` to read references from. Asked only
-        // of the mods about to be called incomplete.
-        final assetPatches = await assetPatchesAmong(modsPath, noIni);
-        final incomplete = [
-          for (final name in noIni)
-            if (!assetPatches.containsKey(name)) name,
-        ];
-        if (incomplete.isNotEmpty && mounted) {
-          context.notify.warning(
-            loc.t('mods.snackbar.import_no_ini_title'),
-            body: loc.t(
-              'mods.snackbar.import_no_ini_body',
-              params: {'mods': incomplete.join(', ')},
-            ),
-          );
-        }
-        for (final name in assetPatches.keys) {
-          if (!mounted) break;
-          context.notify.warning(
-            loc.t('mods.snackbar.import_asset_patch_title'),
-            body: loc.t('mods.snackbar.import_asset_patch_body',
-                params: {'mod': name}),
-          );
-        }
-
-        // A folder whose .ini opens files it does not contain is a *patch* — it
-        // needs the mod it patches to already be installed here. Said now
-        // rather than left for the user to discover by launching the game and
-        // seeing nothing change. Only for mods that have an .ini at all, so it
-        // never doubles up with the warning above.
-        final patches = await modsThatLookLikePatches(
-          modsPath,
-          importedMods.where((name) => !noIni.contains(name)),
-        );
-        if (patches.isNotEmpty && mounted) {
-          context.notify.warning(
-            loc.t('mods.snackbar.import_patch_title'),
-            body: loc.t(
-              'mods.snackbar.import_patch_body',
-              params: {'mods': patches.join(', ')},
-            ),
-          );
-        }
+        if (mounted) showNotificationLines(context, lines);
       }
 
       // Reported once, here: nothing re-attempts an origin write, because it
@@ -1739,7 +1749,20 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         }
       }
 
-      if (mounted) {
+      // **What the user asked for, and what they got instead.** A refusal means
+      // the install did something other than what it was told, so this report
+      // may not open with "Imported successfully" — it says so, and names which
+      // of the reasons it was.
+      final refusals = patchRefusalHeadlines(
+        loc,
+        patchDecision?.refused ?? const {},
+      );
+
+      // Nothing new to report: every folder went into a mod that already
+      // exists, and the change is not visible as a card. The pinned "patch
+      // applied" notification is the report for that, and a dialog announcing
+      // "0 mods imported" over it is worse than no dialog.
+      if (mounted && importedMods.isNotEmpty) {
         // Показуємо детальне повідомлення про успіх
         final hasAutoTags = autoTags.isNotEmpty;
         showDialog(
@@ -1747,13 +1770,21 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
           builder: (context) => AlertDialog(
             title: Row(
               children: [
-                const Icon(
-                  Icons.check_circle,
-                  color: Color(0xFF10B981),
+                Icon(
+                  refusals.isEmpty
+                      ? Icons.check_circle
+                      : Icons.warning_amber_rounded,
+                  color: refusals.isEmpty
+                      ? const Color(0xFF10B981)
+                      : const Color(0xFFF59E0B),
                   size: 28,
                 ),
                 const SizedBox(width: 8),
-                Text(loc.t('mods.snackbar.import_success_title')),
+                Expanded(
+                  child: Text(loc.t(refusals.isEmpty
+                      ? 'mods.snackbar.import_success_title'
+                      : 'mods.dialog.import_not_as_asked')),
+                ),
               ],
             ),
             content: Column(
@@ -1771,6 +1802,44 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+                if (refusals.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFFF59E0B).withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          loc.t('mods.dialog.import_refused_heading'),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        for (final line in refusals)
+                          Padding(
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 2),
+                            child: Text('• $line',
+                                style: const TextStyle(fontSize: 12)),
+                          ),
+                        const SizedBox(height: 6),
+                        Text(
+                          loc.t('mods.dialog.import_refused_instead'),
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 if (hasAutoTags) ...[
                   const SizedBox(height: 12),
                   Container(
@@ -1837,17 +1906,27 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                     ),
                   ),
                 ],
-                const SizedBox(height: 12),
-                Text(
-                  loc.t('mods.dialog.import_ready'),
-                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                ),
+                // Left out when something was refused: a patch installed as its
+                // own mod is not ready to use, and saying so under the
+                // explanation of why contradicts it.
+                if (refusals.isEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    loc.t('mods.dialog.import_ready'),
+                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                  ),
+                ],
               ],
             ),
             actions: [
               FilledButton(
                 onPressed: () => Navigator.pop(context),
-                child: Text(loc.t('mods.dialog.great')),
+                // **Nothing celebratory over a warning.** "Great!" is the app
+                // being pleased with itself about an install that did not do
+                // what it was told; the only honest button there acknowledges.
+                child: Text(loc.t(refusals.isEmpty
+                    ? 'mods.dialog.great'
+                    : 'mods.dialog.got_it')),
               ),
             ],
           ),

@@ -285,17 +285,18 @@ way, and they can decline to answer and move on.
   warning rather than beside it — the two are answers to the same question about one
   folder, and giving both would say two different things about it.
 
-  The two ingest paths ask at different moments, and only one of them acts on the
-  answer. The **marketplace** path scans the extracted folders *before* the copy —
-  scoped by the import picker, since patch-shape is a property of a resulting mod
-  and not of a folder (`scanPlannedMods`) — and raises the question there
+  **Both ingest paths ask before their copy and record what they find**, through
+  one scan (`scanPlannedMods`) and one pair of phases
+  (`screens/dialogs/patch_install_flow.dart`) — so they cannot conclude different
+  things about one folder, nor do different things with one answer. The scan has
+  to be scoped by the import picker, since patch-shape is a property of a
+  resulting mod and not of a folder.
+
+  The **only** difference between the two is what the patch's own identity is: a
+  Marketplace download has a mod page and file, and a hand-dragged folder has
+  neither. That decides whether a `role: patch` companion can be recorded on the
+  mod a patch is written into, and nothing else
   ([`origin-tracking.md` §10](origin-tracking.md#the-install-asks-too-at-the-moment-it-finds-a-patch)).
-  The **drag/drop** path scans after the copy and only warns — it records no
-  `patch_shaped`, so the folder never reaches the state that would offer to name
-  what it patches. There is a block to record it on: that path seeds every folder
-  it imports (`ModOriginSeed.importedFolder`, or `importedArchive` for one out of
-  an archive), so `importMods` writes an origin for each. Only the write is
-  missing.
 - **Before an update.** If the *incoming* download has dangling references, the
   folder being written into must be mixed. The confirmation says so, and states that
   only part of the folder is being replaced. This works on the existing library with

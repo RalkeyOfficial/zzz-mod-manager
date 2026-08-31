@@ -1134,27 +1134,33 @@ The block:
   (copying it leaves a second live `.ini` whose paths resolve beside itself) and
   a resolver for where inside a combined target the files go. That resolver is
   also what unblocks applying a *companion's* update, which is refused today.
-- [ ] **A patch dragged in by hand is recognised and then forgotten.** Both
+- [x] **A patch dragged in by hand is recognised and then forgotten.** Both
   import paths run both patch rules and both raise the warning, but only the
-  marketplace one writes `ingest.patch_shaped`
-  (`install_archive_flow.dart` against `mods_screen.dart:1636-1663`). Without
-  that flag the folder never reaches `needsCompanion`, so it gets no amber
-  badge, no row offering to name the mod it patches, and a plain "up to date"
-  from the check — the false clean the flag exists to refuse. The asset rule
-  makes this worse rather than better: it identifies *which library mod* the
-  download replaces, which is the strongest evidence there will ever be, and
-  the drag path discards it. The marketplace path's warning is also pinned and
-  this one's is not, so the eight seconds are the whole of it.
-  **Cheaper than Q5 in the plan assumed.** That question was posed on the
-  premise that a hand-dragged folder has no `origin` block to amend, and it
-  does: `mods_screen.dart:1376` seeds every dropped folder
-  (`ModOriginSeed.importedFolder`) and `:1420` every folder out of an archive
-  (`importedArchive`), so `importMods` writes one for each and
-  `updateModOrigin` has something to find. No sidecar exception and no
-  don't-litter argument are needed — the write is simply absent. What is left to
-  decide is whether that path also raises the destination prompt, which needs
-  the scan moved before its copy the way `scanPlannedMods` was for the
-  marketplace.
+  marketplace one writes `ingest.patch_shaped`. Without that flag the folder
+  never reaches `needsCompanion`, so it gets no row offering to name the mod it
+  patches, no amber badge once it is resolved to a page, and a plain "up to
+  date" from the check — the false clean the flag exists to refuse.
+  **Done, and the two paths are now one.** `patch_install_flow.dart` holds both
+  halves — the question before the copy, every write after it — and both imports
+  call it. The scan (`scanPlannedMods`) runs before the copy on both, which
+  leaves no use for a post-import scan: `modsThatLookLikePatches`,
+  `assetPatchesAmong` and `ArchiveService.modsWithoutIni` are gone with it.
+  Warning wording and pinning come from one builder, so a dragged patch reads
+  exactly like a downloaded one.
+  Findings worth keeping:
+  - **A hand-dragged patch has no identity of its own, and that is the whole
+    difference between the paths.** It can be installed into an existing mod like
+    any other, but no `role: patch` companion is recorded on the target, because
+    a companion must name a mod id. Recording nothing beats inventing one; the
+    base mod the folder is *mostly* made of stays correctly tracked either way.
+  - **With no identity the patch folder's card stays quiet.** `untracked` outranks
+    `secondIdentityUnknown`, so a hand-dragged patch keeps the informational
+    mark: there is no page to watch for *either* half yet. It is still counted
+    in needs-attention, the resolve dialog still offers the companion row
+    (that keys on `needsCompanion`, not the badge), and the amber mark appears
+    the moment the folder is resolved to a mod page. The ordering also keeps
+    the bulk "assume current" pass from writing baselines for folders it cannot
+    check, so it stays.
 - [x] **A found update cannot be acted on.** The dialog lists the newer files and
   then offers a mod page and a marketplace shortcut, because installing from
   the marketplace creates a **second mod folder** rather than updating the

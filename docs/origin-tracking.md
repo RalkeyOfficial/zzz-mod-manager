@@ -385,6 +385,14 @@ Rules worth knowing before changing any of it:
   [`gamebanana-api.md`](gamebanana-api.md#a-file-id-cannot-be-turned-back-into-a-mod-id)).
   So the dialog says that instead of searching for the url as though it were a mod
   name.
+- **The search box is seeded with the mod's name, with underscores read as
+  spaces** (`searchSeedFromName`). The name came from a folder inside an archive,
+  so it routinely arrives as `Ellen_Joe_Cheongsam`, which matches nothing —
+  leaving the user to retype what the app already knew. It is a **first guess,
+  not a parse**: hyphens, dots and version suffixes are how mod pages are
+  genuinely titled ("Ellen - Swimsuit v1.2"), and stripping them would change the
+  words rather than restore them. Normalised in the panel rather than by each
+  caller, so both dialogs search the same thing.
 
 ---
 
@@ -855,6 +863,27 @@ own `origin` *is* the base), so it stops being asked.
 The second destination is not offered when the import picker already chose to
 combine several folders into one mod (different destinations), or when the library
 is empty (nowhere to install into). Both say why rather than hiding the control.
+
+**The drag/drop import raises the same prompt**, from the same code
+(`patch_install_flow.dart`) — one decision before either path's copy, one set of
+writes after it. What differs is only what can be *recorded*: a Marketplace
+download knows which mod page and file it is, and a folder dragged off a disk has
+none, so the `role: patch` companion is written for the first and not the second.
+A companion must name a mod id, and inventing one would be worse than recording
+nothing. The install itself — the placement, the snapshot, the refusals, the
+warnings — is the same operation either way.
+
+**With no identity the card stays quiet, and that ordering is deliberate.**
+`untracked` outranks `secondIdentityUnknown` in `modOriginStatus`, so a hand-dragged
+patch shows the quiet informational mark rather than the amber one — there is no page
+to watch for *either* half of the folder yet, so the amber state's offer ("name the
+other mod and get a real answer about it") has nothing to be an offer about. It is
+still counted in **needs attention** as untracked, so the folder is never lost, and
+the resolve dialog offers the companion row regardless — that row keys on
+`needsCompanion`, not on the badge. The amber mark appears the moment the folder is
+resolved to a mod page, which is the whole reason the flag is written at install
+rather than when it is wanted. The same ordering is what keeps the bulk "assume
+current" pass from writing baselines for folders it cannot check.
 
 **The library is searched, not scrolled, and every row carries the mod's cover.**
 A real library is long, and reading folder names down a list was the whole cost this

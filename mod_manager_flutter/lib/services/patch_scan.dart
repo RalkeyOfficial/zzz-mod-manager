@@ -1,10 +1,3 @@
-import 'dart:io';
-
-import 'package:path/path.dart' as path;
-
-import 'folder_contents.dart';
-import 'patch_detection.dart';
-
 /// The I/O side of `patch_detection.dart` — walk some folders, ask the pure
 /// rule about each.
 ///
@@ -16,59 +9,16 @@ import 'patch_detection.dart';
 /// launching the game and seeing nothing: **is this a patch expecting a mod that
 /// isn't here?** It is the same call the update path makes about an incoming
 /// download, and it has to be, or the two would disagree about the same folder.
-Future<List<String>> modsThatLookLikePatches(
-  String modsPath,
-  Iterable<String> modNames,
-) async {
-  final patches = <String>[];
-  for (final name in modNames) {
-    final contents = await readFolderContents(
-      Directory(path.join(modsPath, name)),
-    );
-    if (!contents.hasIni) continue;
-    final assessment = assessPatchShape(
-      references: contents.references,
-      files: contents.files,
-      directories: contents.directories,
-      hasIni: true,
-    );
-    if (assessment.looksLikePatch) patches.add(name);
-  }
-  return patches;
-}
+///
+/// One entry point, [scanPlannedMods], for exactly that reason: both import
+/// paths reach it, and both reach it **before** their copy, so there is no
+/// second implementation and no second moment to drift.
+library;
 
-/// Which of [modNames] are patches shipping **no `.ini`**.
-///
-/// The other half of patch detection. `modsThatLookLikePatches` asks what a
-/// download's `.ini` files reference; a patch replacing one texture has no
-/// `.ini`, so that question has no answer and this one asks whether the folder
-/// carries assets that only an `.ini` could load.
-///
-/// Only worth calling for mods that have no `.ini` at all — the ones that
-/// otherwise get the "may be incomplete" warning, which is right for a broken
-/// download and wrong for a patch.
-///
-/// Reads only the folders named. The rule is intrinsic, so there is no library
-/// to walk and no ordering in which the answer changes.
-Future<Map<String, AssetPatchAssessment>> assetPatchesAmong(
-  String modsPath,
-  Iterable<String> modNames,
-) async {
-  final found = <String, AssetPatchAssessment>{};
-  for (final name in modNames) {
-    final contents = await readFolderContents(
-      Directory(path.join(modsPath, name)),
-    );
-    final assessment = assessAssetPatch(
-      files: contents.files,
-      // Known by construction: the caller passes only mods with no `.ini`. Read
-      // from the folder anyway rather than trusted, so the two cannot drift.
-      hasIni: contents.hasIni,
-    );
-    if (assessment.looksLikePatch) found[name] = assessment;
-  }
-  return found;
-}
+import 'dart:io';
+
+import 'folder_contents.dart';
+import 'patch_detection.dart';
 
 /// One mod an import is **about to** create, and the folders it will be made of.
 ///
@@ -103,8 +53,8 @@ class PlannedPatchScan {
   /// Mods whose `.ini` files ask for content the download does not carry.
   final Set<String> iniPatches;
 
-  /// Mods that ship no `.ini` and bring nothing the library lacks, each with
-  /// the library folders holding every file it brings.
+  /// Mods that ship no `.ini` and carry assets only an `.ini` could load, each
+  /// with how many such assets it brought.
   final Map<String, AssetPatchAssessment> assetPatches;
 
   /// Mods that ship no `.ini` and replace nothing either — the broken download
@@ -185,3 +135,4 @@ Future<PlannedPatchScan> scanPlannedMods(Iterable<PlannedMod> planned) async {
     incomplete: incomplete,
   );
 }
+

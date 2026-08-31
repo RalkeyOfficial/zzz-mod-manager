@@ -740,7 +740,7 @@ void main() {
       await pumpDialog(tester, target: mod(origin: tracked(fileId: 1732269)));
       await tester.pumpAndSettle();
 
-      expect(find.text('This folder holds a patch'), findsNothing);
+      expect(find.text('This mod holds a patch'), findsNothing);
     });
 
     testWidgets('a patch-shaped folder offers to name what it patches',
@@ -752,7 +752,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('This folder holds a patch'), findsOneWidget);
+      expect(find.text('This mod holds a patch'), findsOneWidget);
       expect(find.text('Name the mod it patches'), findsOneWidget);
       // The two escape hatches must still be reachable — the new row sits
       // above them, not in front of them.
@@ -988,10 +988,10 @@ void main() {
 
       // Named, so the row states the answer rather than asking for one.
       expect(find.text('Name the mod it patches'), findsNothing);
-      await tester.tap(find.text('This folder holds a patch'));
+      await tester.tap(find.text('This mod holds a patch'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('This folder is one mod after all'));
+      await tester.tap(find.text('This is just one mod after all'));
       await tester.pumpAndSettle();
 
       expect(gateway.written!.companions, isEmpty,
