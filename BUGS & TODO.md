@@ -3257,6 +3257,23 @@ work that already opens the same file, so they cost nothing extra.
 - [ ] **Conflict detection** — warn when two mods target the same character/slot.
 - [ ] **Storage view + orphan cleanup** — disk usage per mod, prune dead links /
   stale downloads.
+- [ ] **Rank the destination picker when installing a patch.** A patch's `.ini`
+  names files it does not ship, which is a fingerprint of the base mod's
+  contents, so a library folder holding exactly those files is a strong candidate
+  — offered with a stated reason ("references three files this mod has"), never
+  preselected. **Measure it first**: `test/patch_detection_corpus_test.dart` runs
+  the real rule over extracted archives when `ZZZ_PATCH_CORPUS` points at one,
+  and that is the population to measure against. Until then the unranked
+  searchable list is a perfectly good version. *Filtering* the list is the
+  sharper question and the answer is probably no: narrowing to folders sharing
+  the patch's own `mod_id` is right whenever the patch's page names what it
+  patches and wrong whenever it doesn't, which is common — and a filter that
+  hides the correct answer is worse than a list that doesn't rank it.
+- [ ] **`role: separate` for a folder holding two independent mods.** `base` and
+  `patch` cover the two-download case; a folder where the user hand-merged two
+  unrelated mods is a different thing, and forcing it into `base` says something
+  false about it. Nothing produces one today, and an unrecognised role is dropped
+  on read rather than defaulted, so adding it later is safe.
 
 ---
 
