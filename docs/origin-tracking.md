@@ -855,10 +855,32 @@ own `origin` *is* the base), so it stops being asked.
 
 | Answer | What the install does |
 |---|---|
-| Its own folder, naming what it patches | Writes `ingest.patch_shaped` **and** a `role: base` companion, and raises no warning — the user has just been told, in a modal they acted on |
+| Its own folder, naming what it patches **and which file** | Writes `patch_shaped` and a `role: base` companion, then **fetches that file and writes it into the folder** — base first, patch placed back over it. No warning: the folder works |
+| Its own folder, naming the mod but not the file | Writes `patch_shaped` and the companion. Nothing to fetch, so the pinned warning stands |
 | Its own folder, saying nothing | Writes `patch_shaped` only, and the pinned warning stands |
 | Into a library mod | **No new folder at all** — see below |
 | Declines | Nothing is copied. A patch with nothing to patch is a folder the user may well not want |
+
+**Naming the base is an instruction, not a note.** It recorded the answer and
+installed nothing, which left the folder doing nothing in the game — the thing
+naming it was supposed to fix. `installNamedBase` is that install, and it is the
+ordinary update flow with the whole folder passed as the patch: the folder holds
+only the patch at that moment, so it is set aside, the base is written, and the
+patch goes back onto the base's layout
+([`applying-updates.md` §6](applying-updates.md#base-first-then-patch--for-both-halves-of-a-mixed-folder)).
+No second confirmation — they answered this a moment ago in the prompt.
+
+Two consequences worth stating:
+
+- **The warning is silenced by a folder that works, never by an answer about
+  one.** Naming the base used to suppress it on its own, and the folder still did
+  nothing — with the one sentence that would have said so now gone. A cancelled
+  download or an unpickable file leaves as much to do as saying nothing did, so
+  the warning stands.
+- **The answer is recorded before the download starts**, so a cancelled or failed
+  fetch leaves the companion the user named rather than nothing. A successful one
+  upgrades that entry to `exact` on its way past — the second route to `exact` on
+  a companion, and for the same reason as the first: we fetched those bytes.
 
 The second destination is not offered when the import picker already chose to
 combine several folders into one mod (different destinations), or when the library

@@ -229,6 +229,40 @@ UpdateLayout _replayCombined(
   );
 }
 
+/// The `ingest` record to write after an update, in the shape the *next* one
+/// replays.
+///
+/// A combined install keeps its **recorded** subfolder names rather than the
+/// archive's: the subfolder is what the mod's own `.ini` paths were written
+/// against, and adopting a differently-cased incoming name would create a second
+/// directory beside the first on a case-sensitive filesystem.
+///
+/// **Everything the update did not observe is carried across.** This is an
+/// amendment, and the two facts it must not drop cannot be recovered afterwards:
+/// `patch_shaped` is knowable only at install, and `patch_files` is the only
+/// thing that makes a mixed folder rebuildable. Rebuilt from scratch here, an
+/// ordinary update silently turned a folder the app knew held two downloads into
+/// one it thinks holds one.
+///
+/// [patchFiles] replaces the recorded list when the update moved the patch —
+/// which `applyBaseThenPatch` does by design, so a record still naming the old
+/// paths would send the next rebuild looking in the wrong place.
+ModIngest? ingestAfterUpdate(
+  UpdateLayout layout,
+  ModIngest? current, {
+  List<String>? patchFiles,
+}) {
+  final carried = patchFiles == null
+      ? current
+      : (current ?? const ModIngest()).copyWith(patchFiles: patchFiles);
+  if (layout.mappings.isEmpty) return carried;
+  if (carried?.mode == IngestMode.combined) return carried;
+  return (carried ?? const ModIngest()).copyWith(
+    mode: IngestMode.separate,
+    folders: [layout.mappings.single.source],
+  );
+}
+
 /// Case-insensitive, because an archive repacked on another machine routinely
 /// changes only the case of a folder name.
 String? _matchFolder(String wanted, List<String> candidates) {

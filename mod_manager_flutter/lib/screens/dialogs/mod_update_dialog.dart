@@ -11,6 +11,7 @@ import '../../services/api_service.dart';
 import '../../utils/notifications.dart';
 import '../../services/gamebanana/file_selection.dart';
 import '../../services/update_check.dart';
+import '../../services/update_apply/update_write_route.dart';
 import '../../utils/gamebanana_url.dart';
 import '../../utils/html_to_markdown.dart';
 import '../../utils/markdown_description.dart';
@@ -387,19 +388,44 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// "not checked since" instead of keeping a blue mark for an update that has
   /// been taken.
   Future<void> _applyUpdate(GbFile file) async {
-    final modId = widget.mod.origin?.modId;
+    final check = _stored;
+    // The identity this file belongs to, which is the folder's own only when the
+    // verdict is about it. A companion's file recorded against the primary would
+    // claim this folder is that other mod.
+    final subject = check?.subjectModId;
+    final modId = subject ?? widget.mod.origin?.modId;
     if (modId == null) return;
+
+    final route = updateWriteRoute(
+      origin: widget.mod.origin,
+      subjectModId: subject,
+    );
     // Not redundant with `build`'s guard: that one is a widget condition, this
     // is the call that overwrites a live folder.
-    if (_stored?.subjectModId != null) return;
+    if (route.kind == UpdateWriteKind.none) return;
+
     setState(() => _writing = true);
-    final changed = await applyUpdateFlow(
-      context,
-      ref,
-      mod: widget.mod,
-      remoteModId: modId,
-      file: file,
-    );
+    // **Base by layout, patch by placement**, and the folder decides which this
+    // is rather than the button. See `update_write_route.dart`.
+    final changed = route.kind == UpdateWriteKind.patch
+        ? await applyPatchUpdateFlow(
+            context,
+            ref,
+            mod: widget.mod,
+            remoteModId: modId,
+            file: file,
+            asCompanion: route.asCompanion,
+          )
+        : await applyUpdateFlow(
+            context,
+            ref,
+            mod: widget.mod,
+            remoteModId: modId,
+            file: file,
+            patchFiles: route.patchFiles,
+            asCompanion: route.asCompanion,
+            flattensPatch: route.flattensPatch,
+          );
     if (!mounted) return;
     setState(() {
       _writing = false;
@@ -430,15 +456,21 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     // action has to be here rather than only while the mark is showing.
     final hasFinding =
         check != null && (check.hasUpdate || check.dismissed);
-    // The applier writes the named file over this folder and records it against
-    // `origin.mod_id`, so a companion's file would overwrite one mod with
-    // another and stamp a foreign file id at `exact`. Where it *should* land is
-    // the question "apply as a patch to…" exists to ask, so until that exists
-    // the finding is stated and the mod page offered instead.
-    final foreignFinding = hasFinding && check.subjectModId != null;
-    final installable = modId == null || !hasFinding || foreignFinding
-        ? null
-        : _fileToInstall(check);
+    // **A verdict about either half of the folder can be installed**, because
+    // the write is chosen by which half it is: base by layout with the patch
+    // placed back on top, patch by placement over the base. What is refused is
+    // a verdict about a mod this folder does not claim to hold, which no write
+    // could apply without overwriting one mod with another.
+    final route = hasFinding
+        ? updateWriteRoute(
+            origin: widget.mod.origin,
+            subjectModId: check.subjectModId,
+          )
+        : UpdateWriteRoute.refused;
+    final installable =
+        modId == null || !hasFinding || route.kind == UpdateWriteKind.none
+            ? null
+            : _fileToInstall(check);
 
     // Tapping the barrier or pressing Escape pops with **null**, which the
     // caller reads as "nothing was written" — so a dismissal saved and then

@@ -13,6 +13,7 @@ class ModIngest {
     this.folders = const [],
     this.siblingGroup,
     this.patchShaped = false,
+    this.patchFiles = const [],
   });
 
   final IngestMode mode;
@@ -61,11 +62,36 @@ class ModIngest {
   /// only the user can supply.
   final bool patchShaped;
 
+  /// **Which files in this folder came from the patch**, in the spelling they
+  /// have on disk.
+  ///
+  /// The one thing that makes a mixed folder rebuildable. Writing a newer *base*
+  /// into it means taking the patch out, writing the base, and placing the patch
+  /// back on top — and none of that is possible without knowing which files are
+  /// the patch's. It cannot be worked out later: a mixed folder is
+  /// indistinguishable from an ordinary one, which is the same reason
+  /// [patchShaped] has to be recorded at install.
+  ///
+  /// **Recorded rather than re-downloaded** because a patch's mod page can be
+  /// private, trashed or withheld by the time the base updates, and a rebuild
+  /// that needs a page which no longer exists is a rebuild in name only. It also
+  /// makes the rebuild offline and free.
+  ///
+  /// **On-disk spelling, not the normalised comparison key.** These paths open
+  /// files; a lower-cased one deletes nothing on Linux and leaves a second copy
+  /// behind. Normalise at the point of comparison instead.
+  ///
+  /// It records what the app wrote, so the user deleting one of these files is an
+  /// edit rather than damage: a path that is gone is reported and skipped, never
+  /// restored.
+  final List<String> patchFiles;
+
   bool get isEmpty =>
       folders.isEmpty &&
       siblingGroup == null &&
       mode == IngestMode.separate &&
-      !patchShaped;
+      !patchShaped &&
+      patchFiles.isEmpty;
 
   /// Amends one field, keeping the rest.
   ///
@@ -78,12 +104,14 @@ class ModIngest {
     List<String>? folders,
     String? siblingGroup,
     bool? patchShaped,
+    List<String>? patchFiles,
   }) =>
       ModIngest(
         mode: mode ?? this.mode,
         folders: folders ?? this.folders,
         siblingGroup: siblingGroup ?? this.siblingGroup,
         patchShaped: patchShaped ?? this.patchShaped,
+        patchFiles: patchFiles ?? this.patchFiles,
       );
 
   /// Value equality, so [ModOrigin] can have it — see the note there.
@@ -93,42 +121,46 @@ class ModIngest {
       other.mode == mode &&
       other.siblingGroup == siblingGroup &&
       other.patchShaped == patchShaped &&
-      _sameFolders(other.folders);
+      _same(other.folders, folders) &&
+      _same(other.patchFiles, patchFiles);
 
-  bool _sameFolders(List<String> other) {
-    if (other.length != folders.length) return false;
-    for (var i = 0; i < folders.length; i++) {
-      if (other[i] != folders[i]) return false;
+  static bool _same(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
     }
     return true;
   }
 
   @override
-  int get hashCode =>
-      Object.hash(mode, siblingGroup, patchShaped, Object.hashAll(folders));
+  int get hashCode => Object.hash(mode, siblingGroup, patchShaped,
+      Object.hashAll(folders), Object.hashAll(patchFiles));
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'mode': mode.wire,
         if (folders.isNotEmpty) 'folders': folders,
         if (siblingGroup != null) 'sibling_group': siblingGroup,
         if (patchShaped) 'patch_shaped': true,
+        if (patchFiles.isNotEmpty) 'patch_files': patchFiles,
       };
 
   /// Never throws; anything unusable degrades to a safe default.
   static ModIngest? fromJson(Object? raw) {
     if (raw is! Map) return null;
-    final folders = raw['folders'];
     return ModIngest(
       mode: IngestMode.parse(raw['mode']),
-      folders: folders is List
-          ? <String>[
-              for (final entry in folders)
-                if (entry is String && entry.isNotEmpty) entry,
-            ]
-          : const [],
+      folders: _paths(raw['folders']),
       siblingGroup:
           raw['sibling_group'] is String ? raw['sibling_group'] as String : null,
       patchShaped: raw['patch_shaped'] == true,
+      patchFiles: _paths(raw['patch_files']),
     );
   }
+
+  static List<String> _paths(Object? raw) => raw is List
+      ? <String>[
+          for (final entry in raw)
+            if (entry is String && entry.isNotEmpty) entry,
+        ]
+      : const <String>[];
 }

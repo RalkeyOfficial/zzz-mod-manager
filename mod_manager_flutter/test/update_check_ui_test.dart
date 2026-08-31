@@ -1008,14 +1008,13 @@ void main() {
         expect(find.text('This is the latest file'), findsNothing);
       });
 
-      testWidgets('an update on the other mod is never applied from here',
+      testWidgets('an update on the other mod can be installed from here',
           (tester) async {
-        // **The destructive case.** The apply path writes the named file over
-        // *this* folder and records it against `origin.mod_id`, so applying a
-        // companion's file would overwrite one mod's folder with another mod's
-        // archive and then stamp a foreign file id onto this block at `exact` —
-        // after which every check asks the wrong page for a file it has never
-        // published.
+        // **The write is chosen by which half of the folder it is**, so a
+        // verdict about the mod a patch applies to is installable: the base is
+        // written by layout and the patch placed back over it. What used to
+        // refuse this was the *applier* having only one way to write, not
+        // anything about the verdict — see `update_write_route.dart`.
         await tester.pumpWidget(const SizedBox());
         final (client, _) = mixedClient();
         final target = mixedMod();
@@ -1029,14 +1028,13 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // The finding is real and is shown…
         expect(find.text('Possibly outdated'), findsOneWidget);
-        // …and the one control that touches the mod folder is not offered.
-        expect(find.text('Update'), findsNothing);
-        // The mod page is, which is the same answer the dialog already gives
-        // when it can name no successor.
+        expect(find.text('Update'), findsOneWidget);
+        // Still offered beside it: installing the other mod as a second folder
+        // is occasionally what somebody wants.
         expect(find.text('View in marketplace'), findsOneWidget);
       });
+
 
       testWidgets('an update on this mod is still applied normally',
           (tester) async {

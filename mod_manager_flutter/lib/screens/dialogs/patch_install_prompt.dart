@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
+import '../../models/gamebanana/gamebanana.dart';
 import '../../models/mod_companion.dart';
 import '../../services/origin_summary.dart';
 import '../components/resolve/resolve_fragments.dart';
@@ -55,13 +56,22 @@ sealed class PatchDestination {
 /// is *going* to hold, since the patch alone does nothing until the mod it
 /// patches is in there with it.
 class InstallAsNewMod extends PatchDestination {
-  const InstallAsNewMod({this.base, this.baseName});
+  const InstallAsNewMod({this.base, this.baseName, this.baseFile});
 
   final ModCompanion? base;
 
   /// The base mod page's own name, for the row to say. Not stored on the
   /// companion — a name is the remote's to change.
   final String? baseName;
+
+  /// The file of the base mod the install should **fetch and write into this
+  /// folder first**, when the user picked one.
+  ///
+  /// Naming what a patch patches used to record the answer and install nothing,
+  /// which left the folder not working — the thing naming it was supposed to
+  /// fix. Null means they could not say which file, so there is nothing to
+  /// fetch: the answer is recorded and the folder stays as it is.
+  final GbFile? baseFile;
 }
 
 /// Into a library mod's folder, which ends up holding both downloads.
@@ -184,8 +194,12 @@ class _PatchInstallPromptState extends ConsumerState<PatchInstallPrompt> {
     if (outcome == null || !mounted) return;
     setState(() {
       _chosen[subject.modName] = switch (outcome) {
-        CompanionNamed(:final companion, :final modName) =>
-          InstallAsNewMod(base: companion, baseName: modName),
+        CompanionNamed(:final companion, :final modName, :final file) =>
+          InstallAsNewMod(
+            base: companion,
+            baseName: modName,
+            baseFile: file,
+          ),
         CompanionRemoved() => const InstallAsNewMod(),
       };
     });

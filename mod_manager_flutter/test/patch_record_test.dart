@@ -228,4 +228,108 @@ void main() {
       expect(amended.companions, [base, patch]);
     });
   });
+
+  /// The **other** download in the folder, after the app fetched and wrote a
+  /// newer file of it.
+  ///
+  /// The mirror of [ModOrigin.updatedTo], and the reason it is a separate write:
+  /// the folder's own identity did not change, so stamping this file id onto the
+  /// primary would claim the folder is that other mod.
+  group('withCompanionUpdatedTo', () {
+    const base = ModCompanion(
+      role: CompanionRole.base,
+      modId: 7100,
+      modIdConfidence: OriginConfidence.user,
+      fileId: 500,
+      version: '1.0',
+      versionConfidence: OriginConfidence.user,
+    );
+    const patch = ModCompanion(
+      role: CompanionRole.patch,
+      modId: 5100,
+      modIdConfidence: OriginConfidence.exact,
+    );
+
+    ModOrigin? updated(ModOrigin? origin) => withCompanionUpdatedTo(
+          origin,
+          modId: 7100,
+          fileId: 900,
+          version: '2.0',
+          versionLabel: 'NSFW',
+          archiveMd5: 'deadbeef',
+        );
+
+    test('the file we installed is recorded at exact', () {
+      // **The one route to `exact` on a companion besides an install into a
+      // folder**: every other is the user telling us about bytes they moved in
+      // themselves, and these are bytes we fetched.
+      final companion = updated(tracked.copyWith(companions: const [base]))!
+          .companionOfRole(CompanionRole.base)!;
+
+      expect(companion.fileId, 900);
+      expect(companion.version, '2.0');
+      expect(companion.versionLabel, 'NSFW');
+      expect(companion.versionConfidence, OriginConfidence.exact);
+      expect(companion.modIdConfidence, OriginConfidence.exact,
+          reason: 'we fetched it off that page');
+      expect(companion.archiveMd5, 'deadbeef');
+      expect(companion.role, CompanionRole.base,
+          reason: 'which half of the folder it is has not changed');
+    });
+
+    test('the folder still says what it is', () {
+      final amended = updated(tracked.copyWith(companions: const [base]))!;
+      expect(amended.modId, 4001);
+      expect(amended.fileId, 9001);
+      expect(amended.versionConfidence, OriginConfidence.exact);
+    });
+
+    test('a baseline date goes, because the file is now known', () {
+      // "I don't know which file, I got it around then" is a weaker answer, and
+      // leaving it beside a known file means two comparisons disagreeing.
+      final amended = updated(tracked.copyWith(companions: [
+        base.copyWith(baselineRemoteDate: DateTime.utc(2025, 1, 1)),
+      ]))!;
+
+      expect(amended.companionOfRole(CompanionRole.base)!.baselineRemoteDate,
+          isNull);
+    });
+
+    test('a dismissal goes, because they have taken the update', () {
+      // Stored as a date at or after this file's, so keeping it would silence
+      // the *next* release too.
+      final amended = updated(tracked.copyWith(companions: [
+        base.copyWith(updatesDismissedUntil: DateTime.utc(2025, 1, 1)),
+      ]))!;
+
+      expect(amended.companionOfRole(CompanionRole.base)!.updatesDismissedUntil,
+          isNull);
+    });
+
+    test('a page recorded as gone is not gone — we just read it', () {
+      final amended = updated(tracked.copyWith(companions: [
+        base.copyWith(remoteMissing: true),
+      ]))!;
+
+      expect(
+          amended.companionOfRole(CompanionRole.base)!.remoteMissing, isFalse);
+    });
+
+    test('the other companions are untouched', () {
+      final amended = updated(tracked.copyWith(companions: [base, patch]))!;
+      expect(amended.companions.last, patch);
+    });
+
+    test('a folder with no such companion is left exactly as it was', () {
+      // Nothing to amend. Inventing the companion would record a second
+      // identity nobody named.
+      final origin = tracked.copyWith(companions: const [patch]);
+      expect(updated(origin), origin);
+    });
+
+    test('nothing is invented for a folder with no block', () {
+      expect(updated(null), isNull);
+    });
+  });
+
 }

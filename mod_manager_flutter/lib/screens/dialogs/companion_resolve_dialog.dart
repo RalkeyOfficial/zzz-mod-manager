@@ -22,7 +22,7 @@ sealed class CompanionOutcome {
 }
 
 class CompanionNamed extends CompanionOutcome {
-  const CompanionNamed(this.companion, {this.modName});
+  const CompanionNamed(this.companion, {this.modName, this.file});
 
   final ModCompanion companion;
 
@@ -32,6 +32,17 @@ class CompanionNamed extends CompanionOutcome {
   /// an id. Not stored on the companion: a name is the remote's to change, and
   /// a sidecar holding a stale copy would be a second source of truth for it.
   final String? modName;
+
+  /// The file row the user picked, when they picked one.
+  ///
+  /// The companion carries its id, which is enough to *describe* it and not
+  /// enough to fetch it — a download needs the row itself. Carried so a caller
+  /// that is about to install this mod does not have to re-fetch the profile to
+  /// find the file the user was just looking at.
+  ///
+  /// **Null means they answered "I don't know which file"**, and that is the
+  /// answer: there is nothing to install, only something to record.
+  final GbFile? file;
 }
 
 class CompanionRemoved extends CompanionOutcome {
@@ -203,6 +214,7 @@ class _CompanionResolveDialogState
           baselineRemoteDate: baseline,
         ),
         modName: _profile?.name,
+        file: file,
       ),
     );
   }

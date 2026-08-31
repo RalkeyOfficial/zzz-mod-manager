@@ -242,6 +242,69 @@ void main() {
         expect(const ModIngest(patchShaped: true).isEmpty, isFalse);
       });
     });
+
+    /// **Which files in this folder came from the patch.**
+    ///
+    /// The one thing that makes a mixed folder rebuildable: to write a newer
+    /// base into it and keep the patch, the app has to know which files are the
+    /// patch's — and it cannot be derived afterwards, because a mixed folder
+    /// looks exactly like an ordinary one. Recorded rather than re-downloaded so
+    /// that a patch whose mod page has since gone does not take the folder with
+    /// it.
+    group('patch_files', () {
+      test('round-trips', () {
+        const ingest = ModIngest(patchFiles: ['Textures/Body.dds', 'fix.ini']);
+        expect(ingest.toJson()['patch_files'], ['Textures/Body.dds', 'fix.ini']);
+        expect(ModIngest.fromJson(ingest.toJson())!.patchFiles,
+            ['Textures/Body.dds', 'fix.ini']);
+      });
+
+      test('keeps the spelling it was given', () {
+        // On-disk spelling, because these paths open files. Lower-casing them
+        // here would delete nothing on Linux and leave a second copy behind.
+        const ingest = ModIngest(patchFiles: ['Textures/BodyA.dds']);
+        expect(ModIngest.fromJson(ingest.toJson())!.patchFiles,
+            ['Textures/BodyA.dds']);
+      });
+
+      test('is absent from the json when empty', () {
+        expect(const ModIngest().toJson().containsKey('patch_files'), isFalse);
+        expect(ModIngest.fromJson({'mode': 'separate'})!.patchFiles, isEmpty);
+      });
+
+      test('drops entries that are not usable paths', () {
+        final ingest = ModIngest.fromJson({
+          'mode': 'separate',
+          'patch_files': ['Body.dds', 42, null, '', 'fix.ini'],
+        })!;
+        expect(ingest.patchFiles, ['Body.dds', 'fix.ini']);
+      });
+
+      test('anything but a list reads as empty', () {
+        for (final raw in ['Body.dds', 42, true, <String, String>{}]) {
+          expect(
+            ModIngest.fromJson({'mode': 'separate', 'patch_files': raw})!
+                .patchFiles,
+            isEmpty,
+            reason: '$raw',
+          );
+        }
+      });
+
+      test('is part of the value identity', () {
+        expect(const ModIngest(patchFiles: ['a.dds']), isNot(const ModIngest()));
+        expect(const ModIngest(patchFiles: ['a.dds']),
+            isNot(const ModIngest(patchFiles: ['b.dds'])));
+        expect(const ModIngest(patchFiles: ['a.dds']).isEmpty, isFalse);
+      });
+
+      test('survives an amendment that says nothing about it', () {
+        // Every write to `ingest` rebuilds it, so a field left out of one is a
+        // field erased by it — and this one cannot be recovered afterwards.
+        const ingest = ModIngest(patchFiles: ['Body.dds']);
+        expect(ingest.copyWith(patchShaped: true).patchFiles, ['Body.dds']);
+      });
+    });
   });
 
   group('companions', () {

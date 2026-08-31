@@ -235,6 +235,17 @@ Future<InstallResult> installArchiveFlow(
         activation: ModManagerActivationPort(modManager),
       ),
       amend: modManager.updateModOrigin,
+      // Naming what a patch patches is an instruction to install that mod into
+      // the folder, not just a note about it.
+      installBase: (modName, base, baseFile) => installNamedBase(
+        context,
+        ref,
+        modName: modName,
+        modsPath: modsPath,
+        base: base,
+        file: baseFile,
+        characterId: remote.characterId,
+      ),
       // This download came off a mod page, so the patch has an identity to
       // record against the mod it went into.
       patch: PatchIdentity(

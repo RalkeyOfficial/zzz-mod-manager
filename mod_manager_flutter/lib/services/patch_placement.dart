@@ -45,6 +45,9 @@ class PatchPlacement {
     this.unmatched = const <String>[],
   });
 
+  /// No patch to place — for a folder that is one download after all.
+  static const PatchPlacement nothing = PatchPlacement();
+
   /// Incoming path -> where it lands in the target.
   ///
   /// Covers every incoming file **except** those still in [choices], and is

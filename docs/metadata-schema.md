@@ -124,7 +124,7 @@ the common block is the four keys shown above rather than fifteen mostly-null on
 | `mod_id_confidence` / `version_confidence` | `exact` \| `user` \| `inferred` \| `assumed_latest` \| `unknown`. Identity and version resolve independently, so they carry separate confidences. What each tier means and who may write it: [`origin-tracking.md`](origin-tracking.md#1-two-axes-confidence-and-provenance). |
 | `version` / `version_label` | `version` is a version string; `version_label` is the author's free-text *variant* marker ("white hair ver"). **Never conflate them** — that makes two variants of one release look like two releases. |
 | `provenance` | `downloaded` \| `imported_archive` \| `imported_folder`. |
-| `ingest` | `mode` (`separate`/`combined`), `folders` (archive-relative **basenames**), `sibling_group`, `patch_shaped` (this download **replaces rather than adds** — either it brought `.ini` files and none of the content they reference, or it brought game assets and no `.ini` to load them; see [`applying-updates.md` §2](applying-updates.md#2-patch-detection). Knowable only at install). |
+| `ingest` | `mode` (`separate`/`combined`), `folders` (archive-relative **basenames**), `sibling_group`, `patch_shaped` (this download **replaces rather than adds** — either it brought `.ini` files and none of the content they reference, or it brought game assets and no `.ini` to load them; see [`applying-updates.md` §2](applying-updates.md#2-patch-detection). Knowable only at install), `patch_files` (below). |
 | `companions` | The **other downloads in this folder**, when the user has named any. Each is a remote identity plus what is known about which file of it, and deliberately not a second `origin`: see [`origin-tracking.md` §10](origin-tracking.md#10-a-folder-that-holds-two-downloads). Absent when empty, which is almost every sidecar. |
 | `installed_at` / `installed_at_is_proxy` | When, and whether that was observed or derived from file mtimes. |
 | `baseline_remote_date` | For `assumed_latest`: only flag remote files newer than this. |
@@ -132,6 +132,28 @@ the common block is the four keys shown above rather than fifteen mostly-null on
 | `tracking` | `auto` \| `off` (the user declared the mod local). |
 | `remote_missing` | Gone upstream — read from the remote's explicit private/trashed/withheld flags, not inferred from a 404. |
 | `updates_dismissed_until` | "I have seen what this mod published up to here and I don't want it." A **date rather than a file id**, so it expires by itself the moment something newer appears; cleared when the folder is rebound to a different mod. Not the same as `tracking: "off"`, which silences the mod forever. See [`update-checks.md`](update-checks.md#4-dismissing-an-update). |
+
+### `ingest.patch_files`
+
+**Which files in this folder came from the patch**, in the spelling they have on
+disk. Absent when empty, which is almost every sidecar.
+
+It is what makes a mixed folder rebuildable: writing a newer *base* into it means
+taking the patch out, writing the base, and placing the patch back on top, and none
+of that is possible without knowing which files are the patch's. Like
+`patch_shaped`, it **cannot be worked out later** — a mixed folder is
+indistinguishable from an ordinary one — and it is recorded rather than
+re-downloaded because a patch's mod page can be gone by the time the base updates.
+
+Two things follow from the spelling, and both bite:
+
+- **On-disk, not the normalised comparison key.** These paths open files; a
+  lower-cased one deletes nothing on Linux and leaves a second copy behind.
+- **It describes what the app wrote**, so it goes stale if the folder is edited by
+  hand. Read with an existence check: a path that is gone is reported and skipped,
+  never restored.
+
+See [`applying-updates.md` §6](applying-updates.md#which-files-are-the-patchs).
 
 Three rules are load-bearing rather than stylistic:
 

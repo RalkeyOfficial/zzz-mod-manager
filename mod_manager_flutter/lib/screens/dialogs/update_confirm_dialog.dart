@@ -38,11 +38,16 @@ Future<UpdateConfirmChoice?> showUpdateConfirmDialog(
   required ModInfo mod,
   required GbFile file,
   required UpdatePreview preview,
+  bool flattensPatch = false,
 }) =>
     showDialog<UpdateConfirmChoice>(
       context: context,
-      builder: (_) =>
-          _UpdateConfirmDialog(mod: mod, file: file, preview: preview),
+      builder: (_) => _UpdateConfirmDialog(
+        mod: mod,
+        file: file,
+        preview: preview,
+        flattensPatch: flattensPatch,
+      ),
     );
 
 class _UpdateConfirmDialog extends StatefulWidget {
@@ -50,11 +55,21 @@ class _UpdateConfirmDialog extends StatefulWidget {
     required this.mod,
     required this.file,
     required this.preview,
+    this.flattensPatch = false,
   });
 
   final ModInfo mod;
   final GbFile file;
   final UpdatePreview preview;
+
+  /// This folder holds a patch and **nothing records which files are its**, so
+  /// the write cannot put it back on top afterwards.
+  ///
+  /// A folder merged by hand, or one installed before that record existed. The
+  /// write is still offered — the update is what the user wants and the snapshot
+  /// makes it reversible — but it must not happen without this said, because the
+  /// loss is otherwise invisible: the folder looks complete either way.
+  final bool flattensPatch;
 
   @override
   State<_UpdateConfirmDialog> createState() => _UpdateConfirmDialogState();
@@ -222,6 +237,16 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
             icon: Icons.keyboard_outlined,
             message: loc.t('mods.update_apply.keybind_note'),
           ),
+          // **The one loss on this screen that is not paid for by a rule.** A
+          // patch whose files are recorded is set aside and placed back; this
+          // folder's are not on record, so anything the new version ships the
+          // same name for replaces it. Said here because it cannot be seen
+          // afterwards — the folder looks complete either way.
+          if (widget.flattensPatch)
+            DialogNotice(
+              icon: Icons.call_split,
+              message: loc.t('mods.update_apply.patch_unrecorded_note'),
+            ),
           if (preview.layout.unused.isNotEmpty)
             DialogNotice(
               icon: Icons.folder_off_outlined,

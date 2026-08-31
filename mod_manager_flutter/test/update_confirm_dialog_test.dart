@@ -53,6 +53,7 @@ void main() {
     WidgetTester tester,
     UpdatePreview value, {
     Size surfaceSize = const Size(1200, 800),
+    bool flattensPatch = false,
   }) async {
     UpdateConfirmChoice? choice;
     var opened = false;
@@ -67,6 +68,7 @@ void main() {
               mod: mod,
               file: file,
               preview: value,
+              flattensPatch: flattensPatch,
             );
           },
           child: const Text('open'),
@@ -89,6 +91,26 @@ void main() {
     expect(find.textContaining('A copy of this mod'), findsOneWidget);
     expect(find.textContaining('rebound any keys'), findsOneWidget);
     expect(find.text('Update'), findsWidgets);
+  });
+
+  testWidgets('a patch it cannot put back is said before anything is written',
+      (tester) async {
+    // **The one loss on this screen not already paid for by a rule.** A patch
+    // whose files are on record is set aside and placed back over the new
+    // version; this folder's are not, so the update replaces whatever it ships
+    // the same names for. Invisible afterwards — the folder looks complete
+    // either way — so it has to be here or the trade is not one.
+    await open(tester, preview(), flattensPatch: true);
+
+    expect(find.textContaining('holds a patch as well'), findsOneWidget);
+    expect(find.text('Update'), findsWidgets,
+        reason: 'still offered: the update is what they want and the copy is '
+            'the way back');
+  });
+
+  testWidgets('an ordinary update says nothing of the kind', (tester) async {
+    await open(tester, preview());
+    expect(find.textContaining('holds a patch as well'), findsNothing);
   });
 
   testWidgets('cancelling answers nothing', (tester) async {

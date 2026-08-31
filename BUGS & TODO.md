@@ -1112,7 +1112,7 @@ The block:
   themselves. And an unnamed patch-shaped folder now shows an amber badge, which
   is the one state that says "tell us what this is" rather than "we found
   something".
-- [ ] **There is no "install this into that mod's folder" operation.** Both
+- [x] **There is no "install this into that mod's folder" operation.** Both
   install paths refuse a name collision (`mod_manager_service.dart` skips in
   `importMods`, aborts in `importCombinedMod`), so every mixed folder in
   existence was assembled by hand in a file manager and the app is reduced to
@@ -1123,17 +1123,25 @@ The block:
   than as the whole answer. Whatever is designed has to fit the modals the
   install already raises — the multiple-root-folder picker and the duplicate
   archive prompt.
-  **Half done.** The marketplace install now scans the extracted folders before
-  the copy — scoped by the picker, so an ordinary combined mod is not reported as
-  a patch — and asks what a patch patches right there, writing the answer as a
-  companion. What is left is the *destination*: the patch still lands in its own
-  folder, so the folder does not work until the base mod's files are in it. The
-  operation that puts them there is the remaining half, and it must obey update
-  rules rather than install ones — it writes over a live folder, so deactivate →
-  snapshot → overwrite → reactivate, with the extraction wrapper stripped
-  (copying it leaves a second live `.ini` whose paths resolve beside itself) and
-  a resolver for where inside a combined target the files go. That resolver is
-  also what unblocks applying a *companion's* update, which is refused today.
+  **Done, in both directions, because it is one operation:** *base first, then
+  patch*, whichever half is the folder's own recorded identity. Both import paths
+  ask before their copy and write after it through `patch_install_flow.dart`;
+  `UpdateApplier.applyBaseThenPatch` is the ordered write, and
+  `update_write_route.dart` is the pure decision about which half a verdict
+  belongs to. Naming what a patch patches now *fetches* that mod and writes it in
+  rather than only recording it. A companion's update applies — Q8b's answer is
+  the same operation run the other way. And `ingest.patch_files` is what makes
+  any of the rebuilds possible: recorded, not re-downloaded, because a patch's
+  page can be gone by then.
+  Two things this exposed and fixed on the way:
+  - **An ordinary update erased `patch_shaped`.** `ingestAfterUpdate` rebuilt the
+    record from scratch, so any update to a `separate` mod quietly turned a folder
+    the app knew held two downloads into one it thought held one — unrecoverable,
+    since a mixed folder is indistinguishable from an ordinary one.
+  - **Updating the patch half wrote by layout.** A patch archive's root-level file
+    landed at the root, beside the file it should have replaced, where the `.ini`
+    goes on loading the base's and nothing errors. Layout belongs to the base; the
+    patch is placed.
 - [x] **A patch dragged in by hand is recognised and then forgotten.** Both
   import paths run both patch rules and both raise the warning, but only the
   marketplace one writes `ingest.patch_shaped`. Without that flag the folder

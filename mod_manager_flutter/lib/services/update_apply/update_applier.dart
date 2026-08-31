@@ -9,6 +9,7 @@ import '../../utils/directory_copy.dart';
 import '../backup/snapshot_service.dart';
 import '../folder_contents.dart';
 import '../ini_parser_service.dart';
+import '../ini_resources.dart';
 import '../patch_detection.dart';
 import '../patch_placement.dart';
 import 'keybind_changes.dart';
@@ -75,6 +76,15 @@ class UpdateApplier {
     required Directory modFolder,
     required List<String> incomingFolders,
     ModIngest? ingest,
+
+    /// Files in [modFolder] to judge this update **as if they were not there** —
+    /// the other download in a mixed folder.
+    ///
+    /// Without it the patch's own `.ini` is assessed as a leftover of the base's
+    /// update and offered for deletion, which reads as "the update renamed this"
+    /// and deletes the patch if accepted. See [applyBaseThenPatch], which puts
+    /// those files back on top once the base has landed.
+    Iterable<String> excluding = const <String>[],
   }) async {
     final byName = {
       for (final folder in incomingFolders) path.basename(folder): folder,
@@ -99,7 +109,7 @@ class UpdateApplier {
       incoming = incoming.merge(contents.underPrefix(mapping.targetSubPath));
     }
 
-    final existing = await readFolderContents(modFolder);
+    final existing = (await readFolderContents(modFolder)).without(excluding);
 
     return UpdatePreview(
       layout: layout,
@@ -138,12 +148,83 @@ class UpdateApplier {
     required bool deleteStaleInis,
     String? previousVersion,
     String? previousVersionLabel,
+  }) =>
+      _write(
+        modName: modName,
+        modFolder: modFolder,
+        preview: preview,
+        deleteStaleInis: deleteStaleInis,
+        previousVersion: previousVersion,
+        previousVersionLabel: previousVersionLabel,
+        patchFiles: const <String>[],
+      );
+
+  /// Writes a new **base** into a folder that also holds a patch, in the order
+  /// that makes the patch survive it: **base first, then the patch back on top.**
+  ///
+  /// The same operation as [apply] — deactivate, snapshot, copy, reactivate — with
+  /// two steps around the copy, and it is the same method underneath so the two
+  /// can never come to disagree about the order.
+  ///
+  /// **Why the patch has to move rather than be left alone.** The base decides
+  /// where files live. A patch shipping `Body.dds` at its root, written into a mod
+  /// that keeps `Textures/Body.dds`, leaves both — and the `.ini` loads the
+  /// base's. Nothing is missing, nothing errors, the folder looks complete and the
+  /// patch does nothing. So the patch's files are taken out, the base is written,
+  /// and they are placed back by basename (`patch_placement.dart`).
+  ///
+  /// **The snapshot is the aside.** It is a full copy of the folder taken before
+  /// anything is written, so the patch's bytes are read back from there rather
+  /// than copied to a second temporary place that could itself be lost.
+  ///
+  /// [patchFiles] is the folder's recorded patch paths (`ingest.patch_files`), in
+  /// on-disk spelling. Empty means nothing is known to be the patch, and this
+  /// degrades to exactly [apply] — the caller is the one that has to have told the
+  /// user that.
+  Future<UpdateApplyResult> applyBaseThenPatch({
+    required String modName,
+    required Directory modFolder,
+    required UpdatePreview preview,
+    required bool deleteStaleInis,
+    required Iterable<String> patchFiles,
+    String? previousVersion,
+    String? previousVersionLabel,
+  }) =>
+      _write(
+        modName: modName,
+        modFolder: modFolder,
+        preview: preview,
+        deleteStaleInis: deleteStaleInis,
+        previousVersion: previousVersion,
+        previousVersionLabel: previousVersionLabel,
+        patchFiles: patchFiles,
+      );
+
+  Future<UpdateApplyResult> _write({
+    required String modName,
+    required Directory modFolder,
+    required UpdatePreview preview,
+    required bool deleteStaleInis,
+    required Iterable<String> patchFiles,
+    String? previousVersion,
+    String? previousVersionLabel,
   }) async {
     if (!preview.layout.canProceed) {
       return UpdateApplyResult.failed(UpdateApplyFailure.layout);
     }
     if (!await modFolder.exists()) {
       return UpdateApplyResult.failed(UpdateApplyFailure.modMissing);
+    }
+
+    // **Resolved before the folder is touched at all**, because a placement that
+    // cannot be settled has to stop this *now*: past the deletion below there is
+    // a folder with the patch taken out and nowhere to put it back.
+    final recorded = patchFiles.toList();
+    final placement = recorded.isEmpty
+        ? PatchPlacement.nothing
+        : _placementFor(preview: preview, patchFiles: recorded);
+    if (placement.needsChoice) {
+      return UpdateApplyResult.failed(UpdateApplyFailure.layout);
     }
 
     final wasActive = await activation.isActive(modName);
@@ -173,6 +254,11 @@ class UpdateApplier {
       modName,
     );
 
+    // Taken out before the base is written, which is what makes that write an
+    // ordinary update: the folder then holds only the old base, and every rule
+    // downstream compares like with like. The bytes are in the snapshot.
+    final aside = await _takePatchAside(modFolder, recorded);
+
     var written = 0;
     try {
       for (final mapping in preview.layout.mappings) {
@@ -196,6 +282,11 @@ class UpdateApplier {
       );
     }
 
+    // **Before the patch goes back**, deliberately. The stale list names `.ini`
+    // files the *base* renamed, and the patch's own `.ini` was taken out above —
+    // so nothing here can reach it. Run the other way round, a patch that had
+    // replaced the base's `.ini` would be placed back and then deleted as the
+    // predecessor of the file that replaced it.
     final deleted = await _removeStale(
       enabled: deleteStaleInis,
       modFolder: modFolder,
@@ -203,12 +294,22 @@ class UpdateApplier {
       spelling: preview.existing,
     );
 
+    final placed = await _putPatchBack(
+      modFolder: modFolder,
+      snapshot: snapshot,
+      aside: aside,
+      placement: placement,
+    );
+    written += placed.length;
+
     if (wasActive) await activation.activate(modName);
 
     return UpdateApplyResult(
       snapshot: snapshot,
       filesWritten: written,
       removedInis: deleted,
+      patchFiles: placed,
+      missingPatchFiles: aside.missing,
       // A **diff**, computed after the copy. Reporting every keybind the mod
       // used to have is unreadable and appears whether anything moved or not;
       // reporting only what differs makes the section self-explanatory, and
@@ -219,6 +320,95 @@ class UpdateApplier {
       ),
       reactivated: wasActive,
     );
+  }
+
+  /// Where the recorded patch files will land **once the base has been written**.
+  ///
+  /// Computed against the folder the copy is about to produce — what is there now
+  /// minus the patch, plus what the base lays down — rather than against the
+  /// folder as it stands. That is what lets an unsettleable placement stop the
+  /// operation before anything is deleted.
+  PatchPlacement _placementFor({
+    required UpdatePreview preview,
+    required List<String> patchFiles,
+  }) {
+    final patch = {for (final file in patchFiles) normalizeIniPath(file)};
+    return resolvePatchPlacement(
+      incoming: patch,
+      target: {
+        for (final file in preview.existing.files)
+          if (!patch.contains(file)) file,
+        ...preview.incoming.files,
+      },
+    );
+  }
+
+  /// Removes the recorded patch files from the folder, reporting what was there.
+  ///
+  /// Safe because the snapshot above is a full copy: these bytes are read back
+  /// from it. A recorded file that is no longer there is **named, not restored** —
+  /// the record says what the app wrote, and the user having deleted one since is
+  /// an edit rather than damage.
+  Future<_PatchAside> _takePatchAside(
+    Directory modFolder,
+    List<String> patchFiles,
+  ) async {
+    if (patchFiles.isEmpty) return const _PatchAside();
+
+    final before = await readFolderContents(modFolder);
+    final taken = <String, String>{};
+    final missing = <String>[];
+    for (final recorded in patchFiles) {
+      final key = normalizeIniPath(recorded);
+      if (!before.files.contains(key)) {
+        missing.add(recorded);
+        continue;
+      }
+      // The spelling on disk, not the spelling in the record — they agree today
+      // and a mismatch would silently delete nothing and leave a second copy.
+      final onDisk = before.onDisk(key);
+      taken[key] = onDisk;
+      try {
+        await File(path.join(modFolder.path, onDisk)).delete();
+      } catch (e) {
+        print('UpdateApplier: could not set aside $onDisk: $e');
+      }
+    }
+    return _PatchAside(taken: taken, missing: missing);
+  }
+
+  /// Copies the patch back out of the snapshot, onto the base's layout.
+  ///
+  /// Returns where each file now is, in on-disk spelling, for the caller to
+  /// record — the paths are frequently not the ones it started from.
+  Future<List<String>> _putPatchBack({
+    required Directory modFolder,
+    required ModSnapshot snapshot,
+    required _PatchAside aside,
+    required PatchPlacement placement,
+  }) async {
+    if (aside.taken.isEmpty) return const <String>[];
+
+    final source = Directory(path.join(snapshot.directory.path, 'files'));
+    final after = await readFolderContents(modFolder);
+    final placed = <String>[];
+    for (final entry in aside.taken.entries) {
+      final target = placement.mapping[entry.key] ?? entry.key;
+      // A file the base does not have keeps its own path, and keeps the spelling
+      // it arrived with — `onDisk` would answer the lower-cased comparison key
+      // for a path the walk has never seen.
+      final onDisk =
+          target == entry.key ? entry.value : after.onDisk(target);
+      try {
+        final destination = File(path.join(modFolder.path, onDisk));
+        await destination.parent.create(recursive: true);
+        await File(path.join(source.path, entry.value)).copy(destination.path);
+        placed.add(onDisk);
+      } catch (e) {
+        print('UpdateApplier: could not place $onDisk: $e');
+      }
+    }
+    return placed;
   }
 
   /// Writes a **patch** into a mod folder that already works.
@@ -274,6 +464,7 @@ class UpdateApplier {
     );
 
     var written = 0;
+    final placed = <String>[];
     try {
       for (final entry in placement.mapping.entries) {
         // Real on-disk spelling on both sides. The placement is computed over
@@ -287,6 +478,7 @@ class UpdateApplier {
         await target.parent.create(recursive: true);
         await File(path.join(source.path, from)).copy(target.path);
         written++;
+        placed.add(to);
       }
     } catch (e) {
       print('UpdateApplier: patch copy failed for $modName: $e');
@@ -303,6 +495,9 @@ class UpdateApplier {
     return UpdateApplyResult(
       snapshot: snapshot,
       filesWritten: written,
+      // Where the patch now is, for the caller to record — the paths are the
+      // *target's*, not the ones the archive shipped, and that is the point.
+      patchFiles: placed,
       // Nothing is removed on this path. The stale-`.ini` rule looks for an
       // `.ini` whose every resource the incoming download also carries — the
       // renamed predecessor of an update — and a patch by definition carries
@@ -499,6 +694,21 @@ enum UpdateApplyFailure {
   copy,
 }
 
+/// The patch's files, out of the folder and safe in the snapshot.
+///
+/// [taken] maps the comparison key to the spelling it had on disk, which is both
+/// where to read it back from inside the snapshot and what to call it if the base
+/// turns out not to have that file at all.
+class _PatchAside {
+  const _PatchAside({
+    this.taken = const <String, String>{},
+    this.missing = const <String>[],
+  });
+
+  final Map<String, String> taken;
+  final List<String> missing;
+}
+
 class UpdateApplyResult {
   const UpdateApplyResult({
     required this.snapshot,
@@ -508,6 +718,8 @@ class UpdateApplyResult {
     required this.reactivated,
     this.failure,
     this.error,
+    this.patchFiles = const <String>[],
+    this.missingPatchFiles = const <String>[],
   });
 
   factory UpdateApplyResult.failed(
@@ -544,6 +756,22 @@ class UpdateApplyResult {
   final bool reactivated;
   final UpdateApplyFailure? failure;
   final String? error;
+
+  /// Where the patch's files ended up, after [UpdateApplier.applyBaseThenPatch]
+  /// placed them onto the new base's layout.
+  ///
+  /// **The caller records this**, because the paths are frequently not the ones
+  /// it passed in — that relocation is the whole point of the operation — and a
+  /// record still naming the old ones sends the next rebuild looking in the
+  /// wrong place. On-disk spelling, which is what opens a file.
+  final List<String> patchFiles;
+
+  /// Recorded patch files that were not in the folder any more.
+  ///
+  /// Skipped rather than restored from the snapshot: the record says what the app
+  /// wrote, and the user deleting one of those files afterwards is an edit, not
+  /// corruption. Named so the caller can say what it could not put back.
+  final List<String> missingPatchFiles;
 
   bool get success => failure == null;
 }

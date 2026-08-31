@@ -22,11 +22,13 @@ library;
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
 
 import '../../l10n/app_localizations.dart';
 import '../../models/app_notification.dart';
 import '../../models/character_info.dart';
+import '../../models/gamebanana/gamebanana.dart';
 import '../../models/mod_companion.dart';
 import '../../models/origin_enums.dart';
 import '../../services/folder_contents.dart';
@@ -34,6 +36,8 @@ import '../../services/patch_placement.dart';
 import '../../services/patch_record.dart';
 import '../../services/patch_scan.dart';
 import '../../services/update_apply/update_applier.dart';
+import '../../utils/zzz_characters.dart';
+import 'apply_update_flow.dart';
 import 'import_selection_dialog.dart';
 import 'patch_install_prompt.dart';
 
@@ -163,6 +167,19 @@ class PatchInstallDecision {
             entry.key: base,
       };
 }
+
+/// Fetches the mod a patch applies to and writes it into that patch's folder,
+/// **base first, then the patch back on top**. True when the folder now holds
+/// both.
+///
+/// A seam because the download needs a context and a progress dialog, and this
+/// file's job is to decide *what* happens rather than to run it. Absent means
+/// naming the base only records it — the behaviour before an install existed.
+typedef BaseInstaller = Future<bool> Function(
+  String modName,
+  ModCompanion base,
+  GbFile file,
+);
 
 /// Raises the destination prompt. A seam so the phases can be tested without
 /// driving a modal.
@@ -330,6 +347,7 @@ Future<List<NotificationLines>> applyPatchInstall(
   required UpdateApplier applier,
   required OriginAmender amend,
   PatchIdentity? patch,
+  BaseInstaller? installBase,
 }) async {
   final patchedInto = <String, InstallIntoMod>{};
   final writeFailures = <String>[];
@@ -376,12 +394,28 @@ Future<List<NotificationLines>> applyPatchInstall(
     );
   }
 
+  // **Recorded first, then fetched.** The companion is written at `user` before
+  // the download starts, so a cancelled or failed install leaves the answer the
+  // user gave rather than nothing; a successful one upgrades that entry to
+  // `exact` on its way past.
+  final completed = <String>{};
+  if (installBase != null) {
+    for (final entry in decision.destinations.entries) {
+      if (!imported.contains(entry.key)) continue;
+      if (entry.value
+          case InstallAsNewMod(base: final base?, baseFile: final file?)) {
+        if (await installBase(entry.key, base, file)) completed.add(entry.key);
+      }
+    }
+  }
+
   return patchInstallLines(
     loc,
     decision: decision,
     importedMods: importedMods,
     patchedInto: patchedInto,
     writeFailures: writeFailures,
+    completed: completed,
   );
 }
 
@@ -409,6 +443,55 @@ List<String> patchRefusalHeadlines(
         }),
     ];
 
+/// The [BaseInstaller] both import paths use: fetch the mod a patch applies to
+/// and write it into that patch's folder, then place the patch back on top.
+///
+/// **The patch is everything in the folder**, because the import has just created
+/// it and put nothing else there. That is what lets this reuse the ordinary
+/// update flow — the folder is set aside, the base is written as any download is,
+/// and the patch goes back onto its layout.
+///
+/// No confirmation: the user answered this in the prompt a moment ago, and asking
+/// again is asking twice. A cancelled download is not a failure of anything — the
+/// patch stays installed and the base stays recorded, exactly as before this
+/// existed.
+Future<bool> installNamedBase(
+  BuildContext context,
+  WidgetRef ref, {
+  required String modName,
+  required String modsPath,
+  required ModCompanion base,
+  required GbFile file,
+  String? characterId,
+}) async {
+  final folder = Directory(path.join(modsPath, modName));
+  final contents = await readFolderContents(folder);
+  if (contents.files.isEmpty) return false;
+  // The download needs a progress dialog and this context is gone. Reporting
+  // "not installed" is honest — nothing was — and leaves the warning standing.
+  if (!context.mounted) return false;
+
+  return applyUpdateFlow(
+    context,
+    ref,
+    // The folder exists and its sidecar is written, but nothing has rescanned
+    // yet — so this is assembled from what the install already knows rather than
+    // read back. Only the id, the name and the portrait are used.
+    mod: ModInfo(
+      id: modName,
+      name: modName,
+      characterId: characterId ?? unknownCharacterId,
+      isActive: false,
+    ),
+    remoteModId: base.modId,
+    file: file,
+    // On-disk spelling: these paths open files.
+    patchFiles: contents.actualPaths.values.toList(),
+    asCompanion: true,
+    confirm: false,
+  );
+}
+
 /// What an install says about the patches it found, in the order it says it.
 ///
 /// **Only what the user has to act on**, and each as its own card rather than
@@ -420,13 +503,21 @@ List<NotificationLines> patchInstallLines(
   required Iterable<String> importedMods,
   required Map<String, InstallIntoMod> patchedInto,
   required List<String> writeFailures,
+
+  /// Mods whose base was actually fetched and written in, so the folder works
+  /// and there is nothing left to warn about.
+  Set<String> completed = const <String>{},
 }) {
   final imported = importedMods.toSet();
-  final namedBases = decision.namedBases;
   final scan = decision.scan;
+  // **Silenced by a folder that works, never by an answer about it.** Naming the
+  // base suppressed this warning on its own, and the folder still did nothing in
+  // the game — with the one sentence that would have said so now gone. Named but
+  // not installed (no file they could pick, or a download they cancelled) leaves
+  // exactly as much for the user to do as saying nothing did.
   final iniPatches = [
     for (final name in scan.iniPatches)
-      if (imported.contains(name) && !namedBases.containsKey(name)) name,
+      if (imported.contains(name) && !completed.contains(name)) name,
   ];
 
   return <NotificationLines>[
@@ -496,7 +587,7 @@ List<NotificationLines> patchInstallLines(
     // this download brought content nothing can load, rather than asking for
     // content it did not bring.
     for (final name in scan.assetPatches.keys)
-      if (imported.contains(name) && !namedBases.containsKey(name))
+      if (imported.contains(name) && !completed.contains(name))
         NotificationLines(
           loc.t('mods.snackbar.import_asset_patch_title'),
           loc.t('mods.snackbar.import_asset_patch_body',

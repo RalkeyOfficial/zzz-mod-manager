@@ -529,6 +529,7 @@
       "overwrite_note": "The new files are copied over this mod folder. Files it doesn't replace are left where they are, so anything you added yourself stays.",
       "snapshot_note": "A copy of this mod as it is now is saved first. You can put it back from the mod's right-click menu.",
       "keybind_note": "If you rebound any keys inside this mod's .ini, the new version's own file replaces them. The saved copy still has them.",
+      "patch_unrecorded_note": "This folder holds a patch as well, and nothing records which files came from it — so anything the new version ships under the same name replaces it. The saved copy still has it.",
       "patch_warning": "This download is a patch: it contains .ini files and none of the {count} file(s) they need, so it expects the mod it patches to already be in this folder. Only its .ini files are being replaced — everything else here is left as it is.",
       "unused_folders": "The archive also contains {folders}, which isn't part of this mod and won't be installed.",
       "remove_stale_single": "Remove the leftover {files}",

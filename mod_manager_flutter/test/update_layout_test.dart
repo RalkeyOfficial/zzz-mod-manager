@@ -114,4 +114,69 @@ void main() {
     );
     expect(layout.problem, UpdateLayoutProblem.layoutChanged);
   });
+
+  /// What gets written back after an update, which is where the *next* one reads
+  /// its answer from.
+  group('the record an update leaves behind', () {
+    UpdateLayout layoutFor(String folder) => planUpdateLayout(
+          ingest: ModIngest(folders: [folder]),
+          incomingFolders: [folder],
+        );
+
+    test('it adopts the folder the update actually used', () {
+      final ingest = ingestAfterUpdate(
+        layoutFor('Ellen v2'),
+        const ModIngest(folders: ['Ellen v1']),
+      )!;
+      expect(ingest.folders, ['Ellen v2']);
+    });
+
+    test('it does not forget that the folder holds a patch', () {
+      // **Knowable only at install.** Rebuilt from scratch here, an ordinary
+      // update turns a folder the app knows is two downloads into one it thinks
+      // is one — and no later scan can recover that.
+      final ingest = ingestAfterUpdate(
+        layoutFor('Ellen'),
+        const ModIngest(
+          folders: ['Ellen'],
+          patchShaped: true,
+          patchFiles: ['Textures/Body.dds'],
+          siblingGroup: 'group-7',
+        ),
+      )!;
+
+      expect(ingest.patchShaped, isTrue);
+      expect(ingest.patchFiles, ['Textures/Body.dds']);
+      expect(ingest.siblingGroup, 'group-7');
+    });
+
+    test('a combined record is kept verbatim, patch record and all', () {
+      const current = ModIngest(
+        mode: IngestMode.combined,
+        folders: ['Body', 'Wings'],
+        patchFiles: ['Body/Skin.dds'],
+      );
+      expect(ingestAfterUpdate(layoutFor('Body'), current), current);
+    });
+
+    test('the moved patch replaces the recorded paths', () {
+      // The base's layout decides where the patch lives, so an update that
+      // rewrote the base moved it — and a record still naming the old paths
+      // sends the next rebuild looking in the wrong place.
+      final ingest = ingestAfterUpdate(
+        layoutFor('Ellen'),
+        const ModIngest(folders: ['Ellen'], patchFiles: ['Body.dds']),
+        patchFiles: ['Textures/Body.dds'],
+      )!;
+      expect(ingest.patchFiles, ['Textures/Body.dds']);
+    });
+
+    test('a folder that never had a record can gain one', () {
+      // The real gain for the pre-`ingest` library: a mod with no layout on
+      // record now has one, so its next update replays instead of asking.
+      final ingest = ingestAfterUpdate(layoutFor('Ellen'), null)!;
+      expect(ingest.folders, ['Ellen']);
+      expect(ingest.patchShaped, isFalse);
+    });
+  });
 }

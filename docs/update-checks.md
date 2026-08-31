@@ -121,22 +121,24 @@ Three rules follow, none of them obvious:
 `tracksPatchOnly` is therefore produced only while `ingest.patch_shaped` is set *and*
 no `base` companion is named. Naming one retires it, per folder.
 
-**A companion's finding is reported but never applied**, and this is a rule rather
-than an unfinished edge. The apply path writes the named file over *this* folder and
-records it against `origin.mod_id`
-([`applying-updates.md` §4](applying-updates.md#after-a-successful-update)), so
-handing it a companion's file overwrites one mod's folder with another mod's archive
-and then stamps a foreign file id onto the block at `exact` — after which every later
-check asks the wrong page for a file it has never published. Two guards enforce it:
-the Update button is not offered when `subjectModId` is set, and the apply call
-refuses the same condition, because the first is a widget condition a later edit
-could stop satisfying and the second is the call that touches a live folder.
+**A companion's finding can be applied, and which write does it is decided by
+`role`.** A companion says the other download is *in this folder*, so a newer file
+of it lands in this folder — and the folder is written base-first-then-patch
+whichever half changed
+([`applying-updates.md` §6](applying-updates.md#base-first-then-patch--for-both-halves-of-a-mixed-folder)).
+`update_write_route.dart` is that decision on its own, so it can be read without a
+download or a dialog.
 
-There is no destination this could work out on its own. A companion says the other
-download is *in this folder*; whether a new archive of it should land here, beside
-it, or not at all is the question an explicit "apply as a patch to…" install exists
-to ask, and until that exists the dialog states the finding and offers the mod page —
-the same answer it already gives when it can name no successor.
+What is refused is narrower and it is still a rule: **a verdict about a mod this
+folder does not claim to hold is never written.** Nothing could apply it — it would
+overwrite one mod's folder with another mod's archive and stamp a file id onto a
+block that never published it, after which every later check asks the wrong page.
+Two guards enforce that, because the first is a widget condition a later edit could
+stop satisfying and the second is the call that touches a live folder.
+
+The file is recorded **against the identity that was written**, never against the
+primary by default: `withCompanionUpdatedTo` amends the companion, and reaches
+`exact` on the same grounds the primary does — we fetched those bytes off that page.
 
 **Every caller must supply the companion records**, or a mixed folder reads
 `indeterminate`: the bulk pass batches both ids ([§5](#5-checking-the-whole-library))

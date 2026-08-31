@@ -1002,20 +1002,25 @@ becomes a field addition.
                                                           ordinary combined
                                                           mods read as patches
   ✓7  the prompt + branch A                               item 2, cheap half
-   8  branch B, on update_applier: the second radio,      item 2, expensive
+  ✓8  branch B, on update_applier: the second radio,      item 2, expensive
       role:patch at exact on the TARGET, the wrapper       half. answers Q8b
       rule, and the placement resolver                     with it
+  ✓9  the ordering, both ways: base written by layout     what step 8 turned
+      and patch placed over it, whichever half is the      out to be half of
+      folder's own identity — plus ingest.patch_files,
+      which is what makes a rebuild possible at all
 ```
 
-Steps 1–7 have shipped and each was shippable on its own. **Step 8 was written as
-the one that can be dropped, and that is no longer true.** Without it a patch lands
-in its own folder and the companion gets named — but the folder does not work until
-the base mod's files are in it, and there is no operation that puts them there. So
-the `base` companion recorded by branch A is a statement about a folder's *intended*
-contents, waiting on step 8 to become a statement about its actual ones.
+All of it has shipped. **Step 8 was written as the one that can be dropped, and
+that turned out to be the opposite of true**: without step 9 with it, a patch
+landed in its own folder and the companion got named, and the folder still did not
+work — the `base` companion was a statement about a folder's *intended* contents
+rather than its actual ones. Naming what a patch patches now fetches that mod and
+writes it in, base first.
 
-Step 8 is also the only route by which a companion ever reaches `exact`, and the
-only answer to Q8b. It is the remaining work.
+Both routes to `exact` on a companion are here: a patch installed into a mod, and a
+base fetched into a patch's folder. Q8b is answered by the same operation running in
+the other direction.
 
 ---
 
@@ -1108,50 +1113,43 @@ folder is additive, while this replaces a download already in it, so the
 orphaned-`.ini` rule then applies to whichever `.ini` the *other* download left
 behind.
 
-**Q9 — one destination per run, or several? — ANSWERED: one, and keep the archive**
+**Q9 — one destination per run, or several? — ANSWERED: one**
 A patch can genuinely apply to both `Ellen v1` and `Ellen v2`. Each is a live folder
 needing its own snapshot, so "several" is N sequential update-shaped writes rather
 than one — and each needs its own placement resolution, which may ask. **Single
-select**, and the archive is **kept** on this path rather than deleted
-(`_safeDeleteArchive`), so applying it to a second folder is a second run and not a
-second download. Retention matters more than it first looked: "base first, then
-patch" makes a folder rebuildable, and a rebuild it cannot fetch from is a rebuild
-in name only.
+select**, so applying it to a second folder is a second run.
 
-**Q10 — should extraction report that it wrapped a rootless archive?**
-`_prepareDirectoriesForImport` invents a folder for a loose pile of files and
-returns it indistinguishably from a folder the archive really had. Branch B needs
-to know the difference ([§4](#branch-b-the-two-shapes-rarely-line-up)), and
-nothing downstream can currently tell. One added field on
-`ArchiveExtractionResult` — the alternative, re-deriving it by comparing the
-folder name to the archive basename, is a guess that breaks the moment an author
-names the folder after the archive.
+The other half of this answer — keep the archive, because "base first, then patch"
+makes a folder rebuildable and a rebuild it cannot fetch from is a rebuild in name
+only — is **superseded and was never built.** `ingest.patch_files` records which
+files in the folder are the patch's, which makes the rebuild read from the folder
+itself: offline, free, and immune to the patch's mod page being taken down. Keeping
+the archive would have needed a retention rule in a shared, pruned `downloads/` and
+still failed the case where the user cleared it.
+
+**Q10 — should extraction report that it wrapped a rootless archive? — ANSWERED:
+it does not need to.** The question was posed because branch B was expected to need
+the difference. It does not: what gets copied is the *contents* of the source
+folder, never the folder, so an invented wrapper cannot nest inside the target and
+is indistinguishable from a real folder because it makes no difference. The
+alternative it was weighed against — re-deriving it by comparing the folder name to
+the archive basename — remains a guess that breaks the moment an author names the
+folder after the archive, so nothing is lost by not having it.
 
 ---
 
-## 8. A gap in what already shipped
+## 8. A gap in what already shipped — CLOSED
 
-Found while reading for this plan; **not part of it**, filed here so it is not
-lost.
+Found while reading for this plan and filed here rather than lost: the pinned
+warning and the refusal to claim "up to date" covered the **marketplace path
+only**, so a patch dragged in by hand warned for eight seconds and recorded
+nothing.
 
-```
-  installArchiveFlow (marketplace)          mods_screen (drag/drop + button)
-  ────────────────────────────────          ────────────────────────────────
-  patch scan                    ✓           patch scan                    ✓
-  warning                       ✓           warning                       ✓
-  warning is PINNED             ✓           warning is pinned             ✗
-  writes ingest.patch_shaped    ✓           writes patch_shaped           ✗
-                                                 mods_screen.dart:1652-1664
-```
-
-So the shipped half of this work — the pinned warning and the refusal to claim
-"up to date" — covers the **marketplace path only**. The path where a user drags
-a patch in by hand still warns for eight seconds and records nothing.
-
-Half of the fix is a one-line `pinned: true`. The other half runs straight into
-[Q5](#7-open-questions): on that path there is frequently no origin block to
-amend. Both belong in `BUGS & TODO.md` as their own item rather than inside
-either of the two this plan covers.
+Both paths now go through one decision before their copy and one set of writes
+after it (`patch_install_flow.dart`), so there is no second implementation to
+drift. [Q5](#7-open-questions)'s premise was wrong on the way: the drag path seeds
+an origin block for every folder it creates, so there was always something to
+amend and the write was simply absent.
 
 ---
 

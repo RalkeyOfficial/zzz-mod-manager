@@ -57,6 +57,57 @@ ModOrigin? withPatchShape(ModOrigin? current, {ModCompanion? base}) {
   );
 }
 
+/// [current] with the companion naming [modId] recorded as the file the app has
+/// just downloaded and written into the folder.
+///
+/// The mirror of [ModOrigin.updatedTo] for the **other** download, and a separate
+/// write for one reason: the folder's own identity did not change. Stamping this
+/// file id onto the primary would claim the folder is that other mod.
+///
+/// It clears the same three things, on the same grounds:
+///
+/// - **`baselineRemoteDate`** — "I don't know which file, I got it around then"
+///   is a weaker answer, and left beside a known file it is a second comparison
+///   that can only disagree.
+/// - **`updatesDismissedUntil`** — they waved an update away and have now taken
+///   it. Stored as a date at or after this file's, so keeping it silences the
+///   *next* release too.
+/// - **`remoteMissing`** — we just fetched the page and a file off it.
+///
+/// **Reaches `exact`**, which is otherwise closed to a companion: every other
+/// route is the user telling us about bytes they moved in themselves, and these
+/// are bytes we fetched. `role` survives — which half of the folder this is has
+/// not changed.
+///
+/// A folder with no such companion is returned unchanged: this amends, and
+/// inventing the entry would record a second identity nobody named.
+ModOrigin? withCompanionUpdatedTo(
+  ModOrigin? current, {
+  required int modId,
+  required int fileId,
+  String? version,
+  String? versionLabel,
+  String? archiveMd5,
+}) {
+  if (current == null) return null;
+  return current.copyWith(companions: [
+    for (final companion in current.companions)
+      if (companion.modId != modId)
+        companion
+      else
+        ModCompanion(
+          role: companion.role,
+          modId: modId,
+          modIdConfidence: OriginConfidence.exact,
+          fileId: fileId,
+          version: version,
+          versionLabel: versionLabel,
+          versionConfidence: OriginConfidence.exact,
+          archiveMd5: archiveMd5,
+        ),
+  ]);
+}
+
 /// [current] recorded as **also holding a patch** that was written into it.
 ///
 /// The reverse ordering from [withPatchShape]: here the folder's primary is the

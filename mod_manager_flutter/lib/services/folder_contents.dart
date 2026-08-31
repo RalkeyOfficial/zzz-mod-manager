@@ -94,6 +94,35 @@ class FolderContents {
     );
   }
 
+  /// This walk **with [paths] discounted**, as though those files were not in
+  /// the folder.
+  ///
+  /// For judging one download in a folder that holds two: the patch's files
+  /// belong to neither side of an update to the base — they are going back on
+  /// top afterwards — and left in, they make the base's update look like it is
+  /// leaving `.ini` files behind that are not its own.
+  ///
+  /// Takes either spelling. A caller holds the on-disk one, because that is what
+  /// a record stores and what opens a file.
+  FolderContents without(Iterable<String> paths) {
+    if (paths.isEmpty) return this;
+    final drop = {for (final path in paths) normalizeIniPath(path)};
+    bool keep(String key) => !drop.contains(key);
+    return FolderContents(
+      files: {for (final file in files) if (keep(file)) file},
+      directories: directories,
+      iniPaths: {for (final ini in iniPaths) if (keep(ini)) ini},
+      iniContents: {
+        for (final entry in iniContents.entries)
+          if (keep(entry.key)) entry.key: entry.value,
+      },
+      actualPaths: {
+        for (final entry in actualPaths.entries)
+          if (keep(entry.key)) entry.key: entry.value,
+      },
+    );
+  }
+
   /// Merges two walks — the several folders one combined install laid down.
   FolderContents merge(FolderContents other) => FolderContents(
         files: {...files, ...other.files},

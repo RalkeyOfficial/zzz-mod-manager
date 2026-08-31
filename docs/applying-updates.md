@@ -449,11 +449,16 @@ update replays instead of stopping to ask.
 ### Every apply snapshots, unconditionally
 
 The update path deliberately accepts losses it cannot distinguish from intended
-changes: a rebound keybind reverted by a shipped `.ini`, a patch overwritten by the
-mod it patches, any hand edit. Each of those is defensible **only** while the recourse
-exists, so the snapshot is not a setting and not an opt-in. **If it cannot be taken,
-nothing is written** — proceeding would trade a recoverable failure for an
-unrecoverable one.
+changes: a rebound keybind reverted by a shipped `.ini`, any hand edit, and — where
+nothing records which files came from a patch — that patch overwritten by the mod it
+patches. Each of those is defensible **only** while the recourse exists, so the
+snapshot is not a setting and not an opt-in. **If it cannot be taken, nothing is
+written** — proceeding would trade a recoverable failure for an unrecoverable one.
+
+The patch case is now the exception rather than the rule: with
+`ingest.patch_files` on record the patch is set aside and placed back over the new
+version ([§6](#base-first-then-patch--for-both-halves-of-a-mixed-folder)), and the
+snapshot is what that read-back comes *from* rather than what pays for a loss.
 
 It is also the only recovery from a copy that fails part-way. Overwrite has no
 aside-folder to fall back on the way a swap would, and a partly-copied folder holds
@@ -639,6 +644,84 @@ Three consequences of the file-by-file copy:
 Where the placement cannot be settled without a guess, the install falls back to an
 ordinary new mod and says why — see
 [`origin-tracking.md` §10](origin-tracking.md#installing-a-patch-into-a-mod-that-already-works).
+
+### Base first, then patch — for both halves of a mixed folder
+
+**Layout belongs to the base.** It decides where files live, and the patch is
+placed onto it. That one sentence decides every write into a folder that holds two
+downloads, and it does not care which of them is the folder's own recorded
+identity:
+
+```
+   the BASE  updated → written by §4's layout, then the patch back on top
+   the PATCH updated → placed over the base, by basename
+```
+
+`update_write_route.dart` is that decision, alone and pure, because it is read
+from `role` rather than from which record the verdict came out of — a patch
+installed as its own mod has the patch as its **primary** and the base as a
+companion, and a patch installed *into* a mod is the reverse.
+
+**Skipping the re-placement fails silently, which is why it is not optional:**
+
+```
+  folder holds the patch:  Body.dds                  (patch author's layout)
+  base archive ships:      ellen.ini, Textures/Body.dds
+
+  base written, patch left where it was:
+      Body.dds           ← the patch, referenced by nothing
+      Textures/Body.dds  ← the base, and this is what ellen.ini loads
+```
+
+Nothing is missing, nothing errors, the folder looks complete, and the patch does
+nothing. The same shape is why an update to the *patch* half must not replay the
+folder's layout: the archive's root-level file would land at the root, beside the
+one it should have replaced.
+
+**The snapshot is the aside.** `applyBaseThenPatch` takes the patch's files out of
+the folder, writes the base as any download is written, and copies them back from
+the snapshot onto the new layout. Nothing is copied to a second temporary place,
+because the snapshot §5 takes unconditionally is already a full copy — and with the
+patch out of the way, the base's write is an ordinary update: `preview`'s
+stale-`.ini` rule sees only the base's own `.ini` files and cannot offer the
+patch's.
+
+Order inside it is load-bearing twice over. The placement is resolved **before
+anything is deleted** — against the folder the copy is about to produce — so a
+target that cannot be settled stops the operation while the patch is still in
+place. And the stale-`.ini` removal runs **before the patch goes back**, or a patch
+that had replaced the base's `.ini` would be put back and then deleted as the
+predecessor of the file that replaced it.
+
+### Which files are the patch's
+
+`ingest.patch_files` ([`metadata-schema.md`](metadata-schema.md)) is the record all
+of that depends on, and it is written by every path that puts a patch into a folder.
+
+- **It cannot be derived later.** A mixed folder is byte-for-byte
+  indistinguishable from an ordinary one — the same reason `patch_shaped` has to be
+  captured at install.
+- **Recorded rather than re-downloaded**, because a patch's mod page can be
+  private, trashed or withheld by the time the base updates, and a rebuild that
+  needs a page which no longer exists is a rebuild in name only. It also makes the
+  rebuild offline and free. This supersedes keeping the patch's archive on disk,
+  which would need a retention rule in a shared, pruned `downloads/`.
+- **On-disk spelling.** These paths open files, and a lower-cased one deletes
+  nothing on Linux and leaves a second copy behind.
+- **It records what the app wrote**, so a path that is gone is reported and
+  skipped, never restored: the user deleting one of those files is an edit rather
+  than damage.
+- **It is re-written after every write that moves the patch**, which
+  `applyBaseThenPatch` does by design. `ingestAfterUpdate` carries it — and
+  `patch_shaped` — across an ordinary update for the same reason: rebuilt from
+  scratch there, an update would quietly turn a folder the app knows is two
+  downloads into one it thinks is one.
+
+A folder with **no** record — merged by hand, or installed before the record
+existed — still gets its base update, with the confirmation saying plainly that the
+patch cannot be put back. Offered rather than refused because the update is what
+the user wants and the snapshot makes it reversible; said rather than silent
+because the loss is invisible otherwise.
 
 ---
 

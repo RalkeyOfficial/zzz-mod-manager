@@ -1687,6 +1687,16 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
             activation: ModManagerActivationPort(modManagerService),
           ),
           amend: modManagerService.updateModOrigin,
+          // Naming what a patch patches installs that mod into the folder, the
+          // same as it does for a download from the Marketplace.
+          installBase: (modName, base, baseFile) => installNamedBase(
+            context,
+            ref,
+            modName: modName,
+            modsPath: modsPath,
+            base: base,
+            file: baseFile,
+          ),
         );
         if (mounted) showNotificationLines(context, lines);
       }

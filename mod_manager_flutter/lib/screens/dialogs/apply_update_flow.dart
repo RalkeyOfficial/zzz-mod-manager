@@ -12,6 +12,9 @@ import '../../models/mod_origin.dart';
 import '../../models/origin_enums.dart';
 import '../../services/api_service.dart';
 import '../../services/archive_service.dart';
+import '../../services/folder_contents.dart';
+import '../../services/patch_placement.dart';
+import '../../services/patch_record.dart';
 import '../../services/update_apply/mod_activation_port.dart';
 import '../../services/update_apply/update_applier.dart';
 import '../../services/update_apply/update_layout.dart';
@@ -47,6 +50,14 @@ import 'update_result_dialog.dart';
 ///    shipped `.ini`, and the snapshot is the way back.
 /// 5. **Apply**, then record what the folder now is.
 ///
+/// **It writes one of the folder's two halves.** A mixed folder holds a base mod
+/// and a patch over it, and the rule is the same whichever of them is the
+/// folder's own recorded identity: *base first, then patch*. So a write that
+/// replaces the **base** takes the patch out, writes the base, and places the
+/// patch back on top ([patchFiles]); a write that replaces the **patch** is a
+/// placement onto the base's layout and goes through
+/// `UpdateApplier.applyPatchInto` instead of this.
+///
 /// Returns true when the mod folder changed, so the caller rescans.
 Future<bool> applyUpdateFlow(
   BuildContext context,
@@ -54,6 +65,32 @@ Future<bool> applyUpdateFlow(
   required ModInfo mod,
   required int remoteModId,
   required GbFile file,
+
+  /// The folder's recorded patch files (`ingest.patch_files`), when this write
+  /// replaces the **base** of a folder that also holds a patch. They are set
+  /// aside, the base is written, and they are placed back onto its layout.
+  ///
+  /// Empty means nothing is known to be the patch — either an ordinary
+  /// single-download mod, or a mixed folder from before the record existed. The
+  /// second is an ordinary overwrite of whatever is in there, and the **caller**
+  /// is the one that has to have said so.
+  Iterable<String> patchFiles = const <String>[],
+
+  /// True when [remoteModId] is a **companion** of this folder — the mod its
+  /// patch applies to — rather than the folder's own identity. Decides which
+  /// record the installed file is written against; writing a companion's file
+  /// id onto the primary would claim this folder is that other mod.
+  bool asCompanion = false,
+
+  /// Whether to ask before writing. False only where the user has just answered
+  /// the same question in a modal, which is the one case where confirming again
+  /// is asking twice rather than asking.
+  bool confirm = true,
+
+  /// This folder holds a patch that **cannot be put back**, because nothing
+  /// records which files are its. Stated on the confirmation, where it is the
+  /// one loss not already paid for by a rule.
+  bool flattensPatch = false,
 }) async {
   final loc = context.loc;
   final notify = context.notify;
@@ -131,22 +168,30 @@ Future<bool> applyUpdateFlow(
       modFolder: modFolder,
       incomingFolders: folders,
       ingest: mod.origin?.ingest,
+      // The patch belongs to neither side of the base's update: it is going back
+      // on top afterwards. Left in, its own `.ini` is assessed as a leftover the
+      // base renamed and offered for deletion, which deletes the patch.
+      excluding: patchFiles,
     );
 
     if (!context.mounted) return false;
-    final choice = await showUpdateConfirmDialog(
-      context,
-      mod: mod,
-      file: file,
-      preview: preview,
-    );
+    final choice = confirm
+        ? await showUpdateConfirmDialog(
+            context,
+            mod: mod,
+            file: file,
+            preview: preview,
+            flattensPatch: flattensPatch,
+          )
+        : const UpdateConfirmChoice(removeStaleInis: true);
     if (choice == null) return false;
 
-    final result = await applier.apply(
+    final result = await applier.applyBaseThenPatch(
       modName: mod.id,
       modFolder: modFolder,
       preview: preview,
       deleteStaleInis: choice.removeStaleInis,
+      patchFiles: patchFiles,
       previousVersion: mod.origin?.version,
       previousVersionLabel: mod.origin?.versionLabel,
     );
@@ -175,6 +220,11 @@ Future<bool> applyUpdateFlow(
       file: file,
       archiveMd5: extraction.archiveMd5 ?? download.md5,
       layout: preview.layout,
+      asCompanion: asCompanion,
+      // Where the patch is *now*. `applyBaseThenPatch` moves it onto the new
+      // base's layout by design, so recording the paths it started from would
+      // send the next rebuild looking in the wrong place.
+      patchFiles: patchFiles.isEmpty ? null : result.patchFiles,
     );
 
     // Bounded retention runs here rather than on a timer: it is the one moment
@@ -199,12 +249,170 @@ Future<bool> applyUpdateFlow(
   }
 }
 
+/// Downloading a newer file of the **patch** in a mixed folder and placing it
+/// over the base that is in there with it.
+///
+/// The other half of [applyUpdateFlow], and a separate function because the copy
+/// is a different one: **layout belongs to the base, and the patch is placed.**
+/// The two downloads are by different authors and nothing makes their layouts
+/// agree, so replaying the folder's recorded layout for a patch archive writes
+/// its files *beside* the ones they should replace — where the `.ini` still loads
+/// the base's, nothing errors, and the update appears to have done nothing.
+///
+/// Everything else is the same and shared: the cancellable download, the
+/// snapshot, and the record written against whichever identity this was.
+Future<bool> applyPatchUpdateFlow(
+  BuildContext context,
+  WidgetRef ref, {
+  required ModInfo mod,
+  required int remoteModId,
+  required GbFile file,
+  bool asCompanion = false,
+}) async {
+  final loc = context.loc;
+  final notify = context.notify;
+  void fail(String title, String body) =>
+      notify.error(title, body: body, characterId: mod.characterId);
+
+  final config = await ApiService.getConfig();
+  final modsPath = config['mods_path'] ?? '';
+  final modFolder = Directory(path.join(modsPath, mod.id));
+  if (modsPath.isEmpty || !await modFolder.exists()) {
+    fail(
+      loc.t('mods.update_apply.mod_missing_title'),
+      loc.t('mods.update_apply.mod_missing', params: {'mod': mod.name}),
+    );
+    return false;
+  }
+
+  if (!context.mounted) return false;
+  final download = await downloadFileWithProgress(
+    context,
+    ref,
+    file,
+    characterId: mod.characterId,
+    subject: mod.name,
+  );
+  if (download == null) return false;
+
+  var archiveConsumed = false;
+  Directory? extractRoot;
+  try {
+    final extraction = await ArchiveService.extractArchive(
+      archiveFile: download.file,
+      knownMd5: download.md5,
+    );
+    if (!extraction.success) {
+      final lines = extractFailureMessage(
+        loc,
+        archivePath: download.file.path,
+        reason: extraction.failure ?? ExtractFailure.other,
+      );
+      fail(lines.title, lines.body);
+      return false;
+    }
+    archiveConsumed = true;
+
+    final folders = extraction.extractedFolders ?? const <String>[];
+    if (folders.isEmpty) {
+      fail(
+        loc.t('marketplace.install_empty_title'),
+        loc.t('marketplace.install_empty_body'),
+      );
+      return false;
+    }
+    extractRoot = Directory(folders.first).parent;
+
+    // One folder's contents, never the folder itself — an extraction wrapper
+    // invented for a rootless archive must not end up nested inside the target.
+    final source = Directory(folders.first);
+    final incoming = await readFolderContents(source);
+    final existing = await readFolderContents(modFolder);
+    final placement = resolvePatchPlacement(
+      incoming: incoming.files,
+      target: existing.files,
+    );
+
+    final mods = await ApiService.getModManagerService();
+    final applier = UpdateApplier(
+      snapshots: ref.read(snapshotServiceProvider),
+      activation: ModManagerActivationPort(mods),
+    );
+    final result = await applier.applyPatchInto(
+      modName: mod.id,
+      modFolder: modFolder,
+      source: source,
+      incoming: incoming,
+      existing: existing,
+      placement: placement,
+    );
+    if (result.snapshot != null) ref.invalidate(modBackupsProvider);
+
+    if (!result.success) {
+      if (!context.mounted) return result.snapshot != null;
+      final lines = _failureMessage(loc, result, mod);
+      fail(lines.title, lines.body);
+      return result.failure == UpdateApplyFailure.copy;
+    }
+
+    await ApiService.updateModOrigin(mod.id, (current) {
+      // Where the patch is now, whichever record names it.
+      final ingest = (current?.ingest ?? const ModIngest())
+          .copyWith(patchFiles: result.patchFiles);
+      if (asCompanion) {
+        return withCompanionUpdatedTo(
+          current?.copyWith(ingest: ingest),
+          modId: remoteModId,
+          fileId: file.idRow,
+          version: file.version,
+          versionLabel: file.description,
+          archiveMd5: extraction.archiveMd5 ?? download.md5,
+        );
+      }
+      final base =
+          current ?? const ModOrigin(provenance: OriginProvenance.downloaded);
+      return base.updatedTo(
+        source: gameBananaSource,
+        modId: remoteModId,
+        fileId: file.idRow,
+        version: file.version,
+        versionLabel: file.description,
+        archiveMd5: extraction.archiveMd5 ?? download.md5,
+        // **Not refreshed from this download's layout.** The folder's shape is
+        // the base's, and this archive's folder names describe the patch.
+        ingest: ingest,
+        installedAt: DateTime.now(),
+      );
+    });
+
+    await ref.read(snapshotServiceProvider).prune();
+    ref.invalidate(modBackupsProvider);
+    ref.invalidate(installedModsIndexProvider);
+
+    if (!context.mounted) return true;
+    await showUpdateResultDialog(context, mod: mod, file: file, result: result);
+    return true;
+  } catch (e) {
+    if (context.mounted) {
+      fail(loc.t('mods.update_apply.failed_title'), '$e');
+    }
+    return false;
+  } finally {
+    await _cleanupExtract(extractRoot);
+    if (archiveConsumed) await _deleteArchive(download.file);
+  }
+}
+
 /// Writes what the folder now is.
 ///
 /// Both confidences reach `exact` here on the same grounds a marketplace
 /// install does — the user picked this row of this mod's file list and we wrote
 /// exactly that file id — and the clearing rules live in [ModOrigin.updatedTo]
-/// rather than here.
+/// and [withCompanionUpdatedTo] rather than here.
+///
+/// **Against the identity that was actually written.** A folder can hold two
+/// downloads, and stamping a companion's file id onto the primary would claim the
+/// folder is that other mod.
 ///
 /// The `ingest` record is refreshed from what actually happened, which is a real
 /// gain for the pre-`ingest` library: a mod that had no layout on record now has
@@ -215,9 +423,25 @@ Future<void> _recordOrigin({
   required GbFile file,
   required String? archiveMd5,
   required UpdateLayout layout,
+  required bool asCompanion,
+  required List<String>? patchFiles,
 }) async {
   final now = DateTime.now();
   await ApiService.updateModOrigin(mod.id, (current) {
+    final ingest =
+        ingestAfterUpdate(layout, current?.ingest, patchFiles: patchFiles);
+    if (asCompanion) {
+      // The folder's own identity is untouched: it still is what it was, and
+      // what changed is the *other* download in it.
+      return withCompanionUpdatedTo(
+        current?.copyWith(ingest: ingest),
+        modId: remoteModId,
+        fileId: file.idRow,
+        version: file.version,
+        versionLabel: file.description,
+        archiveMd5: archiveMd5,
+      );
+    }
     final base = current ??
         const ModOrigin(provenance: OriginProvenance.downloaded);
     return base.updatedTo(
@@ -227,25 +451,10 @@ Future<void> _recordOrigin({
       version: file.version,
       versionLabel: file.description,
       archiveMd5: archiveMd5,
-      ingest: _ingestFor(layout, current?.ingest),
+      ingest: ingest,
       installedAt: now,
     );
   });
-}
-
-/// The layout this update actually used, in the shape the next one replays.
-///
-/// A combined install keeps its **recorded** subfolder names rather than the
-/// archive's: the subfolder is what the mod's own `.ini` paths were written
-/// against, and adopting a differently-cased incoming name would create a second
-/// directory beside the first on a case-sensitive filesystem.
-ModIngest? _ingestFor(UpdateLayout layout, ModIngest? current) {
-  if (layout.mappings.isEmpty) return current;
-  if (current?.mode == IngestMode.combined) return current;
-  return ModIngest(
-    folders: [layout.mappings.single.source],
-    siblingGroup: current?.siblingGroup,
-  );
 }
 
 NotificationLines _failureMessage(

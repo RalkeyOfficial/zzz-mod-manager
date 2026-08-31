@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/l10n/app_localizations.dart';
 import 'package:mod_manager_flutter/models/app_notification.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gamebanana.dart';
 import 'package:mod_manager_flutter/models/mod_companion.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
@@ -487,6 +488,124 @@ void main() {
           reason: 'and it is counted, because naming the base clears it');
     });
 
+    /// **Naming the base is an instruction to install it**, not a note about it.
+    /// A folder holding only a patch does nothing in the game, so recording the
+    /// answer and stopping there left the user exactly where they started.
+    group('the base the user named', () {
+      const base = ModCompanion(
+        role: CompanionRole.base,
+        modId: 7100,
+        modIdConfidence: OriginConfidence.user,
+      );
+      final file = GbFile.fromJson(const {
+        '_idRow': 91000,
+        '_sFile': 'ellen_swimsuit.zip',
+      });
+
+      PatchInstallDecision decisionFor(PatchDestination destination) =>
+          PatchInstallDecision(
+            scan: const PlannedPatchScan(iniPatches: {'Ellen Fix'}),
+            destinations: {'Ellen Fix': destination},
+          );
+
+      test('it is fetched and written into that patch\'s folder', () async {
+        origins['Ellen Fix'] =
+            const ModOrigin(provenance: OriginProvenance.importedFolder);
+        final asked = <String>[];
+
+        final lines = await applyPatchInstall(
+          loc,
+          decision: decisionFor(
+            InstallAsNewMod(base: base, baseName: 'Ellen', baseFile: file),
+          ),
+          importedMods: const ['Ellen Fix'],
+          modsPath: modsPath,
+          applier: applier,
+          amend: amend,
+          installBase: (modName, named, chosen) async {
+            asked.add('$modName:${named.modId}:${chosen.idRow}');
+            return true;
+          },
+        );
+
+        expect(asked, ['Ellen Fix:7100:91000']);
+        expect(lines, isEmpty,
+            reason: 'the folder works now, so there is nothing to warn about');
+      });
+
+      test('the answer is recorded before the download starts', () async {
+        // A cancelled or failed fetch has to leave the answer the user gave.
+        // Written afterwards, it would be lost with the download.
+        origins['Ellen Fix'] =
+            const ModOrigin(provenance: OriginProvenance.importedFolder);
+
+        final lines = await applyPatchInstall(
+          loc,
+          decision: decisionFor(
+            InstallAsNewMod(base: base, baseName: 'Ellen', baseFile: file),
+          ),
+          importedMods: const ['Ellen Fix'],
+          modsPath: modsPath,
+          applier: applier,
+          amend: amend,
+          installBase: (modName, named, chosen) async => false,
+        );
+
+        expect(origins['Ellen Fix']!.companionOfRole(CompanionRole.base), base,
+            reason: 'they said what it patches, and that stands');
+        expect(origins['Ellen Fix']!.ingest!.patchShaped, isTrue);
+        expect(lines.single.title, loc.t('mods.snackbar.import_patch_title'),
+            reason: 'and the folder still does not work, so it still says so');
+      });
+
+      test('an answer with no file to install fetches nothing', () async {
+        // "I don't know which file" names the mod and stops there — there is
+        // nothing to install, and the newest is a guess this must not make.
+        origins['Ellen Fix'] =
+            const ModOrigin(provenance: OriginProvenance.importedFolder);
+        var called = false;
+
+        await applyPatchInstall(
+          loc,
+          decision: decisionFor(
+            const InstallAsNewMod(base: base, baseName: 'Ellen'),
+          ),
+          importedMods: const ['Ellen Fix'],
+          modsPath: modsPath,
+          applier: applier,
+          amend: amend,
+          installBase: (modName, named, chosen) async {
+            called = true;
+            return true;
+          },
+        );
+
+        expect(called, isFalse);
+        expect(origins['Ellen Fix']!.companionOfRole(CompanionRole.base), base);
+      });
+
+      test('a mod the import never created is not fetched for', () async {
+        var called = false;
+
+        await applyPatchInstall(
+          loc,
+          decision: decisionFor(
+            InstallAsNewMod(base: base, baseName: 'Ellen', baseFile: file),
+          ),
+          importedMods: const [],
+          modsPath: modsPath,
+          applier: applier,
+          amend: amend,
+          installBase: (modName, named, chosen) async {
+            called = true;
+            return true;
+          },
+        );
+
+        expect(called, isFalse);
+      });
+    });
+
     test('nothing is said or written about a mod the import did not create',
         () async {
       // A folder that already existed is skipped rather than replaced, so it
@@ -533,9 +652,11 @@ void main() {
       expect(lines.single.pinned, isTrue);
     });
 
-    test('a patch the user just answered for says nothing', () async {
-      // They were told, in a modal they acted on, and the card carries the
-      // mark. A pinned card repeating it is nagging.
+    test('naming the base is not the same as having it', () async {
+      // **The warning is silenced by a folder that works, not by an answer about
+      // it.** Naming the base used to suppress this on its own — and the folder
+      // still did nothing in the game, with the one sentence that would have
+      // said so now gone.
       final lines = linesFor(
         const PatchInstallDecision(
           scan: PlannedPatchScan(iniPatches: {'Ellen Fix'}),
@@ -550,6 +671,42 @@ void main() {
           },
         ),
         imported: ['Ellen Fix'],
+      );
+
+      expect(lines.single.title, loc.t('mods.snackbar.import_patch_title'),
+          reason: 'nothing was installed, so there is as much left to do as '
+              'if they had said nothing');
+    });
+
+    test('a base that was actually installed says nothing', () async {
+      // The folder holds both downloads now. There is nothing to act on, and a
+      // pinned card saying otherwise is wrong rather than merely noisy.
+      final lines = patchInstallLines(
+        loc,
+        decision: const PatchInstallDecision(
+          scan: PlannedPatchScan(iniPatches: {'Ellen Fix'}),
+        ),
+        importedMods: const ['Ellen Fix'],
+        patchedInto: const {},
+        writeFailures: const [],
+        completed: const {'Ellen Fix'},
+      );
+
+      expect(lines, isEmpty);
+    });
+
+    test('an asset patch whose base arrived says nothing either', () async {
+      final lines = patchInstallLines(
+        loc,
+        decision: const PatchInstallDecision(
+          scan: PlannedPatchScan(
+            assetPatches: {'Retexture': AssetPatchAssessment(assets: 1)},
+          ),
+        ),
+        importedMods: const ['Retexture'],
+        patchedInto: const {},
+        writeFailures: const [],
+        completed: const {'Retexture'},
       );
 
       expect(lines, isEmpty);
