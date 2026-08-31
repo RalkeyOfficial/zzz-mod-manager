@@ -38,6 +38,29 @@ class GbRateLimitException extends GbException {
   final Duration? retryAfter;
 }
 
+/// The server claimed success and sent **nothing at all** — a `2xx` with an
+/// empty body.
+///
+/// Not a format failure, though it arrives at the same place. Nothing was sent,
+/// so there is no shape to have got wrong, and the two want different answers:
+/// a malformed body will look the same on the next press, while this clears up
+/// on its own.
+///
+/// **Measured, not theorised.** Mod 712159's `ProfilePage` answered `200` with
+/// zero bytes twice in a row, and served 14,926 bytes of valid JSON for the same
+/// url a minute later. The client retries it like a back-off and only raises
+/// this once those are spent.
+///
+/// The damage it did was in the caching, not the request: an empty body kept for
+/// the cache's ten minutes made one hiccup look like a mod whose page was
+/// permanently broken, because every retry was served from memory without asking
+/// again.
+class GbEmptyResponseException extends GbException {
+  const GbEmptyResponseException(super.message, {this.statusCode});
+
+  final int? statusCode;
+}
+
 /// The server returned a structured error envelope
 /// (`{"_sErrorCode": …, "_aErrorData": {…}}`).
 ///

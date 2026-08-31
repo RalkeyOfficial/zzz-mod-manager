@@ -204,6 +204,79 @@ void main() {
     });
   });
 
+  /// A `200` with nothing in it.
+  ///
+  /// Measured against the live API on mod 712159: two consecutive requests
+  /// answered `200` with a zero-byte body, and the same url served 14,926 bytes
+  /// of valid JSON a minute later. It is a transient upstream fault, so the
+  /// client treats it like one — the same reactive retry a 429 gets.
+  group('an empty response body', () {
+    test('is retried, and the retry is what the caller sees', () async {
+      final url = endpoints.modProfile(1);
+      transport.enqueue(url, body: '');
+      transport.enqueue(url, body: '{"_idRow":1}');
+      final client = buildClient();
+
+      final mod = await client.modProfile(1);
+
+      expect(mod.idRow, 1);
+      expect(transport.callCount, 2);
+      expect(slept, [const Duration(seconds: 1)],
+          reason: 'spaced out, not hammered');
+    });
+
+    test('whitespace is just as empty', () async {
+      final url = endpoints.modProfile(1);
+      transport.enqueue(url, body: '   \n  ');
+      transport.enqueue(url, body: '{"_idRow":1}');
+
+      expect((await buildClient().modProfile(1)).idRow, 1);
+    });
+
+    test('says the server sent nothing, rather than blaming the shape of it',
+        () async {
+      // "We couldn't read what GameBanana sent" is untrue and unactionable when
+      // nothing was sent. This is a distinct failure so the screen can say so.
+      transport.stub(endpoints.modProfile(1), body: '');
+      final client = buildClient();
+
+      await expectLater(
+        client.modProfile(1),
+        throwsA(isA<GbEmptyResponseException>()),
+      );
+      expect(transport.callCount, 3, reason: 'the initial call plus 2 retries');
+    });
+
+    test('is never cached, however many times it happens', () async {
+      final url = endpoints.modProfile(1);
+      transport.stub(url, body: '');
+      final client = buildClient(maxRetries: 0);
+
+      await expectLater(client.modProfile(1),
+          throwsA(isA<GbEmptyResponseException>()));
+      await expectLater(client.modProfile(1),
+          throwsA(isA<GbEmptyResponseException>()));
+
+      expect(transport.callCount, 2,
+          reason: 'the second press asked again instead of replaying the '
+              'empty body from cache');
+    });
+
+    test('an empty body on a 404 is still a 404', () async {
+      // Status first: an empty body is only interesting when the server claimed
+      // success. A missing mod that answers with nothing must stay not-found,
+      // or the client would retry something that will never come good.
+      transport.stub(endpoints.modProfile(1), statusCode: 404, body: '');
+      final client = buildClient();
+
+      await expectLater(
+        client.modProfile(1),
+        throwsA(isA<GbApiException>().having((e) => e.isNotFound, 'isNotFound', isTrue)),
+      );
+      expect(transport.callCount, 1, reason: 'not retried');
+    });
+  });
+
   group('caching', () {
     test('a repeat call is served from cache', () async {
       transport.stub(endpoints.modProfile(531649),
@@ -268,6 +341,45 @@ void main() {
       final mod = await client.modProfile(1);
 
       expect(mod.idRow, 1);
+      expect(transport.callCount, 2);
+    });
+
+    test('an unreadable body is not cached, so pressing again re-asks',
+        () async {
+      // **The bug this exists for.** GameBanana intermittently answers a
+      // perfectly good request with `200` and nothing in it. Cached, that one
+      // hiccup became a mod that could not be opened for the next ten minutes —
+      // every retry served the same empty body from memory without a request,
+      // so it read as a permanent fault in that one mod's page.
+      //
+      // The rule is general, not about emptiness: a body that cannot be parsed
+      // is a body that must not be kept.
+      final url = endpoints.modProfile(1);
+      transport.enqueue(url, body: '<html>nope</html>');
+      transport.enqueue(url, body: '{"_idRow":1}');
+      final client = buildClient();
+
+      await expectLater(
+          client.modProfile(1), throwsA(isA<GbFormatException>()));
+      final mod = await client.modProfile(1);
+
+      expect(mod.idRow, 1);
+      expect(transport.callCount, 2, reason: 'the second call asked again');
+    });
+
+    test('a profile that parsed but carried no _idRow is not kept either',
+        () async {
+      // Reached through a different throw site — the client's own check, after
+      // a successful decode — and it poisons the cache exactly the same way.
+      final url = endpoints.modProfile(1);
+      transport.enqueue(url, body: '{"_sName":"no id here"}');
+      transport.enqueue(url, body: '{"_idRow":1}');
+      final client = buildClient();
+
+      await expectLater(
+          client.modProfile(1), throwsA(isA<GbFormatException>()));
+
+      expect((await client.modProfile(1)).idRow, 1);
       expect(transport.callCount, 2);
     });
 

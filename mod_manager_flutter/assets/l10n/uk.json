@@ -80,6 +80,8 @@
     "empty_filtered_action": "Розмити замість цього",
     "error_offline": "Не вдалося зʼєднатися з GameBanana.",
     "error_offline_hint": "Перевірте зʼєднання та спробуйте ще раз.",
+    "error_empty": "GameBanana надіслала порожню відповідь.",
+    "error_empty_hint": "Їхній сервер двічі відповів нічим. Зазвичай це одразу минає — спробуйте ще раз.",
     "error_generic": "Під час завантаження сталася помилка.",
     "error_generic_hint": "GameBanana надіслала щось, чого ми не змогли прочитати.",
     "error_rate_limited": "GameBanana просить зменшити навантаження.",

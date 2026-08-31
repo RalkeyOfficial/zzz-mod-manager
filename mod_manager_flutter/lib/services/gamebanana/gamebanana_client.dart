@@ -73,7 +73,7 @@ class GameBananaClient {
     int perPage = 30,
     bool refresh = false,
   }) async {
-    final body = await _fetch(
+    return _fetchParsed(
       _endpoints.modIndex(
         categoryId: categoryId,
         submitterId: submitterId,
@@ -81,9 +81,9 @@ class GameBananaClient {
         page: page,
         perPage: perPage,
       ),
+      (body) => parseEnvelope(body, GbMod.fromJson),
       refresh: refresh,
     );
-    return parseEnvelope(body, GbMod.fromJson);
   }
 
   /// Text search via `Util/Search/Results`.
@@ -100,9 +100,11 @@ class GameBananaClient {
     if (trimmed.isEmpty) {
       return const GbPage<GbMod>(records: [], recordCount: 0, isComplete: true);
     }
-    final body =
-        await _fetch(_endpoints.search(trimmed, page: page), refresh: refresh);
-    return parseEnvelope(body, GbMod.fromJson);
+    return _fetchParsed(
+      _endpoints.search(trimmed, page: page),
+      (body) => parseEnvelope(body, GbMod.fromJson),
+      refresh: refresh,
+    );
   }
 
   /// The game's "best of period" submissions via `Game/<id>/TopSubs` — three
@@ -111,19 +113,23 @@ class GameBananaClient {
   /// Entries whose `_sPeriod` we don't recognise are dropped rather than
   /// mislabelled, so this can return fewer than 21.
   Future<List<GbTopSub>> topSubs({bool refresh = false}) async {
-    final body = await _fetch(_endpoints.topSubs(), refresh: refresh);
-    return parseBareList(body, GbTopSub.fromJson);
+    return _fetchParsed(
+      _endpoints.topSubs(),
+      (body) => parseBareList(body, GbTopSub.fromJson),
+      refresh: refresh,
+    );
   }
 
   /// Full mod detail via `Mod/<id>/ProfilePage` — one request fills the whole
   /// detail screen, including the file list and gallery.
   Future<GbMod> modProfile(int modId, {bool refresh = false}) async {
-    final body = await _fetch(_endpoints.modProfile(modId), refresh: refresh);
-    final mod = GbMod.fromJson(parseObject(body));
-    if (mod == null) {
-      throw GbFormatException('Mod $modId: profile carried no _idRow');
-    }
-    return mod;
+    return _fetchParsed(_endpoints.modProfile(modId), (body) {
+      final mod = GbMod.fromJson(parseObject(body));
+      if (mod == null) {
+        throw GbFormatException('Mod $modId: profile carried no _idRow');
+      }
+      return mod;
+    }, refresh: refresh);
   }
 
   /// Many mods' chosen fields in one request via `Mod/Multi` — a **bare array**
@@ -146,11 +152,11 @@ class GameBananaClient {
     bool refresh = false,
   }) async {
     if (modIds.isEmpty) return const <GbMod>[];
-    final body = await _fetch(
+    return _fetchParsed(
       _endpoints.modsMulti(modIds, properties),
+      (body) => parseBareList(body, GbMod.fromJson),
       refresh: refresh,
     );
-    return parseBareList(body, GbMod.fromJson);
   }
 
   /// The mod's release feed via `Mod/<id>/Updates`, newest first.
@@ -158,8 +164,11 @@ class GameBananaClient {
   /// One request, and the newest page is all the update check needs — see
   /// [GameBananaEndpoints.modUpdates].
   Future<List<GbUpdate>> modUpdates(int modId, {bool refresh = false}) async {
-    final body = await _fetch(_endpoints.modUpdates(modId), refresh: refresh);
-    return parseEnvelope(body, GbUpdate.fromJson).records;
+    return _fetchParsed(
+      _endpoints.modUpdates(modId),
+      (body) => parseEnvelope(body, GbUpdate.fromJson).records,
+      refresh: refresh,
+    );
   }
 
   /// The category tree via `Mod/Categories` — roots when [categoryId] is null,
@@ -172,14 +181,41 @@ class GameBananaClient {
     GbCategorySort sort = GbCategorySort.aToZ,
     bool refresh = false,
   }) async {
-    final body = await _fetch(
+    return _fetchParsed(
       _endpoints.categories(categoryId: categoryId, sort: sort),
+      (body) => parseBareList(body, GbCategoryNode.fromJson),
       refresh: refresh,
     );
-    return parseBareList(body, GbCategoryNode.fromJson);
   }
 
   // ---------------------------------------------------------------- plumbing
+
+  /// [_fetch], then parse — and **drop the cached body if the parse fails.**
+  ///
+  /// Every request goes through here rather than through [_fetch] directly,
+  /// because a body kept in the cache is a body that will be handed back for the
+  /// next ten minutes without asking the server anything. A body that could not
+  /// be parsed once cannot be parsed on the next press either, so keeping it
+  /// turns a single bad response into a feature that stays broken while the
+  /// user retries — which is exactly how one empty `200` on one mod page read as
+  /// that page being permanently unopenable.
+  ///
+  /// Catches everything rather than `GbException`: a parser bug of ours poisons
+  /// the cache just as effectively as a malformed body, and re-throwing is the
+  /// caller's answer either way.
+  Future<T> _fetchParsed<T>(
+    Uri url,
+    T Function(String body) parse, {
+    bool refresh = false,
+  }) async {
+    final body = await _fetch(url, refresh: refresh);
+    try {
+      return parse(body);
+    } catch (_) {
+      _cache.remove(url);
+      rethrow;
+    }
+  }
 
   /// Cache -> coalesce -> transport -> reactive retry -> typed errors.
   Future<String> _fetch(Uri url, {bool refresh = false}) {
@@ -227,6 +263,14 @@ class GameBananaClient {
       } on GbRateLimitException catch (e) {
         if (attempt >= maxRetries) rethrow;
         await _sleep(e.retryAfter ?? _backoffFor(attempt));
+        attempt++;
+      } on GbEmptyResponseException {
+        // A `200` carrying nothing is a transient upstream fault — measured on
+        // one mod page, twice in a row, with the same url serving valid JSON a
+        // minute later. Retried on exactly the same terms as a back-off, with no
+        // `Retry-After` to honour because the server never admitted a problem.
+        if (attempt >= maxRetries) rethrow;
+        await _sleep(_backoffFor(attempt));
         attempt++;
       }
     }

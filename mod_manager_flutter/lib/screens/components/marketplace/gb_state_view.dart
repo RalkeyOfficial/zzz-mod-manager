@@ -125,6 +125,11 @@ class GbFailureState extends StatelessWidget {
           'marketplace.error_not_found',
           'marketplace.error_not_found_hint',
         ),
+      GbFailureKind.emptyResponse => (
+          Icons.cloud_off,
+          'marketplace.error_empty',
+          'marketplace.error_empty_hint',
+        ),
       GbFailureKind.generic => (
           Icons.error_outline,
           'marketplace.error_generic',

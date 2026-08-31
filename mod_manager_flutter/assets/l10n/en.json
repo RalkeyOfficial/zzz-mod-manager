@@ -80,6 +80,8 @@
     "empty_filtered_action": "Blur them instead",
     "error_offline": "Couldn't reach GameBanana.",
     "error_offline_hint": "Check your connection, then try again.",
+    "error_empty": "GameBanana sent an empty reply.",
+    "error_empty_hint": "Their server answered with nothing, twice over. It usually clears up straight away — try again.",
     "error_generic": "Something went wrong loading this.",
     "error_generic_hint": "GameBanana sent something we couldn't read.",
     "error_rate_limited": "GameBanana asked us to slow down.",

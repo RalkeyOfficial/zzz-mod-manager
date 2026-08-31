@@ -85,6 +85,18 @@ void main() {
       );
     });
 
+    test('nothing sent is its own kind, not an unreadable body', () {
+      // The two are different answers to "what do I do now?". A malformed body
+      // is a bug of ours or a changed API and will look the same on the next
+      // press; an empty `200` is a transient upstream fault that clears up. It
+      // was measured on a live mod page, and the client only reports it after
+      // its retries are spent — so a user seeing it has already waited.
+      expect(
+        describeGbFailure(const GbEmptyResponseException('nothing')).kind,
+        GbFailureKind.emptyResponse,
+      );
+    });
+
     test('a bug of ours lands somewhere honest rather than throwing again', () {
       // What `AsyncValue.error` hands over is `Object`, so anything at all can
       // arrive here — and an error state that throws while rendering is the one

@@ -40,6 +40,19 @@ class GameBananaErrorMapper {
     final masked = _envelopeError(response);
     if (masked != null) throw masked;
 
+    // **Success with nothing in it.** Checked after the status codes above, so a
+    // `404` that also sent nothing stays not-found: an empty body is only
+    // interesting when the server claimed it had answered. Raised here rather
+    // than left to the JSON layer because the client can retry this one, and
+    // because "we couldn't read it" is the wrong thing to tell anybody about a
+    // body that does not exist.
+    if (response.body.trim().isEmpty) {
+      throw GbEmptyResponseException(
+        'HTTP ${response.statusCode} with an empty body',
+        statusCode: response.statusCode,
+      );
+    }
+
     return response.body;
   }
 

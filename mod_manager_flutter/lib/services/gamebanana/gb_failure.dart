@@ -15,7 +15,7 @@ library;
 
 import '../../models/gamebanana/gb_exceptions.dart';
 
-/// The four answers worth telling apart.
+/// The answers worth telling apart.
 enum GbFailureKind {
   /// No usable HTTP response at all — no connectivity, DNS, TLS, or a timeout.
   /// By far the most common failure, and not a bug.
@@ -28,6 +28,12 @@ enum GbFailureKind {
   /// The record is not there. Distinct from every other failure because it is
   /// the only one that will still be true in an hour.
   notFound,
+
+  /// The server said `200` and sent nothing, and the client's retries are
+  /// spent. Its own kind rather than [generic] because "we couldn't read what
+  /// GameBanana sent" is untrue when nothing was sent, and because this one
+  /// genuinely does clear up — see [GbEmptyResponseException].
+  emptyResponse,
 
   /// Everything else: a malformed body, an error envelope we have no specific
   /// answer for, a bug of ours.
@@ -60,6 +66,7 @@ GbFailure describeGbFailure(Object error) {
   return GbFailure(switch (error) {
     GbNetworkException() => GbFailureKind.offline,
     GbRateLimitException() => GbFailureKind.rateLimited,
+    GbEmptyResponseException() => GbFailureKind.emptyResponse,
     // `isNotFound` rather than a status comparison here: which of the API's
     // several 404 shapes arrived is the exception's business, not ours.
     GbApiException(isNotFound: true) => GbFailureKind.notFound,

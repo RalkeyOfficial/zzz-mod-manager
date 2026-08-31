@@ -150,6 +150,25 @@ What *users* can reach is a **missing mod id**, and that is unchanged —
 with `{"_sErrorCode": "NO_SUCH_RECORD", "_sErrorMessage": "This Mod doesn't exist"}`.
 So a "has this mod been removed?" check behaves identically on v13.
 
+**A `200` can carry nothing at all, and it is transient.** Measured on
+`Mod/712159/ProfilePage`: two consecutive requests answered `200` with a
+**zero-byte body** — no envelope, no error code, `content-type:
+application/json` — and the same url served 14,926 bytes of valid JSON a minute
+later. Both `/ProfilePage` and `/Updates` did it for that mod in the same window,
+and other mods answered normally throughout, so it is neither mod-specific nor a
+throttle.
+
+Two consequences for any client:
+
+- **Treat it as a retryable fault, not a parse failure.** `jsonDecode('')` throws
+  `Unexpected end of input`, which reads as "the API changed shape" and is exactly
+  the wrong conclusion. There is no `Retry-After` to honour — the server never
+  admits a problem — so reactive backoff is all there is.
+- **Never cache it.** With no `cache-control` to mirror (below), a client TTL of
+  ten minutes turns one hiccup into a mod page that stays broken for ten minutes
+  while the user retries, because every retry is served from memory. The general
+  form of that rule: **a body that could not be parsed must not be kept**.
+
 ### Caching and rate limits
 
 - **apiv13 sends no `cache-control` at all**, where apiv11 answered every request
