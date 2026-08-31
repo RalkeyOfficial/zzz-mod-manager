@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../services/api_service.dart';
+import '../../services/log/confirmations.dart';
 import '../../utils/notifications.dart';
 
 /// Confirms and permanently deletes a mod (its folder and all state). The
@@ -19,6 +20,9 @@ Future<void> showDeleteModDialog(
     builder: (dialogContext) {
       Future<void> confirm() async {
         Navigator.pop(dialogContext);
+        // The most destructive thing in the app, and the one a user is most
+        // likely to ask about afterwards.
+        logConfirmation('mod.delete', accepted: true, subject: mod.id);
         try {
           final ok = await ApiService.deleteMod(mod.id);
           if (!context.mounted) return;

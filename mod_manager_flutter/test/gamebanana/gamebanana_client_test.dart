@@ -4,6 +4,8 @@ import 'package:mod_manager_flutter/services/gamebanana/gamebanana_client.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_endpoints.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_response_cache.dart';
 import 'package:mod_manager_flutter/services/bulk_update_check.dart';
+import 'package:mod_manager_flutter/services/log/log_sinks.dart';
+import 'package:mod_manager_flutter/services/log/logger.dart';
 
 import '../support/fake_http_transport.dart';
 import '../support/fixtures.dart';
@@ -274,6 +276,103 @@ void main() {
         throwsA(isA<GbApiException>().having((e) => e.isNotFound, 'isNotFound', isTrue)),
       );
       expect(transport.callCount, 1, reason: 'not retried');
+    });
+  });
+
+  /// **The bug this whole logging change was built for.**
+  ///
+  /// GameBanana answered a valid request with `200` and nothing in it, the
+  /// client cached that for ten minutes, and the only evidence anywhere was
+  /// `GbFormatException: Response was not valid JSON: Unexpected end of input`
+  /// — no url, no status, no body length, and no way to tell an empty body from
+  /// a malformed one. These pin that the log now carries all four.
+  group('what the log says when it goes wrong', () {
+    late MemoryLogSink sink;
+
+    setUp(() {
+      sink = MemoryLogSink();
+      Log.install(LogRouter(sinks: [sink]));
+    });
+
+    tearDown(() => Log.install(LogRouter(sinks: [])));
+
+    String everything() => sink.lines.join('\n');
+
+    /// The lines whose message is [event], so a test pins the line it means
+    /// rather than being satisfied by a different one that happens to carry
+    /// the same field. (Written after a deliberate break passed: the `response`
+    /// assertions were being met by the `gave up` line.)
+    Iterable<String> linesFor(String event) =>
+        sink.lines.where((line) => line.contains('  $event '));
+
+    test('an empty 200 is diagnosable from the file alone', () async {
+      transport.stub(endpoints.modProfile(712159), body: '');
+      final client = buildClient(maxRetries: 1);
+
+      await expectLater(client.modProfile(712159),
+          throwsA(isA<GbEmptyResponseException>()));
+
+      // **On the response line itself**, before anything had decided what it
+      // meant — that is what makes it a diagnosis rather than a conclusion.
+      final response = linesFor('response').first;
+      expect(response, contains('/Mod/712159/ProfilePage'));
+      expect(response, contains('status=200'));
+      expect(response, contains('bytes=0'));
+
+      // And the fourth fact the old line could not carry: empty, not
+      // malformed. Two different problems with two different answers.
+      expect(linesFor('retrying').single, contains('reason=empty_body'));
+      expect(linesFor('gave up').single, contains('kind=empty'));
+    });
+
+    test('a malformed body says how long it was and how it started', () async {
+      transport.stub(endpoints.modProfile(1), body: '<html>go away</html>');
+      final client = buildClient();
+
+      await expectLater(
+          client.modProfile(1), throwsA(isA<GbFormatException>()));
+
+      expect(everything(), contains('bytes=20'));
+      expect(everything(), contains('head='),
+          reason: 'enough of the body to recognise an interstitial');
+      expect(everything(), contains('cache=evicted'),
+          reason: 'so the next press is known to have really asked again');
+    });
+
+    test('the body itself is never written to the log', () async {
+      // A mod page is tens of kilobytes of somebody's description, and the log
+      // is a file the user is invited to send to a stranger.
+      final huge = '{"_idRow":1,"_sText":"${'x' * 5000}"}';
+      transport.stub(endpoints.modProfile(1), body: huge);
+      final client = buildClient();
+
+      await client.modProfile(1);
+
+      expect(everything().length, lessThan(1000));
+      expect(everything(), isNot(contains('xxxxxxxxxxxxxxxxxxxx')));
+    });
+
+    test('a cache hit is distinguishable from a request', () async {
+      transport.stub(endpoints.modProfile(1), body: '{"_idRow":1}');
+      final client = buildClient();
+
+      await client.modProfile(1);
+      await client.modProfile(1);
+
+      expect(everything(), contains('cache=miss'));
+      expect(everything(), contains('cache=hit'));
+      expect(transport.callCount, 1);
+    });
+
+    test('a mod that is gone says so, and is not retried', () async {
+      transport.stub(endpoints.modProfile(1),
+          statusCode: 404, body: loadGbFixture('error_no_such_record'));
+      final client = buildClient();
+
+      await expectLater(client.modProfile(1), throwsA(isA<GbApiException>()));
+
+      expect(everything(), contains('kind=not_found'));
+      expect(everything(), contains('status=404'));
     });
   });
 

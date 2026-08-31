@@ -73,6 +73,18 @@ class Logger {
   }) =>
       _emit(LogLevel.critical, message, fields, error, stack);
 
+  /// For a caller that already holds a level — a severity mapped in from
+  /// somewhere else, like a notification's. Everywhere else, use the named
+  /// methods: a literal level at a call site is a decision made twice.
+  void at(
+    LogLevel level,
+    String message, {
+    Map<String, Object?>? fields,
+    Object? error,
+    StackTrace? stack,
+  }) =>
+      _emit(level, message, fields, error, stack);
+
   void _emit(
     LogLevel level,
     String message, [
@@ -100,7 +112,15 @@ class LogRouter {
     List<LogSink>? sinks,
     LogRedactor? redactor,
     DateTime Function()? now,
-  })  : sinks = sinks ?? <LogSink>[TerminalLogSink()],
+  })  :
+        // **Quiet by default**, because the default router is the one nobody
+        // installed: a unit test, a pure function, anything running before
+        // `main()`. Debug lines there are noise in a test runner's output, and
+        // a test suite that scrolls its own diagnostics past the failures is
+        // worse off for having them. Production builds its own sinks and sets
+        // its own thresholds.
+        sinks = sinks ??
+            <LogSink>[TerminalLogSink(threshold: LogLevel.warning)],
         redactor = redactor ?? LogRedactor.pathsOnly,
         now = now ?? DateTime.now;
 

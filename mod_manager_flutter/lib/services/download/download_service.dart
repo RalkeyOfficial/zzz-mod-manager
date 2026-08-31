@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path/path.dart' as path;
 
 import '../../utils/path_helper.dart';
+import '../log/logger.dart';
 import 'download_exceptions.dart';
 import 'download_handle.dart';
 import 'download_paths.dart';
@@ -37,6 +38,8 @@ import 'resume_policy.dart';
 ///
 /// Everything is injectable — pump, transport, directory, clock, sink opener —
 /// so the whole class is testable with no network and no real waiting.
+final Logger _log = Logger('download');
+
 class DownloadService {
   DownloadService({
     DownloadPump? pump,
@@ -266,6 +269,20 @@ class _Run {
       contentRange: session.contentRange,
       etag: session.etag,
     );
+
+    // **The highest-value line in the whole download path.** A corrupt-archive
+    // report is unanswerable without knowing whether this transfer appended to
+    // a partial, started over, or was told it already had everything — and
+    // which of the server's answers led to that.
+    _log.debug('resume decision', fields: {
+      'file': filename,
+      'action': decision.action.name,
+      'status': session.statusCode,
+      'on_disk': onDisk,
+      'content_length': session.contentLength,
+      'content_range': session.contentRange,
+      'attempt': attempt,
+    });
 
     if (decision.action == ResumeAction.fail) {
       await session.shutdown();
@@ -506,6 +523,14 @@ class _Run {
         'No data for ${service.stallTimeout.inSeconds}s',
         stallTimeout: service.stallTimeout,
       );
+      // A degraded CDN node, nearly always. Worth a line with how far it got,
+      // because the next attempt resumes from exactly there.
+      _log.warning('transfer stalled', fields: {
+        'file': _filename,
+        'received': _received,
+        'total': _total,
+        'after': service.stallTimeout,
+      });
       // The one interrupt mechanism, shared with cancel. The drain stops
       // gracefully and flushes what it has, so the partial can still be
       // resumed; `_streamToDisk` raises the recorded reason afterwards.
@@ -534,6 +559,14 @@ class _Run {
       throw DownloadWriteException('Downloaded file vanished: ${partFile.path}');
     }
     final target = await _paths.resolveCollision(filename);
+    if (path.basename(target.path) != filename) {
+      // The name the mod ends up with when the archive has no folder inside
+      // it, so a rename here is worth knowing about.
+      _log.warning('renamed to avoid a collision', fields: {
+        'wanted': filename,
+        'got': path.basename(target.path),
+      });
+    }
     return partFile.rename(target.path);
   }
 

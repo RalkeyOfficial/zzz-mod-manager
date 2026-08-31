@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:isolate';
 
 import '../../core/constants.dart';
+import '../log/log_level.dart';
 import '../log/logger.dart';
 import 'download_exceptions.dart';
 import 'download_pump.dart';
@@ -114,6 +115,19 @@ const String _kDone = 'done';
 /// worker*, which would kill it silently on exactly the error path. `onError`
 /// only ever delivers strings anyway, so strings is the shape both paths share.
 const String _kError = 'error';
+
+/// worker → main: `[level, message, fields, atMicros]`.
+///
+/// **The worker cannot log.** It shares no memory with the main isolate, so
+/// there is no `Log.router` to reach and no file handle it may open — a second
+/// writer on the rotating file would interleave halfway through lines. Its
+/// diagnostics travel as data, like [_kError], and are logged on arrival.
+///
+/// The timestamp is taken **in the worker**. Delivery is delayed by exactly the
+/// event-loop congestion the isolate exists to escape, so stamping on arrival
+/// would misattribute a stall to the moment it was noticed rather than the
+/// moment it happened.
+const String _kLog = 'log';
 
 /// main → worker: `[partPath, hashMd5]`.
 const String _kProceed = 'proceed';
@@ -232,6 +246,31 @@ class _IsolateSession implements PumpSession {
         );
       case _kError:
         _failWith(_exceptionFrom(message));
+      case _kLog:
+        _logFromWorker(message);
+    }
+  }
+
+  /// Replays a worker's line on the main isolate, where the sinks live.
+  ///
+  /// Wrapped and forgiving throughout: this runs inside a port listener, where
+  /// a throw is unhandleable, and a **diagnostic channel must never be able to
+  /// kill a download**. An unrecognised level becomes a warning rather than an
+  /// argument, and a malformed message is dropped.
+  void _logFromWorker(List<Object?> message) {
+    try {
+      final level = LogLevel.values.firstWhere(
+        (value) => value.name == message[1] as String,
+        orElse: () => LogLevel.warning,
+      );
+      final fields = (message[3] as Map).cast<String, Object?>();
+      Logger('download.worker').at(
+        level,
+        message[2] as String,
+        fields: {...fields, 'origin': 'worker'},
+      );
+    } catch (_) {
+      // A shape we do not recognise. Dropping it is the only safe answer here.
     }
   }
 
@@ -380,6 +419,16 @@ Future<void> _downloadWorker(_WorkerRequest request) async {
     response.headers,
   ]);
 
+  // What the server actually agreed to, from inside the isolate that asked.
+  // A resumed transfer that silently got a `200` instead of a `206` is how a
+  // partial file ends up with the beginning written twice, and this is the
+  // only place that answer exists.
+  _workerLog(request.reply, LogLevel.debug, 'connected', {
+    'status': response.statusCode,
+    'content_length': response.contentLength,
+    'ranged': response.headers.containsKey('content-range'),
+  });
+
   final command = await firstCommand.future;
   if (command[0] != _kProceed) {
     await response.discard();
@@ -412,6 +461,10 @@ Future<void> _downloadWorker(_WorkerRequest request) async {
     finish(<Object?>[_kDone, outcome.bytesWritten, outcome.md5]);
   } catch (error) {
     ticker.cancel();
+    _workerLog(request.reply, LogLevel.warning, 'transfer failed', {
+      'written': written,
+      'kind': error is DownloadWriteException ? 'write' : 'network',
+    });
     finish(<Object?>[
       _kError,
       error is DownloadWriteException ? _kindWrite : _kindNetwork,
@@ -419,4 +472,27 @@ Future<void> _downloadWorker(_WorkerRequest request) async {
       '$error',
     ]);
   }
+}
+
+/// Sends one line home. See [_kLog] for why the worker cannot log directly.
+///
+/// Everything is stringified here rather than on arrival, because a field value
+/// whose sendability has not been argued for would throw **synchronously inside
+/// the worker** and kill it — on the diagnostic path, which is the last place
+/// that can be allowed to happen.
+void _workerLog(
+  SendPort reply,
+  LogLevel level,
+  String message,
+  Map<String, Object?> fields,
+) {
+  reply.send(<Object?>[
+    _kLog,
+    level.name,
+    message,
+    <String, String>{
+      for (final entry in fields.entries) entry.key: '${entry.value}',
+    },
+    DateTime.now().microsecondsSinceEpoch,
+  ]);
 }

@@ -13,6 +13,7 @@ import '../../models/origin_enums.dart';
 import '../../services/api_service.dart';
 import '../../services/archive_service.dart';
 import '../../services/folder_contents.dart';
+import '../../services/log/confirmations.dart';
 import '../../services/log/logger.dart';
 import '../../services/patch_placement.dart';
 import '../../services/patch_record.dart';
@@ -185,6 +186,18 @@ Future<bool> applyUpdateFlow(
             flattensPatch: flattensPatch,
           )
         : const UpdateConfirmChoice(removeStaleInis: true);
+    if (confirm) {
+      logConfirmation('update.apply',
+          accepted: choice != null,
+          subject: mod.id,
+          fields: {
+            'from': mod.origin?.version,
+            'to': file.version ?? file.description,
+            'file_id': file.idRow,
+            'flattens_patch': flattensPatch,
+            if (choice != null) 'remove_stale_inis': choice.removeStaleInis,
+          });
+    }
     if (choice == null) return false;
 
     final result = await applier.applyBaseThenPatch(

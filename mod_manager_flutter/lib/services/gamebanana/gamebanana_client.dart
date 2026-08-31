@@ -4,6 +4,7 @@ import '../../core/constants.dart';
 import '../../models/gamebanana/gamebanana.dart';
 import '../http/http_transport.dart';
 import '../http/package_http_transport.dart';
+import '../log/logger.dart';
 import 'gamebanana_endpoints.dart';
 import 'gamebanana_error_mapper.dart';
 import 'gamebanana_response_cache.dart';
@@ -23,6 +24,8 @@ import 'gamebanana_response_cache.dart';
 ///
 /// Everything is injectable — transport, cache, clock, sleep — so the whole
 /// class is testable with no network and no real waiting.
+final Logger _log = Logger('gamebanana.client');
+
 class GameBananaClient {
   GameBananaClient({
     HttpTransport? transport,
@@ -211,21 +214,57 @@ class GameBananaClient {
     final body = await _fetch(url, refresh: refresh);
     try {
       return parse(body);
-    } catch (_) {
+    } catch (error, stack) {
       _cache.remove(url);
+      // The **head of the body, not the body**: 120 characters is enough to
+      // tell a Cloudflare interstitial from an error envelope from a changed
+      // shape, and a mod page's full JSON in a log file is neither readable
+      // nor anybody's business.
+      _log.error('could not read the response',
+          error: error,
+          stack: stack,
+          fields: {
+            'url': _shortUrl(url),
+            'bytes': body.length,
+            'head': body.length > 120 ? body.substring(0, 120) : body,
+            'cache': 'evicted',
+          });
       rethrow;
     }
   }
+
+  /// The path, without the host and without the api version prefix.
+  ///
+  /// Every line would otherwise carry the same 30 characters of
+  /// `https://gamebanana.com/apiv13`, which is in the header already.
+  String _shortUrl(Uri url) =>
+      url.path.replaceFirst(RegExp(r'^/apiv\d+'), '') +
+      (url.hasQuery ? '?${url.query}' : '');
 
   /// Cache -> coalesce -> transport -> reactive retry -> typed errors.
   Future<String> _fetch(Uri url, {bool refresh = false}) {
     if (!refresh) {
       final cached = _cache.get(url);
-      if (cached != null) return Future<String>.value(cached);
+      if (cached != null) {
+        _log.debug('request', fields: {
+          'url': _shortUrl(url),
+          'cache': 'hit',
+          'bytes': cached.length,
+        });
+        return Future<String>.value(cached);
+      }
     }
 
     final pending = _inFlight[url];
-    if (pending != null) return pending;
+    if (pending != null) {
+      // Two screens wanting the same page at once. Worth a line: it explains a
+      // response arriving with no request beside it.
+      _log.debug('request', fields: {
+        'url': _shortUrl(url),
+        'cache': 'coalesced',
+      });
+      return pending;
+    }
 
     // Block body, not an arrow: `Map.remove` returns the removed value, and an
     // arrow would hand that value — this very future — back to whenComplete,
@@ -241,6 +280,13 @@ class GameBananaClient {
   Future<String> _send(Uri url) async {
     var attempt = 0;
     while (true) {
+      _log.debug('request', fields: {
+        'url': _shortUrl(url),
+        'cache': 'miss',
+        if (attempt > 0) 'attempt': attempt + 1,
+      });
+
+      final started = DateTime.now();
       final HttpResponse response;
       try {
         response = await _transport.get(
@@ -251,9 +297,25 @@ class GameBananaClient {
       } on GbException {
         rethrow;
       } catch (error) {
+        _log.error('request failed', error: error, fields: {
+          'url': _shortUrl(url),
+          'kind': 'offline',
+          'took': DateTime.now().difference(started),
+        });
         // Connectivity, DNS, TLS, timeout — everything the transport throws.
         throw GbNetworkException('Request failed: $url', cause: error);
       }
+
+      // **The line the empty-`200` bug needed and did not have.** Status and
+      // body length, before anything has decided what they mean — which is
+      // what makes `status=200 bytes=0` the whole diagnosis rather than an
+      // "unexpected end of input" three layers later.
+      _log.debug('response', fields: {
+        'url': _shortUrl(url),
+        'status': response.statusCode,
+        'bytes': response.body.length,
+        'took': DateTime.now().difference(started),
+      });
 
       try {
         final body = _errors.bodyOrThrow(response);
@@ -261,17 +323,61 @@ class GameBananaClient {
         _cache.put(url, body, ttl: response.maxAge);
         return body;
       } on GbRateLimitException catch (e) {
-        if (attempt >= maxRetries) rethrow;
-        await _sleep(e.retryAfter ?? _backoffFor(attempt));
+        if (attempt >= maxRetries) {
+          _log.error('gave up', fields: {
+            'url': _shortUrl(url),
+            'kind': 'rate_limited',
+            'status': response.statusCode,
+            'attempts': attempt + 1,
+          });
+          rethrow;
+        }
+        final wait = e.retryAfter ?? _backoffFor(attempt);
+        _log.warning('retrying', fields: {
+          'url': _shortUrl(url),
+          'reason': 'rate_limit',
+          'status': response.statusCode,
+          'attempt': attempt + 1,
+          'wait': wait,
+        });
+        await _sleep(wait);
         attempt++;
       } on GbEmptyResponseException {
         // A `200` carrying nothing is a transient upstream fault — measured on
         // one mod page, twice in a row, with the same url serving valid JSON a
         // minute later. Retried on exactly the same terms as a back-off, with no
         // `Retry-After` to honour because the server never admitted a problem.
-        if (attempt >= maxRetries) rethrow;
-        await _sleep(_backoffFor(attempt));
+        if (attempt >= maxRetries) {
+          _log.error('gave up', fields: {
+            'url': _shortUrl(url),
+            'kind': 'empty',
+            'status': response.statusCode,
+            'bytes': 0,
+            'attempts': attempt + 1,
+          });
+          rethrow;
+        }
+        final wait = _backoffFor(attempt);
+        _log.warning('retrying', fields: {
+          'url': _shortUrl(url),
+          'reason': 'empty_body',
+          'status': response.statusCode,
+          'attempt': attempt + 1,
+          'wait': wait,
+        });
+        await _sleep(wait);
         attempt++;
+      } on GbApiException catch (e) {
+        // Not retried — a 404 or a bad request will say the same thing next
+        // time — but very much worth a line, because this is what a user sees
+        // as "the mod page won't open".
+        _log.error('gave up', fields: {
+          'url': _shortUrl(url),
+          'kind': e.isNotFound ? 'not_found' : 'api',
+          'status': response.statusCode,
+          'code': e.code,
+        });
+        rethrow;
       }
     }
   }

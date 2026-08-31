@@ -33,6 +33,7 @@ import '../../models/mod_companion.dart';
 import '../../models/origin_enums.dart';
 import '../../services/folder_contents.dart';
 import '../../services/library_file_index.dart';
+import '../../services/log/confirmations.dart';
 import '../../services/patch_destination_ranking.dart';
 import '../../services/patch_placement.dart';
 import '../../services/patch_record.dart';
@@ -261,7 +262,29 @@ Future<PatchInstallDecision?> decidePatchInstall(
     library: library,
     combined: plan.combine,
   );
-  if (answered == null) return null;
+  if (answered == null) {
+    logConfirmation('patch.install',
+        accepted: false, subject: scan.patchShaped.join(', '));
+    return null;
+  }
+
+  // Per subject, with where it went and how the ranking had placed that folder
+  // — the only evidence that will ever accumulate about whether the ordering in
+  // `docs/patch-destinations.md` is worth having.
+  for (final entry in answered.entries) {
+    final into = entry.value;
+    final order = ranked[entry.key] ?? const <DestinationRank>[];
+    logConfirmation('patch.destination',
+        accepted: true,
+        subject: entry.key,
+        fields: {
+          'destination': into is InstallIntoMod ? into.modName : 'new folder',
+          if (into is InstallIntoMod)
+            'rank_of_choice':
+                order.indexWhere((r) => r.modId == into.modId) + 1,
+          if (into is InstallAsNewMod) 'base_named': into.base != null,
+        });
+  }
 
   return resolvePatchDestinations(
     scan: scan,

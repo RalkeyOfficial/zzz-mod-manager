@@ -72,8 +72,25 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/app_notification.dart';
+import '../services/log/log_level.dart';
+import '../services/log/logger.dart';
 
 export '../models/app_notification.dart';
+
+final Logger _log = Logger('ui.notify');
+
+/// A notification's severity as a log level.
+///
+/// `success` and `info` are both [LogLevel.info]: the distinction between them
+/// is about tone on screen — a green tick versus a blue dot — and means nothing
+/// to somebody reading a file afterwards. `warning` and `error` map straight
+/// across, which is why the two vocabularies were kept spelled the same.
+LogLevel _levelFor(NotificationSeverity severity) => switch (severity) {
+      NotificationSeverity.error => LogLevel.error,
+      NotificationSeverity.warning => LogLevel.warning,
+      NotificationSeverity.success => LogLevel.info,
+      NotificationSeverity.info => LogLevel.info,
+    };
 
 /// How long each severity stays when the caller doesn't say.
 ///
@@ -209,6 +226,20 @@ class NotificationCenter extends Notifier<List<AppNotification>> {
       icon: icon,
       duration: pinned ? null : (duration ?? kNotificationDurations[severity]!),
     );
+
+    // **Every notification the app raises passes through here**, so one call
+    // covers all of them and no call site has to remember one. This is what
+    // puts "what the user was actually told, and when" in the log beside the
+    // failure that caused it.
+    //
+    // The text is already localized, so a Ukrainian UI writes Ukrainian here —
+    // correct, because the point is to record what was on screen.
+    _log.at(_levelFor(severity), 'notified', fields: {
+      'severity': severity.name,
+      'title': title,
+      'body': body,
+      if (pinned) 'pinned': true,
+    });
 
     // Re-raising something already on screen moves it to the bottom and
     // restarts its clock rather than stacking a second copy: a folder scan that

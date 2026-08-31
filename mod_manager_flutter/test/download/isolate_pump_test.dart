@@ -7,6 +7,8 @@ import 'package:mod_manager_flutter/services/download/download_paths.dart';
 import 'package:mod_manager_flutter/services/download/download_request.dart';
 import 'package:mod_manager_flutter/services/download/download_service.dart';
 import 'package:mod_manager_flutter/services/download/isolate_download_pump.dart';
+import 'package:mod_manager_flutter/services/log/log_sinks.dart';
+import 'package:mod_manager_flutter/services/log/logger.dart';
 import 'package:path/path.dart' as path;
 
 import '../support/loopback_file_server.dart';
@@ -83,6 +85,35 @@ void main() {
       await expectPrompt(session.shutdown());
       await drain;
       await pump.close();
+    });
+  });
+
+  group('what the worker can say', () {
+    test('its diagnostics reach the log on the main isolate', () async {
+      // The worker shares no memory with us: it cannot reach `Log.router` and
+      // must not open the rotating file itself. So its lines travel as data on
+      // the port it already has, and are logged on arrival — which this is the
+      // only test that can prove, because it runs a real isolate.
+      final sink = MemoryLogSink();
+      Log.install(LogRouter(sinks: [sink]));
+      addTearDown(() => Log.install(LogRouter(sinks: [])));
+
+      final service = build();
+      await service
+          .start(DownloadRequest(
+            url: server.uri('/file.bin'),
+            suggestedFilename: 'mod.rar',
+          ))
+          .done;
+      service.close();
+
+      final fromWorker =
+          sink.lines.where((line) => line.contains('download.worker'));
+      expect(fromWorker, isNotEmpty);
+      expect(fromWorker.first, contains('connected'));
+      expect(fromWorker.first, contains('status=200'));
+      expect(fromWorker.first, contains('origin=worker'),
+          reason: 'a reader can tell which isolate a line came from');
     });
   });
 
