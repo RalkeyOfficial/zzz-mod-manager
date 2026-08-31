@@ -88,6 +88,21 @@ class DownloadService {
 
   bool _swept = false;
 
+  /// **Startup only.** Deletes every completed archive left in the downloads
+  /// directory — see [DownloadPaths.sweepCompleted] for why they are there and
+  /// why this is safe nowhere else.
+  ///
+  /// Deliberately *not* folded into [_sweepOnce], which runs lazily on the first
+  /// download of a session: by then an install from this session may be waiting
+  /// on its archive.
+  Future<void> sweepCompletedDownloads() async {
+    try {
+      await _paths.sweepCompleted();
+    } catch (_) {
+      // Housekeeping must never block a launch.
+    }
+  }
+
   /// Clears junk left by crashes and abandoned downloads. Runs once, lazily.
   Future<void> _sweepOnce() async {
     if (_swept) return;
@@ -273,6 +288,7 @@ class _Run {
         totalBytes: _received,
         etag: decision.etag ?? record?.etag,
         resumed: true,
+        requestedName: filename,
       );
     }
 
@@ -339,6 +355,7 @@ class _Run {
       etag: decision.etag,
       md5: md5,
       resumed: _resumedFrom > 0,
+      requestedName: filename,
     );
   }
 

@@ -137,6 +137,40 @@ void main() {
       expect(_hasFileNamed(folders.single, 'mod.ini'), isTrue);
     });
 
+    test('D2: the invented folder can be named by the caller', () async {
+      // **The mod's name comes from the archive's filename here**, and the file
+      // on disk is not always called what the download asked for: a leftover
+      // archive of the same name pushes the new one to `mod (2).rar`, and the
+      // user's mod would be called `pulchra_reworked (2)`. The caller knows the
+      // name that was asked for, so it says.
+      final zip = _makeZip(path.join(tmp.path, 'Flat (2).zip'), {
+        'mod.ini': '[m]',
+        'hash.buf': 'b',
+      });
+      final dest = Directory(path.join(tmp.path, 'out_named'))
+        ..createSync(recursive: true);
+
+      final result = await ArchiveService.extractArchive(
+        archiveFile: zip,
+        destinationDir: dest,
+        nameHint: 'Flat.zip',
+      );
+
+      expect(result.success, isTrue, reason: result.error);
+      expect(path.basename(result.extractedFolders!.single), 'Flat');
+    });
+
+    test('D3: with no hint the file name is still what it is called', () async {
+      // A folder dragged or an archive the user picked themselves: nobody
+      // renamed it, so its own name is the right one.
+      final zip = _makeZip(path.join(tmp.path, 'Untouched.zip'), {
+        'mod.ini': '[m]',
+      });
+
+      final folders = await extractFolders(zip);
+      expect(path.basename(folders.single), 'Untouched');
+    });
+
     test('E: archive-name collides with a root folder => siblings nest, no crash',
         () async {
       // Foo.zip contains a Foo/ folder AND a root Foo.ini.

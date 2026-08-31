@@ -42,6 +42,13 @@ Future<InstallResult> installArchiveFlow(
   required GbMod mod,
   required GbFile file,
   String? knownMd5,
+
+  /// The name the download asked for, when it was one. The downloads directory
+  /// never overwrites, so the file on disk can be `mod (2).rar` — and for an
+  /// archive with no folder inside it the filename becomes the **mod's** name,
+  /// plus the default name in the folder picker. Our own bookkeeping must not
+  /// rename the user's mod.
+  String? requestedName,
 }) async {
   final loc = context.loc;
 
@@ -66,6 +73,7 @@ Future<InstallResult> installArchiveFlow(
     final extractionResult = await ArchiveService.extractArchive(
       archiveFile: archiveFile,
       knownMd5: knownMd5,
+      nameHint: requestedName,
     );
 
     if (!extractionResult.success) {
@@ -93,7 +101,10 @@ Future<InstallResult> installArchiveFlow(
 
     // The character is often in the archive name rather than the inner folder
     // (or vice versa), so pass the archive base name as an extra detection hint.
-    final archiveBaseName = path.basenameWithoutExtension(archiveFile.path);
+    // From the name the download **asked for**: it is also the default name in
+    // the folder picker, and a collision suffix has no business in either.
+    final archiveBaseName =
+        path.basenameWithoutExtension(requestedName ?? archiveFile.path);
 
     final archiveMd5 = extractionResult.archiveMd5 ?? knownMd5;
     if (!context.mounted) return InstallResult.cancelled();

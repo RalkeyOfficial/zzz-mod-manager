@@ -267,6 +267,7 @@ ArchiveInstaller _askingInstaller(String question) {
     required GbMod mod,
     required GbFile file,
     String? knownMd5,
+    String? requestedName,
   }) async {
     await showDialog<void>(
       context: context,
@@ -291,6 +292,7 @@ Future<InstallResult> _neverInstaller(
   required GbMod mod,
   required GbFile file,
   String? knownMd5,
+  String? requestedName,
 }) async {
   fail('nothing in this group should reach the installer');
 }

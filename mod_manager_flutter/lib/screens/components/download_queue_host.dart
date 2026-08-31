@@ -26,6 +26,7 @@ typedef ArchiveInstaller = Future<InstallResult> Function(
   required GbMod mod,
   required GbFile file,
   String? knownMd5,
+  String? requestedName,
 });
 
 /// Finishes what the download queue starts, and reports it while it runs.
@@ -274,6 +275,11 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
         // deleted once unpacked and a zip cannot be reproduced from its
         // contents.
         knownMd5: job.result?.md5,
+        // What the download asked to be called, which is not always what it
+        // ended up called: a name already taken in the downloads folder becomes
+        // `mod (2).rar`, and for an archive with no folder inside it that would
+        // become the mod's name.
+        requestedName: job.result?.requestedName,
       );
     } catch (error) {
       queue.markFailed(job.seq, InstallFailure('$error'));

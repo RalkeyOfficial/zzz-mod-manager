@@ -207,6 +207,50 @@ impossible, and removing that barrier is the whole point of a queue. It must als
 through a service held as a singleton, and can ask a question. Two of those
 interleaving would race on all three, and two dialogs would stack.
 
+### The filename, and why it must not reach the mod
+
+**A finished download never overwrites**, so a name already taken becomes
+`mod (2).rar`, then `mod (3).rar`. That is not tidiness: two mods routinely
+publish `main.zip`, and the queue transfers concurrently while installing one at a
+time — so promoting over the file already there would make one install extract
+another mod's bytes. It cannot tell the two apart at that moment, so it never
+tries.
+
+**But that name becomes the mod's name.** An archive with no folder inside it — a
+flat pile of files — is wrapped in a folder named after the archive
+(`ArchiveService`), and it is also the default name in the folder picker. So a
+leftover archive would silently rename the user's mod to
+`pulchra_bottom_heavy_reworked (2)`.
+
+The install therefore works from the name the download **asked for**
+(`DownloadResult.requestedName` → `installArchiveFlow`'s `requestedName` →
+`extractArchive`'s `nameHint`) rather than the name on disk. Exact, not a
+heuristic: stripping a trailing ` (n)` would rename a mod genuinely called
+`Ellen (2024)`. An archive nobody renamed — dragged in, or picked from a file
+dialog — passes no hint and keeps its own name.
+
+### Completed archives are swept at launch
+
+An install deletes the archive it consumed, on every success path and on both
+cancel paths. What is left in the directory is an archive whose install never
+*ran*: extraction failed and it was kept so the user could unpack it by hand, the
+mods path was unset, the app closed between the download landing and the install
+starting, or the delete itself failed and was only logged.
+
+Nothing swept those — `sweep` only ever looked at `.part` files and their records
+— so the directory grew forever, and every leftover was a future collision.
+`sweepCompleted` runs once at launch and deletes every complete archive.
+
+**Launch is the only safe moment.** Nothing is queued or installing yet, so every
+complete file is by definition finished with; run mid-session it would delete the
+archive of an install still in progress. It is deliberately not folded into the
+lazy `sweep` that runs on the first download of a session, for exactly that
+reason. A `.part` and its record survive it — they are a resumable download.
+
+One consequence to keep in mind: an archive kept because extraction failed is
+gone after a restart. The message names its path, and that path is good for the
+rest of the session.
+
 ## 9. What the user sees
 
 Two surfaces, and they answer different questions. The **notification** says

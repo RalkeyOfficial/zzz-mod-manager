@@ -17,6 +17,7 @@ import 'screens/welcome_screen.dart';
 import 'screens/marketplace_screen.dart';
 import 'utils/state_providers.dart';
 import 'services/api_service.dart';
+import 'services/download/download_queue.dart';
 import 'l10n/app_localizations.dart';
 
 void main() async {
@@ -73,6 +74,12 @@ class _MyAppState extends ConsumerState<MyApp> {
 
   Future<void> _checkFirstRun() async {
     await ApiService.initialize(container: ProviderScope.containerOf(context));
+    // At launch, where nothing is queued yet, so every completed archive still
+    // sitting in the downloads folder is one whose install never ran. Left
+    // there, the next download of the same file promotes to `mod (2).rar` — and
+    // that name becomes the mod's. Not awaited: it is housekeeping, and the
+    // first run screen must not wait on a directory listing.
+    ref.read(downloadServiceProvider).sweepCompletedDownloads();
     final isFirstRun = await ApiService.isFirstRun();
     if (mounted) {
       setState(() {

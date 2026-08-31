@@ -11,10 +11,19 @@ class DownloadResult {
     this.etag,
     this.md5,
     this.resumed = false,
+    this.requestedName,
   });
 
   /// The archive at its final name.
   final File file;
+
+  /// The name this download **asked for**, before any collision was resolved.
+  ///
+  /// Not the same as `file`'s name: the downloads directory never overwrites, so
+  /// a leftover archive of the same name pushes this one to `mod (2).rar`. That
+  /// matters because for an archive with no folder inside it the filename becomes
+  /// the **mod's** name, and our own bookkeeping must not rename the user's mod.
+  final String? requestedName;
 
   final int totalBytes;
 

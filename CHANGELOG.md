@@ -68,7 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Install confirmations now name the mod that arrived and say nothing more about the work — the auto-tags and the list of fields copied from the mod page are gone. Anything you need to act on (a mod with no `.ini`, a download that turned out to be a patch, tracking that couldn't be saved) arrives as its own separate warning beside it, rather than several problems joined into one paragraph you have to read to the end to count.
 - Mod descriptions are easier to read: body text is larger, lines are more generously spaced, and headings, lists, quotes, code, tables and horizontal rules now follow one consistent style everywhere a description is shown. A `---` divider is a hairline instead of a thick bar.
 - Descriptions keep the spacing their author gave them: blank lines between paragraphs are a full line tall rather than a hairline gap, and a run of several stays as tall as it was written instead of collapsing into a single break.
-- Downloaded archives now always land in the app's own downloads folder and are deleted once installed; an archive that fails to extract is kept, and the app tells you where to find it.
+- Downloaded archives now always land in the app's own downloads folder and are deleted once installed; an archive that fails to extract is kept for the rest of the session, and the app tells you where to find it. Anything still sitting there is cleared when you next start the app, so the folder no longer grows forever.
 
 ### Removed
 
@@ -76,6 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A mod is no longer named `something (2)` because of a leftover download. Archives never overwrite each other in the downloads folder, so a second copy of the same file gets a `(2)` — and for an archive that is just a pile of files with no folder inside it, that filename was becoming the mod's name. The install now uses the name the download asked for.
 - A RAR or 7z mod that can't be unpacked because 7-Zip isn't installed now says so, and says the download itself is fine. It used to report the same "couldn't extract the archive, extract it by hand" as a genuinely broken file, which points away from the actual fix.
 - A mod folder holding a patch is no longer reported as up to date. Update checking follows the patch's page there, so a clean result said nothing about the mod the folder actually contains — which could be several versions behind. It now says only the patch is tracked. Recognising this depends on the app having installed the patch itself, so folders you assembled before this release aren't covered.
 - The "this looks like a patch" warning after an install now stays until you dismiss it, instead of disappearing after eight seconds beside the success message, and says that update checking will follow the patch rather than the mod it patches. Both routes in — the Marketplace, and dragging a folder or archive in — warn the same way. "The mod may be incomplete" still times out, since there is nothing there to finish.

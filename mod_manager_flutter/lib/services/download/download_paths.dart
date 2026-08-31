@@ -100,6 +100,34 @@ class DownloadPaths {
     throw FileSystemException('Too many name collisions', candidate.path);
   }
 
+  /// Removes every **completed** archive. For startup, and nowhere else.
+  ///
+  /// An install deletes the archive it consumed, so what is left in here is an
+  /// archive whose install never ran: one whose extraction failed and was kept so
+  /// the user could unpack it by hand, one interrupted by the app closing, or one
+  /// whose delete failed. Nothing swept those, so the directory grew forever.
+  ///
+  /// That is not only untidiness. A leftover `mod.rar` makes the next download of
+  /// the same file `mod (2).rar` — and for an archive with no folder inside it,
+  /// that name becomes the name of the user's mod.
+  ///
+  /// **Only safe at launch**, where nothing is queued or installing yet and every
+  /// complete file here is therefore finished with. Called at any other moment it
+  /// would delete the archive of an install still in progress.
+  ///
+  /// A `.part` and its record are left alone: they are a resumable download.
+  Future<int> sweepCompleted() async {
+    if (!await directory.exists()) return 0;
+    var removed = 0;
+    for (final entry in await directory.list(followLinks: false).toList()) {
+      if (entry is! File) continue;
+      final name = path.basename(entry.path);
+      if (name.endsWith(partSuffix) || name.endsWith(recordSuffix)) continue;
+      if (await _tryDelete(entry)) removed++;
+    }
+    return removed;
+  }
+
   /// Removes junk left by crashes and abandoned downloads.
   ///
   /// Without this the directory grows forever: every interrupted download that

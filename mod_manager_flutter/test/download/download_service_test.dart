@@ -58,6 +58,22 @@ void main() {
       expect(result.resumed, isFalse);
     });
 
+    test('it reports the name it asked for, not the one it got', () async {
+      // A leftover archive of the same name pushes this download to
+      // `mod (2).rar`. For an archive with no folder inside it that filename
+      // becomes the **mod's** name, so the install needs the name that was
+      // asked for — our own collision bookkeeping must not rename a mod.
+      File(path.join(temp.path, 'mod.rar')).writeAsStringSync('leftover');
+      transport.enqueue(url, body: body);
+
+      final result = await build().start(request()).done;
+
+      expect(path.basename(result.file.path), 'mod (2).rar',
+          reason: 'the file still never overwrites — two mods can publish the '
+              'same archive name, and the queue downloads concurrently');
+      expect(result.requestedName, 'mod.rar');
+    });
+
     test('sends no range header', () async {
       transport.enqueue(url, body: body);
       await build().start(request()).done;

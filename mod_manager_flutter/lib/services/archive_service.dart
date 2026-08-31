@@ -114,6 +114,19 @@ class ArchiveService {
     required File archiveFile,
     Directory? destinationDir,
     String? knownMd5,
+
+    /// What to call the folder invented for an archive that has none inside it,
+    /// when the file on disk is not named what the download asked for.
+    ///
+    /// The downloads directory never overwrites, so a leftover archive of the
+    /// same name pushes a new one to `mod (2).rar` — and for a rootless archive
+    /// that filename **becomes the mod's name**. The caller knows the name it
+    /// asked for, so it passes it rather than this guessing at a suffix: a mod
+    /// genuinely called `Ellen (2024)` must not be renamed by a heuristic.
+    ///
+    /// Null for an archive nobody renamed — one the user dragged in or picked —
+    /// where the file's own name is the right one.
+    String? nameHint,
   }) async {
     try {
       print('ArchiveService: Розархівування ${archiveFile.path}');
@@ -151,6 +164,7 @@ class ArchiveService {
       final directories = await _prepareDirectoriesForImport(
         tempExtractDir,
         archiveFile,
+        nameHint: nameHint,
       );
 
       if (directories.isEmpty) {
@@ -327,8 +341,9 @@ class ArchiveService {
 
   static Future<List<String>> _prepareDirectoriesForImport(
     Directory extractDir,
-    File archiveFile,
-  ) async {
+    File archiveFile, {
+    String? nameHint,
+  }) async {
     final entries = extractDir.listSync();
     final directories = <String>[];
 
@@ -352,7 +367,10 @@ class ArchiveService {
     // no subfolders at all (a flat pile of files). This keeps everything —
     // especially the root .ini — instead of returning bare subfolders.
     if (hasRootIni || dirEntries.isEmpty) {
-      final baseName = path.basenameWithoutExtension(archiveFile.path);
+      // **This becomes the mod's name**, so it is the name the caller asked for
+      // rather than whatever the file ended up called on disk — see [nameHint].
+      final baseName =
+          path.basenameWithoutExtension(nameHint ?? archiveFile.path);
       final wrapperDir = Directory(path.join(extractDir.path, baseName));
       await wrapperDir.create(recursive: true);
 

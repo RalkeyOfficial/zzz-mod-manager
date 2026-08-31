@@ -160,4 +160,52 @@ void main() {
       expect(await gone.sweep(), 0);
     });
   });
+
+  /// **At launch, and only at launch.**
+  ///
+  /// An install deletes the archive it consumed, so what is left here is an
+  /// archive whose install never ran: one whose extraction failed and was kept
+  /// on purpose, one interrupted by the app closing, or one whose delete failed.
+  /// Nothing swept those, so the folder grew forever — and a leftover with the
+  /// same name as a new download is what pushes that download to `mod (2).rar`.
+  ///
+  /// Safe at startup for one reason: nothing is queued or installing yet, so
+  /// every complete archive here is by definition finished with. Run at any other
+  /// moment it would delete the archive of an install still in progress.
+  group('sweepCompleted', () {
+    test('it removes a completed archive', () async {
+      paths.finalFile('leftover.rar').writeAsStringSync('done');
+
+      expect(await paths.sweepCompleted(), 1);
+      expect(paths.finalFile('leftover.rar').existsSync(), isFalse);
+    });
+
+    test('it leaves a resumable download alone', () async {
+      // The `.part` and its record are the one thing in here that is still
+      // wanted: they are what lets a download continue instead of restarting.
+      paths.partFile('live.rar').writeAsStringSync('bytes');
+      paths.recordFile('live.rar').writeAsStringSync('{}');
+
+      expect(await paths.sweepCompleted(), 0);
+      expect(paths.partFile('live.rar').existsSync(), isTrue);
+      expect(paths.recordFile('live.rar').existsSync(), isTrue);
+    });
+
+    test('it clears the collision that renames the next download', () async {
+      // The reason this exists rather than being tidiness: a leftover
+      // `mod.rar` makes the next download of the same file `mod (2).rar`, and
+      // for an archive with no folder inside it that suffix becomes the name of
+      // the user's mod.
+      paths.finalFile('mod.rar').writeAsStringSync('old');
+      await paths.sweepCompleted();
+
+      final promoted = await paths.resolveCollision('mod.rar');
+      expect(path.basename(promoted.path), 'mod.rar');
+    });
+
+    test('a missing directory is not an error', () async {
+      final gone = DownloadPaths(Directory(path.join(temp.path, 'nope')));
+      expect(await gone.sweepCompleted(), 0);
+    });
+  });
 }
