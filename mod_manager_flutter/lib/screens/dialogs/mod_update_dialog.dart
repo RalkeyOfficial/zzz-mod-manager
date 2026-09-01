@@ -9,7 +9,9 @@ import '../../models/gamebanana/gamebanana.dart';
 import '../../models/mod_origin.dart';
 import '../../services/api_service.dart';
 import '../../utils/notifications.dart';
+import '../../services/folder_downloads.dart';
 import '../../services/gamebanana/file_selection.dart';
+import '../../services/origin_summary.dart';
 import '../../services/update_check.dart';
 import '../../services/update_check_run.dart';
 import '../../services/update_apply/update_write_route.dart';
@@ -63,6 +65,28 @@ class ModUpdateGateway {
   ) => ApiService.updateModOrigin(modId, update);
 }
 
+/// One download in the folder, with everything needed to render a section for
+/// it: what it is, what it is called, and its own verdict.
+class _Section {
+  const _Section({
+    required this.download,
+    required this.name,
+    required this.check,
+  });
+
+  final FolderDownload download;
+  final String name;
+  final UpdateCheck check;
+
+  int? get modId => download.modId;
+  bool get isPatch => download.role == FolderDownloadRole.patch;
+
+  /// What a write and a dismissal key on — **null for the folder's own**, which
+  /// is how `updateWriteRoute` and `ModOrigin.withDismissal` spell "this
+  /// folder's own block" rather than one of its companions.
+  int? get subjectModId => download.isFolderOwn ? null : download.modId;
+}
+
 class ModUpdateDialog extends ConsumerStatefulWidget {
   const ModUpdateDialog({
     super.key,
@@ -87,7 +111,16 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// Kept so a dismissal can re-fold the verdict without a second round trip.
   GbMod? _profile;
   ReleaseGroups _releases = ReleaseGroups.empty;
-  List<GbUpdate> _updates = const <GbUpdate>[];
+
+  /// Release feeds, **by remote mod id** — the folder's own and every companion
+  /// alike.
+  ///
+  /// Keyed rather than held in one field because a folder holding two downloads
+  /// renders a full section each, notes accordion included, and two mods'
+  /// changelogs are not interchangeable. Everything else that used to be a
+  /// single value for "the mod this dialog is about" is keyed the same way and
+  /// for the same reason.
+  Map<int, List<GbUpdate>> _updatesByMod = const <int, List<GbUpdate>>{};
 
   /// The **other** mods in this folder, by remote id.
   ///
@@ -98,26 +131,31 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   Map<int, GbMod> _companionProfiles = const <int, GbMod>{};
   Map<int, ReleaseGroups> _companionReleases = const <int, ReleaseGroups>{};
 
-  /// Whether the release feed has been asked for at all.
+  /// Which mods' release feeds have been asked for at all.
   ///
   /// Opened from a card badge this dialog fetches nothing — the bulk pass
   /// already answered — so the notes are behind a button rather than costing a
   /// request every time somebody looks at a verdict they have already seen.
-  bool _notesRequested = false;
-  bool _loadingNotes = false;
+  final Set<int> _notesRequestedFor = <int>{};
+  final Set<int> _loadingNotesFor = <int>{};
 
-  /// Whether the accordion is open. Starts closed even when a check has already
+  /// Which accordions are open. All start closed even when a check has already
   /// fetched the feed: the verdict is what the dialog is for, and release notes
   /// are what you open when you have decided to care.
-  bool _notesOpen = false;
+  final Set<int> _notesOpenFor = <int>{};
 
-  /// Which published file the update would install, when the user has chosen.
+  /// Which published file the update would install, by mod id, when the user
+  /// has chosen.
   ///
-  /// Null means "whatever the check would pick". Only ever set by tapping a row,
-  /// and only offered when there is more than one — with a single candidate
+  /// Absent means "whatever the check would pick". Only ever set by tapping a
+  /// row, and only offered when there is more than one — with a single candidate
   /// there is nothing to choose between and a selection control would be a
   /// question with one answer.
-  int? _chosenFileId;
+  final Map<int, int> _chosenFileIdBy = <int, int>{};
+
+  /// Names fetched purely to label a section — see [_lookUpNames].
+  final Map<int, String> _fetchedNames = <int, String>{};
+  final Set<int> _askedNames = <int>{};
 
   /// Mirrors the sidecar edit this dialog has made, so the verdict on screen
   /// tracks it without waiting for a rescan the caller owns.
@@ -141,6 +179,37 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     if (verdictWithoutAsking(widget.mod.origin) == null &&
         ref.read(modUpdateChecksProvider)[widget.mod.id] == null) {
       _check();
+    } else {
+      _lookUpNames();
+    }
+  }
+
+  /// Names for the section headers, when no check is going to fetch them.
+  ///
+  /// Only reached on the path where `initState` skips the check — a card badge,
+  /// or reopening after this dialog's own check — and only for a folder holding
+  /// more than one download, since a single one renders no header. A per-mod
+  /// check banks nothing in the session, so on a reopen there is otherwise
+  /// nothing local to name either download from and both headers fall back.
+  ///
+  /// One `Mod/Multi` request each, at most once, and a failure is silent: the
+  /// header falls back to the folder name or the id, and an error notice about
+  /// a label would be noise on a dialog opened to read a verdict.
+  void _lookUpNames() {
+    final origin = widget.mod.origin;
+    if (origin == null || origin.companions.isEmpty) return;
+    final records = ref.read(modUpdateRecordsProvider);
+    final client = ref.read(gameBananaClientProvider);
+    for (final download in folderDownloads(origin)) {
+      final id = download.modId;
+      if (id == null || !_askedNames.add(id)) continue;
+      if (records.containsKey(id)) continue;
+      fetchModRecord(client, id).then((record) {
+        if (!mounted) return;
+        final name = record.name;
+        if (name == null || name.isEmpty) return;
+        setState(() => _fetchedNames[id] = name);
+      }).catchError((_) {});
     }
   }
 
@@ -179,7 +248,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       // own candidate while still wearing the `your choice` chip — the app
       // taking credit for a decision the user did not make, which is precisely
       // what that chip exists to prevent.
-      _chosenFileId = null;
+      _chosenFileIdBy.clear();
     });
     try {
       final client = ref.read(gameBananaClientProvider);
@@ -212,6 +281,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       // is the honest answer and the safe direction.
       final companionProfiles = <int, GbMod>{};
       final companionReleases = <int, ReleaseGroups>{};
+      final feeds = <int, List<GbUpdate>>{modId: updates};
       for (final companion in origin!.companions) {
         try {
           companionProfiles[companion.modId] =
@@ -220,9 +290,14 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
           continue;
         }
         try {
-          companionReleases[companion.modId] = ReleaseGroups.fromUpdates(
-            await client.modUpdates(companion.modId, refresh: refresh),
-          );
+          // Kept whole, not just folded into groups: a folder holding two
+          // downloads renders a notes accordion each, and the author's prose is
+          // what those show.
+          final companionUpdates =
+              await client.modUpdates(companion.modId, refresh: refresh);
+          feeds[companion.modId] = companionUpdates;
+          companionReleases[companion.modId] =
+              ReleaseGroups.fromUpdates(companionUpdates);
         } catch (_) {
           // As above: groups can only ever remove a flag, so their absence
           // leaves the louder, honest answer.
@@ -234,11 +309,12 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
         _checking = false;
         _profile = profile;
         _releases = ReleaseGroups.fromUpdates(updates);
-        _updates = updates;
+        _updatesByMod = feeds;
         _companionProfiles = companionProfiles;
         _companionReleases = companionReleases;
-        // The check already paid for the feed, so the notes are simply there.
-        _notesRequested = true;
+        // The check already paid for the feeds, so those notes are simply
+        // there. Only for the mods it actually reached.
+        _notesRequestedFor.addAll(feeds.keys);
       });
       _store(_fold());
     } catch (e) {
@@ -257,26 +333,76 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// but the path that matters here is the one where no check ran, and spending
   /// a request on every badge click to show a changelog nobody asked for is
   /// exactly the cost that path exists to avoid.
-  Future<void> _loadNotes() async {
-    final modId = widget.mod.origin?.modId;
-    if (modId == null || _loadingNotes) return;
+  Future<void> _loadNotes(int modId) async {
+    if (_loadingNotesFor.contains(modId)) return;
     setState(() {
-      _loadingNotes = true;
-      _notesRequested = true;
+      _loadingNotesFor.add(modId);
+      _notesRequestedFor.add(modId);
     });
     try {
       final updates = await ref.read(gameBananaClientProvider).modUpdates(modId);
       if (!mounted) return;
       setState(() {
-        _updates = updates;
-        _loadingNotes = false;
+        _updatesByMod = {..._updatesByMod, modId: updates};
+        _loadingNotesFor.remove(modId);
       });
     } catch (_) {
       // A feed that won't load is not a failed anything: the verdict beside it
       // is unaffected, and a mod with no update posts renders identically.
       if (!mounted) return;
-      setState(() => _loadingNotes = false);
+      setState(() => _loadingNotesFor.remove(modId));
     }
+  }
+
+  /// The folder's downloads, each paired with **its own** verdict and name.
+  ///
+  /// One entry for an ordinary mod, several for a folder holding a patch as
+  /// well as the mod it patches. Order and roles come from `folderDownloads`,
+  /// which derives them so that install order cannot change how the folder
+  /// reads — see `docs/origin-tracking.md` §10.
+  List<_Section> _sections(UpdateCheck folded) {
+    final origin = widget.mod.origin;
+    final downloads = folderDownloads(origin);
+    if (downloads.isEmpty) return const <_Section>[];
+
+    // The folded verdict belongs to whichever identity won; the loser's is
+    // beside it. `folderOwn` is null exactly when the folder's own download won,
+    // in which case the folded verdict *is* it.
+    final own = folded.subjectModId == null ? folded : folded.folderOwn;
+    final byCompanion = <int, UpdateCheck>{
+      for (final entry in folded.companions) entry.companion.modId: entry.check,
+    };
+
+    return [
+      for (final download in downloads)
+        _Section(
+          download: download,
+          name: _nameFor(download),
+          // **Never a stand-in verdict.** A download the fold has no answer for
+          // has not been looked at, and `indeterminate` is what this file says
+          // about anything it did not ask about — the same rule that keeps a
+          // half-checked folder off "up to date".
+          check: (download.isFolderOwn
+                  ? own
+                  : byCompanion[download.modId ?? -1]) ??
+              const UpdateCheck(outcome: UpdateOutcome.indeterminate),
+        ),
+    ];
+  }
+
+  /// What to call a download. The folder's own falls back to the folder name,
+  /// which is what the user knows it by everywhere else; a companion falls back
+  /// to its id, which is at least something to look up.
+  String _nameFor(FolderDownload download) {
+    final id = download.modId;
+    final fetched = id == null
+        ? null
+        : (download.isFolderOwn ? _profile?.name : _companionProfiles[id]?.name) ??
+            _fetchedNames[id] ??
+            ref.read(modUpdateRecordsProvider)[id]?.name;
+    if (fetched != null && fetched.isNotEmpty) return fetched;
+    if (download.isFolderOwn) return widget.mod.name;
+    return loc.t('mods.folder.unnamed', params: {'id': '${id ?? '?'}'});
   }
 
   void _store(UpdateCheck? check) {
@@ -326,17 +452,21 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// press, and dismissing to the current time would swallow it before the user
   /// ever saw it. Anything published after this date speaks up again on its
   /// own, which is what makes this "ignore *this*" rather than a mute.
-  Future<void> _setDismissed(bool dismissed) async {
-    final current = _stored;
-    if (current == null) return;
+  Future<void> _setDismissed(_Section? section, bool dismissed) async {
+    final folded = _stored;
+    if (folded == null) return;
+    // The section's own verdict when there is one, and the folded verdict when
+    // the folder holds a single download — those are the same thing there.
+    final current = section?.check ?? folded;
     final until = dismissed ? current.dismissableUpTo : null;
     if (dismissed && until == null) return;
 
     // A dismissal belongs to the identity whose releases it waves away, not to
     // the folder. Written onto the primary, a companion's dismissal silences
     // nothing — the companion carries its own — and stamps another mod's date
-    // onto this block.
-    final subject = current.subjectModId;
+    // onto this block. With a section in hand that identity is the section's;
+    // without one it is whichever the fold picked.
+    final subject = section?.subjectModId ?? folded.subjectModId;
 
     setState(() => _writing = true);
     final ok = await widget.gateway.writeOrigin(
@@ -361,11 +491,45 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       );
       return;
     }
-    // Flipped on the verdict already in hand, **not** re-folded from a mod page.
-    // Opened from a card badge this dialog never fetches one — the bulk pass
-    // answered — so a re-fold produced null and updated nothing, which is
-    // exactly how a successful write came to look like a dead button.
-    _store(current.asDismissed(dismissed));
+    // Re-folded from the mod pages when this dialog has them. Opened from a
+    // card badge it never fetches any — the bulk pass answered — so a re-fold
+    // produces null there, and returning early on that is exactly how a
+    // successful write once looked like a dead button.
+    //
+    // The fallback re-runs the *fold* rather than flipping the folder's verdict
+    // outright, because with several downloads a dismissal changes which one
+    // wins: waving away the patch's update on a folder whose mod also has one
+    // must leave the mod's finding standing, not mark the folder dismissed.
+    _store(_fold() ?? _refoldDismissal(folded, subject, dismissed));
+  }
+
+  /// Applies a dismissal to one identity's verdict and folds the folder again,
+  /// with no mod page in hand.
+  ///
+  /// [subject] is null for the folder's own download. A single-download folder
+  /// carries no companions, so this is `asDismissed` on the one verdict there
+  /// is — the shape this path had before a folder could hold two.
+  UpdateCheck _refoldDismissal(
+    UpdateCheck folded,
+    int? subject,
+    bool dismissed,
+  ) {
+    if (folded.companions.isEmpty) return folded.asDismissed(dismissed);
+    final own = folded.subjectModId == null ? folded : folded.folderOwn;
+    if (own == null) return folded.asDismissed(dismissed);
+
+    return foldCompanions(
+      subject == null ? own.asDismissed(dismissed) : own,
+      [
+        for (final entry in folded.companions)
+          CompanionCheck(
+            companion: entry.companion,
+            check: entry.companion.modId == subject
+                ? entry.check.asDismissed(dismissed)
+                : entry.check,
+          ),
+      ],
+    );
   }
 
   /// The file the Update button would install.
@@ -375,9 +539,10 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// nothing at all — the installed file is gone and none of the current files
   /// is identifiably its replacement — and the button is absent rather than
   /// disabled there, because the honest action then is the mod page.
-  GbFile? _fileToInstall(UpdateCheck? check) {
-    if (check == null) return null;
-    if (_chosenFileId case final id?) {
+  GbFile? _fileToInstall(_Section? section) {
+    final check = section?.check;
+    if (section == null || check == null) return null;
+    if (_chosenFileIdBy[section.modId ?? -1] case final id?) {
       for (final file in check.newerFiles) {
         if (file.idRow == id) return file;
       }
@@ -393,12 +558,13 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// session verdict is dropped for the same reason, so the card falls back to
   /// "not checked since" instead of keeping a blue mark for an update that has
   /// been taken.
-  Future<void> _applyUpdate(GbFile file) async {
-    final check = _stored;
+  Future<void> _applyUpdate(_Section? section, GbFile file) async {
     // The identity this file belongs to, which is the folder's own only when the
     // verdict is about it. A companion's file recorded against the primary would
-    // claim this folder is that other mod.
-    final subject = check?.subjectModId;
+    // claim this folder is that other mod. With a section in hand the answer is
+    // the section's — which is the point of a button per download rather than
+    // one shared button that has to work out which mod it means.
+    final subject = section?.subjectModId ?? _stored?.subjectModId;
     final modId = subject ?? widget.mod.origin?.modId;
     if (modId == null) return;
 
@@ -473,10 +639,19 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
             subjectModId: check.subjectModId,
           )
         : UpdateWriteRoute.refused;
-    final installable =
-        modId == null || !hasFinding || route.kind == UpdateWriteKind.none
-            ? null
-            : _fileToInstall(check);
+    // **One subject, one action bar.** A folder holding several downloads gives
+    // each its own Ignore and Update beneath its own facts, because a shared
+    // button would have to pick which mod it means and picking wrong writes
+    // another mod's archive over this folder. With one download nothing moves.
+    final sections = check == null ? const <_Section>[] : _sections(check);
+    final sole = sections.length == 1 ? sections.single : null;
+    final barActions = sections.length < 2;
+    final installable = modId == null ||
+            !hasFinding ||
+            !barActions ||
+            route.kind == UpdateWriteKind.none
+        ? null
+        : _fileToInstall(sole);
 
     // Tapping the barrier or pressing Escape pops with **null**, which the
     // caller reads as "nothing was written" — so a dismissal saved and then
@@ -511,7 +686,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
                 else if (check == null)
                   _notice(loc.t('mods.update.not_checked'), Icons.help_outline)
                 else
-                  ..._verdict(check),
+                  ..._body(check),
               ],
             ),
           ),
@@ -531,16 +706,16 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
           // "Ignore" against a live finding; "stop ignoring" once dismissed. The
           // undo sits in the same place as the thing it undoes, so a user who
           // dismissed the wrong mod does not have to work out where it went.
-          if (check?.dismissed ?? false)
+          if (barActions && (check?.dismissed ?? false))
             TextButton(
-              onPressed: _busy ? null : () => _setDismissed(false),
+              onPressed: _busy ? null : () => _setDismissed(sole, false),
               child: Text(loc.t('mods.update.undismiss')),
             )
-          else if (check?.hasUpdate ?? false)
+          else if (barActions && (check?.hasUpdate ?? false))
             TextButton(
               onPressed: _busy || (check?.dismissableUpTo == null)
                   ? null
-                  : () => _setDismissed(true),
+                  : () => _setDismissed(sole, true),
               child: Text(loc.t('mods.update.dismiss')),
             ),
           if (modId != null &&
@@ -560,7 +735,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
           // honest offer is the mod page, not a guess installed over a live mod.
           if (installable case final file?)
             FilledButton.icon(
-              onPressed: _busy ? null : () => _applyUpdate(file),
+              onPressed: _busy ? null : () => _applyUpdate(sole, file),
               icon: const Icon(Icons.download_for_offline_outlined, size: 16),
               label: Text(loc.t('mods.update_apply.action')),
             ),
@@ -602,28 +777,103 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
 
   // ------------------------------------------------------------------ verdict
 
-  List<Widget> _verdict(UpdateCheck check) {
+  /// The dialog's content: **one full report per download in the folder.**
+  ///
+  /// A check is about the mods *in a folder*, and a folder frequently holds two
+  /// — a patch and the mod it patches. Both are in scope, so both get the whole
+  /// treatment: a verdict, the before-and-after box, the file list where there
+  /// is a choice, and the author's notes. Summarising the second one in a line
+  /// was answering a different question from the one the first one answers.
+  ///
+  /// **A folder with one download renders exactly as it always has**, including
+  /// keeping its Update and Ignore in the action bar. The per-section controls
+  /// below exist because two subjects cannot share one action row; introducing
+  /// them for a single subject would move a button nobody asked to have moved.
+  List<Widget> _body(UpdateCheck check) {
+    final sections = _sections(check);
+    if (sections.length < 2) {
+      return _verdict(
+        sections.isEmpty
+            ? _Section(
+                download: const FolderDownload(
+                  role: FolderDownloadRole.mod,
+                  modId: null,
+                  isFolderOwn: true,
+                  summary: OriginSummary.empty,
+                  remoteMissing: false,
+                ),
+                name: widget.mod.name,
+                check: check,
+              )
+            : sections.single,
+        withActions: false,
+      );
+    }
+
+    return [
+      for (final (index, section) in sections.indexed) ...[
+        if (index > 0) ...[
+          const SizedBox(height: 20),
+          const Divider(height: 1),
+          const SizedBox(height: 20),
+        ],
+        _sectionHeader(section),
+        const SizedBox(height: 10),
+        ..._verdict(section, withActions: true),
+      ],
+    ];
+  }
+
+  /// Names the download a section is about, and marks a patch as one.
+  ///
+  /// **The marker is a left rule and a chip, not a position.** Which download a
+  /// sidecar stores first is install order, so a patch has to be legible as a
+  /// patch wherever it sits — see `docs/origin-tracking.md` §10.
+  Widget _sectionHeader(_Section section) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Container(
+          width: 3,
+          height: 22,
+          decoration: BoxDecoration(
+            color: section.isPatch ? scheme.tertiary : scheme.primary,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            section.name,
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.w700),
+          ),
+        ),
+        const SizedBox(width: 6),
+        _chip(
+          loc.t(section.isPatch
+              ? 'mods.folder.role_patch'
+              : 'mods.folder.role_mod'),
+          section.isPatch ? scheme.tertiary : scheme.primary,
+        ),
+        if (section.modId case final id?)
+          IconButton(
+            icon: const Icon(Icons.open_in_new, size: 16),
+            tooltip: loc.t('mods.folder.open_page'),
+            visualDensity: VisualDensity.compact,
+            onPressed: () => launchExternalUrl(context, gameBananaModUrl(id)),
+          ),
+      ],
+    );
+  }
+
+  List<Widget> _verdict(_Section section, {required bool withActions}) {
+    final check = section.check;
     final scheme = Theme.of(context).colorScheme;
     return [
       _headline(check),
-      // Everything below describes a different mod from the one the folder is
-      // named after, so it is said before any of it rather than left to notice.
-      if (check.subjectModId case final subject?) ...[
-        const SizedBox(height: 8),
-        _notice(
-          loc.t('mods.update.about_companion', params: {
-            // The bulk pass's records too, not just this dialog's own fetch:
-            // opened from a card badge nothing is fetched here, and that is
-            // the common way to arrive at a verdict somebody wants explained.
-            'mod': (_companionProfiles[subject] ??
-                        ref.read(modUpdateRecordsProvider)[subject])
-                    ?.name ??
-                '#$subject',
-            'folder': widget.mod.name,
-          }),
-          Icons.call_split,
-        ),
-      ],
       if (check.isObsolete) ...[
         const SizedBox(height: 8),
         // Its own line, never folded into the verdict: an obsolete mod still
@@ -678,7 +928,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
             _line(
               Icons.inventory_2_outlined,
               loc.t('mods.update.you_have'),
-              _installedDescription(check),
+              _installedDescription(section),
               // Only when there is a published record to read it from. With the
               // installed file gone from the page the headline already falls
               // back to what the sidecar stored, and repeating it underneath
@@ -702,7 +952,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
                   detail: _fileDetail(candidate),
                 ),
               ],
-              if (_releaseName(check.candidate) case final release?) ...[
+              if (_releaseName(section, check.candidate) case final release?) ...[
                 const SizedBox(height: 6),
                 // The author's own title for the release ("Version 1.5") — very
                 // often the only real version number a mod page has, since
@@ -714,19 +964,34 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
                 ),
               ],
             ],
-            if (check.comparedAgainst case final date?) ...[
-              const SizedBox(height: 6),
-              _line(
-                Icons.event_outlined,
-                loc.t('mods.update.compared_against'),
-                _formatDate(date),
-              ),
-            ],
+            // **The cutoff, and only where it is not already on screen.**
+            //
+            // The check reads a mod page's file list; it never reads the mod
+            // folder, so "compared against <date>" invited the reading that
+            // something about the *files* was compared. On the ordinary path
+            // that date is the upload date of the file named in the row above,
+            // so the line was restating it under a label that overclaimed.
+            //
+            // It survives only where there is no installed file to name — an
+            // `assumed_latest` install, where a date really is the whole of
+            // what the answer rests on — and it says what the date does rather
+            // than what it is, in the same words the resolve dialog uses for
+            // the same state.
+            if (check.installedFile == null)
+              if (check.comparedAgainst case final date?) ...[
+                const SizedBox(height: 6),
+                _line(
+                  Icons.event_outlined,
+                  loc.t('mods.update.baseline_label'),
+                  loc.t('mods.update.baseline_value',
+                      params: {'date': _formatDate(date)}),
+                ),
+              ],
           ],
         ),
       ),
-      if (check.newerFiles.length >= 2) ..._options(check),
-      ..._releaseNotes(check),
+      if (check.newerFiles.length >= 2) ..._options(section),
+      ..._releaseNotes(section),
       // The caveat the locked decision requires, and it is placed *below* the
       // facts rather than above them: it qualifies the verdict, it is not the
       // verdict. Shown for every guessed answer, including the ones that came
@@ -747,6 +1012,53 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
         ),
       ],
+      // The per-section controls. **Only where there are several sections** —
+      // with one subject the action bar keeps them, which is where they have
+      // always been. Two subjects cannot share one action row: an "Update"
+      // there would have to pick a mod on the user's behalf, and picking the
+      // wrong one writes another mod's archive over this folder.
+      if (withActions) ..._sectionActions(section),
+    ];
+  }
+
+  /// Ignore and Update, for one download.
+  ///
+  /// Right-aligned under that download's own facts, so which mod a press acts
+  /// on is answered by where the button is rather than by the user tracking a
+  /// subject through a shared action bar.
+  List<Widget> _sectionActions(_Section section) {
+    final check = section.check;
+    final installable = _fileToInstall(section);
+    final canDismiss = check.hasUpdate && check.dismissableUpTo != null;
+    if (!check.dismissed && !canDismiss && installable == null) {
+      return const <Widget>[];
+    }
+
+    return [
+      const SizedBox(height: 10),
+      Wrap(
+        alignment: WrapAlignment.end,
+        spacing: 8,
+        runSpacing: 4,
+        children: [
+          if (check.dismissed)
+            TextButton(
+              onPressed: _busy ? null : () => _setDismissed(section, false),
+              child: Text(loc.t('mods.update.undismiss')),
+            )
+          else if (canDismiss)
+            TextButton(
+              onPressed: _busy ? null : () => _setDismissed(section, true),
+              child: Text(loc.t('mods.update.dismiss')),
+            ),
+          if (installable case final file?)
+            FilledButton.icon(
+              onPressed: _busy ? null : () => _applyUpdate(section, file),
+              icon: const Icon(Icons.download_for_offline_outlined, size: 16),
+              label: Text(loc.t('mods.update_apply.action')),
+            ),
+        ],
+      ),
     ];
   }
 
@@ -766,7 +1078,9 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// Bounded and separately scrollable for the reason the resolve dialog's
   /// picker is: a mod can publish more than a screenful, and the buttons below
   /// must stay reachable.
-  List<Widget> _options(UpdateCheck check) {
+  List<Widget> _options(_Section section) {
+    final check = section.check;
+    final chosen = _chosenFileIdBy[section.modId ?? -1];
     final scheme = Theme.of(context).colorScheme;
     return [
       const SizedBox(height: 12),
@@ -791,11 +1105,12 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
             for (final file in check.newerFiles)
               _optionRow(
                 file,
-                isPick: file.idRow == _fileToInstall(check)?.idRow,
+                section: section,
+                isPick: file.idRow == _fileToInstall(section)?.idRow,
                 // Only the check's *own* pick may claim grounds. Once the user
                 // has tapped a row the chip says so, rather than the app taking
                 // credit for their decision under a label it did not choose.
-                pickLabelKey: _chosenFileId != null
+                pickLabelKey: chosen != null
                     ? 'mods.update.pick_chosen'
                     : check.candidateMatchesVariant
                         ? 'mods.update.pick_variant'
@@ -830,20 +1145,23 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// scroll view the user had not asked to grow. Collapsing is the fix, and it
   /// also gives the section the edge it was missing — the header *is* the
   /// separator.
-  List<Widget> _releaseNotes(UpdateCheck check) {
-    final modId = widget.mod.origin?.modId;
+  List<Widget> _releaseNotes(_Section section) {
+    final modId = section.modId;
     if (modId == null) return const [];
 
-    final since = check.comparedAgainst;
+    final requested = _notesRequestedFor.contains(modId);
+    final loading = _loadingNotesFor.contains(modId);
+    final open = _notesOpenFor.contains(modId);
+    final since = section.check.comparedAgainst;
     final relevant = [
-      for (final update in _updates)
+      for (final update in _updatesByMod[modId] ?? const <GbUpdate>[])
         if (update.hasNotes &&
             (since == null || (update.dateAdded?.isAfter(since) ?? true)))
           update,
     ];
     // Nothing to offer, and nothing to say about it: a mod with no update posts
     // is ordinary, so an empty "Release notes" header would be noise.
-    if (_notesRequested && !_loadingNotes && relevant.isEmpty) {
+    if (requested && !loading && relevant.isEmpty) {
       return const [];
     }
 
@@ -863,14 +1181,16 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
               // Expanding is also what *fetches* on the badge path, so one
               // gesture does both and there is no separate "show notes" button
               // that turns into a heading.
-              onTap: _busy || _loadingNotes
+              onTap: _busy || loading
                   ? null
                   : () {
-                      if (!_notesRequested) {
-                        setState(() => _notesOpen = true);
-                        unawaited(_loadNotes());
+                      if (!requested) {
+                        setState(() => _notesOpenFor.add(modId));
+                        unawaited(_loadNotes(modId));
                       } else {
-                        setState(() => _notesOpen = !_notesOpen);
+                        setState(() => open
+                            ? _notesOpenFor.remove(modId)
+                            : _notesOpenFor.add(modId));
                       }
                     },
               child: Padding(
@@ -890,7 +1210,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
                             ?.copyWith(fontWeight: FontWeight.w700),
                       ),
                     ),
-                    if (_loadingNotes)
+                    if (loading)
                       const SizedBox(
                         width: 16,
                         height: 16,
@@ -898,14 +1218,14 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
                       )
                     else
                       Icon(
-                        _notesOpen ? Icons.expand_less : Icons.expand_more,
+                        open ? Icons.expand_less : Icons.expand_more,
                         color: scheme.onSurfaceVariant,
                       ),
                   ],
                 ),
               ),
             ),
-            if (_notesOpen && !_loadingNotes && relevant.isNotEmpty)
+            if (open && !loading && relevant.isNotEmpty)
               // Bounded and scrolling inside itself, the rule every list in
               // these dialogs follows: the buttons underneath must stay one
               // click away.
@@ -983,6 +1303,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// on the suggestion.
   Widget _optionRow(
     GbFile file, {
+    required _Section section,
     required bool isPick,
     required String pickLabelKey,
   }) {
@@ -991,8 +1312,13 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       padding: const EdgeInsets.only(bottom: 4),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onTap:
-            _busy ? null : () => setState(() => _chosenFileId = file.idRow),
+        // Keyed by mod, so choosing a file for the patch cannot silently become
+        // the choice for the mod it patches.
+        onTap: _busy
+            ? null
+            : () => setState(
+                  () => _chosenFileIdBy[section.modId ?? -1] = file.idRow,
+                ),
         child: Container(
           padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
           decoration: BoxDecoration(
@@ -1028,7 +1354,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
                       scheme.onPrimary,
                       background: ModStatusSlot.updateBlue,
                     ),
-                  if (_releaseName(file) case final release?)
+                  if (_releaseName(section, file) case final release?)
                     _chip(release, scheme.primary),
                 ],
               ),
@@ -1064,7 +1390,32 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   );
 
   Widget _headline(UpdateCheck check) {
-    final (String key, IconData icon, Color colour) = switch (check.outcome) {
+    final (key, icon, colour) = _outcomeStyle(check.outcome);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 24, color: colour),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            loc.t(key),
+            style: Theme.of(context).textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.w700),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// How an outcome is worded, iconed and coloured.
+  ///
+  /// One switch, because the headline states the folder's verdict and the
+  /// companion section states each other identity's — and two switches over the
+  /// same enum is how one of them ends up missing a case, silently, since a
+  /// missing key renders as its own dotted path rather than throwing.
+  (String, IconData, Color) _outcomeStyle(UpdateOutcome outcome) {
+    return switch (outcome) {
       UpdateOutcome.updateAvailable => (
         'mods.update.verdict_update',
         Icons.arrow_circle_up,
@@ -1113,21 +1464,6 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
         Theme.of(context).colorScheme.onSurfaceVariant,
       ),
     };
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 24, color: colour),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            loc.t(key),
-            style: Theme.of(context).textTheme.titleMedium
-                ?.copyWith(fontWeight: FontWeight.w700),
-          ),
-        ),
-      ],
-    );
   }
 
   /// What the user has, preferring the published record and falling back to
@@ -1137,21 +1473,23 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// produces is "the file you installed is gone from the mod page", and in
   /// exactly that case there is no published record left to describe. Saying
   /// "unknown" there would contradict the headline directly above it.
-  String _installedDescription(UpdateCheck check) {
-    if (check.installedFile case final file?) return _fileHeadline(file);
-    final origin = widget.mod.origin;
-    final parts = [
-      if (origin?.version case final v? when v.isNotEmpty) v,
-      if (origin?.versionLabel case final l? when l.isNotEmpty) l,
-    ];
-    if (parts.isNotEmpty) return parts.join(' · ');
+  String _installedDescription(_Section section) {
+    if (section.check.installedFile case final file?) return _fileHeadline(file);
+    // **From the entry's own summary, not the folder's block.** A companion
+    // records its own `version` / `version_label`, and reading the primary's
+    // here would describe the wrong download — which is exactly the confusion
+    // a section per download exists to remove.
+    if (section.download.summary.versionLabel case final label?) {
+      if (label.isNotEmpty) return label;
+    }
     return loc.t('mods.update.unknown_file');
   }
 
   /// The update post that shipped [file], by name (`Version 1.5`).
-  String? _releaseName(GbFile? file) {
+  String? _releaseName(_Section section, GbFile? file) {
     if (file == null) return null;
-    for (final update in _updates) {
+    for (final update in _updatesByMod[section.modId ?? -1] ??
+        const <GbUpdate>[]) {
       if (!update.fileRowIds.contains(file.idRow)) continue;
       final name = update.name?.trim();
       return name == null || name.isEmpty ? null : name;
@@ -1162,21 +1500,33 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// The filename with its upload date, for the compact "you have" /
   /// "published" pair. The author's own words go on the greyed line beneath —
   /// see [_fileDetail].
-  String _fileHeadline(GbFile file) {
-    final date = file.dateAdded;
-    return date == null
-        ? fileDisplayName(file)
-        : '${fileDisplayName(file)} — ${_formatDate(date)}';
-  }
+  /// **The filename, and nothing glued to it.**
+  ///
+  /// The upload date used to be appended with a dash, which read as part of the
+  /// name — `v77.zip — 2026-06-19` looks like a file called that. It is a fact
+  /// *about* the file, the same kind as its version, so it belongs on the
+  /// greyed line with them.
+  String _fileHeadline(GbFile file) => fileDisplayName(file);
 
-  /// What the author said about the file, for the second line of those rows.
+  /// What the author said about the file **and when it went up**, for the
+  /// second line of those rows.
   ///
   /// It has to be *there*, not folded into the headline: those two rows sit
   /// directly above one another and are frequently the same variant of the
   /// same mod, so `7.4 · Main file` against `7.7 · Main file` is the comparison
-  /// the user opened the dialog for. What changed is only that it no longer
-  /// stands in for the filename.
-  String? _fileDetail(GbFile file) => fileDisplayDetail(file);
+  /// the user opened the dialog for.
+  ///
+  /// The date joins it rather than the filename because it is the same kind of
+  /// thing — a fact about the file — and because on the rows where the author's
+  /// labels are identical it is the only thing telling them apart.
+  String? _fileDetail(GbFile file) {
+    final parts = [
+      if (fileDisplayDetail(file) case final detail?) detail,
+      if (file.dateAdded case final date?)
+        loc.t('mods.update.uploaded', params: {'date': _formatDate(date)}),
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
 
   // ---------------------------------------------------------------- fragments
 

@@ -743,6 +743,67 @@ void main() {
       expect(find.text('This mod holds a patch'), findsNothing);
     });
 
+    testWidgets('a patch installed into this folder is a peer, not editable',
+        (tester) async {
+      // **The mirror image, and it had no surface at all.** The prompt below
+      // asks the one question this dialog can answer — *this folder is a patch;
+      // what does it patch?* A `patch` companion is what the patch installer
+      // writes on the base mod's own sidecar, with both axes already `exact`
+      // because the app performed that download: nothing to ask about it, and
+      // no flow that runs the other way — so it is a row like any other, with
+      // no change affordance.
+      final transport = FakeHttpTransport()
+        ..stub(profileUrl, body: loadGbFixture('mod_profile_531649'))
+        ..stub(
+          Uri.parse(
+            'https://gamebanana.com/apiv13/Mod/Multi'
+            '?_csvRowIds=$otherModId&_csvProperties=_idRow%2C_sName%2C_sVersion'
+            '%2C_tsDateAdded%2C_tsDateUpdated%2C_bIsObsolete%2C_bIsPrivate'
+            '%2C_bIsTrashed%2C_bIsWithheld%2C_aFiles',
+          ),
+          body: '[{"_idRow":$otherModId,"_sName":"Ellen Joe Cheongsam"}]',
+        );
+
+      await pumpDialog(
+        tester,
+        target: mod(
+          origin: tracked(
+            modIdConfidence: OriginConfidence.exact,
+            fileId: 1732269,
+            versionConfidence: OriginConfidence.exact,
+            provenance: OriginProvenance.downloaded,
+          ).copyWith(
+            companions: const [
+              ModCompanion(
+                role: CompanionRole.patch,
+                modId: otherModId,
+                modIdConfidence: OriginConfidence.exact,
+                fileId: 1462303,
+                versionConfidence: OriginConfidence.exact,
+              ),
+            ],
+          ),
+        ),
+        transport: transport,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('This folder holds two downloads'), findsOneWidget);
+      // Named, because this dialog is already talking to GameBanana and an id
+      // is not something a person can act on.
+      expect(find.text('Ellen Joe Cheongsam'), findsOneWidget);
+      // Both roles labelled, and the folder's own entry is the mod here — this
+      // folder holds the mod and had a patch put into it.
+      expect(find.text('Mod'), findsOneWidget);
+      expect(find.text('Patch'), findsOneWidget);
+      // Nothing to change: no flow runs in this direction.
+      expect(find.byIcon(Icons.edit_outlined), findsNothing);
+      // And *not* the prompt, which asks a question this folder never posed.
+      expect(find.text('This mod holds a patch'), findsNothing);
+      // The escape hatches stay reachable, as they must with anything added.
+      expect(find.text('Not from GameBanana, or it\'s my own'), findsOneWidget);
+    });
+
     testWidgets('a patch-shaped folder offers to name what it patches',
         (tester) async {
       await pumpDialog(
@@ -986,9 +1047,19 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Named, so the row states the answer rather than asking for one.
+      // **Named, so it is a row in the folder's list rather than a prompt.**
+      // The prompt below the list exists only while there is no entry to hang
+      // the change affordance on; once there is, a second row for the same
+      // download would rank it above the other one again.
       expect(find.text('Name the mod it patches'), findsNothing);
-      await tester.tap(find.text('This mod holds a patch'));
+      expect(find.text('This mod holds a patch'), findsNothing);
+      expect(find.text('This folder holds two downloads'), findsOneWidget);
+
+      // Scrolled to first: the folder's list sits above the escape hatches in a
+      // dialog whose content already scrolls, so the row can be below the fold.
+      await tester.ensureVisible(find.byIcon(Icons.edit_outlined));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.edit_outlined));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('This is just one mod after all'));

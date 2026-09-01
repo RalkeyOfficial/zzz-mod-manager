@@ -590,6 +590,11 @@ and what survives a rebind. Entry points: the status slot and the mod context me
   seeing them is enough; at 80 it may not be, and the natural home is a second
   row on the `!` toggle rather than a sixth toolbar control. Filed rather than
   built, to see whether it is actually wanted.
+- [ ] **A patch recorded *inside* a folder cannot be corrected, only read.** The
+  resolve dialog's editable row runs one way — "this folder is a patch, name
+  what it patches" — so a `role: patch` companion is shown and nothing more.
+  What is missing is "that patch is gone / it was never there"; the cost is
+  mirroring the wording in both locales.
 - [ ] **The two resolve dialogs still fetch a whole `ProfilePage`.** They read
   four fields off it — name, dates, files, archived files — where the update
   check now asks `Mod/Multi` for one id at a quarter of the bytes. Not a

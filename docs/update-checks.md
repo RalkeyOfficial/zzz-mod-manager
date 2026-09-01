@@ -149,6 +149,24 @@ primary's.
 
 ## 3. How the comparison actually works
 
+**Nothing reads the mod folder.** Not once, on any path. The check compares what the
+sidecar *records* about the file you installed — its id, its upload date, its version
+string, the author's label for it — against the file list the mod page publishes
+today. It does not hash your files, diff them, or look at them at all, so it cannot
+know that you edited a `.ini`, merged a second mod in, or replaced a texture by hand.
+
+Two consequences worth being blunt about:
+
+- **A mod with no recorded file can only be judged by date**, which is a cutoff and
+  not a comparison: everything the page offers that went up after that date is a
+  candidate, and the verdict is capped at *possibly* outdated accordingly.
+- **A verdict is about the mod page, never about the folder.** "This is the latest
+  file" means the page publishes nothing newer than what we recorded — it is not a
+  claim that the folder still holds what we put there.
+
+What follows is the machinery that makes the first case better than a date cutoff
+whenever there is enough on record to do so.
+
 ### When the installed file is known
 
 Three questions, in order, and the order is the design.
@@ -696,6 +714,44 @@ leaves every verdict; and `_bIsPrivate` is one of the three flags `remote_missin
 reads. `Mod/Multi` is smaller than it anyway — 7.7 KB against 8.1 KB — since it
 sends no licence or submitter instructions.
 
+**A folder holding two downloads gets a full report each.** Not a verdict plus a
+summary of the other one: a check is about *the mods in a folder*, both are in scope,
+so both get the whole treatment — headline, the before-and-after box, the file list
+where there is a choice, the author's notes, and their own Ignore and Update. A
+section per download, separated by a rule, ordered mod then patch.
+
+Anything less answers a different question for the second mod than it answered for
+the first. Before this, a download was named at all only when it **won** the fold, so
+a folder holding a patch and reported *up to date* said nothing about the patch —
+indistinguishable from a folder holding one mod.
+
+Three things this rests on:
+
+- **`UpdateCheck.folderOwn`.** Companion verdicts have always been kept
+  (`UpdateCheck.companions`); the primary's is the one `foldCompanions` discards when
+  a companion wins, so without it the single folder whose *patch* has the update
+  would be the one that could say nothing about the mod it patches. Null when the
+  primary won — the returned verdict is it, and a second copy would drift under
+  `asDismissed`.
+- **Everything per-download is keyed by mod id** — the release feed, whether its
+  accordion is open, which file the user picked. One shared "chosen file" would let a
+  choice made for the patch install the mod it patches.
+- **Actions live in the section, not the action bar.** Two subjects cannot share one
+  Update button: it would have to pick a mod on the user's behalf, and picking wrong
+  writes another mod's archive over this folder. A **folder with one download is
+  untouched** and keeps its buttons where they have always been — introducing
+  per-section controls for a single subject would move a button for no reason.
+
+Dismissing from a section re-runs the fold rather than flipping the folder's verdict,
+because with two downloads a dismissal changes which one wins: waving away the
+patch's update on a folder whose mod also has one must leave the mod's finding
+standing.
+
+Nothing ranks the folder's own download above the other, and the reason is that which
+one it is comes down to install order:
+[`origin-tracking.md` §10](origin-tracking.md#where-it-is-shown), whose role
+derivation and patch marker this shares with the details and resolve dialogs.
+
 **One id per request, not one request per folder.** A batch is all-or-nothing, so
 folding a companion's id in with the primary's would let a companion whose page has
 been deleted fail the primary's check — where the rule is that an unreachable
@@ -860,10 +916,16 @@ names it the same way, from two pure helpers in
 `services/gamebanana/file_selection.dart`:
 
 ```
-v77.zip                     ← fileDisplayName: the filename
-7.7 · Main file             ← fileDisplayDetail: version · description, greyed
-2026-06-19                  ← the row's own metadata
+v77.zip                                     ← fileDisplayName: the filename
+7.7 · Main file · uploaded 2026-06-19       ← fileDisplayDetail plus the date, greyed
 ```
+
+**The upload date joins the greyed line rather than the title.** It used to be
+appended to the filename with a dash, and `v77.zip — 2026-06-19` reads as a file
+called that. It is a fact *about* the file, the same kind as its version, and on the
+rows where the author's labels are identical — which is the common shape of an
+update — it is the only thing telling the two apart, so it has to be legible as a
+date rather than as a suffix.
 
 **The title is the filename, and this reverses an earlier decision.** It used to
 lead with `_sDescription`, on the reasoning that the description is what

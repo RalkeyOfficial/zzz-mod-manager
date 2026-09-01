@@ -16,6 +16,7 @@ import '../../services/origin_summary.dart';
 import '../../utils/gamebanana_url.dart';
 import '../../utils/state_providers.dart';
 import '../../utils/url_utils.dart';
+import '../components/folder_downloads_summary.dart';
 import '../components/resolve/file_choice_panel.dart';
 import '../components/resolve/identity_search_panel.dart';
 import '../components/resolve/resolve_fragments.dart';
@@ -498,6 +499,10 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
         )
       else if (_profileError != null) ...[
         _notice(loc.t('mods.resolve.load_failed'), Icons.cloud_off),
+        // Still shown with the mod page unreachable: what the folder holds is
+        // read out of the sidecar, so a failed fetch costs the companion's
+        // *name* and nothing else.
+        ..._folderSection(),
         const Divider(),
         // Still offered with the mod page unreachable, because it needs nothing
         // from it: "it's my own" is a statement about the folder. The "assume
@@ -520,6 +525,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
           ),
         ),
         const Divider(),
+        ..._folderSection(),
         if (_companionRow() case final row?) row,
         _assumeCurrentTile(),
         _stopTrackingTile(),
@@ -527,13 +533,54 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     ];
   }
 
-  /// The way into naming the **other download in this folder** — one row, and
-  /// only where there is something to say.
+  /// Everything in this folder, this one included, as peers.
   ///
-  /// Shown when the folder is recorded as patch-shaped (so the app knows it is
-  /// two things and can only ask about one) or when a companion is already
-  /// named (so the answer can be corrected). Offering it on every mod would
-  /// turn a rare, specific question into furniture.
+  /// **The folder's own download gets no privileged place here**, even though
+  /// this dialog is otherwise entirely about it: which of a mod and its patch a
+  /// sidecar stores in `origin`'s own fields is install order, so ranking by it
+  /// would put the same pair of mods in different places for two users who did
+  /// the same thing in a different sequence.
+  ///
+  /// The row for the mod a patch applies to carries the **change** affordance,
+  /// rather than that entry getting a row of its own below the list. The empty
+  /// case still does — see [_companionRow] — because there is no entry to hang
+  /// it on until something is named.
+  ///
+  /// Above the escape hatches, which have to stay near the bottom.
+  List<Widget> _folderSection() {
+    final origin = _origin;
+    if (origin == null || origin.companions.isEmpty) return const <Widget>[];
+
+    final base = origin.companionOfRole(CompanionRole.base);
+    return [
+      FolderDownloadsSummary(
+        origin: origin,
+        folderName: widget.mod.name,
+        // This dialog has the folder's own page in hand already.
+        knownNames: {
+          if (origin.modId case final id?)
+            if (_profile?.name case final name?) id: name,
+        },
+        lookUpNames: true,
+        // Only the mod a patch applies to. A `patch` recorded *in* this folder
+        // was downloaded by the app with both axes already `exact`, so there is
+        // nothing to ask about it — and no flow that would run the other way.
+        editableModIds: {if (base != null) base.modId},
+        onEdit: (_) => _editCompanion(base),
+      ),
+      const SizedBox(height: 8),
+    ];
+  }
+
+  /// The way into naming the **other download in this folder**, for the case
+  /// where there is not one yet.
+  ///
+  /// Shown only when the folder is recorded as patch-shaped and nothing has been
+  /// named: the app knows the folder is two things and can only ask about one.
+  /// Once a companion exists it appears in [_folderSection] as a peer, carrying
+  /// the change affordance on its own row — a second row below the list for the
+  /// same download would rank it again. Offering this on every mod would turn a
+  /// rare, specific question into furniture.
   ///
   /// A pushed step rather than a section: this dialog's escape hatches must
   /// stay one click from the bottom, and a second identity card inline is what
@@ -541,8 +588,8 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
   Widget? _companionRow() {
     final origin = _origin;
     if (origin == null) return null;
-    final existing = origin.companionOfRole(CompanionRole.base);
-    if (existing == null && !origin.needsCompanion) return null;
+    if (origin.companionOfRole(CompanionRole.base) != null) return null;
+    if (!origin.needsCompanion) return null;
 
     return ListTile(
       dense: true,
@@ -554,14 +601,11 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
         style: const TextStyle(fontSize: 13),
       ),
       subtitle: Text(
-        existing == null
-            ? loc.t('mods.resolve.companion_row_unnamed')
-            : loc.t('mods.resolve.companion_row_named',
-                params: {'mod': '#${existing.modId}'}),
+        loc.t('mods.resolve.companion_row_unnamed'),
         style: const TextStyle(fontSize: 11),
       ),
       trailing: const Icon(Icons.chevron_right, size: 18),
-      onTap: () => _editCompanion(existing),
+      onTap: () => _editCompanion(null),
     );
   }
 

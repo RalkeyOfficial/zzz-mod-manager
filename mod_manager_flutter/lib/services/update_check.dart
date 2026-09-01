@@ -186,6 +186,7 @@ class UpdateCheck {
     this.candidateMatchesVariant = false,
     this.subjectModId,
     this.companions = const <CompanionCheck>[],
+    this.folderOwn,
   });
 
   /// The same evidence under a different verdict.
@@ -207,13 +208,19 @@ class UpdateCheck {
         candidateMatchesVariant: candidateMatchesVariant,
         subjectModId: subjectModId,
         companions: companions,
+        folderOwn: folderOwn,
       );
 
   /// The same verdict, re-attributed to [modId] and carrying [others].
   ///
   /// Used only by [foldCompanions], where the winning identity's fields become
   /// the folder's.
-  UpdateCheck asSubject(int? modId, List<CompanionCheck> others) => UpdateCheck(
+  UpdateCheck asSubject(
+    int? modId,
+    List<CompanionCheck> others, {
+    UpdateCheck? folderOwn,
+  }) =>
+      UpdateCheck(
         outcome: outcome,
         installedFile: installedFile,
         candidate: candidate,
@@ -226,6 +233,7 @@ class UpdateCheck {
         candidateMatchesVariant: candidateMatchesVariant,
         subjectModId: modId,
         companions: others,
+        folderOwn: folderOwn,
       );
 
   final UpdateOutcome outcome;
@@ -311,6 +319,20 @@ class UpdateCheck {
   /// asked about those at all.
   final List<CompanionCheck> companions;
 
+  /// The **folder's own** download's verdict, when a companion's won the fold
+  /// instead — null when this verdict already is the folder's own.
+  ///
+  /// Kept because which download a sidecar calls the primary is an accident of
+  /// install order, not a ranking, and a dialog listing the folder's contents as
+  /// peers needs every identity's answer including that one. Without it the
+  /// primary's verdict is the only one the fold discards, so exactly the folder
+  /// whose patch has the update could say nothing about the mod it patches.
+  ///
+  /// Not a general parent link: it is one level deep by construction, since the
+  /// value stored here is a pre-fold check and pre-fold checks carry no
+  /// companions.
+  final UpdateCheck? folderOwn;
+
   /// The user has seen this much and said "not this one".
   ///
   /// The verdict is **kept**, not rewritten: the dialog still shows what is
@@ -374,6 +396,7 @@ class UpdateCheck {
         dismissed: value,
         subjectModId: subjectModId,
         companions: companions,
+        folderOwn: folderOwn,
       );
 }
 
@@ -571,7 +594,13 @@ UpdateCheck foldCompanions(
   }
 
   final winner = best ?? (null, primary);
-  return winner.$2.asSubject(winner.$1, companions);
+  return winner.$2.asSubject(
+    winner.$1,
+    companions,
+    // Only when it lost. When the primary won, the returned verdict *is* it,
+    // and storing a second copy would let the two drift under `asDismissed`.
+    folderOwn: winner.$1 == null ? null : primary,
+  );
 }
 
 UpdateCheck _checkForUpdate({

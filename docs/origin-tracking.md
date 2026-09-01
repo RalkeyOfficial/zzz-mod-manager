@@ -793,6 +793,92 @@ The sidecar's three load-bearing rules apply, with consequences specific to a li
 - **No nesting.** A companion carries no companions of its own.
 - Absent from the json when empty, which is every sidecar that has never needed one.
 
+### Where it is shown
+
+**Three dialogs, one implementation** — the details view, the resolve dialog and the
+update dialog, through `screens/components/folder_downloads_summary.dart` over the
+pure `services/folder_downloads.dart`.
+
+**Nothing in it ranks the folder's own download above the other one**, and that is
+the whole design rather than a nicety. Which of a mod and its patch lands in
+`origin`'s own fields is **install order**: patch the mod and the mod is the primary;
+install the patch first and name the mod afterwards and the patch is. The block is
+identical in substance either way. So a section that read the block straight would
+put the same pair of mods in different places for two users who did the same thing in
+a different sequence — the base mod demoted to a footnote for one of them.
+
+`folderDownloads` flattens that. It emits one entry per download, each carrying an
+**absolute** role — `mod` or `patch` — derived rather than read off a field, since
+`ModCompanion.role` is *relative* to the primary and therefore describes opposite
+folders depending on which end you start from:
+
+| Evidence | Makes the folder's own download |
+|---|---|
+| `ingest.patch_shaped` | a **patch** — captured at install, the only moment a patch folder is legible, and the only signal available before anyone has named the base |
+| a companion at `role: base` | a **patch** — the user having answered *what does this patch?*, and the only signal on a sidecar written before `ingest` existed |
+| neither | the **mod** |
+
+Entries are ordered **mod first, then patches** — the order the files themselves go
+on disk ([`applying-updates.md` §6](applying-updates.md#6-the-order-and-why-it-is-the-safety-argument)),
+and the one ordering that reads the same for both install orders. Partitioned rather
+than sorted, because `List.sort` is not stable in Dart and peers that reshuffled on a
+rewrite would make a sidecar edit look like a change to the folder.
+
+`isFolderOwn` survives on each entry, and **not for ranking**: it decides what a row
+falls back to when nothing has named it, and lets the update dialog point at the
+identity its Update button acts on.
+
+**Absent entirely for a folder with one download.** A one-row list is a heading plus a
+restatement of the mod already on screen; and saying "nothing else here" would be a
+claim about a scan this never performs.
+
+**Nothing stores a name**, for either entry — a name belongs to the remote, and a
+stored copy would be a second source of truth. So each caller supplies what it has,
+and the row falls back:
+
+| Surface | Where a name comes from | Explains the "why two" hint |
+|---|---|---|
+| Update dialog *(section headers, not this section)* | The records its own check fetched. Failing that it looks one up — **but only when the check did not run**, which is every reopen and every arrival from a card badge, since `initState` skips the check once a verdict is on record and only a *bulk* pass banks records in the session. Withheld once the check has run: a name missing then means that download's request failed, and asking again is a second failure per download on an offline check. | no |
+| Resolve dialog | The session's records, else one small `Mod/Multi` request — it is already talking to GameBanana, and this is not a request it would otherwise make. | no |
+| Details view | The session's records, else the fallback. **It never fetches**: a read-only view opened on a mod should not spend a request the reader did not ask for. | **yes** — the surface whose job is "what is this", and the one with a scrollable column to spend on it |
+
+The fallback itself differs by entry and each uses the best thing available: the
+folder's own download falls back to **the folder name**, which is what the user knows
+it by everywhere else in the app; a companion falls back to its id. Every row links
+to its page either way, because an id is not something a person can act on.
+
+**The file line appears only when it carries something.** Not
+`describeRecordedFile`, which the resolve surfaces use and which always produces a
+line: three of its six phrasings are how-we-know with no *what* — "the file you
+chose", "the file you downloaded", "byte-identical to the archive you installed" —
+and a download carrying a `file_id` and no version string is the common case, since
+`_sVersion` is routinely null. On a row whose job is naming a download, that renders
+as filler.
+
+One of them is also **wrong for a companion**. `summarizeCompanion` folds `exact` to
+*chosen* on the grounds that a companion is a download the app did not perform — true
+of `base`, which only a person can name, and false of `patch`, which the install
+prompt writes at `exact` precisely *because* the app fetched those bytes. So the line
+credited the user with a choice they never made. What survives is the version when
+there is one, and the caveat when the record is short of a file.
+
+**The update dialog does not use this section.** It renders a *full report* per
+download instead — verdict, before-and-after box, file list, notes, and its own
+actions — because a check is about the mods in a folder and a summary row answers a
+different question for the second mod than the first one got. It shares the role
+derivation above and the same patch marker, so the two screens agree about what each
+download is; see
+[`update-checks.md`](update-checks.md#the-dialog). The section here is for the two
+surfaces where the folder's contents are *context* rather than the subject.
+
+**The change affordance is on the row, not beside the list.** The resolve dialog can
+correct exactly one kind of entry — the mod a patch applies to — and a separate
+editable row for it would put that download in a place of its own again. As a button
+on the row it looks like every other entry with one more thing on it. Which rows offer
+it is passed in by mod id rather than derived: what is editable depends on which flows
+exist, not on anything visible in the row, and a widget guessing would offer a button
+that does nothing.
+
 ### Naming one
 
 Only the user can. They assembled the folder by hand, possibly from a source the app
@@ -829,6 +915,20 @@ direction this feature cannot afford.
 `role` is never asked. Reached from a patch-shaped folder, the primary is the patch
 and the companion is the `base`; asking the user to classify their own folder is a
 quiz whose answer the app already has.
+
+**This step runs in one direction only, and a `role: patch` companion has no
+correcting flow.** Every string in it reads *"this mod holds a patch"* → *"name the
+mod it patches"*. The mirror image — a patch installed *into* a folder whose primary
+is the mod, written by the install prompt below with both axes already `exact` — is
+listed as a peer (above) and carries no change affordance. That is defensible rather
+than merely unbuilt: the app performed that download and knows exactly which file it
+was, so there is nothing to ask. What is genuinely missing is a way to say *"that
+patch is gone / it was never there"*, and mirroring the wording is what it would cost.
+
+The row that *opens* this step is only the **empty** case — patch-shaped, nothing
+named. Once a companion exists it is a row in the folder's list with the change
+affordance on it, because a second row below the list for the same download would
+rank it above the other one again.
 
 The write happens on its own rather than folding into Save — it is a decision about a
 different mod, and making the user press Save afterwards invites them to close the

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../models/keybind_info.dart';
@@ -11,6 +12,7 @@ import '../../utils/markdown_description.dart';
 import '../../utils/markdown_editor.dart';
 import '../../utils/url_utils.dart';
 import '../../utils/zzz_characters.dart';
+import '../components/folder_downloads_summary.dart';
 
 /// Read-only dialog showing everything about a mod: gallery, character,
 /// description, tags, source link, and keybinds (VK_-stripped for readability).
@@ -316,7 +318,29 @@ void showModDetailsDialog(
                                 .map(_detailKeybindChip)
                                 .toList(),
                           ),
+                          const SizedBox(height: 16),
                         ],
+                        // **What this folder holds.** A folder with a patch in
+                        // it looked exactly like any other here, which made the
+                        // app's own record of the second download invisible on
+                        // the one screen whose job is saying what a mod *is*.
+                        //
+                        // A `Consumer` because this dialog is a plain function
+                        // rather than a `ConsumerWidget`, and the section reads
+                        // the session's fetched mod pages for a name. It does
+                        // **not** fetch: a read-only view opened on a mod
+                        // should not spend a request nobody asked for, so an
+                        // unnamed download shows its id and its link.
+                        Consumer(
+                          builder: (context, ref, _) =>
+                              FolderDownloadsSummary(
+                            origin: mod.origin,
+                            folderName: mod.name,
+                            // The surface whose job is "what is this", so it is
+                            // where the explanation belongs.
+                            showHint: true,
+                          ),
+                        ),
                       ],
                     ),
                   ),

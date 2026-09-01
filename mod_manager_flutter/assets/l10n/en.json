@@ -326,6 +326,16 @@
       "possibly_outdated_tooltip": "Possibly outdated — click for details",
       "source_gone_tooltip": "Its GameBanana page is no longer available — nothing more can be checked"
     },
+    "folder": {
+      "heading": "This folder holds two downloads",
+      "hint": "A patch replaces some of a mod's files, so both live in one folder and both are tracked separately.",
+      "role_mod": "Mod",
+      "role_patch": "Patch",
+      "unnamed": "GameBanana mod #{id}",
+      "remote_missing": "Its mod page is no longer available.",
+      "open_page": "Open this mod's page",
+      "change": "Change which mod this is"
+    },
     "resolve": {
       "title": "Update tracking for \"{mod}\"",
       "identity_heading": "Which mod is this?",
@@ -484,7 +494,9 @@
       "options_hint": "This mod offers more than one file. We've marked the one we'd pick — you know which variant you installed, so check it before downloading.",
       "pick_variant": "matches your variant",
       "pick_newest": "newest published",
-      "compared_against": "Compared against",
+      "uploaded": "uploaded {date}",
+      "baseline_label": "What counts as new",
+      "baseline_value": "No file recorded — anything published after {date} counts as an update.",
       "unknown_file": "unknown",
       "no_successor": "The file you installed is no longer offered, and nothing currently on the mod page is identifiably its replacement. Open the mod page to see what's there.",
       "guess_caveat": "Update checks are a best guess, not a guarantee — GameBanana publishes no comparable version numbers, so this rests on file labels and upload dates.",
@@ -508,7 +520,6 @@
       "launch_checked_plural": "Checked {count} mods when the app started.",
       "bulk_failed_single": "1 mod couldn't be checked",
       "bulk_failed_plural": "{count} mods couldn't be checked",
-      "about_companion": "This is about {mod} — the other mod inside {folder}, not the one the folder is named after. Everything below describes {mod}'s files.",
       "dismiss": "Ignore this update",
       "undismiss": "Stop ignoring it",
       "dismissed": "You're ignoring this update — the mark is gone from this mod's card. If the author publishes anything newer, it will show up again on its own.",

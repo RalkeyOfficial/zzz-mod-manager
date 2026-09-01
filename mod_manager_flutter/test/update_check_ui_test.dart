@@ -663,6 +663,58 @@ void main() {
       expect(find.text('Open mod page'), findsNothing);
     });
 
+    testWidgets('the upload date is a fact about the file, not part of its name',
+        (tester) async {
+      // It used to be appended to the filename with a dash, which reads as part
+      // of the name — `v77.zip — 2026-06-19` looks like a file called that. It
+      // belongs on the greyed line with the version and the author's label,
+      // which are the same kind of thing.
+      await pumpDialog(tester, mod('Ellen', origin: origin(fileId: 1696178)));
+      await tester.pumpAndSettle();
+
+      expect(find.text('v77.zip'), findsWidgets);
+      expect(find.textContaining('v77.zip — '), findsNothing);
+      expect(find.textContaining('uploaded '), findsWidgets);
+    });
+
+    testWidgets('a known file states no cutoff, because its date is the row',
+        (tester) async {
+      // "Compared against <date>" was that same file's upload date under a
+      // label that overclaimed: the check reads a mod page's file list and
+      // never the mod folder, so *compared* invited the reading that something
+      // about the files was.
+      await pumpDialog(tester, mod('Ellen', origin: origin(fileId: 1696178)));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Compared against'), findsNothing);
+      expect(find.text('What counts as new'), findsNothing);
+    });
+
+    testWidgets('a date-only install says what the date does', (tester) async {
+      // The one path where a date really is the whole of the answer: nothing
+      // records which file is installed, so the cutoff is load-bearing — and it
+      // says what it does rather than what it is, in the words the resolve
+      // dialog uses for the same state.
+      await pumpDialog(
+        tester,
+        mod(
+          'Ellen',
+          origin: ModOrigin(
+            source: 'gamebanana',
+            modId: 531649,
+            modIdConfidence: OriginConfidence.user,
+            versionConfidence: OriginConfidence.assumedLatest,
+            provenance: OriginProvenance.downloaded,
+            baselineRemoteDate: DateTime.utc(2026, 5, 1),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('What counts as new'), findsOneWidget);
+      expect(find.textContaining('counts as an update'), findsOneWidget);
+    });
+
     testWidgets('a retry appears only when the check actually failed',
         (tester) async {
       // There is no general "check again": a verdict from the bulk pass is
@@ -998,10 +1050,123 @@ void main() {
               'folded into the primary\'s batch would lose the isolation the '
               'unreachable-companion case depends on',
         );
-        // The patch is on its newest file, so this verdict can only have come
-        // from the other mod's record.
+        // A section each, and the patch is on its newest file — so the finding
+        // can only have come from the other mod's record, and the two verdicts
+        // sit under their own names rather than one standing for the folder.
         expect(find.text('Possibly outdated'), findsOneWidget);
-        expect(find.text('This is the latest file'), findsNothing);
+        expect(find.text('This is the latest file'), findsOneWidget);
+      });
+
+      testWidgets('both mods current still names the other one',
+          (tester) async {
+        // **The reported bug.** With nothing out of date the fold gives the
+        // primary's verdict, so the line naming the other mod — which only
+        // fires when a companion *wins* — stayed silent, and a folder holding
+        // two mods read exactly like a folder holding one. The check had
+        // looked at both and said so nowhere.
+        await tester.pumpWidget(const SizedBox());
+        final (client, _) = mixedClient();
+        // A patch installed *into* this folder rather than the reverse, which
+        // is the shape the patch installer writes and the direction that had
+        // no surface anywhere.
+        final target = mod(
+          'EllenBikini',
+          origin: origin(fileId: 1732269).copyWith(
+            companions: [
+              const ModCompanion(
+                role: CompanionRole.patch,
+                modId: 528481,
+                modIdConfidence: OriginConfidence.exact,
+                // Megalodon Maid Ellen's newest file, so this half is current
+                // too and nothing in the folder is out of date.
+                fileId: 1462303,
+                versionConfidence: OriginConfidence.exact,
+              ),
+            ],
+          ),
+        );
+        await pumpLocalized(
+          tester,
+          ModUpdateDialog(
+            mod: target,
+            gateway: _RecordingGateway(target.origin, <ModOrigin?>[]),
+          ),
+          overrides: [gameBananaClientProvider.overrideWithValue(client)],
+        );
+        await tester.pumpAndSettle();
+
+        // **A full report each, not a verdict and a footnote.** Both are
+        // current, so both say so — under their own names, each with its own
+        // before-and-after box.
+        expect(find.text('This is the latest file'), findsNWidgets(2));
+        expect(find.text('Megalodon Maid Ellen'), findsOneWidget);
+        // The folder's own download named by its **mod page**, not by the
+        // folder — the check fetched it, so the better name is in hand.
+        expect(
+          find.text('ZZMI RabbitFX - Glow FX + Censor Remover'),
+          findsOneWidget,
+        );
+        expect(find.text('Mod'), findsOneWidget);
+        expect(find.text('Patch'), findsOneWidget);
+        expect(find.text('You have'), findsNWidgets(2));
+      });
+
+      testWidgets('reopening the dialog does not lose the other mod\'s name',
+          (tester) async {
+        // **The second open fetches nothing**, because `initState` skips the
+        // check when a verdict is already on record — and the verdict it finds
+        // is the one the *first* open stored. So the records that named the
+        // companion are gone with the disposed widget, and the session map only
+        // ever holds what a **bulk** pass banked. A per-mod check banks
+        // nothing, so a folder that read "Patched by Megalodon Maid Ellen" came
+        // back as "Patched by GameBanana mod #528481".
+        final container = ProviderContainer(
+          overrides: [
+            gameBananaClientProvider.overrideWithValue(mixedClient().$1),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final target = mod(
+          'EllenBikini',
+          origin: origin(fileId: 1732269).copyWith(
+            companions: [
+              const ModCompanion(
+                role: CompanionRole.patch,
+                modId: 528481,
+                modIdConfidence: OriginConfidence.exact,
+                fileId: 1462303,
+                versionConfidence: OriginConfidence.exact,
+              ),
+            ],
+          ),
+        );
+
+        Future<void> open() async {
+          await tester.pumpWidget(const SizedBox());
+          await pumpLocalized(
+            tester,
+            ModUpdateDialog(
+              mod: target,
+              gateway: _RecordingGateway(target.origin, <ModOrigin?>[]),
+            ),
+            container: container,
+          );
+          await tester.pumpAndSettle();
+        }
+
+        await open();
+        expect(find.text('Megalodon Maid Ellen'), findsOneWidget);
+        // The verdict really was stored, or the second open would just re-check
+        // and this would pass for the wrong reason.
+        expect(
+          container.read(modUpdateChecksProvider)[target.id],
+          isNotNull,
+        );
+
+        await open();
+        expect(find.text('Megalodon Maid Ellen'), findsOneWidget);
+        expect(find.textContaining('#528481'), findsNothing);
       });
 
       testWidgets('a companion page that will not load is not reported clean',
@@ -1021,7 +1186,12 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(find.text('This is the latest file'), findsNothing);
+        // **The unreachable half admits it.** The primary answered and says so
+        // in its own section, which is honest; what must not happen is the
+        // other section quietly reading as clean on the strength of a request
+        // that never landed.
+        expect(find.text('The mod page listed no files'), findsOneWidget);
+        expect(find.text('This is the latest file'), findsOneWidget);
       });
 
       testWidgets('an update on the other mod can be installed from here',
@@ -1106,6 +1276,10 @@ void main() {
           ),
           overrides: [gameBananaClientProvider.overrideWithValue(client)],
         );
+        await tester.pumpAndSettle();
+        // In the companion's own section now, not the shared action bar — so it
+        // can be below the fold on a folder rendering two full reports.
+        await tester.ensureVisible(find.text('Ignore this update'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Ignore this update'));
         await tester.pumpAndSettle();

@@ -50,6 +50,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - When the patch's page names a mod you already have, that mod goes to the top of the list.
   - A patch whose files don't belong in the mod you picked installs as its own mod instead, and says which of the two reasons it was.
   - A folder holding a patch plus the mod it patches can be told about both, and both are checked for updates.
+  - Checking such a folder for updates reports on both mods in full — each with its own verdict, its own before-and-after, its own release notes and its own Update button.
+  - Its details and tracking dialog list both mods side by side, each marked as the mod or the patch. Which one you installed first makes no difference to how any of it reads.
   - An update to either mod in such a folder can be installed: the base mod goes in and the patch is put back over the top. Folders you merged by hand say so first, since the app can't tell which files are which.
 - The app writes a log file for each run, keeping the last seven, with your username removed and file paths shortened.
   - Each log opens with your system details: OS, distro, display server, and which required tools are installed and at what version.
