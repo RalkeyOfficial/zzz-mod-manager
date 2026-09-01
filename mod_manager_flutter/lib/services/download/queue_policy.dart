@@ -140,9 +140,9 @@ int activeJobCount(List<DownloadJob> jobs) =>
 
 /// Everything still in flight, as one figure.
 ///
-/// One aggregation, two readers — the title bar's ring and the pinned progress
-/// notification — so the button and the card can never disagree about how far
-/// along the queue is.
+/// One aggregation, two readers — the sidebar button's ring and the pinned
+/// progress notification — so the button and the card can never disagree about
+/// how far along the queue is.
 class QueueProgress {
   const QueueProgress({
     required this.active,

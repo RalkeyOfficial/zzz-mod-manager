@@ -21,6 +21,7 @@ the root [`README.md`](../README.md).
 | [`configuration.md`](configuration.md) | The app's **own settings**: `config.json`, the SharedPreferences mirror, the dual-storage pattern, and how to add a setting |
 | [`logging.md`](logging.md) | **What the app records about itself**: the levels and tags, what each area logs, the rotating file and its header, and what redaction does and does not promise |
 | [`mod-reload.md`](mod-reload.md) | **Why the app does not press F10 for you**: what 3DMigoto actually needs, what was measured on Wayland, and why the feature was removed rather than fixed |
+| [`desktop-integration.md`](desktop-integration.md) | **The window itself** — the application id, the desktop entry and the icon that depends on it, and why the title bar is the window manager's |
 | [`gamebanana-api.md`](gamebanana-api.md) | The **remote protocol**: which of the two APIs to use, browsing/filtering/sorting, the mod and file objects, NSFW handling, downloads, the category tree, and the gotchas |
 
 ## Related files outside this directory

@@ -97,8 +97,8 @@ In an active `flutter run` session (same terminal):
   the localization strings and dialog layouts.
 - **`R` — hot restart** (resets state). Needed for changes to `main()`, Riverpod
   providers, model classes (`ModInfo`, `KeybindInfo`), and `static`/top-level fields.
-- **Full relaunch** for: new/changed assets in `pubspec.yaml` (e.g. l10n JSON, images),
-  added packages, or native/plugin changes (`window_manager`, etc.).
+- **Full relaunch** for: new/changed assets in `pubspec.yaml` (l10n JSON, images),
+  added packages, native/plugin changes, and anything under `linux/` (compiled in).
 
 Codebase-specific gotchas:
 
@@ -108,19 +108,17 @@ Codebase-specific gotchas:
 - Mod metadata/scan logic lives in services held as singletons via `ApiService`; changes
   there generally need `R`.
 
-`flutter doctor`: only the **Flutter** and **Linux toolchain** sections matter for this
-project. The **Android toolchain** and **Chrome/web** ✗ marks are expected and safe to
-ignore — this app targets Linux/Windows desktop only, not Android or web.
+`flutter doctor`: only **Flutter** and **Linux toolchain** matter here; the
+**Android toolchain** and **Chrome/web** ✗ marks are expected.
 
 System dependencies (Linux dev): the C++ toolchain (`clang`, `cmake`, `ninja`,
 `pkg-config`) + `gtk3` for building; and `7z`/`7za`/`7zr` (Arch: `7zip`, **not**
 the older `p7zip` port) for archive imports. Nothing else — the window and input
-helpers went with the F10 auto-reload feature
-([`docs/mod-reload.md`](docs/mod-reload.md)).
+helpers went with F10 auto-reload ([`docs/mod-reload.md`](docs/mod-reload.md)).
 
-Clipboard HTML (for paste-as-markdown) is read natively: on Linux via the GTK
-clipboard in the runner (`linux/runner/my_application.cc`, channel
-`mod_manager/clipboard`), on Windows via `pasteboard`. No external CLI tool.
+Clipboard HTML (paste-as-markdown) is read natively: Linux via the GTK clipboard
+in the runner (`linux/runner/my_application.cc`, channel `mod_manager/clipboard`),
+Windows via `pasteboard`. No external CLI tool.
 
 ## Changelog (keep up to date)
 
@@ -159,6 +157,7 @@ mistake.
 > | [`configuration.md`](docs/configuration.md) | The app's **own settings** |
 > | [`logging.md`](docs/logging.md) | **What the app records about itself** — levels, the rotating file, redaction |
 > | [`mod-reload.md`](docs/mod-reload.md) | **Why the app does not press F10 for you** — what was measured, and why the feature is removed rather than fixed |
+> | [`desktop-integration.md`](docs/desktop-integration.md) | **The window itself** — the application id, the desktop entry and the icon that depends on it, and why the title bar is the window manager's |
 >
 > **Each doc owns one subject.** A fact that doesn't fit any of them wants a new
 > file, not the nearest existing one — the scope line at the top of each doc is

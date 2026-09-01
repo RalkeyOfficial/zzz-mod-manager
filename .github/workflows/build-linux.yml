@@ -69,6 +69,18 @@ jobs:
           mkdir -p "output/$NAME/tools"
           cp -r mod_manager_flutter/build/linux/x64/release/bundle/* "output/$NAME/"
           install -m755 /tmp/7z/7zzs "output/$NAME/tools/7zzs"
+          # The desktop entry and its installer. A Wayland compositor takes the
+          # window's icon from `<app id>.desktop`, never from the window itself,
+          # so without these an extracted tarball can only ever show a
+          # placeholder icon and an anonymous taskbar entry. The tarball cannot
+          # ship a ready-to-use entry because `Exec` has to name wherever the
+          # user extracted it, which is why this is a script and not a file.
+          install -Dm644 \
+            mod_manager_flutter/linux/packaging/io.github.notionme.ZzzModManager.desktop \
+            "output/$NAME/packaging/io.github.notionme.ZzzModManager.desktop"
+          install -Dm755 \
+            mod_manager_flutter/linux/packaging/install-desktop-entry.sh \
+            "output/$NAME/packaging/install-desktop-entry.sh"
           # LGPL, so the licence travels with the binary.
           install -m644 /tmp/7z/License.txt "output/$NAME/tools/7-Zip-License.txt"
           tar -C output -czf "output/${NAME}.tar.gz" "$NAME"

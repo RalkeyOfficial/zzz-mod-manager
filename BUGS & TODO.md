@@ -3401,11 +3401,12 @@ Other todo's:
     is the one where it was turned down. The file always gets everything.
   - **Not verified on Windows.** Both platforms emit the same event names and
     the Windows rendering is asserted from Linux, but no run on real hardware.
-- [ ] **The app is not built or run as a proper Wayland client.** Launching it
-  with `GDK_BACKEND=x11` gives it a taskbar icon and the window manager's own
-  title bar with minimise/maximise/close — neither of which it has on the
-  Wayland backend it normally runs under. So the two backends disagree about
-  what kind of window this is, and the custom title bar is drawn on the
-  assumption of the Wayland one. Whatever the app declares about itself (the
-  desktop-entry name and its app id, which is what a compositor matches a
-  taskbar icon against) is either missing or not matching.
+- [x] **The window has its own identity, its icon, and one title bar.** Real app
+  id (`io.github.notionme.ZzzModManager`) with a matching desktop entry and icon;
+  the custom title bar is replaced by the window manager's.
+  [`docs/desktop-integration.md`](docs/desktop-integration.md). Not verified on
+  GNOME/wlroots or on Windows.
+- [ ] **Give the portable build its icon with nothing to install** — set it via
+  `xdg_toplevel_icon_v1` from the runner, dropping the one-command setup. GTK3
+  can't, but the runner can bind the protocol itself; newer compositors only.
+  [`docs/desktop-integration.md`](docs/desktop-integration.md).

@@ -11,7 +11,7 @@ import '../../utils/byte_format.dart';
 import 'character_avatar.dart';
 import 'own_scroll_controller.dart';
 
-/// The list behind the title bar's downloads button.
+/// The list behind the sidebar's downloads button.
 ///
 /// Everything the app is fetching, in the order it was asked for, plus what has
 /// finished this session. It is the detail view for work that is otherwise

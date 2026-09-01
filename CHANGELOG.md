@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Downloads run in the background, two at a time, and install themselves as they land.
   - Downloads resume where they left off and survive the app closing.
   - Downloads can be cancelled while running.
-  - A title-bar button opens the list of downloads, where a failed one can be retried and finished ones cleared.
+  - A sidebar button opens the list of downloads, where a failed one can be retried and finished ones cleared.
   - One notification shows overall download progress until the last one finishes.
 - Mods record where they came from, so they can be checked for updates.
   - Existing mods are linked back to their GameBanana page from the source URL they already carry.
@@ -72,6 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mod descriptions are larger, better spaced, and consistently styled everywhere they're shown.
 - Descriptions keep the paragraph spacing their author gave them.
 - Downloaded archives land in the app's own downloads folder and are deleted once installed. Anything left over is cleared when you next start the app.
+- The window uses your desktop's own title bar, so its buttons sit where the rest of your system puts them and it has the window menu, keyboard shortcuts and decoration theme every other window has.
 
 ### Removed
 
@@ -80,6 +81,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The app shows its own icon and name in the taskbar and window switcher instead of a blank placeholder.
+  - On Wayland the window no longer carries two stacked title bars.
+  - The portable build gets its icon on Wayland by running `packaging/install-desktop-entry.sh` once. It stays out of your application launcher unless you pass `--menu`.
 - A missing 7-Zip is reported as a missing tool rather than a broken archive.
 - Importing a folder no longer follows symbolic links out of it.
 - A mod whose folder can't be written to is named instead of failing quietly.

@@ -7,7 +7,7 @@ import '../../services/download/download_queue.dart';
 import '../../services/download/queue_policy.dart';
 import 'downloads_panel.dart';
 
-/// The title bar's downloads indicator, and the only way to the panel.
+/// The sidebar's downloads indicator, and the only way to the panel.
 ///
 /// **It is absent until there is something to say.** A permanently-present
 /// control that is empty on every launch is a control nobody learns; one that
@@ -29,7 +29,7 @@ class DownloadsButton extends ConsumerWidget {
     final theme = Theme.of(context);
     final active = activeJobCount(jobs);
     // On the **state**, not on whether an error is attached. A cancel is
-    // something the user asked for, and turning the title bar red over it says
+    // something the user asked for, and turning the button red over it says
     // the app broke when it did as it was told.
     final failed = jobs.any((j) => j.state == DownloadJobState.failed);
 

@@ -24,6 +24,7 @@ before changing anything it covers.
 | [`patch-destinations.md`](../docs/patch-destinations.md) | **Which mod folder a patch goes into** — the signals and their measurements; ranked, never narrowed or preselected |
 | [`logging.md`](../docs/logging.md) | **What the app records about itself** — levels, tags, the rotating file, redaction |
 | [`mod-reload.md`](../docs/mod-reload.md) | **Why the app does not press F10 for you** — what was measured, and why the feature is removed rather than fixed |
+| [`desktop-integration.md`](../docs/desktop-integration.md) | **The window itself** — the application id, the desktop entry and the icon that depends on it, and why the title bar is the window manager's |
 | [`configuration.md`](../docs/configuration.md) | The app's **own settings** |
 
 ## How mods work
@@ -48,6 +49,20 @@ resolving a character from an id must handle both, plus the `unknown` placeholde
 - **Never branch on `Platform.isX`** for platform-specific behaviour in business
   logic. Add a method to `PlatformService` and implement it in both
   `LinuxPlatformService` and `WindowsPlatformService`.
+
+**The window** — full reasoning in
+[`desktop-integration.md`](../docs/desktop-integration.md)
+- **The app draws no title bar.** Never set `titleBarStyle: TitleBarStyle.hidden`
+  or `gtk_window_set_decorated(window, FALSE)`. On Wayland that call does not
+  undecorate anything — the compositor adds its own bar above the drawn one —
+  and the one-line GTK fix that *does* undecorate it removes edge resize, which
+  nothing in the app replaces. Anything that wants to sit "in the title bar"
+  goes in the sidebar.
+- **The application id is one string in three places** — `APPLICATION_ID` in
+  `linux/CMakeLists.txt`, the `linux/packaging/<id>.desktop` filename, and the
+  installed icon's filename. A Wayland compositor reads the window's icon from
+  the desktop entry it matches by app id, so the icon silently disappears if any
+  of the three drifts.
 
 **Characters**
 - The `characterAliases` map is **duplicated** in `_detectCharacterFromName` and

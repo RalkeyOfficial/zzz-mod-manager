@@ -74,6 +74,50 @@ static void clipboard_method_call_cb(FlMethodChannel *channel,
     g_warning("Failed to respond to clipboard method call: %s", error->message);
 }
 
+// Gives the window an icon, by whichever of two unrelated mechanisms applies.
+//
+// **On Wayland neither of these is what the taskbar reads.** There is no
+// per-window icon in xdg-shell at all: the compositor matches the surface's app
+// id to `<app id>.desktop` and takes `Icon=` from there, so an installed desktop
+// entry is the only thing that can put an icon on a Wayland window — see
+// `linux/packaging/`. On X11 the icon travels with the window in `_NET_WM_ICON`,
+// which is what a pixbuf set here becomes.
+//
+// The theme name is tried first because that is the mechanism an installed build
+// is meant to use, and it scales. The file beside the executable is the fallback
+// for a portable build that was never installed, and it is resolved from
+// `/proc/self/exe` rather than as a relative path: a relative path resolves only
+// when the app happens to be launched from inside its own bundle directory,
+// which is true under `flutter run` and false for every shipped build.
+static void set_window_icon(GtkWindow *window)
+{
+  if (gtk_icon_theme_has_icon(gtk_icon_theme_get_default(), APPLICATION_ID))
+  {
+    gtk_window_set_default_icon_name(APPLICATION_ID);
+    return;
+  }
+
+  g_autofree gchar *exe = g_file_read_link("/proc/self/exe", nullptr);
+  if (exe == nullptr)
+    return;
+
+  g_autofree gchar *dir = g_path_get_dirname(exe);
+  g_autofree gchar *path = g_build_filename(
+      dir, "data", "flutter_assets", "assets", "icon.png", nullptr);
+
+  g_autoptr(GError) error = nullptr;
+  GdkPixbuf *icon = gdk_pixbuf_new_from_file(path, &error);
+  if (icon == nullptr)
+  {
+    g_warning("No window icon: %s", error->message);
+    return;
+  }
+
+  gtk_window_set_icon(window, icon);
+  gtk_window_set_default_icon(icon);
+  g_object_unref(icon);
+}
+
 // Implements GApplication::activate.
 static void my_application_activate(GApplication *application)
 {
@@ -81,31 +125,17 @@ static void my_application_activate(GApplication *application)
   GtkWindow *window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
-  // Disable title bar for custom window controls
-  gtk_window_set_decorated(window, FALSE);
-  gtk_window_set_title(window, "Mod Manager");
-
-  // Set window icon from installed location
-  GError *error = nullptr;
-  const gchar *icon_paths[] = {
-    "assets/icon.png",                    // When running from build directory
-    "../assets/icon.png",                 // When running from installed location
-    "/opt/mod-manager/assets/icon.png",   // System-wide installation
-    "/usr/share/pixmaps/mod-manager.png", // Standard pixmaps location
-    nullptr
-  };
-  
-  for (int i = 0; icon_paths[i] != nullptr; i++) {
-    GdkPixbuf *icon = gdk_pixbuf_new_from_file(icon_paths[i], &error);
-    if (icon != nullptr) {
-      gtk_window_set_icon(window, icon);
-      gtk_window_set_default_icon(icon);  // Set as default for all windows
-      g_object_unref(icon);
-      break;
-    } else if (error != nullptr) {
-      g_clear_error(&error);
-    }
-  }
+  // **The window keeps the decoration its window manager draws.** An
+  // undecorated window cannot be resized with the mouse — neither GTK nor the
+  // compositor offers an edge to grab, measured on both backends — and it
+  // reimplements minimise, maximise and close worse than the desktop does,
+  // without the window menu, the double-click-to-maximise or the button order
+  // the user chose. On Wayland it is worse than that: GTK announces client-side
+  // decoration only when it actually draws some, so `set_decorated(FALSE)` here
+  // leaves the compositor adding a 28px title bar of its own *above* the app's,
+  // which is two title bars on one window.
+  gtk_window_set_title(window, "ZZZ Mod Manager");
+  set_window_icon(window);
 
   // Start at a sensible size before the window is shown so it doesn't appear
   // as a tiny square and then grow (window_manager restores the saved size

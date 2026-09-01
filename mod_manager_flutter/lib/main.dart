@@ -74,7 +74,9 @@ Future<void> _startUp() async {
     center: true,
     backgroundColor: Colors.transparent,
     skipTaskbar: false,
-    titleBarStyle: TitleBarStyle.hidden,
+    // No `titleBarStyle: hidden`. The window keeps the title bar its desktop
+    // draws, which is the only one that can be resized by its edges and the
+    // only one that obeys the user's own button order and window menu.
   );
 
   windowManager.waitUntilReadyToShow(windowOptions, () async {
@@ -343,13 +345,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
     return DownloadQueueHost(
       child: LaunchUpdateCheckHost(
         child: Scaffold(
-      body: Column(
-        children: [
-          // Custom title bar
-          _buildCustomTitleBar(context, isDarkMode),
-          // Main content
-          Expanded(
-            child: Row(
+      body: Row(
               children: [
                 // Sidebar
                 SlideTransition(
@@ -548,6 +544,13 @@ class _MainScreenState extends ConsumerState<MainScreen>
                           ),
                         ),
                         const Spacer(),
+                        // Downloads. In the sidebar rather than a tab because a
+                        // transfer outlives the screen that started it, and
+                        // absent until there is one to report — see
+                        // `DownloadsButton`. Above the version badge so it sits
+                        // at the same end of the sidebar whether or not the
+                        // badge is showing.
+                        const DownloadsButton(),
                         // Footer with version badge
                         if (!isSidebarCollapsed)
                           Padding(
@@ -616,168 +619,10 @@ class _MainScreenState extends ConsumerState<MainScreen>
                   ),
                 ),
               ],
-            ),
-          ),
-        ],
       ),
       ),
       ),
     );
   }
 
-  Widget _buildCustomTitleBar(BuildContext context, bool isDarkMode) {
-    return DragToMoveArea(
-      child: Container(
-        height: 45,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isDarkMode
-                ? [
-                    const Color(0xFF1A1A1A).withValues(alpha: 0.95),
-                    const Color(0xFF0F0F0F).withValues(alpha: 0.95),
-                  ]
-                : [
-                    Colors.white.withValues(alpha: 0.95),
-                    const Color(0xFFF5F5F5).withValues(alpha: 0.95),
-                  ],
-          ),
-          border: Border(
-            bottom: BorderSide(
-              color: isDarkMode
-                  ? Colors.white.withValues(alpha: 0.05)
-                  : Colors.black.withValues(alpha: 0.03),
-              width: 1,
-            ),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: isDarkMode
-                  ? Colors.black.withValues(alpha: 0.3)
-                  : Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            // Left group (icon + title) fills the bar so the window controls
-            // pin to the far right; the title still shrinks/ellipsizes when
-            // there isn't room.
-            Expanded(
-              child: Row(
-                children: [
-            const SizedBox(width: 20),
-            // App icon/logo with gradient
-            Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF0EA5E9), Color(0xFF06B6D4)],
-                ),
-                borderRadius: BorderRadius.circular(6),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF0EA5E9).withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    spreadRadius: 1,
-                  ),
-                ],
-              ),
-              child: const Icon(Icons.style, color: Colors.white, size: 14),
-            ),
-            const SizedBox(width: 12),
-            // App title with gradient text. Flexible + ellipsis so a very
-            // narrow title bar (e.g. the brief first frame before the window is
-            // sized) shrinks the title instead of overflowing the Row.
-            Flexible(
-              child: ShaderMask(
-                shaderCallback: (bounds) => const LinearGradient(
-                  colors: [Color(0xFF0EA5E9), Color(0xFF06B6D4)],
-                ).createShader(bounds),
-                child: Text(
-                  context.loc.t('app.title'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-              ),
-            ),
-                ],
-              ),
-            ),
-            // Downloads. Between the title and the window controls, and absent
-            // until there is a transfer to report — see `DownloadsButton`.
-            const DownloadsButton(),
-            // Window controls
-            _buildWindowButton(
-              icon: Icons.remove,
-              onPressed: () async {
-                await windowManager.minimize();
-              },
-              isDarkMode: isDarkMode,
-            ),
-            _buildWindowButton(
-              icon: Icons.crop_square,
-              onPressed: () async {
-                bool isMaximized = await windowManager.isMaximized();
-                if (isMaximized) {
-                  await windowManager.unmaximize();
-                } else {
-                  await windowManager.maximize();
-                }
-              },
-              isDarkMode: isDarkMode,
-            ),
-            _buildWindowButton(
-              icon: Icons.close,
-              onPressed: () async {
-                await windowManager.close();
-              },
-              isDarkMode: isDarkMode,
-              isClose: true,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildWindowButton({
-    required IconData icon,
-    required VoidCallback onPressed,
-    required bool isDarkMode,
-    bool isClose = false,
-  }) {
-    return SizedBox(
-      width: 46,
-      height: 40,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onPressed,
-          hoverColor: isClose
-              ? Colors.red.withValues(alpha: 0.8)
-              : (isDarkMode
-                    ? Colors.white.withValues(alpha: 0.1)
-                    : Colors.black.withValues(alpha: 0.05)),
-          child: Icon(
-            icon,
-            size: 16,
-            color: isDarkMode
-                ? Colors.white.withValues(alpha: 0.7)
-                : Colors.black.withValues(alpha: 0.7),
-          ),
-        ),
-      ),
-    );
-  }
 }

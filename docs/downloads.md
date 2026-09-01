@@ -294,9 +294,12 @@ tracking. See `notifications.md` §7.
 
 ### The panel
 
-`DownloadsButton` in the title bar, opening `DownloadsPanel`. Both are **absent
+`DownloadsButton` in the sidebar, opening `DownloadsPanel`. Both are **absent
 until there is something to report**: a control that is empty on every launch is
-one nobody learns.
+one nobody learns. In the sidebar rather than a tab because a transfer outlives
+the screen that started it, so it cannot belong to one — and the sidebar is the
+only chrome the app draws, the title bar being the window manager's
+([`desktop-integration.md`](desktop-integration.md) §4).
 
 - **Finished rows stay until they are cleared.** A row that vanished on its own
   would take the only record of a failure with it.
@@ -319,7 +322,7 @@ one nobody learns.
   whole archive for one cancelled after the bytes landed, since the install that
   would have consumed it is exactly what is being called off. It **records no
   error** — the user asked for it — so `DownloadJob.error` means "something went
-  wrong" everywhere, and the title bar does not turn red over a stop that
+  wrong" everywhere, and the downloads button does not turn red over a stop that
   worked. An *installing* job cannot be cancelled at all, and the refusal is in
   `DownloadQueue.cancel` rather than only in the button that declines to offer
   it: that same method's archive delete would otherwise pull the file out from

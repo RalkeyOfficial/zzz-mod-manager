@@ -1,0 +1,18 @@
+[Desktop Entry]
+Type=Application
+Name=ZZZ Mod Manager
+Comment=Manage Zenless Zone Zero mods with symbolic links
+# Resolved through the icon theme, so the compositor picks the size it needs.
+# Must match the installed icon's filename and the app id in linux/CMakeLists.txt.
+Icon=io.github.notionme.ZzzModManager
+Exec=zzz-mod-manager %U
+Terminal=false
+# One main category on purpose. `Utility;Game;` are both main categories, so
+# listing both puts the app in two menus.
+Categories=Game;
+Keywords=game;mod;zenless;zone;zero;zzz;
+StartupNotify=true
+# What a Wayland compositor matches the surface's app id against. Without it the
+# window gets a placeholder icon and an anonymous taskbar entry even when this
+# file is installed.
+StartupWMClass=io.github.notionme.ZzzModManager

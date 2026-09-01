@@ -7,7 +7,14 @@ project(runner LANGUAGES CXX)
 set(BINARY_NAME "mod_manager_flutter")
 # The unique GTK application identifier for this application. See:
 # https://wiki.gnome.org/HowDoI/ChooseApplicationID
-set(APPLICATION_ID "com.example.mod_manager_flutter")
+#
+# **This is the app's identity to the desktop, not a cosmetic string.** A
+# Wayland compositor has no per-window icon to read: it takes the surface's app
+# id, looks for `<app id>.desktop`, and takes `Icon=` from there. So this value,
+# the installed desktop entry's filename and the installed icon's filename must
+# be the same three strings or the window gets a generic placeholder icon and an
+# anonymous taskbar entry. See `linux/packaging/`.
+set(APPLICATION_ID "io.github.notionme.ZzzModManager")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.

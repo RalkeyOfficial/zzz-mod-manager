@@ -123,6 +123,21 @@ flutter build linux --release
 ./build/linux/x64/release/bundle/mod_manager_flutter
 ```
 
+6. **Give it its icon and taskbar entry** (optional, and Wayland needs it):
+```bash
+./linux/packaging/install-desktop-entry.sh
+```
+
+A Wayland compositor doesn't read an icon from the window — it looks up the
+app's desktop entry, so without one the window shows a placeholder icon and an
+anonymous taskbar entry. This writes the entry under your home directory, needs
+no root, and undoes itself with `--uninstall`.
+
+**It does not add the app to your application launcher.** The entry is written
+`NoDisplay=true`, which gives the window its icon without listing it in menus;
+pass `--menu` if you want it listed. The AUR package installs a normal listed
+entry, and the portable tarball ships this same script in `packaging/`.
+
 ## 🚀 Quick Start
 
 ### First Launch - Welcome Screen
