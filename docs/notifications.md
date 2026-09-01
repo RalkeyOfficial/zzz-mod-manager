@@ -29,8 +29,8 @@ only the failure speaks. That is also what keeps red meaning "it did not work"
 rather than being the colour of both outcomes of the same action.
 
 Successes that survive this rule, and why: an archive downloaded (the path is the
-whole point), a mod installed (it lands in a tab you are not looking at), F10 sent
-(it happens inside the game), a backup restored (files on disk), settings saved,
+whole point), a mod installed (it lands in a tab you are not looking at), a
+backup restored (files on disk), settings saved,
 and every count-bearing bulk report — the count and any partial failure *are* the
 message.
 

@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/services/config_service.dart';
 import 'package:mod_manager_flutter/services/mod_manager_service.dart';
@@ -27,7 +26,6 @@ void main() {
   late Directory modsDir;
   late Directory sourceDir;
   late ModManagerService service;
-  late ProviderContainer container;
 
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('zzz_import_char_test_');
@@ -43,12 +41,10 @@ void main() {
     );
     await config.setPaths(modsDir.path, saveModsDir.path);
 
-    container = ProviderContainer();
-    service = ModManagerService(config, container);
+    service = ModManagerService(config);
   });
 
   tearDown(() async {
-    container.dispose();
     if (temp.existsSync()) await temp.delete(recursive: true);
   });
 

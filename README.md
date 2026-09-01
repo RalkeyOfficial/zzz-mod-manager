@@ -15,7 +15,7 @@
 - [Screenshots](#screenshots)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
-- [F10 Auto-Reload](#f10-auto-reload)
+- [Reloading Mods In Game](#-reloading-mods-in-game)
 - [Usage](#usage)
 - [Configuration](#configuration)
 - [Building from Source](#building-from-source)
@@ -47,7 +47,6 @@ The application uses symbolic links to manage mods, which means:
 - **🔄 Single/Multi Mode**: Enable single or multiple mods per character
 - **🎨 Modern UI**: Clean Material Design 3 interface
 - **🌓 Dark/Light Theme**: Automatic theme switching
-- **⚡ F10 Auto-Reload**: Automatically send F10 to game when activating mods
 - **🧹 Auto-Cleanup**: Removes orphaned symbolic links and tags
 
 ### Advanced Features
@@ -181,7 +180,7 @@ SaveMods Folder (Your Library)     →     Mods Folder (Active Mods)
    - Click on a mod card to enable/disable it
    - Enabled mods get a symbolic link created in your Mods folder
    - Use Single/Multi toggle to choose activation mode
-   - Press F10 in game (or use auto-reload feature)
+   - Press F10 in game to load the change
 
 3. **Organize by characters**:
    - Click on character avatars to filter mods
@@ -229,58 +228,20 @@ SaveMods Folder (Your Library)     →     Mods Folder (Active Mods)
 - ✅ Organized - keep your library separate from active mods
 - ✅ Flexible - move your SaveMods folder anywhere without breaking anything
 
-## ⚡ F10 Auto-Reload
+## ⚡ Reloading Mods In Game
 
-3DMigoto reloads mods when F10 is pressed **inside the game's own window** — it
-does not watch the mods folder, so nothing you change on disk is picked up until
-that key arrives. The mod manager does it for you: it finds the game's window,
-brings it to the front, and presses F10.
-
-### Setup (one-time)
-
-```bash
-# Arch/CachyOS
-sudo pacman -S xdotool
-
-# Ubuntu/Debian
-sudo apt install xdotool
-```
-
-That is the whole setup, on **both X11 and Wayland**. The game runs through
-Proton, so its window is an X11 window on either session — `ydotool`, the `input`
-group and a systemd service are not needed and cannot help, because `ydotool`
-has no way to find a window.
-
-Then check that `d3dx.ini` in your ZZMI folder still has 3DMigoto's default
-binding:
+**Press F10 in the game after changing mods.** 3DMigoto does not watch the mods
+folder, so nothing you toggle here is picked up until that key arrives. It is the
+default binding XXMI ships, and you can confirm it in your ZZMI `d3dx.ini`:
 
 ```ini
 reload_fixes = no_modifiers VK_F10
 ```
 
-### How to Use
-
-- **Reload mods** in the Mods tab presses F10 whenever you ask for it.
-- **Automatic mod reload** in Settings presses it after every activate and
-  deactivate.
-
-Either way **the game comes to the front**, because a key only reaches the window
-that has focus.
-
-### Troubleshooting F10
-
-The app names the step that failed, and the log file records the same thing
-(Settings → Diagnostics → Log files):
-
-| What you see | What to do |
-|---|---|
-| **The game isn't running** | Launch Zenless Zone Zero and leave its window open, not minimized |
-| **xdotool isn't installed** | Run the install command above |
-| **F10 couldn't be sent** | The game would not come to the front — check it is not minimized |
-| **F10 sent**, but nothing changed in game | Check `reload_fixes = no_modifiers VK_F10` in `d3dx.ini` |
-
-The last row is the one to read twice: *F10 sent* means the key reached the game,
-not that 3DMigoto reloaded. Nothing outside the game can see whether it did.
+The mod manager does **not** press F10 for you. It was built and removed: an
+injected keypress does not reliably reach a game running under Proton, and no
+external tool is required any more. See
+[`docs/mod-reload.md`](docs/mod-reload.md) for what was measured.
 
 ## 📖 Usage
 
@@ -320,7 +281,7 @@ not that 3DMigoto reloaded. Nothing outside the game can see whether it did.
 1. Click on a mod card to toggle its status
 2. A mod's on/off state is shown by a toggle on its card
 3. The symbolic link is created/removed automatically
-4. F10 is sent automatically (if configured)
+4. Press F10 in the game to load the change
 
 **Right-click a mod** for more actions: Details, Edit, Rename, Add image, Open source page, Edit keybinds, favorite/unfavorite, and activate/deactivate.
 
@@ -444,16 +405,8 @@ makepkg -si
    ```
 
 3. **Press F10 in game**:
-   - 3DMigoto needs F10 to reload mods
-   - Use the auto-reload feature for convenience
-
-### F10 Auto-Reload Not Working
-
-1. Verify xdotool is installed: `which xdotool` — the same answer on X11 and
-   Wayland
-2. Check the game window can be found: `xdotool search --onlyvisible --name Zenless`
-3. Ensure the game window is not minimized
-4. Read the newest file in Settings → Diagnostics → Log files for the reason
+   - 3DMigoto only reloads when F10 is pressed inside the game
+   - Check `reload_fixes = no_modifiers VK_F10` is in your ZZMI `d3dx.ini`
 
 ### Application Crashes
 

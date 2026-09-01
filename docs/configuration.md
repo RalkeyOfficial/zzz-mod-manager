@@ -147,8 +147,8 @@ page and category.
 
 The Settings tab (`screens/settings_screen.dart`) renders section by section:
 **Mod directories**, **Language**, **Updates**, **Marketplace**, **Automatic
-tagging**, **Automatic mod reload**, **Appearance**. Only the paths are applied by
-the *Save configuration* button; everything else writes as it is changed.
+tagging**, **Diagnostics**, **Appearance**. Only the paths are applied by the
+*Save configuration* button; everything else writes as it is changed.
 
 Anything with a description of its own lives in `screens/components/settings/` as
 its own widget rather than inside the screen, which is already over a thousand
@@ -207,7 +207,7 @@ Recorded so each is not mistaken for an oversight:
 | The post-upgrade "N mods aren't tracked" nudge | The feature is not built, so its dismissed flag has nothing to dismiss. |
 | Automatic updating | Refused, not unbuilt — [`applying-updates.md` §7](applying-updates.md#automatic-updating--considered-and-refused). The **Updates** section's one switch is about *checking*, and its wording keeps that distinction visible. |
 
-Two settings *are* surfaced and do **not** persist: **Dark mode** and **Automatic
-mod reload** both write plain `StateProvider`s and nothing else, so they reset on
-every launch — despite a `theme` key existing in `config.json` with no reader.
-That is a real gap rather than a decision, and it is filed.
+One setting *is* surfaced and does **not** persist: **Dark mode** writes a plain
+`StateProvider` and nothing else, so it resets on every launch — despite a
+`theme` key existing in `config.json` with no reader. That is a real gap rather
+than a decision, and it is filed.

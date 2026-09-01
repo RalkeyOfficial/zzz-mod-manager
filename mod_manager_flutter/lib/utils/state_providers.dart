@@ -207,9 +207,6 @@ final activationModeProvider = StateProvider<ActivationMode>((ref) => Activation
 // Sidebar collapsed state
 final sidebarCollapsedProvider = StateProvider<bool>((ref) => false);
 
-// Auto F10 reload toggle (green = enabled, red = disabled)
-final autoF10ReloadProvider = StateProvider<bool>((ref) => false);
-
 // ── Mods toolbar: search / sort / tag filter / favorites ────────────────────
 // Held here (not as ad-hoc widget state) so the toolbar and the mods grid each
 // rebuild only on the slice they watch, instead of rebuilding the whole screen.

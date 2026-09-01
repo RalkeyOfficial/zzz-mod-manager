@@ -1,120 +1,87 @@
-# Making the game pick up a mod change
+# Reloading mods in the running game
 
-Reference for the **F10 reload**: how a key reaches 3DMigoto inside the running
-game, what the app may claim about it, and why the tool it needs is the same on
-X11 and Wayland.
+**The app does not do this. Press F10 in the game.**
 
-> Scope: getting a *running* game to notice that the links in its mods folder
-> changed. Creating and removing those links is
-> [`app-architecture.md`](app-architecture.md); what the resulting card says is
-> [`notifications.md`](notifications.md).
+This file exists so the feature is not built a third time. It was built, it
+never worked, and this is what was measured before it was removed.
 
-Related: [`logging.md`](logging.md) for the lines this writes.
+> Scope: why pressing F10 for the user is not attempted. Creating and removing
+> the links a reload would pick up is
+> [`app-architecture.md`](app-architecture.md).
 
 ---
 
 ## 1. There is no signal file
 
-3DMigoto does not watch its mods folder. Nothing in the folder — no
+3DMigoto does not watch its mods folder. Nothing written there — no
 `.reload_signal`, no `.mod_timestamp`, no touched file — makes it re-read
-anything. **The only trigger is the `reload_fixes` hotkey**, bound in `d3dx.ini`
-and shipped by XXMI as:
+anything. The only trigger is the `reload_fixes` hotkey, which XXMI ships bound
+as:
 
 ```ini
 reload_fixes = no_modifiers VK_F10
 ```
 
-So the whole feature is one act: press F10 inside the game's own window.
+So the whole feature reduces to one act: get an F10 keypress into the game's own
+window.
 
-## 2. F10 goes to the game's window, or nowhere
+## 2. What was measured
 
-A key press has a destination, and the destination is whatever holds focus.
-When the user clicks *Reload mods*, the window holding focus **is the mod
-manager** — so a press that is not aimed lands in this app and reloads nothing.
+On KDE Wayland (CachyOS), with the game running under Proton and **KWin itself
+asked which window had keyboard focus** — via a KWin script over D-Bus, because
+every X-side answer turned out to be unreliable:
 
-Two rules follow, and both are enforced rather than remembered
-(`test/f10_reload_test.dart`):
+| Step | Result |
+|---|---|
+| `xdotool` finds the game window, on Wayland too | **works** — the game is an XWayland client either way |
+| `xdotool windowactivate` gives it real keyboard focus | **works** — KWin confirms the active window changed |
+| `xdotool key F10` (XTEST) with that focus confirmed | **never arrives** — 0 of 6+ presses |
+| `xdotool key --window <id> F10` (XSendEvent) | never arrives |
+| `ydotool` (`/dev/uinput`, via `ydotoold`) with that focus confirmed | arrives **sometimes** |
+| a **physical** F10 with that same programmatic focus | works every time |
 
-- **The window is found first.** No window, no key press — the result is
-  `F10Outcome.gameNotFound`, which is also the ordinary answer when the game is
-  simply closed.
-- **The game is brought forward, and the activation is confirmed.** A compositor
-  may refuse an activation request from a background application, and the
-  request itself reports nothing about that. So the app re-reads which window is
-  active and only presses the key once the answer is the game's window.
+Two bugs were found and fixed along the way, and neither was sufficient:
 
-A consequence worth stating plainly, because it is visible: **sending F10 brings
-the game to the front.** That is not a side effect to be engineered away — it is
-the mechanism. With automatic reload on, every toggle raises the game.
+- **`KEY_F10` is event code 68; the code sent was 67, which is `KEY_F9`.**
+  `ydotool` speaks event codes, not keysym names. So even a correctly configured
+  Wayland machine pressed the wrong key — indistinguishable, from outside, from
+  the key not arriving.
+- **A failed window search fell through to a blind `xdotool key F10`** and
+  returned success. The window holding focus when someone clicks *Reload* is the
+  mod manager, so the key went into this app; and a blind press cannot fail, so
+  it could only ever be reported as success. Every press, on every machine, said
+  *"Mods reloaded — F10 was sent to the running game"*.
 
-## 3. A synthetic key is not a key
+With both fixed, the app still did not land a press reliably. A physical key in
+the identical state always works, so the gap is between an injected key and a
+real one — not focus, which was verified.
 
-**Linux: `xdotool key F10`, never `xdotool key --window <id> F10`.**
+## 3. Why it was not worth continuing
 
-The targeted form looks better — it names the window, so it should not need
-focus — and it does not work. `--window` sends an `XSendEvent`, which arrives at
-the client flagged as synthetic. Wine does not fold synthetic events into the
-keyboard state it reports through `GetAsyncKeyState`, and `GetAsyncKeyState` is
-what 3DMigoto polls from its present hook to read hotkeys. The press is
-therefore delivered, accepted, and ignored.
+To see whether a mod changed you have to look at the game. Once you are looking
+at the game it has focus, and F10 is under your finger. The feature buys **one
+keystroke**, and charges for it with:
 
-The untargeted form goes through XTEST, which the X server delivers as a real
-event to the focused window — hence §2's insistence on focus.
+- two external tools (`xdotool`, plus `ydotool` on Wayland);
+- a background daemon (`ydotoold`) and access to `/dev/uinput`;
+- focus stealing on every mod toggle, since a key only reaches a focused window;
+- a success message that cannot be verified — with the shipped ZZMI defaults
+  (`hunting = 0`, `show_warnings = 0`, `[Logging] calls = 0`) a reload writes
+  nothing and prints nothing, so nothing outside the game can confirm one.
 
-**Windows: `SendInput`, never `PostMessage`.** The same fact from the other side.
-A posted `WM_KEYDOWN` reaches the window's message queue and returns success
-without touching keyboard state, so `GetAsyncKeyState` never sees it. `SendInput`
-takes the path a real key takes, which again requires the window to be in the
-foreground first. **Not verified on Windows** — the reasoning is 3DMigoto's, and
-the Linux half of it is verified; the win32 path has not been run.
+That last point is the structural one. Even a working implementation could only
+honestly claim *a key was sent*, never *mods were reloaded*.
 
-## 4. `xdotool` on Wayland too, not `ydotool`
+## 4. If it is ever rebuilt
 
-The game runs under Proton, so **its window is an X11 window** — an XWayland
-client — however the session is composited. `xdotool` finds it, activates it and
-presses into it on a Wayland desktop exactly as on X11. Verified on KDE Wayland
-(CachyOS): `xdotool search --onlyvisible --name Zenless` returns the window, and
-an activation from a background application is confirmed active within 100 ms.
+Two things it must not do, both of which the removed version did:
 
-`ydotool` is not the Wayland answer and is not used. It writes to `/dev/uinput`,
-so it can press a key — but it **cannot see windows at all**, and "is the game
-there?" is the question that has to come first. Sending people to install it
-(along with the `input` group and a systemd unit) asked for setup that could not
-have helped.
+- **Never press a key that was not aimed at a located window.** A blind press
+  goes to the mod manager and reports success.
+- **Never claim a reload.** The strongest true claim is that a key was
+  delivered.
 
-So the dependency is `xdotool` on both display servers, and that is the single
-tool the *Check xdotool* button in Settings reports on.
-
-## 5. What the app may claim
-
-**Never "mods reloaded".** Whether 3DMigoto acted is not observable from outside
-the game: with the shipped ZZMI defaults — `hunting = 0`, `show_warnings = 0`,
-`[Logging] calls = 0` — a reload writes nothing to disk and prints nothing on
-screen. The strongest honest claim is that the key was delivered to a located,
-focused game window, and that is what `F10Outcome.sent` means and what the
-notification says.
-
-Each failure names itself, because each needs something different from the
-person reading it:
-
-| Outcome | What the user is told | What it asks of them |
-|---|---|---|
-| `sent` | F10 sent | nothing |
-| `gameNotFound` | the game isn't running | start the game |
-| `toolMissing` | xdotool isn't installed | install a package |
-| `sendFailed` | F10 couldn't be sent | the game would not come forward |
-
-A single bool cannot carry that, which is why `sendF10ToGame` returns
-`F10Result`.
-
-**An automatic reload reports only to the log.** It follows a toggle the user
-just made and can say nothing that toggle did not; a card per switch — most often
-saying the game is not running — would make the setting not worth leaving on.
-
-## 6. Every process call is bounded
-
-The reload runs four short commands, and all of them go through
-[`ProcessProbe`](../mod_manager_flutter/lib/utils/process_probe.dart): `which`,
-`search`, `windowactivate`, `getactivewindow`, `key`. An `xdotool` talking to a
-display server that has stopped answering is precisely the hang that helper
-exists to prevent, and a reload press must not be able to wedge the app.
+And one thing to check first: whether an injected key can reach a Proton game at
+all on the target compositor. That is the question the table in §2 answers with
+"not reliably", and it is the one that decides whether anything else is worth
+writing.

@@ -23,7 +23,7 @@ before changing anything it covers.
 | [`applying-updates.md`](../docs/applying-updates.md) | How an update **is written over an installed mod** |
 | [`patch-destinations.md`](../docs/patch-destinations.md) | **Which mod folder a patch goes into** — the signals and their measurements; ranked, never narrowed or preselected |
 | [`logging.md`](../docs/logging.md) | **What the app records about itself** — levels, tags, the rotating file, redaction |
-| [`mod-reload.md`](../docs/mod-reload.md) | **Making the game pick up a mod change** — aiming F10 at the game's window, and what a press may claim |
+| [`mod-reload.md`](../docs/mod-reload.md) | **Why the app does not press F10 for you** — what was measured, and why the feature is removed rather than fixed |
 | [`configuration.md`](../docs/configuration.md) | The app's **own settings** |
 
 ## How mods work
@@ -72,9 +72,10 @@ resolving a character from an id must handle both, plus the `unknown` placeholde
   confidence licenses an unattended write.
 - Guesses may inform, never drive. A suggestion is never preselected, and nothing
   but a checksum match ever reaches `exact`.
-- **F10 is aimed at the game's window or not pressed at all**, and the only claim
-  allowed is that it was *sent* — a 3DMigoto reload is invisible from outside the
-  game ([`mod-reload.md`](../docs/mod-reload.md)).
+- **The app never presses F10 for the user.** Built, measured, removed — an
+  injected key does not reliably reach a Proton game, and a reload is invisible
+  from outside it ([`mod-reload.md`](../docs/mod-reload.md)). Read that before
+  rebuilding it.
 
 **Notifications** — full rules in [`notifications.md`](../docs/notifications.md)
 - Never call `ScaffoldMessenger`. `context.notify.<severity>(…)` is the only way.

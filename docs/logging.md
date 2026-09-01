@@ -98,7 +98,7 @@ than which file noticed it.
 | `metadata` | Sidecars, origins, autofill |
 | `mods` | Library-level actions |
 | `ini` | Parsing |
-| `platform` | F10, browser, folder, dependency checks |
+| `platform` | Symlinks, browser, folders, the system description |
 | `fileops` | **Every mutation of the filesystem**, whoever made it |
 | `ui.notify` | Every notification raised |
 | `ui.confirm` | Every answer to a destructive prompt |
@@ -203,10 +203,11 @@ where it was found. That runs **unawaited after `runApp`**, because a `where 7z`
 walking a cold Windows `PATH` is a visible pause, and paying for a diagnostic
 with the startup it exists to protect is the wrong trade.
 
-A missing tool is a `warning`, so a machine with no `xdotool` says on its own
-that F10 auto-reload cannot work. On Windows the X11 helpers are reported
-**not applicable** rather than missing: a log saying `xdotool: missing` on a
-platform that sends F10 through win32 sends every reader down a dead end.
+A missing tool is a `warning`, so a machine with no extractor says on its own
+that archive imports cannot work. **Only tools the app actually runs are
+probed.** Three window/input helpers were probed for years for a mod-reload
+feature that no longer exists, and each put a `missing` warning in every log on
+a machine that never needed it — a line that reads like a cause and is not one.
 
 ## 8. The download isolate
 

@@ -11,13 +11,11 @@ Are you tired of:
 - ❌ Forgetting which mods are active?
 - ❌ Wasting disk space with duplicate files?
 - ❌ Struggling to organize dozens of character mods?
-- ❌ Switching to game just to press F10?
 
 **Say goodbye to all that!** This mod manager uses **symbolic links** to give you:
 - ✅ **Instant activation/deactivation** - One click, done!
 - ✅ **Zero file duplication** - Save precious disk space
 - ✅ **Safe operations** - Original files never touched
-- ✅ **Auto F10 reload** - No manual game switching needed
 - ✅ **Beautiful interface** - Clean, modern Material Design 3
 
 ---
@@ -37,7 +35,6 @@ Are you tired of:
 - **Mod Collections** - Organize your favorite mod combinations
 
 ### 🚀 Quality of Life
-- **⚡ F10 Auto-Reload** - Automatically sends F10 to game when you activate mods (no more Alt+Tab!)
 - **📦 Drag & Drop** - Just drag mod folders into the app
 - **📋 Paste Import** - Copy paths and Ctrl+V to import
 - **🌓 Dark/Light Theme** - Automatic theme switching
@@ -133,7 +130,7 @@ paru -S zzz-mod-manager-git
 **Activate Mods:**
 - 👆 Click a mod card to toggle it on/off
 - ✓ Active mods show with a checkmark
-- 🔄 F10 sent automatically (if configured)
+- 🔄 Press F10 in the game to load the change
 
 **Organize:**
 - 🎭 Click character avatars to filter
@@ -142,42 +139,10 @@ paru -S zzz-mod-manager-git
 
 ---
 
-## ⚡ F10 Auto-Reload Setup
+## ⚡ Reloading Mods In Game
 
-Never manually press F10 again! The app can automatically send F10 to the game.
-
-### One-Time Setup (2 minutes):
-
-**Wayland Users:**
-```bash
-sudo pacman -S ydotool wmctrl xdotool
-sudo usermod -a -G input $USER
-sudo systemctl enable --now ydotool.service
-sudo reboot
-```
-
-**X11 Users:**
-```bash
-sudo pacman -S xdotool wmctrl
-```
-
-### How It Works:
-
-**Method 1: Alt+Tab Workflow** ⭐
-```
-1. Launch Zenless Zone Zero
-2. Alt+Tab to mod manager
-3. Activate a mod
-4. Alt+Tab back to game
-5. F10 sent automatically! ✅
-```
-
-**Method 2: Dual Monitor** 🖥️🖥️
-```
-Game visible on Monitor 1
-Mod Manager on Monitor 2
-Activate mods = Instant reload! ✅
-```
+Toggle mods here, then **press F10 in the game** to load the change. That is
+3DMigoto's own reload hotkey, and no extra setup or tools are needed.
 
 ---
 
@@ -203,7 +168,6 @@ Activate mods = Instant reload! ✅
 - Symbolic link management
 - Window state persistence
 - JSON configuration
-- Process detection (for F10 feature)
 - Cross-desktop compatibility (X11/Wayland)
 
 ---
@@ -248,7 +212,6 @@ Activate mods = Instant reload! ✅
 - 🖼️ 38 character portrait assets
 - 🌍 English and Ukrainian translations
 - 📚 Comprehensive documentation
-- 🔧 F10 auto-reload scripts
 - 💻 Native Linux integration
 
 ---

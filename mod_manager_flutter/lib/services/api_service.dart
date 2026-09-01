@@ -51,7 +51,7 @@ class ApiService {
           _configService!.fileLogging;
     }
 
-    _modManager ??= ModManagerService(_configService!, _container!);
+    _modManager ??= ModManagerService(_configService!);
   }
 
   static Future<List<ModInfo>> getMods() async {

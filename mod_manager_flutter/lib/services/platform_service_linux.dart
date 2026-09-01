@@ -12,124 +12,6 @@ final Logger _files = Logger('fileops');
 
 /// Linux-специфічна реалізація PlatformService
 class LinuxPlatformService implements PlatformService {
-  LinuxPlatformService({ProcessProbe probe = const ProcessProbe()})
-      : _probe = probe;
-
-  /// Every process this class runs for F10 goes through the probe, so none of
-  /// them can hang the press: `xdotool` talking to a display server that has
-  /// stopped answering is the exact case `ProcessProbe` was written for.
-  final ProcessProbe _probe;
-
-  /// Window titles the game is known by, most likely first.
-  ///
-  /// `xdotool search --name` takes a **case-sensitive regex** matched against
-  /// the whole title, so `Zenless` finds `ZenlessZoneZero`.
-  static const _gameWindowNames = ['Zenless', 'zenless', 'ZZZ'];
-
-  /// **`xdotool` is the locator on Wayland too, not just X11.** The game runs
-  /// under Proton, so its window is an XWayland client and an ordinary X window
-  /// however the desktop session is composited. `ydotool` cannot see windows at
-  /// all — it writes to `/dev/uinput` — so it can press a key but can never
-  /// answer "is the game there?", which is the question that has to come first.
-  @override
-  Future<F10Result> sendF10ToGame() async {
-    final displayServer = getDisplayServerType();
-    _log.debug('sending F10', fields: {'display': displayServer});
-
-    if (!await _hasTool('xdotool')) {
-      _log.warning('cannot send F10', fields: {
-        'reason': 'no window tool',
-        'needs': 'xdotool',
-        'display': displayServer,
-      });
-      return const F10Result.toolMissing('xdotool');
-    }
-
-    final window = await _findGameWindow();
-    if (window == null) {
-      // Not a warning: the ordinary reason for this is that the game is closed.
-      _log.info('no game window', fields: {'display': displayServer});
-      return const F10Result.gameNotFound();
-    }
-
-    if (!await _activateWindow(window)) {
-      _log.warning('F10 not sent', fields: {
-        'reason': 'could not focus the game',
-        'window': window,
-        'display': displayServer,
-      });
-      return const F10Result.sendFailed('xdotool');
-    }
-
-    // Deliberately `key F10` and not `key --window <id> F10`. A targeted press
-    // is an `XSendEvent`, which arrives flagged as synthetic; Wine does not fold
-    // those into the keyboard state `GetAsyncKeyState` reports, and that is the
-    // call 3DMigoto polls for its hotkeys. So a targeted press is delivered,
-    // accepted and ignored — hence focusing the window first and then pressing
-    // the key for real, through XTEST.
-    final pressed = await _probe.run('xdotool', ['key', 'F10']);
-    if (pressed == null || pressed.exitCode != 0) {
-      _log.warning('F10 not sent', fields: {
-        'reason': 'xdotool could not press the key',
-        'window': window,
-        'display': displayServer,
-      });
-      return const F10Result.sendFailed('xdotool');
-    }
-
-    _log.info('F10 sent', fields: {'tool': 'xdotool', 'window': window});
-    return const F10Result.sent('xdotool');
-  }
-
-  Future<bool> _hasTool(String name) async {
-    final located = await _probe.run('which', [name]);
-    return located != null &&
-        located.exitCode == 0 &&
-        located.stdout.trim().isNotEmpty;
-  }
-
-  /// The id of a visible game window, or null when there is none.
-  Future<String?> _findGameWindow() async {
-    for (final name in _gameWindowNames) {
-      final found =
-          await _probe.run('xdotool', ['search', '--onlyvisible', '--name', name]);
-      // `search` exits 1 when nothing matched, which is how "the game is not
-      // running" is told apart from "xdotool is broken".
-      if (found == null || found.exitCode != 0) continue;
-      final ids = found.stdout.trim();
-      if (ids.isEmpty) continue;
-      final id = ids.split('\n').first.trim();
-      _log.debug('found the game window', fields: {'match': name, 'window': id});
-      return id;
-    }
-    return null;
-  }
-
-  /// Brings the game forward and **confirms it actually came forward**.
-  ///
-  /// The confirmation is the point. A compositor may refuse an activation
-  /// request from a background app (focus-stealing prevention), and
-  /// `windowactivate` reports nothing about that; without the check the app
-  /// would go on to press a key into whatever the user is really looking at.
-  Future<bool> _activateWindow(String window) async {
-    await _probe.run('xdotool', ['windowactivate', window]);
-
-    // Activation is asynchronous — the request goes to the window manager and
-    // comes back as a property change — so this polls rather than trusting one
-    // read taken immediately afterwards.
-    for (var attempt = 0; attempt < 6; attempt++) {
-      final active = await _probe.run('xdotool', ['getactivewindow']);
-      if (active != null &&
-          active.exitCode == 0 &&
-          active.stdout.trim() == window) {
-        return true;
-      }
-      await Future.delayed(const Duration(milliseconds: 100));
-    }
-    return false;
-  }
-
-
   @override
   Future<bool> createModLink(String sourcePath, String linkPath) async {
     try {
@@ -200,40 +82,6 @@ class LinuxPlatformService implements PlatformService {
                         path.join(homeDir, '.local', 'share');
     
     return path.join(xdgDataHome, 'zzz-mod-manager');
-  }
-  
-  /// **Records that the instructions were asked for; it does not print them.**
-  ///
-  /// This used to write twenty lines of `sudo` commands to stdout — a terminal
-  /// a packaged app does not have, and which the person who needs them is
-  /// certainly not watching. The instructions themselves belong on screen, and
-  /// the Settings tab already renders them from
-  /// `settings.auto_f10.instructions.*`; what the log wants is the fact that
-  /// somebody got far enough to ask, and on which display server.
-  @override
-  void showSetupInstructions() {
-    _log.info('setup instructions requested', fields: {
-      'display': getDisplayServerType(),
-    });
-  }
-  
-  @override
-  /// **`xdotool` on both display servers.** The tool has to find the game's
-  /// window before it can press anything into it, and the game is an XWayland
-  /// client on a Wayland session, so the X11 tool is the right answer there too.
-  Future<bool> checkDependencies() async {
-    final displayServer = getDisplayServerType();
-    const tool = 'xdotool';
-
-    final present = await _hasTool(tool);
-    if (present) {
-      _log.debug('dependency present',
-          fields: {'tool': tool, 'display': displayServer});
-    } else {
-      _log.warning('dependency missing',
-          fields: {'tool': tool, 'display': displayServer});
-    }
-    return present;
   }
   
   @override
@@ -408,10 +256,10 @@ class LinuxPlatformService implements PlatformService {
       tools: [
         await _describeTool('7-zip', const ['7z', '7za', '7zr'], probe,
             versionArguments: const []),
-        // `xdotool` alone: it is the only tool F10 needs, on either display
-        // server. Probing tools nothing uses puts a `missing` warning in every
-        // log that reads like a cause and is not one.
-        await _describeTool('xdotool', const ['xdotool'], probe),
+        // 7-Zip alone: it is the only external tool the app runs. `xdotool`,
+        // `ydotool` and `wmctrl` were probed for years for a mod-reload feature
+        // that no longer exists, which put `missing` warnings in every log that
+        // read like a cause and were not one.
       ],
     );
   }

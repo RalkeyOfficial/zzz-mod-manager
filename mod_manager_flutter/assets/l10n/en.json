@@ -141,14 +141,6 @@
       "generic_title": "Something went wrong"
     },
     "snackbar": {
-      "reload_sent_title": "F10 sent",
-      "reload_sent_body": "Zenless Zone Zero has the reload key.",
-      "reload_game_not_found_title": "The game isn't running",
-      "reload_game_not_found_body": "No Zenless Zone Zero window to send F10 to.",
-      "reload_tool_missing_title": "{tool} isn't installed",
-      "reload_tool_missing_body": "F10 needs it to reach Zenless Zone Zero.",
-      "reload_send_failed_title": "F10 couldn't be sent",
-      "reload_send_failed_body": "Zenless Zone Zero would not come to the front.",
       "clipboard_empty_title": "Clipboard is empty",
       "clipboard_empty_body": "Copy an image first, then paste it here.",
       "import_no_folders_title": "Nothing to import",
@@ -183,9 +175,6 @@
       "paste_error_title": "Paste failed"
     },
     "tooltips": {
-      "auto_f10_on": "Auto F10 enabled",
-      "auto_f10_off": "Auto F10 disabled",
-      "reload": "Reload mods (F10)",
       "refresh": "Refresh mod list",
       "card": "Hold to drag\nClick to toggle"
     },
@@ -613,7 +602,6 @@
       "paths": "Mod directories",
       "language": "Language",
       "auto_tag": "Automatic tagging",
-      "auto_f10": "Automatic mod reload",
       "appearance": "Appearance",
       "updates": "Updates",
       "marketplace": "Marketplace",
@@ -683,48 +671,6 @@
       "tag_plural": "tags",
       "list_title": "Detected tags:",
       "error_title": "Auto-tagging failed"
-    },
-    "auto_f10": {
-      "title": "Automatic mod reload",
-      "description": "This app automatically sends F10 to reload mods in 3DMigoto/XXMI after activation/deactivation.",
-      "enabled": "Enabled - F10 is sent automatically when toggling mods",
-      "disabled": "Disabled - press F10 manually",
-      "check_dependencies": "Check xdotool",
-      "show_instructions": "Show instructions",
-      "status_title": "Automatic F10",
-      "requirements": {
-        "launcher": "XXMI Launcher is installed and configured",
-        "config": "d3dx.ini includes: reload_fixes = no_modifiers VK_F10",
-        "tools": "xdotool is installed — the app needs it on X11 and Wayland alike"
-      },
-      "instructions": {
-        "step1_title": "1. Install XXMI Launcher:",
-        "step1_link": "github.com/SpectrumQT/XXMI-Installer",
-        "step2_title": "2. Ensure d3dx.ini contains the line:",
-        "step2_code": "reload_fixes = no_modifiers VK_F10",
-        "step3_title": "3. Install xdotool:",
-        "step3_debian": "Ubuntu/Debian",
-        "step3_debian_code": "sudo apt install xdotool",
-        "step3_arch": "Arch/CachyOS",
-        "step3_arch_code": "sudo pacman -S xdotool",
-        "warning_title": "Important:",
-        "warning_body": "The game must be open and not minimized. Sending F10 brings the game to the front, because a key only reaches the window that has focus.",
-        "workflow_title": "What happens:",
-        "workflow_step1": "1. Launch the game",
-        "workflow_step2": "2. Alt+Tab to the mod manager",
-        "workflow_step3": "3. Activate a mod",
-        "workflow_step4": "4. The game comes to the front",
-        "workflow_step5": "5. ✅ F10 arrives and 3DMigoto reloads",
-        "wayland_note": "Wayland needs xdotool too, not ydotool: the game runs through Proton, so its window is an X11 window on either session."
-      }
-    },
-    "dialogs": {
-      "dependencies_present_title": "xdotool is installed",
-      "dependencies_present_body": "F10 can reach Zenless Zone Zero.",
-      "dependencies_missing_title": "xdotool isn't installed",
-      "dependencies_missing_body": "F10 can't reach Zenless Zone Zero without it. Show instructions for the command to run.",
-      "instructions_title": "F10 instructions",
-      "ok": "Got it"
     }
   },
   "language_names": {

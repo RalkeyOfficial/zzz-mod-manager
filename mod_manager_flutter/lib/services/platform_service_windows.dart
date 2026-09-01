@@ -1,8 +1,5 @@
 import 'dart:io';
-import 'dart:ffi';
-import 'package:ffi/ffi.dart';
 import 'package:path/path.dart' as path;
-import 'package:win32/win32.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:pasteboard/pasteboard.dart';
 import '../utils/process_probe.dart';
@@ -19,86 +16,6 @@ final Logger _files = Logger('fileops');
 
 class WindowsPlatformService implements PlatformService {
   
-  /// **F10 goes to the game's window or nowhere.** There is no fallback to the
-  /// foreground window: the app the user just clicked in *is* the mod manager,
-  /// so a foreground press reloads nothing and cannot report a failure.
-  ///
-  /// **Not verified on Windows.** The reasoning below comes from how 3DMigoto
-  /// reads its hotkeys, and matches the Linux behaviour that is verified; the
-  /// win32 path itself has not been exercised on a Windows machine.
-  @override
-  Future<F10Result> sendF10ToGame() async {
-    _log.debug('sending F10', fields: {'display': getDisplayServerType()});
-
-    try {
-      // Знаходимо вікно гри через FindWindow
-      final windowNames = [
-        'Zenless Zone Zero',
-        'ZenlessZoneZero',
-        'Zenless',
-        'ZZZ'
-      ];
-
-      int hwnd = 0;
-      for (final name in windowNames) {
-        final namePtr = name.toNativeUtf16();
-        try {
-          hwnd = FindWindow(nullptr, namePtr);
-          if (hwnd != 0) {
-            _log.debug('found the game window',
-                fields: {'match': name, 'window': hwnd});
-            break;
-          }
-        } finally {
-          calloc.free(namePtr);
-        }
-      }
-
-      if (hwnd == 0) {
-        // Not a warning: the ordinary reason for this is that the game is
-        // closed.
-        _log.info('no game window');
-        return const F10Result.gameNotFound();
-      }
-
-      // Перевіряємо чи вікно видиме
-      final isVisible = IsWindowVisible(hwnd);
-      if (isVisible == FALSE) {
-        _log.warning('F10 not sent', fields: {
-          'reason': 'the game window is not visible',
-          'window': hwnd,
-        });
-        return const F10Result.sendFailed('win32');
-      }
-
-      SetForegroundWindow(hwnd);
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      // The activation is confirmed rather than assumed: Windows refuses
-      // `SetForegroundWindow` from a process that does not currently own the
-      // foreground, and says so only through this read.
-      if (GetForegroundWindow() != hwnd) {
-        _log.warning('F10 not sent', fields: {
-          'reason': 'could not focus the game',
-          'window': hwnd,
-        });
-        return const F10Result.sendFailed('win32');
-      }
-
-      if (!_pressF10()) {
-        _log.warning('F10 not sent',
-            fields: {'reason': 'SendInput rejected the key', 'window': hwnd});
-        return const F10Result.sendFailed('win32');
-      }
-
-      _log.info('F10 sent', fields: {'tool': 'win32', 'window': hwnd});
-      return const F10Result.sent('win32');
-    } catch (error, stack) {
-      _log.warning('F10 not sent',
-          error: error, stack: stack, fields: {'tool': 'win32'});
-      return const F10Result.sendFailed('win32');
-    }
-  }
   
   @override
   Future<bool> createModLink(String sourcePath, String linkPath) async {
@@ -222,38 +139,6 @@ class WindowsPlatformService implements PlatformService {
     return path.join(appData, 'zzz-mod-manager');
   }
   
-  /// Records the request; the instructions themselves belong on screen.
-  ///
-  /// See the Linux implementation for the reasoning — twenty lines of setup
-  /// help written to a console a packaged app does not have helped nobody.
-  @override
-  void showSetupInstructions() {
-    _log.info('setup instructions requested', fields: {
-      'display': getDisplayServerType(),
-    });
-  }
-
-  @override
-  Future<bool> checkDependencies() async {
-    // На Windows всі необхідні API вже є в системі
-    try {
-      final hwnd = GetForegroundWindow();
-      if (hwnd != 0) {
-        _log.debug('dependency present', fields: {'tool': 'win32'});
-        return true;
-      }
-    } catch (error, stack) {
-      _log.error('the Windows API is not answering',
-          error: error, stack: stack);
-      return false;
-    }
-
-    // No foreground window is not a missing dependency — nothing was focused.
-    _log.debug('dependency present',
-        fields: {'tool': 'win32', 'foreground': 'none'});
-    return true;
-  }
-  
   @override
   Future<List<String>> findGameProcesses() async {
     try {
@@ -343,10 +228,8 @@ class WindowsPlatformService implements PlatformService {
   @override
   List<String> get bundledSevenZipNames => const ['7z.exe', '7zz.exe'];
 
-  /// Windows has no distro and no display server, and its F10 path is win32
-  /// rather than an external tool — so the X11/Wayland helpers are reported
-  /// **not applicable** rather than missing. A Windows log that said
-  /// `xdotool: missing` would send every reader down a dead end.
+  /// Windows has no distro and no display server, so those fields are absent
+  /// rather than empty.
   @override
   Future<SystemReport> describeSystem({
     ProcessProbe probe = const ProcessProbe(),
@@ -358,11 +241,7 @@ class WindowsPlatformService implements PlatformService {
         version: Platform.operatingSystemVersion,
         displayServer: getDisplayServerType(),
       ),
-      tools: [
-        await _describeSevenZip(probe),
-        const ToolStatus.notApplicable('xdotool', note: 'win32 sends F10'),
-        const ToolStatus.notApplicable('ydotool', note: 'win32 sends F10'),
-      ],
+      tools: [await _describeSevenZip(probe)],
     );
   }
 
@@ -456,30 +335,6 @@ class WindowsPlatformService implements PlatformService {
 
   // ===== Приватні методи =====
   
-  /// Presses and releases F10 as though it came from the keyboard.
-  ///
-  /// **`SendInput`, deliberately not `PostMessage`.** 3DMigoto polls
-  /// `GetAsyncKeyState` from its present hook to read hotkeys, and that reports
-  /// the *keyboard state* — which a posted `WM_KEYDOWN` never touches. A posted
-  /// message is delivered to the window's queue, returns success, and reloads
-  /// nothing. `SendInput` goes through the same path a real key does, which is
-  /// why the window has to be in the foreground first.
-  bool _pressF10() {
-    final inputs = calloc<INPUT>(2);
-    try {
-      inputs[0].type = INPUT_KEYBOARD;
-      inputs[0].ki.wVk = VK_F10;
-      inputs[1].type = INPUT_KEYBOARD;
-      inputs[1].ki.wVk = VK_F10;
-      inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
-
-      final accepted = SendInput(2, inputs, sizeOf<INPUT>());
-      return accepted == 2;
-    } finally {
-      calloc.free(inputs);
-    }
-  }
-
 
   Future<bool> _isJunction(String dirPath) async {
     try {

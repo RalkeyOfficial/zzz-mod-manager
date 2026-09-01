@@ -141,14 +141,6 @@
       "generic_title": "Щось пішло не так"
     },
     "snackbar": {
-      "reload_sent_title": "F10 надіслано",
-      "reload_sent_body": "Zenless Zone Zero отримала клавішу перезавантаження.",
-      "reload_game_not_found_title": "Гра не запущена",
-      "reload_game_not_found_body": "Немає вікна Zenless Zone Zero, куди надіслати F10.",
-      "reload_tool_missing_title": "{tool} не встановлено",
-      "reload_tool_missing_body": "Без нього F10 не дійде до Zenless Zone Zero.",
-      "reload_send_failed_title": "Не вдалося надіслати F10",
-      "reload_send_failed_body": "Zenless Zone Zero не вийшла на передній план.",
       "clipboard_empty_title": "Буфер обміну порожній",
       "clipboard_empty_body": "Спочатку скопіюйте зображення, а потім вставте його сюди.",
       "import_no_folders_title": "Немає чого імпортувати",
@@ -183,9 +175,6 @@
       "paste_error_title": "Помилка вставки"
     },
     "tooltips": {
-      "auto_f10_on": "Автоматичне F10 увімкнено",
-      "auto_f10_off": "Автоматичне F10 вимкнено",
-      "reload": "Перезавантажити моди (F10)",
       "refresh": "Оновити список модів",
       "card": "Натисніть та утримуйте для перетягування\nКлікніть для активації"
     },
@@ -626,8 +615,7 @@
       "paths": "Шляхи до модів",
       "language": "Мова",
       "auto_tag": "Автотегування",
-      "auto_f10": "Автоматичне F10",
-      "appearance": "Зовнішній вигляд",
+      "appearance":"Зовнішній вигляд",
       "updates": "Оновлення",
       "marketplace": "Маркетплейс",
       "diagnostics": "Діагностика"
@@ -697,48 +685,6 @@
       "tag_plural": "тегів",
       "list_title": "Виявлені теги:",
       "error_title": "Помилка автотегування"
-    },
-    "auto_f10": {
-      "title": "Автоматичне перезавантаження модів",
-      "description": "Додаток автоматично відправляє F10 для перезавантаження модів у 3DMigoto/XXMI після активації/деактивації.",
-      "enabled": "Увімкнено - F10 відправляється автоматично при активації/деактивації модів",
-      "disabled": "Вимкнено - F10 потрібно натискати вручну",
-      "check_dependencies": "Перевірити xdotool",
-      "show_instructions": "Показати інструкції",
-      "status_title": "Автоматичне F10",
-      "requirements": {
-        "launcher": "XXMI Launcher встановлено та налаштовано",
-        "config": "У d3dx.ini є рядок: reload_fixes = no_modifiers VK_F10",
-        "tools": "xdotool встановлено — він потрібен і на X11, і на Wayland"
-      },
-      "instructions": {
-        "step1_title": "1. Встановіть XXMI Launcher:",
-        "step1_link": "github.com/SpectrumQT/XXMI-Installer",
-        "step2_title": "2. Переконайтеся, що у d3dx.ini є рядок:",
-        "step2_code": "reload_fixes = no_modifiers VK_F10",
-        "step3_title": "3. Встановіть xdotool:",
-        "step3_debian": "Ubuntu/Debian",
-        "step3_debian_code": "sudo apt install xdotool",
-        "step3_arch": "Arch/CachyOS",
-        "step3_arch_code": "sudo pacman -S xdotool",
-        "warning_title": "Важливо:",
-        "warning_body": "Гра має бути відкрита і не згорнута. Надсилання F10 виводить гру на передній план, бо клавіша доходить лише до вікна у фокусі.",
-        "workflow_title": "Що відбувається:",
-        "workflow_step1": "1. Запустіть гру",
-        "workflow_step2": "2. Alt+Tab до менеджера модів",
-        "workflow_step3": "3. Активуйте мод",
-        "workflow_step4": "4. Гра виходить на передній план",
-        "workflow_step5": "5. ✅ F10 доходить, і 3DMigoto перезавантажує моди",
-        "wayland_note": "На Wayland потрібен саме xdotool, а не ydotool: гра працює через Proton, тому її вікно є вікном X11 у будь-якій сесії."
-      }
-    },
-    "dialogs": {
-      "dependencies_present_title": "xdotool встановлено",
-      "dependencies_present_body": "F10 може дійти до Zenless Zone Zero.",
-      "dependencies_missing_title": "xdotool не встановлено",
-      "dependencies_missing_body": "Без нього F10 не дійде до Zenless Zone Zero. Натисніть «Показати інструкції», щоб побачити команду.",
-      "instructions_title": "Інструкції F10",
-      "ok": "Зрозуміло"
     }
   },
   "language_names": {

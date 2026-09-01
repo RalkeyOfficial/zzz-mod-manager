@@ -62,15 +62,16 @@ markdown would otherwise flatten `<br>`×6 to the same break as `<br>`×2.
 - **`IniParserService`** — parses mod `.ini` files into keybinds.
 - **`ArchiveService`** — extracts `.zip` in-process (`archive` package) and
   `.rar`/`.7z` by shelling out to `7z`/`7za`/`7zr`, which must be installed.
-Sending F10 so a running game picks up a mod change lives on `PlatformService`
-rather than in a service of its own — see [`mod-reload.md`](mod-reload.md).
+Nothing here reloads mods in the running game. That is deliberate and
+[`mod-reload.md`](mod-reload.md) is why.
 
 ### The platform abstraction
 
 The most important architectural decision. `PlatformService` (abstract) defines
-symlink creation/removal, sending F10, app-data paths and dependency checks.
-`PlatformServiceFactory.getInstance()` returns `LinuxPlatformService` (real
-symlinks + xdotool) or `WindowsPlatformService` (junctions + win32 SendInput).
+symlink creation/removal, app-data paths, the system description for the log
+header, and opening folders and URLs. `PlatformServiceFactory.getInstance()`
+returns `LinuxPlatformService` (real symlinks) or `WindowsPlatformService`
+(junctions).
 
 **Never branch on `Platform.isX` for these in business logic** — add a method here
 and implement it in both subclasses.

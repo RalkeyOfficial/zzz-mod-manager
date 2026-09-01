@@ -1,61 +1,13 @@
 import '../utils/process_probe.dart';
 import 'log/system_report.dart';
 
-/// What became of an attempt to send F10 to the game.
-///
-/// A `bool` cannot carry this. "The game is not running" and "the tool that
-/// sends keystrokes is not installed" need different words on screen and
-/// different actions from the user, and neither is the same as a key that was
-/// delivered to a window that ignored it.
-enum F10Outcome {
-  /// A real key event was delivered to a located game window.
-  ///
-  /// **This is the strongest claim the app can make.** Whether 3DMigoto then
-  /// reloaded anything is not observable from outside the game: with
-  /// `hunting = 0` and `show_warnings = 0` — the shipped ZZMI defaults — a
-  /// reload writes nothing and prints nothing. So nothing may report that mods
-  /// *were* reloaded.
-  sent,
-
-  /// No game window exists, which is the ordinary answer when the game is not
-  /// running.
-  gameNotFound,
-
-  /// The tool needed to find the window and press the key is not installed.
-  toolMissing,
-
-  /// A game window was found, and the key still did not reach it.
-  sendFailed,
-}
-
-class F10Result {
-  const F10Result.sent(this.tool) : outcome = F10Outcome.sent;
-  const F10Result.gameNotFound()
-      : outcome = F10Outcome.gameNotFound,
-        tool = null;
-  const F10Result.toolMissing(this.tool) : outcome = F10Outcome.toolMissing;
-  const F10Result.sendFailed(this.tool) : outcome = F10Outcome.sendFailed;
-
-  final F10Outcome outcome;
-
-  /// The tool this outcome is about: the one that delivered the key, the one
-  /// that is missing, or the one whose send failed.
-  final String? tool;
-
-  bool get sent => outcome == F10Outcome.sent;
-}
-
 /// Абстрактний клас для платформно-специфічних операцій
+///
+/// **There is deliberately nothing here for reloading mods in the running
+/// game.** Pressing F10 for the user was tried and removed — see
+/// [`docs/mod-reload.md`](../../../docs/mod-reload.md) for what was measured and
+/// why it loses. Press F10 in the game.
 abstract class PlatformService {
-  /// Presses F10 in the game's own window so 3DMigoto reloads its mods.
-  ///
-  /// **F10 is only ever sent to a window that was found first.** Sending it
-  /// blind — to whatever holds focus — reaches the mod manager instead, since
-  /// the mod manager is what the user just clicked in; and a blind send cannot
-  /// fail, so it can only ever be reported as success. That combination is why
-  /// this returns [F10Result] rather than a bool.
-  Future<F10Result> sendF10ToGame();
-  
   /// Створює symbolic link або його аналог (junction на Windows)
   Future<bool> createModLink(String sourcePath, String linkPath);
   
@@ -67,12 +19,6 @@ abstract class PlatformService {
   
   /// Отримує шлях до директорії даних додатку
   String getAppDataPath();
-  
-  /// Показує інструкції по налаштуванню для конкретної платформи
-  void showSetupInstructions();
-  
-  /// Перевіряє наявність необхідних інструментів/залежностей
-  Future<bool> checkDependencies();
   
   /// Знаходить процеси гри
   Future<List<String>> findGameProcesses();
@@ -116,11 +62,11 @@ abstract class PlatformService {
   /// or a file read.
   ///
   /// **One method returning one struct, rather than a getter per fact.** The two
-  /// platforms differ in *which questions exist*: there is no distro on Windows,
-  /// no display server, and no xdotool — F10 goes through win32. A pile of
-  /// nullable getters would push "is this meaningful here?" back to the caller
-  /// and invite a `Platform.isWindows` at the call site, which is the rule this
-  /// exists to protect.
+  /// platforms differ in *which questions exist*: there is no distro and no
+  /// display server on Windows, and each platform finds its extractor its own
+  /// way. A pile of nullable getters would push "is this meaningful here?" back
+  /// to the caller and invite a `Platform.isWindows` at the call site, which is
+  /// the rule this exists to protect.
   ///
   /// Never throws, and every probe is bounded: a header is a nice-to-have and
   /// must not be able to delay or break a launch.

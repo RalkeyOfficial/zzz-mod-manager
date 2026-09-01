@@ -7,17 +7,10 @@
 /// from a Linux test and vice versa.
 library;
 
-/// Whether a tool is here, absent, or has no meaning on this platform.
-///
-/// The third state is not pedantry. Without it a Windows log reads
-/// `xdotool: missing` — and a reader who does not know that Windows sends F10
-/// through win32 will chase it as the cause.
+/// Whether a tool is here or absent.
 enum ToolState {
   present,
   missing,
-
-  /// Not part of how this platform works at all.
-  notApplicable,
 }
 
 class ToolStatus {
@@ -34,11 +27,6 @@ class ToolStatus {
         path = null,
         version = null,
         note = null;
-
-  const ToolStatus.notApplicable(this.name, {this.note})
-      : state = ToolState.notApplicable,
-        path = null,
-        version = null;
 
   final String name;
   final ToolState state;

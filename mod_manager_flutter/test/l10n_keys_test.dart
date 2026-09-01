@@ -74,10 +74,6 @@ void main() {
     'language_names.',
     // Chosen at runtime by a ternary *inside* `t(...)`, so the call-site regex
     // above sees `t(cond ? …` and matches nothing at all.
-    'mods.snackbar.reload_sent_',
-    'mods.snackbar.reload_game_not_found_',
-    'mods.snackbar.reload_tool_missing_',
-    'mods.snackbar.reload_send_failed_',
     'mods.backups.restored_',
     'mods.backups.restore_failed_',
     'marketplace.install_success_title_',

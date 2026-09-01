@@ -1539,8 +1539,7 @@ is exactly right.
   `_cleanupInvalidLinks()` then prunes it, silently switching the mod off.
   Overwriting never moves the folder, so the link stays valid throughout and
   nothing needs pruning. Deactivation is now only about **open file handles**
-  (below), not about link integrity. Still restore the previous active state and
-  fire the F10 reload when `autoF10Reload` is on.
+  (below), not about link integrity. Still restore the previous active state.
 - [x] **The folder name never changes.** The new archive's root folder is frequently
   named differently (`Ellen v2`), but `config.json` keys `active_mods`,
   `favorite_mods` and `mod_character_tags` by folder name. Keep the existing name;
@@ -2081,17 +2080,16 @@ is exactly right.
   toggle/rename/edit/delete/favourite all patch the list in place rather than
   rescanning. The re-render was never the rescan — it was the keys.
 
-- [ ] **The auto-tag and F10 sections cannot get a widget test.**
+- [ ] **The auto-tag section cannot get a widget test.**
   `_SettingsScreenState.initState` calls `ApiService.getConfig()`, which lazily
   builds a `ConfigService` against the developer's **real**
   `<appData>/config.json`, so mounting the screen in a test would rewrite their
   library paths. Anything extracted to `components/settings/` with a writer seam
   escapes that — `test/settings_sections_test.dart` covers the Updates and
-  Marketplace sections on exactly those terms — but the auto-tag section did not
-  get the treatment, because its `_buildRequirement` helper is shared with the
-  F10 section and moving it would refactor a section nobody has complained
-  about. Whoever does it should make that helper a small shared widget first.
-  Until then the busy-state fix above is verified by clicking, not by a test.
+  Marketplace sections on exactly those terms — but the auto-tag section has not
+  had the treatment. Its `_buildRequirement` helper is now used by nothing else,
+  so extracting the section takes the helper with it. Until then the busy-state
+  fix above is verified by clicking, not by a test.
 - [ ] **`isLoading` is one flag doing two jobs, and only one of them is safe.**
   It swaps the whole page body, which unmounts the `AnimationLimiter` and makes
   every section replay its staggered entrance. That is correct for the first
@@ -2100,15 +2098,14 @@ is exactly right.
   inside the swapped subtree — would make the mistake unavailable rather than
   merely documented.
 
-- [ ] **Dark mode and auto-F10 are surfaced but do not persist.**
-  `isDarkModeProvider` and `autoF10ReloadProvider` are plain `StateProvider`s
-  written by their Settings switches and by nothing else, so both reset on every
-  launch. `config.json` even carries a `theme` key — written by `_saveToFile`,
-  read back by `loadFromFile`, and **read by no UI at all**, so the value is
-  round-tripped and then ignored. Not folded into §6's work: those two are
-  already *surfaced*, which is what §6 was about, and persisting them is a
-  separate three-place change each plus a decision about what `theme` should
-  hold now that it stores `'dark-blue'` rather than a boolean.
+- [ ] **Dark mode is surfaced but does not persist.**
+  `isDarkModeProvider` is a plain `StateProvider` written by its Settings switch
+  and by nothing else, so it resets on every launch. `config.json` even carries
+  a `theme` key — written by `_saveToFile`, read back by `loadFromFile`, and
+  **read by no UI at all**, so the value is round-tripped and then ignored. Not
+  folded into §6's work: it is already *surfaced*, which is what §6 was about,
+  and persisting it is a separate three-place change plus a decision about what
+  `theme` should hold now that it stores `'dark-blue'` rather than a boolean.
 - [ ] **Two `allowsUnattendedUpdate` predicates have no reader and now never
   will.** `ModOrigin.allowsUnattendedUpdate` and
   `OriginConfidence.allowsUnattendedUpdate` (`origin_enums.dart`) — with
@@ -3010,10 +3007,9 @@ One screen, two jobs, and nothing that goes stale once libraries are migrated.
   state is the wrong fix (the slot has one mark by rule); the honest options are
   the tooltip saying so, or the resolve dialog's existing "worked out from the
   source link — not confirmed" line being enough.
-- **The character header still holds four global controls.** Auto-F10,
-  refresh, F10 reload and Single/Multi sit at the right of a block titled
-  *Characters*, which is where they ended up because there was room rather than
-  because they belong. The toolbar rebuild deliberately stopped short of them:
+- **The character header still holds two global controls.** Refresh and
+  Single/Multi sit at the right of a block titled *Characters*, which is where
+  they ended up because there was room rather than because they belong. The toolbar rebuild deliberately stopped short of them:
   they are not library *bulk* actions, and moving them into the same menu would
   mix "rescan the folder" with "rewrite 24 sidecars". Whether the header's right
   side should become an explicit action bar is a separate question, and it is
@@ -3319,8 +3315,8 @@ work that already opens the same file, so they cost nothing extra.
   gave an app that could not extract `.rar` or `.7z` mods — most of GameBanana —
   and could not open a mod page or folder. Now `depends` adds **`7zip`** (the
   current Arch package; `p7zip` is the older independent port, and the app's own
-  docs named it) and **`xdg-utils`**, with `xdotool` / `ydotool` / `wmctrl` as
-  `optdepends` for F10 auto-reload, which is genuinely optional. `.SRCINFO`
+  docs named it) and **`xdg-utils`**. There are no `optdepends`: the three
+  window/input helpers that were listed went with F10 auto-reload. `.SRCINFO`
   regenerated for everything but `pkgver`, which the release skill says to leave.
 - [x] **The portable builds ship their own extractor now.** `ArchiveService`
   looks beside `Platform.resolvedExecutable` — and in a `tools/` beside it —
@@ -3354,25 +3350,26 @@ work that already opens the same file, so they cost nothing extra.
   it did was reimplement methods 1 and 2 in Python. Both READMEs documented
   running it by hand from `/opt/zzz-mod-manager/scripts/`, a path that never
   existed.
-- [x] **A signal file reloads nothing, and F10 was never aimed.** 3DMigoto has no
-  watcher: the only trigger is the `reload_fixes` hotkey. The signal-file writer
-  went with `f10_reload_service.dart`, so what was left was a press sent into
-  whatever held focus — the mod manager — reported as **"Mods reloaded"**. The
-  reload now finds the game's window, raises it, confirms it is focused, and only
-  then presses the key; the strongest claim it makes is *F10 sent*, because a
-  3DMigoto reload is invisible from outside the game (`hunting = 0`,
-  `show_warnings = 0`, `calls = 0` in the shipped `d3dx.ini`).
-  Three things the fix turned on, all in [`docs/mod-reload.md`](docs/mod-reload.md):
-  - **`xdotool key --window <id>` is inert.** It is an `XSendEvent`, and Wine
-    does not fold synthetic events into the `GetAsyncKeyState` state 3DMigoto
-    polls. The plain XTEST form works, and needs the window focused. `PostMessage`
-    on Windows fails the same way, hence `SendInput`.
-  - **`ydotool` was the wrong tool to ask for.** The game runs under Proton, so
-    its window is an XWayland client and `xdotool` finds and raises it on a
-    Wayland session too — verified on KDE Wayland, activation confirmed within
-    100 ms. `ydotool` cannot enumerate windows at all.
-  - **Sending F10 raises the game**, which is the mechanism rather than a side
-    effect, and is now what the instructions say.
+- [x] **A signal file reloads nothing, and the whole F10 auto-reload feature is
+  removed.** 3DMigoto has no watcher: the only trigger is the `reload_fixes`
+  hotkey. What the app had was a press sent into whatever held focus — the mod
+  manager, since that is what the user just clicked — reported as **"Mods
+  reloaded"** every time, on every machine.
+  Two bugs were found and fixed, and neither was sufficient: a failed window
+  search fell through to a blind `xdotool key F10` that could only report
+  success, and the `ydotool` keycode was **67**, which is `KEY_F9` rather than
+  `KEY_F10`'s 68. With both fixed the press still did not land reliably.
+  Measured with KWin asked directly which window held focus, because every
+  X-side answer proved unreliable: `xdotool` locates and raises the game on
+  Wayland too (it is an XWayland client under Proton) and the activation gives
+  **real** keyboard focus, yet XTEST never arrives, and a physical key in that
+  same state always does. So the gap is between an injected key and a real one.
+  Removed rather than pursued: the feature buys one keystroke — you have to look
+  at the game to see a mod change, and F10 is under your finger there — and
+  charges two tools, a daemon, `/dev/uinput` access, focus stealing on every
+  toggle, and a success message nothing can verify.
+  Full measurements and the two rules any rebuild must follow are in
+  [`docs/mod-reload.md`](docs/mod-reload.md).
 
 ## Planned: rethink the whole UI
 
@@ -3404,3 +3401,11 @@ Other todo's:
     is the one where it was turned down. The file always gets everything.
   - **Not verified on Windows.** Both platforms emit the same event names and
     the Windows rendering is asserted from Linux, but no run on real hardware.
+- [ ] **The app is not built or run as a proper Wayland client.** Launching it
+  with `GDK_BACKEND=x11` gives it a taskbar icon and the window manager's own
+  title bar with minimise/maximise/close — neither of which it has on the
+  Wayland backend it normally runs under. So the two backends disagree about
+  what kind of window this is, and the custom title bar is drawn on the
+  assumption of the Wayland one. Whatever the app declares about itself (the
+  desktop-entry name and its app id, which is what a compositor matches a
+  taskbar icon against) is either missing or not matching.

@@ -18,11 +18,8 @@ depends=(
     # calls it too, so it is the mechanism on both paths.
     'xdg-utils'
 )
-optdepends=(
-    # On Wayland too: the game runs under Proton, so its window is an XWayland
-    # client and xdotool can find, raise and type into it either way.
-    'xdotool: F10 auto-reload, on X11 and Wayland alike'
-)
+# No optdepends. `xdotool`, `ydotool` and `wmctrl` were listed for an F10
+# auto-reload feature that has been removed — see docs/mod-reload.md.
 makedepends=(
     'git'
     'flutter'

@@ -1,13 +1,11 @@
 import 'dart:io';
 import 'package:path/path.dart' as path;
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/character_info.dart';
 import '../models/mod_origin.dart';
 import '../models/mod_origin_seed.dart';
 import '../models/keybind_info.dart';
 import '../utils/directory_copy.dart';
 import '../utils/shipped_preview.dart';
-import '../utils/state_providers.dart';
 import '../utils/zzz_characters.dart';
 import 'config_service.dart';
 import 'gamebanana/remote_mod_metadata.dart';
@@ -30,7 +28,6 @@ final Logger _files = Logger('fileops');
 class ModManagerService {
   final ConfigService _configService;
   final PlatformService _platformService;
-  final ProviderContainer _container;
   final IniParserService _iniParser;
   final ModMetadataRepository _metadata;
 
@@ -45,7 +42,7 @@ class ModManagerService {
   /// cleared wholesale on a manual refresh.
   final Map<String, List<KeybindInfo>> _keybindCache = {};
 
-  ModManagerService(this._configService, this._container)
+  ModManagerService(this._configService)
       : _platformService = PlatformServiceFactory.getInstance(),
         _iniParser = IniParserService(),
         // modsPath is read through a closure, not captured by value: the user
@@ -291,8 +288,6 @@ class ModManagerService {
 
       await _configService.addActiveMod(modName);
 
-      await _autoReload(modName);
-
       return true;
     } catch (error, stack) {
       _log.error('could not activate',
@@ -317,8 +312,6 @@ class ModManagerService {
       }
 
       await _configService.removeActiveMod(modName);
-
-      await _autoReload(modName);
 
       return true;
     } catch (error, stack) {
@@ -432,40 +425,6 @@ class ModManagerService {
     } catch (e) {
       return null;
     }
-  }
-
-  /// Sends F10 after a toggle, when the user has asked for automatic reloads.
-  ///
-  /// **The outcome is logged and never notified.** The toggle the user just
-  /// made speaks for itself, and a second card per switch — most often saying
-  /// the game is not running — would make the setting not worth having on. The
-  /// log is where "why did nothing change in-game?" gets answered.
-  Future<void> _autoReload(String modName) async {
-    if (!_container.read(autoF10ReloadProvider)) return;
-
-    final result = await _platformService.sendF10ToGame();
-    if (result.sent) return;
-    _log.info('automatic reload did not reach the game', fields: {
-      'mod': modName,
-      'outcome': result.outcome.name,
-      if (result.tool != null) 'tool': result.tool!,
-    });
-  }
-
-  /// Ручне перезавантаження модів (натискання F10)
-  Future<F10Result> reloadMods() async {
-    return await _platformService.sendF10ToGame();
-  }
-
-  /// Показує інструкції налаштування F10 сервісу
-  void showF10SetupInstructions() {
-    _platformService.showSetupInstructions();
-  }
-
-  /// Встановлює залежності для F10 сервісу
-  /// Whether the tool that presses F10 in the game's window is installed.
-  Future<bool> checkF10Dependencies() async {
-    return await _platformService.checkDependencies();
   }
 
   Future<void> _safeRemove(String filePath) async {

@@ -15,7 +15,6 @@ import '../services/api_service.dart';
 import '../services/log/logger.dart';
 import '../services/archive_service.dart';
 import '../services/ingest_origin_builder.dart';
-import '../services/platform_service.dart';
 import '../services/update_apply/mod_activation_port.dart';
 import '../services/update_apply/update_applier.dart';
 import '../utils/notifications.dart';
@@ -510,53 +509,6 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     }
   }
 
-  Future<void> _reloadMods() async {
-    if (_isOperationInProgress) return;
-
-    setState(() {
-      _isOperationInProgress = true;
-    });
-
-    try {
-      final modManagerService = await ref.read(
-        modManagerServiceProvider.future,
-      );
-      final result = await modManagerService.reloadMods();
-
-      if (mounted) {
-        // One of the few successes worth keeping: F10 goes to the game, so
-        // nothing in this window shows whether it landed. Each failure says
-        // which one it was, because they need different things from the user —
-        // start the game, or install a package.
-        final key = switch (result.outcome) {
-          F10Outcome.sent => 'sent',
-          F10Outcome.gameNotFound => 'game_not_found',
-          F10Outcome.toolMissing => 'tool_missing',
-          F10Outcome.sendFailed => 'send_failed',
-        };
-        final params = {'tool': result.tool ?? ''};
-        context.notify.show(
-          loc.t('mods.snackbar.reload_${key}_title', params: params),
-          body: loc.t('mods.snackbar.reload_${key}_body', params: params),
-          severity: result.sent
-              ? NotificationSeverity.success
-              : NotificationSeverity.error,
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        context.notify.error(
-          loc.t('mods.errors.generic_title'),
-          body: e.toString(),
-        );
-      }
-    } finally {
-      setState(() {
-        _isOperationInProgress = false;
-      });
-    }
-  }
-
   Future<void> _toggleFavorite(ModInfo mod) async {
     try {
       final configService = await ApiService.getConfigService();
@@ -887,13 +839,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                         ),
                       ),
                       const Spacer(),
-                      // Auto F10 toggle
-                      const AutoF10Toggle(),
-                      const SizedBox(width: 12),
                       RefreshModsButton(busy: isLoading || _isLoadingMods, onRefresh: _refreshModsList),
-                      const SizedBox(width: 12),
-                      // F10 Reload button
-                      F10ReloadButton(busy: _isOperationInProgress, onReload: _reloadMods),
                       const SizedBox(width: 12),
                       // Mode toggle buttons
                       ModeToggleWidget(

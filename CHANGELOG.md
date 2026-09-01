@@ -72,18 +72,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mod descriptions are larger, better spaced, and consistently styled everywhere they're shown.
 - Descriptions keep the paragraph spacing their author gave them.
 - Downloaded archives land in the app's own downloads folder and are deleted once installed. Anything left over is cleared when you next start the app.
-- Sending F10 brings the game to the front, because a key only reaches the window that has focus.
-- F10 auto-reload needs only xdotool, on Wayland as well as X11 — ydotool, the `input` group and its service are no longer asked for.
-- Settings checks whether xdotool is installed and tells you the answer, in place of the "Install dependencies" button.
 
 ### Removed
 
 - The embedded webview (Windows) and the Downloads-folder watcher (Linux), replaced by the built-in browser.
+- F10 auto-reload — the F10 button, the auto-reload toggle and the "Automatic mod reload" settings section — because a keypress the app sends never reaches a game running under Proton, so it only ever claimed to work. Press F10 in the game; xdotool is no longer needed.
 
 ### Fixed
 
-- "Reload mods" presses F10 in the game's own window instead of into whatever had focus, so it reloads the mods.
-- "Reload mods" reports success only when F10 reached the game, and each failure says which one it was: the game isn't running, xdotool isn't installed, or the game wouldn't come to the front.
 - A missing 7-Zip is reported as a missing tool rather than a broken archive.
 - Importing a folder no longer follows symbolic links out of it.
 - A mod whose folder can't be written to is named instead of failing quietly.

@@ -98,29 +98,17 @@ HOME_URL="https://cachyos.org/"
       // Absent field would read as a caller who forgot; `unknown` is the fact.
       expect(
         toolFields(const ToolStatus(
-          name: 'ydotool',
+          name: '7-zip',
           state: ToolState.present,
-          path: '/usr/bin/ydotool',
+          path: '/usr/bin/7z',
         ))['version'],
         'unknown',
       );
     });
 
     test('a missing tool carries no version at all', () {
-      final fields = toolFields(const ToolStatus.missing('xdotool'));
+      final fields = toolFields(const ToolStatus.missing('7-zip'));
       expect(fields['state'], 'missing');
-      expect(fields.containsKey('version'), isFalse);
-    });
-
-    test('not applicable is its own answer, and explains itself', () {
-      // A Windows log saying `xdotool: missing` sends every reader down a
-      // dead end — F10 there goes through win32.
-      final fields = toolFields(
-        const ToolStatus.notApplicable('xdotool', note: 'win32 sends F10'),
-      );
-
-      expect(fields['state'], 'notApplicable');
-      expect(fields['via'], 'win32 sends F10');
       expect(fields.containsKey('version'), isFalse);
     });
   });
