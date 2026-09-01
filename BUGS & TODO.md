@@ -3378,14 +3378,20 @@ Waiting on it:
 Other todo's:
 
 - [ ] Add a disk usage page, where you can see with graphs how much disk is being used and for what (images, mods, backups / previous versions, etc.)
-- [ ] **Proper logging throughout the app.** What exists is `debugPrint` at
-  scattered call sites, which means a failure a user hits leaves nothing behind:
-  the empty-`200` bug reported only `GameBanana request failed (generic):
-  GbFormatException: Response was not valid JSON: Unexpected end of input` — no
-  url, no status, no body length, and nothing to say the body was *empty* rather
-  than malformed. Every one of those four would have named the cause instantly.
-  What it needs to answer: **which request**, **what came back** (status, size,
-  a bounded snippet), **which decision was taken** (retried, cached, evicted),
-  and **where the file operations went** for imports and updates. Wanted as a
-  file on disk the user can attach to a report, with levels, a size cap and no
-  secrets — not a bigger pile of prints. Its own task and its own commit.
+- [x] **Proper logging throughout the app.** Five levels, a terminal and a
+  rotating file, one file per run with the last seven kept, and a Settings
+  section to turn it off, open its folder or copy a summary for a bug report.
+  Every run's file opens with the machine: OS, distro, display server, and each
+  required tool with its version and where it was found. The account name never
+  reaches the file — censored on the rendered line, because an exception's own
+  `toString()` carries a path no call site touched. 223 prints became log lines
+  or were deleted, taking the analyzer from 251 to 17.
+  - The empty-`200` bug now reads as `status=200 bytes=0` on the response line,
+    before anything has decided what that means, and a test asserts exactly
+    that. Full rules and the volume limits in
+    [`docs/logging.md`](docs/logging.md).
+  - **Not built, and refused rather than deferred: a log-level setting.**
+    Letting the verbosity be tuned means the one report you needed detail from
+    is the one where it was turned down. The file always gets everything.
+  - **Not verified on Windows.** Both platforms emit the same event names and
+    the Windows rendering is asserted from Linux, but no run on real hardware.
