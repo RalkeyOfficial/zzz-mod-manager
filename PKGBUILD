@@ -19,9 +19,9 @@ depends=(
     'xdg-utils'
 )
 optdepends=(
-    'xdotool: F10 auto-reload on X11'
-    'ydotool: F10 auto-reload on Wayland'
-    'wmctrl: window focusing fallback for F10 auto-reload'
+    # On Wayland too: the game runs under Proton, so its window is an XWayland
+    # client and xdotool can find, raise and type into it either way.
+    'xdotool: F10 auto-reload, on X11 and Wayland alike'
 )
 makedepends=(
     'git'

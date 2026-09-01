@@ -780,9 +780,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: _installF10Dependencies,
-                  icon: const Icon(Icons.download, size: 16),
-                  label: Text(loc.t('settings.auto_f10.install_dependencies')),
+                  onPressed: _checkF10Dependencies,
+                  icon: const Icon(Icons.fact_check_outlined, size: 16),
+                  label: Text(loc.t('settings.auto_f10.check_dependencies')),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF0EA5E9),
                     side: const BorderSide(color: Color(0xFF0EA5E9)),
@@ -916,14 +916,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
     );
   }
 
-  void _installF10Dependencies() async {
+  /// Reports whether the tool F10 needs is actually there.
+  ///
+  /// It cannot install anything — this app never runs a package manager — so it
+  /// says what it found and the instructions button says what to do about it.
+  void _checkF10Dependencies() async {
     final modManagerService = await ref.read(modManagerServiceProvider.future);
-    await modManagerService.installF10Dependencies();
-    
-    if (mounted) {
-      context.notify.info(
-        context.loc.t('settings.dialogs.dependencies_title'),
-        body: context.loc.t('settings.dialogs.dependencies_message'),
+    final present = await modManagerService.checkF10Dependencies();
+
+    if (!mounted) return;
+    final loc = context.loc;
+    if (present) {
+      context.notify.success(
+        loc.t('settings.dialogs.dependencies_present_title'),
+        body: loc.t('settings.dialogs.dependencies_present_body'),
+      );
+    } else {
+      context.notify.warning(
+        loc.t('settings.dialogs.dependencies_missing_title'),
+        body: loc.t('settings.dialogs.dependencies_missing_body'),
       );
     }
   }
@@ -970,35 +981,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
-                Text(loc.t('settings.auto_f10.instructions.step3_platform')),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  margin: const EdgeInsets.only(top: 4, bottom: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    loc.t('settings.auto_f10.instructions.step3_code'),
-                    style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  loc.t('settings.auto_f10.instructions.step4_title'),
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    loc.t('settings.auto_f10.instructions.step4_code'),
-                    style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
-                  ),
+                // Two distributions side by side, because the one command a
+                // reader needs is the one for the system they are on.
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _f10Command(
+                        loc.t('settings.auto_f10.instructions.step3_debian'),
+                        loc.t('settings.auto_f10.instructions.step3_debian_code'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _f10Command(
+                        loc.t('settings.auto_f10.instructions.step3_arch'),
+                        loc.t('settings.auto_f10.instructions.step3_arch_code'),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 Container(
@@ -1057,7 +1058,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
                     border: Border.all(color: Colors.blue[200]!),
                   ),
                   child: Text(
-                    loc.t('settings.auto_f10.instructions.details_file'),
+                    loc.t('settings.auto_f10.instructions.wayland_note'),
                     style: TextStyle(color: Colors.blue[900], fontSize: 12),
                   ),
                 ),
@@ -1072,6 +1073,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
           ),
         ],
       ),
+    );
+  }
+
+  /// A distribution label above the one command to paste under it.
+  Widget _f10Command(String label, String command) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12)),
+        const SizedBox(height: 4),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.grey[100],
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            command,
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+          ),
+        ),
+      ],
     );
   }
 

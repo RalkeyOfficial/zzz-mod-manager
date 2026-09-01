@@ -12,43 +12,124 @@ final Logger _files = Logger('fileops');
 
 /// Linux-специфічна реалізація PlatformService
 class LinuxPlatformService implements PlatformService {
+  LinuxPlatformService({ProcessProbe probe = const ProcessProbe()})
+      : _probe = probe;
 
+  /// Every process this class runs for F10 goes through the probe, so none of
+  /// them can hang the press: `xdotool` talking to a display server that has
+  /// stopped answering is the exact case `ProcessProbe` was written for.
+  final ProcessProbe _probe;
+
+  /// Window titles the game is known by, most likely first.
+  ///
+  /// `xdotool search --name` takes a **case-sensitive regex** matched against
+  /// the whole title, so `Zenless` finds `ZenlessZoneZero`.
+  static const _gameWindowNames = ['Zenless', 'zenless', 'ZZZ'];
+
+  /// **`xdotool` is the locator on Wayland too, not just X11.** The game runs
+  /// under Proton, so its window is an XWayland client and an ordinary X window
+  /// however the desktop session is composited. `ydotool` cannot see windows at
+  /// all — it writes to `/dev/uinput` — so it can press a key but can never
+  /// answer "is the game there?", which is the question that has to come first.
   @override
-  Future<bool> sendF10ToGame() async {
+  Future<F10Result> sendF10ToGame() async {
     final displayServer = getDisplayServerType();
     _log.debug('sending F10', fields: {'display': displayServer});
 
-    bool success = false;
-    
-    // Метод 1: Відправка F10 через відповідний інструмент
-    if (displayServer == 'x11') {
-      if (await _sendF10ViaXdotool()) {
-        success = true;
-      }
-    } else if (displayServer == 'wayland') {
-      if (await _sendF10ViaYdotool()) {
-        success = true;
-      }
-    }
-    
-    // Метод 2: Спроба через обидва інструменти (резервний)
-    if (!success) {
-      if (await _sendF10ViaXdotool() || await _sendF10ViaYdotool()) {
-        success = true;
-      }
-    }
-    
-    if (success) {
-      _log.debug('F10 sent', fields: {'display': displayServer});
-    } else {
-      // Not an error: the game may simply not be running, which is the
-      // ordinary case for a press with no window to send to.
-      _log.warning('F10 not sent', fields: {'display': displayServer});
+    if (!await _hasTool('xdotool')) {
+      _log.warning('cannot send F10', fields: {
+        'reason': 'no window tool',
+        'needs': 'xdotool',
+        'display': displayServer,
+      });
+      return const F10Result.toolMissing('xdotool');
     }
 
-    return success;
+    final window = await _findGameWindow();
+    if (window == null) {
+      // Not a warning: the ordinary reason for this is that the game is closed.
+      _log.info('no game window', fields: {'display': displayServer});
+      return const F10Result.gameNotFound();
+    }
+
+    if (!await _activateWindow(window)) {
+      _log.warning('F10 not sent', fields: {
+        'reason': 'could not focus the game',
+        'window': window,
+        'display': displayServer,
+      });
+      return const F10Result.sendFailed('xdotool');
+    }
+
+    // Deliberately `key F10` and not `key --window <id> F10`. A targeted press
+    // is an `XSendEvent`, which arrives flagged as synthetic; Wine does not fold
+    // those into the keyboard state `GetAsyncKeyState` reports, and that is the
+    // call 3DMigoto polls for its hotkeys. So a targeted press is delivered,
+    // accepted and ignored — hence focusing the window first and then pressing
+    // the key for real, through XTEST.
+    final pressed = await _probe.run('xdotool', ['key', 'F10']);
+    if (pressed == null || pressed.exitCode != 0) {
+      _log.warning('F10 not sent', fields: {
+        'reason': 'xdotool could not press the key',
+        'window': window,
+        'display': displayServer,
+      });
+      return const F10Result.sendFailed('xdotool');
+    }
+
+    _log.info('F10 sent', fields: {'tool': 'xdotool', 'window': window});
+    return const F10Result.sent('xdotool');
   }
-  
+
+  Future<bool> _hasTool(String name) async {
+    final located = await _probe.run('which', [name]);
+    return located != null &&
+        located.exitCode == 0 &&
+        located.stdout.trim().isNotEmpty;
+  }
+
+  /// The id of a visible game window, or null when there is none.
+  Future<String?> _findGameWindow() async {
+    for (final name in _gameWindowNames) {
+      final found =
+          await _probe.run('xdotool', ['search', '--onlyvisible', '--name', name]);
+      // `search` exits 1 when nothing matched, which is how "the game is not
+      // running" is told apart from "xdotool is broken".
+      if (found == null || found.exitCode != 0) continue;
+      final ids = found.stdout.trim();
+      if (ids.isEmpty) continue;
+      final id = ids.split('\n').first.trim();
+      _log.debug('found the game window', fields: {'match': name, 'window': id});
+      return id;
+    }
+    return null;
+  }
+
+  /// Brings the game forward and **confirms it actually came forward**.
+  ///
+  /// The confirmation is the point. A compositor may refuse an activation
+  /// request from a background app (focus-stealing prevention), and
+  /// `windowactivate` reports nothing about that; without the check the app
+  /// would go on to press a key into whatever the user is really looking at.
+  Future<bool> _activateWindow(String window) async {
+    await _probe.run('xdotool', ['windowactivate', window]);
+
+    // Activation is asynchronous — the request goes to the window manager and
+    // comes back as a property change — so this polls rather than trusting one
+    // read taken immediately afterwards.
+    for (var attempt = 0; attempt < 6; attempt++) {
+      final active = await _probe.run('xdotool', ['getactivewindow']);
+      if (active != null &&
+          active.exitCode == 0 &&
+          active.stdout.trim() == window) {
+        return true;
+      }
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+    return false;
+  }
+
+
   @override
   Future<bool> createModLink(String sourcePath, String linkPath) async {
     try {
@@ -137,22 +218,14 @@ class LinuxPlatformService implements PlatformService {
   }
   
   @override
+  /// **`xdotool` on both display servers.** The tool has to find the game's
+  /// window before it can press anything into it, and the game is an XWayland
+  /// client on a Wayland session, so the X11 tool is the right answer there too.
   Future<bool> checkDependencies() async {
     final displayServer = getDisplayServerType();
-    final tool = switch (displayServer) {
-      'x11' => 'xdotool',
-      'wayland' => 'ydotool',
-      _ => null,
-    };
-    if (tool == null) {
-      _log.warning('cannot check dependencies', fields: {
-        'display': displayServer,
-      });
-      return false;
-    }
+    const tool = 'xdotool';
 
-    final result = await Process.run('which', [tool]);
-    final present = result.exitCode == 0;
+    final present = await _hasTool(tool);
     if (present) {
       _log.debug('dependency present',
           fields: {'tool': tool, 'display': displayServer});
@@ -335,10 +408,10 @@ class LinuxPlatformService implements PlatformService {
       tools: [
         await _describeTool('7-zip', const ['7z', '7za', '7zr'], probe,
             versionArguments: const []),
+        // `xdotool` alone: it is the only tool F10 needs, on either display
+        // server. Probing tools nothing uses puts a `missing` warning in every
+        // log that reads like a cause and is not one.
         await _describeTool('xdotool', const ['xdotool'], probe),
-        await _describeTool('ydotool', const ['ydotool'], probe),
-        await _describeTool('wmctrl', const ['wmctrl'], probe,
-            versionArguments: const ['-V']),
       ],
     );
   }
@@ -399,117 +472,4 @@ class LinuxPlatformService implements PlatformService {
     return null;
   }
 
-  // ===== Приватні методи =====
-  
-  Future<bool> _sendF10ViaXdotool() async {
-    try {
-      final checkResult = await Process.run('which', ['xdotool']);
-      if (checkResult.exitCode != 0) {
-        return false;
-      }
-
-      String? windowId;
-      final windowNames = ['Zenless', 'ZZZ', 'zenless'];
-      
-      for (final name in windowNames) {
-        try {
-          final windowResult = await Process.run('xdotool', [
-            'search', '--name', '--onlyvisible', name
-          ]);
-          
-          if (windowResult.exitCode == 0 && windowResult.stdout.toString().trim().isNotEmpty) {
-            windowId = windowResult.stdout.toString().trim().split('\n').first;
-            _log.debug('found the game window',
-                fields: {'match': name, 'window': windowId});
-            break;
-          }
-        } catch (e) {
-          continue;
-        }
-      }
-
-      if (windowId == null) {
-        await Process.run('xdotool', ['key', 'F10']);
-        return true;
-      }
-
-      await Process.run('xdotool', ['windowactivate', windowId]);
-      await Future.delayed(const Duration(milliseconds: 200));
-
-      final keyResult = await Process.run('xdotool', [
-        'key', '--window', windowId, 'F10'
-      ]);
-
-      return keyResult.exitCode == 0;
-    } catch (e) {
-      _log.warning('xdotool failed', error: e, fields: {'tool': 'xdotool'});
-      return false;
-    }
-  }
-  
-  Future<bool> _sendF10ViaYdotool() async {
-    try {
-      final checkResult = await Process.run('which', ['ydotool']);
-      if (checkResult.exitCode != 0) {
-        return false;
-      }
-
-      await _focusGameWindow();
-      await Future.delayed(const Duration(milliseconds: 200));
-
-      for (int i = 0; i < 2; i++) {
-        await Process.run('ydotool', ['key', '67:1', '67:0']);
-        if (i < 1) {
-          await Future.delayed(const Duration(milliseconds: 100));
-        }
-      }
-
-      _log.debug('F10 sent', fields: {'tool': 'ydotool'});
-      return true;
-    } catch (e) {
-      _log.warning('ydotool failed', error: e, fields: {'tool': 'ydotool'});
-      return false;
-    }
-  }
-  
-  Future<void> _focusGameWindow() async {
-    try {
-      final wmctrlCheck = await Process.run('which', ['wmctrl']);
-      if (wmctrlCheck.exitCode == 0) {
-        final windowNames = ['Zenless', 'ZZZ', 'zenless'];
-        for (final name in windowNames) {
-          try {
-            await Process.run('wmctrl', ['-a', name]);
-            _log.debug('game window focused',
-                fields: {'tool': 'wmctrl', 'match': name});
-            return;
-          } catch (e) {
-            continue;
-          }
-        }
-      }
-
-      final xdotoolCheck = await Process.run('which', ['xdotool']);
-      if (xdotoolCheck.exitCode == 0) {
-        final windowNames = ['Zenless', 'ZZZ', 'zenless'];
-        for (final name in windowNames) {
-          try {
-            final result = await Process.run('xdotool', ['search', '--name', name]);
-            
-            if (result.exitCode == 0 && result.stdout.toString().trim().isNotEmpty) {
-              final windowId = result.stdout.toString().trim().split('\n').first;
-              await Process.run('xdotool', ['windowactivate', windowId]);
-              _log.debug('game window focused',
-                  fields: {'tool': 'xdotool', 'match': name});
-              return;
-            }
-          } catch (e) {
-            continue;
-          }
-        }
-      }
-    } catch (e) {
-      _log.debug('could not focus the game window', fields: {'reason': '$e'});
-    }
-  }
 }

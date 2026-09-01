@@ -291,11 +291,7 @@ class ModManagerService {
 
       await _configService.addActiveMod(modName);
 
-      // Автоматично перезавантажуємо моди після активації (якщо увімкнено)
-      final autoF10Enabled = _container.read(autoF10ReloadProvider);
-      if (autoF10Enabled) {
-        await _platformService.sendF10ToGame();
-      }
+      await _autoReload(modName);
 
       return true;
     } catch (error, stack) {
@@ -322,11 +318,7 @@ class ModManagerService {
 
       await _configService.removeActiveMod(modName);
 
-      // Автоматично перезавантажуємо моди після деактивації (якщо увімкнено)
-      final autoF10Enabled = _container.read(autoF10ReloadProvider);
-      if (autoF10Enabled) {
-        await _platformService.sendF10ToGame();
-      }
+      await _autoReload(modName);
 
       return true;
     } catch (error, stack) {
@@ -442,8 +434,26 @@ class ModManagerService {
     }
   }
 
+  /// Sends F10 after a toggle, when the user has asked for automatic reloads.
+  ///
+  /// **The outcome is logged and never notified.** The toggle the user just
+  /// made speaks for itself, and a second card per switch — most often saying
+  /// the game is not running — would make the setting not worth having on. The
+  /// log is where "why did nothing change in-game?" gets answered.
+  Future<void> _autoReload(String modName) async {
+    if (!_container.read(autoF10ReloadProvider)) return;
+
+    final result = await _platformService.sendF10ToGame();
+    if (result.sent) return;
+    _log.info('automatic reload did not reach the game', fields: {
+      'mod': modName,
+      'outcome': result.outcome.name,
+      if (result.tool != null) 'tool': result.tool!,
+    });
+  }
+
   /// Ручне перезавантаження модів (натискання F10)
-  Future<bool> reloadMods() async {
+  Future<F10Result> reloadMods() async {
     return await _platformService.sendF10ToGame();
   }
 
@@ -453,8 +463,9 @@ class ModManagerService {
   }
 
   /// Встановлює залежності для F10 сервісу
-  Future<void> installF10Dependencies() async {
-    await _platformService.checkDependencies();
+  /// Whether the tool that presses F10 in the game's window is installed.
+  Future<bool> checkF10Dependencies() async {
+    return await _platformService.checkDependencies();
   }
 
   Future<void> _safeRemove(String filePath) async {

@@ -115,7 +115,8 @@ ignore — this app targets Linux/Windows desktop only, not Android or web.
 System dependencies (Linux dev): the C++ toolchain (`clang`, `cmake`, `ninja`,
 `pkg-config`) + `gtk3` for building; `7z`/`7za`/`7zr` (Arch: `7zip`, **not** the
 older `p7zip` port) for archive imports; and
-`xdotool` (X11) or `ydotool` (Wayland) for the F10 auto-reload feature.
+`xdotool` for the F10 auto-reload feature, on X11 **and** Wayland — the game is
+an XWayland client either way ([`docs/mod-reload.md`](docs/mod-reload.md)).
 
 Clipboard HTML (for paste-as-markdown) is read natively: on Linux via the GTK
 clipboard in the runner (`linux/runner/my_application.cc`, channel
@@ -157,6 +158,7 @@ mistake.
 > | [`patch-destinations.md`](docs/patch-destinations.md) | **Which mod folder a patch goes into** — the signals, what each measures, why the list is ordered and never narrowed |
 > | [`configuration.md`](docs/configuration.md) | The app's **own settings** |
 > | [`logging.md`](docs/logging.md) | **What the app records about itself** — levels, the rotating file, redaction |
+> | [`mod-reload.md`](docs/mod-reload.md) | **Making the game pick up a mod change** — aiming F10 at the game's window, and what a press may claim |
 >
 > **Each doc owns one subject.** A fact that doesn't fit any of them wants a new
 > file, not the nearest existing one — the scope line at the top of each doc is

@@ -19,8 +19,15 @@ final Logger _files = Logger('fileops');
 
 class WindowsPlatformService implements PlatformService {
   
+  /// **F10 goes to the game's window or nowhere.** There is no fallback to the
+  /// foreground window: the app the user just clicked in *is* the mod manager,
+  /// so a foreground press reloads nothing and cannot report a failure.
+  ///
+  /// **Not verified on Windows.** The reasoning below comes from how 3DMigoto
+  /// reads its hotkeys, and matches the Linux behaviour that is verified; the
+  /// win32 path itself has not been exercised on a Windows machine.
   @override
-  Future<bool> sendF10ToGame() async {
+  Future<F10Result> sendF10ToGame() async {
     _log.debug('sending F10', fields: {'display': getDisplayServerType()});
 
     try {
@@ -31,7 +38,7 @@ class WindowsPlatformService implements PlatformService {
         'Zenless',
         'ZZZ'
       ];
-      
+
       int hwnd = 0;
       for (final name in windowNames) {
         final namePtr = name.toNativeUtf16();
@@ -46,38 +53,50 @@ class WindowsPlatformService implements PlatformService {
           calloc.free(namePtr);
         }
       }
-      
+
       if (hwnd == 0) {
-        _log.debug('no game window, trying the foreground one');
-        return await _sendF10ToForegroundWindow();
+        // Not a warning: the ordinary reason for this is that the game is
+        // closed.
+        _log.info('no game window');
+        return const F10Result.gameNotFound();
       }
 
       // Перевіряємо чи вікно видиме
       final isVisible = IsWindowVisible(hwnd);
       if (isVisible == FALSE) {
-        _log.warning('the game window is not visible', fields: {
+        _log.warning('F10 not sent', fields: {
+          'reason': 'the game window is not visible',
           'window': hwnd,
         });
-        return false;
+        return const F10Result.sendFailed('win32');
       }
-      
-      // Активуємо вікно
+
       SetForegroundWindow(hwnd);
       await Future.delayed(const Duration(milliseconds: 100));
-      
-      // Відправляємо F10 (VK_F10 = 0x79)
-      // Натискання клавіші
-      PostMessage(hwnd, WM_KEYDOWN, VK_F10, 0);
-      await Future.delayed(const Duration(milliseconds: 50));
-      // Відпускання клавіші
-      PostMessage(hwnd, WM_KEYUP, VK_F10, 0);
-      
-      _log.debug('F10 sent', fields: {'tool': 'win32', 'window': hwnd});
-      return true;
+
+      // The activation is confirmed rather than assumed: Windows refuses
+      // `SetForegroundWindow` from a process that does not currently own the
+      // foreground, and says so only through this read.
+      if (GetForegroundWindow() != hwnd) {
+        _log.warning('F10 not sent', fields: {
+          'reason': 'could not focus the game',
+          'window': hwnd,
+        });
+        return const F10Result.sendFailed('win32');
+      }
+
+      if (!_pressF10()) {
+        _log.warning('F10 not sent',
+            fields: {'reason': 'SendInput rejected the key', 'window': hwnd});
+        return const F10Result.sendFailed('win32');
+      }
+
+      _log.info('F10 sent', fields: {'tool': 'win32', 'window': hwnd});
+      return const F10Result.sent('win32');
     } catch (error, stack) {
       _log.warning('F10 not sent',
           error: error, stack: stack, fields: {'tool': 'win32'});
-      return false;
+      return const F10Result.sendFailed('win32');
     }
   }
   
@@ -437,35 +456,31 @@ class WindowsPlatformService implements PlatformService {
 
   // ===== Приватні методи =====
   
-  Future<bool> _sendF10ToForegroundWindow() async {
+  /// Presses and releases F10 as though it came from the keyboard.
+  ///
+  /// **`SendInput`, deliberately not `PostMessage`.** 3DMigoto polls
+  /// `GetAsyncKeyState` from its present hook to read hotkeys, and that reports
+  /// the *keyboard state* — which a posted `WM_KEYDOWN` never touches. A posted
+  /// message is delivered to the window's queue, returns success, and reloads
+  /// nothing. `SendInput` goes through the same path a real key does, which is
+  /// why the window has to be in the foreground first.
+  bool _pressF10() {
+    final inputs = calloc<INPUT>(2);
     try {
-      // Відправляємо F10 до активного вікна
-      final hwnd = GetForegroundWindow();
-      if (hwnd == 0) {
-        _log.warning('F10 not sent', fields: {
-          'tool': 'win32',
-          'reason': 'no foreground window',
-        });
-        return false;
-      }
+      inputs[0].type = INPUT_KEYBOARD;
+      inputs[0].ki.wVk = VK_F10;
+      inputs[1].type = INPUT_KEYBOARD;
+      inputs[1].ki.wVk = VK_F10;
+      inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
 
-      PostMessage(hwnd, WM_KEYDOWN, VK_F10, 0);
-      await Future.delayed(const Duration(milliseconds: 50));
-      PostMessage(hwnd, WM_KEYUP, VK_F10, 0);
-
-      _log.debug('F10 sent', fields: {
-        'tool': 'win32',
-        'window': hwnd,
-        'target': 'foreground',
-      });
-      return true;
-    } catch (error, stack) {
-      _log.warning('F10 not sent',
-          error: error, stack: stack, fields: {'tool': 'win32'});
-      return false;
+      final accepted = SendInput(2, inputs, sizeOf<INPUT>());
+      return accepted == 2;
+    } finally {
+      calloc.free(inputs);
     }
   }
-  
+
+
   Future<bool> _isJunction(String dirPath) async {
     try {
       // Використовуємо cmd для перевірки junction

@@ -15,6 +15,7 @@ import '../services/api_service.dart';
 import '../services/log/logger.dart';
 import '../services/archive_service.dart';
 import '../services/ingest_origin_builder.dart';
+import '../services/platform_service.dart';
 import '../services/update_apply/mod_activation_port.dart';
 import '../services/update_apply/update_applier.dart';
 import '../utils/notifications.dart';
@@ -520,19 +521,24 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       final modManagerService = await ref.read(
         modManagerServiceProvider.future,
       );
-      final success = await modManagerService.reloadMods();
+      final result = await modManagerService.reloadMods();
 
       if (mounted) {
         // One of the few successes worth keeping: F10 goes to the game, so
-        // nothing in this window shows whether it landed.
+        // nothing in this window shows whether it landed. Each failure says
+        // which one it was, because they need different things from the user —
+        // start the game, or install a package.
+        final key = switch (result.outcome) {
+          F10Outcome.sent => 'sent',
+          F10Outcome.gameNotFound => 'game_not_found',
+          F10Outcome.toolMissing => 'tool_missing',
+          F10Outcome.sendFailed => 'send_failed',
+        };
+        final params = {'tool': result.tool ?? ''};
         context.notify.show(
-          loc.t(success
-              ? 'mods.snackbar.reload_success_title'
-              : 'mods.snackbar.reload_failure_title'),
-          body: loc.t(success
-              ? 'mods.snackbar.reload_success_body'
-              : 'mods.snackbar.reload_failure_body'),
-          severity: success
+          loc.t('mods.snackbar.reload_${key}_title', params: params),
+          body: loc.t('mods.snackbar.reload_${key}_body', params: params),
+          severity: result.sent
               ? NotificationSeverity.success
               : NotificationSeverity.error,
         );

@@ -231,85 +231,56 @@ SaveMods Folder (Your Library)     →     Mods Folder (Active Mods)
 
 ## ⚡ F10 Auto-Reload
 
-The F10 Auto-Reload feature automatically sends the F10 key to the game when you activate/deactivate mods, eliminating the need to manually switch to the game and press F10.
+3DMigoto reloads mods when F10 is pressed **inside the game's own window** — it
+does not watch the mods folder, so nothing you change on disk is picked up until
+that key arrives. The mod manager does it for you: it finds the game's window,
+brings it to the front, and presses F10.
 
-### Setup (One-time, 2 minutes)
-
-#### For Wayland Users:
+### Setup (one-time)
 
 ```bash
-# 1. Install required tools
-sudo pacman -S ydotool wmctrl xdotool
+# Arch/CachyOS
+sudo pacman -S xdotool
 
-# 2. Add yourself to the input group
-sudo usermod -a -G input $USER
-
-# 3. Enable ydotool service
-sudo systemctl enable --now ydotool.service
-
-# 4. Reboot (IMPORTANT!)
-sudo reboot
+# Ubuntu/Debian
+sudo apt install xdotool
 ```
 
-#### For X11 Users:
+That is the whole setup, on **both X11 and Wayland**. The game runs through
+Proton, so its window is an X11 window on either session — `ydotool`, the `input`
+group and a systemd service are not needed and cannot help, because `ydotool`
+has no way to find a window.
 
-```bash
-# Install xdotool
-sudo pacman -S xdotool wmctrl
+Then check that `d3dx.ini` in your ZZMI folder still has 3DMigoto's default
+binding:
+
+```ini
+reload_fixes = no_modifiers VK_F10
 ```
 
 ### How to Use
 
-#### Method 1: Alt+Tab Workflow ⭐ (Recommended)
+- **Reload mods** in the Mods tab presses F10 whenever you ask for it.
+- **Automatic mod reload** in Settings presses it after every activate and
+  deactivate.
 
-```
-1. Launch Zenless Zone Zero
-2. Alt+Tab to the mod manager
-3. Select/enable a mod
-4. Alt+Tab back to the game
-5. F10 is automatically sent! ✅
-```
-
-#### Method 2: Dual Monitor Setup 🖥️🖥️
-
-```
-Game on Monitor 1 (always visible)
-Mod Manager on Monitor 2
-Simply activate mods - works instantly! ✅
-```
-
-#### Method 3: Manual F10 Button
-
-```
-Click the "F10" button in the mod manager UI
-```
-
-### Important Notes for Wayland
-
-- ✅ Game window must be **VISIBLE** (not minimized)
-- ✅ ydotool daemon must be running
-- ✅ You must be in the `input` group
-- ✅ System must be rebooted after setup
+Either way **the game comes to the front**, because a key only reaches the window
+that has focus.
 
 ### Troubleshooting F10
 
-**Check 1: Permissions**
-```bash
-groups | grep input
-# Should show: ... input ...
-```
+The app names the step that failed, and the log file records the same thing
+(Settings → Diagnostics → Log files):
 
-**Check 2: ydotool daemon**
-```bash
-ps aux | grep ydotool
-# Should show a running process
-```
+| What you see | What to do |
+|---|---|
+| **The game isn't running** | Launch Zenless Zone Zero and leave its window open, not minimized |
+| **xdotool isn't installed** | Run the install command above |
+| **F10 couldn't be sent** | The game would not come to the front — check it is not minimized |
+| **F10 sent**, but nothing changed in game | Check `reload_fixes = no_modifiers VK_F10` in `d3dx.ini` |
 
-**Check 3: Test F10**
-```bash
-# Manual test with ydotool
-ydotool key 67:1 67:0
-```
+The last row is the one to read twice: *F10 sent* means the key reached the game,
+not that 3DMigoto reloaded. Nothing outside the game can see whether it did.
 
 ## 📖 Usage
 
@@ -478,15 +449,11 @@ makepkg -si
 
 ### F10 Auto-Reload Not Working
 
-**For Wayland**:
-1. Verify you're in the input group: `groups | grep input`
-2. Check ydotool is running: `systemctl status ydotool`
-3. Ensure game window is visible (not minimized)
-4. Reboot after initial setup
-
-**For X11**:
-1. Verify xdotool is installed: `which xdotool`
-2. Test manually: `xdotool key F10`
+1. Verify xdotool is installed: `which xdotool` — the same answer on X11 and
+   Wayland
+2. Check the game window can be found: `xdotool search --onlyvisible --name Zenless`
+3. Ensure the game window is not minimized
+4. Read the newest file in Settings → Diagnostics → Log files for the reason
 
 ### Application Crashes
 

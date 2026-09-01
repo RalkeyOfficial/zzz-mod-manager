@@ -203,8 +203,8 @@ where it was found. That runs **unawaited after `runApp`**, because a `where 7z`
 walking a cold Windows `PATH` is a visible pause, and paying for a diagnostic
 with the startup it exists to protect is the wrong trade.
 
-A missing tool is a `warning`, so a Wayland machine with no `ydotool` says on its
-own that F10 auto-reload cannot work. On Windows the X11 helpers are reported
+A missing tool is a `warning`, so a machine with no `xdotool` says on its own
+that F10 auto-reload cannot work. On Windows the X11 helpers are reported
 **not applicable** rather than missing: a log saying `xdotool: missing` on a
 platform that sends F10 through win32 sends every reader down a dead end.
 

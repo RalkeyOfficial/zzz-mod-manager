@@ -3354,16 +3354,25 @@ work that already opens the same file, so they cost nothing extra.
   it did was reimplement methods 1 and 2 in Python. Both READMEs documented
   running it by hand from `/opt/zzz-mod-manager/scripts/`, a path that never
   existed.
-- [ ] **Does a signal file actually reload anything?** Found while deleting the
-  above and left open because it needs knowledge of ZZMI, not of this code.
-  `reloadMods` returns `true` as soon as `_createReloadSignalFile` writes
-  `.reload_signal` / `.mod_timestamp` into the mods folder, which essentially
-  always succeeds — so `mods_screen.dart` reports **"Mods reloaded — F10 was
-  sent to the running game"** even when `xdotool` is absent and no key was sent.
-  If 3DMigoto watches for those files the return value is honest and there is
-  nothing to fix; if it does not, then methods 1 and 2 write litter on every
-  press and the success message is a lie. `optdepends` makes running without
-  `xdotool` more likely, not less.
+- [x] **A signal file reloads nothing, and F10 was never aimed.** 3DMigoto has no
+  watcher: the only trigger is the `reload_fixes` hotkey. The signal-file writer
+  went with `f10_reload_service.dart`, so what was left was a press sent into
+  whatever held focus — the mod manager — reported as **"Mods reloaded"**. The
+  reload now finds the game's window, raises it, confirms it is focused, and only
+  then presses the key; the strongest claim it makes is *F10 sent*, because a
+  3DMigoto reload is invisible from outside the game (`hunting = 0`,
+  `show_warnings = 0`, `calls = 0` in the shipped `d3dx.ini`).
+  Three things the fix turned on, all in [`docs/mod-reload.md`](docs/mod-reload.md):
+  - **`xdotool key --window <id>` is inert.** It is an `XSendEvent`, and Wine
+    does not fold synthetic events into the `GetAsyncKeyState` state 3DMigoto
+    polls. The plain XTEST form works, and needs the window focused. `PostMessage`
+    on Windows fails the same way, hence `SendInput`.
+  - **`ydotool` was the wrong tool to ask for.** The game runs under Proton, so
+    its window is an XWayland client and `xdotool` finds and raises it on a
+    Wayland session too — verified on KDE Wayland, activation confirmed within
+    100 ms. `ydotool` cannot enumerate windows at all.
+  - **Sending F10 raises the game**, which is the mechanism rather than a side
+    effect, and is now what the instructions say.
 
 ## Planned: rethink the whole UI
 

@@ -20,6 +20,7 @@ the root [`README.md`](../README.md).
 | [`patch-destinations.md`](patch-destinations.md) | **Which mod folder a patch is installed into**: the filename fingerprint, the author's declared requirement, what each is measured to be worth, and why the list is ordered rather than narrowed |
 | [`configuration.md`](configuration.md) | The app's **own settings**: `config.json`, the SharedPreferences mirror, the dual-storage pattern, and how to add a setting |
 | [`logging.md`](logging.md) | **What the app records about itself**: the levels and tags, what each area logs, the rotating file and its header, and what redaction does and does not promise |
+| [`mod-reload.md`](mod-reload.md) | **Making the game pick up a mod change**: why F10 has to be aimed at the game's own window, why a synthetic key is ignored, and what the app may claim about a press |
 | [`gamebanana-api.md`](gamebanana-api.md) | The **remote protocol**: which of the two APIs to use, browsing/filtering/sorting, the mod and file objects, NSFW handling, downloads, the category tree, and the gotchas |
 
 ## Related files outside this directory
