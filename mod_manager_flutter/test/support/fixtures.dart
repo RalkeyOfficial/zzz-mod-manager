@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 /// Loads a checked-in API response from `test/fixtures/`.
@@ -35,3 +36,29 @@ String loadFixture(String relativePath) {
 
 /// Shorthand for the GameBanana fixture directory.
 String loadGbFixture(String name) => loadFixture('gamebanana/$name.json');
+
+/// One mod's record out of the captured `Mod/Multi` batch, as the bare array a
+/// single-id request answers with.
+///
+/// Sliced from `mod_multi_files` rather than captured again, because a batch
+/// record and a one-id record are the same shape — verified against the live API
+/// — and re-capturing would mean two files to keep in step. **Still real data**:
+/// nothing here builds a record, it only narrows the array.
+///
+/// This is the shape a per-mod check sees (`fetchModRecord`), and it differs from
+/// a profile in the one way that matters: `_aFiles` is the union of current and
+/// archived, flagged by `_bIsArchived`.
+String gbMultiRecordFixture(int modId) {
+  final decoded = jsonDecode(loadGbFixture('mod_multi_files'));
+  if (decoded is! List) {
+    throw StateError('mod_multi_files is not a bare array');
+  }
+  final record = decoded.firstWhere(
+    (r) => r is Map && r['_idRow'] == modId,
+    orElse: () => throw StateError(
+      'mod_multi_files holds no record for mod $modId — '
+      'capture it into that batch rather than writing one by hand',
+    ),
+  );
+  return jsonEncode([record]);
+}

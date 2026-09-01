@@ -229,16 +229,6 @@ Two things are **refused rather than unbuilt**, both recorded in
   date, needs no check to have run, and is the honest answer to "I already have
   this — what do I do about it?". Wants deciding where it lands the user: the
   Mods tab filtered to that folder, or the folder's own dialog.
-- **The per-mod check fetches a whole `ProfilePage` when `DownloadPage`
-  would do.** `Mod/<id>/DownloadPage` returns `_aFiles` + `_aArchivedFiles`
-  plus the upstream-gone flags and nothing else — everything the comparator
-  reads except `_tsDateAdded` (the baseline clamp) and `_tsDateUpdated`. Not
-  taken: the dialog would then need a second request for the two dates, and the
-  profile is very often already in the client's ten-minute cache from the
-  marketplace. Worth measuring before assuming either way. The `Uri` builder for
-  that endpoint is **not** in the client — it was removed as dead surface — so
-  acting on this means re-adding it, four lines against a response shape already
-  pinned by `test/gamebanana/gb_parse_test.dart`.
 - **The batch bisect could ask the error which id was bad.** A
   `NO_SUCH_RECORD` response names the offending id in `_sErrorMessage`
   (`Record Mod.999999999 doesn't exist`), so a parser could drop it and retry
@@ -600,6 +590,12 @@ and what survives a rebind. Entry points: the status slot and the mod context me
   seeing them is enough; at 80 it may not be, and the natural home is a second
   row on the `!` toggle rather than a sixth toolbar control. Filed rather than
   built, to see whether it is actually wanted.
+- [ ] **The two resolve dialogs still fetch a whole `ProfilePage`.** They read
+  four fields off it — name, dates, files, archived files — where the update
+  check now asks `Mod/Multi` for one id at a quarter of the bytes. Not a
+  drop-in: both read `profile.files` / `profile.archivedFiles` directly, and
+  `Mod/Multi` returns the union under one key, so they have to move to
+  `currentFiles` / `allFiles` first.
 - [ ] **A `/dl/` link could still pick the *file*, once the mod is known.** The
   identity step rejects one honestly — neither API resolves a file id to a mod —
   but the file step has the mod's `_aFiles` + `_aArchivedFiles` in hand, so a

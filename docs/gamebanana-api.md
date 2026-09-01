@@ -197,7 +197,7 @@ Two consequences for any client:
 | `GET /apiv13/Game/<gameId>/TopSubs` | **"Best of period" — 3 mods × 7 time windows.** See [§3.1](#31-top-submissions--gameidtopsubs) |
 | `GET /apiv13/Util/Search/Results?_sModelName=Mod&_sSearchString=…` | Text search |
 | `GET /apiv13/Mod/<id>/ProfilePage` | Everything for a mod detail screen, in one call |
-| `GET /apiv13/Mod/<id>/DownloadPage` | Just the file lists — cheap, for update checks |
+| `GET /apiv13/Mod/<id>/DownloadPage` | Just the file lists — cheap, and **not enough for an update check** |
 | `GET /apiv13/Mod/<id>/Updates` | The author's changelog entries |
 | `GET /apiv13/Mod/Multi?_csvRowIds=…&_csvProperties=…` | **Many mods, chosen fields, one request** |
 
@@ -323,11 +323,22 @@ So it is worth reading and never worth trusting: see
 `_bAdvancedRequirementsExist` sits beside it and only says the author used the site's
 structured editor; it is not modelled.
 
-### Update checks — `Mod/<id>/DownloadPage`
+### The file lists alone — `Mod/<id>/DownloadPage`
 
 Returns `_aFiles` + `_aArchivedFiles` (plus `_bIsTrashed` / `_bIsWithheld`) and
-nothing else. Much cheaper than `ProfilePage` when all you need is "did the file list
-change?".
+nothing else — a quarter of `ProfilePage`'s bytes when all you need is "did the file
+list change?".
+
+**It cannot serve an update check, and `Mod/Multi` for one id is both complete and
+smaller.** Measured on two mods: 8.1 KB and 11.8 KB here against 7.7 KB and 11.3 KB
+for a one-id `Mod/Multi` asking for ten properties, against 31.3 KB and 47.6 KB for
+the profile. What this endpoint omits is what makes it unusable rather than merely
+lean — `_tsDateAdded`, `_tsDateUpdated`, `_bIsObsolete` and `_bIsPrivate` are all
+absent, and the first two are what a date-based comparison is clamped and measured
+against. It also carries **no `_idRow`**, so a caller must supply the mod id, and it
+answers a missing mod with a plain `404` where `Mod/Multi` answers `400` +
+`INPUT_ERRORS` naming `_csvRowIds`. See
+[`update-checks.md`](update-checks.md#the-dialog).
 
 ### Releases and changelogs — `Mod/<id>/Updates`
 
@@ -377,8 +388,14 @@ curl 'https://gamebanana.com/apiv13/Mod/Multi?_csvRowIds=698834,605830\
 
 Returns a bare **array** (no `_aMetadata` wrapper) in the requested order. This is how
 a bulk "check all mods for updates" pass is built: batches of ids in a handful of
-requests instead of one request per mod. Four things to know, all measured rather than
-assumed, and the last two will bite:
+requests instead of one request per mod.
+
+**It is also the right shape for a single mod**, which is not obvious from the name.
+One id with a chosen property list beats both purpose-built responses for an update
+check: it is a quarter of `ProfilePage` and slightly smaller than `DownloadPage`
+while being the only one of the three that carries every field a comparison needs.
+
+Four things to know, all measured rather than assumed, and the last two will bite:
 
 - `_csvProperties` is honoured **here but ignored by `Index`** — don't expect it to
   trim listing payloads.

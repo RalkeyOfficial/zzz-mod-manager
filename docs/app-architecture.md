@@ -148,11 +148,12 @@ Read-only client for `apiv13` — browse, search, mod detail, category tree. Rea
   which supports neither filters nor sort). **One builder per method above and no
   others**, so the two files stay in step and neither accumulates a url for a
   request nobody makes. `Mod/<id>/DownloadPage` is the one the API offers and this
-  app does not use: it returns just the file lists and is cheaper *per mod*, but
-  the update check batches 50 mods into one `Mod/Multi` and needs `Updates`'
-  `_aFileRowIds` grouping besides, so it loses on both counts. Its captured
-  response and parse test are kept (`test/gamebanana/gb_parse_test.dart`) —
-  evidence about an undocumented API costs nothing, an unused `Uri` builder does.
+  app does not use, and the reason is not batching: it returns just the file lists
+  and the trashed/withheld flags, so it is missing four of the six fields the
+  update comparator reads — and a one-id `Mod/Multi` is both complete and *smaller*
+  (measured: 7.7 KB against 8.1 KB). Its captured response and parse test are kept
+  (`test/gamebanana/gb_parse_test.dart`) — evidence about an undocumented API costs
+  nothing, an unused `Uri` builder does.
 - **`GameBananaResponseCache`** — in-memory, keyed by full `Uri`, TTL from the
   server's `cache-control: max-age` when one is sent. **apiv13 sends none**, so the
   10-minute default is ours. Injected clock. **A user-initiated refresh has to be

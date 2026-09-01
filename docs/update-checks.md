@@ -142,7 +142,7 @@ primary by default: `withCompanionUpdatedTo` amends the companion, and reaches
 
 **Every caller must supply the companion records**, or a mixed folder reads
 `indeterminate`: the bulk pass batches both ids ([§5](#5-checking-the-whole-library))
-and the per-mod dialog fetches the companion's profile and feed alongside the
+and the per-mod dialog fetches the companion's record and feed alongside the
 primary's.
 
 ---
@@ -675,6 +675,35 @@ which arrives with nothing on record, and the card's blue badge, which arrives
 with a verdict from the last pass. The only difference is whether a request is
 made on open, so they are not two dialogs.
 
+**A per-mod check asks `Mod/Multi` for one id, not `Mod/<id>/ProfilePage`** —
+`fetchModRecord` in `update_check_run.dart`, with the same `updateCheckProperties`
+the whole-library pass sends. That the two paths share one property list is the
+point rather than a tidiness win: the comparator reads six fields off a `GbMod`,
+and a list that drifted would let the card badge and the dialog give one mod two
+different verdicts, with neither surface looking wrong on its own. It is also a
+quarter of the bytes — measured live, 7.7 KB against 31 KB for one mod and 11 KB
+against 48 KB for one with a long description — because a profile carries a
+gallery, HTML prose, credits, licence text and requirements that no comparator can
+use.
+
+**`Mod/<id>/DownloadPage` is cheaper on paper and cannot serve this**, which is
+worth stating because it is the obvious choice. It returns the two file lists plus
+`_bIsTrashed` / `_bIsWithheld` and nothing else, so four of the six fields are
+missing or partial: without `_tsDateAdded` and `_tsDateUpdated` a date-only
+verdict ([§3](#when-only-a-date-is-known)) loses both its sanity floor and its last
+fallback, which makes it *wrong* rather than quieter; `_bIsObsolete` silently
+leaves every verdict; and `_bIsPrivate` is one of the three flags `remote_missing`
+reads. `Mod/Multi` is smaller than it anyway — 7.7 KB against 8.1 KB — since it
+sends no licence or submitter instructions.
+
+**One id per request, not one request per folder.** A batch is all-or-nothing, so
+folding a companion's id in with the primary's would let a companion whose page has
+been deleted fail the primary's check — where the rule is that an unreachable
+companion is left out and the folder is simply not called clean
+([§2](#a-folder-with-two-identities-still-gets-one-verdict)). Recovering inside a
+batch is the halving the bulk pass does, and it is not worth it for the two or
+three ids a folder has.
+
 It states both sides of the comparison as a **filename with the author's own
 words underneath** — `v74.zip` over a greyed `7.4 · Main file`, against `v77.zip`
 over `7.7 · Main file`. Those two rows sit directly above one another and are
@@ -741,7 +770,7 @@ implementation detail. Opened from a card badge this dialog fetches nothing —
 the bulk pass already answered — so re-folding produced null, and a write that
 had *succeeded* left the dialog, the card badge and the toolbar count all
 showing the pre-dismissal state. The button looked dead. Nothing threw, and the
-only test covering the button used the other entry point, where a profile
+only test covering the button used the other entry point, where a fetched record
 happens to be in hand.
 
 The dialog also names **the release** a candidate shipped in (`Version 1.5`),

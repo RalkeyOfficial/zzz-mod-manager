@@ -12,6 +12,7 @@ import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/components/mods_toolbar.dart';
 import 'package:mod_manager_flutter/screens/dialogs/bulk_resolution_dialog.dart';
 import 'package:mod_manager_flutter/screens/dialogs/mod_update_dialog.dart';
+import 'package:mod_manager_flutter/services/bulk_update_check.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_client.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_endpoints.dart';
 import 'package:mod_manager_flutter/services/update_check.dart';
@@ -565,11 +566,15 @@ void main() {
     (GameBananaClient, FakeHttpTransport) fakeClient() {
       final transport = FakeHttpTransport();
       final endpoints = GameBananaEndpoints(gameId: 19567);
+      // `Mod/Multi` for one id, not the mod's profile — what the dialog asks
+      // for. The record carries current and archived files in one list, so this
+      // is also the shape that would catch a reader keying off `_aFiles` rather
+      // than `_bIsArchived`.
       transport.stub(
-        endpoints.modProfile(531649),
-        body: loadGbFixture('mod_profile_531649'),
+        endpoints.modsMulti(const [531649], updateCheckProperties),
+        body: gbMultiRecordFixture(531649),
       );
-      // The release feed is fetched alongside the profile. RabbitFX's own is
+      // The release feed is fetched alongside the record. RabbitFX's own is
       // not captured, and an empty one is the honest stand-in: most mods have
       // no grouping to apply, and the verdict must be identical either way.
       transport.stub(
@@ -670,10 +675,13 @@ void main() {
       // One-shot failure, then a standing success: `enqueue` is consumed by the
       // next matching request while `stub` repeats, so this scripts "offline,
       // then fine" without the second setup having to replace the first.
-      transport.enqueue(endpoints.modProfile(531649), statusCode: 500);
+      transport.enqueue(
+        endpoints.modsMulti(const [531649], updateCheckProperties),
+        statusCode: 500,
+      );
       transport.stub(
-        endpoints.modProfile(531649),
-        body: loadGbFixture('mod_profile_531649'),
+        endpoints.modsMulti(const [531649], updateCheckProperties),
+        body: gbMultiRecordFixture(531649),
       );
       transport.stub(
         endpoints.modUpdates(531649),
@@ -917,17 +925,20 @@ void main() {
         final transport = FakeHttpTransport();
         final endpoints = GameBananaEndpoints(gameId: 19567);
         transport.stub(
-          endpoints.modProfile(531649),
-          body: loadGbFixture('mod_profile_531649'),
+          endpoints.modsMulti(const [531649], updateCheckProperties),
+          body: gbMultiRecordFixture(531649),
         );
         transport.stub(
           endpoints.modUpdates(531649),
           body: '{"_aMetadata":{"_nRecordCount":0},"_aRecords":[]}',
         );
         if (companionReachable) {
+          // A **separate** request per id, which is the property this group
+          // depends on: an unreachable companion must not take the primary's
+          // check down with it, and one batch of two would.
           transport.stub(
-            endpoints.modProfile(528481),
-            body: loadGbFixture('mod_profile_rated'),
+            endpoints.modsMulti(const [528481], updateCheckProperties),
+            body: gbMultiRecordFixture(528481),
           );
           transport.stub(
             endpoints.modUpdates(528481),
@@ -978,12 +989,17 @@ void main() {
 
         expect(
           transport.requests,
-          contains(GameBananaEndpoints(gameId: 19567).modProfile(528481)),
+          contains(
+            GameBananaEndpoints(gameId: 19567)
+                .modsMulti(const [528481], updateCheckProperties),
+          ),
           reason: 'the other mod in the folder has to be asked about by name — '
-              'a call count would pass on any second request at all',
+              'a call count would pass on any second request at all, and an id '
+              'folded into the primary\'s batch would lose the isolation the '
+              'unreachable-companion case depends on',
         );
         // The patch is on its newest file, so this verdict can only have come
-        // from the other mod's page.
+        // from the other mod's record.
         expect(find.text('Possibly outdated'), findsOneWidget);
         expect(find.text('This is the latest file'), findsNothing);
       });

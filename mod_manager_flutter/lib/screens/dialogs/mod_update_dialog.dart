@@ -11,6 +11,7 @@ import '../../services/api_service.dart';
 import '../../utils/notifications.dart';
 import '../../services/gamebanana/file_selection.dart';
 import '../../services/update_check.dart';
+import '../../services/update_check_run.dart';
 import '../../services/update_apply/update_write_route.dart';
 import '../../utils/gamebanana_url.dart';
 import '../../utils/html_to_markdown.dart';
@@ -185,7 +186,12 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       // Both at once. The release feed is what tells a co-released *variant*
       // apart from a successor, and without it this dialog would show the
       // unrefined verdict the badge no longer shows — the two must agree.
-      final profile = await client.modProfile(modId, refresh: refresh);
+      //
+      // `Mod/Multi` for one id rather than the mod's profile: the comparator
+      // reads six fields and a profile is four times the bytes for the same
+      // answer. See `fetchModRecord`, which also records why `DownloadPage` —
+      // the obvious cheaper choice — cannot serve this.
+      final profile = await fetchModRecord(client, modId, refresh: refresh);
       // A mod with no update posts is normal, and a feed that fails to load is
       // not a failed check: the groups can only ever *remove* a flag, so their
       // absence leaves the honest, louder answer.
@@ -209,7 +215,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       for (final companion in origin!.companions) {
         try {
           companionProfiles[companion.modId] =
-              await client.modProfile(companion.modId, refresh: refresh);
+              await fetchModRecord(client, companion.modId, refresh: refresh);
         } catch (_) {
           continue;
         }
