@@ -33,7 +33,7 @@ final Logger _log = Logger('snapshot');
 ///
 /// ```
 /// <appData>/backups/
-///   <mod folder name>/
+///   a1b2c3d4e5f60718293a4b5c6d7e8f90/    ← the mod's uid, never its name
 ///     20260809-142530-000/
 ///       manifest.json     ← what this is, taken when, of what version
 ///       files/            ← the mod folder, verbatim, sidecar included
@@ -44,6 +44,23 @@ final Logger _log = Logger('snapshot');
 /// sidecar **is** included: a rollback that restored the files but kept the new
 /// origin block would leave the app checking for updates against a file the
 /// folder no longer holds.
+///
+/// ## Keyed by the mod's uid, and that is the whole design
+///
+/// A group named after the mod **folder** is stranded by any rename the app
+/// does not perform — a rename in a file manager runs no hook, so every
+/// rollback point for that mod becomes unreachable *and* exempt from pruning,
+/// because retention protects each group's newest entry forever. Keyed by the
+/// uid in the folder's own sidecar (`services/mod_uid.dart`), a rename is a
+/// non-event however it happens.
+///
+/// It also makes reclaiming the space possible at all: a group whose uid no
+/// folder claims is **unambiguously** a deleted mod, where a group whose *name*
+/// nothing matches might be a mod the user renamed and still wants.
+///
+/// The cost is a directory nobody can read by eye. Each snapshot's manifest
+/// carries the name the mod had when it was taken, which is what a screen
+/// shows; the path is for the machine.
 class SnapshotService {
   SnapshotService({String? rootPath, this.policy = RetentionPolicy.standard})
       : _rootPath = rootPath;
@@ -56,15 +73,19 @@ class SnapshotService {
 
   Directory get _root => Directory(rootPath);
 
-  Directory _modDir(String modName) => Directory(path.join(rootPath, modName));
+  Directory _groupDir(String modUid) => Directory(path.join(rootPath, modUid));
 
   /// Copies [modFolder] into a new snapshot. Returns null if nothing could be
   /// written — a full disk, a read-only app-data directory.
   ///
   /// A failure here is the caller's cue to **stop**, not to carry on unprotected:
   /// there is no other way back from an overwrite.
+  /// [modUid] is which group this belongs to — the mod's identity, not its name
+  /// ([ModUid]). [modName] is recorded in the manifest as what the mod was
+  /// called at the time, for a screen to show.
   Future<ModSnapshot?> capture({
     required String modName,
+    required String modUid,
     required Directory modFolder,
     required SnapshotReason reason,
     String? version,
@@ -74,7 +95,7 @@ class SnapshotService {
     try {
       if (!await modFolder.exists()) return null;
       final takenAt = now ?? DateTime.now();
-      final dir = await _createSnapshotDir(modName, takenAt);
+      final dir = await _createSnapshotDir(modUid, takenAt);
       final files = Directory(path.join(dir.path, 'files'));
 
       final written = (await copyDirectory(modFolder, files)).length;
@@ -82,6 +103,7 @@ class SnapshotService {
 
       final snapshot = ModSnapshot(
         modName: modName,
+        modUid: modUid,
         id: path.basename(dir.path),
         takenAt: takenAt,
         sizeBytes: size,
@@ -106,44 +128,52 @@ class SnapshotService {
   }
 
   /// Every snapshot of one mod, newest first.
-  Future<List<ModSnapshot>> list(String modName) async {
-    final dir = _modDir(modName);
+  ///
+  /// Keyed by the mod's uid, so this answers for the folder whatever it is
+  /// called today. **Empty for a null uid**, which is a mod nothing has ever
+  /// had to remember — it cannot have snapshots, because there was no identity
+  /// to file them under.
+  Future<List<ModSnapshot>> list(String? modUid) async {
+    if (modUid == null || modUid.isEmpty) return const [];
+    final dir = _groupDir(modUid);
     if (!await dir.exists()) return const [];
     final snapshots = <ModSnapshot>[];
     try {
       await for (final entity in dir.list(followLinks: false)) {
         if (entity is! Directory) continue;
-        final snapshot = await _read(modName, entity);
+        final snapshot = await _read(modUid, entity);
         if (snapshot != null) snapshots.add(snapshot);
       }
     } catch (e) {
       _log.warning('could not list snapshots',
-          error: e, fields: {'mod': modName});
+          error: e, fields: {'uid': modUid});
     }
     snapshots.sort((a, b) => b.takenAt.compareTo(a.takenAt));
     return snapshots;
   }
 
-  /// The mod folder names that have at least one snapshot.
+  /// The mod **uids** that have at least one snapshot.
   ///
   /// One `readdir` and no manifests: the directory names *are* the answer. It is
   /// what the context menu asks before offering a rollback, so it has to stay
-  /// cheaper than the thing it is gating.
-  Future<Set<String>> modsWithSnapshots() async {
+  /// cheaper than the thing it is gating — and it stays that cheap under uid
+  /// keying, because the comparison moves from a mod's name to its uid and the
+  /// scan already carries both.
+  Future<Set<String>> uidsWithSnapshots() async {
     try {
       if (!await _root.exists()) return const <String>{};
-      final names = <String>{};
+      final uids = <String>{};
       await for (final entity in _root.list(followLinks: false)) {
-        if (entity is Directory) names.add(path.basename(entity.path));
+        if (entity is Directory) uids.add(path.basename(entity.path));
       }
-      return names;
+      return uids;
     } catch (e) {
       _log.warning('could not list backup folders', error: e);
       return const <String>{};
     }
   }
 
-  /// Every snapshot of every mod.
+  /// Every snapshot of every mod, including groups no folder claims any more.
   Future<List<ModSnapshot>> listAll() async {
     if (!await _root.exists()) return const [];
     final all = <ModSnapshot>[];
@@ -188,11 +218,11 @@ class SnapshotService {
       if (await snapshot.directory.exists()) {
         await snapshot.directory.delete(recursive: true);
       }
-      // Leave no empty per-mod directory behind — it would otherwise show up in
+      // Leave no empty group directory behind — it would otherwise show up in
       // `listAll` forever as a mod with no snapshots.
-      final modDir = _modDir(snapshot.modName);
-      if (await modDir.exists() && await modDir.list().isEmpty) {
-        await modDir.delete();
+      final groupDir = _groupDir(snapshot.modUid);
+      if (await groupDir.exists() && await groupDir.list().isEmpty) {
+        await groupDir.delete();
       }
       return true;
     } catch (e) {
@@ -234,24 +264,24 @@ class SnapshotService {
   /// `20260809-142530-000`, with the trailing counter resolving the collision
   /// two snapshots taken in the same second would otherwise have. Sortable as a
   /// string, which is what makes the directory listing readable by hand.
-  Future<Directory> _createSnapshotDir(String modName, DateTime takenAt) async {
+  Future<Directory> _createSnapshotDir(String modUid, DateTime takenAt) async {
     final t = takenAt.toLocal();
     String two(int n) => n.toString().padLeft(2, '0');
     final stamp = '${t.year}${two(t.month)}${two(t.day)}-'
         '${two(t.hour)}${two(t.minute)}${two(t.second)}';
     for (var i = 0; i < 1000; i++) {
       final dir = Directory(
-        path.join(rootPath, modName, '$stamp-${i.toString().padLeft(3, '0')}'),
+        path.join(rootPath, modUid, '$stamp-${i.toString().padLeft(3, '0')}'),
       );
       if (!await dir.exists()) {
         await dir.create(recursive: true);
         return dir;
       }
     }
-    throw StateError('could not allocate a snapshot directory for $modName');
+    throw StateError('could not allocate a snapshot directory for $modUid');
   }
 
-  Future<ModSnapshot?> _read(String modName, Directory dir) async {
+  Future<ModSnapshot?> _read(String modUid, Directory dir) async {
     final files = Directory(path.join(dir.path, 'files'));
     if (!await files.exists()) return null;
     final manifest = File(path.join(dir.path, _manifestName));
@@ -267,7 +297,7 @@ class SnapshotService {
       // failure this whole service exists to prevent.
     }
     return ModSnapshot.fromManifest(
-      modName: modName,
+      modUid: modUid,
       id: path.basename(dir.path),
       directory: dir,
       json: json,
@@ -320,6 +350,7 @@ enum SnapshotReason {
 class ModSnapshot {
   const ModSnapshot({
     required this.modName,
+    required this.modUid,
     required this.id,
     required this.takenAt,
     required this.sizeBytes,
@@ -330,7 +361,17 @@ class ModSnapshot {
     this.versionLabel,
   });
 
+  /// **What the mod was called when this was taken**, and nothing more.
+  ///
+  /// Informational since the store keyed by [modUid]: it is what a screen shows
+  /// for a group whose folder has since been renamed, and it is empty for a
+  /// snapshot whose manifest could not be read. Never used to find anything.
   final String modName;
+
+  /// Which mod this is a snapshot **of** — the identity in its sidecar, which
+  /// is also the directory this group lives in.
+  final String modUid;
+
   final String id;
   final DateTime takenAt;
   final int sizeBytes;
@@ -346,7 +387,7 @@ class ModSnapshot {
   final Directory directory;
 
   SnapshotRef get ref => SnapshotRef(
-        modName: modName,
+        modUid: modUid,
         id: id,
         takenAt: takenAt,
         sizeBytes: sizeBytes,
@@ -354,6 +395,7 @@ class ModSnapshot {
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'mod': modName,
+        'mod_uid': modUid,
         'taken_at': takenAt.toUtc().toIso8601String(),
         'size_bytes': sizeBytes,
         'file_count': fileCount,
@@ -362,8 +404,12 @@ class ModSnapshot {
         if (versionLabel != null) 'version_label': versionLabel,
       };
 
+  /// [modUid] is the group's directory, which is the authority on which mod
+  /// this belongs to — the manifest's copy is read only for the *name*, and a
+  /// manifest that cannot be read costs a display string rather than the
+  /// snapshot.
   static ModSnapshot fromManifest({
-    required String modName,
+    required String modUid,
     required String id,
     required Directory directory,
     required Map<String, dynamic>? json,
@@ -375,7 +421,8 @@ class ModSnapshot {
       parsed = DateTime.tryParse(raw)?.toLocal();
     }
     return ModSnapshot(
-      modName: modName,
+      modName: json?['mod'] is String ? json!['mod'] as String : '',
+      modUid: modUid,
       id: id,
       directory: directory,
       takenAt: parsed ?? fallbackTakenAt,

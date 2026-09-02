@@ -670,8 +670,11 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       // `valueOrNull` rather than a `when`: the listing is one readdir and
       // resolves long before a right-click, and a menu that waited on it would
       // be a menu that sometimes did not open.
-      hasBackups:
-          ref.read(modBackupsProvider).valueOrNull?.contains(mod.id) ?? false,
+      // By uid: the store is keyed by the folder's identity so a rename cannot
+      // strand it, and a mod with no uid has never had a snapshot taken.
+      hasBackups: mod.uid != null &&
+          (ref.read(modBackupsProvider).valueOrNull?.contains(mod.uid) ??
+              false),
       onDetails: () => _showModDetailsDialog(mod),
       onEdit: () => _showEditDialog(mod),
       onRename: () => showRenameModDialog(

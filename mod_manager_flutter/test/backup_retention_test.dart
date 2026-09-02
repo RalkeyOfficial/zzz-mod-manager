@@ -12,7 +12,9 @@ void main() {
     String? id,
   }) =>
       SnapshotRef(
-        modName: mod,
+        // The grouping key, which is a mod's uid rather than its folder name —
+        // spelled here as a readable stand-in.
+        modUid: mod,
         id: id ?? 'd$daysAgo',
         takenAt: now.subtract(Duration(days: daysAgo)),
         sizeBytes: sizeMb * mb,
@@ -101,7 +103,7 @@ void main() {
       now: now,
       policy: const RetentionPolicy(maxTotalBytes: 2000 * mb),
     );
-    expect(plan.prune.map((s) => '${s.modName}/${s.id}'), [
+    expect(plan.prune.map((s) => '${s.modUid}/${s.id}'), [
       'ellen/d5',
       'lycaon/d6',
     ]);

@@ -56,6 +56,7 @@ class _RefusingSnapshots extends SnapshotService {
   @override
   Future<ModSnapshot?> capture({
     required String modName,
+    required String modUid,
     required Directory modFolder,
     required SnapshotReason reason,
     String? version,

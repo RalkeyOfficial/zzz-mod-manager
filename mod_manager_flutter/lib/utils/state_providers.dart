@@ -479,7 +479,7 @@ final snapshotServiceProvider = Provider<SnapshotService>(
   (ref) => SnapshotService(),
 );
 
-/// Which mods have a snapshot to roll back to.
+/// Which mods have a snapshot to roll back to, **by uid**.
 ///
 /// A single directory listing of `<appData>/backups` — the folder names *are*
 /// the answer, so this reads no manifests and walks no files. It exists so the
@@ -487,8 +487,13 @@ final snapshotServiceProvider = Provider<SnapshotService>(
 /// rather than showing a permanently-present entry that usually opens an empty
 /// dialog.
 ///
+/// Uids rather than mod names, because that is what the store is keyed by; the
+/// caller compares against `ModInfo.uid`, which the scan already carries. A mod
+/// with no uid is absent from this by construction, which is correct — it has
+/// never had an identity to file a snapshot under.
+///
 /// Invalidated by whatever writes a snapshot; there is no watcher, because the
 /// only things that create one are inside this app.
 final modBackupsProvider = FutureProvider<Set<String>>((ref) async {
-  return ref.read(snapshotServiceProvider).modsWithSnapshots();
+  return ref.read(snapshotServiceProvider).uidsWithSnapshots();
 });

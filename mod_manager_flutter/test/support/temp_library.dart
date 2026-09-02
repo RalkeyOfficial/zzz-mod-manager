@@ -174,13 +174,31 @@ class TempLibrary {
 
   /// Which snapshots exist for a mod — the folder names, which is all "is there
   /// a way back?" needs.
+  ///
+  /// Resolved through the mod's **uid**, read off its sidecar, because that is
+  /// how the store is keyed. A mod with no uid has never had a snapshot taken,
+  /// so the empty answer is the true one rather than a lookup miss.
   List<String> snapshotsOf(String modName) {
-    final dir = Directory(p.join(snapshots.rootPath, modName));
+    final uid = uidOf(modName);
+    if (uid == null) return const [];
+    final dir = Directory(p.join(snapshots.rootPath, uid));
     if (!dir.existsSync()) return const [];
     return [
       for (final entity in dir.listSync().whereType<Directory>())
         p.basename(entity.path),
     ]..sort();
+  }
+
+  /// The mod's identity as it stands on disk, or null if nothing has needed one.
+  String? uidOf(String modName) {
+    final file = File(p.join(
+      modFolder(modName).path,
+      AppConstants.modMetadataDirName,
+      AppConstants.modMetadataFileName,
+    ));
+    if (!file.existsSync()) return null;
+    final json = jsonDecode(file.readAsStringSync());
+    return json is Map<String, Object?> ? json['uid'] as String? : null;
   }
 
   File _file(String modName, String relative) =>

@@ -585,11 +585,42 @@ so unlike the store above there is no renaming that could make it safe.
 
 ```
 <appData>/backups/
-  <mod folder name>/
+  a1b2c3d4e5f60718293a4b5c6d7e8f90/   ← the mod's uid, never its name
     20260809-142530-000/
       manifest.json     ← what this is, taken when, of what version
       files/            ← the mod folder, verbatim, sidecar included
 ```
+
+**Keyed by the mod's `uid`** ([`metadata-schema.md`](metadata-schema.md)), and that
+is the whole design rather than a detail. A group named after the folder is stranded
+by any rename the app does not itself perform — a rename in a file manager runs no
+hook, so every rollback point becomes unreachable from "Restore a previous version…"
+*and* exempt from the budget below, which protects each group's newest entry forever.
+Keyed by the uid in the folder's own sidecar, a rename is a non-event however it
+happens, and there is no migration hook to write.
+
+It is also what makes reclaiming the space possible at all: a group whose uid no
+folder claims is **unambiguously** a deleted mod, where a group whose *name* nothing
+matches might be a mod the user renamed and still wants.
+
+Two consequences worth stating:
+
+- **The uid is assigned by the snapshot itself.** `UpdateApplier` calls
+  `ModUid.ensure` before every capture, so **no identity means no snapshot** and
+  therefore no write — the same refusal a snapshot that could not be taken already
+  produces. The only folder that hits it is one whose sidecar cannot be written,
+  which the copy would fail on a moment later anyway.
+- **A restore cannot cost a mod its identity.** A snapshot is a complete copy,
+  sidecar included, and a restore overwrites with the same semantics — so a restored
+  sidecar carries whatever uid it held when taken. Because `ensure` always runs
+  before `capture`, every snapshot in this store was taken *after* its folder had a
+  uid, and rolling one back restores that same identity rather than none. That
+  ordering is load-bearing: reversed, the first rollback would strand every saved
+  version of the mod at the moment of recovery.
+
+The cost is a directory nobody can read by eye. Each manifest carries the name the
+mod had when its snapshot was taken, which is what a screen shows; the path is for
+the machine.
 
 The manifest sits **beside** `files/` rather than inside it, so a restore copies
 `files/` back wholesale without carrying bookkeeping into the mod. The sidecar **is**
@@ -599,7 +630,10 @@ missing manifest never hides the snapshot — the files are still restorable, an
 rollback the user cannot reach is the failure this exists to prevent.
 
 `manifest.json` is its own small format and is **not** the mod sidecar; nothing in
-[`metadata-schema.md`](metadata-schema.md) describes it. Fields: `mod`, `taken_at`,
+[`metadata-schema.md`](metadata-schema.md) describes it. Fields: `mod` (**the name
+at the time**, for display — the group's directory is the authority on which mod this
+is, so a manifest that cannot be read costs a display string rather than the
+snapshot), `mod_uid`, `taken_at`,
 `size_bytes`, `file_count`, `reason` (`before_update` | `before_restore` |
 `before_patch_removal` — its own value rather than `before_update`, since a
 rollback list calling it an update would send a user looking for a version change
@@ -623,6 +657,9 @@ so three per mod costs almost every library nothing, but the tail reaches 1.24 G
 a handful of those quietly eat several gigabytes.
 
 Deletion walks four tiers in order and stops as soon as the budget is met:
+
+Grouping is **per uid**, not per folder name — so a mod renamed between two updates
+is one mod here rather than two, each keeping a tier-0 entry of its own forever.
 
 | Tier | What | When it is pruned |
 |---|---|---|

@@ -6,6 +6,7 @@ import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/backup/snapshot_service.dart';
 import 'package:mod_manager_flutter/services/folder_contents.dart';
+import 'package:mod_manager_flutter/services/mod_uid.dart';
 import 'package:mod_manager_flutter/services/patch_placement.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_applier.dart';
 import 'package:path/path.dart' as p;
@@ -126,10 +127,14 @@ void main() {
     );
 
     expect((await run('Ellen', mod, [source])).success, isTrue);
-    expect(
-      read(mod, '${AppConstants.modMetadataDirName}/metadata.json'),
-      '{"description":"mine"}',
-    );
+    final sidecar =
+        read(mod, '${AppConstants.modMetadataDirName}/metadata.json')!;
+    expect(sidecar, contains('mine'));
+    expect(sidecar, isNot(contains('a stranger')),
+        reason: "the archive's copy must not reach the folder");
+    // Not asserted as an exact string: the update gives the folder its identity
+    // on the way past, so the sidecar it leaves is the user's plus a uid.
+    expect(sidecar, contains('"uid"'));
   });
 
   test('a renamed upstream .ini is offered up and removed', () async {
@@ -274,7 +279,61 @@ void main() {
       'v1',
     );
     expect(snapshot.reason, SnapshotReason.beforeUpdate);
-    expect((await snapshots.list('Ellen')).length, 1);
+    // Found by the folder's identity, which the update assigned on its way
+    // past — not by its name, which is what a rename would take away.
+    expect((await snapshots.list(snapshot.modUid)).length, 1);
+    expect(snapshot.modName, 'Ellen', reason: 'what it was called at the time');
+  });
+
+  test('a snapshot survives the rename the app never sees', () async {
+    // **The reason the store is keyed by uid at all.** Renaming a folder in a
+    // file manager runs no hook, so a group named after the folder would be
+    // stranded here — unreachable from "Restore a previous version…" *and*
+    // exempt from pruning, because retention protects each group's newest
+    // entry forever.
+    final mod = modFolder('Ellen');
+    write(mod, 'ellen.ini', 'filename = Body.dds');
+    write(mod, 'Body.dds', 'v1');
+    final source = incoming('Ellen');
+    write(source, 'ellen.ini', 'filename = Body.dds');
+    write(source, 'Body.dds', 'v2');
+
+    final taken = (await run('Ellen', mod, [source])).snapshot!;
+
+    // No rename call, no migration, nothing told: the folder simply moves.
+    final renamed = Directory(p.join(mods.path, 'Ellen but better'));
+    mod.renameSync(renamed.path);
+
+    final uid = await ModUid().read(renamed);
+    expect(uid, taken.modUid, reason: 'the identity travelled with the folder');
+    expect((await snapshots.list(uid)).length, 1);
+    expect(
+      read(Directory(p.join(taken.directory.path, 'files')), 'Body.dds'),
+      'v1',
+      reason: 'and the way back is still the old files',
+    );
+  });
+
+  test('a rename does not split one mod into two histories', () async {
+    // The pruning half of the same property. Two name-groups each keep a
+    // newest entry forever, so a mod renamed between updates would quietly
+    // become exempt from the budget twice over.
+    final mod = modFolder('Ellen');
+    write(mod, 'ellen.ini', 'filename = Body.dds');
+    write(mod, 'Body.dds', 'v1');
+    final source = incoming('Ellen');
+    write(source, 'ellen.ini', 'filename = Body.dds');
+    write(source, 'Body.dds', 'v2');
+    final first = (await run('Ellen', mod, [source])).snapshot!;
+
+    final renamed = Directory(p.join(mods.path, 'Ellen but better'));
+    mod.renameSync(renamed.path);
+    final second = (await run('Ellen but better', renamed, [source])).snapshot!;
+
+    expect(second.modUid, first.modUid);
+    expect((await snapshots.listAll()).length, 2);
+    expect((await snapshots.uidsWithSnapshots()), {first.modUid},
+        reason: 'one mod, one group, whatever it has been called');
   });
 
   test('nothing is written when the snapshot cannot be taken', () async {
@@ -325,6 +384,11 @@ void main() {
       modFolder: mod,
       incomingFolders: [source.path],
     );
+    // **The identity first**, because assigning one is itself a write into this
+    // folder: without it the read-only folder below fails at the snapshot step
+    // instead, which is a different (and correct) refusal than the one under
+    // test. A folder that has ever been snapshotted is already in this state.
+    expect(await applier.uids.ensure(mod), isNotNull);
     // Read-only, so creating that new file throws. Skipped when the process can
     // write anyway (running as root), rather than asserting something untrue.
     await Process.run('chmod', ['500', mod.path]);
@@ -453,7 +517,41 @@ void main() {
       expect(restored.success, isTrue);
       expect(read(mod, 'Body.dds'), 'v1');
       expect(restored.snapshot!.reason, SnapshotReason.beforeRestore);
-      expect((await snapshots.list('Ellen')).length, 2);
+      // Both in one group, because both are of the same mod — the rollback did
+      // not restore an older sidecar over the folder's identity and start a
+      // second history under a new one.
+      expect(restored.snapshot!.modUid, applied.snapshot!.modUid);
+      expect((await snapshots.list(applied.snapshot!.modUid)).length, 2);
+    });
+
+    test('the folder keeps its identity through a rollback', () async {
+      // **The way this feature could eat itself.** A snapshot is a complete
+      // copy of the folder, sidecar included, and a restore overwrites with the
+      // same semantics — so a sidecar restored over the live one takes the
+      // folder's identity with it. Every snapshot in this store was taken after
+      // its folder had a uid, which is what makes the restored one carry the
+      // same identity rather than none.
+      final mod = modFolder('Ellen');
+      write(mod, 'ellen.ini', 'filename = Body.dds');
+      write(mod, 'Body.dds', 'v1');
+
+      final source = incoming('Ellen');
+      write(source, 'ellen.ini', 'filename = Body.dds');
+      write(source, 'Body.dds', 'v2');
+      final applied = await run('Ellen', mod, [source]);
+      final uid = await ModUid().read(mod);
+      expect(uid, applied.snapshot!.modUid);
+
+      await applier.restore(
+        modName: 'Ellen',
+        modFolder: mod,
+        snapshot: applied.snapshot!,
+      );
+
+      expect(await ModUid().read(mod), uid,
+          reason: 'a rollback that dropped this would strand every saved '
+              'version of the mod at the moment of recovery');
+      expect((await snapshots.list(uid)).length, 2);
     });
 
     test('removes the .ini the newer version added, in reverse', () async {
@@ -484,16 +582,17 @@ void main() {
       for (var i = 0; i < 5; i++) {
         await snapshots.capture(
           modName: 'Ellen',
+          modUid: 'ellen-uid',
           modFolder: mod,
           reason: SnapshotReason.beforeUpdate,
           now: DateTime.now().subtract(Duration(days: 200 - i)),
         );
       }
-      expect((await snapshots.list('Ellen')).length, 5);
+      expect((await snapshots.list('ellen-uid')).length, 5);
 
       final plan = await snapshots.prune();
       expect(plan.prune.length, 2);
-      expect((await snapshots.list('Ellen')).length, 3);
+      expect((await snapshots.list('ellen-uid')).length, 3);
     });
 
     test('a snapshot survives a missing manifest', () async {
@@ -501,14 +600,20 @@ void main() {
       write(mod, 'Body.dds', 'v1');
       final taken = await snapshots.capture(
         modName: 'Ellen',
+        modUid: 'ellen-uid',
         modFolder: mod,
         reason: SnapshotReason.beforeUpdate,
       );
       File(p.join(taken!.directory.path, 'manifest.json')).deleteSync();
 
-      final listed = await snapshots.list('Ellen');
+      final listed = await snapshots.list('ellen-uid');
       expect(listed.length, 1);
       expect(listed.single.sizeBytes, greaterThan(0));
+      expect(listed.single.modUid, 'ellen-uid',
+          reason: 'the group it is in answers for which mod it is, so a '
+              'manifest that cannot be read costs a display name and not the '
+              'snapshot');
+      expect(listed.single.modName, isEmpty);
     });
   });
 
@@ -686,14 +791,18 @@ void main() {
       write(folder, 'body.dds', 'original');
       final source = incoming('patch');
       write(source, 'body.dds', 'patched');
-      write(source, '${AppConstants.modMetadataDirName}/metadata.json', '{}');
+      write(source, '${AppConstants.modMetadataDirName}/metadata.json',
+          '{"description":"a stranger"}');
 
       await applyPatch('Ellen', folder, source);
 
-      expect(
-        read(folder, '${AppConstants.modMetadataDirName}/metadata.json'),
-        isNull,
-      );
+      // A sidecar is there, and it is **ours**: the write gave the folder its
+      // identity before snapshotting it. What must never arrive is the
+      // archive's content.
+      final sidecar =
+          read(folder, '${AppConstants.modMetadataDirName}/metadata.json')!;
+      expect(sidecar, isNot(contains('a stranger')));
+      expect(sidecar, contains('"uid"'));
     });
   });
 }
@@ -727,6 +836,7 @@ class _RefusingSnapshots extends SnapshotService {
   @override
   Future<ModSnapshot?> capture({
     required String modName,
+    required String modUid,
     required Directory modFolder,
     required SnapshotReason reason,
     String? version,

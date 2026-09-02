@@ -277,20 +277,30 @@ Two things are **refused rather than unbuilt**, both recorded in
   button. The two need visibly different weight before they share a surface —
   and each apply already has its own confirmation, its own snapshot and its own
   stale-`.ini` question, none of which collapses into a checkbox.
-- [ ] **Renaming or deleting a mod strands its snapshots forever.** `renameMod`
-  and `deleteMod` never touch `<appData>/backups/`, so the folder stays under the
-  old name — unreachable from "Restore a previous version…" — and `planRetention`
-  groups by mod *name* and protects each group's newest entry unconditionally, so
-  the orphan is **never pruned**. A 1.2 GB mod deleted a year ago still costs
-  1.2 GB. Wants a migrate on rename, a delete on delete, and a sweep for groups
-  with no folder; the pure planner needs no change. This is why a patch's
-  displaced files live in the mod folder instead
-  ([`docs/applying-updates.md`](docs/applying-updates.md) §5).
+**Renaming a mod no longer strands its snapshots**, in the app or outside it: the
+store is keyed by the folder's own `uid` rather than its name, so a rename is a
+non-event and there is no hook to write
+([`docs/applying-updates.md`](docs/applying-updates.md) §5). It is also what
+makes the space reclaimable — a group whose uid no folder claims is
+unambiguously a deleted mod, where an unmatched *name* might be a mod the user
+renamed and still wants.
+
+- [ ] **Deleting a mod still leaves its snapshots behind.** Decided: they go
+  with it. The trap is ordering — the uid lives in the folder being deleted, so
+  `deleteMod` has to read it **before** the folder goes, or the operation meant
+  to reclaim the space is the one that orphans it. The confirmation has to say
+  the saved versions go too; it currently names the folder, the link and the
+  saved state, and "and every saved version of it" is a materially different
+  sentence when there are gigabytes of them.
+- [ ] **Nothing reports a group no folder claims.** Three ways to get one and
+  all of them silent: a mod deleted outside the app, a folder duplicated in a
+  file manager (both copies carry one uid, and an update to either prunes the
+  other's), and a sidecar deleted by hand. Belongs with the disk-usage page
+  below, which is where `SnapshotService.totalBytes()` gets its first reader.
 - [ ] **Total backup size is not surfaced anywhere.** The rollback dialog shows a
-  size per snapshot; there is no whole-library figure, so the retention budget
-  bounds something invisible. §4.2 always intended this to live in the storage
-  view (backlog); `SnapshotService.totalBytes()` exists and has no reader. Worth
-  pairing with a "delete all snapshots for this mod" action, which the per-row
+  size per snapshot and there is no whole-library figure. Moved to the disk-usage
+  page at the end of this file, which is the screen it belongs on; worth pairing
+  there with a "delete all saved versions of this mod" action, which the per-row
   delete currently makes tedious.
 - **The retention numbers are not user-configurable**, deliberately for now
   (30 days / 3 per mod / 5 GB). They are the kind of setting that is easy to add
@@ -888,6 +898,13 @@ Waiting on it:
 Other todo's:
 
 - [ ] Add a disk usage page, where you can see with graphs how much disk is being used and for what (images, mods, backups / previous versions, etc.)
+  - It owns two things filed elsewhere, because both are the same screen: the
+    **whole-library backup figure** (`SnapshotService.totalBytes()`, which has
+    no reader, so the 5 GB retention budget currently bounds something
+    invisible) and the **saved versions no folder claims any more** — a mod
+    deleted outside the app, a duplicated folder, a deleted sidecar. Those are
+    reported and reclaimed by hand, never swept automatically: an unclaimed
+    group is recoverable data right up until it is deleted.
 - [ ] **Give the portable build its icon with nothing to install** — set it via
   `xdg_toplevel_icon_v1` from the runner, dropping the one-command setup. GTK3
   can't, but the runner can bind the protocol itself; newer compositors only.

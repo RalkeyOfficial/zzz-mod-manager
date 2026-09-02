@@ -10,6 +10,7 @@ import '../../utils/directory_copy.dart';
 import '../backup/snapshot_service.dart';
 import '../folder_contents.dart';
 import '../log/logger.dart';
+import '../mod_uid.dart';
 import '../patch_removal.dart';
 import '../patch_store.dart';
 import '../ini_parser_service.dart';
@@ -74,10 +75,19 @@ class UpdateApplier {
     required this.snapshots,
     required this.activation,
     this.store = const PatchStore(),
-  });
+    ModUid? uids,
+  }) : uids = uids ?? ModUid();
 
   final SnapshotService snapshots;
   final ModActivationPort activation;
+
+  /// The mod folder's identity, which is what its snapshots are filed under.
+  ///
+  /// A field for the same reason [store] is: the one place that decides where a
+  /// mod's history lives stays [ModUid] rather than being spelled out here. It
+  /// reads and writes the folder's own sidecar and needs no config, so it is a
+  /// default rather than an injected dependency.
+  final ModUid uids;
 
   /// The mod's own files a patch wrote over, kept inside the mod folder.
   ///
@@ -283,7 +293,7 @@ class UpdateApplier {
     final wasActive = await activation.isActive(modName);
     if (wasActive) await activation.deactivate(modName);
 
-    final snapshot = await snapshots.capture(
+    final snapshot = await _snapshot(
       modName: modName,
       modFolder: modFolder,
       reason: SnapshotReason.beforeUpdate,
@@ -566,7 +576,7 @@ class UpdateApplier {
     final wasActive = await activation.isActive(modName);
     if (wasActive) await activation.deactivate(modName);
 
-    final snapshot = await snapshots.capture(
+    final snapshot = await _snapshot(
       modName: modName,
       modFolder: modFolder,
       reason: SnapshotReason.beforeUpdate,
@@ -725,7 +735,7 @@ class UpdateApplier {
     final wasActive = await activation.isActive(modName);
     if (wasActive) await activation.deactivate(modName);
 
-    final snapshot = await snapshots.capture(
+    final snapshot = await _snapshot(
       modName: modName,
       modFolder: modFolder,
       reason: SnapshotReason.beforePatchRemoval,
@@ -796,7 +806,7 @@ class UpdateApplier {
     final wasActive = await activation.isActive(modName);
     if (wasActive) await activation.deactivate(modName);
 
-    final safety = await snapshots.capture(
+    final safety = await _snapshot(
       modName: modName,
       modFolder: modFolder,
       reason: SnapshotReason.beforeRestore,
@@ -841,6 +851,34 @@ class UpdateApplier {
       removedInis: deleted,
       keybindChanges: const [],
       reactivated: wasActive,
+    );
+  }
+
+  /// Takes a snapshot, filed under the folder's **own identity** rather than
+  /// its name — so a rename, in the app or in a file manager, leaves every
+  /// rollback point reachable.
+  ///
+  /// **No identity, no snapshot, and therefore no write.** The uid is assigned
+  /// here if the folder has never needed one, so the only way this returns null
+  /// is a sidecar that cannot be written — a folder the copy about to follow
+  /// would fail on anyway. The alternative is putting a snapshot somewhere
+  /// nothing can ever find again, which is not a way back at all.
+  Future<ModSnapshot?> _snapshot({
+    required String modName,
+    required Directory modFolder,
+    required SnapshotReason reason,
+    String? version,
+    String? versionLabel,
+  }) async {
+    final uid = await uids.ensure(modFolder);
+    if (uid == null) return null;
+    return snapshots.capture(
+      modName: modName,
+      modUid: uid,
+      modFolder: modFolder,
+      reason: reason,
+      version: version,
+      versionLabel: versionLabel,
     );
   }
 

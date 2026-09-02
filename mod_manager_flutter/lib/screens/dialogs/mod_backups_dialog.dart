@@ -58,8 +58,10 @@ class _ModBackupsDialogState extends ConsumerState<ModBackupsDialog> {
   }
 
   Future<void> _load() async {
+    // By the folder's uid, not its name: a mod renamed in a file manager still
+    // finds the versions taken before the rename.
     final snapshots =
-        await ref.read(snapshotServiceProvider).list(widget.mod.id);
+        await ref.read(snapshotServiceProvider).list(widget.mod.uid);
     if (!mounted) return;
     setState(() => _snapshots = snapshots);
   }

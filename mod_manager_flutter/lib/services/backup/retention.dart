@@ -49,13 +49,19 @@ library;
 /// One snapshot on disk, as far as retention is concerned.
 class SnapshotRef {
   const SnapshotRef({
-    required this.modName,
+    required this.modUid,
     required this.id,
     required this.takenAt,
     required this.sizeBytes,
   });
 
-  final String modName;
+  /// Which mod this belongs to — **its uid, never its folder name.**
+  ///
+  /// Grouping is what the tiers below are computed per, so this decides what
+  /// "each mod's newest" means. A name would make one mod look like two the
+  /// moment it was renamed, and each half would then keep a newest of its own
+  /// forever.
+  final String modUid;
 
   /// The snapshot directory's name — unique within the mod.
   final String id;
@@ -65,13 +71,13 @@ class SnapshotRef {
 
   @override
   bool operator ==(Object other) =>
-      other is SnapshotRef && other.modName == modName && other.id == id;
+      other is SnapshotRef && other.modUid == modUid && other.id == id;
 
   @override
-  int get hashCode => Object.hash(modName, id);
+  int get hashCode => Object.hash(modUid, id);
 
   @override
-  String toString() => '$modName/$id';
+  String toString() => '$modUid/$id';
 }
 
 /// The three numbers, in one place so they can be stated in the docs and
@@ -133,7 +139,7 @@ RetentionPlan planRetention(
 
   final byMod = <String, List<SnapshotRef>>{};
   for (final snapshot in snapshots) {
-    byMod.putIfAbsent(snapshot.modName, () => []).add(snapshot);
+    byMod.putIfAbsent(snapshot.modUid, () => []).add(snapshot);
   }
 
   final protected = <SnapshotRef>{};
@@ -190,7 +196,7 @@ RetentionPlan planRetention(
   return RetentionPlan(
     prune: prune.toList()
       ..sort((a, b) {
-        final byMod = a.modName.compareTo(b.modName);
+        final byMod = a.modUid.compareTo(b.modUid);
         return byMod != 0 ? byMod : a.id.compareTo(b.id);
       }),
     keptBytes: kept,
