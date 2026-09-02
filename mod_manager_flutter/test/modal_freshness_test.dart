@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
+import 'package:mod_manager_flutter/models/mod_metadata.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/dialogs/duplicate_archive_dialog.dart';
@@ -211,4 +212,7 @@ void main() {
 /// event loop, so the write would never complete. The point of these fixtures
 /// is that they land with nothing running, so they are synchronous throughout.
 String _sidecar(ModOrigin origin) =>
-    jsonEncode({'schema_version': 3, 'origin': origin.toJson()});
+    jsonEncode({
+      'schema_version': ModMetadata.currentSchemaVersion,
+      'origin': origin.toJson(),
+    });
