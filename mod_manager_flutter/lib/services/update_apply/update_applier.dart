@@ -539,6 +539,12 @@ class UpdateApplier {
   /// **Null for a patch dragged off a disk**: there is no id to key a store by,
   /// nothing to check for updates, and nothing that could put it back — the
   /// write still happens and the snapshot is still the way back.
+  /// [recorded] is what this same patch laid down last time, when this is an
+  /// **update** to it rather than a first install. What it names and the new
+  /// version does not place is taken back out: the mod's own file returns where
+  /// this patch had written over one, and the patch's own additions go.
+  /// [claimedAbove] is any path a layer sitting over this one records, which is
+  /// not this one's to touch.
   Future<UpdateApplyResult> applyPatchInto({
     required String modName,
     required Directory modFolder,
@@ -547,6 +553,8 @@ class UpdateApplier {
     required FolderContents existing,
     required PatchPlacement placement,
     int? patchModId,
+    List<InstalledFile> recorded = const <InstalledFile>[],
+    Iterable<String> claimedAbove = const <String>[],
   }) async {
     if (placement.needsChoice) {
       return UpdateApplyResult.failed(UpdateApplyFailure.layout);
@@ -581,7 +589,13 @@ class UpdateApplier {
         // normalised paths so that a case-insensitive loader's `Body.dds` and
         // `body.dds` are one file; the copy needs what is actually there.
         final from = incoming.actualPaths[entry.key] ?? entry.key;
-        final to = existing.actualPaths[entry.value] ?? entry.value;
+        // **A file that replaces nothing keeps the name its author gave it.**
+        // The folder has no spelling to offer for a path it does not hold, and
+        // the normalised key is lower-cased — so falling back to it would write
+        // `glow.dds` where the archive shipped `Glow.dds`, and record that as
+        // the on-disk name every removal afterwards works from.
+        final to = existing.actualPaths[entry.value] ??
+            (entry.value == entry.key ? from : entry.value);
         if (_isSidecar(entry.key)) continue;
 
         final target = File(path.join(modFolder.path, to));
@@ -624,11 +638,44 @@ class UpdateApplier {
       );
     }
 
+    // **Worked out from the record and the placement, not from the folder**,
+    // and after the copy for the same reason the base path does it there: a
+    // write that failed part-way leaves the old version's files where they are.
+    final dropped = planDroppedFiles(
+      recorded: recorded,
+      incoming: placement.mapping.values.toSet(),
+      onDisk: existing.files,
+      claimedByOthers: claimedAbove,
+      // Lifted onto the folder's layout, because the patch's `.ini` names paths
+      // in the *patch author's* layout and the placement is what reconciles the
+      // two. Compared unmapped, this would ask about files the folder does not
+      // have.
+      incomingReferences: {
+        for (final reference in incoming.references.paths)
+          placement.mapping[reference] ?? reference,
+      },
+      storedOriginals:
+          await _storedOriginals(modFolder, patchModId, recorded),
+      keepsDisplaced: patchModId != null,
+    );
+    final restored = await _restoreUnderneath(
+      modFolder: modFolder,
+      patchModId: patchModId,
+      paths: dropped.restore,
+    );
+    final droppedFiles = await _removeDropped(
+      modFolder: modFolder,
+      dropped: dropped,
+      spelling: existing,
+    );
+
     if (wasActive) await activation.activate(modName);
 
     return UpdateApplyResult(
       snapshot: snapshot,
       filesWritten: placed.length,
+      droppedFiles: droppedFiles,
+      restoredFiles: restored,
       // Where the patch now is, for the caller to record — the paths are the
       // *target's*, not the ones the archive shipped, and that is the point.
       patchFiles: [for (final file in placed) file.path],
@@ -795,6 +842,58 @@ class UpdateApplier {
       keybindChanges: const [],
       reactivated: wasActive,
     );
+  }
+
+  /// Which of [recorded]'s paths the store really holds an original for.
+  ///
+  /// **Asked of the store rather than read off the record.** A `replaced` entry
+  /// says the write displaced something and not that keeping it succeeded, and
+  /// the difference decides between putting a file back and leaving one alone.
+  Future<Set<String>> _storedOriginals(
+    Directory modFolder,
+    int? patchModId,
+    List<InstalledFile> recorded,
+  ) async {
+    if (patchModId == null || recorded.isEmpty) return const <String>{};
+    return {
+      for (final file in recorded)
+        if (await store.holds(
+          modFolder: modFolder,
+          patchModId: patchModId,
+          relativePath: file.path,
+        ))
+          file.path,
+    };
+  }
+
+  /// Puts the mod's own files back where a patch version that no longer wants
+  /// them had written over them.
+  ///
+  /// **The stored copy is deliberately left in place.** The path is one this
+  /// patch has stopped touching, so nothing needs it now; and if a later
+  /// version reaches for it again, `PatchStore.keep` finds an original already
+  /// on hand and keeps that one — which is the mod's, not the patch's.
+  Future<List<String>> _restoreUnderneath({
+    required Directory modFolder,
+    required int? patchModId,
+    required List<String> paths,
+  }) async {
+    if (patchModId == null || paths.isEmpty) return const <String>[];
+    final restored = <String>[];
+    for (final relative in paths) {
+      final ok = await store.restore(
+        modFolder: modFolder,
+        patchModId: patchModId,
+        relativePath: relative,
+      );
+      if (ok) {
+        restored.add(relative);
+      } else {
+        _log.warning('could not put back what a patch had replaced',
+            fields: {'file': relative, 'phase': 'restore'});
+      }
+    }
+    return restored;
   }
 
   /// Deletes the files the new version no longer ships, and the directories
@@ -1033,6 +1132,7 @@ class UpdateApplyResult {
     this.error,
     this.writtenFiles = const <InstalledFile>[],
     this.droppedFiles = const <String>[],
+    this.restoredFiles = const <String>[],
     this.placedPatchFiles = const <InstalledFile>[],
     this.patchFiles = const <String>[],
     this.missingPatchFiles = const <String>[],
@@ -1080,6 +1180,13 @@ class UpdateApplyResult {
   /// Separate from [removedInis]: those were a guess the user approved, these
   /// are the download's own record of what it wrote.
   final List<String> droppedFiles;
+
+  /// **The mod's own files, back where a patch had written over them** — paths
+  /// the patch's new version has stopped touching.
+  ///
+  /// Only ever from a layer that keeps what it displaces. The bottom layer has
+  /// nothing underneath it, so an update to it never puts anything back.
+  final List<String> restoredFiles;
 
   /// The keys this update moved or removed — **empty when it moved none**.
   ///

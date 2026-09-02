@@ -101,6 +101,18 @@ class _UpdateResultDialog extends StatelessWidget {
                         params: {'count': '${result.droppedFiles.length}'},
                       ),
                     ),
+                  // Only a patch update ever has these: the mod's own files,
+                  // back at paths the patch has stopped writing over.
+                  if (result.restoredFiles.isNotEmpty)
+                    DialogFact(
+                      icon: Icons.undo,
+                      label: loc.t('mods.update_apply.done_restored_label'),
+                      value: loc.plural(
+                        'mods.update_apply.done_restored',
+                        result.restoredFiles.length,
+                        params: {'count': '${result.restoredFiles.length}'},
+                      ),
+                    ),
                   if (result.reactivated)
                     DialogFact(
                       icon: Icons.toggle_on_outlined,

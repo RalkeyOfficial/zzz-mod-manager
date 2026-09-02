@@ -382,6 +382,14 @@ Future<bool> applyPatchUpdateFlow(
       // operation — stripping it leaves a block naming a mod the folder does
       // not hold — so nothing is stored under it.
       patchModId: asCompanion ? remoteModId : null,
+      // **This layer's own last version**, so what it no longer places is taken
+      // back out: the mod's file returns where this patch had written over one,
+      // and the patch's own additions go.
+      recorded: mod.origin?.downloadOf(remoteModId)?.files ??
+          const <InstalledFile>[],
+      // A folder can hold two patches, and the one above this has overwritten
+      // some of its files in turn — those paths are not this layer's to touch.
+      claimedAbove: _recordedAbove(mod.origin, remoteModId),
     );
     if (result.snapshot != null) ref.invalidate(modBackupsProvider);
 
@@ -441,6 +449,23 @@ Future<bool> applyPatchUpdateFlow(
     await _cleanupExtract(extractRoot);
     if (archiveConsumed) await _deleteArchive(download.file);
   }
+}
+
+/// Every path recorded by a layer sitting **over** [modId] in this folder.
+///
+/// What a write to [modId] must not remove: the layers above it overwrote some
+/// of its files by design, so the file at such a path is theirs. Upward only —
+/// a layer *under* it records the same path precisely because this one wrote
+/// over it, and reading that as a claim would make every displacement
+/// untouchable.
+List<String> _recordedAbove(ModOrigin? origin, int modId) {
+  if (origin == null) return const <String>[];
+  final index = origin.indexOf(modId);
+  if (index < 0) return const <String>[];
+  return [
+    for (final layer in origin.downloads.skip(index + 1))
+      for (final file in layer.files) file.path,
+  ];
 }
 
 /// Writes what the folder now is.

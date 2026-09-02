@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/installed_file.dart';
 import 'package:mod_manager_flutter/services/backup/snapshot_service.dart';
+import 'package:mod_manager_flutter/services/folder_contents.dart';
+import 'package:mod_manager_flutter/services/patch_placement.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_applier.dart';
 import 'package:path/path.dart' as p;
 
@@ -328,6 +330,140 @@ void main() {
 
     expect(has(mod, 'Textures/BodyA.dds'), isFalse);
     expect(result.droppedFiles, ['Textures/BodyA.dds']);
+  });
+
+  group('a patch update', () {
+    /// The real round trip: install the patch, then write a new version of it
+    /// over the folder with the first one's record in hand.
+    Future<UpdateApplyResult> applyPatch(
+      String modName,
+      Directory folder,
+      Directory source, {
+      int? patchModId,
+      List<InstalledFile> recorded = const <InstalledFile>[],
+    }) async {
+      final incoming = await readFolderContents(source);
+      final existing = await readFolderContents(folder);
+      return applier.applyPatchInto(
+        modName: modName,
+        modFolder: folder,
+        source: source,
+        incoming: incoming,
+        existing: existing,
+        placement: resolvePatchPlacement(
+          incoming: incoming.files,
+          target: existing.files,
+        ),
+        patchModId: patchModId,
+        recorded: recorded,
+      );
+    }
+
+    test('the mod\'s own file comes back where the patch stops writing',
+        () async {
+      // The rule that differs from the base's. A file the patch wrote over is
+      // the *mod's*, and the mod is still supposed to have it — so this is a
+      // restore where an update to the bottom layer would be a delete.
+      final mod = modFolder('Ellen');
+      write(mod, 'ellen.ini', modIni('Textures/Body.dds'));
+      write(mod, 'Textures/Body.dds', 'the mod');
+      write(mod, 'Textures/Hair.dds', 'the mod hair');
+
+      final v1 = incoming('patch v1');
+      write(v1, 'Body.dds', 'patch v1 body');
+      write(v1, 'Hair.dds', 'patch v1 hair');
+      final first = await applyPatch('Ellen', mod, v1, patchModId: 605460);
+
+      expect(read(mod, 'Textures/Body.dds'), 'patch v1 body');
+
+      // The new version only touches the hair.
+      final v2 = incoming('patch v2');
+      write(v2, 'Hair.dds', 'patch v2 hair');
+      final second = await applyPatch('Ellen', mod, v2,
+          patchModId: 605460, recorded: first.writtenFiles);
+
+      expect(second.success, isTrue);
+      expect(read(mod, 'Textures/Hair.dds'), 'patch v2 hair');
+      expect(read(mod, 'Textures/Body.dds'), 'the mod',
+          reason: 'not deleted, and not left as the old patch had it');
+      expect(second.restoredFiles, ['Textures/Body.dds']);
+      expect(second.droppedFiles, isEmpty);
+    });
+
+    test('a file the patch added and no longer ships is deleted', () async {
+      // Nothing was underneath it, so there is nothing to put back.
+      final mod = modFolder('Ellen');
+      write(mod, 'ellen.ini', modIni('Textures/Body.dds'));
+      write(mod, 'Textures/Body.dds', 'the mod');
+
+      final v1 = incoming('patch v1');
+      write(v1, 'Body.dds', 'patch v1 body');
+      write(v1, 'Glow.dds', 'patch v1 extra');
+      final first = await applyPatch('Ellen', mod, v1, patchModId: 605460);
+
+      final v2 = incoming('patch v2');
+      write(v2, 'Body.dds', 'patch v2 body');
+      final second = await applyPatch('Ellen', mod, v2,
+          patchModId: 605460, recorded: first.writtenFiles);
+
+      expect(has(mod, 'Glow.dds'), isFalse);
+      expect(second.droppedFiles, ['Glow.dds']);
+      expect(second.restoredFiles, isEmpty);
+    });
+
+    test('a displaced file with no original kept is left alone', () async {
+      // A folder patched before the store existed, or one whose store could not
+      // be written. Deleting would leave a hole where the mod's file was.
+      final mod = modFolder('Ellen');
+      write(mod, 'ellen.ini', modIni('Textures/Body.dds'));
+      write(mod, 'Textures/Body.dds', 'the mod');
+
+      final v1 = incoming('patch v1');
+      write(v1, 'Body.dds', 'patch v1 body');
+      // No id, so nothing was ever stored under one.
+      final first = await applyPatch('Ellen', mod, v1);
+
+      final v2 = incoming('patch v2');
+      write(v2, 'Hair.dds', 'patch v2 hair');
+      final second = await applyPatch('Ellen', mod, v2,
+          patchModId: 605460, recorded: first.writtenFiles);
+
+      expect(read(mod, 'Textures/Body.dds'), 'patch v1 body',
+          reason: 'the patched file stays: taking it away leaves nothing');
+      expect(second.droppedFiles, isEmpty);
+      expect(second.restoredFiles, isEmpty);
+    });
+
+    test('a file it adds keeps the name its author gave it', () async {
+      // What the removal above works from. The folder has no spelling to offer
+      // for a path it does not hold, and the normalised key is lower-cased — so
+      // the record has to fall back to the archive's own name, or every later
+      // removal is aimed at a file nobody has.
+      final mod = modFolder('Ellen');
+      write(mod, 'ellen.ini', modIni('Textures/Body.dds'));
+      write(mod, 'Textures/Body.dds', 'the mod');
+
+      final patch = incoming('patch v1');
+      write(patch, 'Glow.dds', 'patch extra');
+      final result = await applyPatch('Ellen', mod, patch, patchModId: 605460);
+
+      expect(has(mod, 'Glow.dds'), isTrue);
+      expect([for (final file in result.writtenFiles) file.path], ['Glow.dds']);
+    });
+
+    test('a first install has no record and removes nothing', () async {
+      final mod = modFolder('Ellen');
+      write(mod, 'ellen.ini', modIni('Textures/Body.dds'));
+      write(mod, 'Textures/Body.dds', 'the mod');
+
+      final patch = incoming('patch v1');
+      write(patch, 'Body.dds', 'patch body');
+      final result = await applyPatch('Ellen', mod, patch, patchModId: 605460);
+
+      expect(result.droppedFiles, isEmpty);
+      expect(result.restoredFiles, isEmpty);
+      expect(read(mod, 'Textures/Body.dds'), 'patch body');
+    });
   });
 
   test('the snapshot still holds what was removed', () async {

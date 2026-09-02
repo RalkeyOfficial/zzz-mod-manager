@@ -104,6 +104,14 @@ layer's record is almost entirely `replaced` — and what it replaced was the ve
 being got rid of. What decides a restore is whether an original is *on hand*, which
 only a layer that keeps what it displaces ever has.
 
+**Which layer is being written therefore decides between a delete and a restore.**
+The bottom layer deletes: there is nothing underneath it. A patch layer puts the
+mod's own file back from its store ([§5](#a-patchs-displaced-files-are-kept-separately-and-in-the-folder))
+wherever its new version has stopped writing over one, and deletes only what it had
+added. The stored copy is deliberately left where it is: the path is one the patch no
+longer touches, and if a later version reaches for it again `PatchStore.keep` finds an
+original already on hand — the mod's, which is the one that has to survive.
+
 Two caveats worth knowing rather than discovering:
 
 - Do **not** "solve" leftovers by clearing all `.ini` files before copying. Harmless

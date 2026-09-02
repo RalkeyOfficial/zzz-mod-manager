@@ -56,8 +56,8 @@ class DroppedFiles {
   /// `ingest.patch_files` and `planPatchRemoval` already read by.
   final List<String> gone;
 
-  /// Another download in this folder records the same path, so the file sitting
-  /// there now is **its**, not the old version's.
+  /// A download **above** this one in the folder records the same path, so the
+  /// file sitting there now is its, not the old version's.
   ///
   /// The ordinary mixed folder: a patch replaced one of the mod's files, and the
   /// mod's next version stops shipping it. Deleting it would take the patch's
@@ -106,9 +106,12 @@ class DroppedFiles {
 /// now; both normalised, because the loader is case-insensitive and a record
 /// written on Windows may not agree with the folder's spelling.
 ///
-/// [claimedByOthers] is every path the folder's *other* downloads record. A
-/// mixed folder's layers overwrite each other by design, so a path in two
-/// records belongs to the upper one and this must not touch it.
+/// [claimedByOthers] is every path recorded by a download that sits **over**
+/// this one. A mixed folder's layers overwrite each other by design, so a path
+/// in two records belongs to the upper one and this must not touch it. Only
+/// upward: a layer *under* this one records the same path precisely because
+/// this download wrote over it, and treating that as a claim would make every
+/// displacement untouchable.
 ///
 /// [incomingReferences] is every path the new version's own `.ini` files point
 /// at. A recorded file it still names and the archive does not carry is kept:
@@ -119,11 +122,17 @@ class DroppedFiles {
 /// displaced something and **not** that keeping it succeeded.
 ///
 /// [keepsDisplaced] says whether this download is one that keeps what it writes
-/// over. A patch does; the bottom layer has nothing underneath it to keep, so
-/// for it a `replaced` entry means *the previous version of itself* — which is
-/// exactly what an update is replacing, and deleting it is the whole point.
-/// Getting this backwards is the one dangerous mistake available here, which is
-/// why it is a named parameter rather than inferred from an empty store.
+/// over. A patch layer does; the bottom layer has nothing underneath it to
+/// keep, so for it a `replaced` entry means *the previous version of itself* —
+/// which is exactly what an update is replacing, and deleting it is the whole
+/// point. Getting this backwards is the one dangerous mistake available here,
+/// which is why it is a named parameter rather than inferred from an empty
+/// store: an empty store is also what a failed keep leaves.
+///
+/// A layer with no store and a `replaced` entry does not arise: a patch is
+/// written into an empty folder as `added` throughout, and the roles only
+/// become `replaced` when a base is put underneath it — which is the operation
+/// that builds the store.
 ///
 /// Returns [DroppedFiles.nothing] for a download with no file record: a folder
 /// installed before the record existed has no way to tell its files from
