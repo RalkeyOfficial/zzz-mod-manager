@@ -58,7 +58,7 @@ void main() {
     Map<int, String> knownNames = const {},
     Map<int, String> notes = const {},
     Map<int, GbMod> sessionRecords = const {},
-    Set<int> editableModIds = const {},
+    Map<int, FolderRowAction> rowActions = const {},
     void Function(FolderDownload)? onEdit,
   }) =>
       pumpLocalized(
@@ -70,7 +70,7 @@ void main() {
               folderName: folderName,
               knownNames: knownNames,
               notes: notes,
-              editableModIds: editableModIds,
+              rowActions: rowActions,
               onEdit: onEdit,
             ),
           ),
@@ -218,29 +218,72 @@ void main() {
     expect(find.text('Updates: An update is available'), findsOneWidget);
   });
 
-  testWidgets('only a row named as editable offers to change', (tester) async {
-    // A button on a row nothing can change would do nothing when pressed, so
-    // the caller names the rows rather than the widget guessing.
-    FolderDownload? edited;
+  testWidgets('only a row given an action offers one', (tester) async {
+    // A button on a row nothing can be done to would do nothing when pressed,
+    // so the caller names the rows rather than the widget guessing.
+    FolderDownload? acted;
     await pump(
       tester,
       origin(
         modId: 605460,
         companions: [companion(role: CompanionRole.base, modId: 585282)],
       ),
-      editableModIds: const {585282},
-      onEdit: (download) => edited = download,
+      rowActions: const {585282: FolderRowAction.change},
+      onEdit: (download) => acted = download,
     );
 
     expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
     await tester.tap(find.byIcon(Icons.edit_outlined));
-    expect(edited?.modId, 585282);
-    expect(edited?.role, FolderDownloadRole.mod);
+    expect(acted?.modId, 585282);
+    expect(acted?.role, FolderDownloadRole.mod);
   });
 
-  testWidgets('no edit affordance when nothing is editable', (tester) async {
+  testWidgets('a row that can only be dropped says so, not "change"',
+      (tester) async {
+    // The affordance has to name what it does. A patch the app installed knows
+    // exactly what it is, so "change which mod this is" would offer something
+    // that must not happen.
+    FolderDownload? acted;
+    await pump(
+      tester,
+      origin(companions: [companion()]),
+      rowActions: const {605460: FolderRowAction.remove},
+      onEdit: (download) => acted = download,
+    );
+
+    expect(find.byIcon(Icons.edit_outlined), findsNothing);
+    expect(find.byIcon(Icons.delete_outline), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.delete_outline));
+    expect(acted?.modId, 605460);
+    expect(acted?.role, FolderDownloadRole.patch);
+  });
+
+  testWidgets('each row gets its own action, and only its own',
+      (tester) async {
+    // Both companions recorded at once: the affordances must not swap places.
+    await pump(
+      tester,
+      origin(
+        companions: [
+          companion(role: CompanionRole.base, modId: 585283),
+          companion(),
+        ],
+      ),
+      rowActions: const {
+        585283: FolderRowAction.change,
+        605460: FolderRowAction.remove,
+      },
+      onEdit: (_) {},
+    );
+
+    expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.delete_outline), findsOneWidget);
+  });
+
+  testWidgets('no affordance when no row has an action', (tester) async {
     await pump(tester, origin(companions: [companion()]));
 
     expect(find.byIcon(Icons.edit_outlined), findsNothing);
+    expect(find.byIcon(Icons.delete_outline), findsNothing);
   });
 }

@@ -112,26 +112,33 @@ enum ModOriginStatus {
 ModOriginStatus modOriginStatus(ModOrigin? origin) {
   if (origin == null) return ModOriginStatus.untracked;
   if (origin.tracking == OriginTracking.off) return ModOriginStatus.none;
-  if (origin.remoteMissing) return ModOriginStatus.sourceGone;
-  if (!origin.hasIdentity) return ModOriginStatus.untracked;
+  final base = origin.base;
+  if (base == null) return ModOriginStatus.untracked;
+  if (base.remoteMissing) return ModOriginStatus.sourceGone;
+  if (!base.hasIdentity) return ModOriginStatus.untracked;
   // Above the version switch: "which file of the patch is installed" is an
-  // ambiguous question while the folder is known to be two things and only one
-  // of them is named. The ordering is low-stakes — one pass through the resolve
-  // dialog answers both — but it is decided here rather than left to chance.
-  if (origin.needsCompanion) return ModOriginStatus.secondIdentityUnknown;
-  // **A folder is only as resolved as its least-resolved identity.** Naming the
-  // other mod clears `needsCompanion`, and without this the slot then reads the
-  // *primary's* version confidence alone — `exact` for a patch we downloaded —
-  // so a folder whose second half we cannot judge rendered nothing at all. Not
+  // ambiguous question while the bottom of the stack is missing. The ordering is
+  // low-stakes — one pass through the resolve dialog answers both — but it is
+  // decided here rather than left to chance.
+  if (origin.needsBase) return ModOriginStatus.secondIdentityUnknown;
+  // **A folder is only as resolved as its least-resolved layer.** Naming the
+  // base clears `needsBase`, and without this the slot then reads the bottom
+  // layer's version confidence alone — `exact` for something we downloaded — so
+  // a folder whose upper half we cannot judge rendered nothing at all. Not
   // amber, and not blue either: the check answers `versionUnknown` for that
-  // half rather than finding an update, so there was no verdict to show and no
+  // layer rather than finding an update, so there was no verdict to show and no
   // mark to explain it.
-  for (final companion in origin.companions) {
-    if (companion.versionConfidence == OriginConfidence.unknown) {
+  //
+  // A layer with no identity is skipped: nothing can be known about which file
+  // of an unnamed download is installed, and an amber mark demanding the user
+  // resolve something the app cannot ask about is a mark with nowhere to go.
+  for (final patch in origin.patches) {
+    if (patch.hasIdentity &&
+        patch.versionConfidence == OriginConfidence.unknown) {
       return ModOriginStatus.versionUnknown;
     }
   }
-  return switch (origin.versionConfidence) {
+  return switch (base.versionConfidence) {
     OriginConfidence.unknown => ModOriginStatus.versionUnknown,
     // A recorded guess. `inferred` is included even though nothing writes it
     // yet — the bulk resolution pass will, and a guess that renders as
@@ -173,7 +180,8 @@ ModOriginStatus modSlotStatus(ModOrigin? origin, UpdateCheck? update) {
   // confirmed update. Short-circuiting on the state rather than on its cause
   // would hide the strongest verdict this feature can produce.
   if (origin != null &&
-      (origin.tracking == OriginTracking.off || origin.remoteMissing)) {
+      (origin.tracking == OriginTracking.off ||
+          (origin.base?.remoteMissing ?? false))) {
     return modOriginStatus(origin);
   }
   if (update?.hasUpdate ?? false) return ModOriginStatus.updateAvailable;

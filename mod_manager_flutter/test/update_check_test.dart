@@ -10,6 +10,7 @@ import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/update_check.dart';
 
 import 'support/fixtures.dart';
+import 'support/origin_shorthand.dart';
 
 /// The update comparator, against **real captured mod pages**.
 ///
@@ -39,7 +40,7 @@ void main() {
     bool patchShaped = false,
     List<ModCompanion> companions = const [],
   }) =>
-      ModOrigin(
+      originFixture(
         source: 'gamebanana',
         modId: modId,
         modIdConfidence: modIdConfidence,

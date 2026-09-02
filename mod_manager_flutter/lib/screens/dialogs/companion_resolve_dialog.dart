@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../models/gamebanana/gamebanana.dart';
-import '../../models/mod_companion.dart';
+import '../../models/mod_download.dart';
 import '../../models/origin_enums.dart';
 import '../../services/origin_resolution.dart';
 import '../../utils/state_providers.dart';
@@ -24,7 +24,7 @@ sealed class CompanionOutcome {
 class CompanionNamed extends CompanionOutcome {
   const CompanionNamed(this.companion, {this.modName, this.file});
 
-  final ModCompanion companion;
+  final ModDownload companion;
 
   /// The mod page's own name, when this step had the profile in hand.
   ///
@@ -73,18 +73,84 @@ Future<CompanionOutcome?> showCompanionResolveDialog(
   BuildContext context, {
   required String modName,
   required int? primaryModId,
-  required CompanionRole role,
-  ModCompanion? existing,
+  ModDownload? existing,
 }) {
   return showDialog<CompanionOutcome>(
     context: context,
     builder: (_) => CompanionResolveDialog(
       modName: modName,
       primaryModId: primaryModId,
-      role: role,
       existing: existing,
     ),
   );
+}
+
+/// Confirms dropping a **patch the app installed into this folder** from the
+/// record. True when the user said to.
+///
+/// A confirmation and not [showCompanionResolveDialog], because the two
+/// directions are not the same question. That step searches for a mod and picks
+/// a file, which is what naming a download nobody recorded requires. A patch
+/// written by the install prompt already has both at `exact` — the app fetched
+/// those bytes — so there is nothing to search for and nothing to choose, and
+/// offering either would let the user re-aim an exact record at a mod page it
+/// did not come from. What is left is the one thing the record cannot know on
+/// its own: whether those files are still in the folder.
+///
+/// **It says what does not happen.** Nothing is deleted from disk, which is the
+/// first thing a delete icon suggests. What stops is the watching.
+///
+/// [removable] means the app knows which files that patch put in the folder, so
+/// there is a real uninstall for it. This still only forgets the record — a row
+/// in a dialog about *tracking* must not quietly become a write that deletes and
+/// restores files — but it names the menu entry that does the other thing, since
+/// a user who came here to get rid of a patch would otherwise leave believing
+/// they had.
+Future<bool> showCompanionRemoveDialog(
+  BuildContext context, {
+  required String modName,
+  bool removable = false,
+}) async {
+  final loc = context.loc;
+  final answer = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(loc.t('mods.resolve.companion_remove_patch_title')),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              loc.t('mods.resolve.companion_remove_patch_body',
+                  params: {'mod': modName}),
+            ),
+            if (removable) ...[
+              const SizedBox(height: 10),
+              Text(
+                loc.t('mods.resolve.companion_remove_patch_uninstall'),
+                style: Theme.of(dialogContext).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(dialogContext).colorScheme.primary,
+                    ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: Text(loc.t('mods.resolve.cancel')),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: Text(loc.t('mods.resolve.companion_remove_patch_confirm')),
+        ),
+      ],
+    ),
+  );
+  return answer ?? false;
 }
 
 class CompanionResolveDialog extends ConsumerStatefulWidget {
@@ -92,7 +158,6 @@ class CompanionResolveDialog extends ConsumerStatefulWidget {
     super.key,
     required this.modName,
     required this.primaryModId,
-    required this.role,
     this.existing,
   });
 
@@ -105,12 +170,12 @@ class CompanionResolveDialog extends ConsumerStatefulWidget {
   /// it carries none, where there is nothing to refuse.
   final int? primaryModId;
 
-  /// Known from where this was opened, never asked. The folder is recorded as
-  /// patch-shaped, so its primary is the patch and this is the mod it patches —
-  /// making the user classify their own folder is a quiz whose answer we have.
-  final CompanionRole role;
-
-  final ModCompanion? existing;
+  /// **No role is asked for and none is stored here.** This step names the mod
+  /// that goes *underneath* — the folder is recorded as patch-shaped, so the
+  /// answer is always the bottom of the stack, and making the user classify
+  /// their own folder is a quiz whose answer the app already has. The write that
+  /// inserts the layer takes the role from the position it lands in.
+  final ModDownload? existing;
 
   @override
   ConsumerState<CompanionResolveDialog> createState() =>
@@ -198,8 +263,9 @@ class _CompanionResolveDialogState
         file == null && _assumeLatest ? _profile?.dateAdded : null;
     Navigator.of(context).pop(
       CompanionNamed(
-        ModCompanion(
-          role: widget.role,
+        ModDownload(
+          // No role: this layer goes **underneath** the folder's patch, and the
+          // write that inserts it is what sets the role from the position.
           modId: modId,
           // `user`, never `exact` — see the class doc.
           modIdConfidence: OriginConfidence.user,

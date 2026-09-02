@@ -13,6 +13,7 @@ import 'package:mod_manager_flutter/utils/state_providers.dart';
 import 'support/fake_http_transport.dart';
 import 'support/fixtures.dart';
 import 'support/localized_harness.dart';
+import 'support/origin_shorthand.dart';
 
 /// The install asking about a patch **at the moment it finds one**.
 ///
@@ -61,7 +62,7 @@ void main() {
         characterId: 'ellen',
         isActive: false,
         imagePath: imagePath,
-        origin: ModOrigin(
+        origin: originFixture(
           source: 'gamebanana',
           modId: 111,
           modIdConfidence: OriginConfidence.exact,

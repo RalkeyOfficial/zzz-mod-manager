@@ -2,14 +2,32 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../models/mod_download.dart';
 import '../../models/mod_origin.dart';
-import '../../services/folder_downloads.dart';
+import '../../models/origin_enums.dart';
 import '../../services/origin_summary.dart';
 import '../../services/update_check_run.dart';
 import '../../utils/gamebanana_url.dart';
 import '../../utils/state_providers.dart';
 import '../../utils/url_utils.dart';
 import 'resolve/resolve_fragments.dart';
+
+/// What a row's affordance does, for the rows a caller gives one.
+///
+/// Two actions rather than one, because the two entries a folder can hold were
+/// not learned the same way. The mod a patch applies to is something a person
+/// told us, so it can be told again — [change] reopens that question. A patch
+/// the app installed into the folder carries an identity it fetched itself, and
+/// the only thing left to say about it is that it is not there any more:
+/// [remove] drops the record. Re-pointing that one would attach a claim to
+/// bytes nobody moved.
+enum FolderRowAction {
+  /// Reopens the step that named this entry.
+  change,
+
+  /// Drops this entry from the folder's record. Touches nothing on disk.
+  remove,
+}
 
 /// **What this folder holds**, as a list of peers.
 ///
@@ -18,7 +36,7 @@ import 'resolve/resolve_fragments.dart';
 ///
 /// **Nothing here ranks the folder's own download above the other one.** Which
 /// of a mod and its patch a sidecar stores in `origin`'s own fields is install
-/// order (see [folderDownloads]); a section that made one of them the subject
+/// order; a section that made one of them the subject
 /// and the other a footnote would put the same pair of mods in different places
 /// depending on the order somebody happened to install them. Every entry gets
 /// the same row, and the role — mod, or patch — is a label on it rather than a
@@ -43,7 +61,7 @@ class FolderDownloadsSummary extends ConsumerStatefulWidget {
     this.lookUpNames = false,
     this.showHint = false,
     this.onEdit,
-    this.editableModIds = const <int>{},
+    this.rowActions = const <int, FolderRowAction>{},
   });
 
   final ModOrigin? origin;
@@ -68,15 +86,15 @@ class FolderDownloadsSummary extends ConsumerStatefulWidget {
   /// `docs/origin-tracking.md` §10.
   final bool lookUpNames;
 
-  /// What changing a row's answer does.
+  /// What acting on a row does. Which rows offer it, and which of the two
+  /// actions each offers, comes from [rowActions].
   ///
-  /// **On the row rather than beside the list.** The tracking dialog can correct
-  /// exactly one kind of entry — the mod a patch applies to — and a separate
-  /// editable row for it would put that one download in a place of its own
-  /// again, which is the asymmetry this section exists to remove. As an
-  /// affordance *on* the row, an entry that can be changed looks like every
-  /// other entry and simply has one more thing on it.
-  final void Function(FolderDownload download)? onEdit;
+  /// **On the row rather than beside the list.** A separate editable row below
+  /// the list would put one download in a place of its own again, which is the
+  /// asymmetry this section exists to remove. As an affordance *on* the row, an
+  /// entry that can be acted on looks like every other entry and simply has one
+  /// more thing on it.
+  final void Function(ModDownload download)? onEdit;
 
   /// Whether to explain *why* one folder holds two downloads.
   ///
@@ -87,12 +105,13 @@ class FolderDownloadsSummary extends ConsumerStatefulWidget {
   /// and the role labels carry the meaning without it.
   final bool showHint;
 
-  /// Which rows [onEdit] applies to, by mod id.
+  /// Which rows [onEdit] applies to, by mod id, and what it does to each.
   ///
-  /// Explicit rather than derived: what is editable depends on which flows
-  /// exist, not on anything visible in the row, and a widget guessing at it
-  /// would offer a button that does nothing. Empty means no row is.
-  final Set<int> editableModIds;
+  /// Explicit rather than derived: what can be done to an entry depends on
+  /// which flows exist, not on anything visible in the row, and a widget
+  /// guessing at it would offer a button that does nothing. Empty means no row
+  /// has one.
+  final Map<int, FolderRowAction> rowActions;
 
   @override
   ConsumerState<FolderDownloadsSummary> createState() =>
@@ -107,7 +126,10 @@ class _FolderDownloadsSummaryState
   final Map<int, String> _fetched = <int, String>{};
   final Set<int> _asked = <int>{};
 
-  List<FolderDownload> get _downloads => folderDownloads(widget.origin);
+  /// **The stack, as recorded.** No derivation and no reordering: the list is
+  /// already bottom-up, which is the order the files themselves go on disk.
+  List<ModDownload> get _downloads =>
+      widget.origin?.downloads ?? const <ModDownload>[];
 
   @override
   void initState() {
@@ -145,7 +167,7 @@ class _FolderDownloadsSummaryState
     }
   }
 
-  String _nameOf(FolderDownload download) {
+  String _nameOf(ModDownload download) {
     final id = download.modId;
     final fetched = id == null
         ? null
@@ -153,7 +175,10 @@ class _FolderDownloadsSummaryState
             _fetched[id] ??
             ref.watch(modUpdateRecordsProvider)[id]?.name;
     if (fetched != null && fetched.isNotEmpty) return fetched;
-    if (download.isFolderOwn) return widget.folderName;
+    // **The bottom layer falls back to the folder name**, which is what the
+    // user knows this thing by everywhere else in the app — and the folder is
+    // named after what it is. A layer written over it has no such claim.
+    if (download.role == DownloadRole.base) return widget.folderName;
     return context.loc.t(
       'mods.folder.unnamed',
       params: {'id': id == null ? '?' : '$id'},
@@ -191,11 +216,11 @@ class _FolderDownloadsSummaryState
     );
   }
 
-  Widget _row(FolderDownload download) {
+  Widget _row(ModDownload download) {
     final loc = context.loc;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final isPatch = download.role == FolderDownloadRole.patch;
+    final isPatch = download.role == DownloadRole.patch;
     final detail = _detailLine(loc, download);
     final note = download.modId == null ? null : widget.notes[download.modId];
 
@@ -282,14 +307,23 @@ class _FolderDownloadsSummaryState
                   launchExternalUrl(context, gameBananaModUrl(id)),
             ),
           if (widget.onEdit case final edit?)
-            if (download.modId case final id?
-                when widget.editableModIds.contains(id))
-              IconButton(
-                icon: const Icon(Icons.edit_outlined, size: 16),
-                tooltip: loc.t('mods.folder.change'),
-                visualDensity: VisualDensity.compact,
-                onPressed: () => edit(download),
-              ),
+            if (download.modId case final id?)
+              if (widget.rowActions[id] case final action?)
+                IconButton(
+                  icon: Icon(
+                    switch (action) {
+                      FolderRowAction.change => Icons.edit_outlined,
+                      FolderRowAction.remove => Icons.delete_outline,
+                    },
+                    size: 16,
+                  ),
+                  tooltip: loc.t(switch (action) {
+                    FolderRowAction.change => 'mods.folder.change',
+                    FolderRowAction.remove => 'mods.folder.remove',
+                  }),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => edit(download),
+                ),
         ],
       ),
     );
@@ -308,14 +342,18 @@ class _FolderDownloadsSummaryState
   ///
   /// One of them is also wrong for a companion. [summarizeCompanion] folds
   /// `exact` to *chosen* on the grounds that a companion is a download the app
-  /// did not perform — true of a `base`, which only a person can name, and false
-  /// of a `patch`, which the install prompt writes at `exact` precisely because
-  /// the app fetched those bytes.
+  /// did not perform, which was never true of every layer — the install prompt
+  /// writes a patch at `exact` precisely because the app fetched those bytes.
+  /// One summariser over one type is what removed that wart.
   ///
   /// What survives is the half a reader can act on: the version when there is
   /// one, and the caveat when the record is short of a file.
-  String? _detailLine(AppLocalizations loc, FolderDownload download) {
-    final summary = download.summary;
+  String? _detailLine(AppLocalizations loc, ModDownload download) {
+    final summary = summarizeDownload(
+      download,
+      provenance:
+          widget.origin?.provenance ?? OriginProvenance.importedFolder,
+    );
     return switch (summary.version) {
       VersionSummary.none ||
       VersionSummary.dateOnly ||

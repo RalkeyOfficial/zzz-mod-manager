@@ -62,8 +62,15 @@ class ModIngest {
   /// only the user can supply.
   final bool patchShaped;
 
-  /// **Which files in this folder came from the patch**, in the spelling they
+  /// **Which files in this folder came from a patch**, in the spelling they
   /// have on disk.
+  ///
+  /// **Derived, and kept only for compatibility.** The authority is each
+  /// download's own `files` list (`ModDownload.files`), and this is the union of
+  /// the ones above the bottom of the stack — see `derivedPatchFiles`. It stays
+  /// a plain `string[]` permanently because [_paths] filters this key to
+  /// strings: an already-released build reading per-download objects here would
+  /// see *no* patch files and flatten the patch away on the next base update.
   ///
   /// The one thing that makes a mixed folder rebuildable. Writing a newer *base*
   /// into it means taking the patch out, writing the base, and placing the patch
@@ -124,7 +131,7 @@ class ModIngest {
       _same(other.folders, folders) &&
       _same(other.patchFiles, patchFiles);
 
-  static bool _same(List<String> a, List<String> b) {
+  static bool _same(List<Object> a, List<Object> b) {
     if (a.length != b.length) return false;
     for (var i = 0; i < a.length; i++) {
       if (a[i] != b[i]) return false;

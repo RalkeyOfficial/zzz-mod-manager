@@ -743,48 +743,52 @@ void main() {
       expect(find.text('This mod holds a patch'), findsNothing);
     });
 
-    testWidgets('a patch installed into this folder is a peer, not editable',
-        (tester) async {
-      // **The mirror image, and it had no surface at all.** The prompt below
-      // asks the one question this dialog can answer — *this folder is a patch;
-      // what does it patch?* A `patch` companion is what the patch installer
-      // writes on the base mod's own sidecar, with both axes already `exact`
-      // because the app performed that download: nothing to ask about it, and
-      // no flow that runs the other way — so it is a row like any other, with
-      // no change affordance.
-      final transport = FakeHttpTransport()
-        ..stub(profileUrl, body: loadGbFixture('mod_profile_531649'))
-        ..stub(
-          Uri.parse(
-            'https://gamebanana.com/apiv13/Mod/Multi'
-            '?_csvRowIds=$otherModId&_csvProperties=_idRow%2C_sName%2C_sVersion'
-            '%2C_tsDateAdded%2C_tsDateUpdated%2C_bIsObsolete%2C_bIsPrivate'
-            '%2C_bIsTrashed%2C_bIsWithheld%2C_aFiles',
-          ),
-          body: '[{"_idRow":$otherModId,"_sName":"Ellen Joe Cheongsam"}]',
+    /// A folder that holds the mod and had a patch installed into it — the
+    /// mirror of [patchShaped]. Both of the patch's axes are `exact` because
+    /// the app performed that download.
+    ModOrigin withPatchInside() => tracked(
+          modIdConfidence: OriginConfidence.exact,
+          fileId: 1732269,
+          versionConfidence: OriginConfidence.exact,
+          provenance: OriginProvenance.downloaded,
+        ).copyWith(
+          companions: const [
+            ModCompanion(
+              role: CompanionRole.patch,
+              modId: otherModId,
+              modIdConfidence: OriginConfidence.exact,
+              fileId: 1462303,
+              versionConfidence: OriginConfidence.exact,
+            ),
+          ],
         );
 
+    /// The folder's own page, plus the name lookup the peer list does for the
+    /// companion.
+    FakeHttpTransport namedPatch() => FakeHttpTransport()
+      ..stub(profileUrl, body: loadGbFixture('mod_profile_531649'))
+      ..stub(
+        Uri.parse(
+          'https://gamebanana.com/apiv13/Mod/Multi'
+          '?_csvRowIds=$otherModId&_csvProperties=_idRow%2C_sName%2C_sVersion'
+          '%2C_tsDateAdded%2C_tsDateUpdated%2C_bIsObsolete%2C_bIsPrivate'
+          '%2C_bIsTrashed%2C_bIsWithheld%2C_aFiles',
+        ),
+        body: '[{"_idRow":$otherModId,"_sName":"Ellen Joe Cheongsam"}]',
+      );
+
+    testWidgets('a patch installed into this folder is a peer that can be '
+        'declared gone', (tester) async {
+      // **The mirror image.** The prompt below asks the one question the
+      // naming step can answer — *this folder is a patch; what does it patch?*
+      // A `patch` companion needs no answer to that: the app fetched those
+      // bytes and both axes are already `exact`. What it does need is the one
+      // thing no record can know on its own, which is whether the files are
+      // still there — so the row offers removal and not a rebind.
       await pumpDialog(
         tester,
-        target: mod(
-          origin: tracked(
-            modIdConfidence: OriginConfidence.exact,
-            fileId: 1732269,
-            versionConfidence: OriginConfidence.exact,
-            provenance: OriginProvenance.downloaded,
-          ).copyWith(
-            companions: const [
-              ModCompanion(
-                role: CompanionRole.patch,
-                modId: otherModId,
-                modIdConfidence: OriginConfidence.exact,
-                fileId: 1462303,
-                versionConfidence: OriginConfidence.exact,
-              ),
-            ],
-          ),
-        ),
-        transport: transport,
+        target: mod(origin: withPatchInside()),
+        transport: namedPatch(),
       );
       await tester.pumpAndSettle();
 
@@ -796,12 +800,69 @@ void main() {
       // folder holds the mod and had a patch put into it.
       expect(find.text('Mod'), findsOneWidget);
       expect(find.text('Patch'), findsOneWidget);
-      // Nothing to change: no flow runs in this direction.
+      // Removal, never a rebind: re-aiming an exact record would attach a
+      // claim to bytes nobody moved.
+      expect(find.byIcon(Icons.delete_outline), findsOneWidget);
       expect(find.byIcon(Icons.edit_outlined), findsNothing);
       // And *not* the prompt, which asks a question this folder never posed.
       expect(find.text('This mod holds a patch'), findsNothing);
       // The escape hatches stay reachable, as they must with anything added.
       expect(find.text('Not from GameBanana, or it\'s my own'), findsOneWidget);
+    });
+
+    testWidgets('dropping the patch is confirmed, and says what survives it',
+        (tester) async {
+      // A delete icon's first suggestion is that files go, and none do. The
+      // confirmation has to say so before it is answered.
+      final gateway = await pumpDialog(
+        tester,
+        target: mod(origin: withPatchInside()),
+        transport: namedPatch(),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.byIcon(Icons.delete_outline));
+      await tester.tap(find.byIcon(Icons.delete_outline));
+      await tester.pumpAndSettle();
+
+      expect(
+          find.text('This patch is no longer in the folder?'), findsOneWidget);
+      expect(find.textContaining('Nothing in the folder is deleted'),
+          findsOneWidget);
+      // The mod it names is the patch, so two entries are tellable apart.
+      expect(find.textContaining('Ellen Joe Cheongsam'), findsOneWidget);
+
+      // Backing out writes nothing at all. `.last` is the confirmation's own
+      // Cancel — the dialog underneath has one too, and it is the older route.
+      await tester.tap(find.text('Cancel').last);
+      await tester.pumpAndSettle();
+      expect(gateway.writes, 0);
+    });
+
+    testWidgets('the dropped patch leaves the record and the mod stays',
+        (tester) async {
+      final gateway = await pumpDialog(
+        tester,
+        target: mod(origin: withPatchInside()),
+        transport: namedPatch(),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.byIcon(Icons.delete_outline));
+      await tester.tap(find.byIcon(Icons.delete_outline));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Remove from the record'));
+      await tester.pumpAndSettle();
+
+      expect(gateway.writes, 1);
+      expect(gateway.written!.companions, isEmpty);
+      // The folder's own identity is untouched: "that patch is gone" says
+      // nothing about which mod this folder is.
+      expect(gateway.written!.modId, 531649);
+      expect(gateway.written!.fileId, 1732269);
+      expect(gateway.written!.modIdConfidence, OriginConfidence.exact);
+      // And it endorses nothing about the mod page, so nothing is pulled off it.
+      expect(gateway.filled, isEmpty);
     });
 
     testWidgets('a patch-shaped folder offers to name what it patches',

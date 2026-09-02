@@ -29,7 +29,7 @@ import '../../l10n/app_localizations.dart';
 import '../../models/app_notification.dart';
 import '../../models/character_info.dart';
 import '../../models/gamebanana/gamebanana.dart';
-import '../../models/mod_companion.dart';
+import '../../models/mod_download.dart';
 import '../../models/origin_enums.dart';
 import '../../services/folder_contents.dart';
 import '../../services/library_file_index.dart';
@@ -87,10 +87,13 @@ class PatchIdentity {
   final String? versionLabel;
   final String? archiveMd5;
 
-  /// **At `exact`**, which this is the one route to on a companion: every other
-  /// one is the user telling us about bytes they moved in themselves.
-  ModCompanion get companion => ModCompanion(
-        role: CompanionRole.patch,
+  /// **At `exact` on both axes**, which this is the one route to for a layer the
+  /// user did not identify by hand: every other one is somebody telling us about
+  /// bytes they moved in themselves.
+  ///
+  /// No `role`: it is taken from the position the layer lands in, and the write
+  /// that places it is what knows that.
+  ModDownload get layer => ModDownload(
         modId: modId,
         modIdConfidence: OriginConfidence.exact,
         fileId: fileId,
@@ -164,7 +167,7 @@ class PatchInstallDecision {
 
   /// What the user said each new folder patches, where they said. Only the
   /// new-folder destination has one; the other answer *is* the destination.
-  Map<String, ModCompanion> get namedBases => <String, ModCompanion>{
+  Map<String, ModDownload> get namedBases => <String, ModDownload>{
         for (final entry in destinations.entries)
           if (entry.value case InstallAsNewMod(base: final base?))
             entry.key: base,
@@ -180,7 +183,7 @@ class PatchInstallDecision {
 /// naming the base only records it — the behaviour before an install existed.
 typedef BaseInstaller = Future<bool> Function(
   String modName,
-  ModCompanion base,
+  ModDownload base,
   GbFile file,
 );
 
@@ -325,7 +328,12 @@ Future<Map<String, List<DestinationRank>>> rankPatchDestinations({
   };
   final required = <String>{
     for (final mod in library)
-      if (mod.origin?.modId != null && declared.contains(mod.origin!.modId))
+      // **Any layer the folder holds**, not only what it is: a mod the patch's
+      // page names is "already installed" whether it sits at the bottom of some
+      // folder or was written into one.
+      if (mod.origin?.trackable
+              .any((download) => declared.contains(download.modId)) ??
+          false)
         mod.id,
   };
 
@@ -451,6 +459,9 @@ Future<List<NotificationLines>> applyPatchInstall(
       incoming: write.incoming,
       existing: write.existing,
       placement: write.placement,
+      // Keys the store of displaced base files. Null for a folder dragged off a
+      // disk, which has no page and so nothing to key one by.
+      patchModId: patch?.modId,
     );
     if (!result.success) {
       writeFailures.add(write.into.modName);
@@ -466,7 +477,14 @@ Future<List<NotificationLines>> applyPatchInstall(
     if (patch case final identity?) {
       await amend(
         write.into.modId,
-        (current) => withAppliedPatch(current, identity.companion),
+        // **With the files it actually wrote.** The paths are the target's, not
+        // the ones the archive shipped, and the copy is the only thing that
+        // knows them — every rule that puts this patch back, or takes it out,
+        // reads this list.
+        (current) => withAppliedPatch(
+          current,
+          identity.layer.copyWith(files: result.writtenFiles),
+        ),
       );
     }
   }
@@ -550,7 +568,7 @@ Future<bool> installNamedBase(
   WidgetRef ref, {
   required String modName,
   required String modsPath,
-  required ModCompanion base,
+  required ModDownload base,
   required GbFile file,
   String? characterId,
 }) async {
@@ -573,7 +591,9 @@ Future<bool> installNamedBase(
       characterId: characterId ?? unknownCharacterId,
       isActive: false,
     ),
-    remoteModId: base.modId,
+    // Non-null by construction: this runs only for a base the user named off a
+    // mod page, and naming one is what produces the id.
+    remoteModId: base.modId!,
     file: file,
     // On-disk spelling: these paths open files.
     patchFiles: contents.actualPaths.values.toList(),

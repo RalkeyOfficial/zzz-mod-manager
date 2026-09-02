@@ -77,7 +77,7 @@ class SnapshotService {
       final dir = await _createSnapshotDir(modName, takenAt);
       final files = Directory(path.join(dir.path, 'files'));
 
-      final written = await copyDirectory(modFolder, files);
+      final written = (await copyDirectory(modFolder, files)).length;
       final size = await _directorySize(files);
 
       final snapshot = ModSnapshot(
@@ -296,16 +296,23 @@ class SnapshotService {
 /// there are two of them from the same afternoon.
 enum SnapshotReason {
   beforeUpdate,
-  beforeRestore;
+  beforeRestore,
+
+  /// A patch was taken back out of the folder. Its own reason rather than
+  /// [beforeUpdate], because a rollback list that called this "before an update"
+  /// would send a user looking for a version change that never happened.
+  beforePatchRemoval;
 
   static SnapshotReason parse(Object? raw) => switch (raw) {
         'before_restore' => SnapshotReason.beforeRestore,
+        'before_patch_removal' => SnapshotReason.beforePatchRemoval,
         _ => SnapshotReason.beforeUpdate,
       };
 
   String get wire => switch (this) {
         SnapshotReason.beforeUpdate => 'before_update',
         SnapshotReason.beforeRestore => 'before_restore',
+        SnapshotReason.beforePatchRemoval => 'before_patch_removal',
       };
 }
 

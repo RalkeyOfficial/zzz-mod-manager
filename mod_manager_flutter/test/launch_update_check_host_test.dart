@@ -11,6 +11,7 @@ import 'package:mod_manager_flutter/screens/components/launch_update_check_host.
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
 import 'support/localized_harness.dart';
+import 'support/origin_shorthand.dart';
 
 /// The opt-in startup check, from the side that has a `BuildContext`.
 ///
@@ -26,7 +27,7 @@ void main() {
         isActive: false,
         origin: modId == null
             ? null
-            : ModOrigin(
+            : originFixture(
                 source: 'gamebanana',
                 modId: modId,
                 modIdConfidence: OriginConfidence.user,

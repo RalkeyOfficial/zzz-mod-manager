@@ -10,6 +10,7 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:cross_file/cross_file.dart';
 import '../core/constants.dart';
 import '../models/character_info.dart';
+import '../models/mod_download.dart';
 import '../models/mod_origin_seed.dart';
 import '../services/api_service.dart';
 import '../services/log/logger.dart';
@@ -38,6 +39,7 @@ import 'dialogs/duplicate_archive_dialog.dart';
 import 'dialogs/import_selection_dialog.dart';
 import 'dialogs/keybinds_dialog.dart';
 import 'dialogs/mod_context_menu.dart';
+import 'dialogs/remove_patch_flow.dart';
 import 'dialogs/edit_mod_dialog.dart';
 import 'dialogs/mod_details_dialog.dart';
 import 'dialogs/mod_backups_dialog.dart';
@@ -626,6 +628,21 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     }
   }
 
+  /// Takes one patch back out of a folder and rescans, since the card's status
+  /// slot is drawn from `ModInfo.origin`.
+  ///
+  /// The name comes from what the session already fetched, falling back to the
+  /// id: a companion records no title, and a page fetch on the way into a
+  /// confirmation would be a request the user did not ask for.
+  Future<void> _removePatch(ModInfo mod, ModDownload patch) async {
+    final name = ref.read(modUpdateRecordsProvider)[patch.modId]?.name ??
+        context.loc.t('mods.folder.unnamed', params: {'id': '${patch.modId}'});
+    if (await removePatchFlow(context, ref,
+        mod: mod, patch: patch, patchName: name)) {
+      await loadMods(showLoading: false);
+    }
+  }
+
   void _showContextMenu(BuildContext context, ModInfo mod, Offset position) {
     showModContextMenu(
       context,
@@ -634,6 +651,12 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       onResolveOrigin: () => unawaited(_resolveOrigin(mod)),
       onCheckForUpdate: () => unawaited(_checkForUpdate(mod)),
       onRestoreBackup: () => unawaited(_restoreBackup(mod)),
+      onRemovePatch: (patch) => unawaited(_removePatch(mod, patch)),
+      // Whatever this session already knows. Nothing is fetched for a menu.
+      patchNames: {
+        for (final entry in ref.read(modUpdateRecordsProvider).entries)
+          if (entry.value.name case final name?) entry.key: name,
+      },
       // `valueOrNull` rather than a `when`: the listing is one readdir and
       // resolves long before a right-click, and a menu that waited on it would
       // be a menu that sometimes did not open.

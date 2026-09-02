@@ -1,3 +1,4 @@
+import 'installed_file.dart';
 import 'origin_enums.dart';
 
 /// What one companion download is, relative to the folder's primary.
@@ -36,6 +37,23 @@ enum CompanionRole {
   }
 }
 
+/// **Migration only.** The shape a sidecar's second download used to be written
+/// in, kept so `ModOrigin.migrateFlatBlock` can read one.
+///
+/// Nothing else may use it, and nothing writes it. A folder is a **stack** now —
+/// `ModDownload`, ordered bottom-up, where position is the role — because this
+/// shape's role was *relative* to whichever download happened to be installed
+/// first, and the same pair of mods therefore produced mirror-image records for
+/// two people who did the same thing in a different order. The compensation for
+/// that ran through the update check, the write routing, the peer list and the
+/// badge, and one operation — taking a patch back out — could not be expressed
+/// at all for one of the two orderings.
+///
+/// The doc below describes the old shape, and is kept because the migration has
+/// to know what each field meant.
+///
+/// ---
+///
 /// A **second remote identity inside one mod folder**.
 ///
 /// A mod folder is frequently two downloads — a patch plus the mod it patches —
@@ -77,6 +95,7 @@ class ModCompanion {
     this.baselineRemoteDate,
     this.remoteMissing = false,
     this.updatesDismissedUntil,
+    this.files = const [],
   });
 
   final CompanionRole role;
@@ -112,6 +131,26 @@ class ModCompanion {
   /// exists to fix.
   final DateTime? updatesDismissedUntil;
 
+  /// **Which files in the folder are this download's**, sized and marked by
+  /// whether each went over something — see [InstalledFile].
+  ///
+  /// Per companion rather than one list on the folder, because a flat list
+  /// cannot say whose a file is and one folder can legitimately hold two
+  /// patches (which is why [withAppliedPatch] dedupes by mod id). Without the
+  /// attribution only "remove every patch" is expressible.
+  ///
+  /// This is not one of the six fields a companion deliberately does not carry.
+  /// Each of those describes *this folder's ingest* — how we came to put the
+  /// folder here — and a companion is a statement about a download we did not
+  /// perform. What files it laid down is a fact about that download itself.
+  ///
+  /// **Only ever non-empty where the app wrote the bytes**, which is the install
+  /// prompt's `role: patch`. A companion the user named after the fact describes
+  /// files somebody moved in by hand: the app never saw them arrive, cannot say
+  /// which of the folder's files are theirs, and must not guess — so the list
+  /// stays empty and the surfaces that need it degrade honestly.
+  final List<InstalledFile> files;
+
   Map<String, dynamic> toJson() => <String, dynamic>{
         'role': role.wire,
         'mod_id': modId,
@@ -129,6 +168,8 @@ class ModCompanion {
         if (updatesDismissedUntil != null)
           'updates_dismissed_until':
               updatesDismissedUntil!.toUtc().toIso8601String(),
+        if (files.isNotEmpty)
+          'files': [for (final file in files) file.toJson()],
       };
 
   /// Parses one entry. **Never throws, and returns null for anything it cannot
@@ -159,6 +200,7 @@ class ModCompanion {
       baselineRemoteDate: _date(raw['baseline_remote_date']),
       remoteMissing: raw['remote_missing'] == true,
       updatesDismissedUntil: _date(raw['updates_dismissed_until']),
+      files: InstalledFile.parseList(raw['files']),
     );
   }
 
@@ -174,6 +216,7 @@ class ModCompanion {
     DateTime? baselineRemoteDate,
     bool? remoteMissing,
     DateTime? updatesDismissedUntil,
+    List<InstalledFile>? files,
   }) =>
       ModCompanion(
         role: role ?? this.role,
@@ -188,6 +231,7 @@ class ModCompanion {
         remoteMissing: remoteMissing ?? this.remoteMissing,
         updatesDismissedUntil:
             updatesDismissedUntil ?? this.updatesDismissedUntil,
+        files: files ?? this.files,
       );
 
   /// Clears [updatesDismissedUntil], which [copyWith] cannot express.
@@ -202,6 +246,7 @@ class ModCompanion {
         archiveMd5: archiveMd5,
         baselineRemoteDate: baselineRemoteDate,
         remoteMissing: remoteMissing,
+        files: files,
       );
 
   /// Value equality over **every** field, for the reason [ModOrigin] has it:
@@ -221,7 +266,16 @@ class ModCompanion {
       other.archiveMd5 == archiveMd5 &&
       other.baselineRemoteDate == baselineRemoteDate &&
       other.remoteMissing == remoteMissing &&
-      other.updatesDismissedUntil == updatesDismissedUntil;
+      other.updatesDismissedUntil == updatesDismissedUntil &&
+      _sameFiles(other.files, files);
+
+  static bool _sameFiles(List<InstalledFile> a, List<InstalledFile> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
 
   @override
   int get hashCode => Object.hash(
@@ -236,6 +290,7 @@ class ModCompanion {
         baselineRemoteDate,
         remoteMissing,
         updatesDismissedUntil,
+        Object.hashAll(files),
       );
 
   @override

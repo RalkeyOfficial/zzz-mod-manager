@@ -8,6 +8,7 @@ import 'package:mod_manager_flutter/services/update_check.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
 import 'support/localized_harness.dart';
+import 'support/origin_shorthand.dart';
 
 ModInfo mod({ModOrigin? origin}) => ModInfo(
       id: 'Ellen Swimsuit',
@@ -23,7 +24,7 @@ ModOrigin origin({
   OriginTracking tracking = OriginTracking.auto,
   bool remoteMissing = false,
 }) =>
-    ModOrigin(
+    originFixture(
       modId: modId,
       modIdConfidence:
           modId == null ? OriginConfidence.unknown : OriginConfidence.inferred,

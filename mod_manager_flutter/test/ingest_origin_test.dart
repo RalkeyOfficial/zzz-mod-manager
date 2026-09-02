@@ -3,6 +3,8 @@ import 'package:mod_manager_flutter/models/mod_origin_seed.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/ingest_origin_builder.dart';
 
+import 'support/origin_shorthand.dart';
+
 void main() {
   late DateTime clock;
   var idCounter = 0;

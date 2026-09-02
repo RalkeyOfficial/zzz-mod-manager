@@ -122,7 +122,8 @@ BulkAssumeCurrentPlan planBulkAssumeCurrent(Iterable<ModInfo> mods) {
       // `assumed_latest` over that would **demote** it — trading a known file
       // for a date, in a pass the user ran to gain information.
       case ModOriginStatus.secondIdentityUnknown
-          when mod.origin?.versionConfidence != OriginConfidence.unknown:
+          when mod.origin?.base?.versionConfidence !=
+              OriginConfidence.unknown:
         continue;
       case ModOriginStatus.versionUnknown:
       case ModOriginStatus.secondIdentityUnknown:

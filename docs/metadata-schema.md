@@ -78,9 +78,12 @@ dependency at all: see `test/origin_backfill_test.dart` and
 <mod folder>/
 └── .zzz-mod-manager/
     ├── metadata.json
-    └── images/
-        ├── 01.png
-        └── 02.jpg
+    ├── images/
+    │   ├── 01.png
+    │   └── 02.jpg
+    └── replaced/                    ← §5
+        └── 605460/
+            └── Textures/Body.dds.orig
 ```
 
 ```json
@@ -124,8 +127,8 @@ the common block is the four keys shown above rather than fifteen mostly-null on
 | `mod_id_confidence` / `version_confidence` | `exact` \| `user` \| `inferred` \| `assumed_latest` \| `unknown`. Identity and version resolve independently, so they carry separate confidences. What each tier means and who may write it: [`origin-tracking.md`](origin-tracking.md#1-two-axes-confidence-and-provenance). |
 | `version` / `version_label` | `version` is a version string; `version_label` is the author's free-text *variant* marker ("white hair ver"). **Never conflate them** — that makes two variants of one release look like two releases. |
 | `provenance` | `downloaded` \| `imported_archive` \| `imported_folder`. |
-| `ingest` | `mode` (`separate`/`combined`), `folders` (archive-relative **basenames**), `sibling_group`, `patch_shaped` (this download **replaces rather than adds** — either it brought `.ini` files and none of the content they reference, or it brought game assets and no `.ini` to load them; see [`applying-updates.md` §2](applying-updates.md#2-patch-detection). Knowable only at install), `patch_files` (below). |
-| `companions` | The **other downloads in this folder**, when the user has named any. Each is a remote identity plus what is known about which file of it, and deliberately not a second `origin`: see [`origin-tracking.md` §10](origin-tracking.md#10-a-folder-that-holds-two-downloads). Absent when empty, which is almost every sidecar. |
+| `ingest` | `mode` (`separate`/`combined`), `folders` (archive-relative **basenames**), `sibling_group`, `patch_shaped` (this download **replaces rather than adds** — either it brought `.ini` files and none of the content they reference, or it brought game assets and no `.ini` to load them; see [`applying-updates.md` §2](applying-updates.md#2-patch-detection). Knowable only at install), `files` and `patch_files` (below). |
+| `companions` | The **other downloads in this folder**, when the user has named any. Each is a remote identity plus what is known about which file of it, and deliberately not a second `origin`: see [`origin-tracking.md` §10](origin-tracking.md#10-a-folder-that-holds-two-downloads). Carries its own `files` on the same terms as `ingest.files`. Absent when empty, which is almost every sidecar. |
 | `installed_at` / `installed_at_is_proxy` | When, and whether that was observed or derived from file mtimes. |
 | `baseline_remote_date` | For `assumed_latest`: only flag remote files newer than this. |
 | `archive_md5` | md5 of the archive it was extracted from. |
@@ -133,10 +136,30 @@ the common block is the four keys shown above rather than fifteen mostly-null on
 | `remote_missing` | Gone upstream — read from the remote's explicit private/trashed/withheld flags, not inferred from a 404. |
 | `updates_dismissed_until` | "I have seen what this mod published up to here and I don't want it." A **date rather than a file id**, so it expires by itself the moment something newer appears; cleared when the folder is rebound to a different mod. Not the same as `tracking: "off"`, which silences the mod forever. See [`update-checks.md`](update-checks.md#4-dismissing-an-update). |
 
-### `ingest.patch_files`
+### The file record: `files` per download, `patch_files` for the folder
 
-**Which files in this folder came from the patch**, in the spelling they have on
-disk. Absent when empty, which is almost every sidecar.
+**Which files each download in this folder laid down**, in the spelling they have
+on disk. Absent when empty, which is every sidecar written before this existed.
+
+```json
+"ingest": {
+  "mode": "separate",
+  "folders": ["Ellen Swimsuit"],
+  "files": [
+    { "path": "ellen.ini", "role": "added", "bytes": 2048 },
+    { "path": "Textures/Body.dds", "role": "added", "bytes": 5242880 }
+  ],
+  "patch_files": ["Textures/Body.dds"]
+},
+"companions": [
+  {
+    "role": "patch", "mod_id": 605460,
+    "files": [
+      { "path": "Textures/Body.dds", "role": "replaced", "bytes": 4194304 }
+    ]
+  }
+]
+```
 
 It is what makes a mixed folder rebuildable: writing a newer *base* into it means
 taking the patch out, writing the base, and placing the patch back on top, and none
@@ -145,15 +168,61 @@ of that is possible without knowing which files are the patch's. Like
 indistinguishable from an ordinary one — and it is recorded rather than
 re-downloaded because a patch's mod page can be gone by the time the base updates.
 
-Two things follow from the spelling, and both bite:
+**Per download, not per folder.** `ingest.files` is the folder's own download;
+each companion carries its own. One flat list cannot say whose a file is, and a
+folder can legitimately hold two patches — which is why `withAppliedPatch`
+deduplicates by mod id. Without the attribution, only "remove every patch" is
+expressible.
 
-- **On-disk, not the normalised comparison key.** These paths open files; a
-  lower-cased one deletes nothing on Linux and leaves a second copy behind.
+Three fields, and each earns its place:
+
+| Field | Means |
+|---|---|
+| `path` | Relative to the mod folder root, `/`-separated, **on-disk spelling**. These paths open and delete files; a lower-cased one deletes nothing on Linux and leaves a second copy behind. Normalise at the point of comparison instead. |
+| `role` | `added` — nothing was at this path, so it goes when the download does. `replaced` — the download wrote over something, which has to come back. |
+| `bytes` | Size when written. Absent when it could not be read, which is **not** the same as an empty file: this exists so a folder's downloads can be weighed, never so a file can be verified. |
+
+**An unrecognised `role` reads as `replaced`, which inverts the usual rule and
+for the same reason it exists.** Every other lenient parse here resolves an
+unknown to the weakest claim, because the risk is acting on a permission we do
+not have. Here the weak answer is the dangerous one: `added` is what licenses a
+**delete**. Leaving a file behind is recoverable; deleting the mod's own file is
+not.
+
+**`patch_files` stays a plain `string[]`, permanently**, and is written as the
+derived union of every download whose absolute role is *patch*
+(`derivedPatchFiles`, `services/folder_downloads.dart`). That is compatibility
+rather than duplication: `ModIngest` filters that key to strings, so an
+already-released build reading per-download objects there would see *no* patch
+files and flatten the patch away on the next base update. New code never reads it
+as the source of truth, and a folder with no per-download registries is left with
+whatever `patch_files` it already had rather than having it rebuilt to nothing.
+
+Two things follow from all of it, and both bite:
+
 - **It describes what the app wrote**, so it goes stale if the folder is edited by
   hand. Read with an existence check: a path that is gone is reported and skipped,
   never restored.
+- **Empty is "unknown", never "this download wrote nothing".** Everything
+  installed before the record existed has none, so no reader may treat absence as
+  a claim.
 
 See [`applying-updates.md` §6](applying-updates.md#which-files-are-the-patchs).
+
+### `.zzz-mod-manager/replaced/` — the mod's own files a patch wrote over
+
+Not part of `metadata.json`, but it lives in the same directory and the sidecar's
+registry is what explains it: one folder per patch mod id, holding the files that
+patch displaced, each under its real path with a **`.orig`** suffix.
+
+Why it is in the mod folder rather than beside the snapshots, why every stored
+file is renamed, and the single reconciliation it still needs on ingest are all
+in [`applying-updates.md` §5](applying-updates.md#5-snapshots).
+
+**No `schema_version` bump for any of this.** `origin` itself has not shipped, and
+the rule in [§4](#4-versioning-and-migration) is that the whole unreleased cycle
+is one format: a library goes from 1 to 2 in a single step and never observes
+anything in between.
 
 Three rules are load-bearing rather than stylistic:
 

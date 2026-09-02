@@ -155,9 +155,10 @@ BulkUpdateCheckPlan planBulkUpdateCheck(List<ModInfo> mods) {
     }
     final origin = mod.origin!;
     checkable.add(mod);
-    byModId.putIfAbsent(origin.modId!, () => <ModInfo>[]).add(mod);
-    for (final companion in origin.companions) {
-      byModId.putIfAbsent(companion.modId, () => <ModInfo>[]).add(mod);
+    // Every layer that names a page. A folder appears under each of them, and a
+    // page shared by two folders is fetched once.
+    for (final download in origin.trackable) {
+      byModId.putIfAbsent(download.modId!, () => <ModInfo>[]).add(mod);
     }
   }
 
@@ -294,16 +295,18 @@ Future<BulkUpdateCheckOutcome> runBulkUpdateCheck({
     Map<int, ReleaseGroups> groupsFor = const <int, ReleaseGroups>{},
   }) {
     final origin = mod.origin!;
-    final primary = records[origin.modId!];
-    if (primary == null) return null;
+    final baseModId = origin.base?.modId;
+    if (baseModId == null) return null;
+    final baseRecord = records[baseModId];
+    if (baseRecord == null) return null;
     return checkForUpdate(
       origin: origin,
-      remote: primary,
-      releases: groupsFor[origin.modId!] ?? ReleaseGroups.empty,
+      remote: baseRecord,
+      releases: groupsFor[baseModId] ?? ReleaseGroups.empty,
       companionRemotes: <int, GbMod>{
-        for (final companion in origin.companions)
-          if (records[companion.modId] case final record?)
-            companion.modId: record,
+        for (final download in origin.patches)
+          if (download.modId case final id?)
+            if (records[id] case final record?) id: record,
       },
       companionReleases: groupsFor,
     );
@@ -321,8 +324,8 @@ Future<BulkUpdateCheckOutcome> runBulkUpdateCheck({
     // Half an answer is not an answer. The verdict is kept — it refuses to
     // claim clean without the missing half — but the folder is reported
     // unchecked, because the pass did not finish asking about it.
-    if (mod.origin!.companions
-        .any((companion) => !records.containsKey(companion.modId))) {
+    if (mod.origin!.patches.any((download) =>
+        download.hasIdentity && !records.containsKey(download.modId))) {
       failed.add(mod.id);
     }
   }
@@ -343,7 +346,8 @@ Future<BulkUpdateCheckOutcome> runBulkUpdateCheck({
     for (final mod in plan.checkable) {
       final check = checks[mod.id];
       if (!(check?.hasUpdate ?? false)) continue;
-      final subject = check!.subjectModId ?? mod.origin!.modId!;
+      final subject = check!.subjectModId ?? mod.origin!.base?.modId;
+      if (subject == null) continue;
       needFeed.putIfAbsent(subject, () => <ModInfo>[]).add(mod);
     }
 

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
+import '../../models/mod_download.dart';
+import '../../services/patch_removal.dart';
 
 /// The right-click menu for a mod card. A thin dispatcher: each entry runs the
 /// matching callback (deferred so the menu closes first). The caller wires the
@@ -20,6 +22,7 @@ void showModContextMenu(
   required VoidCallback onCheckForUpdate,
   required VoidCallback onRestoreBackup,
   required VoidCallback onDelete,
+  required void Function(ModDownload patch) onRemovePatch,
   /// Whether this mod has a pre-update snapshot to roll back to.
   ///
   /// Passed in rather than looked up here: the answer is one directory listing
@@ -27,8 +30,17 @@ void showModContextMenu(
   /// would be a filesystem call inside a menu builder. A permanently-present
   /// entry that usually opens an empty dialog was the alternative.
   bool hasBackups = false,
+
+  /// Names for the patches in this folder, by mod id, used only when there is
+  /// more than one to tell apart.
+  ///
+  /// **Nothing is fetched to fill this.** A companion records an id and never a
+  /// title, and a menu builder is the last place to spend a request; the caller
+  /// passes what the session already has and the entry falls back to the id.
+  Map<int, String> patchNames = const <int, String>{},
 }) {
   final loc = context.loc;
+  final patches = removablePatches(mod.origin);
   showMenu(
     context: context,
     position: RelativeRect.fromLTRB(
@@ -136,6 +148,36 @@ void showModContextMenu(
             ],
           ),
           onTap: () => Future.delayed(Duration.zero, onRestoreBackup),
+        ),
+      // **Only for a patch this folder can actually take back out**, which
+      // means one the app installed and recorded the files of. A patch merged in
+      // by hand is recorded and checked for updates and still cannot be removed,
+      // because nothing says which of the folder's files are its — so the entry
+      // is absent rather than present and refusing.
+      //
+      // One entry per patch, named, for the folder that holds two: a single
+      // "Remove patch…" would have to ask which, and the menu is the better
+      // place to ask than a dialog opened from it.
+      for (final patch in patches)
+        PopupMenuItem(
+          child: Row(
+            children: [
+              const Icon(Icons.layers_clear, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  patches.length > 1
+                      ? loc.t('mods.context_menu.remove_patch_named', params: {
+                          'patch': patchNames[patch.modId] ?? '#${patch.modId}',
+                        })
+                      : loc.t('mods.context_menu.remove_patch'),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          onTap: () =>
+              Future.delayed(Duration.zero, () => onRemovePatch(patch)),
         ),
       // The second way into the resolve dialog. The status slot on the card is
       // the first, but it is absent for a mod whose origin is fully known — and

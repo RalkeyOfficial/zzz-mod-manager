@@ -1,5 +1,5 @@
-/// **Writing down that a folder holds a patch**, which is the only half of
-/// patch detection that outlives the install.
+/// **Writing down what a folder holds**, which is the only half of patch
+/// detection that outlives the install.
 ///
 /// A patch folder is legible exactly once: before the user drags the base mod's
 /// files in around it. Afterwards every reference resolves and the folder is
@@ -11,12 +11,19 @@
 /// Both import paths write through here, and both ask **before** their copy so
 /// they can offer a destination rather than warn afterwards. What the write says
 /// is the same either way; `patch_install_flow.dart` is where it is called from.
+///
+/// Each of these is a **stack operation** — insert at the bottom, add on top,
+/// amend one layer — and every one of them re-derives `ingest.patch_files`
+/// afterwards, so the flat compatibility list cannot drift from the layers it
+/// summarises.
 library;
 
-import '../models/mod_companion.dart';
+import '../models/installed_file.dart';
+import '../models/mod_download.dart';
 import '../models/mod_ingest.dart';
 import '../models/mod_origin.dart';
 import '../models/origin_enums.dart';
+import 'folder_downloads.dart';
 
 /// How an import amends the origin block of a mod it has just created.
 ///
@@ -27,8 +34,8 @@ typedef OriginAmender = Future<bool> Function(
   ModOrigin? Function(ModOrigin? current) update,
 );
 
-/// [current] recorded as holding a patch, with [base] named as the mod it
-/// patches when the user has said which that is.
+/// [current] recorded as **a patch whose base is missing**, with [base] named as
+/// the mod it applies to when the user has said which that is.
 ///
 /// Null in, null out: this is an **amendment**, not the write that creates an
 /// origin block. Both import paths seed one for every folder they create, so a
@@ -38,82 +45,30 @@ typedef OriginAmender = Future<bool> Function(
 ///
 /// The flag is set whether or not a base is named. Being told what a folder
 /// patches does not make it one download.
-ModOrigin? withPatchShape(ModOrigin? current, {ModCompanion? base}) {
+///
+/// **Naming the base inserts it underneath**, which is the whole reason the
+/// stack is ordered: what was the only layer becomes the patch above it, with no
+/// role field to rewrite because the role follows the position.
+ModOrigin? withPatchShape(ModOrigin? current, {ModDownload? base}) {
   if (current == null) return null;
-  return current.copyWith(
+  final shaped = current.copyWith(
     ingest: (current.ingest ?? const ModIngest()).copyWith(patchShaped: true),
-    // **Only ever added, never cleared.** An unanswered prompt is the user not
-    // saying, which is not the same as them saying there is nothing there — and
-    // this runs again on every re-import of the same folder. One base at a
-    // time, though: a folder patches one mod, so a second entry would be a
-    // contradiction rather than more information.
-    companions: base == null
-        ? current.companions
-        : [
-            for (final companion in current.companions)
-              if (companion.role != CompanionRole.base) companion,
-            base,
-          ],
   );
-}
-
-/// [current] with the companion naming [modId] recorded as the file the app has
-/// just downloaded and written into the folder.
-///
-/// The mirror of [ModOrigin.updatedTo] for the **other** download, and a separate
-/// write for one reason: the folder's own identity did not change. Stamping this
-/// file id onto the primary would claim the folder is that other mod.
-///
-/// It clears the same three things, on the same grounds:
-///
-/// - **`baselineRemoteDate`** — "I don't know which file, I got it around then"
-///   is a weaker answer, and left beside a known file it is a second comparison
-///   that can only disagree.
-/// - **`updatesDismissedUntil`** — they waved an update away and have now taken
-///   it. Stored as a date at or after this file's, so keeping it silences the
-///   *next* release too.
-/// - **`remoteMissing`** — we just fetched the page and a file off it.
-///
-/// **Reaches `exact`**, which is otherwise closed to a companion: every other
-/// route is the user telling us about bytes they moved in themselves, and these
-/// are bytes we fetched. `role` survives — which half of the folder this is has
-/// not changed.
-///
-/// A folder with no such companion is returned unchanged: this amends, and
-/// inventing the entry would record a second identity nobody named.
-ModOrigin? withCompanionUpdatedTo(
-  ModOrigin? current, {
-  required int modId,
-  required int fileId,
-  String? version,
-  String? versionLabel,
-  String? archiveMd5,
-}) {
-  if (current == null) return null;
-  return current.copyWith(companions: [
-    for (final companion in current.companions)
-      if (companion.modId != modId)
-        companion
-      else
-        ModCompanion(
-          role: companion.role,
-          modId: modId,
-          modIdConfidence: OriginConfidence.exact,
-          fileId: fileId,
-          version: version,
-          versionLabel: versionLabel,
-          versionConfidence: OriginConfidence.exact,
-          archiveMd5: archiveMd5,
-        ),
-  ]);
+  if (base == null) return withRebuiltPatchFiles(shaped);
+  // **Only ever added, never replaced from here.** An unanswered prompt is the
+  // user not saying, which is not the same as them saying there is nothing
+  // there — and this runs again on every re-import of the same folder. A folder
+  // that already has something underneath is left alone: it is not a patch
+  // missing its base any more.
+  if (shaped.downloads.length > 1) return withRebuiltPatchFiles(shaped);
+  return withRebuiltPatchFiles(shaped.withBaseInserted(base));
 }
 
 /// [current] recorded as **also holding a patch** that was written into it.
 ///
-/// The reverse ordering from [withPatchShape]: here the folder's primary is the
-/// mod itself and the patch is the second thing in it, so nothing about the
-/// primary changes and no `patch_shaped` flag is involved — that flag says the
-/// folder *is* a patch missing its base, which is the opposite claim.
+/// The other direction from [withPatchShape]: here the folder already holds the
+/// mod and the patch goes on top, so no `patch_shaped` flag is involved — that
+/// flag says the bottom of the stack is missing, which is the opposite claim.
 ///
 /// A block is created when there is none, unlike [withPatchShape]. The target is
 /// an existing library mod, and most of a library that predates origin tracking
@@ -121,15 +76,65 @@ ModOrigin? withCompanionUpdatedTo(
 /// feature quietly unavailable for exactly the folders most likely to be
 /// hand-assembled.
 ///
-/// Deduplicated by **mod id, not by role**: one folder can legitimately hold two
-/// different patches, and re-applying the same one must not list it twice.
-ModOrigin withAppliedPatch(ModOrigin? current, ModCompanion patch) {
+/// **A patch with no mod id is still recorded**, unlike under the old shape,
+/// which required an identity and therefore wrote nothing at all for a patch
+/// dragged off a disk. The install knows exactly which files it laid down even
+/// when it cannot say which mod they are, and that is enough to set the layer
+/// aside on a base update and to take it back out. What it cannot do is be
+/// checked for updates, which follows from the null id on its own.
+ModOrigin withAppliedPatch(ModOrigin? current, ModDownload patch) {
   final base =
       current ?? const ModOrigin(provenance: OriginProvenance.importedFolder);
-  return base.copyWith(companions: [
-    for (final companion in base.companions)
-      if (companion.modId != patch.modId) companion,
-    patch,
-  ]);
+  return withRebuiltPatchFiles(base.withLayerOnTop(patch));
 }
 
+/// [current] with the layer naming [modId] recorded as the file the app has just
+/// downloaded and written into the folder.
+///
+/// A separate write from the one that records the folder's own identity, and for
+/// one reason: **a layer's place in the stack does not change because we learned
+/// something about it.** Stamping this file id onto the wrong layer would claim
+/// one download is another.
+///
+/// A folder with no such layer is returned unchanged: this amends, and inventing
+/// the entry would record a download nobody named.
+ModOrigin? withDownloadUpdatedTo(
+  ModOrigin? current, {
+  required int modId,
+  required int fileId,
+  String? version,
+  String? versionLabel,
+  String? archiveMd5,
+  List<InstalledFile>? files,
+}) {
+  if (current == null) return null;
+  return withRebuiltPatchFiles(current.withDownload(
+    modId,
+    (download) => download.updatedTo(
+      modId: modId,
+      fileId: fileId,
+      version: version,
+      versionLabel: versionLabel,
+      archiveMd5: archiveMd5,
+      files: files,
+    ),
+  ));
+}
+
+/// [origin] with `ingest.patch_files` recomputed from the stack.
+///
+/// Every write that changes what a folder holds goes through here, so the flat
+/// list and the layers cannot drift — a `patch_files` naming a patch that has
+/// been removed would have the next base update set aside files nothing owns.
+///
+/// **A folder with no per-layer registries is left exactly as it is.**
+/// Everything installed before they existed has a hand-written `patch_files` and
+/// no `files` to derive one from, so rebuilding would replace the only record it
+/// has with an empty list — and that record is what makes it rebuildable.
+ModOrigin withRebuiltPatchFiles(ModOrigin origin) {
+  final derived = derivedPatchFiles(origin);
+  if (derived.isEmpty) return origin;
+  return origin.copyWith(
+    ingest: (origin.ingest ?? const ModIngest()).copyWith(patchFiles: derived),
+  );
+}

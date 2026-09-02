@@ -75,9 +75,14 @@ class OriginBackfill {
     // it. `tracking: off` is permanent until the user themselves reverses it.
     if (origin.tracking == OriginTracking.off) return null;
 
+    // **Against what the folder *is*** — its bottom layer. A url in the mod's
+    // own description names the mod, and a patch written on top of it does not
+    // change which mod that is.
+    final base = origin.base;
+
     // Nothing stored, or the url agrees with it: fill / leave alone.
-    if (origin.modId == null) return parsed;
-    if (origin.modId == parsed) return null;
+    if (base?.modId == null) return parsed;
+    if (base!.modId == parsed) return null;
 
     // The url now names a *different* mod than the one on record. Whether that
     // wins depends entirely on where the stored id came from:
@@ -90,7 +95,7 @@ class OriginBackfill {
     //   a silent no-op, and the resolve dialog
     //   (`docs/origin-tracking.md` §5) is the only other way to fix the
     //   binding.
-    if (_confirmedTiers.contains(origin.modIdConfidence)) return null;
+    if (_confirmedTiers.contains(base.modIdConfidence)) return null;
     return parsed;
   }
 
@@ -132,15 +137,19 @@ class OriginBackfill {
         const ModOrigin(provenance: OriginProvenance.importedFolder);
 
     // Re-pointing the folder at a *different* mod invalidates everything that
-    // described the old one — see [ModOrigin.boundTo], which owns that rule for
-    // both rebinding paths (this one and the resolve dialog).
-    final bound = base.boundTo(
-      modId: modId,
-      confidence: OriginConfidence.inferred,
-      source: gameBananaSource,
-    );
+    // described the old one — see [ModDownload.boundTo], which owns that rule
+    // for both rebinding paths (this one and the resolve dialog).
+    //
+    // **The bottom layer only.** A url in the mod's description says what the
+    // folder is; it says nothing about a patch somebody wrote over it, and the
+    // upper layers' records stay true.
+    final bound = base.withBase((download) => download.boundTo(
+          modId: modId,
+          confidence: OriginConfidence.inferred,
+        ));
 
     return bound.copyWith(
+      source: gameBananaSource,
       installedAt: resolvedAt,
       installedAtIsProxy: isProxy,
     );

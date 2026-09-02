@@ -184,11 +184,15 @@ BulkResolutionPlan planBulkResolution({
       settled++;
       continue;
     }
-    if (origin == null || origin.modId == null) {
+    // **What the folder is** — its bottom layer. This pass confirms identities
+    // and fills in versions for the mod a folder holds; the layers above it are
+    // the resolve dialog's business, one folder at a time.
+    final base = origin?.base;
+    if (origin == null || base?.modId == null) {
       untracked.add(mod);
       continue;
     }
-    final remote = records[origin.modId];
+    final remote = records[base!.modId];
     if (remote == null) {
       unreachable++;
       continue;
@@ -200,7 +204,7 @@ BulkResolutionPlan planBulkResolution({
       // fetched from it would be empty and an identity confirmed against it
       // would be confirmed against a blank. One question, and it is the only
       // one with an answer.
-      if (!origin.remoteMissing) {
+      if (!base.remoteMissing) {
         questions.add(BulkResolutionQuestion.sourceGone);
       }
       if (questions.isEmpty) {
@@ -215,14 +219,14 @@ BulkResolutionPlan planBulkResolution({
       }
       continue;
     }
-    if (origin.remoteMissing) questions.add(BulkResolutionQuestion.sourceBack);
-    if (!origin.modIdConfidence.isConfirmed) {
+    if (base.remoteMissing) questions.add(BulkResolutionQuestion.sourceBack);
+    if (!base.modIdConfidence.isConfirmed) {
       questions.add(BulkResolutionQuestion.identity);
     }
 
     var candidates = const <ResolveCandidate>[];
     ResolveCandidate? suggestion;
-    if (origin.versionConfidence == OriginConfidence.unknown) {
+    if (base.versionConfidence == OriginConfidence.unknown) {
       // `Mod/Multi` folds archived files into `_aFiles` and flags them with
       // `_bIsArchived`, where a profile splits them across two keys. Passing
       // `allFiles` and nothing else is what makes one ranking serve both shapes
@@ -233,7 +237,7 @@ BulkResolutionPlan planBulkResolution({
         archivedFiles: null,
         folderName: mod.name,
         installedAt: origin.installedAt,
-        archiveMd5: origin.archiveMd5,
+        archiveMd5: base.archiveMd5,
       );
       if (!resolution.isEmpty) {
         candidates = resolution.candidates;
@@ -351,7 +355,7 @@ ModOrigin? applyBulkResolution(
   ModOrigin? current,
   BulkResolutionAnswer answer,
 ) {
-  if (current == null || current.modId != answer.modId) return null;
+  if (current == null || current.base?.modId != answer.modId) return null;
   var next = current;
 
   if (answer.remoteMissing case final gone?) {
@@ -365,7 +369,7 @@ ModOrigin? applyBulkResolution(
 
   final confirmsIdentity = answer.confirmIdentity ||
       (answer.file != null && answer.fileConfidence.isConfirmed);
-  if (confirmsIdentity && !next.modIdConfidence.isConfirmed) {
+  if (confirmsIdentity && !(next.base?.modIdConfidence.isConfirmed ?? false)) {
     next = OriginResolution.bind(next, answer.modId);
   }
 

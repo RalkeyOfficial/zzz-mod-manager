@@ -10,6 +10,8 @@ import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/bulk_update_check.dart';
 import 'package:mod_manager_flutter/services/update_check.dart';
 
+import 'support/origin_shorthand.dart';
+
 /// The whole-library pass: what it asks about, how it batches, and — the part
 /// that is genuinely easy to get wrong — what it does when the batch endpoint
 /// refuses the whole request because one id is bad.
@@ -23,7 +25,7 @@ void main() {
     int? fileId,
     OriginTracking tracking = OriginTracking.auto,
   }) =>
-      ModOrigin(
+      originFixture(
         source: modId == null ? null : 'gamebanana',
         modId: modId,
         modIdConfidence:

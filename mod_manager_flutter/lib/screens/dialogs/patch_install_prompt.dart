@@ -7,7 +7,7 @@ import '../../core/constants.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../models/gamebanana/gamebanana.dart';
-import '../../models/mod_companion.dart';
+import '../../models/mod_download.dart';
 import '../../services/origin_summary.dart';
 import '../../services/patch_destination_ranking.dart';
 import '../components/resolve/resolve_fragments.dart';
@@ -62,16 +62,16 @@ sealed class PatchDestination {
 /// A folder of its own — the default, and the one that cannot destroy anything.
 ///
 /// [base] is what the user said it patches, when they said. It is recorded as a
-/// `role: base` companion on the new folder: a statement about what that folder
-/// is *going* to hold, since the patch alone does nothing until the mod it
-/// patches is in there with it.
+/// layer **underneath** the patch on the new folder: a statement about what that
+/// folder is *going* to hold, since the patch alone does nothing until the mod
+/// it patches is in there with it.
 class InstallAsNewMod extends PatchDestination {
   const InstallAsNewMod({this.base, this.baseName, this.baseFile});
 
-  final ModCompanion? base;
+  final ModDownload? base;
 
   /// The base mod page's own name, for the row to say. Not stored on the
-  /// companion — a name is the remote's to change.
+  /// layer — a name is the remote's to change.
   final String? baseName;
 
   /// The file of the base mod the install should **fetch and write into this
@@ -204,7 +204,6 @@ class _PatchInstallPromptState extends ConsumerState<PatchInstallPrompt> {
       context,
       modName: subject.modName,
       primaryModId: subject.patchModId,
-      role: CompanionRole.base,
       existing: current is InstallAsNewMod ? current.base : null,
     );
     if (outcome == null || !mounted) return;
@@ -385,7 +384,7 @@ class _PatchInstallPromptState extends ConsumerState<PatchInstallPrompt> {
             // differently, and one of them marks the card.
             '${loc.t('mods.patch_install.recorded', params: {
                   'mod': named.baseName ?? '#${base.modId}',
-                })}\n${describeRecordedFile(loc, summarizeCompanion(base))}',
+                })}\n${describeRecordedFile(loc, summarizeDownload(base))}',
             Icons.call_split,
           ),
         ),
@@ -426,7 +425,7 @@ class _PatchInstallPromptState extends ConsumerState<PatchInstallPrompt> {
       for (final candidate in _ordered(subject))
         if (query.isEmpty ||
             candidate.mod.name.toLowerCase().contains(query) ||
-            (candidate.mod.origin?.versionLabel
+            (candidate.mod.origin?.base?.versionLabel
                     ?.toLowerCase()
                     .contains(query) ??
                 false))
@@ -466,7 +465,7 @@ class _PatchInstallPromptState extends ConsumerState<PatchInstallPrompt> {
               itemBuilder: (_, index) {
                 final mod = matches[index].mod;
                 final rank = matches[index].rank;
-                final label = mod.origin?.versionLabel;
+                final label = mod.origin?.base?.versionLabel;
                 final reason = _reasonFor(rank);
                 return ListTile(
                   dense: true,

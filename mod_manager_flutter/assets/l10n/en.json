@@ -261,7 +261,31 @@
       "delete": "Delete",
       "resolve_origin": "Update tracking…",
       "check_update": "Check for updates…",
-      "restore_backup": "Restore a previous version…"
+      "restore_backup": "Restore a previous version…",
+      "remove_patch": "Remove patch…",
+      "remove_patch_named": "Remove patch: {patch}"
+    },
+    "remove_patch": {
+      "title": "Remove this patch?",
+      "body": "\"{patch}\" was installed into \"{mod}\". Removing it puts the mod's own files back where the patch replaced them.",
+      "deletes_single": "{count} file the patch added is deleted",
+      "deletes_plural": "{count} files the patch added are deleted",
+      "restores_single": "{count} of the mod's own files comes back",
+      "restores_plural": "{count} of the mod's own files come back",
+      "unrecoverable_single": "{count} file stays as the patch left it — the mod's original was never saved",
+      "unrecoverable_plural": "{count} files stay as the patch left them — the mod's originals were never saved",
+      "gone_single": "{count} recorded file is no longer in the folder and is left alone",
+      "gone_plural": "{count} recorded files are no longer in the folder and are left alone",
+      "cancel": "Cancel",
+      "confirm": "Remove patch",
+      "done_title": "Patch removed",
+      "partial_title": "Patch removed, with some files left",
+      "partial_body_single": "{count} file could not be moved. Nothing is lost — \"Restore a previous version…\" undoes this.",
+      "partial_body_plural": "{count} files could not be moved. Nothing is lost — \"Restore a previous version…\" undoes this.",
+      "already_gone_title": "That patch is not in this folder any more",
+      "failed_title": "Could not remove the patch",
+      "failed_snapshot": "A copy of the mod could not be saved first, so nothing was changed.",
+      "failed_missing": "The mod folder is gone."
     },
     "details": {
       "keybinds": "Keybinds",
@@ -334,7 +358,8 @@
       "unnamed": "GameBanana mod #{id}",
       "remote_missing": "Its mod page is no longer available.",
       "open_page": "Open this mod's page",
-      "change": "Change which mod this is"
+      "change": "Change which mod this is",
+      "remove": "This patch is no longer here"
     },
     "resolve": {
       "title": "Update tracking for \"{mod}\"",
@@ -385,7 +410,11 @@
       "companion_file_unknown": "Nothing here records which of these you actually have — these are the files this mod page publishes, not what's in your folder. Pick the one you recognise, or say you don't know.",
       "companion_is_self": "That is this mod, not another one",
       "companion_remove": "This is just one mod after all",
-      "companion_remove_hint": "Stops watching the other mod page."
+      "companion_remove_hint": "Stops watching the other mod page.",
+      "companion_remove_patch_title": "This patch is no longer in the folder?",
+      "companion_remove_patch_body": "Nothing in the folder is deleted. {mod} stops being checked for updates, and this folder stops offering to write it back. Installing that patch through the app again records it again.",
+      "companion_remove_patch_confirm": "Remove from the record",
+      "companion_remove_patch_uninstall": "To take its files out of the folder as well, use \"Remove patch…\" in this mod's right-click menu."
     },
     "patch_install": {
       "title": "This looks like a patch",

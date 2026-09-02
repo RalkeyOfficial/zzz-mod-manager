@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/l10n/app_localizations.dart';
-import 'package:mod_manager_flutter/models/mod_companion.dart';
+import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/archive_service.dart';
@@ -16,6 +16,8 @@ import 'package:mod_manager_flutter/services/patch_scan.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_applier.dart';
 import 'package:mod_manager_flutter/utils/directory_copy.dart';
 import 'package:path/path.dart' as p;
+
+import 'support/origin_shorthand.dart';
 
 /// The **whole install path** for an asset-only patch, over a real archive.
 ///
@@ -125,7 +127,7 @@ void main() {
     );
     await repository.recordOrigin(
       modName,
-      const ModOrigin(
+      originFixture(
         provenance: OriginProvenance.downloaded,
         source: 'gamebanana',
         modId: 900460,
@@ -171,23 +173,23 @@ void main() {
 
     // ---- 5. and the card asks the user to finish it ------------------------
     final origin = sidecar.origin!;
-    expect(origin.needsCompanion, isTrue);
+    expect(origin.needsBase, isTrue);
     expect(modOriginStatus(origin), ModOriginStatus.secondIdentityUnknown,
         reason: 'the amber mark, and its own sentence');
     expect(modNeedsAttention(origin), isTrue,
         reason: 'and it is counted, because naming the base clears it');
 
     // ---- 6. naming the base retires the state ------------------------------
-    // The last link in the chain: the state is not a dead end.
-    expect(
-      modOriginStatus(origin.copyWith(companions: [
-        const ModCompanion(
-          role: CompanionRole.base,
-          modId: 900282,
-          modIdConfidence: OriginConfidence.user,
-        ),
-      ])),
-      ModOriginStatus.none,
-    );
+    // The last link in the chain: the state is not a dead end. Naming it
+    // **inserts underneath**, so what was the only layer becomes the patch —
+    // and the folder is a two-deep stack with nothing left to ask about.
+    final named = origin.withBaseInserted(const ModDownload(
+      modId: 900282,
+      modIdConfidence: OriginConfidence.user,
+      versionConfidence: OriginConfidence.user,
+    ));
+    expect(named.downloads.map((d) => d.modId), [900282, 900460]);
+    expect(named.needsBase, isFalse);
+    expect(modOriginStatus(named), ModOriginStatus.none);
   }, skip: pair == null);
 }

@@ -64,33 +64,32 @@ class InstalledModsIndex {
       final origin = mod.origin;
       if (origin == null) continue;
 
+      // **Every download in the folder counts as installed**, and this is the
+      // one place a mixed folder is a straight gain rather than a cost: a
+      // patched folder really does hold both mods' files, and before this the
+      // mod that was not the folder's headline showed no badge on its own page
+      // at all. One folder legitimately appears under several ids.
+      //
+      // Inside the `tracking: "off"` guard on purpose — the switch is about the
+      // folder, which is exactly why no layer carries one of its own.
       if (origin.tracking != OriginTracking.off) {
-        if (origin.modId case final modId?) {
-          byModId.putIfAbsent(modId, () => <String>[]).add(mod.id);
-        }
-        if (origin.fileId case final fileId?) {
-          byFileId.putIfAbsent(fileId, () => <String>[]).add(mod.id);
-        }
-        // **The other downloads in the folder count as installed too**, and
-        // this is the one place a second identity is a straight gain rather
-        // than a cost: the base mod's files really are in the library, and its
-        // page showed no badge at all because the folder is named after the
-        // patch. One folder legitimately appears under both ids.
-        //
-        // Inside the `tracking: "off"` guard on purpose — the switch is about
-        // the folder, which is exactly why a companion carries none of its own.
-        for (final companion in origin.companions) {
-          byModId
-              .putIfAbsent(companion.modId, () => <String>[])
-              .add(mod.id);
-          if (companion.fileId case final fileId?) {
+        for (final download in origin.downloads) {
+          if (download.modId case final modId?) {
+            byModId.putIfAbsent(modId, () => <String>[]).add(mod.id);
+          }
+          if (download.fileId case final fileId?) {
             byFileId.putIfAbsent(fileId, () => <String>[]).add(mod.id);
           }
         }
       }
 
-      if (normalizeArchiveMd5(origin.archiveMd5) case final md5?) {
-        byArchiveMd5.putIfAbsent(md5, () => <String>[]).add(mod.id);
+      // **Every layer's archive, not only the bottom one's.** The hash answers
+      // "have I installed this archive before", and a patch's archive is one the
+      // user can pick again from the same file list.
+      for (final download in origin.downloads) {
+        if (normalizeArchiveMd5(download.archiveMd5) case final md5?) {
+          byArchiveMd5.putIfAbsent(md5, () => <String>[]).add(mod.id);
+        }
       }
     }
 

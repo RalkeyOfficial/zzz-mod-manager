@@ -13,6 +13,8 @@ import 'package:mod_manager_flutter/services/mod_metadata_repository.dart';
 import 'package:mod_manager_flutter/services/origin_backfill.dart';
 import 'package:mod_manager_flutter/services/origin_resolution.dart';
 
+import 'support/origin_shorthand.dart';
+
 /// In-memory stand-in for the `config.json` character-tag mirror.
 ///
 /// Deliberately *not* the real `ConfigService`: that writes to the developer's
@@ -663,7 +665,7 @@ void main() {
       OriginProvenance provenance = OriginProvenance.importedArchive,
       String? md5 = 'aaaa',
     }) =>
-        ModOrigin(
+        originFixture(
           provenance: provenance,
           archiveMd5: md5,
           ingest: const ModIngest(folders: ['Mod']),
@@ -767,7 +769,7 @@ void main() {
         characterId: 'ellen',
         isActive: false,
         description: 'my notes',
-        origin: const ModOrigin(
+        origin: originFixture(
           provenance: OriginProvenance.downloaded,
           source: 'gamebanana',
           modId: 424242,
@@ -828,7 +830,7 @@ void main() {
       makeMod('Legacy Mod');
       await repo.recordOrigin(
         'Legacy Mod',
-        const ModOrigin(
+        originFixture(
           provenance: OriginProvenance.importedArchive,
           archiveMd5: 'bbbb',
           ingest: ModIngest(folders: ['Legacy Mod']),
@@ -860,7 +862,7 @@ void main() {
       makeMod('Raced Mod');
       await repo.recordOrigin(
         'Raced Mod',
-        const ModOrigin(provenance: OriginProvenance.importedFolder, modId: 1),
+        originFixture(provenance: OriginProvenance.importedFolder, modId: 1),
       );
 
       ModOrigin? seen;
@@ -878,7 +880,7 @@ void main() {
       makeMod('Rebound Mod');
       await repo.recordOrigin(
         'Rebound Mod',
-        const ModOrigin(provenance: OriginProvenance.importedFolder, modId: 7),
+        originFixture(provenance: OriginProvenance.importedFolder, modId: 7),
       );
 
       expect(await repo.updateOrigin('Rebound Mod', (_) => null), isFalse);
@@ -1129,7 +1131,7 @@ void main() {
       makeMod('Ellen Swimsuit');
       await repo.recordOrigin(
         'Ellen Swimsuit',
-        const ModOrigin(
+        originFixture(
           source: 'gamebanana',
           modId: 531275,
           modIdConfidence: OriginConfidence.exact,

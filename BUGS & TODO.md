@@ -271,6 +271,15 @@ Two things are **refused rather than unbuilt**, both recorded in
   button. The two need visibly different weight before they share a surface —
   and each apply already has its own confirmation, its own snapshot and its own
   stale-`.ini` question, none of which collapses into a checkbox.
+- [ ] **Renaming or deleting a mod strands its snapshots forever.** `renameMod`
+  and `deleteMod` never touch `<appData>/backups/`, so the folder stays under the
+  old name — unreachable from "Restore a previous version…" — and `planRetention`
+  groups by mod *name* and protects each group's newest entry unconditionally, so
+  the orphan is **never pruned**. A 1.2 GB mod deleted a year ago still costs
+  1.2 GB. Wants a migrate on rename, a delete on delete, and a sweep for groups
+  with no folder; the pure planner needs no change. This is why a patch's
+  displaced files live in the mod folder instead
+  ([`docs/applying-updates.md`](docs/applying-updates.md) §5).
 - [ ] **Total backup size is not surfaced anywhere.** The rollback dialog shows a
   size per snapshot; there is no whole-library figure, so the retention budget
   bounds something invisible. §4.2 always intended this to live in the storage
@@ -330,17 +339,16 @@ Everything that follows from that — the patch test, the stale-`.ini` rule, the
 layout replay, the ordering that is the safety argument — is
 [`docs/applying-updates.md`](docs/applying-updates.md).
 
-- [ ] **Recording the file list an archive laid down — later, not now.** The
-  precise mechanism is to save each download's file list at install and, on update,
-  remove exactly those paths before writing the new ones. It needs no guessing and
-  it would make the overwritten-patch case detectable. It is **not a prerequisite**:
-  the data does not exist for a single currently-installed mod, which is the entire
-  library and every mixed folder in it. Reconstructing it by re-downloading the
-  *old* archive does not rescue it either — that is a second full transfer
-  (22 MB median, 1.24 GB tail), and GameBanana deletes old file ids, so it is
-  unavailable exactly for the old mods most likely to have been patched. Add it
-  narrowly so installs from that point on get the precise path. Self-healing per
-  §7.7.
+- [ ] **An update still overwrites rather than removing what the last version
+  wrote.** Each download's file list is now recorded at install
+  ([`docs/metadata-schema.md`](docs/metadata-schema.md)), and the removal half is
+  built for patches only. The general form is to remove exactly the recorded
+  paths before writing the new ones, which would make a file the new version
+  stopped shipping disappear instead of lingering — the `ShaderFixes/` gap above
+  is the case with no other detection. Forward-only: no mod installed before the
+  record existed has one, and re-downloading the old archive to reconstruct it is
+  a second full transfer (22 MB median, 1.24 GB tail) against file ids GameBanana
+  deletes. Self-healing per §7.7.
 - [ ] Reuse this same path for a **reinstall / repair** action — it's the identical
   operation at the same file id, so it costs nothing extra. `applyUpdateFlow` takes
   a `GbFile` and does not care whether it is newer than what is installed. What is
@@ -590,11 +598,11 @@ and what survives a rebind. Entry points: the status slot and the mod context me
   seeing them is enough; at 80 it may not be, and the natural home is a second
   row on the `!` toggle rather than a sixth toolbar control. Filed rather than
   built, to see whether it is actually wanted.
-- [ ] **A patch recorded *inside* a folder cannot be corrected, only read.** The
-  resolve dialog's editable row runs one way — "this folder is a patch, name
-  what it patches" — so a `role: patch` companion is shown and nothing more.
-  What is missing is "that patch is gone / it was never there"; the cost is
-  mirroring the wording in both locales.
+- [ ] **A stale companion is only fixable from the tracking dialog.** Both
+  corrections live there — rename what a patch applies to, or declare a patch
+  gone — and the surface that *shows* the problem is the updates dialog, which
+  has no route to it. The same gap as the filed item under §7.5 about the
+  edit-mod dialog, and one menu entry away from being the same fix.
 - [ ] **The two resolve dialogs still fetch a whole `ProfilePage`.** They read
   four fields off it — name, dates, files, archived files — where the update
   check now asks `Mod/Multi` for one id at a quarter of the bytes. Not a

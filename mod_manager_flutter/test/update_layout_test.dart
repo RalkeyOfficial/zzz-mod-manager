@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/models/installed_file.dart';
 import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_layout.dart';
@@ -177,6 +178,35 @@ void main() {
       final ingest = ingestAfterUpdate(layoutFor('Ellen'), null)!;
       expect(ingest.folders, ['Ellen']);
       expect(ingest.patchShaped, isFalse);
+    });
+
+    test('the files this write laid down replace the old manifest', () {
+      // Precisely what an update changed, so carrying the old list forward
+      // would name files the new version does not ship.
+      final ingest = ingestAfterUpdate(
+        layoutFor('Ellen'),
+        const ModIngest(
+          folders: ['Ellen'],
+          files: [InstalledFile(path: 'Old.ini')],
+        ),
+        files: const [InstalledFile(path: 'Ellen.ini', bytes: 40)],
+      )!;
+
+      expect(ingest.files.map((f) => f.path), ['Ellen.ini']);
+    });
+
+    test('a build that cannot say what it wrote keeps the old manifest', () {
+      // Null is "I do not know", and an empty list would assert the folder is
+      // empty — which would then license deleting nothing on the next update
+      // and, worse, offer no way back to the record that was there.
+      const current = ModIngest(
+        folders: ['Ellen'],
+        files: [InstalledFile(path: 'Ellen.ini')],
+      );
+
+      final ingest = ingestAfterUpdate(layoutFor('Ellen'), current)!;
+
+      expect(ingest.files.map((f) => f.path), ['Ellen.ini']);
     });
   });
 }

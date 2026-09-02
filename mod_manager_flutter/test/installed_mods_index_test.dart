@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
-import 'package:mod_manager_flutter/models/mod_companion.dart';
-import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/installed_mods_index.dart';
+
+import 'support/origin_shorthand.dart';
 
 /// The "do I already have this?" lookup.
 ///
@@ -28,7 +28,7 @@ void main() {
       isActive: false,
       origin: noOrigin
           ? null
-          : ModOrigin(
+          : originFixture(
               source: 'gamebanana',
               modId: modId,
               modIdConfidence: modIdConfidence,
@@ -225,15 +225,20 @@ void main() {
     });
   });
 
-  group('companions', () {
-    // The one place a second identity is a straight gain rather than a cost:
-    // the base mod's files really are in the library, and until now its page
-    // showed no badge because the folder is named after the patch.
+  group('a folder that holds more than one download', () {
+    // The one place a mixed folder is a straight gain rather than a cost: both
+    // mods' files really are in the library, and before this the mod that was
+    // not the folder's headline showed no badge on its own page at all.
+    //
+    // The folder is a **patch with the mod it patches underneath it**, which is
+    // the ordering the old model recorded as "primary is the patch, companion is
+    // the base". As a stack it is simply base-then-patch, like the other
+    // ordering — which is the point.
     ModInfo mixed(
       String name, {
-      required int primary,
-      required int companion,
-      int? companionFileId,
+      required int patch,
+      required int base,
+      int? baseFileId,
       OriginTracking tracking = OriginTracking.auto,
     }) =>
         ModInfo(
@@ -241,36 +246,31 @@ void main() {
           name: name,
           characterId: 'unknown',
           isActive: false,
-          origin: ModOrigin(
+          origin: originFixture(
             source: 'gamebanana',
-            modId: primary,
-            modIdConfidence: OriginConfidence.exact,
+            modId: base,
+            modIdConfidence: OriginConfidence.user,
+            fileId: baseFileId,
             provenance: OriginProvenance.downloaded,
             tracking: tracking,
-            companions: [
-              ModCompanion(
-                role: CompanionRole.base,
-                modId: companion,
-                modIdConfidence: OriginConfidence.user,
-                fileId: companionFileId,
-              ),
+            patches: [
+              patchFixture(modId: patch, modIdConfidence: OriginConfidence.exact),
             ],
           ),
         );
 
-    test('the base mod counts as installed, under the folder it is in', () {
+    test('every download counts as installed, under the folder it is in', () {
       final index = InstalledModsIndex.fromMods([
-        mixed('EllenBikini', primary: 222, companion: 111),
+        mixed('EllenBikini', patch: 222, base: 111),
       ]);
       expect(index.hasMod(222), isTrue);
       expect(index.hasMod(111), isTrue);
       expect(index.installsOfMod(111), ['EllenBikini']);
     });
 
-    test('a companion file id marks that row as installed', () {
+    test('a lower layer\'s file id marks that row as installed', () {
       final index = InstalledModsIndex.fromMods([
-        mixed('EllenBikini',
-            primary: 222, companion: 111, companionFileId: 1490003),
+        mixed('EllenBikini', patch: 222, base: 111, baseFileId: 1490003),
       ]);
       final match = index.matchFile(fileId: 1490003);
       expect(match.isInstalled, isTrue);
@@ -278,24 +278,24 @@ void main() {
       expect(match.folders, ['EllenBikini']);
     });
 
-    test('one page installed as a folder and as a companion lists both', () {
+    test('one page installed on its own and inside a stack lists both', () {
       // Nothing stops a user owning the base mod in its own folder *and*
       // having it inside a patched one, and both are true answers to "where
       // is this in my library".
       final index = InstalledModsIndex.fromMods([
         mod('Ellen Bikini', modId: 111),
-        mixed('EllenBikini Patched', primary: 222, companion: 111),
+        mixed('EllenBikini Patched', patch: 222, base: 111),
       ]);
       expect(index.installsOfMod(111), ['Ellen Bikini', 'EllenBikini Patched']);
     });
 
-    test('tracking off excludes the companion too', () {
-      // The switch is about the folder, which is exactly why a companion does
-      // not carry one of its own. A stale identity of either kind must not
-      // badge somebody else's mod page.
+    test('tracking off excludes every layer', () {
+      // The switch is about the folder, which is exactly why no layer carries
+      // one of its own. A stale identity at any depth must not badge somebody
+      // else's mod page.
       final index = InstalledModsIndex.fromMods([
         mixed('EllenBikini',
-            primary: 222, companion: 111, tracking: OriginTracking.off),
+            patch: 222, base: 111, tracking: OriginTracking.off),
       ]);
       expect(index.hasMod(222), isFalse);
       expect(index.hasMod(111), isFalse);

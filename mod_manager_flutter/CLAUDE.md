@@ -79,7 +79,16 @@ resolving a character from an id must handle both, plus the `unknown` placeholde
   render a match as "verified".
 - **An update overwrites a mod folder; it never empties, moves or replaces it**,
   and **never writes without a snapshot first**. A mod folder frequently holds a
-  second download that replacing would destroy.
+  second download that replacing would destroy. Taking a patch out follows the
+  same order and the same refusal.
+- **An `InstalledFileRole` we do not recognise is `replaced`, never `added`** —
+  the one lenient parse in this codebase that resolves *upward*. `added` licenses
+  a delete, and leaving a file behind is recoverable where deleting the mod's own
+  file is not.
+- **A displaced original is renamed, never stored under its real name.** Files
+  kept in `.zzz-mod-manager/replaced/` take a `.orig` suffix: the folder is
+  reachable through the active symlink, so a stored `ellen.ini` would be loaded
+  beside the live one ([`applying-updates.md`](../docs/applying-updates.md) §5).
 - **No update is applied without the user present.** Automatic updating is
   refused rather than unbuilt ([`applying-updates.md`](../docs/applying-updates.md)
   §7). *Checking* is automatable and is opt-in

@@ -4,7 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../models/gamebanana/gamebanana.dart';
-import '../../models/mod_companion.dart';
+import '../../models/mod_download.dart';
+import '../../models/mod_ingest.dart';
 import '../../models/mod_origin.dart';
 import '../../models/origin_enums.dart';
 import '../../services/api_service.dart';
@@ -13,6 +14,7 @@ import '../../services/gamebanana/remote_mod_metadata.dart';
 import '../../services/log/logger.dart';
 import '../../services/origin_resolution.dart';
 import '../../services/origin_summary.dart';
+import '../../services/patch_record.dart';
 import '../../utils/gamebanana_url.dart';
 import '../../utils/state_providers.dart';
 import '../../utils/url_utils.dart';
@@ -21,6 +23,7 @@ import '../components/resolve/file_choice_panel.dart';
 import '../components/resolve/identity_search_panel.dart';
 import '../components/resolve/resolve_fragments.dart';
 import 'companion_resolve_dialog.dart';
+import 'remove_patch_flow.dart';
 
 /// Binds one library folder to one remote mod and file.
 ///
@@ -129,7 +132,10 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
   @override
   void initState() {
     super.initState();
-    _modId = _origin?.modId;
+    // **What the folder is** — its bottom layer. This dialog's identity step
+    // answers "which mod is this?", and a patch written on top of it does not
+    // change the answer.
+    _modId = _origin?.base?.modId;
     _installedAt = _origin?.installedAt;
     // A mod the user declared their own renders one notice and one button, and
     // `build` shows nothing a mod page could fill in — so fetching one is a
@@ -230,7 +236,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
       archivedFiles: profile.archivedFiles,
       folderName: widget.mod.name,
       installedAt: _installedAt,
-      archiveMd5: _origin?.archiveMd5,
+      archiveMd5: _origin?.base?.archiveMd5,
     );
   }
 
@@ -244,10 +250,10 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
   /// rebound while this dialog was open, the write abandons instead of
   /// attaching a file id to somebody else's mod.
   bool get _identityNeedsWrite {
-    final origin = _origin;
-    if (origin == null || origin.modId != _modId) return true;
-    return origin.modIdConfidence != OriginConfidence.user &&
-        origin.modIdConfidence != OriginConfidence.exact;
+    final base = _origin?.base;
+    if (base == null || base.modId != _modId) return true;
+    return base.modIdConfidence != OriginConfidence.user &&
+        base.modIdConfidence != OriginConfidence.exact;
   }
 
   /// Whether Save would change anything on disk.
@@ -541,55 +547,85 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
   /// would put the same pair of mods in different places for two users who did
   /// the same thing in a different sequence.
   ///
-  /// The row for the mod a patch applies to carries the **change** affordance,
-  /// rather than that entry getting a row of its own below the list. The empty
-  /// case still does — see [_companionRow] — because there is no entry to hang
-  /// it on until something is named.
+  /// **Every recorded companion carries an affordance**, rather than that entry
+  /// getting a row of its own below the list. The empty case still does — see
+  /// [_companionRow] — because there is no entry to hang one on until something
+  /// is named.
+  ///
+  /// **The bottom layer carries no affordance here**, and that is the one
+  /// redundancy the stack removed: it is what the identity card above already
+  /// edits, and a second way to change the same thing in the same dialog reads
+  /// as two different settings. Every layer above it offers removal.
   ///
   /// Above the escape hatches, which have to stay near the bottom.
   List<Widget> _folderSection() {
     final origin = _origin;
-    if (origin == null || origin.companions.isEmpty) return const <Widget>[];
+    if (origin == null || !origin.isMixed) return const <Widget>[];
 
-    final base = origin.companionOfRole(CompanionRole.base);
     return [
       FolderDownloadsSummary(
         origin: origin,
         folderName: widget.mod.name,
-        // This dialog has the folder's own page in hand already.
+        // This dialog has the base's page in hand already.
         knownNames: {
-          if (origin.modId case final id?)
+          if (origin.base?.modId case final id?)
             if (_profile?.name case final name?) id: name,
         },
         lookUpNames: true,
-        // Only the mod a patch applies to. A `patch` recorded *in* this folder
-        // was downloaded by the app with both axes already `exact`, so there is
-        // nothing to ask about it — and no flow that would run the other way.
-        editableModIds: {if (base != null) base.modId},
-        onEdit: (_) => _editCompanion(base),
+        rowActions: {
+          for (final patch in origin.patches)
+            if (patch.modId case final id?) id: FolderRowAction.remove,
+        },
+        onEdit: _takeOutPatch,
       ),
       const SizedBox(height: 8),
     ];
   }
 
-  /// The way into naming the **other download in this folder**, for the case
-  /// where there is not one yet.
+  /// **Takes the patch out**, files and all — the same operation the mod's
+  /// right-click menu runs, from the surface that is showing the patch.
   ///
-  /// Shown only when the folder is recorded as patch-shaped and nothing has been
-  /// named: the app knows the folder is two things and can only ask about one.
-  /// Once a companion exists it appears in [_folderSection] as a peer, carrying
-  /// the change affordance on its own row — a second row below the list for the
-  /// same download would rank it again. Offering this on every mod would turn a
-  /// rare, specific question into furniture.
+  /// It used to forget the record and leave the files, and that was worse than
+  /// doing nothing: the record is what makes the next base update set the patch
+  /// aside instead of writing over it, and what makes the confirmation warn when
+  /// it cannot. Removing tracking for a patch that is still in the folder took
+  /// the protection away and left the patch.
+  ///
+  /// So there is one action, and it does what the situation allows — see
+  /// [removePatchFlow], which decides between putting the mod's files back,
+  /// dropping a record whose files are demonstrably gone, and refusing where
+  /// nothing says which files are the patch's.
+  Future<void> _takeOutPatch(ModDownload patch) async {
+    if (patch.modId == null) return;
+    final changed = await removePatchFlow(
+      context,
+      ref,
+      mod: widget.mod,
+      patch: patch,
+      patchName: _layerName(patch.modId!),
+    );
+    if (!changed || !mounted) return;
+    // The block this dialog is holding has just been rewritten under it, and
+    // every panel below reads that block. Closing is the honest answer: the
+    // folder is not what it was when the dialog opened.
+    Navigator.of(context).pop(true);
+  }
+
+  /// The way into naming the mod a patch-shaped folder **applies to**, for the
+  /// case where the bottom of the stack is missing.
+  ///
+  /// Shown only then: the app knows the folder is two things and can only ask
+  /// about one. Once a base exists it is the layer the identity card edits, so a
+  /// row for it here would be the second copy this section exists to avoid.
+  /// Offering this on every mod would turn a rare, specific question into
+  /// furniture.
   ///
   /// A pushed step rather than a section: this dialog's escape hatches must
   /// stay one click from the bottom, and a second identity card inline is what
   /// pushes them off it.
   Widget? _companionRow() {
     final origin = _origin;
-    if (origin == null) return null;
-    if (origin.companionOfRole(CompanionRole.base) != null) return null;
-    if (!origin.needsCompanion) return null;
+    if (origin == null || !origin.needsBase) return null;
 
     return ListTile(
       dense: true,
@@ -605,39 +641,53 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
         style: const TextStyle(fontSize: 11),
       ),
       trailing: const Icon(Icons.chevron_right, size: 18),
-      onTap: () => _editCompanion(null),
+      onTap: _nameTheBase,
     );
   }
 
-  Future<void> _editCompanion(ModCompanion? existing) async {
+  /// Names what this folder's patch applies to, and **inserts it underneath**.
+  ///
+  /// Written on its own rather than folded into Save: this is a decision about a
+  /// different download, and making the user press Save afterwards invites them
+  /// to close the dialog believing they already had.
+  Future<void> _nameTheBase() async {
     final modId = _modId;
     if (modId == null) return;
     final outcome = await showCompanionResolveDialog(
       context,
       modName: widget.mod.name,
       primaryModId: modId,
-      role: CompanionRole.base,
-      existing: existing,
     );
     if (outcome == null || !mounted) return;
 
-    // Written on its own rather than folded into Save: this is a decision about
-    // a different mod, and making the user press Save afterwards invites them
-    // to close the dialog believing they already had.
     await _write((current) {
       if (current == null) return null;
-      final rest = [
-        for (final companion in current.companions)
-          if (companion.role != CompanionRole.base) companion,
-      ];
-      return current.copyWith(
-        companions: switch (outcome) {
-          CompanionNamed(:final companion) => [...rest, companion],
-          CompanionRemoved() => rest,
-        },
-      );
+      return withRebuiltPatchFiles(switch (outcome) {
+        // Under everything, which is what makes the folder's own layer a patch
+        // — with no field to rewrite, because the role follows the position.
+        CompanionNamed(:final companion) =>
+          current.withBaseInserted(companion),
+        // "This is just one mod after all": nothing was inserted, so there is
+        // nothing to take out. The flag is what said otherwise.
+        CompanionRemoved() => current.copyWith(
+            ingest:
+                (current.ingest ?? const ModIngest()).copyWith(
+              patchShaped: false,
+            ),
+          ),
+      });
     });
   }
+
+  /// The best name this dialog can put on a layer, without fetching one.
+  ///
+  /// The summary row does its own lookup and may well be showing a real title
+  /// while this returns the id form. Accepted rather than plumbed: the
+  /// confirmation names the mod so the user can tell two entries apart, and the
+  /// id is on the row directly above it either way.
+  String _layerName(int modId) =>
+      ref.read(modUpdateRecordsProvider)[modId]?.name ??
+      loc.t('mods.folder.unnamed', params: {'id': '$modId'});
 
   /// The bound mod, and — while this dialog is still looking at the mod the
   /// sidecar names — **what is currently recorded about it.**
@@ -657,7 +707,8 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     // the recorded file, version and baseline all belong to the old one — so
     // showing them under the new mod's name would attribute one mod's history
     // to another.
-    final summary = _modId == _origin?.modId ? _summary : OriginSummary.empty;
+    final summary =
+        _modId == _origin?.base?.modId ? _summary : OriginSummary.empty;
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(

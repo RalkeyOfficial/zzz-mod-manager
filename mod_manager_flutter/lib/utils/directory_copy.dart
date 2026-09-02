@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as path;
 
+import '../models/installed_file.dart';
+
 /// Recursive directory copy with **overwrite** semantics, shared by the import
 /// path and the update path.
 ///
@@ -21,37 +23,67 @@ import 'package:path/path.dart' as path;
 /// block with a stranger's — including the block that decides which mod page we
 /// check.
 ///
-/// Returns how many files were written.
-Future<int> copyDirectory(
+/// **Returns every file it wrote**, each relative to [destination] in the
+/// spelling it now has on disk, sized, and marked by whether something was
+/// already at that path.
+///
+/// This is the one place that can answer any of those three without a second
+/// walk: the entry is in hand, the size comes off the copy, and only the code
+/// about to overwrite a path knows whether it was occupied. A caller that wants
+/// the old count takes `.length`.
+///
+/// **The check runs before the copy**, or every path would report itself as
+/// occupied by the file just written.
+Future<List<InstalledFile>> copyDirectory(
   Directory source,
   Directory destination, {
   bool Function(String relativePath)? skipRelative,
 }) async {
-  return _copy(source, destination, source.path, skipRelative ?? _keepAll);
+  final written = <InstalledFile>[];
+  await _copy(
+    source,
+    destination,
+    source.path,
+    destination.path,
+    skipRelative ?? _keepAll,
+    written,
+  );
+  return written;
 }
 
 bool _keepAll(String _) => false;
 
-Future<int> _copy(
+Future<void> _copy(
   Directory source,
   Directory destination,
-  String root,
+  String sourceRoot,
+  String destinationRoot,
   bool Function(String) skip,
+  List<InstalledFile> written,
 ) async {
   await destination.create(recursive: true);
-  var written = 0;
 
   await for (final entity in source.list(recursive: false, followLinks: false)) {
     final relative =
-        path.relative(entity.path, from: root).replaceAll(r'\', '/');
+        path.relative(entity.path, from: sourceRoot).replaceAll(r'\', '/');
     if (skip(relative)) continue;
 
     final target = path.join(destination.path, path.basename(entity.path));
     if (entity is Directory) {
-      written += await _copy(entity, Directory(target), root, skip);
+      await _copy(
+          entity, Directory(target), sourceRoot, destinationRoot, skip, written);
     } else if (entity is File) {
-      await entity.copy(target);
-      written++;
+      final existed = await File(target).exists();
+      final copied = await entity.copy(target);
+      written.add(InstalledFile(
+        // Relative to where it landed, not to where it came from: a combined
+        // install renames its folders on the way in, so the source-relative
+        // path names a file the mod folder does not have.
+        path: path.relative(copied.path, from: destinationRoot)
+            .replaceAll(r'\', '/'),
+        bytes: await _sizeOf(copied),
+        role: existed ? InstalledFileRole.replaced : InstalledFileRole.added,
+      ));
     }
     // Links are deliberately not followed and not recreated — `followLinks:
     // false` yields a `Link`, which matches neither branch above.
@@ -62,6 +94,15 @@ Future<int> _copy(
     // too: a link out of the folder copies an unbounded amount of unrelated
     // disk into the library, and one pointing at an ancestor recurses forever.
   }
+}
 
-  return written;
+/// Zero rather than throwing. A size that could not be read is a weaker record
+/// of a file that copied successfully, and failing the copy over it would trade
+/// a working install for a missing one.
+Future<int> _sizeOf(File file) async {
+  try {
+    return await file.length();
+  } catch (_) {
+    return 0;
+  }
 }

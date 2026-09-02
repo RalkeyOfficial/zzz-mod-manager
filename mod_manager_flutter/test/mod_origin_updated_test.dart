@@ -3,6 +3,8 @@ import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 
+import 'support/origin_shorthand.dart';
+
 /// `ModOrigin.updatedTo` — the block after an applied update.
 ///
 /// Its whole job is **what it clears**, and one of those clears is load-bearing
@@ -18,7 +20,7 @@ void main() {
     OriginTracking tracking = OriginTracking.auto,
     OriginProvenance provenance = OriginProvenance.importedArchive,
   }) =>
-      ModOrigin(
+      originFixture(
         source: 'gamebanana',
         modId: 700727,
         modIdConfidence: OriginConfidence.inferred,
@@ -37,13 +39,19 @@ void main() {
         updatesDismissedUntil: DateTime.utc(2026, 8, 8),
       );
 
-  ModOrigin updated(ModOrigin origin) => origin.updatedTo(
+  /// The write an update performs, in the shape it now has: the **layer** is
+  /// what `updatedTo` amends, and the folder's install date is set beside it.
+  ModOrigin updated(ModOrigin origin) => origin
+      .withBase((download) => download.updatedTo(
+            modId: 700727,
+            fileId: 222,
+            version: '1.2',
+            versionLabel: 'Main file',
+            archiveMd5: 'bbbb',
+          ))
+      .copyWith(
         source: 'gamebanana',
-        modId: 700727,
-        fileId: 222,
-        version: '1.2',
-        versionLabel: 'Main file',
-        archiveMd5: 'bbbb',
+        provenance: OriginProvenance.downloaded,
         installedAt: installedAt,
       );
 
@@ -98,12 +106,10 @@ void main() {
 
   test('a null archive hash keeps the one already banked', () {
     // Null-or-exact: a hash we could not compute must not erase one we have.
-    final after = before().updatedTo(
-      source: 'gamebanana',
-      modId: 700727,
-      fileId: 222,
-      installedAt: installedAt,
-    );
+    final after = before().withBase((download) => download.updatedTo(
+          modId: 700727,
+          fileId: 222,
+        ));
     expect(after.archiveMd5, 'aaaa');
     expect(after.ingest?.folders, ['MiyabiStudent']);
   });

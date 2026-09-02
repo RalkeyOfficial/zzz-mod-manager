@@ -20,6 +20,7 @@
 library;
 
 import '../models/gamebanana/gb_file.dart';
+import '../models/mod_download.dart';
 import '../models/mod_origin.dart';
 import '../models/origin_enums.dart';
 import '../utils/gamebanana_url.dart';
@@ -232,12 +233,25 @@ class OriginResolution {
         // least-privileged answer costs nothing, since provenance is not the
         // auto-update gate — confidence is.
         const ModOrigin(provenance: OriginProvenance.importedFolder);
-    return base.boundTo(
-      modId: modId,
-      confidence: OriginConfidence.user,
-      source: gameBananaSource,
-    );
+    // **The bottom layer.** "Which mod is this?" is a question about what the
+    // folder is, and a patch written over it does not change the answer.
+    return base
+        .withBase((download) => download.boundTo(
+              modId: modId,
+              confidence: OriginConfidence.user,
+            ))
+        .copyWith(source: gameBananaSource);
   }
+
+  /// The layer this dialog is acting on, or null when the block no longer holds
+  /// it.
+  ///
+  /// **Every write below re-checks it against the block as freshly read.** A
+  /// file id written against a layer that has since been rebound or removed is
+  /// precisely the corruption the re-read exists to prevent, and the plan a
+  /// caller is holding is exactly what has gone stale in the case that matters.
+  static ModDownload? _layer(ModOrigin? existing, int modId) =>
+      existing?.downloadOf(modId);
 
   /// Records which file of the bound mod is installed.
   ///
@@ -262,20 +276,24 @@ class OriginResolution {
     required GbFile file,
     required bool exact,
   }) {
-    if (existing == null || existing.modId != modId) return null;
-    final rePickingRecorded = existing.fileId == file.idRow;
-    return existing.copyWith(
-      fileId: file.idRow,
-      version: file.version,
-      versionLabel: file.description,
-      versionConfidence: exact ||
-              (rePickingRecorded &&
-                  existing.versionConfidence == OriginConfidence.exact)
-          ? OriginConfidence.exact
-          // Everything weaker becomes `user`, including a re-pick of an
-          // `inferred` row — the user looking at the list and choosing it is
-          // exactly the confirmation that tier is waiting for.
-          : OriginConfidence.user,
+    final layer = _layer(existing, modId);
+    if (layer == null) return null;
+    final rePickingRecorded = layer.fileId == file.idRow;
+    return existing!.withDownload(
+      modId,
+      (download) => download.copyWith(
+        fileId: file.idRow,
+        version: file.version,
+        versionLabel: file.description,
+        versionConfidence: exact ||
+                (rePickingRecorded &&
+                    download.versionConfidence == OriginConfidence.exact)
+            ? OriginConfidence.exact
+            // Everything weaker becomes `user`, including a re-pick of an
+            // `inferred` row — the user looking at the list and choosing it is
+            // exactly the confirmation that tier is waiting for.
+            : OriginConfidence.user,
+      ),
     );
   }
 
@@ -301,13 +319,17 @@ class OriginResolution {
     required int modId,
     required GbFile file,
   }) {
-    if (existing == null || existing.modId != modId) return null;
-    if (existing.versionConfidence != OriginConfidence.unknown) return null;
-    return existing.copyWith(
-      fileId: file.idRow,
-      version: file.version,
-      versionLabel: file.description,
-      versionConfidence: OriginConfidence.inferred,
+    final layer = _layer(existing, modId);
+    if (layer == null) return null;
+    if (layer.versionConfidence != OriginConfidence.unknown) return null;
+    return existing!.withDownload(
+      modId,
+      (download) => download.copyWith(
+        fileId: file.idRow,
+        version: file.version,
+        versionLabel: file.description,
+        versionConfidence: OriginConfidence.inferred,
+      ),
     );
   }
 
@@ -326,9 +348,13 @@ class OriginResolution {
     required int modId,
     required bool gone,
   }) {
-    if (existing == null || existing.modId != modId) return null;
-    if (existing.remoteMissing == gone) return null;
-    return existing.copyWith(remoteMissing: gone);
+    final layer = _layer(existing, modId);
+    if (layer == null) return null;
+    if (layer.remoteMissing == gone) return null;
+    return existing!.withDownload(
+      modId,
+      (download) => download.copyWith(remoteMissing: gone),
+    );
   }
 
   /// "I don't know which file — I got it around then."
@@ -378,9 +404,13 @@ class OriginResolution {
       installedAtIsProxy: existing.installedAt == null && observed != null
           ? true
           : existing.installedAtIsProxy,
-      versionConfidence: OriginConfidence.assumedLatest,
-      baselineRemoteDate: baseline,
-    );
+    // **The bottom layer's baseline.** "I got this mod around then" is about
+    // what the folder is; a patch written over it arrived whenever it arrived
+    // and carries its own.
+    ).withBase((download) => download.copyWith(
+          versionConfidence: OriginConfidence.assumedLatest,
+          baselineRemoteDate: baseline,
+        ));
   }
 
   /// "Not from GameBanana / it's my own" — the status slot goes quiet

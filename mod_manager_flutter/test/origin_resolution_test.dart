@@ -4,7 +4,11 @@ import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/origin_resolution.dart';
 
+import 'package:mod_manager_flutter/models/installed_file.dart';
+import 'package:mod_manager_flutter/models/mod_download.dart';
+
 import 'support/fixtures.dart';
+import 'support/origin_shorthand.dart';
 
 /// The two captured profiles this suite leans on, because they are the two
 /// shapes the file-selection rules were designed around:
@@ -17,7 +21,7 @@ GbMod profile(String fixture) =>
     GbMod.fromJson(parseObject(loadGbFixture(fixture)))!;
 
 ModOrigin bound(int modId, {String? archiveMd5, DateTime? installedAt}) =>
-    ModOrigin(
+    originFixture(
       source: 'gamebanana',
       modId: modId,
       modIdConfidence: OriginConfidence.inferred,
@@ -219,47 +223,74 @@ void main() {
     });
   });
 
-  group('ModOrigin.boundTo', () {
+  group('ModDownload.boundTo', () {
     // Tested directly as well as through its two callers, because the branch
     // that matters most is the one neither of them reaches with anything to
     // lose: binding to the *same* mod, where every field has to survive.
     test('binding to the same mod preserves everything but the claim', () {
-      final existing = bound(555, archiveMd5: 'abc').copyWith(
+      const existing = ModDownload(
+        modId: 555,
+        modIdConfidence: OriginConfidence.inferred,
         fileId: 900,
         version: '2.0',
         versionLabel: 'white hair ver',
         versionConfidence: OriginConfidence.user,
-        baselineRemoteDate: DateTime.utc(2025),
-        installedAt: DateTime.utc(2024),
+        archiveMd5: 'abc',
         remoteMissing: true,
+        files: [InstalledFile(path: 'ellen.ini')],
       );
 
       final result = existing.boundTo(
         modId: 555,
         confidence: OriginConfidence.exact,
-        source: 'gamebanana',
       );
 
       expect(result.modIdConfidence, OriginConfidence.exact);
-      expect(result.source, 'gamebanana');
       expect(result.fileId, 900);
       expect(result.version, '2.0');
       expect(result.versionLabel, 'white hair ver');
       expect(result.versionConfidence, OriginConfidence.user);
-      expect(result.baselineRemoteDate, DateTime.utc(2025));
-      expect(result.installedAt, DateTime.utc(2024));
       expect(result.archiveMd5, 'abc');
       expect(result.remoteMissing, isTrue);
+      expect(result.files, existing.files,
+          reason: 'the record names what is on disk, and disk did not change');
     });
 
-    test('source is overwritten rather than kept', () {
+    test('a rebind clears everything that described the old mod', () {
+      const existing = ModDownload(
+        modId: 555,
+        modIdConfidence: OriginConfidence.inferred,
+        fileId: 900,
+        version: '2.0',
+        versionLabel: 'white hair ver',
+        versionConfidence: OriginConfidence.user,
+        archiveMd5: 'abc',
+        remoteMissing: true,
+      );
+
+      final result = existing.boundTo(
+        modId: 777,
+        confidence: OriginConfidence.user,
+      );
+
+      expect(result.fileId, isNull);
+      expect(result.version, isNull);
+      expect(result.versionLabel, isNull);
+      expect(result.versionConfidence, OriginConfidence.unknown);
+      expect(result.remoteMissing, isFalse);
+      // A fact about the archive we extracted, not about which mod we now
+      // think it is — which is what lets it be matched against the new mod's
+      // published checksums.
+      expect(result.archiveMd5, 'abc');
+    });
+
+    test('source is the folder\'s, and a rebind overwrites it', () {
       // The field is a service discriminator, and a block being re-bound to a
       // GameBanana mod is a GameBanana mod whatever it used to say.
-      final result = bound(1).copyWith(source: 'elsewhere').boundTo(
-            modId: 1,
-            confidence: OriginConfidence.user,
-            source: 'gamebanana',
-          );
+      final result = OriginResolution.bind(
+        bound(1).copyWith(source: 'elsewhere'),
+        1,
+      );
       expect(result.source, 'gamebanana');
     });
   });
@@ -277,7 +308,7 @@ void main() {
     });
 
     test('confirming the id the backfill guessed keeps the file data', () {
-      final existing = bound(555).copyWith(
+      final existing = bound(555).copyBase(
         fileId: 900,
         version: '2.0',
         versionConfidence: OriginConfidence.user,
@@ -289,7 +320,7 @@ void main() {
     });
 
     test('rebinding to a different mod clears what described the old one', () {
-      final existing = bound(555, archiveMd5: 'abc').copyWith(
+      final existing = bound(555, archiveMd5: 'abc').copyBase(
         fileId: 900,
         version: '2.0',
         versionLabel: 'white hair ver',
@@ -330,7 +361,7 @@ void main() {
 
     test('a hash-matched pick is exact and can drive auto-update', () {
       final origin = OriginResolution.pickFile(
-        bound(1).copyWith(modIdConfidence: OriginConfidence.exact),
+        bound(1).copyBase(modIdConfidence: OriginConfidence.exact),
         modId: 1,
         file: file,
         exact: true,

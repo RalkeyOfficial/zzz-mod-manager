@@ -3,6 +3,8 @@ import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/origin_summary.dart';
 
+import 'support/origin_shorthand.dart';
+
 /// What the resolve dialog says is *currently* recorded.
 ///
 /// The risk here is not the fold but the **strength of the claim**: the same
@@ -22,7 +24,7 @@ void main() {
     String? versionLabel,
     DateTime? baselineRemoteDate,
   }) =>
-      ModOrigin(
+      originFixture(
         source: modId == null ? null : 'gamebanana',
         modId: modId,
         modIdConfidence: modIdConfidence,

@@ -10,6 +10,7 @@ import 'package:mod_manager_flutter/services/update_check_run.dart';
 
 import 'support/fake_http_transport.dart';
 import 'support/fixtures.dart';
+import 'support/origin_shorthand.dart';
 
 /// The request a **per-mod** update check makes.
 ///
@@ -64,7 +65,7 @@ void main() {
       // Installed on RabbitFX's archived "Main file" v7.4, whose successor
       // under the same label is v7.7 — the one case where the strong verdict is
       // earned rather than folded down to a guess.
-      origin: const ModOrigin(
+      origin: const originFixture(
         source: 'gamebanana',
         modId: 531649,
         modIdConfidence: OriginConfidence.user,

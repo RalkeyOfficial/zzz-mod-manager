@@ -2,6 +2,8 @@ import 'dart:math';
 
 import 'package:path/path.dart' as path;
 
+import '../models/installed_file.dart';
+import '../models/mod_download.dart';
 import '../models/mod_ingest.dart';
 import '../models/mod_origin.dart';
 import '../models/mod_origin_seed.dart';
@@ -55,10 +57,15 @@ class IngestOriginBuilder {
   /// [sourceFolder] is the folder the archive yielded, whose basename is what
   /// gets recorded — see [ModIngest.folders] for why it is not the mod's own
   /// name and not an absolute path.
+  ///
+  /// [files] is what the copy actually wrote, mod-folder-relative — see
+  /// [ModIngest.files]. Empty when the caller could not report it, which reads
+  /// as "unknown" rather than "nothing".
   ModOrigin separate({
     required ModOriginSeed seed,
     required String sourceFolder,
     String? siblingGroup,
+    List<InstalledFile> files = const <InstalledFile>[],
   }) =>
       _build(
         seed: seed,
@@ -67,6 +74,7 @@ class IngestOriginBuilder {
           folders: [path.basename(sourceFolder)],
           siblingGroup: siblingGroup,
         ),
+        files: files,
       );
 
   /// Builds the origin block for several folders merged into one mod.
@@ -76,6 +84,7 @@ class IngestOriginBuilder {
   ModOrigin combined({
     required ModOriginSeed seed,
     required List<String> sourceFolders,
+    List<InstalledFile> files = const <InstalledFile>[],
   }) =>
       _build(
         seed: seed,
@@ -83,23 +92,36 @@ class IngestOriginBuilder {
           mode: IngestMode.combined,
           folders: sourceFolders.map(path.basename).toList(),
         ),
+        files: files,
       );
 
-  ModOrigin _build({required ModOriginSeed seed, required ModIngest ingest}) =>
+  /// An ingest produces a **one-deep stack**: the archive we just wrote is the
+  /// only thing in the folder. Anything installed over it afterwards is added on
+  /// top by the path that writes it.
+  ModOrigin _build({
+    required ModOriginSeed seed,
+    required ModIngest ingest,
+    required List<InstalledFile> files,
+  }) =>
       ModOrigin(
         source: seed.source,
-        modId: seed.modId,
-        modIdConfidence: seed.modIdConfidence,
-        fileId: seed.fileId,
-        version: seed.version,
-        versionLabel: seed.versionLabel,
-        versionConfidence: seed.versionConfidence,
         provenance: seed.provenance,
         ingest: ingest,
         // Observed, not derived from file timestamps — so no proxy flag. This
         // is also the first genuinely reliable install date the library has.
         installedAt: _now().toUtc(),
-        archiveMd5: seed.archiveMd5,
+        downloads: [
+          ModDownload(
+            modId: seed.modId,
+            modIdConfidence: seed.modIdConfidence,
+            fileId: seed.fileId,
+            version: seed.version,
+            versionLabel: seed.versionLabel,
+            versionConfidence: seed.versionConfidence,
+            archiveMd5: seed.archiveMd5,
+            files: files,
+          ),
+        ],
       );
 
   /// Reduces several per-folder seeds to the one describing a combined mod.

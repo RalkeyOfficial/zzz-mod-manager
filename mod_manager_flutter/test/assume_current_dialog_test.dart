@@ -10,6 +10,7 @@ import 'package:mod_manager_flutter/services/bulk_assume_current.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
 import 'support/localized_harness.dart';
+import 'support/origin_shorthand.dart';
 
 /// The bulk "assume current" surface.
 ///
@@ -26,7 +27,7 @@ void main() {
     bool proxy = true,
     bool undated = false,
   }) =>
-      ModOrigin(
+      originFixture(
         source: 'gamebanana',
         modId: modId,
         modIdConfidence: OriginConfidence.inferred,

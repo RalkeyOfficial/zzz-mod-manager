@@ -66,7 +66,7 @@ library;
 import '../models/gamebanana/gb_file.dart';
 import '../models/gamebanana/gb_mod.dart';
 import '../models/gamebanana/gb_update.dart';
-import '../models/mod_companion.dart';
+import '../models/mod_download.dart';
 import '../models/mod_origin.dart';
 import '../models/origin_enums.dart';
 import 'installed_mods_index.dart';
@@ -185,8 +185,7 @@ class UpdateCheck {
     this.newerFiles = const <GbFile>[],
     this.candidateMatchesVariant = false,
     this.subjectModId,
-    this.companions = const <CompanionCheck>[],
-    this.folderOwn,
+    this.layers = const <DownloadCheck>[],
   });
 
   /// The same evidence under a different verdict.
@@ -207,19 +206,14 @@ class UpdateCheck {
         newerFiles: newerFiles,
         candidateMatchesVariant: candidateMatchesVariant,
         subjectModId: subjectModId,
-        companions: companions,
-        folderOwn: folderOwn,
+        layers: layers,
       );
 
-  /// The same verdict, re-attributed to [modId] and carrying [others].
+  /// The same verdict, re-attributed to [modId] and carrying every layer's own.
   ///
-  /// Used only by [foldCompanions], where the winning identity's fields become
-  /// the folder's.
-  UpdateCheck asSubject(
-    int? modId,
-    List<CompanionCheck> others, {
-    UpdateCheck? folderOwn,
-  }) =>
+  /// Used only by [foldDownloads], where the winning layer's fields become the
+  /// folder's.
+  UpdateCheck asSubject(int? modId, List<DownloadCheck> others) =>
       UpdateCheck(
         outcome: outcome,
         installedFile: installedFile,
@@ -232,8 +226,7 @@ class UpdateCheck {
         newerFiles: newerFiles,
         candidateMatchesVariant: candidateMatchesVariant,
         subjectModId: modId,
-        companions: others,
-        folderOwn: folderOwn,
+        layers: others,
       );
 
   final UpdateOutcome outcome;
@@ -303,35 +296,26 @@ class UpdateCheck {
   /// in [checkForUpdate].
   final DateTime? comparedAgainst;
 
-  /// Which identity the fields above describe, when it is **not** the folder's
-  /// own primary. Null means the primary, which is every ordinary mod.
+  /// **Which download the fields above describe** — the layer that won the fold.
   ///
-  /// A mixed folder is checked against two mod pages and the card still shows
-  /// one verdict, so the top-level fields carry whichever identity won the fold
-  /// — see [foldCompanions]. Without this the UI would render a verdict about
-  /// one mod under the name of another.
+  /// A mixed folder is checked against every mod page it holds and the card
+  /// still shows one verdict, so the top-level fields carry the winner's. Null
+  /// only where nothing was asked at all (untracked, `tracking: off`, no
+  /// identity). Without this the UI would render a verdict about one mod under
+  /// the name of another.
   final int? subjectModId;
 
-  /// Every companion's own verdict, in the order the block records them.
+  /// **Every layer's own verdict**, bottom of the stack first.
   ///
-  /// The card folds to one state; the dialog shows all of them. Empty for an
-  /// ordinary mod, and empty for a folder the user declared local — nothing is
-  /// asked about those at all.
-  final List<CompanionCheck> companions;
-
-  /// The **folder's own** download's verdict, when a companion's won the fold
-  /// instead — null when this verdict already is the folder's own.
+  /// The card folds to one state; the dialog shows all of them. Empty for a
+  /// folder with nothing to ask about, and — for an ordinary one-download mod —
+  /// holding the single layer whose verdict this already is.
   ///
-  /// Kept because which download a sidecar calls the primary is an accident of
-  /// install order, not a ranking, and a dialog listing the folder's contents as
-  /// peers needs every identity's answer including that one. Without it the
-  /// primary's verdict is the only one the fold discards, so exactly the folder
-  /// whose patch has the update could say nothing about the mod it patches.
-  ///
-  /// Not a general parent link: it is one level deep by construction, since the
-  /// value stored here is a pre-fold check and pre-fold checks carry no
-  /// companions.
-  final UpdateCheck? folderOwn;
+  /// The base's answer is in here like any other, which is the whole reason the
+  /// stack replaced the old primary-plus-companions shape: under that model the
+  /// fold discarded exactly one verdict, and a folder whose patch had the update
+  /// could say nothing at all about the mod it patched.
+  final List<DownloadCheck> layers;
 
   /// The user has seen this much and said "not this one".
   ///
@@ -395,16 +379,15 @@ class UpdateCheck {
         comparedAgainst: comparedAgainst,
         dismissed: value,
         subjectModId: subjectModId,
-        companions: companions,
-        folderOwn: folderOwn,
+        layers: layers,
       );
 }
 
-/// One companion identity's own verdict, kept beside the folded one.
-class CompanionCheck {
-  const CompanionCheck({required this.companion, required this.check});
+/// One layer of the stack and its own verdict, kept beside the folded one.
+class DownloadCheck {
+  const DownloadCheck({required this.download, required this.check});
 
-  final ModCompanion companion;
+  final ModDownload download;
   final UpdateCheck check;
 }
 
@@ -456,86 +439,74 @@ UpdateCheck checkForUpdate({
   Map<int, ReleaseGroups> companionReleases = const <int, ReleaseGroups>{},
 }) {
   // "It's my own" and "no identity at all" are answers about the **folder**,
-  // and they short-circuit before a single companion is consulted. That is the
-  // folder-level mute doing its job, and it is why a companion carries no
+  // and they short-circuit before a single layer is consulted. That is the
+  // folder-level mute doing its job, and it is why no layer carries a
   // `tracking` of its own.
   if (verdictWithoutAsking(origin) case final settled?) return settled;
 
-  final primary = _checkForUpdate(
-    origin: origin,
-    remote: remote,
-    releases: releases,
-  );
-
-  final companions = <CompanionCheck>[
-    for (final companion in origin!.companions)
-      CompanionCheck(
-        companion: companion,
-        check: _checkCompanion(
-          origin: origin,
-          companion: companion,
-          remote: companionRemotes[companion.modId],
-          releases: companionReleases[companion.modId] ?? ReleaseGroups.empty,
+  // **One judgement per layer, and [remote] is the bottom one's.** The caller
+  // fetched that page to get here; the rest arrive through the maps. Nothing
+  // here privileges the bottom layer beyond that — it is judged by the same
+  // function as everything above it.
+  final layers = <DownloadCheck>[
+    for (final download in origin!.downloads)
+      DownloadCheck(
+        download: download,
+        check: _judgeLayer(
+          download: download,
+          remote: download.modId == origin.base?.modId
+              ? remote
+              : companionRemotes[download.modId],
+          releases: download.modId == origin.base?.modId
+              ? releases
+              : (companionReleases[download.modId] ?? ReleaseGroups.empty),
+          patchShaped: origin.needsBase,
         ),
       ),
   ];
 
-  // **A patch-shaped folder may not be called up to date.** The origin block
-  // names the patch's page, so "nothing newer" is true about the page we asked
-  // and says nothing about the mod the folder actually contains — which is the
-  // false clean §4 calls the one failure this feature cannot afford.
-  //
-  // Only that verdict is downgraded, and only while nobody has said what the
-  // patch applies to. A patch with a genuine new release is still
-  // [UpdateOutcome.updateAvailable], and that is a real finding; a folder whose
-  // base mod *has* been named gets a real answer about both halves instead of
-  // this admission.
-  final settledPrimary = primary.outcome == UpdateOutcome.upToDate &&
-          (origin.needsCompanion)
-      ? primary.withOutcome(UpdateOutcome.tracksPatchOnly)
-      : primary;
-
-  return foldCompanions(settledPrimary, companions);
+  return foldDownloads(layers);
 }
 
-/// One companion identity, judged the same way the primary is.
+/// One layer, judged. Every layer goes through here, including the bottom.
 ///
-/// The companion's fields are lifted into a `ModOrigin` shape because that is
-/// what the comparator takes — and the fields it does **not** carry are lifted
-/// from the folder: [ModOrigin.source] and [ModOrigin.tracking] belong to the
-/// folder rather than to either download in it.
-UpdateCheck _checkCompanion({
-  required ModOrigin origin,
-  required ModCompanion companion,
+/// **Never fetched is not "nothing new".** A null [remote] is silence, and
+/// silence is not evidence — the same rule this file applies to a response that
+/// carried no file list. Reporting clean because we only looked at part of the
+/// folder is precisely the false clean the whole feature exists to remove. A
+/// layer with no identity gets the same answer for the same reason: there is no
+/// page to ask.
+///
+/// [patchShaped] downgrades a clean bill on a folder whose base is missing —
+/// see the note at the call site.
+UpdateCheck _judgeLayer({
+  required ModDownload download,
   required GbMod? remote,
   required ReleaseGroups releases,
+  required bool patchShaped,
 }) {
-  // **Never fetched is not "nothing new".** Silence is not evidence — the same
-  // rule this file applies to a response that carried no file list — and
-  // reporting clean because we only looked at half the folder is precisely the
-  // false clean the whole feature exists to remove.
-  if (remote == null) {
+  if (remote == null || !download.hasIdentity) {
     return const UpdateCheck(outcome: UpdateOutcome.indeterminate);
   }
-  return _checkForUpdate(
-    origin: ModOrigin(
-      source: origin.source,
-      modId: companion.modId,
-      modIdConfidence: companion.modIdConfidence,
-      fileId: companion.fileId,
-      version: companion.version,
-      versionLabel: companion.versionLabel,
-      versionConfidence: companion.versionConfidence,
-      provenance: origin.provenance,
-      archiveMd5: companion.archiveMd5,
-      baselineRemoteDate: companion.baselineRemoteDate,
-      remoteMissing: companion.remoteMissing,
-      updatesDismissedUntil: companion.updatesDismissedUntil,
-      tracking: origin.tracking,
-    ),
+  final judged = _judgeDownload(
+    download: download,
     remote: remote,
     releases: releases,
   );
+
+  // **A patch whose base is missing may not be called up to date.** The record
+  // names the patch's page, so "nothing newer" is true about the page we asked
+  // and says nothing about the mod the folder is supposed to contain — the
+  // false clean §4 calls the one failure this feature cannot afford.
+  //
+  // Only that verdict is downgraded. A patch with a genuine new release is
+  // still [UpdateOutcome.updateAvailable] and that is a real finding; a folder
+  // whose base *has* been named gets a real answer about every layer instead of
+  // this admission.
+  if (patchShaped && judged.outcome == UpdateOutcome.upToDate) {
+    return judged.withOutcome(UpdateOutcome.tracksPatchOnly);
+  }
+  return judged;
 }
 
 /// Most actionable first. The fold reports the first outcome any identity
@@ -554,37 +525,38 @@ const List<UpdateOutcome> _foldOrder = <UpdateOutcome>[
   UpdateOutcome.upToDate,
 ];
 
-/// Collapses a folder's identities into the one verdict its card can show.
+/// Collapses a folder's layers into the one verdict its card can show.
 ///
 /// **The winner's fields become the folder's**, which is load-bearing rather
-/// than convenient: every existing consumer reads `candidate` and `newerFiles`,
-/// and [UpdateCheck.dismissableUpTo] is computed from the latter. An outcome
-/// taken from the companion sitting on top of the primary's file list would
-/// illustrate a verdict about one mod with another's files — and would write a
-/// dismissal cutoff derived from the wrong mod's dates.
+/// than convenient: every consumer reads `candidate` and `newerFiles`, and
+/// [UpdateCheck.dismissableUpTo] is computed from the latter. An outcome taken
+/// from one layer sitting on top of another's file list would illustrate a
+/// verdict about one mod with another's files — and would write a dismissal
+/// cutoff derived from the wrong mod's dates.
 ///
 /// **A live finding beats a dismissed stronger one.** Ranking by outcome alone
 /// picks a dismissed `updateAvailable` and then reports `hasUpdate: false`,
-/// leaving a folder with a real update on its other identity rendering as
-/// though it had none. A dismissal is a statement about one page's releases, so
-/// it disqualifies that identity from winning rather than the whole folder.
-UpdateCheck foldCompanions(
-  UpdateCheck primary,
-  List<CompanionCheck> companions,
-) {
-  if (companions.isEmpty) return primary;
+/// leaving a folder with a real update on another layer rendering as though it
+/// had none. A dismissal is a statement about one page's releases, so it
+/// disqualifies that layer from winning rather than the whole folder.
+///
+/// **Every layer's verdict is kept** on the result, the winner included — the
+/// dialog reports on all of them, and nothing here is discarded.
+UpdateCheck foldDownloads(List<DownloadCheck> layers) {
+  if (layers.isEmpty) {
+    return const UpdateCheck(outcome: UpdateOutcome.untracked);
+  }
+  if (layers.length == 1) {
+    return layers.single.check
+        .asSubject(layers.single.download.modId, layers);
+  }
 
-  final candidates = <(int?, UpdateCheck)>[
-    (null, primary),
-    for (final entry in companions) (entry.companion.modId, entry.check),
-  ];
-
-  (int?, UpdateCheck)? best;
+  DownloadCheck? best;
   for (final live in [true, false]) {
     for (final outcome in _foldOrder) {
-      for (final candidate in candidates) {
-        if (candidate.$2.outcome != outcome) continue;
-        if (candidate.$2.hasUpdate != live) continue;
+      for (final candidate in layers) {
+        if (candidate.check.outcome != outcome) continue;
+        if (candidate.check.hasUpdate != live) continue;
         best = candidate;
         break;
       }
@@ -593,23 +565,21 @@ UpdateCheck foldCompanions(
     if (best != null) break;
   }
 
-  final winner = best ?? (null, primary);
-  return winner.$2.asSubject(
-    winner.$1,
-    companions,
-    // Only when it lost. When the primary won, the returned verdict *is* it,
-    // and storing a second copy would let the two drift under `asDismissed`.
-    folderOwn: winner.$1 == null ? null : primary,
-  );
+  final winner = best ?? layers.first;
+  return winner.check.asSubject(winner.download.modId, layers);
 }
 
-UpdateCheck _checkForUpdate({
-  required ModOrigin? origin,
+/// The comparison itself, for **one** download against **one** mod page.
+///
+/// Takes a layer rather than a folder, which is what makes it the same code for
+/// every download in the stack: every field it reads — the file id, the version,
+/// both confidences, the banked hash, the baseline, the dismissal — is a fact
+/// about one download, and the folder-level ones were never consulted here.
+UpdateCheck _judgeDownload({
+  required ModDownload download,
   required GbMod remote,
   ReleaseGroups releases = ReleaseGroups.empty,
 }) {
-  if (verdictWithoutAsking(origin) case final settled?) return settled;
-  origin!;
   if (remote.isRemoteMissing) {
     return UpdateCheck(
       outcome: UpdateOutcome.sourceGone,
@@ -629,15 +599,15 @@ UpdateCheck _checkForUpdate({
   // Identity is a guess unless the user confirmed it or we downloaded the mod.
   // It caps the verdict on its own: binding the wrong mod page means every
   // file below belongs to a mod the user does not own.
-  final identityConfirmed = _isConfirmed(origin.modIdConfidence);
+  final identityConfirmed = _isConfirmed(download.modIdConfidence);
 
-  final installed = _findInstalledFile(origin, all);
+  final installed = _findInstalledFile(download, all);
   if (installed.evidence != InstalledFileEvidence.none ||
-      origin.fileId != null) {
+      download.fileId != null) {
     return _withDismissal(
-      origin,
+      download,
       _judgeAgainstFile(
-        origin: origin,
+        download: download,
         remote: remote,
         current: current,
         installed: installed,
@@ -647,12 +617,12 @@ UpdateCheck _checkForUpdate({
     );
   }
 
-  if (origin.versionConfidence == OriginConfidence.assumedLatest &&
-      origin.baselineRemoteDate != null) {
+  if (download.versionConfidence == OriginConfidence.assumedLatest &&
+      download.baselineRemoteDate != null) {
     return _withDismissal(
-      origin,
+      download,
       _judgeAgainstBaseline(
-        origin: origin,
+        download: download,
         remote: remote,
         current: current,
       ),
@@ -672,8 +642,8 @@ UpdateCheck _checkForUpdate({
 /// the author releases something later than the dismissal the badge comes back
 /// on its own. A dismissal that short-circuited the comparison would have to be
 /// cleared by hand, which is the behaviour "not now" is supposed to avoid.
-UpdateCheck _withDismissal(ModOrigin origin, UpdateCheck check) {
-  final until = origin.updatesDismissedUntil;
+UpdateCheck _withDismissal(ModDownload download, UpdateCheck check) {
+  final until = download.updatesDismissedUntil;
   if (until == null || !check.hasUpdate) return check;
   final reporting = check.dismissableUpTo;
   // No date on the finding at all: a dismissal cannot be shown to cover it, so
@@ -695,20 +665,20 @@ class _Installed {
 /// costs nothing to apply — it is the same lookup the resolve dialog runs — but
 /// *recording* it is a resolution, and resolutions are written by the dialog
 /// and by the bulk pass, never as a side effect of asking a question.
-_Installed _findInstalledFile(ModOrigin origin, List<GbFile> all) {
-  if (origin.fileId case final id?) {
+_Installed _findInstalledFile(ModDownload download, List<GbFile> all) {
+  if (download.fileId case final id?) {
     for (final file in all) {
       if (file.idRow == id) {
         return _Installed(file, InstalledFileEvidence.recorded);
       }
     }
     // Recorded, and no longer published in either list. Not "not found" — that
-    // absence is itself the answer, and the caller reads `origin.fileId` to
+    // absence is itself the answer, and the caller reads `download.fileId` to
     // tell this apart from having nothing recorded at all.
     return const _Installed(null, InstalledFileEvidence.recorded);
   }
 
-  final banked = InstalledModsIndex.normalizeArchiveMd5(origin.archiveMd5);
+  final banked = InstalledModsIndex.normalizeArchiveMd5(download.archiveMd5);
   if (banked == null) return const _Installed(null, InstalledFileEvidence.none);
   for (final file in all) {
     if (InstalledModsIndex.normalizeArchiveMd5(file.md5Checksum) == banked) {
@@ -742,7 +712,7 @@ _Installed _findInstalledFile(ModOrigin origin, List<GbFile> all) {
 /// instead of merely ranking it — which is why it can turn a flag off where
 /// nothing else in this file can.
 UpdateCheck _judgeAgainstFile({
-  required ModOrigin origin,
+  required ModDownload download,
   required GbMod remote,
   required List<GbFile> current,
   required _Installed installed,
@@ -753,14 +723,15 @@ UpdateCheck _judgeAgainstFile({
   final hashMatched = installed.evidence == InstalledFileEvidence.archiveHash;
   // A checksum match is exact on its own, whatever tier the block records.
   final versionConfirmed =
-      hashMatched || _isConfirmed(origin.versionConfidence);
+      hashMatched || _isConfirmed(download.versionConfidence);
   final isGuess = !identityConfirmed || !versionConfirmed;
 
   // The label the block stored at install time is preferred over the published
   // record's, and that is load-bearing rather than tidy: `Mod/Multi` is the
   // bulk path and the *file* it names may since have been deleted outright, in
   // which case there is no published record to read a label from at all.
-  final label = _labelKey(origin.versionLabel) ?? _labelKey(file?.description);
+  final label =
+      _labelKey(download.versionLabel) ?? _labelKey(file?.description);
 
   UpdateCheck result({
     required UpdateOutcome outcome,
@@ -787,7 +758,7 @@ UpdateCheck _judgeAgainstFile({
   // Everything the author did *not* ship alongside the installed file. With no
   // recorded file id there is nothing to be a sibling of, so the pool is
   // untouched — which is also the state for every mod with no update feed.
-  final installedId = file?.idRow ?? origin.fileId;
+  final installedId = file?.idRow ?? download.fileId;
   final offered = installedId == null || releases.isEmpty
       ? current
       : [
@@ -877,11 +848,11 @@ UpdateCheck _judgeAgainstFile({
 /// The verdict is capped at [UpdateOutcome.possiblyOutdated] structurally —
 /// nothing here knows what is installed, only when it arrived.
 UpdateCheck _judgeAgainstBaseline({
-  required ModOrigin origin,
+  required ModDownload download,
   required GbMod remote,
   required List<GbFile> current,
 }) {
-  final stored = origin.baselineRemoteDate!;
+  final stored = download.baselineRemoteDate!;
   final created = remote.dateAdded;
   final baseline =
       created != null && created.isAfter(stored) ? created : stored;

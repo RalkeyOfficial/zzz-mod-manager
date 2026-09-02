@@ -1,19 +1,27 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mod_manager_flutter/models/mod_companion.dart';
+import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/origin_status.dart';
 
+import 'support/origin_shorthand.dart';
+
+/// A folder whose **bottom layer** is [modId] — what the folder is.
+///
+/// [patches] are the layers written over it. A folder that is a patch with
+/// nothing underneath it yet is `patchShaped: true` and no patches: the single
+/// layer sits at the bottom because it is the bottom of what exists, and the
+/// flag is the separate claim that something is missing under it.
 ModOrigin origin({
   int? modId,
   OriginConfidence versionConfidence = OriginConfidence.unknown,
   OriginTracking tracking = OriginTracking.auto,
   bool remoteMissing = false,
   bool patchShaped = false,
-  List<ModCompanion> companions = const [],
+  List<ModDownload> patches = const [],
 }) =>
-    ModOrigin(
+    originFixture(
       source: modId == null ? null : 'gamebanana',
       modId: modId,
       modIdConfidence:
@@ -23,15 +31,13 @@ ModOrigin origin({
       tracking: tracking,
       remoteMissing: remoteMissing,
       ingest: patchShaped ? const ModIngest(patchShaped: true) : null,
-      companions: companions,
+      patches: patches,
     );
 
-/// A companion the user has **fully** answered for: which mod, and which file
-/// of it. Anything less is still outstanding work — see the half-answered case
-/// below.
-const ModCompanion namedBase = ModCompanion(
-  role: CompanionRole.base,
-  modId: 111,
+/// A patch the user has **fully** answered for: which mod, and which file of it.
+/// Anything less is still outstanding work — see the half-answered case below.
+final ModDownload answeredPatch = patchFixture(
+  modId: 222,
   modIdConfidence: OriginConfidence.user,
   fileId: 9,
   versionConfidence: OriginConfidence.user,
@@ -150,12 +156,14 @@ void main() {
     test('naming the base mod clears it', () {
       // The property the "needs attention" filter depends on: this state can be
       // reached zero by doing work, which is what disqualifies `sourceGone`.
+      //
+      // Naming the base inserts it underneath, so the stack is two deep and
+      // there is nothing missing below any more — the flag cannot outlive it.
       expect(
         modOriginStatus(origin(
-          modId: 222,
-          versionConfidence: OriginConfidence.exact,
-          patchShaped: true,
-          companions: const [namedBase],
+          modId: 111,
+          versionConfidence: OriginConfidence.user,
+          patches: [answeredPatch],
         )),
         ModOriginStatus.none,
       );
@@ -191,24 +199,17 @@ void main() {
       );
     });
 
-    test('a companion whose file is unknown still asks for something', () {
-      // The hole this closes: naming the base mod clears `needsCompanion`, and
-      // the slot then reads only the *primary's* version confidence — which for
-      // a downloaded patch is `exact`. So a folder we cannot judge rendered
-      // nothing at all: no amber, and no blue either, because the check answers
-      // `versionUnknown` rather than finding an update.
+    test('a layer whose file is unknown still asks for something', () {
+      // **A folder is only as resolved as its least-resolved layer.** Reading
+      // one layer's confidence alone — `exact` for something we downloaded —
+      // left a folder we cannot judge rendering nothing at all: no amber, and
+      // no blue either, because the check answers `versionUnknown` for the
+      // other layer rather than finding an update.
       expect(
         modOriginStatus(origin(
-          modId: 222,
+          modId: 111,
           versionConfidence: OriginConfidence.exact,
-          patchShaped: true,
-          companions: const [
-            ModCompanion(
-              role: CompanionRole.base,
-              modId: 111,
-              modIdConfidence: OriginConfidence.user,
-            ),
-          ],
+          patches: [patchFixture(modId: 222)],
         )),
         ModOriginStatus.versionUnknown,
         reason: 'one pass through the resolve dialog fixes it, which is exactly '
@@ -216,21 +217,26 @@ void main() {
       );
       expect(
         modOriginStatus(origin(
-          modId: 222,
+          modId: 111,
           versionConfidence: OriginConfidence.exact,
-          patchShaped: true,
-          companions: const [
-            ModCompanion(
-              role: CompanionRole.base,
-              modId: 111,
-              modIdConfidence: OriginConfidence.user,
-              fileId: 9,
-              versionConfidence: OriginConfidence.user,
-            ),
-          ],
+          patches: [answeredPatch],
         )),
         ModOriginStatus.none,
         reason: 'picking a file for it is what finishes the job',
+      );
+    });
+
+    test('a layer nobody can name is not held against the folder', () {
+      // A patch written in from a local archive has no page, so there is no
+      // question to answer about which of its files is installed — and an amber
+      // mark demanding the user resolve it would have nowhere to go.
+      expect(
+        modOriginStatus(origin(
+          modId: 111,
+          versionConfidence: OriginConfidence.exact,
+          patches: [patchFixture(modId: null)],
+        )),
+        ModOriginStatus.none,
       );
     });
 
@@ -286,10 +292,9 @@ void main() {
       expect(modNeedsAttention(unnamed), isTrue);
       expect(
         modNeedsAttention(origin(
-          modId: 222,
-          versionConfidence: OriginConfidence.exact,
-          patchShaped: true,
-          companions: const [namedBase],
+          modId: 111,
+          versionConfidence: OriginConfidence.user,
+          patches: [answeredPatch],
         )),
         isFalse,
         reason: 'naming the base is what takes it off the list',
@@ -331,7 +336,11 @@ void main() {
         origin(modId: 1, tracking: OriginTracking.off),
         origin(modId: 1, remoteMissing: true),
         origin(modId: 1, patchShaped: true),
-        origin(modId: 1, patchShaped: true, companions: const [namedBase]),
+        origin(
+          modId: 1,
+          versionConfidence: OriginConfidence.user,
+          patches: [answeredPatch],
+        ),
       ]) {
         expect(
           modNeedsAttention(candidate),

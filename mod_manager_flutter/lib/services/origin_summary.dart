@@ -14,7 +14,7 @@
 /// same field at different tiers, and the difference is the whole point.
 library;
 
-import '../models/mod_companion.dart';
+import '../models/mod_download.dart';
 import '../models/mod_origin.dart';
 import '../models/origin_enums.dart';
 
@@ -97,16 +97,26 @@ class OriginSummary {
       identity == IdentitySummary.none && version == VersionSummary.none;
 }
 
-/// Folds a stored block into what the dialog should say about it.
+/// Folds **one download** into what a dialog should say about it.
+///
+/// One fold for every layer of the stack, which is what keeps "on record" and
+/// "our best guess" from coming to mean different things depending on which
+/// half of a mixed folder is being described.
+///
+/// [provenance] is the folder's, and it is the one thing here that is not the
+/// layer's own: it separates the two routes to `exact` on the version axis.
 ///
 /// Deliberately says nothing about `tracking: "off"` — that mod gets its own
 /// notice and never reaches this panel.
-OriginSummary summarizeOrigin(ModOrigin? origin) {
-  if (origin == null) return OriginSummary.empty;
+OriginSummary summarizeDownload(
+  ModDownload? download, {
+  OriginProvenance provenance = OriginProvenance.importedFolder,
+}) {
+  if (download == null) return OriginSummary.empty;
 
-  final identity = switch (origin.modId) {
+  final identity = switch (download.modId) {
     null => IdentitySummary.none,
-    _ => switch (origin.modIdConfidence) {
+    _ => switch (download.modIdConfidence) {
         // `exact` on the identity axis is only ever written by a download: the
         // marketplace knows the mod id before the first byte. A checksum match
         // raises the *version* axis, never this one, because a hash identifies
@@ -120,7 +130,7 @@ OriginSummary summarizeOrigin(ModOrigin? origin) {
       },
   };
 
-  final version = switch (origin.versionConfidence) {
+  final version = switch (download.versionConfidence) {
     OriginConfidence.unknown => VersionSummary.none,
     OriginConfidence.assumedLatest => VersionSummary.dateOnly,
     OriginConfidence.inferred => VersionSummary.guessed,
@@ -129,58 +139,33 @@ OriginSummary summarizeOrigin(ModOrigin? origin) {
     // we fetched it, or its bytes matched. Provenance is what separates them,
     // and the wording has to as well — "byte-identical to your archive" is a
     // claim about a match, not about having obtained the file ourselves.
-    OriginConfidence.exact => origin.provenance.isOurDownload
-        ? VersionSummary.downloaded
-        : VersionSummary.checksumMatched,
+    //
+    // **A layer's own archive hash is the better witness where it has one.**
+    // A patch the app wrote into a hand-imported folder is a file we fetched,
+    // and the folder's provenance would have called it a checksum match.
+    OriginConfidence.exact =>
+      provenance.isOurDownload || download.archiveMd5 != null
+          ? VersionSummary.downloaded
+          : VersionSummary.checksumMatched,
   };
 
   return OriginSummary(
     identity: identity,
     version: version,
-    fileId: origin.fileId,
-    versionLabel: _versionLabel(origin),
-    baseline: origin.baselineRemoteDate,
+    fileId: download.fileId,
+    versionLabel: _joinVersion(download.version, download.versionLabel),
+    baseline: download.baselineRemoteDate,
   );
 }
 
-/// The same fold for a **companion** — the other download in the folder.
+/// The fold for **what the folder is** — its bottom layer.
 ///
-/// Shares this file rather than living beside the prompt that renders it, for
-/// the reason the two resolve steps share their panels: "on record" and "our
-/// best guess" must not come to mean different things depending on which half
-/// of a folder is being described.
-///
-/// Two of the version phrasings are unreachable here and that is a fact about
-/// the wording rather than a gap. "The file you downloaded" and "byte-identical
-/// to the archive you installed" are both claims about *this folder's* ingest,
-/// and a companion is a download the app did not perform — so a recorded file
-/// is reported as chosen however it came to be recorded.
-OriginSummary summarizeCompanion(ModCompanion companion) => OriginSummary(
-      identity: switch (companion.modIdConfidence) {
-        OriginConfidence.exact => IdentitySummary.downloaded,
-        OriginConfidence.user => IdentitySummary.confirmed,
-        OriginConfidence.inferred ||
-        OriginConfidence.assumedLatest ||
-        OriginConfidence.unknown =>
-          IdentitySummary.inferred,
-      },
-      version: switch (companion.versionConfidence) {
-        OriginConfidence.unknown => VersionSummary.none,
-        OriginConfidence.assumedLatest => VersionSummary.dateOnly,
-        OriginConfidence.inferred => VersionSummary.guessed,
-        OriginConfidence.user || OriginConfidence.exact =>
-          VersionSummary.chosen,
-      },
-      fileId: companion.fileId,
-      versionLabel: _joinVersion(companion.version, companion.versionLabel),
-      baseline: companion.baselineRemoteDate,
-    );
-
-/// `version` and `version_label` are two different strings that must not be
-/// conflated in storage — but for one line of display, joined is what reads:
-/// `3.0 · white hair ver`.
-String? _versionLabel(ModOrigin origin) =>
-    _joinVersion(origin.version, origin.versionLabel);
+/// A convenience over [summarizeDownload], and the one every surface that asks
+/// "which mod is this?" wants: a patch written on top modifies the mod, it does
+/// not change which mod the folder is.
+OriginSummary summarizeOrigin(ModOrigin? origin) => origin == null
+    ? OriginSummary.empty
+    : summarizeDownload(origin.base, provenance: origin.provenance);
 
 String? _joinVersion(String? version, String? label) {
   final parts = [

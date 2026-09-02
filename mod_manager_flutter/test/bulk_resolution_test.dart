@@ -9,6 +9,7 @@ import 'package:mod_manager_flutter/services/bulk_resolution.dart';
 import 'package:mod_manager_flutter/services/origin_resolution.dart';
 
 import 'support/fixtures.dart';
+import 'support/origin_shorthand.dart';
 
 /// The bulk resolution pass: who gets asked what, what a pre-ticked row is
 /// allowed to claim, and — the half that is easy to get wrong — what happens
@@ -41,7 +42,7 @@ void main() {
     OriginTracking tracking = OriginTracking.auto,
     bool remoteMissing = false,
   }) =>
-      ModOrigin(
+      originFixture(
         source: 'gamebanana',
         modId: modId,
         modIdConfidence: modIdConfidence,

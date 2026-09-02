@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/models/installed_file.dart';
 import 'package:mod_manager_flutter/models/mod_companion.dart';
 import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
@@ -216,5 +217,90 @@ void main() {
     );
 
     expect(downloads.map((d) => d.modId), [585282, 111, 222, 333]);
+  });
+
+  /// The flat `ingest.patch_files`, rebuilt from the per-download registries.
+  ///
+  /// **Both shapes are written, and that is compatibility rather than
+  /// tidiness.** `ModIngest` filters `patch_files` to plain strings, so a
+  /// released build reading per-download objects would see no patch files at all
+  /// and the next base update would flatten the patch away.
+  group('the derived patch file list', () {
+    ModCompanion withFiles(
+      CompanionRole role,
+      List<String> paths, {
+      int modId = 605460,
+    }) =>
+        companion(role: role, modId: modId)
+            .copyWith(files: [for (final p in paths) InstalledFile(path: p)]);
+
+    ModOrigin ownFiles(ModOrigin block, List<String> paths) => block.copyWith(
+          ingest: (block.ingest ?? const ModIngest())
+              .copyWith(files: [for (final p in paths) InstalledFile(path: p)]),
+        );
+
+    test('is the same set whichever download the sidecar stored first', () {
+      // The symmetry this whole file exists for, applied to the file record: the
+      // same two downloads must yield the same patch files either way round.
+      final patchInside = derivedPatchFiles(ownFiles(
+        origin(companions: [withFiles(CompanionRole.patch, ['Body.dds'])]),
+        ['Ellen.ini', 'Textures/Body.dds'],
+      ));
+
+      final patchIsOwn = derivedPatchFiles(ownFiles(
+        origin(
+          modId: 605460,
+          companions: [withFiles(CompanionRole.base, [
+            'Ellen.ini',
+            'Textures/Body.dds',
+          ], modId: 585282)],
+        ),
+        ['Body.dds'],
+      ));
+
+      expect(patchInside, ['Body.dds']);
+      expect(patchIsOwn, ['Body.dds']);
+    });
+
+    test('the mod\'s own files are never in it', () {
+      final files = derivedPatchFiles(ownFiles(
+        origin(companions: [withFiles(CompanionRole.patch, ['Body.dds'])]),
+        ['Ellen.ini'],
+      ));
+
+      expect(files, isNot(contains('Ellen.ini')));
+    });
+
+    test('two patches both contribute', () {
+      final files = derivedPatchFiles(origin(companions: [
+        withFiles(CompanionRole.patch, ['Body.dds'], modId: 111),
+        withFiles(CompanionRole.patch, ['Face.dds'], modId: 222),
+      ]));
+
+      expect(files, ['Body.dds', 'Face.dds']);
+    });
+
+    test('a patch-shaped folder counts its own files even with nothing named',
+        () {
+      // `patch_shaped` exists before anyone has answered *what does this
+      // patch*, and it is enough on its own.
+      final files = derivedPatchFiles(
+        ownFiles(origin(patchShaped: true), ['Body.dds']),
+      );
+
+      expect(files, ['Body.dds']);
+    });
+
+    test('a folder with no registries derives nothing', () {
+      // Everything installed before the registries existed has a hand-written
+      // `patch_files` and no `files` to derive one from, so the caller must
+      // leave that record alone rather than replacing it with an empty list.
+      expect(
+        derivedPatchFiles(
+          origin(companions: [companion(role: CompanionRole.patch)]),
+        ),
+        isEmpty,
+      );
+    });
   });
 }

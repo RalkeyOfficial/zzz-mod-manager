@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/models/installed_file.dart';
 import 'package:mod_manager_flutter/models/mod_companion.dart';
 import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_metadata.dart';
@@ -303,6 +304,78 @@ void main() {
         // field erased by it — and this one cannot be recovered afterwards.
         const ingest = ModIngest(patchFiles: ['Body.dds']);
         expect(ingest.copyWith(patchShaped: true).patchFiles, ['Body.dds']);
+      });
+    });
+
+    group('files', () {
+      const files = [
+        InstalledFile(path: 'Ellen.ini', bytes: 2048),
+        InstalledFile(
+          path: 'Textures/Body.dds',
+          bytes: 5242880,
+          role: InstalledFileRole.replaced,
+        ),
+      ];
+
+      test('round-trips with its sizes and roles', () {
+        const ingest = ModIngest(files: files);
+        expect(ModIngest.fromJson(ingest.toJson())!.files, files);
+      });
+
+      test('is absent from the json when empty', () {
+        expect(const ModIngest().toJson().containsKey('files'), isFalse);
+        expect(ModIngest.fromJson({'mode': 'separate'})!.files, isEmpty);
+      });
+
+      test('a stranger\'s malformed entries are dropped, not fatal', () {
+        // A sidecar travels with its folder, so one can arrive from any build.
+        final ingest = ModIngest.fromJson({
+          'mode': 'separate',
+          'files': [
+            {'path': 'Ellen.ini', 'role': 'added'},
+            {'path': ''},
+            'Body.dds',
+            null,
+          ],
+        })!;
+        expect(ingest.files.map((f) => f.path), ['Ellen.ini']);
+      });
+
+      test('anything but a list reads as empty', () {
+        for (final raw in ['Ellen.ini', 42, true, <String, String>{}]) {
+          expect(
+            ModIngest.fromJson({'mode': 'separate', 'files': raw})!.files,
+            isEmpty,
+            reason: '$raw',
+          );
+        }
+      });
+
+      test('is part of the value identity', () {
+        expect(const ModIngest(files: files), isNot(const ModIngest()));
+        expect(const ModIngest(files: files).isEmpty, isFalse);
+      });
+
+      test('survives an amendment that says nothing about it', () {
+        expect(const ModIngest(files: files).copyWith(patchShaped: true).files,
+            files);
+      });
+
+      test('coexists with `patch_files`, which keeps its plain-string shape',
+          () {
+        // **Compat, not tidiness.** A released build filters `patch_files` to
+        // strings, so objects there would read as *no* patch files and the next
+        // base update would flatten the patch. The rich record goes in its own
+        // key and `patch_files` stays exactly what it was.
+        const ingest = ModIngest(
+          files: files,
+          patchFiles: ['Textures/Body.dds'],
+        );
+        final json = ingest.toJson();
+
+        expect(json['patch_files'], ['Textures/Body.dds']);
+        expect(json['files'], isA<List<Object?>>());
+        expect(ModIngest.fromJson(json)!.patchFiles, ['Textures/Body.dds']);
       });
     });
   });

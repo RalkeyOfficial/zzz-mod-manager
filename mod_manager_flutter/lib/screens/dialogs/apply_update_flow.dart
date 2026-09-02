@@ -7,7 +7,7 @@ import 'package:path/path.dart' as path;
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../models/gamebanana/gamebanana.dart';
-import '../../models/mod_ingest.dart';
+import '../../models/installed_file.dart';
 import '../../models/mod_origin.dart';
 import '../../models/origin_enums.dart';
 import '../../services/api_service.dart';
@@ -77,6 +77,10 @@ Future<bool> applyUpdateFlow(
   /// second is an ordinary overwrite of whatever is in there, and the **caller**
   /// is the one that has to have said so.
   Iterable<String> patchFiles = const <String>[],
+
+  /// Whose store of displaced originals to rebuild as that patch goes back —
+  /// see `UpdateWriteRoute.patchModId`. Null leaves any store alone.
+  int? patchModId,
 
   /// True when [remoteModId] is a **companion** of this folder — the mod its
   /// patch applies to — rather than the folder's own identity. Decides which
@@ -191,7 +195,7 @@ Future<bool> applyUpdateFlow(
           accepted: choice != null,
           subject: mod.id,
           fields: {
-            'from': mod.origin?.version,
+            'from': mod.origin?.base?.version,
             'to': file.version ?? file.description,
             'file_id': file.idRow,
             'flattens_patch': flattensPatch,
@@ -206,8 +210,9 @@ Future<bool> applyUpdateFlow(
       preview: preview,
       deleteStaleInis: choice.removeStaleInis,
       patchFiles: patchFiles,
-      previousVersion: mod.origin?.version,
-      previousVersionLabel: mod.origin?.versionLabel,
+      patchModId: patchModId,
+      previousVersion: mod.origin?.base?.version,
+      previousVersionLabel: mod.origin?.base?.versionLabel,
     );
 
     // **Before the success check, deliberately.** A snapshot exists the moment
@@ -239,6 +244,12 @@ Future<bool> applyUpdateFlow(
       // base's layout by design, so recording the paths it started from would
       // send the next rebuild looking in the wrong place.
       patchFiles: patchFiles.isEmpty ? null : result.patchFiles,
+      // **Only when this write was the folder's own download.** With
+      // `asCompanion` the files that moved belong to the *other* one, and
+      // stamping them onto `ingest` would credit the folder's own record with a
+      // patch's file list.
+      files: result.writtenFiles,
+      placedPatchFiles: result.placedPatchFiles,
     );
 
     // Bounded retention runs here rather than on a timer: it is the one moment
@@ -359,6 +370,12 @@ Future<bool> applyPatchUpdateFlow(
       incoming: incoming,
       existing: existing,
       placement: placement,
+      // **Only where a removal flow can reach it.** A `patch` companion is the
+      // one shape that can be taken back out, so it is the one that needs the
+      // mod's displaced files kept. A folder that *is* the patch has no such
+      // operation — stripping it leaves a block naming a mod the folder does
+      // not hold — so nothing is stored under it.
+      patchModId: asCompanion ? remoteModId : null,
     );
     if (result.snapshot != null) ref.invalidate(modBackupsProvider);
 
@@ -369,32 +386,35 @@ Future<bool> applyPatchUpdateFlow(
       return result.failure == UpdateApplyFailure.copy;
     }
 
+    // **One write for whichever layer this was**, which is what the stack
+    // bought: the two shapes a mixed folder comes in used to need two branches
+    // here, and they were doing the same thing to a different record.
+    //
+    // `ingest` is deliberately *not* refreshed from this archive's layout: the
+    // folder's shape belongs to its bottom layer, and this archive's folder
+    // names describe a patch. `patch_files` is re-derived from the layers by
+    // `withDownloadUpdatedTo`, so it follows the files recorded just below.
     await ApiService.updateModOrigin(mod.id, (current) {
-      // Where the patch is now, whichever record names it.
-      final ingest = (current?.ingest ?? const ModIngest())
-          .copyWith(patchFiles: result.patchFiles);
-      if (asCompanion) {
-        return withCompanionUpdatedTo(
-          current?.copyWith(ingest: ingest),
-          modId: remoteModId,
-          fileId: file.idRow,
-          version: file.version,
-          versionLabel: file.description,
-          archiveMd5: extraction.archiveMd5 ?? download.md5,
-        );
-      }
-      final base =
-          current ?? const ModOrigin(provenance: OriginProvenance.downloaded);
-      return base.updatedTo(
-        source: gameBananaSource,
+      if (current == null) return null;
+      final updated = withDownloadUpdatedTo(
+        current,
         modId: remoteModId,
         fileId: file.idRow,
         version: file.version,
         versionLabel: file.description,
         archiveMd5: extraction.archiveMd5 ?? download.md5,
-        // **Not refreshed from this download's layout.** The folder's shape is
-        // the base's, and this archive's folder names describe the patch.
-        ingest: ingest,
+        // This version's files, replacing the last one's — the paths move
+        // whenever the two authors' layouts differ.
+        files: result.writtenFiles,
+      );
+      if (updated == null) return null;
+      // The **folder's** facts only when what the folder *is* was written. A
+      // patch arriving on top does not re-date the folder or re-describe how it
+      // got here.
+      if (current.base?.modId != remoteModId) return updated;
+      return updated.copyWith(
+        source: gameBananaSource,
+        provenance: OriginProvenance.downloaded,
         installedAt: DateTime.now(),
       );
     });
@@ -431,6 +451,12 @@ Future<bool> applyPatchUpdateFlow(
 /// The `ingest` record is refreshed from what actually happened, which is a real
 /// gain for the pre-`ingest` library: a mod that had no layout on record now has
 /// one, so its *next* update replays instead of stopping to ask.
+///
+/// **Two downloads moved and each gets its own record**, which is the whole
+/// reason a mixed folder can be rebuilt. [files] is what this write laid down —
+/// the base — and [placedPatchFiles] is where the patch ended up on top of it.
+/// Which of the two records is the folder's own depends on [asCompanion], and
+/// nothing else about the write does.
 Future<void> _recordOrigin({
   required ModInfo mod,
   required int remoteModId,
@@ -439,35 +465,64 @@ Future<void> _recordOrigin({
   required UpdateLayout layout,
   required bool asCompanion,
   required List<String>? patchFiles,
+  List<InstalledFile>? files,
+  List<InstalledFile>? placedPatchFiles,
 }) async {
   final now = DateTime.now();
   await ApiService.updateModOrigin(mod.id, (current) {
-    final ingest =
-        ingestAfterUpdate(layout, current?.ingest, patchFiles: patchFiles);
-    if (asCompanion) {
-      // The folder's own identity is untouched: it still is what it was, and
-      // what changed is the *other* download in it.
-      return withCompanionUpdatedTo(
-        current?.copyWith(ingest: ingest),
-        modId: remoteModId,
-        fileId: file.idRow,
-        version: file.version,
-        versionLabel: file.description,
-        archiveMd5: archiveMd5,
-      );
-    }
-    final base = current ??
+    var block = current ??
         const ModOrigin(provenance: OriginProvenance.downloaded);
-    return base.updatedTo(
+
+    // **The layer that was written**, whether it is the bottom of the stack or
+    // one above it. `updatedTo` owns the clearing rules; the stack is what makes
+    // the two cases one line instead of two branches.
+    final written = block.downloadOf(remoteModId);
+    block = written == null
+        // Not on record at all — a mod the app updated without ever having a
+        // block for it, which is most of a library that predates origin
+        // tracking. The layer it wrote is what the folder now is.
+        ? block.withBase((download) => download.updatedTo(
+              modId: remoteModId,
+              fileId: file.idRow,
+              version: file.version,
+              versionLabel: file.description,
+              archiveMd5: archiveMd5,
+              files: files,
+            ))
+        : block.withDownload(
+            remoteModId,
+            (download) => download.updatedTo(
+              modId: remoteModId,
+              fileId: file.idRow,
+              version: file.version,
+              versionLabel: file.description,
+              archiveMd5: archiveMd5,
+              files: files,
+            ),
+          );
+
+    // The layers above moved onto the new base's layout, so their records are
+    // rewritten too. One write, not two: they are layers of one stack.
+    if (placedPatchFiles != null && placedPatchFiles.isNotEmpty) {
+      block = block.copyWith(downloads: [
+        block.downloads.first,
+        for (final patch in block.patches)
+          patch.copyWith(files: placedPatchFiles),
+      ]);
+    }
+
+    block = block.copyWith(
       source: gameBananaSource,
-      modId: remoteModId,
-      fileId: file.idRow,
-      version: file.version,
-      versionLabel: file.description,
-      archiveMd5: archiveMd5,
-      ingest: ingest,
-      installedAt: now,
+      ingest: ingestAfterUpdate(layout, block.ingest, patchFiles: patchFiles),
     );
+
+    // **Only when what the folder *is* was written.** A patch arriving on top
+    // does not re-date the folder or re-describe how it got here.
+    if (block.base?.modId != remoteModId) return withRebuiltPatchFiles(block);
+    return withRebuiltPatchFiles(block.copyWith(
+      provenance: OriginProvenance.downloaded,
+      installedAt: now,
+    ));
   });
 }
 

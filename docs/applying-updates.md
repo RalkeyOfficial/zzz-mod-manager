@@ -464,11 +464,65 @@ It is also the only recovery from a copy that fails part-way. Overwrite has no
 aside-folder to fall back on the way a swap would, and a partly-copied folder holds
 some new files and some old.
 
-### They live outside `modsPath`
+### A patch's displaced files are kept separately, and in the folder
+
+A snapshot answers "put this mod back as it was". Taking a patch out asks
+something narrower and needs to answer it **years later**: give me back the
+handful of the mod's own files this patch wrote over. A snapshot cannot be relied
+on for that, because retention will eventually eat it — only the *newest* per mod
+is protected, so the pre-patch one is prunable the moment a later snapshot
+exists.
+
+So `applyPatchInto` keeps each displaced file on its own, under the mod folder:
+
+```
+<mod>/.zzz-mod-manager/replaced/<patch mod id>/Textures/Body.dds.orig
+```
+
+**In the mod folder, and that is the decision worth stating.** The filesystem is
+then the bookkeeping: rename the mod, move the library to another drive, delete
+the folder, zip it and send it — each is handled by the operation that already
+handles the folder. `<appData>` keyed by folder name is what the snapshots do,
+and that shape **already leaks**: `renameMod` and `deleteMod` do not touch
+`<appData>/backups/`, and `planRetention` protects the newest snapshot of each
+mod *name* unconditionally, so a stranded group is both unreachable from "Restore
+a previous version…" and permanently exempt from pruning. A second store keyed
+the same way would inherit that on day one. It also lands on the right side of
+the sidecar's own split rule ([`metadata-schema.md` §1](metadata-schema.md)):
+which files this patch displaced is intrinsic to the folder, not to this
+installation.
+
+**Every stored file is suffixed, because the objection below is real.** A patch
+replacing the base's `.ini` is the common case, so this store holds exactly the
+file that would cause a duplicate-hotkey failure. `.orig` takes it out of any
+`*.ini` glob, the true path lives in the registry rather than on disk, and an
+asset no `.ini` references is inert on its own. **Not verified against ZZMI** —
+it is a claim about someone else's loader, and the check is one launch of the game
+with a patched mod active.
+
+Three rules keep it honest:
+
+- **The first displacement wins.** Updating a patch overwrites the *previous
+  patch's* files, not the mod's, so a second keep at the same path would replace
+  the base's original with a patch file — and removing the patch would then
+  restore the patch. A path the new version reaches for the first time is still
+  kept.
+- **A store that cannot be written does not stop the install.** What is lost is
+  the cheap permanent route, not the write; the snapshot is still the recovery,
+  and the removal asks the store what it *holds* rather than trusting the record
+  to have succeeded.
+- **A store nothing accounts for is deleted at ingest.** `copyDirectory` carries
+  `.zzz-mod-manager/` wholesale while the inbound `origin` block is always
+  dropped, so an imported folder can arrive holding originals with nothing left
+  saying which patch they belong to. This is the *only* reconciliation in-folder
+  storage needs — against four hooks and a sweep for the alternative.
+
+### Snapshots live outside `modsPath`
 
 A snapshot placed *inside* the mod folder is reachable through the active symlink, so
 the loader walks into it and reads the old version's `.ini` alongside the new one —
-the exact duplicate-hotkey failure §3 exists to prevent.
+the exact duplicate-hotkey failure §3 exists to prevent. It is a *verbatim* copy,
+so unlike the store above there is no renaming that could make it safe.
 
 ```
 <appData>/backups/
@@ -487,8 +541,11 @@ rollback the user cannot reach is the failure this exists to prevent.
 
 `manifest.json` is its own small format and is **not** the mod sidecar; nothing in
 [`metadata-schema.md`](metadata-schema.md) describes it. Fields: `mod`, `taken_at`,
-`size_bytes`, `file_count`, `reason` (`before_update` | `before_restore`), and
-optionally `version` / `version_label` as they stood before the update.
+`size_bytes`, `file_count`, `reason` (`before_update` | `before_restore` |
+`before_patch_removal` — its own value rather than `before_update`, since a
+rollback list calling it an update would send a user looking for a version change
+that never happened), and optionally `version` / `version_label` as they stood
+before the update.
 
 ### Retention
 
@@ -695,8 +752,15 @@ predecessor of the file that replaced it.
 
 ### Which files are the patch's
 
-`ingest.patch_files` ([`metadata-schema.md`](metadata-schema.md)) is the record all
-of that depends on, and it is written by every path that puts a patch into a folder.
+The **per-download file registry** ([`metadata-schema.md`](metadata-schema.md)) is
+the record all of that depends on, and it is written by every path that lays files
+into a folder — an ordinary install included, not only a patch. `ingest.files` is
+the folder's own download, each companion carries its own, and the flat
+`ingest.patch_files` is the derived union of whichever of them are patches.
+
+**Every entry says whether it went over something**, and that is what makes the
+record act on rather than merely read. `added` is the download's alone; `replaced`
+has a predecessor. Nothing else can distinguish them afterwards.
 
 - **It cannot be derived later.** A mixed folder is byte-for-byte
   indistinguishable from an ordinary one — the same reason `patch_shaped` has to be
@@ -722,6 +786,46 @@ existed — still gets its base update, with the confirmation saying plainly tha
 patch cannot be put back. Offered rather than refused because the update is what
 the user wants and the snapshot makes it reversible; said rather than silent
 because the loss is invisible otherwise.
+
+### Taking a patch back out
+
+The reverse operation, and the same order: **deactivate, snapshot, change,
+reactivate**, with no snapshot meaning no write. `planPatchRemoval`
+(`services/patch_removal.dart`) is pure and decides it; `UpdateApplier.removePatch`
+performs it.
+
+Four outcomes per recorded file, and the split between the first two is the whole
+point — only what the patch *brought* is the patch's to delete:
+
+| | |
+|---|---|
+| `added`, still there | **deleted** |
+| `replaced`, original stored | **restored** from §5's store |
+| recorded, not in the folder | **left alone** and named — an edit, not damage |
+| `replaced`, nothing stored | **left as the patch made it**, and said on the confirmation before it is answered |
+
+**Restores run before deletes.** Both orders leave the same folder when every
+step works; this one is better when they do not, because a failed restore leaves
+the patch's file in place, while a delete that ran first and a restore that then
+failed leaves a hole.
+
+**The store is dropped only when nothing failed.** A file that could not be put
+back still has its original in there, and discarding it would turn a retryable
+failure into a permanent one.
+
+**The record goes even when some files could not be moved.** What it claims is
+that the folder holds that patch, and afterwards it does not — a record kept
+"until the files are sorted out" would go on offering to update a patch that has
+been taken out. The leftovers are named on screen instead.
+
+**Only a `role: patch` companion, and only one with a registry.** A folder that
+*is* the patch has no such operation: stripping it would leave a block naming a
+mod the folder does not hold, and the thing the user wants there is deleting the
+mod, which already exists. A patch merged in by hand is recorded, is checked for
+updates, and still cannot be removed, because nothing says which of the folder's
+files are its — so the action is **absent** rather than present and refusing. The
+tracking dialog's row still forgets the record for that case, saying plainly that
+the files stay ([`origin-tracking.md` §10](origin-tracking.md#declaring-a-patch-gone)).
 
 ---
 

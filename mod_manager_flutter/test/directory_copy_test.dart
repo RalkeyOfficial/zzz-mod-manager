@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/models/installed_file.dart';
 import 'package:mod_manager_flutter/utils/directory_copy.dart';
 import 'package:path/path.dart' as path;
 
@@ -34,13 +35,13 @@ void main() {
     return file.existsSync() ? file.readAsStringSync() : null;
   }
 
-  test('copies files and nested folders, and counts the files', () async {
+  test('copies files and nested folders, and reports each one', () async {
     write(source, 'mod.ini', 'a');
     write(source, 'textures/skin.dds', 'b');
 
     final written = await copyDirectory(source, dest);
 
-    expect(written, 2);
+    expect(written.length, 2);
     expect(read(dest, 'mod.ini'), 'a');
     expect(read(dest, 'textures/skin.dds'), 'b');
   });
@@ -59,6 +60,61 @@ void main() {
     expect(read(dest, 'patch.ini'), 'mine', reason: 'the hand-merge survives');
   });
 
+  group('what it reports', () {
+    test('paths are destination-relative, `/`-separated, on-disk spelling',
+        () async {
+      // These paths open files and are shown to a user. The normalised
+      // lower-cased key the comparison rules use opens nothing on Linux.
+      write(source, 'Ellen.ini', 'a');
+      write(source, 'Textures/Body.dds', 'b');
+
+      final written = await copyDirectory(source, dest);
+
+      expect(written.map((f) => f.path).toSet(),
+          {'Ellen.ini', 'Textures/Body.dds'});
+    });
+
+    test('sizes come off the files it wrote', () async {
+      write(source, 'mod.ini', 'abcde');
+
+      final written = await copyDirectory(source, dest);
+
+      expect(written.single.bytes, 5);
+    });
+
+    test('a path that was occupied is `replaced`, an empty one `added`',
+        () async {
+      // The only code that can answer this is the code about to overwrite, and
+      // only *before* it does — afterwards every path is occupied by the file
+      // just written.
+      write(source, 'mod.ini', 'new');
+      write(source, 'extra.ini', 'new');
+      dest.createSync(recursive: true);
+      write(dest, 'mod.ini', 'old');
+
+      final written = await copyDirectory(source, dest);
+      final roles = {for (final file in written) file.path: file.role};
+
+      expect(roles['mod.ini'], InstalledFileRole.replaced);
+      expect(roles['extra.ini'], InstalledFileRole.added);
+    });
+
+    test('a skipped subtree is absent from the report as well as the copy',
+        () async {
+      write(source, 'mod.ini', 'a');
+      write(source, '.zzz-mod-manager/metadata.json', 'theirs');
+
+      final written = await copyDirectory(
+        source,
+        dest,
+        skipRelative: (relative) =>
+            relative.split('/').first == '.zzz-mod-manager',
+      );
+
+      expect(written.map((f) => f.path), ['mod.ini']);
+    });
+  });
+
   group('links', () {
     test('a link to a file outside the folder is skipped, not resolved',
         () async {
@@ -71,7 +127,7 @@ void main() {
 
       final written = await copyDirectory(source, dest);
 
-      expect(written, 1, reason: 'only mod.ini');
+      expect(written.length, 1, reason: 'only mod.ini');
       expect(read(dest, 'stolen.txt'), isNull);
     });
 
@@ -97,7 +153,7 @@ void main() {
         onTimeout: () => fail('the copy did not terminate'),
       );
 
-      expect(written, 1);
+      expect(written.length, 1);
     });
   }, skip: Platform.isWindows ? 'symlinks need privileges on Windows' : false);
 
@@ -112,7 +168,7 @@ void main() {
       skipRelative: (relative) => relative.split('/').first == '.zzz-mod-manager',
     );
 
-    expect(written, 1);
+    expect(written.length, 1);
     expect(read(dest, '.zzz-mod-manager/metadata.json'), isNull);
   });
 }

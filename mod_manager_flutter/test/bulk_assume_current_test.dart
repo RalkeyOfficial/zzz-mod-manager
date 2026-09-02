@@ -4,6 +4,8 @@ import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/bulk_assume_current.dart';
 
+import 'support/origin_shorthand.dart';
+
 /// The zero-network "assume current" bulk action.
 ///
 /// Two things here are worth more than the rest. The **planner** decides how
@@ -23,7 +25,7 @@ void main() {
     bool undated = false,
     bool proxy = true,
   }) =>
-      ModOrigin(
+      originFixture(
         source: 'gamebanana',
         modId: modId,
         modIdConfidence:

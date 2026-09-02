@@ -747,7 +747,15 @@ describe the patch — so everything above answers about the wrong half.
 `ModCompanion` (`models/mod_companion.dart`) is a **remote identity plus what is
 known about which file of it**: `role`, `mod_id`, `mod_id_confidence`, `file_id`,
 `version`, `version_label`, `version_confidence`, `archive_md5`,
-`baseline_remote_date`, `remote_missing`, `updates_dismissed_until`.
+`baseline_remote_date`, `remote_missing`, `updates_dismissed_until`, `files`.
+
+`files` is the one thing here that is not about identity, and it is not one of the
+six below: each of those describes *this folder's ingest* — how we came to put the
+folder here — while which files a download laid down is a fact about that download
+itself ([`metadata-schema.md`](metadata-schema.md)). It is non-empty only where
+the app wrote the bytes, which is the install prompt's `role: patch`; a companion
+the user named after the fact describes files somebody moved in by hand, and the
+app never saw them arrive.
 
 It is deliberately **not** a second `ModOrigin`. Six of that type's fields describe
 *this folder's ingest*, and a companion is a statement about a download the app did
@@ -871,13 +879,15 @@ download is; see
 [`update-checks.md`](update-checks.md#the-dialog). The section here is for the two
 surfaces where the folder's contents are *context* rather than the subject.
 
-**The change affordance is on the row, not beside the list.** The resolve dialog can
-correct exactly one kind of entry — the mod a patch applies to — and a separate
-editable row for it would put that download in a place of its own again. As a button
-on the row it looks like every other entry with one more thing on it. Which rows offer
-it is passed in by mod id rather than derived: what is editable depends on which flows
-exist, not on anything visible in the row, and a widget guessing would offer a button
-that does nothing.
+**The affordance is on the row, not beside the list.** A separate editable row below
+the list would put one download in a place of its own again; as a button on the row
+it looks like every other entry with one more thing on it. Which rows offer one, and
+which of the two actions each offers, is passed in by mod id rather than derived:
+what can be done to an entry depends on which flows exist, not on anything visible
+in the row, and a widget guessing would offer a button that does nothing. The
+resolve dialog gives every recorded companion one — *change* for the mod a patch
+applies to, *remove* for a patch installed into the folder (see [below](#declaring-a-patch-gone)) —
+and the details view gives none, being a read-only answer to "what is this".
 
 ### Naming one
 
@@ -916,19 +926,65 @@ direction this feature cannot afford.
 and the companion is the `base`; asking the user to classify their own folder is a
 quiz whose answer the app already has.
 
-**This step runs in one direction only, and a `role: patch` companion has no
-correcting flow.** Every string in it reads *"this mod holds a patch"* → *"name the
-mod it patches"*. The mirror image — a patch installed *into* a folder whose primary
-is the mod, written by the install prompt below with both axes already `exact` — is
-listed as a peer (above) and carries no change affordance. That is defensible rather
-than merely unbuilt: the app performed that download and knows exactly which file it
-was, so there is nothing to ask. What is genuinely missing is a way to say *"that
-patch is gone / it was never there"*, and mirroring the wording is what it would cost.
+**This step runs in one direction only, and that is why it is not the flow for a
+`role: patch` companion.** Every string in it reads *"this mod holds a patch"* →
+*"name the mod it patches"*, and the search-plus-file-picker shape exists because a
+download nobody recorded has to be identified from scratch. A patch installed *into*
+a folder whose primary is the mod — written by the install prompt below with both
+axes already `exact` — needs none of that: the app performed the download and knows
+exactly which file it was. Offering the search would let an exact record be re-aimed
+at a mod page its bytes never came from.
 
-The row that *opens* this step is only the **empty** case — patch-shaped, nothing
-named. Once a companion exists it is a row in the folder's list with the change
-affordance on it, because a second row below the list for the same download would
-rank it above the other one again.
+### Declaring a patch gone
+
+The one thing a `role: patch` record cannot know on its own is whether those files
+are still in the folder. It goes stale for reasons unrelated to how confident it
+was: the user deletes the patch by hand, an update overwrites the folder and
+flattens it away ([`applying-updates.md`](applying-updates.md) §1), or its page
+comes down. A stale one keeps a second mod page on the folder's books — its verdict
+competes for the folder's headline through `foldCompanions`
+([`update-checks.md`](update-checks.md)), and the updates dialog offers to write
+files back that the user removed on purpose.
+
+So that row's affordance is **removal, not a rebind** — a confirmation
+(`showCompanionRemoveDialog`), and the only correction this direction accepts:
+
+| Answer | Writes |
+|---|---|
+| "This patch is no longer here" | Drops that entry, matched by mod id, and rebuilds `ingest.patch_files` from what is left. Nothing else in the block changes, and no metadata is pulled off the folder's own mod page — the answer endorses nothing about it. |
+| Cancel | Nothing. |
+
+It is confirmed rather than immediate because a delete affordance's first suggestion
+is that files go, and none do; the confirmation's job is saying so before it is
+answered. Recorded through `logConfirmation('companion.remove', …)`, since an entry
+that quietly left the record is otherwise indistinguishable from one that was never
+written. Installing that patch through the app again records it again — the install
+prompt is the only route to a `role: patch` companion, in either direction.
+
+**This row forgets the record; it never moves a file.** Where the app *does* know
+which files that patch put in the folder, there is a real uninstall — **"Remove
+patch…"** in the mod's right-click menu, which deletes what the patch added and
+puts the mod's own files back
+([`applying-updates.md` §6](applying-updates.md#taking-a-patch-back-out)). The
+confirmation here names it, because a user who came to get rid of a patch would
+otherwise leave believing they had.
+
+The two live on different surfaces on purpose. Deleting and restoring files is a
+mod action and belongs with the other ones; a row in a dialog about *tracking* that
+quietly performed a snapshot-and-write would make a real operation look like a
+bookkeeping tweak. And the record-only answer still has to exist for the folders
+the menu entry cannot serve — merged by hand, or patched before the file registry
+existed — where forgetting the record is the *only* honest correction available.
+
+**Which affordance a row carries comes from how the entry was learned, never from
+where it sits** (`FolderRowAction`, `screens/components/folder_downloads_summary.dart`).
+Deriving it from the role would be right today by coincidence and wrong the moment a
+third flow exists, so the caller states it per row.
+
+The row that *opens* the naming step is only the **empty** case — patch-shaped,
+nothing named. Once a companion exists it is a row in the folder's list carrying its
+own affordance, because a second row below the list for the same download would rank
+it above the other one again.
 
 The write happens on its own rather than folding into Save — it is a decision about a
 different mod, and making the user press Save afterwards invites them to close the

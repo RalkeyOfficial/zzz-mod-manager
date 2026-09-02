@@ -247,6 +247,10 @@ UpdateLayout _replayCombined(
 /// [patchFiles] replaces the recorded list when the update moved the patch —
 /// which `applyBaseThenPatch` does by design, so a record still naming the old
 /// paths would send the next rebuild looking in the wrong place.
+///
+/// The **file manifest is not here**: it belongs to the layer that wrote it
+/// (`ModDownload.files`), and only `patch_files` — the derived flat list an
+/// older build can still read — lives on `ingest`.
 ModIngest? ingestAfterUpdate(
   UpdateLayout layout,
   ModIngest? current, {

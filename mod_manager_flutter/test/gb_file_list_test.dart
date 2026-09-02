@@ -8,6 +8,7 @@ import 'package:mod_manager_flutter/screens/components/marketplace/gb_file_list.
 import 'package:mod_manager_flutter/services/installed_mods_index.dart';
 
 import 'support/localized_harness.dart';
+import 'support/origin_shorthand.dart';
 
 /// The mod detail screen's file list, and specifically what it claims about the
 /// local library.
@@ -245,7 +246,7 @@ class ModInfoStub {
         name: name,
         characterId: 'unknown',
         isActive: false,
-        origin: ModOrigin(
+        origin: originFixture(
           provenance: OriginProvenance.downloaded,
           source: 'gamebanana',
           modId: 700727,

@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'package:path/path.dart' as path;
 import '../models/character_info.dart';
+import '../models/installed_file.dart';
 import '../models/mod_origin.dart';
+import 'patch_store.dart';
 import '../models/mod_origin_seed.dart';
 import '../models/keybind_info.dart';
 import '../utils/directory_copy.dart';
@@ -483,6 +485,8 @@ class ModManagerService {
       final autoTags = <String, String>{};
       // Kept so the origin pass below can name the folder each mod came out of.
       final sourceOf = <String, String>{};
+      // And what the copy actually laid down, which only the copy knows.
+      final writtenBy = <String, List<InstalledFile>>{};
       final modsDir = Directory(modsPath!);
 
       if (!await modsDir.exists()) {
@@ -503,7 +507,10 @@ class ModManagerService {
         }
 
         // Копіюємо папку з модом
-        await copyDirectory(sourceDir, targetDir);
+        writtenBy[modName] = await copyDirectory(sourceDir, targetDir);
+        // The inbound origin block is dropped, so any displaced originals that
+        // came with the folder are bytes nothing can explain.
+        await const PatchStore().discardAll(targetDir);
         importedMods.add(modName);
         sourceOf[modName] = folderPath;
 
@@ -538,6 +545,7 @@ class ModManagerService {
             seed: seed,
             sourceFolder: sourceOf[modName]!,
             siblingGroup: group,
+            files: writtenBy[modName] ?? const <InstalledFile>[],
           ),
         );
       }
@@ -573,7 +581,7 @@ class ModManagerService {
     final ok = await _metadata.recordOrigin(modName, origin);
     if (!ok) {
       _log.warning('could not record where a mod came from',
-          fields: {'mod': modName, 'mod_id': origin.modId});
+          fields: {'mod': modName, 'mod_id': origin.base?.modId});
       _originWriteFailures.add(modName);
     }
   }
@@ -615,16 +623,25 @@ class ModManagerService {
 
       var copied = 0;
       final copiedFolders = <String>[];
+      final written = <InstalledFile>[];
       for (final folderPath in folderPaths) {
         final sourceDir = Directory(folderPath);
         if (!await sourceDir.exists()) continue;
-        await copyDirectory(
-          sourceDir,
-          Directory(path.join(targetPath, path.basename(folderPath))),
-        );
+        final subFolder = path.basename(folderPath);
+        written.addAll(installedFilesUnderPrefix(
+          await copyDirectory(
+            sourceDir,
+            Directory(path.join(targetPath, subFolder)),
+          ),
+          // Each source lands in its own subfolder of the mod, so the copy's
+          // paths are relative to that and have to be lifted to the mod root.
+          subFolder,
+        ));
         copiedFolders.add(folderPath);
         copied++;
       }
+      // As above: whatever came with these folders, nothing now says what it is.
+      await const PatchStore().discardAll(targetDir);
 
       // Nothing usable was copied — roll back the empty mod folder.
       if (copied == 0) {
@@ -637,7 +654,11 @@ class ModManagerService {
       if (origin != null) {
         await _recordOrigin(
           modName,
-          _originBuilder.combined(seed: origin, sourceFolders: copiedFolders),
+          _originBuilder.combined(
+            seed: origin,
+            sourceFolders: copiedFolders,
+            files: written,
+          ),
         );
       }
 

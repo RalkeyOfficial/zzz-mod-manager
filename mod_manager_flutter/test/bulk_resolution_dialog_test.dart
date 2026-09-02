@@ -9,6 +9,7 @@ import 'package:mod_manager_flutter/screens/dialogs/bulk_resolution_dialog.dart'
 import 'package:mod_manager_flutter/services/bulk_resolution.dart';
 
 import 'support/localized_harness.dart';
+import 'support/origin_shorthand.dart';
 
 /// The bulk results/resolution screen.
 ///
@@ -25,7 +26,7 @@ void main() {
     OriginConfidence versionConfidence = OriginConfidence.unknown,
     bool remoteMissing = false,
   }) =>
-      ModOrigin(
+      originFixture(
         source: 'gamebanana',
         modId: modId,
         modIdConfidence: modIdConfidence,

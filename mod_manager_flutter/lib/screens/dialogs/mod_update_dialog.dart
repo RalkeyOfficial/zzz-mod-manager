@@ -9,7 +9,8 @@ import '../../models/gamebanana/gamebanana.dart';
 import '../../models/mod_origin.dart';
 import '../../services/api_service.dart';
 import '../../utils/notifications.dart';
-import '../../services/folder_downloads.dart';
+import '../../models/mod_download.dart';
+import '../../models/origin_enums.dart';
 import '../../services/gamebanana/file_selection.dart';
 import '../../services/origin_summary.dart';
 import '../../services/update_check.dart';
@@ -74,17 +75,20 @@ class _Section {
     required this.check,
   });
 
-  final FolderDownload download;
+  final ModDownload download;
   final String name;
   final UpdateCheck check;
 
   int? get modId => download.modId;
-  bool get isPatch => download.role == FolderDownloadRole.patch;
+  bool get isPatch => download.role == DownloadRole.patch;
 
-  /// What a write and a dismissal key on — **null for the folder's own**, which
-  /// is how `updateWriteRoute` and `ModOrigin.withDismissal` spell "this
-  /// folder's own block" rather than one of its companions.
-  int? get subjectModId => download.isFolderOwn ? null : download.modId;
+  /// What a write and a dismissal key on.
+  ///
+  /// **Always this layer's own id.** It used to be null for the folder's own
+  /// download, because that was the one the block kept in its own fields and
+  /// every write had a separate spelling for it. In a stack every layer is
+  /// addressed the same way.
+  int? get subjectModId => download.modId;
 }
 
 class ModUpdateDialog extends ConsumerStatefulWidget {
@@ -197,10 +201,10 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// a label would be noise on a dialog opened to read a verdict.
   void _lookUpNames() {
     final origin = widget.mod.origin;
-    if (origin == null || origin.companions.isEmpty) return;
+    if (origin == null || !origin.isMixed) return;
     final records = ref.read(modUpdateRecordsProvider);
     final client = ref.read(gameBananaClientProvider);
-    for (final download in folderDownloads(origin)) {
+    for (final download in origin.downloads) {
       final id = download.modId;
       if (id == null || !_askedNames.add(id)) continue;
       if (records.containsKey(id)) continue;
@@ -238,7 +242,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// job — the same reason the marketplace's refresh button routes around it.
   Future<void> _check({bool refresh = false}) async {
     final origin = widget.mod.origin;
-    final modId = origin?.modId;
+    final modId = origin?.base?.modId;
     if (modId == null || verdictWithoutAsking(origin) != null) return;
     setState(() {
       _checking = true;
@@ -282,10 +286,11 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       final companionProfiles = <int, GbMod>{};
       final companionReleases = <int, ReleaseGroups>{};
       final feeds = <int, List<GbUpdate>>{modId: updates};
-      for (final companion in origin!.companions) {
+      for (final patch in origin!.patches) {
+        if (patch.modId case final patchModId?) {
         try {
-          companionProfiles[companion.modId] =
-              await fetchModRecord(client, companion.modId, refresh: refresh);
+          companionProfiles[patchModId] =
+              await fetchModRecord(client, patchModId, refresh: refresh);
         } catch (_) {
           continue;
         }
@@ -293,14 +298,15 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
           // Kept whole, not just folded into groups: a folder holding two
           // downloads renders a notes accordion each, and the author's prose is
           // what those show.
-          final companionUpdates =
-              await client.modUpdates(companion.modId, refresh: refresh);
-          feeds[companion.modId] = companionUpdates;
-          companionReleases[companion.modId] =
-              ReleaseGroups.fromUpdates(companionUpdates);
+          final patchUpdates =
+              await client.modUpdates(patchModId, refresh: refresh);
+          feeds[patchModId] = patchUpdates;
+          companionReleases[patchModId] =
+              ReleaseGroups.fromUpdates(patchUpdates);
         } catch (_) {
           // As above: groups can only ever remove a flag, so their absence
           // leaves the louder, honest answer.
+        }
         }
       }
 
@@ -357,20 +363,19 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// The folder's downloads, each paired with **its own** verdict and name.
   ///
   /// One entry for an ordinary mod, several for a folder holding a patch as
-  /// well as the mod it patches. Order and roles come from `folderDownloads`,
-  /// which derives them so that install order cannot change how the folder
-  /// reads — see `docs/origin-tracking.md` §10.
+  /// well as the mod it patches. **Order and roles are the stack's**, which is
+  /// what makes install order unable to change how the folder reads.
+  ///
+  /// The fold keeps every layer's own verdict beside the winning one, so this is
+  /// a lookup rather than a reconstruction — there is no discarded verdict to
+  /// recover, which is what `folderOwn` used to exist for.
   List<_Section> _sections(UpdateCheck folded) {
-    final origin = widget.mod.origin;
-    final downloads = folderDownloads(origin);
+    final downloads = widget.mod.origin?.downloads ?? const <ModDownload>[];
     if (downloads.isEmpty) return const <_Section>[];
 
-    // The folded verdict belongs to whichever identity won; the loser's is
-    // beside it. `folderOwn` is null exactly when the folder's own download won,
-    // in which case the folded verdict *is* it.
-    final own = folded.subjectModId == null ? folded : folded.folderOwn;
-    final byCompanion = <int, UpdateCheck>{
-      for (final entry in folded.companions) entry.companion.modId: entry.check,
+    final byMod = <int, UpdateCheck>{
+      for (final layer in folded.layers)
+        if (layer.download.modId case final id?) id: layer.check,
     };
 
     return [
@@ -382,26 +387,25 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
           // has not been looked at, and `indeterminate` is what this file says
           // about anything it did not ask about — the same rule that keeps a
           // half-checked folder off "up to date".
-          check: (download.isFolderOwn
-                  ? own
-                  : byCompanion[download.modId ?? -1]) ??
+          check: byMod[download.modId ?? -1] ??
               const UpdateCheck(outcome: UpdateOutcome.indeterminate),
         ),
     ];
   }
 
-  /// What to call a download. The folder's own falls back to the folder name,
-  /// which is what the user knows it by everywhere else; a companion falls back
-  /// to its id, which is at least something to look up.
-  String _nameFor(FolderDownload download) {
+  /// What to call a download. The bottom layer falls back to the folder name,
+  /// which is what the user knows it by everywhere else; a layer above it falls
+  /// back to its id, which is at least something to look up.
+  String _nameFor(ModDownload download) {
     final id = download.modId;
+    final isBase = download.role == DownloadRole.base;
     final fetched = id == null
         ? null
-        : (download.isFolderOwn ? _profile?.name : _companionProfiles[id]?.name) ??
+        : (isBase ? _profile?.name : _companionProfiles[id]?.name) ??
             _fetchedNames[id] ??
             ref.read(modUpdateRecordsProvider)[id]?.name;
     if (fetched != null && fetched.isNotEmpty) return fetched;
-    if (download.isFolderOwn) return widget.mod.name;
+    if (isBase) return widget.mod.name;
     return loc.t('mods.folder.unnamed', params: {'id': '${id ?? '?'}'});
   }
 
@@ -428,13 +432,15 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     if (profile == null) return null;
     var origin = widget.mod.origin;
     if (_dismissalEdited && origin != null) {
-      // **Onto the identity it was written to.** Re-applied to the primary, a
-      // companion's dismissal both fails to silence the companion and silences
-      // the folder's own mod.
-      origin = origin.withDismissal(
-        subject: _dismissedSubject,
-        until: _dismissedUntil,
-      );
+      if (_dismissedSubject case final subject?) {
+        // **Onto the layer it was written to.** Applied to another one it both
+        // fails to silence the layer the user pressed and stamps that layer's
+        // release date where it can hide a finding nobody dismissed.
+        origin = origin.withDismissal(
+          subject: subject,
+          until: _dismissedUntil,
+        );
+      }
     }
     return checkForUpdate(
       origin: origin,
@@ -468,6 +474,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     // without one it is whichever the fold picked.
     final subject = section?.subjectModId ?? folded.subjectModId;
 
+    if (subject == null) return;
     setState(() => _writing = true);
     final ok = await widget.gateway.writeOrigin(
       widget.mod.id,
@@ -506,30 +513,27 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// Applies a dismissal to one identity's verdict and folds the folder again,
   /// with no mod page in hand.
   ///
-  /// [subject] is null for the folder's own download. A single-download folder
-  /// carries no companions, so this is `asDismissed` on the one verdict there
-  /// is — the shape this path had before a folder could hold two.
+  /// [subject] names the layer the user pressed. A folder with one layer folds
+  /// to that layer, so this is `asDismissed` on the one verdict there is.
+  ///
+  /// **Re-folded rather than patched in place**, because a dismissal can change
+  /// which layer wins: a live finding beats a dismissed stronger one, so
+  /// silencing the winner has to let another layer through.
   UpdateCheck _refoldDismissal(
     UpdateCheck folded,
     int? subject,
     bool dismissed,
   ) {
-    if (folded.companions.isEmpty) return folded.asDismissed(dismissed);
-    final own = folded.subjectModId == null ? folded : folded.folderOwn;
-    if (own == null) return folded.asDismissed(dismissed);
-
-    return foldCompanions(
-      subject == null ? own.asDismissed(dismissed) : own,
-      [
-        for (final entry in folded.companions)
-          CompanionCheck(
-            companion: entry.companion,
-            check: entry.companion.modId == subject
-                ? entry.check.asDismissed(dismissed)
-                : entry.check,
-          ),
-      ],
-    );
+    if (folded.layers.length < 2) return folded.asDismissed(dismissed);
+    return foldDownloads([
+      for (final layer in folded.layers)
+        DownloadCheck(
+          download: layer.download,
+          check: layer.download.modId == subject
+              ? layer.check.asDismissed(dismissed)
+              : layer.check,
+        ),
+    ]);
   }
 
   /// The file the Update button would install.
@@ -565,7 +569,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     // the section's — which is the point of a button per download rather than
     // one shared button that has to work out which mod it means.
     final subject = section?.subjectModId ?? _stored?.subjectModId;
-    final modId = subject ?? widget.mod.origin?.modId;
+    final modId = subject ?? widget.mod.origin?.base?.modId;
     if (modId == null) return;
 
     final route = updateWriteRoute(
@@ -595,6 +599,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
             remoteModId: modId,
             file: file,
             patchFiles: route.patchFiles,
+            patchModId: route.patchModId,
             asCompanion: route.asCompanion,
             flattensPatch: route.flattensPatch,
           );
@@ -622,7 +627,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   @override
   Widget build(BuildContext context) {
     final check = _stored;
-    final modId = widget.mod.origin?.modId;
+    final modId = widget.mod.origin?.base?.modId;
     // An *ignored* update is still installable: the user waved the badge away,
     // not the file. The dialog is where they come to change their mind, so the
     // action has to be here rather than only while the mark is showing.
@@ -795,13 +800,10 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       return _verdict(
         sections.isEmpty
             ? _Section(
-                download: const FolderDownload(
-                  role: FolderDownloadRole.mod,
-                  modId: null,
-                  isFolderOwn: true,
-                  summary: OriginSummary.empty,
-                  remoteMissing: false,
-                ),
+                // A folder with nothing recorded still renders one card: the
+                // verdict is `untracked` or `trackingOff`, and there is no layer
+                // to attribute it to.
+                download: const ModDownload(),
                 name: widget.mod.name,
                 check: check,
               )
@@ -1475,11 +1477,16 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// "unknown" there would contradict the headline directly above it.
   String _installedDescription(_Section section) {
     if (section.check.installedFile case final file?) return _fileHeadline(file);
-    // **From the entry's own summary, not the folder's block.** A companion
-    // records its own `version` / `version_label`, and reading the primary's
-    // here would describe the wrong download — which is exactly the confusion
-    // a section per download exists to remove.
-    if (section.download.summary.versionLabel case final label?) {
+    // **This layer's own record, not the folder's.** Every layer carries its
+    // own `version` / `version_label`, and reading another's here would
+    // describe the wrong download — exactly the confusion a section per
+    // download exists to remove.
+    if (summarizeDownload(
+          section.download,
+          provenance: widget.mod.origin?.provenance ??
+              OriginProvenance.importedFolder,
+        ).versionLabel
+        case final label?) {
       if (label.isNotEmpty) return label;
     }
     return loc.t('mods.update.unknown_file');

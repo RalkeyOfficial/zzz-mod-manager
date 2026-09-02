@@ -5,6 +5,8 @@ import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
+import 'support/origin_shorthand.dart';
+
 /// The "needs attention" filter, at the provider level.
 ///
 /// A status dot is spatial; this is the part that makes the state
@@ -24,7 +26,7 @@ void main() {
     OriginConfidence versionConfidence = OriginConfidence.unknown,
     OriginTracking tracking = OriginTracking.auto,
   }) =>
-      ModOrigin(
+      originFixture(
         modId: modId,
         versionConfidence: versionConfidence,
         provenance: OriginProvenance.importedFolder,

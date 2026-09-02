@@ -10,6 +10,8 @@ import 'package:mod_manager_flutter/services/origin_backfill.dart';
 import 'package:mod_manager_flutter/utils/gamebanana_url.dart';
 import 'package:mod_manager_flutter/utils/install_date_proxy.dart';
 
+import 'support/origin_shorthand.dart';
+
 /// The offline backfill, split the way the code is: the decisions run with no
 /// filesystem at all, and only the install-date proxy touches real files.
 void main() {
@@ -52,7 +54,7 @@ void main() {
         expect(
           OriginBackfill.recoverableModId(meta(
             sourceUrl: 'https://gamebanana.com/mods/999',
-            origin: ModOrigin(
+            origin: originFixture(
               provenance: OriginProvenance.downloaded,
               modId: 111,
               modIdConfidence: tier,
@@ -68,7 +70,7 @@ void main() {
       expect(
         OriginBackfill.recoverableModId(meta(
           sourceUrl: 'https://gamebanana.com/mods/111',
-          origin: const ModOrigin(
+          origin: originFixture(
             provenance: OriginProvenance.importedFolder,
             modId: 111,
             modIdConfidence: OriginConfidence.inferred,
@@ -87,7 +89,7 @@ void main() {
       expect(
         OriginBackfill.recoverableModId(meta(
           sourceUrl: gameBananaModUrl(700727),
-          origin: const ModOrigin(
+          origin: originFixture(
             provenance: OriginProvenance.downloaded,
             modId: 700727,
             modIdConfidence: OriginConfidence.exact,
@@ -111,7 +113,7 @@ void main() {
         expect(
           OriginBackfill.recoverableModId(meta(
             sourceUrl: 'https://gamebanana.com/mods/222',
-            origin: ModOrigin(
+            origin: originFixture(
               provenance: OriginProvenance.importedFolder,
               modId: 111,
               modIdConfidence: tier,
@@ -129,7 +131,7 @@ void main() {
       expect(
         OriginBackfill.recoverableModId(meta(
           sourceUrl: 'https://gamebanana.com/mods/531649',
-          origin: const ModOrigin(
+          origin: originFixture(
             provenance: OriginProvenance.importedArchive,
             tracking: OriginTracking.off,
           ),
@@ -181,7 +183,7 @@ void main() {
       // recorded install moment is real; the proxy would be a downgrade.
       final observed = DateTime.utc(2026, 1, 1);
       final origin = OriginBackfill.merge(
-        existing: ModOrigin(
+        existing: originFixture(
           provenance: OriginProvenance.downloaded,
           installedAt: observed,
           archiveMd5: 'abc123',
@@ -203,7 +205,7 @@ void main() {
 
     test('a rebind drops what described the old mod, but keeps the hash', () {
       final origin = OriginBackfill.merge(
-        existing: ModOrigin(
+        existing: originFixture(
           provenance: OriginProvenance.importedArchive,
           modId: 111,
           modIdConfidence: OriginConfidence.inferred,
@@ -238,7 +240,7 @@ void main() {
 
     test('filling an absent id is not a rebind and keeps everything', () {
       final origin = OriginBackfill.merge(
-        existing: const ModOrigin(
+        existing: originFixture(
           provenance: OriginProvenance.importedArchive,
           fileId: 555,
           version: '1.2',
@@ -259,7 +261,7 @@ void main() {
       // human typed, so it must be confirmed once before anything overwrites
       // files. Even a *version* somehow being exact must not unlock it.
       final origin = OriginBackfill.merge(
-        existing: const ModOrigin(
+        existing: originFixture(
           provenance: OriginProvenance.importedArchive,
           versionConfidence: OriginConfidence.exact,
         ),

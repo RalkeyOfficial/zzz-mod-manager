@@ -6,6 +6,8 @@ import 'package:mod_manager_flutter/services/bulk_update_check.dart';
 import 'package:mod_manager_flutter/services/launch_update_check.dart';
 import 'package:mod_manager_flutter/services/update_check.dart';
 
+import 'support/origin_shorthand.dart';
+
 /// The two decisions behind the opt-in startup check.
 ///
 /// Both are conditions rather than algorithms, which is exactly why they are
@@ -20,7 +22,7 @@ void main() {
         isActive: false,
         origin: modId == null
             ? null
-            : ModOrigin(
+            : originFixture(
                 source: 'gamebanana',
                 modId: modId,
                 modIdConfidence: OriginConfidence.user,

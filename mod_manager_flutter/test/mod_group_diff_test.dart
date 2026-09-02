@@ -2,11 +2,14 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
+import 'package:mod_manager_flutter/models/installed_file.dart';
 import 'package:mod_manager_flutter/models/keybind_info.dart';
 import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/utils/mod_group_diff.dart';
+
+import 'support/origin_shorthand.dart';
 
 /// The guard that decides whether a rescan is allowed to refresh the mods grid.
 ///
@@ -40,7 +43,7 @@ void main() {
         CharacterInfo(id: 'all', name: 'All', skins: mods),
       ];
 
-  const untracked = ModOrigin(
+  final untracked = originFixture(
     source: 'gamebanana',
     modId: 555,
     modIdConfidence: OriginConfidence.inferred,
@@ -126,7 +129,7 @@ void main() {
     final after = groups([
       mod(
         'Ellen Swimsuit',
-        origin: untracked.copyWith(
+        origin: untracked.copyBase(
           modIdConfidence: OriginConfidence.user,
           fileId: 900,
           version: '2.0',
@@ -142,12 +145,17 @@ void main() {
     // Each of these flips the badge by itself, so each has to be visible to the
     // guard by itself.
     final variants = <String, ModOrigin>{
-      'gained an identity': untracked.copyWith(modId: 777),
-      'gained a version': untracked.copyWith(
+      'gained an identity': untracked.copyBase(modId: 777),
+      'gained a version': untracked.copyBase(
         versionConfidence: OriginConfidence.assumedLatest,
       ),
       'was declared local': untracked.copyWith(tracking: OriginTracking.off),
-      'went missing upstream': untracked.copyWith(remoteMissing: true),
+      'went missing upstream': untracked.copyBase(remoteMissing: true),
+      // The stack itself is an axis now: a folder that gained a patch reads
+      // differently, and the guard compares the whole block.
+      'gained a patch': untracked.copyWith(
+        downloads: [untracked.base!, patchFixture()],
+      ),
     };
 
     for (final entry in variants.entries) {
@@ -235,7 +243,7 @@ void main() {
         'isFavorite': full(isFavorite: true),
         'keybinds': full(keybinds: [bind('KeySwap', 'VK_F9')]),
         'origin': full(
-          origin: const ModOrigin(
+          origin: originFixture(
             source: 'gamebanana',
             modId: 9,
             provenance: OriginProvenance.importedFolder,
@@ -282,13 +290,13 @@ void main() {
       // each scan builds fresh instances off disk, so identity comparison would
       // report a change on every single scan and switch the guard off.
       expect(
-        const ModOrigin(
+        originFixture(
           provenance: OriginProvenance.downloaded,
           modId: 1,
           ingest: ModIngest(folders: ['A', 'B']),
           archiveMd5: 'abc',
         ),
-        const ModOrigin(
+        originFixture(
           provenance: OriginProvenance.downloaded,
           modId: 1,
           ingest: ModIngest(folders: ['A', 'B']),
@@ -298,48 +306,57 @@ void main() {
     });
 
     test('equal blocks hash the same', () {
-      const a = ModOrigin(
+      final a = originFixture(
         provenance: OriginProvenance.downloaded,
-        ingest: ModIngest(folders: ['A']),
+        ingest: const ModIngest(folders: ['A']),
       );
-      const b = ModOrigin(
+      final b = originFixture(
         provenance: OriginProvenance.downloaded,
-        ingest: ModIngest(folders: ['A']),
+        ingest: const ModIngest(folders: ['A']),
       );
       expect(a.hashCode, b.hashCode);
     });
 
     test('a difference in any field breaks equality', () {
-      const base = ModOrigin(provenance: OriginProvenance.downloaded);
+      final base = originFixture(
+        source: null,
+        provenance: OriginProvenance.downloaded,
+      );
       final variants = <ModOrigin>[
+        // The folder's own five.
         base.copyWith(source: 'gamebanana'),
-        base.copyWith(modId: 1),
-        base.copyWith(modIdConfidence: OriginConfidence.user),
-        base.copyWith(fileId: 2),
-        base.copyWith(version: '1'),
-        base.copyWith(versionLabel: 'white hair ver'),
-        base.copyWith(versionConfidence: OriginConfidence.user),
         base.copyWith(provenance: OriginProvenance.importedFolder),
         base.copyWith(ingest: const ModIngest(folders: ['A'])),
         base.copyWith(installedAt: DateTime.utc(2026)),
         base.copyWith(installedAtIsProxy: true),
-        base.copyWith(baselineRemoteDate: DateTime.utc(2026)),
-        base.copyWith(archiveMd5: 'abc'),
         base.copyWith(tracking: OriginTracking.off),
-        base.copyWith(remoteMissing: true),
+        // The stack: a layer added, and each of a layer's own fields.
+        base.copyWith(downloads: [base.base!, patchFixture()]),
+        base.copyBase(modId: 1),
+        base.copyBase(modIdConfidence: OriginConfidence.user),
+        base.copyBase(fileId: 2),
+        base.copyBase(version: '1'),
+        base.copyBase(versionLabel: 'white hair ver'),
+        base.copyBase(versionConfidence: OriginConfidence.user),
+        base.copyBase(baselineRemoteDate: DateTime.utc(2026)),
+        base.copyBase(archiveMd5: 'abc'),
+        base.copyBase(remoteMissing: true),
+        base.copyBase(updatesDismissedUntil: DateTime.utc(2026)),
+        base.copyBase(files: const [InstalledFile(path: 'a.ini')]),
       ];
       for (final variant in variants) {
         expect(variant, isNot(base));
       }
-      // One per field, so a field added to the model without being added to
-      // `==` shows up here as a count mismatch rather than as a silent hole.
-      expect(variants, hasLength(15));
+      // One per field across both halves, so a field added to either model
+      // without being added to `==` shows up here as a count mismatch rather
+      // than as a silent hole.
+      expect(variants, hasLength(18));
     });
 
     test('ingest is compared by value, not by identity', () {
-      const withFolders = ModOrigin(
+      final withFolders = originFixture(
         provenance: OriginProvenance.downloaded,
-        ingest: ModIngest(folders: ['A']),
+        ingest: const ModIngest(folders: ['A']),
       );
       expect(
         withFolders,
