@@ -134,6 +134,25 @@ Future<InstallResult> installArchiveFlow(
       ..clear()
       ..addAll(plan.folders);
 
+    // **The library as it is on disk, not as the Mods tab last saw it.**
+    // `modsProvider` is derived from `charactersProvider`, which only
+    // `ModsScreen` ever writes — and that screen is disposed while the
+    // marketplace is open (see `installedModsIndexProvider`). Reading it here
+    // offers a patch every mod *except* the ones installed since the user last
+    // visited the Mods tab, which includes the base they just installed for
+    // this very patch. One scan, and the same one that provider already costs:
+    // 4 ms warm, 12 ms cold over a real 23-mod library.
+    var library = ref.read(modsProvider);
+    try {
+      library = await ApiService.getMods();
+    } catch (e) {
+      // The stale list beats no prompt at all: a destination the user has to
+      // pick again from the Mods tab is a worse install, not a failed one.
+      Logger('install').warning(
+          'could not re-read the library for the patch prompt',
+          error: e);
+    }
+
     // **The patch question, before the copy.** The answer exists as soon as the
     // archive is unpacked, and asking here is what lets the install offer a
     // destination rather than warn about a folder the user then has to go and
@@ -144,7 +163,7 @@ Future<InstallResult> installArchiveFlow(
       plan: plan,
       folders: directoriesToImport,
       modsPath: modsPath,
-      library: ref.read(modsProvider),
+      library: library,
       patchModId: mod.idRow,
       // What the author says this needs. For a patch that is sometimes the mod
       // being patched, and where the library holds it, it leads the

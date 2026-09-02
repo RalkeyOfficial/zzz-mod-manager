@@ -155,13 +155,18 @@ mod page is [`docs/metadata-autofill.md`](docs/metadata-autofill.md).
 
 ### Open around the read side (known, deliberately not built)
 
-- **Nothing keeps the library list live across a tab switch.** `ModsScreen` is
-  a keyed child of an `AnimatedSwitcher` with no keep-alive, so it is disposed on
-  every tab change and `initState` re-scans on the way back. The read side works
-  around it by taking its own snapshot and invalidating it when the marketplace
-  opens — which is correct and cheap, but two independent readers of the same
-  library is a shape worth revisiting if a third appears (§7.4's status slot is
-  rendered from `charactersProvider`, so it will not need one).
+- [ ] **Nothing keeps the library list live across a tab switch, and the third
+  reader of it arrived as a bug.** `ModsScreen` is a keyed child of an
+  `AnimatedSwitcher` with no keep-alive, so it is disposed on every tab change
+  and `initState` re-scans on the way back. `charactersProvider` — which only
+  that screen writes — therefore holds whatever the last visit to the Mods tab
+  produced, while `modsProvider` derives from it. The read side works around
+  that with its own snapshot, invalidated when the marketplace opens; the patch
+  destination prompt did not, so it offered a patch every mod **except** the
+  ones installed since that visit, including the base just installed for it.
+  Fixed where it bit, by reading the library off disk at the prompt. What the
+  fix does not do is stop the next reader making the same assumption, which is
+  what inverting the ownership below would.
 
 ### Open around metadata autofill (known, deliberately not built)
 
