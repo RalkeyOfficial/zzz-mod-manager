@@ -18,8 +18,18 @@ class ApiService {
   static ConfigService? _configService;
   static ProviderContainer? _container;
 
+  /// Whether building the real services is forbidden — see
+  /// [refuseRealLibraryInTests].
+  static bool _refuseRealLibrary = false;
+
+  static const String _reachedTheRealLibrary =
+      'ApiService reached the real <appData>/config.json from a test. '
+      'Mount a library with TempLibrary.create() (test/support/temp_library.dart), '
+      'or override the provider this widget reads.';
+
   static Future<void> initialize({ProviderContainer? container}) async {
     if (_configService == null) {
+      if (_refuseRealLibrary) throw StateError(_reachedTheRealLibrary);
       final prefs = await SharedPreferences.getInstance();
       _configService = ConfigService(prefs);
       await _configService!.loadFromFile();
@@ -90,6 +100,28 @@ class ApiService {
     _configService = null;
     _modManager = null;
     _container = null;
+  }
+
+  /// **Makes reaching the real library a failure instead of a quiet read.**
+  ///
+  /// Armed once per test isolate from `test/flutter_test_config.dart`, which
+  /// Flutter runs before `main()` in every file under `test/`. From then on
+  /// [initialize] throws unless [useLibraryForTests] has installed one.
+  ///
+  /// It exists because [useLibraryForTests] is opt-in and this is not. Several
+  /// providers reach this facade — `installedModsIndexProvider` calls
+  /// [getMods], `modManagerServiceProvider` calls [getModManagerService] — so
+  /// any widget test that mounts something watching one of those, and does not
+  /// know to substitute a library, reads the developer's own `config.json` and
+  /// scans their real mod folder. Nothing about that looks like a failure: the
+  /// test passes, slowly, against data no other machine has.
+  ///
+  /// So the rule is enforced where it cannot be forgotten rather than written
+  /// down and hoped for. The message names the fix, because the stack trace
+  /// points at a provider and not at the missing set-up.
+  @visibleForTesting
+  static void refuseRealLibraryInTests() {
+    _refuseRealLibrary = true;
   }
 
   static Future<List<ModInfo>> getMods() async {
