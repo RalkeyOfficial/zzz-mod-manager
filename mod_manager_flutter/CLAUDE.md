@@ -183,10 +183,14 @@ Custom JSON i18n (not ARB/gen-l10n). Strings live in `assets/l10n/en.json` and
   pumping so that failure mode can never be silent again.
 - The same trap applies to `Image.asset`: assert about the `AssetImage`'s
   `assetName`, never about pixels.
-- Dialogs that write must take a seam. `ApiService` lazily builds a
-  `ConfigService` against the developer's **real** `<appData>/config.json`, so a
-  test that merely mounts such a dialog would clobber their library paths and
-  favourites.
+- Dialogs that write must take a seam. `ApiService` is static and lazily builds
+  a `ConfigService` against the developer's **real** `<appData>/config.json`, so
+  mounting such a dialog would clobber their library paths.
+  `test/support/temp_library.dart` installs a real library in a temp directory
+  instead — not a fake filesystem: these flows *are* the file writes.
+- Press a handler that touches files with `tapWithIo`: a `testWidgets` body runs
+  in a fake-async zone that never turns the real event loop, so the handler never
+  resumes and its dialog is never built. Only `runAsync` turns it.
 
 ## App-data locations
 

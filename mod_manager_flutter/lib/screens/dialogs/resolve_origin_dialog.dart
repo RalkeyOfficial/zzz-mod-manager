@@ -611,11 +611,11 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
   /// **Takes the patch out**, files and all — the same operation the mod's
   /// right-click menu runs, from the surface that is showing the patch.
   ///
-  /// It used to forget the record and leave the files, and that was worse than
-  /// doing nothing: the record is what makes the next base update set the patch
-  /// aside instead of writing over it, and what makes the confirmation warn when
-  /// it cannot. Removing tracking for a patch that is still in the folder took
-  /// the protection away and left the patch.
+  /// **Forgetting the record while the files stay is worse than doing nothing,**
+  /// so it is not offered here. The record is what makes the next base update set
+  /// the patch aside instead of writing over it, and what makes the confirmation
+  /// warn when it cannot — so dropping it for a patch that is still in the folder
+  /// takes the protection away and leaves the patch.
   ///
   /// So there is one action, and it does what the situation allows — see
   /// [removePatchFlow], which decides between putting the mod's files back,

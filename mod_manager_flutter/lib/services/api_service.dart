@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -52,6 +53,43 @@ class ApiService {
     }
 
     _modManager ??= ModManagerService(_configService!);
+  }
+
+  /// **Points this facade at a library the caller owns**, so nothing reaches the
+  /// real `<appData>/config.json`.
+  ///
+  /// Everything here is static and [initialize] builds its singletons on first
+  /// use — a `ConfigService` over `<appData>/config.json` and a
+  /// `ModManagerService` over whatever library that file names. So a test that
+  /// runs any flow touching this class rewrites the developer's own library
+  /// paths, active-mod list, language and sort order. That is the reason the
+  /// dialogs that *write* have no coverage above the service layer, which is
+  /// exactly where the confirmation, the rescan and the notification live.
+  ///
+  /// [config] is a **real** `ConfigService` over a temp directory, not a stub
+  /// that does nothing. What these flows do is write files, so a config that
+  /// swallowed its writes would remove the only thing worth asserting; the
+  /// substitution is *where* it writes, never *whether*. See
+  /// `test/support/temp_library.dart`, which builds one and installs it.
+  ///
+  /// Always paired with [resetForTests] in a tear-down: the fields are static,
+  /// so a library left installed outlives the test that made it and the next
+  /// test writes into a directory that has been deleted.
+  @visibleForTesting
+  static void useLibraryForTests(ConfigService config) {
+    _configService = config;
+    // Dropped rather than kept: a manager built over the previous test's config
+    // still holds that test's temp paths, and `??=` below would keep it.
+    _modManager = null;
+    _container = null;
+  }
+
+  /// Forgets an installed test library, so the next caller builds the real one.
+  @visibleForTesting
+  static void resetForTests() {
+    _configService = null;
+    _modManager = null;
+    _container = null;
   }
 
   static Future<List<ModInfo>> getMods() async {

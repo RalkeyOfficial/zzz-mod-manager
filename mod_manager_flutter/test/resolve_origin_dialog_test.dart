@@ -17,6 +17,7 @@ import 'support/fake_http_transport.dart';
 import 'support/fixtures.dart';
 import 'support/localized_harness.dart';
 import 'support/origin_shorthand.dart';
+import 'support/temp_library.dart';
 
 /// Records what the dialog would have done locally, and touches nothing.
 ///
@@ -121,6 +122,11 @@ void main() {
     required ModInfo target,
     FakeHttpTransport? transport,
     _FakeGateway? gateway,
+
+    /// Extra overrides, for the one action this dialog does not perform
+    /// itself: taking a patch out reaches the mod folder and the snapshot
+    /// store, so a test of it mounts a `TempLibrary`'s.
+    List<Override> overrides = const [],
   }) async {
     // Written out rather than as `transport ?? FakeHttpTransport()..stub(...)`:
     // a cascade binds looser than `??`, so that form silently stubs a
@@ -138,6 +144,7 @@ void main() {
         gameBananaClientProvider.overrideWithValue(
           GameBananaClient(transport: http, maxRetries: 0),
         ),
+        ...overrides,
       ],
     );
     return fake;
@@ -818,28 +825,51 @@ void main() {
       expect(find.text('Not from GameBanana, or it\'s my own'), findsOneWidget);
     });
 
-    testWidgets('the patch row does not write the record on its own',
+    testWidgets('the patch row takes the patch out, files and all',
         (tester) async {
-      // **The behaviour this replaced was worse than doing nothing.** The row
-      // used to forget the record and leave the files, which took away the one
-      // thing that makes the next base update set the patch aside instead of
-      // writing over it — so "stop tracking this patch" removed the patch's
-      // only protection and left the patch.
+      // **Forgetting the record while the files stay is worse than doing
+      // nothing**, so this row does not offer it. The record is the one thing
+      // that makes the next base update set the patch aside instead of writing
+      // over it, so dropping it for a patch that is still in the folder takes
+      // the protection away and leaves the patch.
       //
-      // It now runs the same removal the mod's menu does, which deletes and
-      // restores files through `ApiService` and is therefore not reachable from
-      // a widget test (it would rewrite the developer's real config). What is
-      // testable here is that the row offers it and that nothing is written
-      // behind it: the write itself is `remove_patch_test.dart` and the
-      // confirmation is `remove_patch_confirm_test.dart`.
+      // So the row runs the same removal the mod's right-click menu does,
+      // against a real folder — which is what this asserts, rather than that a
+      // planner was called.
+      final origin = withPatchInside();
+      // Real async, so it goes inside `runAsync` — a `testWidgets` body never
+      // turns the real event loop on its own.
+      late TempLibrary library;
+      await tester.runAsync(() async {
+        library = await TempLibrary.create(prefix: 'zzz_resolve_remove_');
+        library.createMod('RabbitFX');
+        library.write('RabbitFX', 'Textures/Body.dds', 'the patch');
+        await library.writeOrigin('RabbitFX', origin);
+      });
+
       final gateway = await pumpDialog(
         tester,
-        target: mod(origin: withPatchInside()),
+        target: mod(origin: origin),
         transport: namedPatch(),
+        overrides: library.overrides,
       );
       await tester.pumpAndSettle();
 
-      expect(find.byIcon(Icons.delete_outline), findsOneWidget);
+      // The row sits below the fold of a dialog this long, and a tap on a
+      // widget the viewport is not showing lands on whatever is painted there.
+      await tester.ensureVisible(find.byIcon(Icons.delete_outline));
+      await tester.pumpAndSettle();
+
+      await tapWithIo(tester, find.byIcon(Icons.delete_outline));
+      expect(find.text('Remove this patch?'), findsOneWidget,
+          reason: 'the files go, so it is asked before anything is touched');
+
+      await tapWithIo(tester, find.text('Remove patch'));
+
+      expect(library.has('RabbitFX', 'Textures/Body.dds'), isFalse);
+      expect(library.originOf('RabbitFX')!.patches, isEmpty);
+      // Not through this dialog's own write path: the removal owns the record
+      // change, because the files and the record have to move together.
       expect(gateway.writes, 0);
     });
 

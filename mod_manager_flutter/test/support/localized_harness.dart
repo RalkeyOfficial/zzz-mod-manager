@@ -91,6 +91,25 @@ Future<void> pumpLocalized(
   }
 }
 
+/// Taps something whose handler does **real file I/O**, then settles the frames.
+///
+/// The tap happens inside [WidgetTester.runAsync] on purpose. A widget test body
+/// runs in a fake-async zone that never turns the real event loop, so a handler
+/// awaiting a directory read never resumes: the press appears to do nothing, the
+/// dialog it would open is never built, and every `find` afterwards returns
+/// nothing **with no exception**. Running the tap inside `runAsync` puts the
+/// handler in the real zone, where its reads and writes complete.
+///
+/// Frames are pumped after, not inside: the handler's dialog is a route, and
+/// building routes belongs to the fake clock.
+Future<void> tapWithIo(WidgetTester tester, Finder finder) async {
+  await tester.runAsync(() async {
+    await tester.tap(finder);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+  });
+  await tester.pumpAndSettle();
+}
+
 /// Guards against a vacuous test: fails if the subtree under test never built.
 void expectBuilt(Type widgetType) {
   expect(
