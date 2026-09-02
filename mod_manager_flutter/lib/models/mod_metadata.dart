@@ -17,6 +17,7 @@ class ModMetadata {
   /// round-trips through [extra] as well, shadowing the typed one.
   static const Set<String> knownKeys = {
     'schema_version',
+    'uid',
     'description',
     'source_url',
     'tags',
@@ -27,6 +28,29 @@ class ModMetadata {
 
   /// Schema version, so the on-disk format can evolve without breaking old files.
   final int schemaVersion;
+
+  /// **This folder's identity, for the things that have to outlive its name.**
+  ///
+  /// Opaque, machine-owned, and never parsed — 32 hex characters from
+  /// `Random.secure()`. Its only job is to be the same string tomorrow.
+  ///
+  /// The folder name cannot do that job. It is the install identity everything
+  /// else keys by (`active_mods`, `favorite_mods`, `mod_character_tags`), and
+  /// **renaming outside the app is not an event this app can see** — no hook
+  /// runs, so anything filed under the old name is stranded silently. Saved
+  /// versions are the one thing where that costs gigabytes, so they key by this
+  /// instead and a rename becomes a non-event, in the app or out of it.
+  ///
+  /// Null until something needs to remember this folder, which today means
+  /// until its first snapshot ([ModUid]). A mod with no uid has no history, and
+  /// that is not an approximation — it is the same statement.
+  ///
+  /// Two things it deliberately does not fix, because the folder name is the
+  /// right identity for them: per-install state in `config.json` (a rename
+  /// through the app migrates it, and an outside rename costs a favourite star
+  /// rather than a library), and telling two copies of one folder apart — a
+  /// duplicated folder carries a duplicated uid, and the scan has to notice.
+  final String? uid;
 
   /// Free-form description.
   final String? description;
@@ -99,6 +123,7 @@ class ModMetadata {
 
   const ModMetadata({
     this.schemaVersion = currentSchemaVersion,
+    this.uid,
     this.description,
     this.sourceUrl,
     this.tags = const [],
@@ -118,6 +143,10 @@ class ModMetadata {
       (characterId == null || characterId!.isEmpty) &&
       images.isEmpty &&
       origin == null &&
+      // A folder whose only content is its identity is still worth a sidecar:
+      // the identity is what its saved versions are filed under, and losing it
+      // strands them where nothing can ever claim them again.
+      uid == null &&
       extra.isEmpty;
 
   factory ModMetadata.fromJson(Map<String, dynamic> json) {
@@ -127,6 +156,7 @@ class ModMetadata {
     }
     return ModMetadata(
       schemaVersion: json['schema_version'] as int? ?? assumedSchemaVersion,
+      uid: json['uid'] as String?,
       description: json['description'] as String?,
       sourceUrl: json['source_url'] as String?,
       tags: (json['tags'] as List?)?.map((e) => e.toString()).toList() ?? const [],
@@ -140,6 +170,7 @@ class ModMetadata {
   Map<String, dynamic> toJson() {
     return {
       'schema_version': schemaVersion,
+      if (uid != null) 'uid': uid,
       if (description != null) 'description': description,
       if (sourceUrl != null) 'source_url': sourceUrl,
       'tags': tags,
@@ -164,8 +195,12 @@ class ModMetadata {
   ///
   /// Every parameter is required on purpose. A new user-editable field breaks
   /// the build at each save site (which is what you want — a forgotten one is
-  /// erased on the first edit), while a new machine-owned field needs no change
-  /// here at all, because this method never touches those.
+  /// erased on the first edit).
+  ///
+  /// **A new machine-owned field has to be carried here explicitly**, because
+  /// this builds a fresh instance: one left off the list defaults to null and
+  /// is erased the first time anyone edits a description. That is the hole
+  /// `ModInfo.origin`'s doc describes having already been paid for once.
   ///
   /// [characterId] is normalised through [storedCharacterId], so callers may
   /// hand over the runtime `"unknown"` placeholder without it reaching disk.
@@ -180,6 +215,7 @@ class ModMetadata {
   }) {
     return ModMetadata(
       schemaVersion: schemaVersion, // machine-owned: from disk
+      uid: uid, // machine-owned: from disk
       origin: origin, // machine-owned: from disk
       extra: extra, // unknown: from disk
       description: description,
@@ -192,6 +228,7 @@ class ModMetadata {
 
   ModMetadata copyWith({
     int? schemaVersion,
+    String? uid,
     String? description,
     String? sourceUrl,
     List<String>? tags,
@@ -202,6 +239,7 @@ class ModMetadata {
   }) {
     return ModMetadata(
       schemaVersion: schemaVersion ?? this.schemaVersion,
+      uid: uid ?? this.uid,
       description: description ?? this.description,
       sourceUrl: sourceUrl ?? this.sourceUrl,
       tags: tags ?? this.tags,
@@ -231,6 +269,7 @@ class ModMetadata {
             : (schemaVersion > currentSchemaVersion
                 ? schemaVersion
                 : currentSchemaVersion),
+        uid: uid,
         description: description,
         sourceUrl: sourceUrl,
         tags: tags,

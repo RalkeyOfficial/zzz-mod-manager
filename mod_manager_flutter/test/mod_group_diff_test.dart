@@ -208,6 +208,7 @@ void main() {
       bool isFavorite = false,
       List<KeybindInfo>? keybinds,
       ModOrigin? origin,
+      String? uid = 'a1b2c3d4e5f60718293a4b5c6d7e8f90',
     }) =>
         ModInfo(
           id: id,
@@ -222,6 +223,7 @@ void main() {
           isFavorite: isFavorite,
           keybinds: keybinds ?? [bind('KeySwap', 'VK_F7')],
           origin: origin ?? untracked,
+          uid: uid,
         );
 
     test('two mods built the same way are equal, and hash the same', () {
@@ -249,6 +251,10 @@ void main() {
             provenance: OriginProvenance.importedFolder,
           ),
         ),
+        // A mod that has just been given an identity is a changed mod: the
+        // "Restore a previous version…" entry is drawn from it, so a grid built
+        // before the uid landed would go on hiding it.
+        'uid': full(uid: null),
       };
       for (final entry in cases.entries) {
         expect(full(), isNot(entry.value), reason: '${entry.key} was ignored');
@@ -263,6 +269,7 @@ void main() {
       const compared = {
         'id', 'name', 'characterId', 'isActive', 'imagePath', 'description',
         'sourceUrl', 'tags', 'images', 'isFavorite', 'keybinds', 'origin',
+        'uid',
       };
       final source = File('lib/models/character_info.dart').readAsStringSync();
       final body = source.substring(source.indexOf('class ModInfo'));

@@ -18,6 +18,7 @@ import 'support/origin_shorthand.dart';
 /// (most of them) left out of here is invisible to it.
 const _fullyPopulatedJson = <String, dynamic>{
   'schema_version': 2,
+  'uid': 'a1b2c3d4e5f60718293a4b5c6d7e8f90',
   'description': 'd',
   'source_url': 'u',
   'tags': ['t'],
@@ -140,6 +141,7 @@ void main() {
       // field) — and the mod silently reverts to untracked.
       final onDisk = ModMetadata.fromJson({
         'schema_version': 7,
+        'uid': 'a1b2c3d4e5f60718293a4b5c6d7e8f90',
         'description': 'old',
         'character_id': 'ellen',
         'origin': {'provenance': 'downloaded', 'mod_id': 123},
@@ -163,6 +165,12 @@ void main() {
         reason: 'typed machine-owned field survives a user edit',
       );
       expect((json['origin'] as Map)['provenance'], 'downloaded');
+      // The same failure with a worse ending. A description edit that dropped
+      // the uid would leave every saved version of this mod filed under an
+      // identity nothing can claim again — unreachable from the app and exempt
+      // from pruning forever.
+      expect(json['uid'], 'a1b2c3d4e5f60718293a4b5c6d7e8f90',
+          reason: 'the identity its saved versions are filed under');
     });
 
     test('replaceUserFields never lets the "unknown" placeholder reach disk', () {

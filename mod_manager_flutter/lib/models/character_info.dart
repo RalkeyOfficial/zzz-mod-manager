@@ -82,6 +82,14 @@ class ModInfo {
   /// `docs/metadata-schema.md` §3.
   final ModOrigin? origin;
 
+  /// This folder's stable identity, as read from its sidecar — **read-only
+  /// here, on the same terms as [origin].**
+  ///
+  /// Null until something needed to remember this folder; see `ModUid`. What
+  /// reads it is anything that must survive a rename the app never saw: today
+  /// that is the saved-versions store, which is keyed by it.
+  final String? uid;
+
   ModInfo({
     required this.id,
     required this.name,
@@ -95,6 +103,7 @@ class ModInfo {
     this.isFavorite = false,
     this.keybinds,
     this.origin,
+    this.uid,
   });
 
   ModInfo copyWith({
@@ -110,6 +119,7 @@ class ModInfo {
     bool? isFavorite,
     List<KeybindInfo>? keybinds,
     ModOrigin? origin,
+    String? uid,
   }) {
     return ModInfo(
       id: id ?? this.id,
@@ -127,6 +137,10 @@ class ModInfo {
       // `copyWith` on every editorial action, and dropping the block there would
       // make a mod's status slot flicker to "untracked" until the next scan.
       origin: origin ?? this.origin,
+      // Carried for the same reason, and it costs more to drop: a mod whose uid
+      // went missing between rebuilds loses the "Restore a previous version…"
+      // entry while its saved versions are sitting right there.
+      uid: uid ?? this.uid,
     );
   }
 
@@ -152,6 +166,7 @@ class ModInfo {
           other.sourceUrl == sourceUrl &&
           other.isFavorite == isFavorite &&
           other.origin == origin &&
+          other.uid == uid &&
           _sameList(other.tags, tags) &&
           _sameList(other.images, images) &&
           _sameList(other.keybinds, keybinds);
@@ -167,6 +182,7 @@ class ModInfo {
         sourceUrl,
         isFavorite,
         origin,
+        uid,
         Object.hashAll(tags),
         Object.hashAll(images),
         keybinds == null ? null : Object.hashAll(keybinds!),

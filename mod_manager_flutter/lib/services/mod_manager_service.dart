@@ -174,6 +174,10 @@ class ModManagerService {
       // block into the runtime view costs nothing. It is read-only there: the
       // save path rebuilds the sidecar from the copy on disk, never from here.
       origin: metadata.origin,
+      // Same rules, and it is what "does this mod have saved versions?" is
+      // answered by — one readdir of `<appData>/backups` compared against this,
+      // rather than a sidecar read per right-click.
+      uid: metadata.uid,
     );
   }
 

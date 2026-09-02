@@ -89,6 +89,7 @@ dependency at all: see `test/origin_backfill_test.dart` and
 ```json
 {
   "schema_version": 2,
+  "uid": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
   "description": "Ellen swimsuit retexture.\n\nSupports **markdown**.",
   "source_url": "https://gamebanana.com/mods/123456",
   "tags": ["swimsuit", "4k"],
@@ -115,12 +116,64 @@ dependency at all: see `test/origin_backfill_test.dart` and
 | Field | Type | Written when | Meaning |
 |---|---|---|---|
 | `schema_version` | `int` | always | On-disk format version. Missing → assumed `ModMetadata.assumedSchemaVersion`. See [§4](#4-versioning-and-migration). |
+| `uid` | `string?` | non-null only | This folder's **identity**, for what has to outlive its name. Opaque, machine-owned, assigned on first need. See below. |
 | `description` | `string?` | non-null only | Free-form, **rendered as markdown** in the UI (`utils/markdown_description.dart`). Users can paste rich text and get markdown — see the clipboard-HTML note in `CLAUDE.md`. |
 | `source_url` | `string?` | non-null only | The mod's **page** URL. User-facing and user-editable via the edit dialog. |
 | `tags` | `string[]` | **always** (even `[]`) | Arbitrary user tags. Drive the tag filters in the mods toolbar. |
 | `character_id` | `string?` | non-null only | Canonical character/category id. Normalised through `canonicalCharacterId()` (`utils/zzz_characters.dart`) on read. |
 | `images` | `string[]` | **always** (even `[]`) | Gallery, **relative to the mod folder root**. First entry is the cover. |
 | `origin` | `object?` | non-null only | Where the mod came from. **Machine-owned** — see below. |
+
+### `uid` — the identity a rename cannot take away
+
+**The folder name is this app's identity for a mod, and it is the right one
+almost everywhere.** `config.json` keys `active_mods`, `favorite_mods` and
+`mod_character_tags` by it, and `renameMod` migrates all three — which works
+because a rename *through the app* is an event the app can see.
+
+A rename in a file manager is not. No hook runs, nothing migrates, and anything
+filed under the old name is stranded silently. What that costs depends on what
+was filed there:
+
+| Filed under the name | Cost of an outside rename |
+|---|---|
+| favourite star, active link, character tag | a star, a link the next scan prunes, a tag the sidecar already carries |
+| **saved versions** (`<appData>/backups`) | every rollback point for that mod, unreachable **and** exempt from pruning, because retention protects each name-group's newest entry forever |
+
+So saved versions key by `uid` and a rename becomes a non-event, inside the app
+or outside it. `ModUid` (`services/mod_uid.dart`) is the only thing that ever
+assigns one.
+
+- **Opaque, and never parsed.** 32 hex characters from `Random.secure()`. Not
+  derived from the folder name, the install date or the origin block: a derived
+  id changes when the thing it derives from changes, which is the failure being
+  fixed.
+- **Assigned on first need, never backfilled.** A mod gets one the first time
+  something has to remember it — today, its first snapshot. There is no
+  scan-time pass stamping the library, which would write into every mod folder
+  for data most have no use for and fail against read-only ones for no gain. **A
+  mod with no uid has no saved versions**, which is an identity rather than an
+  approximation.
+- **Machine-owned, so it is carried through every save**
+  (`replaceUserFields`, `copyWith`, `withOrigin`). A new machine-owned field
+  left off those lists is erased by the first description edit — see
+  [§3](#modinfoorigin-is-read-only-and-why-that-was-allowed) for the same hole
+  paid for once already with `origin`.
+- **Additive, so it does not bump `schema_version`.** Absence is unambiguous
+  ("has not needed one"), unlike the 1 → 2 case in
+  [§4](#when-to-bump-it).
+
+Two things it deliberately does not fix:
+
+- **A duplicated folder carries a duplicated uid.** Copying a mod folder is
+  something people do, and both copies then claim one history — where an update
+  to either prunes the other's. The scan is where that would have to be caught;
+  it is filed, and pinned by a test so it is a known shape rather than a
+  surprise.
+- **A deleted sidecar orphans the history it named.** The mod takes a fresh uid
+  on its next snapshot and the old group becomes unclaimable. The user's own
+  doing, but silent — which is why unclaimed groups are reported rather than
+  left to accumulate.
 
 ### The `origin` block
 
