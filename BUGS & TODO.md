@@ -285,13 +285,10 @@ makes the space reclaimable — a group whose uid no folder claims is
 unambiguously a deleted mod, where an unmatched *name* might be a mod the user
 renamed and still wants.
 
-- [ ] **Deleting a mod still leaves its snapshots behind.** Decided: they go
-  with it. The trap is ordering — the uid lives in the folder being deleted, so
-  `deleteMod` has to read it **before** the folder goes, or the operation meant
-  to reclaim the space is the one that orphans it. The confirmation has to say
-  the saved versions go too; it currently names the folder, the link and the
-  saved state, and "and every saved version of it" is a materially different
-  sentence when there are gigabytes of them.
+**Deleting a mod deletes its saved versions too**, and the confirmation says how
+many. The identity is read *before* the folder goes — it lives in the sidecar
+inside it, so the operation meant to reclaim the space would otherwise be the
+one that orphaned it.
 - [ ] **Nothing reports a group no folder claims.** Three ways to get one and
   all of them silent: a mod deleted outside the app, a folder duplicated in a
   file manager (both copies carry one uid, and an update to either prunes the

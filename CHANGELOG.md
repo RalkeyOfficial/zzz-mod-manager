@@ -40,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updating writes over the files the new version replaces and leaves anything you added yourself alone.
   - An update also takes away the files the version you had shipped and the new one doesn't, so nothing of the old one is left loading in the game.
   - Every update saves a copy of the mod first, and "Restore a previous version…" puts it back.
+  - Saved versions survive renaming a mod, including renaming its folder outside the app.
+  - Deleting a mod deletes every saved version of it too, and the confirmation says how many.
   - "Reinstall this version…" in a mod's right-click menu puts the author's files back over a mod that has stopped working, without changing which version you have. Anything you added yourself stays.
   - A mod whose file has been taken off GameBanana says so instead of quietly reinstalling a different version.
   - The dialog shows the author's release notes for anything published since your version.

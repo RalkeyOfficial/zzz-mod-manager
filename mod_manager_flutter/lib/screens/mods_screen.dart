@@ -621,6 +621,30 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     }
   }
 
+  /// Asks, then deletes the mod and every saved version of it.
+  ///
+  /// The count is read here rather than in the dialog: it is one `readdir` of
+  /// the mod's own group, and the confirmation must say how much history the
+  /// delete takes with it — the only place the user could otherwise find that
+  /// out is the entry that stops existing.
+  Future<void> _deleteMod(ModInfo mod) async {
+    final saved =
+        (await ref.read(snapshotServiceProvider).list(mod.uid)).length;
+    if (!mounted) return;
+    await showDeleteModDialog(
+      context,
+      mod,
+      savedVersions: saved,
+      onDeleted: () {
+        _onModDeleted(mod.id);
+        // The group is gone with the mod, so the cached set of uids that have
+        // one is stale — and it is what decides whether a *rollback* entry is
+        // offered on every other card.
+        ref.invalidate(modBackupsProvider);
+      },
+    );
+  }
+
   /// Writes the version already installed over the folder again, and rescans:
   /// the files change even though the recorded version does not.
   Future<void> _reinstall(ModInfo mod) async {
@@ -691,11 +715,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         onSaved: () => unawaited(loadMods(showLoading: false)),
       ),
       onToggleFavorite: () => _toggleFavorite(mod),
-      onDelete: () => showDeleteModDialog(
-        context,
-        mod,
-        onDeleted: () => _onModDeleted(mod.id),
-      ),
+      onDelete: () => unawaited(_deleteMod(mod)),
     );
   }
 

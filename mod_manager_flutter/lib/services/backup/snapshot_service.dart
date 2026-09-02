@@ -232,6 +232,29 @@ class SnapshotService {
     }
   }
 
+  /// Removes **every** snapshot of one mod, for a mod that is being deleted.
+  ///
+  /// Not part of retention: the budget's job is to keep the newest way back for
+  /// each mod alive, and this is the one case where there is no mod left to
+  /// have a way back to. True when nothing of the group remains, including when
+  /// there was nothing there to begin with.
+  Future<bool> deleteGroup(String modUid) async {
+    if (modUid.isEmpty) return false;
+    final dir = _groupDir(modUid);
+    try {
+      if (!await dir.exists()) return true;
+      await dir.delete(recursive: true);
+      return true;
+    } catch (e) {
+      // Wasted space, not a failed delete: the mod itself is already gone by
+      // the time this runs, and saying otherwise would report a failure the
+      // user cannot act on.
+      _log.warning('could not remove a deleted mod\'s saved versions',
+          error: e, fields: {'uid': modUid});
+      return false;
+    }
+  }
+
   /// Applies [policy] across every mod. Returns the plan it carried out, so the
   /// caller can report an over-budget remainder rather than pretend it pruned.
   Future<RetentionPlan> prune({DateTime? now}) async {

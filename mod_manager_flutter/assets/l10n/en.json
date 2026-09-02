@@ -209,6 +209,8 @@
       "rename_failed_title": "Couldn't rename the mod",
       "delete_title": "Delete mod",
       "delete_message": "Permanently delete \"{mod}\"? This removes the mod folder and all its files from disk and cannot be undone.",
+      "delete_saved_single": "{count} saved version of it goes too, so there will be nothing left to restore.",
+      "delete_saved_plural": "{count} saved versions of it go too, so there will be nothing left to restore.",
       "delete_confirm": "Delete",
       "source_url": "Source link:",
       "source_url_hint": "https://gamebanana.com/mods/...",

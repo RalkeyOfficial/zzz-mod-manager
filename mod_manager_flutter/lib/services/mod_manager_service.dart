@@ -9,6 +9,7 @@ import '../models/keybind_info.dart';
 import '../utils/directory_copy.dart';
 import '../utils/shipped_preview.dart';
 import '../utils/zzz_characters.dart';
+import 'backup/snapshot_service.dart';
 import 'config_service.dart';
 import 'gamebanana/remote_mod_metadata.dart';
 import 'ingest_origin_builder.dart';
@@ -16,6 +17,7 @@ import 'log/logger.dart';
 import 'metadata_autofill.dart';
 import 'mod_metadata_repository.dart';
 import 'mod_metadata_service.dart';
+import 'mod_uid.dart';
 import 'platform_service.dart';
 import 'platform_service_factory.dart';
 import 'ini_parser_service.dart';
@@ -44,8 +46,21 @@ class ModManagerService {
   /// cleared wholesale on a manual refresh.
   final Map<String, List<KeybindInfo>> _keybindCache = {};
 
-  ModManagerService(this._configService)
-      : _platformService = PlatformServiceFactory.getInstance(),
+  /// Only for `deleteMod`: a mod's saved versions go when the mod does.
+  final SnapshotService _snapshots;
+  final ModUid _uids;
+
+  /// [snapshots] and [uids] are defaulted rather than required because they
+  /// need no configuration — one reads the folder's own sidecar, the other is
+  /// rooted in app-data. They are parameters at all so `deleteMod` can be
+  /// tested without reaching the developer's real `<appData>/backups`.
+  ModManagerService(
+    this._configService, {
+    SnapshotService? snapshots,
+    ModUid? uids,
+  })  : _snapshots = snapshots ?? SnapshotService(),
+        _uids = uids ?? ModUid(),
+        _platformService = PlatformServiceFactory.getInstance(),
         _iniParser = IniParserService(),
         // modsPath is read through a closure, not captured by value: the user
         // can repoint the library in Settings at any time.
@@ -379,15 +394,29 @@ class ModManagerService {
   }
 
   /// Permanently deletes a mod: removes its active link (if any), deletes the
-  /// on-disk folder with all its files, and clears its config state
-  /// (active/favorite/category). The in-folder metadata is destroyed with the
-  /// folder. Returns false if the mod folder is missing or on any failure.
+  /// on-disk folder with all its files, clears its config state
+  /// (active/favorite/category), and **deletes every saved version of it**. The
+  /// in-folder metadata is destroyed with the folder. Returns false if the mod
+  /// folder is missing or on any failure.
+  ///
+  /// The saved versions go with the mod deliberately: keeping gigabytes of a
+  /// mod the user has just deleted is a surprise, and nothing would ever offer
+  /// them again — the rollback list is per mod, and this mod is gone.
+  ///
+  /// **The identity is read before the folder is touched**, and that ordering is
+  /// the whole trick: the uid lives in the sidecar *inside* the folder being
+  /// deleted, so reading it afterwards is impossible and the operation meant to
+  /// reclaim the space would be the one that orphaned it forever.
   Future<bool> deleteMod(String modName) async {
     try {
       if (modsPath == null) return false;
 
       final modDir = Directory(path.join(modsPath!, modName));
       if (!await modDir.exists()) return false;
+
+      // **Before anything is removed.** See above: after the delete there is
+      // nowhere left to read this from.
+      final uid = await _uids.read(modDir);
 
       // Remove the active link first so we don't leave a dangling link in the
       // game's mods folder once the source folder is gone.
@@ -403,6 +432,13 @@ class ModManagerService {
       await _configService.removeFavoriteMod(modName);
       await _configService.removeModCharacterTag(modName);
       invalidateKeybinds(modName);
+
+      // **After the folder, and never gating the delete.** The mod is already
+      // gone by here, so a group that could not be removed is wasted space
+      // rather than a failure to report — and reporting one would tell the user
+      // their delete failed when it did not. A mod with no uid never had a
+      // saved version to remove.
+      if (uid != null) await _snapshots.deleteGroup(uid);
       return true;
     } catch (error, stack) {
       _files.error('delete failed',

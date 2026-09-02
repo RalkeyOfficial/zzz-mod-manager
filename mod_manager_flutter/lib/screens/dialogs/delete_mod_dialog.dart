@@ -8,10 +8,16 @@ import '../../utils/notifications.dart';
 /// Confirms and permanently deletes a mod (its folder and all state). The
 /// action is irreversible, so it requires an explicit confirmation. [onDeleted]
 /// runs after a successful delete so the caller can refresh its list.
+///
+/// [savedVersions] is how many snapshots go with it, which the delete does and
+/// which the user has no other way to find out. Stated only when there are any:
+/// a sentence about saved versions in front of a mod that has none is noise,
+/// and an alarming kind.
 Future<void> showDeleteModDialog(
   BuildContext context,
   ModInfo mod, {
   required VoidCallback onDeleted,
+  int savedVersions = 0,
 }) {
   final loc = context.loc;
   final notify = context.notify;
@@ -64,8 +70,25 @@ Future<void> showDeleteModDialog(
         ),
         content: SizedBox(
           width: 380,
-          child: Text(
-            loc.t('mods.dialog.delete_message', params: {'mod': mod.name}),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                loc.t('mods.dialog.delete_message', params: {'mod': mod.name}),
+              ),
+              if (savedVersions > 0) ...[
+                const SizedBox(height: 10),
+                Text(
+                  loc.plural(
+                    'mods.dialog.delete_saved',
+                    savedVersions,
+                    params: {'count': '$savedVersions'},
+                  ),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ],
+            ],
           ),
         ),
         actions: [
