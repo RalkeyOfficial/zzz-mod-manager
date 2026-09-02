@@ -345,15 +345,18 @@ Everything that follows from that — the patch test, the stale-`.ini` rule, the
 layout replay, the ordering that is the safety argument — is
 [`docs/applying-updates.md`](docs/applying-updates.md).
 
-- [ ] **An update still overwrites rather than removing what the last version
-  wrote.** Each download's file list is now recorded at install
-  ([`docs/metadata-schema.md`](docs/metadata-schema.md)), and the removal half is
-  built for patches only. The general form is to remove exactly the recorded
-  paths before writing the new ones, which would make a file the new version
-  stopped shipping disappear instead of lingering — the `ShaderFixes/` gap above
-  is the case with no other detection. Forward-only: no mod installed before the
-  record existed has one, and re-downloading the old archive to reconstruct it is
-  a second full transfer (22 MB median, 1.24 GB tail) against file ids GameBanana
+- [ ] **A patch's own update leaves behind what its last version wrote.** The
+  bottom layer no longer does: an update removes exactly the paths its record
+  names that the new archive does not carry, and nothing else
+  ([`docs/applying-updates.md`](docs/applying-updates.md) §1). `applyPatchInto`
+  writes the other half of a mixed folder and has no such step — and its rule is
+  a different one, because a file the old patch wrote over has the mod's own
+  original in the store, so it wants a **restore** where the base wants a delete.
+  `planDroppedFiles` expresses both already (`keepsDisplaced`); what is missing
+  is the wiring, the store entries the new version no longer needs, and the
+  reporting. Forward-only either way: a folder installed before the record
+  existed has none, and re-downloading the old archive to reconstruct one is a
+  second full transfer (22 MB median, 1.24 GB tail) against file ids GameBanana
   deletes. Self-healing per §7.7.
 - [ ] Reuse this same path for a **reinstall / repair** action — it's the identical
   operation at the same file id, so it costs nothing extra. `applyUpdateFlow` takes

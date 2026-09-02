@@ -178,6 +178,12 @@ Future<bool> applyUpdateFlow(
       // on top afterwards. Left in, its own `.ini` is assessed as a leftover the
       // base renamed and offered for deletion, which deletes the patch.
       excluding: patchFiles,
+      // **The bottom layer's record**, because that is the layer this writes.
+      // What it names is removed where the new version has no file by that name,
+      // which is how a renamed `.ini` or a dropped shader stops being loaded
+      // instead of lingering. Empty for a mod installed before the record
+      // existed — see `dropped_files.dart`.
+      recorded: mod.origin?.base?.files ?? const <InstalledFile>[],
     );
 
     if (!context.mounted) return false;

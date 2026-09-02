@@ -16,6 +16,7 @@ import '../ini_parser_service.dart';
 import '../ini_resources.dart';
 import '../patch_detection.dart';
 import '../patch_placement.dart';
+import 'dropped_files.dart';
 import 'keybind_changes.dart';
 import 'stale_ini.dart';
 import 'update_layout.dart';
@@ -106,6 +107,12 @@ class UpdateApplier {
     /// and deletes the patch if accepted. See [applyBaseThenPatch], which puts
     /// those files back on top once the base has landed.
     Iterable<String> excluding = const <String>[],
+
+    /// **What the download being replaced laid down last time**
+    /// (`ModDownload.files`), so the files this version drops can be removed
+    /// rather than left loading. Empty for a folder installed before the record
+    /// existed, which degrades to the inference in `stale_ini.dart`.
+    List<InstalledFile> recorded = const <InstalledFile>[],
   }) async {
     final byName = {
       for (final folder in incomingFolders) path.basename(folder): folder,
@@ -132,11 +139,31 @@ class UpdateApplier {
 
     final existing = (await readFolderContents(modFolder)).without(excluding);
 
+    // The bottom layer keeps nothing it displaces — there is nothing under it —
+    // so a `replaced` entry here is the *previous version of this same
+    // download*, which is what the update is replacing.
+    final dropped = planDroppedFiles(
+      recorded: recorded,
+      incoming: incoming.files,
+      onDisk: existing.files,
+      claimedByOthers: excluding,
+      incomingReferences: incoming.references.paths,
+    );
+
+    // **The `.ini` inference is asked about the folder the removals leave.** A
+    // renamed `.ini` the record already names is deleted outright, and offering
+    // it a second time as a guess would ask the user to approve something that
+    // is happening either way. What is left for the guess is the folder's
+    // unrecorded half — a second mod merged in by hand, or a library that
+    // predates the record.
+    final judged = existing.without(dropped.remove);
+
     return UpdatePreview(
       layout: layout,
       sources: sources,
       incoming: incoming,
       existing: existing,
+      dropped: dropped,
       // Does the *download* stand on its own? A patch-shaped one proves the
       // folder it is going into is mixed, which is the only signal available for
       // that with no recorded file list and no extra request.
@@ -147,9 +174,9 @@ class UpdateApplier {
         hasIni: incoming.hasIni,
       ),
       staleInis: assessStaleInis(
-        existingReferences: existing.references,
-        existingInis: existing.iniPaths,
-        existingFiles: existing.files,
+        existingReferences: judged.references,
+        existingInis: judged.iniPaths,
+        existingFiles: judged.files,
         incomingInis: incoming.iniPaths,
         incomingFiles: incoming.files,
       ),
@@ -315,6 +342,17 @@ class UpdateApplier {
       );
     }
 
+    // **After the copy, not before it.** These files are the old version's and
+    // the new one has no name for them, so nothing the copy writes touches them
+    // either way — and running afterwards means a copy that failed part-way
+    // leaves them where they are rather than deleting them to make room for
+    // something that never arrived.
+    final droppedFiles = await _removeDropped(
+      modFolder: modFolder,
+      dropped: preview.dropped,
+      spelling: preview.existing,
+    );
+
     // **Before the patch goes back**, deliberately. The stale list names `.ini`
     // files the *base* renamed, and the patch's own `.ini` was taken out above —
     // so nothing here can reach it. Run the other way round, a patch that had
@@ -341,6 +379,7 @@ class UpdateApplier {
       filesWritten: written.length + placed.length,
       writtenFiles: written,
       removedInis: deleted,
+      droppedFiles: droppedFiles,
       patchFiles: [for (final file in placed) file.path],
       placedPatchFiles: placed,
       missingPatchFiles: aside.missing,
@@ -758,6 +797,81 @@ class UpdateApplier {
     );
   }
 
+  /// Deletes the files the new version no longer ships, and the directories
+  /// that held nothing else.
+  ///
+  /// **Not offered as a choice**, unlike the stale-`.ini` deletion below. That
+  /// one is an inference and can be wrong about somebody's merged second mod;
+  /// this is the download's own record of what it wrote, and a file the new
+  /// version has no name for is exactly what "update this mod" means to remove.
+  /// The snapshot taken above is the way back either way.
+  ///
+  /// A path that cannot be deleted is logged and skipped: it is the old
+  /// version's file, so leaving it is the state the app was already in before
+  /// this existed, and failing the update over it would be worse.
+  Future<List<String>> _removeDropped({
+    required Directory modFolder,
+    required DroppedFiles dropped,
+    required FolderContents spelling,
+  }) async {
+    if (dropped.remove.isEmpty) return const <String>[];
+    final removed = <String>[];
+    final parents = <String>{};
+    for (final relative in dropped.remove) {
+      // The walk's spelling when it has one, and **the record's own otherwise**
+      // — never `onDisk`'s fallback, which hands back the lower-cased
+      // comparison key and would delete nothing on Linux while reporting a
+      // file the user does not have.
+      final onDisk =
+          spelling.actualPaths[normalizeIniPath(relative)] ?? relative;
+      final segments = onDisk.split('/');
+      try {
+        final file = File(path.joinAll([modFolder.path, ...segments]));
+        if (!await file.exists()) continue;
+        await file.delete();
+        removed.add(onDisk);
+        if (segments.length > 1) {
+          parents.add(segments.sublist(0, segments.length - 1).join('/'));
+        }
+      } catch (e) {
+        _log.warning('could not remove a file the new version dropped',
+            error: e, fields: {'file': onDisk, 'phase': 'remove'});
+      }
+    }
+    await _pruneEmptyParents(modFolder, parents);
+    return removed;
+  }
+
+  /// Removes a directory a removal has just emptied, and its parents up to — but
+  /// never including — the mod folder.
+  ///
+  /// The visible half of the removal: a version that dropped its whole
+  /// `ShaderFixes/` otherwise leaves the folder behind, and a user looking at
+  /// the mod cannot tell it is empty. **Only directories a removed file was in**,
+  /// and only while they are empty, so nothing the user put there is at risk and
+  /// an empty directory the app never touched is left alone.
+  Future<void> _pruneEmptyParents(
+    Directory modFolder,
+    Set<String> parents,
+  ) async {
+    for (final parent in parents) {
+      var segments = parent.split('/');
+      while (segments.isNotEmpty) {
+        final dir = Directory(path.joinAll([modFolder.path, ...segments]));
+        try {
+          if (!await dir.exists()) break;
+          if (!await dir.list(followLinks: false).isEmpty) break;
+          await dir.delete();
+        } catch (e) {
+          _log.debug('could not remove an emptied directory',
+              fields: {'dir': segments.join('/'), 'reason': '$e'});
+          break;
+        }
+        segments = segments.sublist(0, segments.length - 1);
+      }
+    }
+  }
+
   /// Deletes the orphaned `.ini` files the user agreed to, **by their real
   /// name**.
   ///
@@ -844,6 +958,7 @@ class UpdatePreview {
     this.existing = FolderContents.empty,
     this.patch = PatchAssessment.none,
     this.staleInis = StaleIniAssessment.none,
+    this.dropped = DroppedFiles.nothing,
   });
 
   final UpdateLayout layout;
@@ -859,6 +974,10 @@ class UpdatePreview {
 
   final PatchAssessment patch;
   final StaleIniAssessment staleInis;
+
+  /// What the version being replaced leaves behind that the new one has no name
+  /// for. Empty when nothing records what the last version wrote.
+  final DroppedFiles dropped;
 
   bool get canProceed => layout.canProceed;
 
@@ -913,6 +1032,7 @@ class UpdateApplyResult {
     this.failure,
     this.error,
     this.writtenFiles = const <InstalledFile>[],
+    this.droppedFiles = const <String>[],
     this.placedPatchFiles = const <InstalledFile>[],
     this.patchFiles = const <String>[],
     this.missingPatchFiles = const <String>[],
@@ -952,6 +1072,14 @@ class UpdateApplyResult {
   final List<InstalledFile> writtenFiles;
 
   final List<String> removedInis;
+
+  /// The last version's files that the new one no longer ships, **gone**.
+  ///
+  /// On-disk spelling, and only what was really deleted — a path that could not
+  /// be removed is logged and left out, so this never overstates what happened.
+  /// Separate from [removedInis]: those were a guess the user approved, these
+  /// are the download's own record of what it wrote.
+  final List<String> droppedFiles;
 
   /// The keys this update moved or removed — **empty when it moved none**.
   ///

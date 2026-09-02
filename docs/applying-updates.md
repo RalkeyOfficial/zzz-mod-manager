@@ -66,11 +66,43 @@ against them. It is put back exactly as it was afterwards, active or not.
 on an existing directory and `File.copy` replaces its destination, so colliding files
 are replaced and everything else is left alone.
 
-### What overwrite leaves behind
+### What overwrite leaves behind, and what is taken away instead
 
-Files the new version stopped shipping stay in the folder. For models and textures
-that is wasted space and nothing more, because the loader only touches what an `.ini`
-references. **`.ini` files are the exception** and are handled in [§3](#3-orphaned-ini-files).
+An overwrite only ever adds and replaces, so a file the last version shipped under a
+name the new one does not use would simply stay. The loader reads **every** `.ini` in
+the folder, so a renamed one stays live beside its successor — duplicate hotkeys and
+two sets of overrides on the same hashes — and everything else left over is dead
+weight nothing in the folder accounts for.
+
+Each download records the files it laid down (`ModDownload.files`,
+[`metadata-schema.md`](metadata-schema.md)), so the answer is a **set difference and
+not an inference**: recorded last time, not shipped this time, still on disk, and
+claimed by no other download in the folder. `services/update_apply/dropped_files.dart`
+decides it before anything is written; the applier deletes those paths after the copy
+and removes a directory whose last file it just took.
+
+That is asked, but not offered as a choice the way [§3](#3-orphaned-ini-files)'s
+prompt is. §3 is an inference and can be wrong about somebody's merged second mod;
+this is the download's own record of what it wrote, and a file the new version has no
+name for is exactly what "update this mod" means to remove. What it buys over §3 is
+the case §3 has no signal for at all — an asset no `.ini` in the folder mentions any
+more.
+
+Five things it refuses to touch, and each is a different reason:
+
+| What | Why |
+|---|---|
+| a path **another** download in the folder records | the file there now is that download's, not the old version's — deleting it is the destruction overwrite exists to avoid |
+| a file **the new version's own `.ini` still names** and the archive did not carry | an author who replaced one component ships a fraction of what their `.ini` references, and removing it breaks a working mod on the update meant to improve it |
+| a recorded file that is **already gone** | the record says what the app wrote, so the user deleting one since is an edit rather than damage |
+| a file **nothing recorded writing** | there is no licence to delete it; a folder with no record at all behaves exactly as it did before this existed |
+| a **displaced original that was never kept** | deleting it would leave a hole where the file underneath used to be — see [§5](#a-patchs-displaced-files-are-kept-separately-and-in-the-folder) |
+
+**The role on a record is not the test, and getting that backwards would silently do
+nothing.** Every update overwrites the previous version's files, so the bottom
+layer's record is almost entirely `replaced` — and what it replaced was the version
+being got rid of. What decides a restore is whether an original is *on hand*, which
+only a layer that keeps what it displaces ever has.
 
 Two caveats worth knowing rather than discovering:
 
@@ -324,6 +356,13 @@ The loader reads **every** `.ini` in a mod folder. When an update renames its ow
 `ellen.ini` becomes `ellen_v2.ini` — the overwrite writes the new one and the old one
 simply stays, and both are live: duplicate hotkeys, two sets of overrides on the same
 hashes, and a user who reports that the update broke their mod.
+
+**Where the last version's file list is on record this rule never sees the rename**,
+because [§1](#what-overwrite-leaves-behind-and-what-is-taken-away-instead) has
+already removed `ellen.ini` by name — and putting a question to the user about a file
+that is going either way is not offering a choice. What is left for the inference
+below is the unrecorded half of a library: mods installed before the record existed,
+and the second download in a folder somebody merged by hand.
 
 The obvious rule — *any `.ini` we did not just write is a leftover* — is wrong, and
 wrong in the direction this whole path exists to avoid. It would offer, by default,

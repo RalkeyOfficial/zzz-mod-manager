@@ -88,6 +88,19 @@ class _UpdateResultDialog extends StatelessWidget {
                       label: loc.t('mods.update_apply.done_removed_label'),
                       value: result.removedInis.join(', '),
                     ),
+                  // Its own row rather than folded into the one above: those
+                  // were `.ini` files the user ticked a box for, and these are
+                  // the ones the record settled without asking.
+                  if (result.droppedFiles.isNotEmpty)
+                    DialogFact(
+                      icon: Icons.auto_delete_outlined,
+                      label: loc.t('mods.update_apply.done_dropped_label'),
+                      value: loc.plural(
+                        'mods.update_apply.done_dropped',
+                        result.droppedFiles.length,
+                        params: {'count': '${result.droppedFiles.length}'},
+                      ),
+                    ),
                   if (result.reactivated)
                     DialogFact(
                       icon: Icons.toggle_on_outlined,

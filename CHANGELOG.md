@@ -38,11 +38,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updates can be installed from the update dialog. The mod keeps its name, character tag, favourite star and on/off state.
   - The dialog lists every newer file and marks the one it would pick.
   - Updating writes over the files the new version replaces and leaves anything you added yourself alone.
+  - An update also takes away the files the version you had shipped and the new one doesn't, so nothing of the old one is left loading in the game.
   - Every update saves a copy of the mod first, and "Restore a previous version…" puts it back.
   - The dialog shows the author's release notes for anything published since your version.
   - Hotkeys the new version moved are listed after an update.
   - You're told what an update will do before it runs.
-  - When a new version renames its .ini, the old one is offered for deletion.
+  - When a new version renames its .ini, the old one goes with it — or is offered for deletion, where the app has no record of what the last version shipped.
   - An update whose archive layout no longer matches the mod stops and says so rather than guessing.
 - An install that turns out to be a patch says so, and remembers it for later.
   - Installing a patch asks where it goes: its own folder with the mod it patches fetched in for you, or straight into a mod you already have, picked from a searchable list with cover images.

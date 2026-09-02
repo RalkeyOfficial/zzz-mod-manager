@@ -229,6 +229,19 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
             icon: Icons.layers_outlined,
             message: loc.t('mods.update_apply.overwrite_note'),
           ),
+          // **Directly under the overwrite note**, because it is the one thing
+          // an overwrite would not do on its own. A count rather than a list:
+          // a version that reorganises its textures drops dozens of files, and
+          // the folder is not what the user is deciding about.
+          if (preview.dropped.remove.isNotEmpty)
+            DialogNotice(
+              icon: Icons.auto_delete_outlined,
+              message: loc.plural(
+                'mods.update_apply.dropped_note',
+                preview.dropped.remove.length,
+                params: {'count': '${preview.dropped.remove.length}'},
+              ),
+            ),
           // The accepted loss, named rather than discovered. Re-applying the
           // user's .ini edits was considered and rejected — there is no pristine
           // baseline to diff against, so a merge reports every *author* change
