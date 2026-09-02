@@ -184,8 +184,9 @@ mod page is [`docs/metadata-autofill.md`](docs/metadata-autofill.md).
   claim one mod. Nothing pins that. If the category is ever allowed to *override* a
   name match, the summary would report the category's answer while the sidecar keeps
   the name's, and the two would disagree silently. The wiring has no widget test
-  either (it needs `ApiService`'s singletons and a configured library), which is
-  acceptable for UI plumbing but is why the invariant is worth writing down.
+  either — `test/support/temp_library.dart` installs the library one would need,
+  so this is a gap rather than a blocker — which is why the invariant is worth
+  writing down.
 
 ## 4. Mod updating
 
@@ -316,13 +317,18 @@ Two things are **refused rather than unbuilt**, both recorded in
   on the theme — which touches every screen at once, so the fixed-height layouts
   (`GbModCard`'s `mainAxisExtent`, the mods toolbar rows that have overflowed
   twice) need measuring at 480px afterwards rather than assuming.
-- [ ] **A shipped `ShaderFixes/` is the one leftover class that can stay live**,
-  and it is unverified. Shaders are picked up by filename convention rather than
-  by `.ini` reference, so a shader the new version stopped shipping is not
-  detectable by anything in the patch/stale rules, which are reference-based by
-  construction. Recorded in `docs/applying-updates.md` §1 as the known gap.
-  Confirming the loader's actual behaviour is the first step; it may turn out to
-  be a non-issue.
+- [ ] **A shader copied to the game root is the one leftover class outside every
+  mod folder**, which is a smaller gap than a live stale shader and a harder one.
+  Shader overrides are read from the **single** directory `override_directory`
+  names (`ShaderFixes`, at the game root) — not recursively, and not per-mod — so
+  a `ShaderFixes/` folder inside a mod is not loaded from where the app puts it.
+  A standalone mod that wants its own shaders uses `CustomShader` or
+  `ShaderRegex`, which are `.ini`-referenced and therefore already covered by the
+  reference-based patch and stale rules. What escapes is a shader the user
+  hand-copied to the root: nothing records it, no mod folder contains it, and
+  removing the mod leaves it applied to the game. Recorded in
+  `docs/applying-updates.md` §1. Bounded rather than urgent — no mod in a
+  124-`.ini` library ships a `ShaderFixes/` subfolder at all.
 
 ### 4.1 How an update is actually applied
 
@@ -421,15 +427,17 @@ are [`docs/configuration.md`](docs/configuration.md).
 
 ### Filed while surfacing the settings
 
-- [ ] **The auto-tag section cannot get a widget test.**
-  `_SettingsScreenState.initState` calls `ApiService.getConfig()`, which lazily
-  builds a `ConfigService` against the developer's **real**
-  `<appData>/config.json`, so mounting the screen in a test would rewrite their
-  library paths. Anything extracted to `components/settings/` with a writer seam
-  escapes that — `test/settings_sections_test.dart` covers the Updates and
-  Marketplace sections on exactly those terms — but the auto-tag section has not
-  had the treatment. Its `_buildRequirement` helper is now used by nothing else,
-  so extracting the section takes the helper with it.
+- [ ] **The auto-tag section has no widget test.**
+  `_SettingsScreenState.initState` calls `ApiService.getConfig()`, so mounting
+  the whole screen requires a library installed first —
+  `test/support/temp_library.dart` provides one, and
+  `test/flutter_test_config.dart` makes forgetting it a failure rather than a
+  write to the developer's own `<appData>/config.json`. A section extracted to
+  `components/settings/` with a writer seam needs neither, which is the cheaper
+  shape for a section: `test/settings_sections_test.dart` covers the Updates and
+  Marketplace sections on exactly those terms, and the auto-tag section has not
+  had the treatment. Its `_buildRequirement` helper is used by nothing else, so
+  extracting the section takes the helper with it.
 - [ ] **`isLoading` is one flag doing two jobs, and only one of them is safe.**
   It swaps the whole page body, which unmounts the `AnimationLimiter` and makes
   every section replay its staggered entrance. That is correct for the first
@@ -630,9 +638,10 @@ and what survives a rebind. Entry points: the status slot and the mod context me
 - [ ] **Two local-side write seams exist with the same signature.**
   `ResolveOriginGateway.writeOrigin` and `BulkOriginWriter`
   (`dialogs/assume_current_dialog.dart`) both wrap `ApiService.updateModOrigin`
-  for the same reason — a widget test that touched the real `ApiService` would
-  rewrite the developer's `<appData>/config.json` — and both spell that rationale
-  out. One shared typedef would stop them drifting. It belongs with the item
+  for the same reason — a focused widget test asserts what the dialog *would*
+  write, so it wants the transform in hand rather than a library to write it into
+  — and both spell that rationale out. One shared typedef would stop them
+  drifting. It belongs with the item
   above, since fixing `updateOrigin`'s return type has to touch both anyway.
   The bulk resolution screen imports `BulkOriginWriter` rather than declaring a
   third, so the drift did not get worse — but it now lives in
@@ -790,6 +799,19 @@ Two limits, because they bound what may be built on it:
   silently blurs the entire grid.
 - **One seam for offline tests.** HTTP stays behind a single injectable interface —
   `HttpTransport`, with `ImageFetcher` as the one deliberate second seam for bytes.
+- **One seam for the local library, and it is a static one** because `ApiService`
+  is a static facade: `useLibraryForTests` installs a real `ConfigService` over a
+  temp directory, `test/support/temp_library.dart` builds it, and
+  `test/flutter_test_config.dart` refuses the real `<appData>` for every test
+  under `test/`. Real services over a temp directory rather than a fake
+  filesystem — these flows *are* the file writes, so a fake replaces the only
+  part worth trusting.
+- [ ] **Widgets read the static facade instead of the providers that wrap it.**
+  `modManagerServiceProvider` exists and dialogs call `ApiService` directly: 13
+  `getModManagerService` and 9 `updateModOrigin` call sites over ~25 files. What
+  routing them buys is disposal, no static mutable state and no init ordering —
+  **not** coverage, since the library seam above already unblocks the tests, which
+  is why it is filed rather than built.
 
 ---
 

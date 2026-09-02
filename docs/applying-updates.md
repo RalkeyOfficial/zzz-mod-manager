@@ -77,9 +77,14 @@ Two caveats worth knowing rather than discovering:
 - Do **not** "solve" leftovers by clearing all `.ini` files before copying. Harmless
   on a folder with one `.ini`, destructive on a folder where two are live (two mods
   merged by hand), and it buys only what §3's prompt already does with consent.
-- Shaders are picked up by **filename convention** from a `ShaderFixes/` directory
-  rather than by reference, so a mod shipping its own is the one file class where a
-  leftover can still be live. Unverified against the loader; noted as the known gap.
+- Shaders are picked up by **filename convention**, from the single directory
+  `override_directory` names in `d3dx.ini` — `ShaderFixes` at the game root, not
+  recursively and not per-mod. So a `ShaderFixes/` folder left inside a mod folder
+  is not loaded at all, and a mod that ships shaders of its own to be loaded from
+  its folder does it through `CustomShader` or `ShaderRegex`, which are
+  `.ini`-referenced and covered by the rules above. **The leftover that can still
+  be live is a shader the user copied to the game root**, which no mod folder
+  contains and nothing here records.
 
 ### Excluded from the copy: `.zzz-mod-manager/`
 
