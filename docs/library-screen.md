@@ -214,7 +214,8 @@ displays is exactly what this rule exists to prevent. See
   picker is how "on record" and "our best guess" come to mean different things on
   two screens.
 - **Naming that other download is a pushed step, not a section.** One row appears —
-  only when the folder is recorded as patch-shaped or already carries a companion —
+  only when the folder is recorded as patch-shaped, or from its bottom layer once
+  one has been named —
   and opens a dialog of its own. Inline, a second identity card spends the height
   budget again and pushes the hatches below the fold, which is the one thing this
   dialog must not do. What that step may write is

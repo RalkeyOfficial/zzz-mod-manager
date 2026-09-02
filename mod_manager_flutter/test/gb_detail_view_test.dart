@@ -9,7 +9,6 @@ import 'package:mod_manager_flutter/models/gamebanana/gb_enums.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_image.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_page.dart';
-import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/components/marketplace/gb_detail_view.dart';
 import 'package:mod_manager_flutter/services/gamebanana/content_filter.dart';
@@ -20,6 +19,7 @@ import 'package:mod_manager_flutter/utils/state_providers.dart';
 
 import 'support/fixtures.dart';
 import 'support/localized_harness.dart';
+import 'support/origin_shorthand.dart';
 
 /// The mod detail screen, with its gallery navigation.
 ///
@@ -346,7 +346,7 @@ void main() {
             name: 'Remielle Swim',
             characterId: 'unknown',
             isActive: false,
-            origin: const ModOrigin(
+            origin: originFixture(
               provenance: OriginProvenance.importedFolder,
               source: 'gamebanana',
               modId: 700727,

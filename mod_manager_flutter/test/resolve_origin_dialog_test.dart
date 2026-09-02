@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
-import 'package:mod_manager_flutter/models/mod_companion.dart';
+import 'package:mod_manager_flutter/models/installed_file.dart';
+import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
@@ -15,6 +16,7 @@ import 'package:mod_manager_flutter/utils/state_providers.dart';
 import 'support/fake_http_transport.dart';
 import 'support/fixtures.dart';
 import 'support/localized_harness.dart';
+import 'support/origin_shorthand.dart';
 
 /// Records what the dialog would have done locally, and touches nothing.
 ///
@@ -97,7 +99,7 @@ void main() {
     OriginProvenance provenance = OriginProvenance.importedFolder,
     DateTime? baselineRemoteDate,
   }) =>
-      ModOrigin(
+      originFixture(
         source: 'gamebanana',
         modId: modId,
         modIdConfidence: modIdConfidence,
@@ -722,16 +724,18 @@ void main() {
       ..stub(companionProfileUrl, body: loadGbFixture('mod_profile_rated'))
       ..stub(companionSearchUrl, body: loadGbFixture('search_ellen'));
 
-    ModOrigin patchShaped({List<ModCompanion> companions = const []}) =>
-        tracked(
+    /// A folder that **is** a patch, with nothing recorded under it.
+    ModOrigin patchShaped() => tracked(
           modIdConfidence: OriginConfidence.exact,
           fileId: 1732269,
           versionConfidence: OriginConfidence.exact,
           provenance: OriginProvenance.downloaded,
-        ).copyWith(
-          ingest: const ModIngest(patchShaped: true),
-          companions: companions,
-        );
+        ).copyWith(ingest: const ModIngest(patchShaped: true));
+
+    /// The same folder after the user said what it patches: [base] inserted
+    /// underneath, so the patch is the layer above it.
+    ModOrigin patchShapedWithBase(List<ModDownload> base) =>
+        patchShaped().withBaseInserted(base.single);
 
     testWidgets('an ordinary mod is never asked about a second one',
         (tester) async {
@@ -743,25 +747,29 @@ void main() {
       expect(find.text('This mod holds a patch'), findsNothing);
     });
 
-    /// A folder that holds the mod and had a patch installed into it — the
-    /// mirror of [patchShaped]. Both of the patch's axes are `exact` because
-    /// the app performed that download.
-    ModOrigin withPatchInside() => tracked(
+    /// A folder holding the mod with a patch written over it. Both of the
+    /// patch's axes are `exact` because the app performed that download, and
+    /// [files] is what makes it removable.
+    ModOrigin withPatchInside({bool files = true}) {
+      final own = tracked(
+        modIdConfidence: OriginConfidence.exact,
+        fileId: 1732269,
+        versionConfidence: OriginConfidence.exact,
+        provenance: OriginProvenance.downloaded,
+      );
+      return own.copyWith(downloads: [
+        own.base!,
+        patchFixture(
+          modId: otherModId,
           modIdConfidence: OriginConfidence.exact,
-          fileId: 1732269,
+          fileId: 1462303,
           versionConfidence: OriginConfidence.exact,
-          provenance: OriginProvenance.downloaded,
-        ).copyWith(
-          companions: const [
-            ModCompanion(
-              role: CompanionRole.patch,
-              modId: otherModId,
-              modIdConfidence: OriginConfidence.exact,
-              fileId: 1462303,
-              versionConfidence: OriginConfidence.exact,
-            ),
-          ],
-        );
+          files: files
+              ? const [InstalledFile(path: 'Textures/Body.dds')]
+              : const [],
+        ),
+      ]);
+    }
 
     /// The folder's own page, plus the name lookup the peer list does for the
     /// companion.
@@ -810,10 +818,20 @@ void main() {
       expect(find.text('Not from GameBanana, or it\'s my own'), findsOneWidget);
     });
 
-    testWidgets('dropping the patch is confirmed, and says what survives it',
+    testWidgets('the patch row does not write the record on its own',
         (tester) async {
-      // A delete icon's first suggestion is that files go, and none do. The
-      // confirmation has to say so before it is answered.
+      // **The behaviour this replaced was worse than doing nothing.** The row
+      // used to forget the record and leave the files, which took away the one
+      // thing that makes the next base update set the patch aside instead of
+      // writing over it — so "stop tracking this patch" removed the patch's
+      // only protection and left the patch.
+      //
+      // It now runs the same removal the mod's menu does, which deletes and
+      // restores files through `ApiService` and is therefore not reachable from
+      // a widget test (it would rewrite the developer's real config). What is
+      // testable here is that the row offers it and that nothing is written
+      // behind it: the write itself is `remove_patch_test.dart` and the
+      // confirmation is `remove_patch_confirm_test.dart`.
       final gateway = await pumpDialog(
         tester,
         target: mod(origin: withPatchInside()),
@@ -821,48 +839,24 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.ensureVisible(find.byIcon(Icons.delete_outline));
-      await tester.tap(find.byIcon(Icons.delete_outline));
-      await tester.pumpAndSettle();
-
-      expect(
-          find.text('This patch is no longer in the folder?'), findsOneWidget);
-      expect(find.textContaining('Nothing in the folder is deleted'),
-          findsOneWidget);
-      // The mod it names is the patch, so two entries are tellable apart.
-      expect(find.textContaining('Ellen Joe Cheongsam'), findsOneWidget);
-
-      // Backing out writes nothing at all. `.last` is the confirmation's own
-      // Cancel — the dialog underneath has one too, and it is the older route.
-      await tester.tap(find.text('Cancel').last);
-      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.delete_outline), findsOneWidget);
       expect(gateway.writes, 0);
     });
 
-    testWidgets('the dropped patch leaves the record and the mod stays',
+    testWidgets('a patch whose files are unknown still offers removal',
         (tester) async {
-      final gateway = await pumpDialog(
+      // Whether it can be *taken out* is the removal flow's judgement — it
+      // needs the file registry — but the row is where the user says the patch
+      // is gone, and a folder patched before the registry existed is exactly
+      // the one that needs the record correcting.
+      await pumpDialog(
         tester,
-        target: mod(origin: withPatchInside()),
+        target: mod(origin: withPatchInside(files: false)),
         transport: namedPatch(),
       );
       await tester.pumpAndSettle();
 
-      await tester.ensureVisible(find.byIcon(Icons.delete_outline));
-      await tester.tap(find.byIcon(Icons.delete_outline));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Remove from the record'));
-      await tester.pumpAndSettle();
-
-      expect(gateway.writes, 1);
-      expect(gateway.written!.companions, isEmpty);
-      // The folder's own identity is untouched: "that patch is gone" says
-      // nothing about which mod this folder is.
-      expect(gateway.written!.modId, 531649);
-      expect(gateway.written!.fileId, 1732269);
-      expect(gateway.written!.modIdConfidence, OriginConfidence.exact);
-      // And it endorses nothing about the mod page, so nothing is pulled off it.
-      expect(gateway.filled, isEmpty);
+      expect(find.byIcon(Icons.delete_outline), findsOneWidget);
     });
 
     testWidgets('a patch-shaped folder offers to name what it patches',
@@ -901,18 +895,21 @@ void main() {
       await tester.tap(find.text('Add'));
       await tester.pumpAndSettle();
 
-      final companion = gateway.written!.companions.single;
+      final companion = gateway.written!.base!;
       expect(companion.modId, otherModId);
-      expect(companion.role, CompanionRole.base);
+      expect(companion.role, DownloadRole.base,
+          reason: 'it went underneath, so it is the bottom of the stack');
       expect(
         companion.modIdConfidence,
         OriginConfidence.user,
         reason: 'the user told us; nothing here is exact, because we did not '
             'download these bytes',
       );
-      // The folder's own identity is untouched by the second one.
-      expect(gateway.written!.modId, 531649);
-      expect(gateway.written!.fileId, 1732269);
+      // The patch's own record is untouched — it just sits above the base now.
+      expect(gateway.written!.downloads, hasLength(2));
+      expect(gateway.written!.patches.single.modId, 531649);
+      expect(gateway.written!.patches.single.fileId, 1732269);
+      expect(gateway.written!.patches.single.role, DownloadRole.patch);
     });
 
     testWidgets('picking a file for it records that too', (tester) async {
@@ -934,7 +931,7 @@ void main() {
       await tester.tap(find.text('Add'));
       await tester.pumpAndSettle();
 
-      final companion = gateway.written!.companions.single;
+      final companion = gateway.written!.base!;
       expect(companion.fileId, 1462303);
       expect(companion.versionConfidence, OriginConfidence.user);
     });
@@ -992,7 +989,7 @@ void main() {
       await tester.tap(find.text('Add'));
       await tester.pumpAndSettle();
 
-      final companion = gateway.written!.companions.single;
+      final companion = gateway.written!.base!;
       expect(companion.versionConfidence, OriginConfidence.assumedLatest);
       expect(companion.baselineRemoteDate, isNotNull);
       expect(companion.fileId, isNull);
@@ -1035,7 +1032,7 @@ void main() {
       await tester.tap(find.text('Add'));
       await tester.pumpAndSettle();
 
-      final companion = gateway.written!.companions.single;
+      final companion = gateway.written!.base!;
       expect(companion.modId, otherModId);
       expect(
         companion.baselineRemoteDate,
@@ -1091,14 +1088,13 @@ void main() {
       );
     });
 
-    testWidgets('an already-named companion is shown and can be removed',
+    testWidgets('a named base is shown and the answer can be undone',
         (tester) async {
       final gateway = await pumpDialog(
         tester,
         target: mod(
-          origin: patchShaped(companions: const [
-            ModCompanion(
-              role: CompanionRole.base,
+          origin: patchShapedWithBase(const [
+            ModDownload(
               modId: otherModId,
               modIdConfidence: OriginConfidence.user,
             ),
@@ -1126,8 +1122,12 @@ void main() {
       await tester.tap(find.text('This is just one mod after all'));
       await tester.pumpAndSettle();
 
-      expect(gateway.written!.companions, isEmpty,
+      // The base layer goes and the flag goes with it: what is left is one
+      // download that patches nothing, which is an ordinary mod.
+      expect(gateway.written!.downloads, hasLength(1));
+      expect(gateway.written!.needsBase, isFalse,
           reason: 'a wrong answer has to be undoable, or naming one is a trap');
+      expect(gateway.written!.ingest?.patchShaped ?? false, isFalse);
     });
 
     testWidgets('cancelling the second step writes nothing', (tester) async {

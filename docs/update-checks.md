@@ -73,7 +73,7 @@ No network, no filesystem, no widgets.
 | `untracked` | No remote identity at all. |
 | `trackingOff` | The user declared the mod their own. |
 | `sourceGone` | The mod page is private, trashed or withheld — read from the remote's own flags, not inferred from a status code. |
-| `indeterminate` | The response carried no current file list, or a companion's page was never fetched. **Silence is not evidence**: concluding "nothing newer" from a question never asked is the one way this fails invisibly. |
+| `indeterminate` | The response carried no current file list, or a layer's page was never fetched — or it names no page to fetch. **Silence is not evidence**: concluding "nothing newer" from a question never asked is the one way this fails invisibly. |
 | `tracksPatchOnly` | The folder holds a patch and nobody has said what it patches, so nothing here is a statement about the mod the folder actually contains. Distinct from `upToDate` because the patch genuinely has no newer file — that answer is true about the page asked and false about the folder. |
 
 `isObsolete` rides alongside, never folded in. `_bIsObsolete` is the author
@@ -96,38 +96,46 @@ A mixed folder is checked against two mod pages
 and the card has one slot, `modUpdateChecksProvider` is keyed by folder, and the
 toolbar counts one number. So `checkForUpdate` **folds** rather than fanning out.
 
-**The top-level fields describe whichever identity won**, not always the primary,
-and `subjectModId` names it (null = the primary). This is load-bearing: every
-consumer reads `candidate` and `newerFiles`, and `dismissableUpTo` is computed from
-the latter — a verdict folded from the companion sitting on the primary's file list
-would illustrate one mod's finding with another's files, and would write a dismissal
-cutoff from the wrong mod's dates. `companions` carries each identity's own verdict
-for the dialog.
+**The top-level fields describe whichever layer won**, and `subjectModId` names it
+by its own id. This is load-bearing: every consumer reads `candidate` and
+`newerFiles`, and `dismissableUpTo` is computed from the latter — a verdict folded
+from one layer sitting on another's file list would illustrate one mod's finding
+with another's files, and would write a dismissal cutoff from the wrong mod's
+dates. `layers` carries **every** layer's own verdict for the dialog, the winner
+included.
 
-The fold applies the file's existing asymmetry across identities — the most
-actionable verdict wins, and `upToDate` is claimed only when every identity says it.
-Three rules follow, none of them obvious:
+That last point is the difference from the shape this replaced. A
+primary-plus-companions record made the fold discard exactly one verdict — the
+primary's — so a folder whose patch had the update could say nothing at all about
+the mod it patched, and a `folderOwn` field existed to smuggle it back. With a
+stack there is no privileged entry and nothing is discarded.
+
+The fold applies the file's existing asymmetry across layers — the most actionable
+verdict wins, and `upToDate` is claimed only when every layer says it. Three rules
+follow, none of them obvious:
 
 - **A live finding beats a dismissed stronger one.** Ranking by outcome alone picks a
   dismissed `updateAvailable` and then reports `hasUpdate: false`, leaving a folder
-  with a real update on its other identity rendering as though it had none. A
-  dismissal is per identity, so it disqualifies that identity rather than the folder.
-- **A companion whose record was never fetched is `indeterminate`.** Claiming clean
-  after looking at half a folder is the false clean this whole feature exists to
-  remove.
-- **`tracking: "off"` short-circuits before any of it.** No companion is consulted,
+  with a real update on another layer rendering as though it had none. A dismissal
+  is per layer, so it disqualifies that layer rather than the folder.
+- **A layer whose record was never fetched is `indeterminate`**, and so is one with
+  no mod id to fetch. Claiming clean after looking at part of a folder is the false
+  clean this whole feature exists to remove.
+- **`tracking: "off"` short-circuits before any of it.** No layer is consulted,
   which is the folder-level switch doing its job.
 
-`tracksPatchOnly` is therefore produced only while `ingest.patch_shaped` is set *and*
-no `base` companion is named. Naming one retires it, per folder.
+`tracksPatchOnly` is therefore produced only while `ingest.patch_shaped` is set
+*and* nothing is recorded under the folder's own download. Naming what it patches
+retires it, per folder.
 
-**A companion's finding can be applied, and which write does it is decided by
-`role`.** A companion says the other download is *in this folder*, so a newer file
-of it lands in this folder — and the folder is written base-first-then-patch
-whichever half changed
+**Any layer's finding can be applied, and its *position* decides which write does
+it.** A layer says that download is *in this folder*, so a newer file of it lands
+in this folder — and the folder is written bottom-first-then-upward whichever layer
+changed
 ([`applying-updates.md` §6](applying-updates.md#base-first-then-patch--for-both-halves-of-a-mixed-folder)).
-`update_write_route.dart` is that decision on its own, so it can be read without a
-download or a dialog.
+`update_write_route.dart` is that decision on its own — now `indexOf` and two cases,
+where it used to be a five-branch table over relative roles — so it can be read
+without a download or a dialog.
 
 What is refused is narrower and it is still a rule: **a verdict about a mod this
 folder does not claim to hold is never written.** Nothing could apply it — it would
@@ -136,14 +144,17 @@ block that never published it, after which every later check asks the wrong page
 Two guards enforce that, because the first is a widget condition a later edit could
 stop satisfying and the second is the call that touches a live folder.
 
-The file is recorded **against the identity that was written**, never against the
-primary by default: `withCompanionUpdatedTo` amends the companion, and reaches
-`exact` on the same grounds the primary does — we fetched those bytes off that page.
+The file is recorded **against the layer that was written**, and against no other:
+`withDownloadUpdatedTo` amends that one by mod id and leaves its position alone,
+reaching `exact` on the same grounds any layer does — we fetched those bytes off
+that page. The folder's own facts (its install date, its provenance) are refreshed
+only when the write was the **bottom** layer's: a patch arriving on top does not
+re-date the folder.
 
-**Every caller must supply the companion records**, or a mixed folder reads
-`indeterminate`: the bulk pass batches both ids ([§5](#5-checking-the-whole-library))
-and the per-mod dialog fetches the companion's record and feed alongside the
-primary's.
+**Every caller must supply the records for every layer**, or a mixed folder reads
+`indeterminate`: the bulk pass batches every id ([§5](#5-checking-the-whole-library))
+and the per-mod dialog fetches each upper layer's record and feed alongside the
+bottom one's.
 
 ---
 
@@ -361,13 +372,12 @@ Six rules:
   candidate, a dismissal left every later file silenced while this section
   promised the opposite. The user was shown the whole list and ignored the whole
   finding, so the dismissal covers the whole list.
-- **It belongs to the identity whose releases it waves away.** A folded verdict
-  names its identity in `subjectModId`, and the cutoff goes on that companion's
-  entry rather than on the folder's own block — one rule, `ModOrigin.withDismissal`,
-  shared by the write and by the re-fold that follows it so the two cannot
-  disagree. Written on the primary a companion's dismissal fails twice at once:
-  it silences nothing, because the check reads each identity's own field, and it
-  stamps another mod's release date where it can hide a finding nobody
+- **It belongs to the layer whose releases it waves away.** A folded verdict names
+  that layer in `subjectModId`, and the cutoff goes on **that layer's** entry — one
+  rule, `ModOrigin.withDismissal`, shared by the write and by the re-fold that
+  follows it so the two cannot disagree. Written on the wrong layer a dismissal
+  fails twice at once: it silences nothing, because the check reads each layer's own
+  field, and it stamps another mod's release date where it can hide a finding nobody
   dismissed.
 - **The verdict is kept, not rewritten.** Only `hasUpdate` — the badge — goes
   quiet. The dialog goes on saying what is published, because "there is an
@@ -435,25 +445,25 @@ never answered — an outage, an abort, a batch it never reached — come back i
 `failed`, and the summary says so. "No updates" and "no updates among the mods we
 could actually reach" are different statements, and reporting the second as the
 first turns a network failure into false reassurance across a whole library. A
-folder whose *companion* could not be reached is in `failed` too: it still gets a
-verdict, which refuses to claim clean without the missing half, but half an answer
+folder any of whose *layers* could not be reached is in `failed` too: it still gets
+a verdict, which refuses to claim clean without the missing part, but half an answer
 is not an answer.
 
 ### A mixed folder is two requests and one answer
 
-A folder carrying a companion is listed under **both** mod ids, so both pages are
-fetched. Two consequences shape the pass:
+A folder is listed under **every** mod id in its stack, so every page is fetched.
+Two consequences shape the pass:
 
-- **Nothing is folded as records arrive.** The two ids can land in different
-  batches, and folding on arrival writes one identity's verdict and then overwrites
-  it with the other's — whichever came last silently becoming the folder's whole
-  answer, computed by comparing one mod's origin against another mod's page. Every
-  record is banked first; each folder is folded once afterwards.
+- **Nothing is folded as records arrive.** The ids can land in different batches,
+  and folding on arrival writes one layer's verdict and then overwrites it with
+  another's — whichever came last silently becoming the folder's whole answer,
+  computed by comparing one mod's record against another mod's page. Every record
+  is banked first; each folder is folded once afterwards.
 - **`checkableCount` counts folders, `requests` counts pages.** The user counts
   cards, so the toolbar button must not promise more work than they can see.
 
 A page the server says does not exist is banked as a record flagged missing rather
-than short-circuited to a verdict, so a *companion* that has gone reads as
+than short-circuited to a verdict, so a *layer* whose page has gone reads as
 `sourceGone` instead of collapsing into "never asked".
 
 Phase two asks the feed of **the identity that produced the finding**
@@ -727,12 +737,12 @@ indistinguishable from a folder holding one mod.
 
 Three things this rests on:
 
-- **`UpdateCheck.folderOwn`.** Companion verdicts have always been kept
-  (`UpdateCheck.companions`); the primary's is the one `foldCompanions` discards when
-  a companion wins, so without it the single folder whose *patch* has the update
-  would be the one that could say nothing about the mod it patches. Null when the
-  primary won — the returned verdict is it, and a second copy would drift under
-  `asDismissed`.
+- **`UpdateCheck.layers` holds every layer's own verdict, the winner included.**
+  Under the shape this replaced, the fold discarded exactly one — the primary's —
+  so the single folder whose *patch* had the update was the one that could say
+  nothing about the mod it patched, and a `folderOwn` field existed to carry it
+  back. A stack has no privileged entry, so the field is gone and the section list
+  is a plain lookup.
 - **Everything per-download is keyed by mod id** — the release feed, whether its
   accordion is open, which file the user picked. One shared "chosen file" would let a
   choice made for the patch install the mod it patches.
@@ -747,15 +757,16 @@ because with two downloads a dismissal changes which one wins: waving away the
 patch's update on a folder whose mod also has one must leave the mod's finding
 standing.
 
-Nothing ranks the folder's own download above the other, and the reason is that which
-one it is comes down to install order:
-[`origin-tracking.md` §10](origin-tracking.md#where-it-is-shown), whose role
-derivation and patch marker this shares with the details and resolve dialogs.
+**Sections are in stack order, bottom-most first** — the order the files themselves
+go on disk, and the same order the details and resolve dialogs list them in
+([`origin-tracking.md` §10](origin-tracking.md#where-it-is-shown), whose patch
+marker this shares). No ranking is applied and none is needed: a stack records the
+order, so nothing here has to work out which download is which.
 
 **One id per request, not one request per folder.** A batch is all-or-nothing, so
-folding a companion's id in with the primary's would let a companion whose page has
-been deleted fail the primary's check — where the rule is that an unreachable
-companion is left out and the folder is simply not called clean
+folding one layer's id in with another's would let a layer whose page has been
+deleted fail the whole folder's check — where the rule is that an unreachable layer
+is left out and the folder is simply not called clean
 ([§2](#a-folder-with-two-identities-still-gets-one-verdict)). Recovering inside a
 batch is the halving the bulk pass does, and it is not worth it for the two or
 three ids a folder has.

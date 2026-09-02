@@ -598,11 +598,11 @@ and what survives a rebind. Entry points: the status slot and the mod context me
   seeing them is enough; at 80 it may not be, and the natural home is a second
   row on the `!` toggle rather than a sixth toolbar control. Filed rather than
   built, to see whether it is actually wanted.
-- [ ] **A stale companion is only fixable from the tracking dialog.** Both
-  corrections live there — rename what a patch applies to, or declare a patch
-  gone — and the surface that *shows* the problem is the updates dialog, which
-  has no route to it. The same gap as the filed item under §7.5 about the
-  edit-mod dialog, and one menu entry away from being the same fix.
+- [ ] **A stale patch is only fixable from the tracking dialog or the mod menu.**
+  Both routes into "take this patch out" are there, and the surface that *shows*
+  the problem is the updates dialog, which has no route to either. The same gap
+  as the filed item under §7.5 about the edit-mod dialog, and one menu entry away
+  from being the same fix.
 - [ ] **The two resolve dialogs still fetch a whole `ProfilePage`.** They read
   four fields off it — name, dates, files, archived files — where the update
   check now asks `Mod/Multi` for one id at a quarter of the bytes. Not a
@@ -816,9 +816,11 @@ Two limits, because they bound what may be built on it:
   two mods together"; the answer is a grouping in the library listing, not a
   folder holding both. **A folder must never hold two independent mods**: they
   share one on/off state, one snapshot and one set of `.ini` files, so
-  activating, updating or rolling back either acts on both. `base` and `patch`
-  are therefore the complete set of companion roles, and `role: separate` is
-  refused rather than unbuilt (`mod_companion.dart`).
+  activating, updating or rolling back either acts on both. The record is a
+  **stack of overwrites** (`mod_download.dart`), so downloads that do not overlap
+  have no defined order and no meaning as layers — which is why `base` and
+  `patch` are the complete set of positions and a third is refused rather than
+  unbuilt.
   Doing it properly means reworking the mod list's UI/UX, which is reason enough
   to wait for a real request rather than guess at the shape.
 

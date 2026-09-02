@@ -4,7 +4,7 @@ import 'package:mod_manager_flutter/models/gamebanana/gb_exceptions.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_update.dart';
-import 'package:mod_manager_flutter/models/mod_companion.dart';
+import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/bulk_update_check.dart';
@@ -23,7 +23,10 @@ void main() {
   ModOrigin origin({
     int? modId,
     int? fileId,
+    String? versionLabel,
+    OriginConfidence? versionConfidence,
     OriginTracking tracking = OriginTracking.auto,
+    List<ModDownload> patches = const [],
   }) =>
       originFixture(
         source: modId == null ? null : 'gamebanana',
@@ -31,10 +34,14 @@ void main() {
         modIdConfidence:
             modId == null ? OriginConfidence.unknown : OriginConfidence.user,
         fileId: fileId,
-        versionConfidence:
-            fileId == null ? OriginConfidence.unknown : OriginConfidence.user,
+        versionLabel: versionLabel,
+        versionConfidence: versionConfidence ??
+            (fileId == null
+                ? OriginConfidence.unknown
+                : OriginConfidence.user),
         provenance: OriginProvenance.downloaded,
         tracking: tracking,
+        patches: patches,
       );
 
   ModInfo mod(String name, {ModOrigin? origin}) => ModInfo(
@@ -102,16 +109,19 @@ void main() {
     }) =>
         mod(
           name,
-          origin: origin(modId: modId, fileId: fileId).copyWith(
-            companions: [
-              ModCompanion(
-                role: CompanionRole.base,
-                modId: baseId,
-                modIdConfidence: OriginConfidence.user,
-                fileId: baseFileId,
-                versionConfidence: baseFileId == null
-                    ? OriginConfidence.unknown
-                    : OriginConfidence.user,
+          // The base underneath, the patch over it — the stack the old shape
+          // recorded as "primary is the patch, companion is the base".
+          origin: origin(
+            modId: baseId,
+            fileId: baseFileId,
+            versionConfidence: baseFileId == null
+                ? OriginConfidence.unknown
+                : OriginConfidence.user,
+            patches: [
+              patchFixture(
+                modId: modId,
+                fileId: fileId,
+                versionConfidence: OriginConfidence.user,
               ),
             ],
           ),
@@ -144,10 +154,10 @@ void main() {
       final plan = planBulkUpdateCheck([
         mod(
           'mine',
-          origin: origin(modId: 222, tracking: OriginTracking.off).copyWith(
-            companions: const [
-              ModCompanion(role: CompanionRole.base, modId: 111),
-            ],
+          origin: origin(
+            modId: 111,
+            tracking: OriginTracking.off,
+            patches: [patchFixture(modId: 222)],
           ),
         ),
       ]);
@@ -216,15 +226,19 @@ void main() {
         batchSize: 1,
       );
 
+      // **In stack order, bottom first**, and split across batches — so the
+      // clean answer lands in one batch and the finding in another. The fold
+      // runs once every record is in, which is what keeps a later batch from
+      // overwriting an earlier verdict.
       expect(asked, [
-        [222],
         [111],
-      ], reason: 'the finding must land before the answer that would mask it, '
-          'or this test cannot fail');
+        [222],
+      ]);
 
       final check = outcome.checks['EllenBikini']!;
       expect(check.outcome, UpdateOutcome.updateAvailable);
-      expect(check.subjectModId, isNull, reason: 'null names the primary');
+      expect(check.subjectModId, 222,
+          reason: 'the layer the finding is about, named by its own id');
     });
 
     test('a companion whose page could not be reached is never clean',
@@ -258,17 +272,12 @@ void main() {
         plan: planBulkUpdateCheck([
           mod(
             'the patch',
-            origin: origin(modId: 605460, fileId: 1473174).copyWith(
-              companions: const [
-                ModCompanion(
-                  role: CompanionRole.base,
-                  modId: 585282,
-                  modIdConfidence: OriginConfidence.user,
-                  fileId: 1430055,
-                  versionLabel: 'SFW Variants Only',
-                  versionConfidence: OriginConfidence.user,
-                ),
-              ],
+            origin: origin(
+              modId: 585282,
+              fileId: 1430055,
+              versionLabel: 'SFW Variants Only',
+              versionConfidence: OriginConfidence.user,
+              patches: [patchFixture(modId: 605460, fileId: 1473174)],
             ),
           ),
         ]),

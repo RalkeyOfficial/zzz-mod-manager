@@ -132,18 +132,25 @@ class ModOrigin {
   /// to work around the others.
   bool get isMixed => downloads.length > 1;
 
-  /// **The bottom of the stack is missing.** The app recognised this folder as a
-  /// patch at install and nobody has said what it patches.
+  /// **This folder is a patch and nobody has said what it patches.**
   ///
-  /// The one thing position cannot express, which is why `ingest.patch_shaped`
-  /// still exists: the layer at index 0 is itself a patch, and the mod it
-  /// applies to is not in the record. Naming it **inserts at index 0**.
+  /// The one question position cannot answer, which is why
+  /// `ingest.patch_shaped` still exists: a stack of one cannot say whether
+  /// something belongs *under* it. The flag is that claim, and
+  /// [withBaseInserted] is what retires it.
+  ///
+  /// **The flag is the record and the depth is the answer.** `patch_shaped`
+  /// says the folder's own ingest was a patch, which only an install can know
+  /// and which never stops being true; a second layer says somebody has since
+  /// named what it applies to. Writing the answer into the flag instead would
+  /// make it unrecoverable, and undoing a wrong answer has to stay possible.
   ///
   /// The evidence was captured at install because that is the only moment a
   /// patch folder is legible — afterwards every reference resolves and the
   /// folder is indistinguishable from an ordinary one — and the missing half can
   /// only come from the person who assembled it.
-  bool get needsBase => (ingest?.patchShaped ?? false) && downloads.length < 2;
+  bool get needsBase =>
+      (ingest?.patchShaped ?? false) && downloads.length < 2;
 
   /// The strongest thing this block can say about its bottom layer: we know
   /// exactly which remote file is installed, the user has not declared the mod
@@ -267,12 +274,22 @@ class ModOrigin {
   /// [layer] inserted at the **bottom**, which is what naming the mod a
   /// patch-shaped folder applies to means.
   ///
-  /// Clears `patch_shaped`: the flag says the bottom is missing, and after this
-  /// it is not. The roles are re-derived, so what used to be index 0 becomes a
-  /// patch — with no field to update, because the field follows the position.
+  /// The roles are re-derived, so what used to be index 0 becomes a patch —
+  /// with no field to update, because the field follows the position.
+  ///
+  /// **`patch_shaped` survives**: it records what the ingest was, and being told
+  /// what that patch applies to does not change it. What the answer retires is
+  /// [needsBase], which reads the flag *and* the depth — so the answer is the
+  /// second layer's existence, and removing it asks again.
+  ///
+  /// **An empty stack gains a layer for the folder's own download**, unnamed,
+  /// so the base has something to sit under. Without it the record would read
+  /// as "this folder is that mod", which is the one thing it is not.
   ModOrigin withBaseInserted(ModDownload layer) => copyWith(
-        ingest: (ingest ?? const ModIngest()).copyWith(patchShaped: false),
-        downloads: _reroled([layer, ...downloads]),
+        downloads: _reroled([
+          layer,
+          if (downloads.isEmpty) const ModDownload() else ...downloads,
+        ]),
       );
 
   /// [layer] added on top, replacing any layer that already names the same mod.
@@ -383,9 +400,13 @@ class ModOrigin {
   /// - **A repeated mod id keeps the lower layer.** Kept, the second would have
   ///   the check ask one page twice and report two verdicts for one folder — and
   ///   the lower one is the one whose files the upper would have overwritten.
-  /// - **An entry with neither an identity nor a file list is dropped.** It
-  ///   cannot be checked, set aside, or removed; it is a layer that says nothing.
-  ///   An entry with *either* is kept, because either is actionable.
+  /// - **An entry that knows nothing is still kept**, and that is the one rule
+  ///   here that would be wrong in the old shape. A companion with no identity
+  ///   was worthless, because a companion *was* an identity. A layer with no
+  ///   identity and no file list still carries its **position** — "there is a
+  ///   download here and we know nothing about it" — and dropping it would
+  ///   renumber everything above it, turning a patch into the thing it was
+  ///   written over.
   static List<ModDownload> _stack(Object? raw) {
     if (raw is! List) return const <ModDownload>[];
     final parsed = <ModDownload>[];
@@ -393,7 +414,6 @@ class ModOrigin {
     for (final entry in raw) {
       final download = ModDownload.fromJson(entry, index: parsed.length);
       if (download == null) continue;
-      if (!download.hasIdentity && !download.hasFileRecord) continue;
       if (download.modId case final id? when !seen.add(id)) continue;
       parsed.add(download);
     }

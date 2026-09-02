@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
-import 'package:mod_manager_flutter/models/mod_companion.dart';
+import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/components/folder_downloads_summary.dart';
-import 'package:mod_manager_flutter/services/folder_downloads.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
 import 'support/localized_harness.dart';
+import 'support/origin_shorthand.dart';
 
 /// The section that says **what this folder holds**.
 ///
@@ -17,8 +17,7 @@ import 'support/localized_harness.dart';
 /// privileged: a mod and a patch in one folder are the same shape whichever of
 /// them the sidecar happens to store in `origin`'s own fields.
 void main() {
-  ModCompanion companion({
-    CompanionRole role = CompanionRole.patch,
+  ModDownload patch({
     int modId = 605460,
     int? fileId = 1473174,
     String? version,
@@ -26,8 +25,7 @@ void main() {
     OriginConfidence versionConfidence = OriginConfidence.exact,
     bool remoteMissing = false,
   }) =>
-      ModCompanion(
-        role: role,
+      patchFixture(
         modId: modId,
         modIdConfidence: OriginConfidence.exact,
         fileId: fileId,
@@ -39,16 +37,16 @@ void main() {
 
   ModOrigin origin({
     int? modId = 585282,
-    List<ModCompanion> companions = const [],
+    List<ModDownload> patches = const [],
   }) =>
-      ModOrigin(
+      originFixture(
         source: 'gamebanana',
         modId: modId,
         modIdConfidence: OriginConfidence.exact,
         fileId: 1433843,
         versionConfidence: OriginConfidence.exact,
         provenance: OriginProvenance.downloaded,
-        companions: companions,
+        patches: patches,
       );
 
   Future<void> pump(
@@ -59,7 +57,7 @@ void main() {
     Map<int, String> notes = const {},
     Map<int, GbMod> sessionRecords = const {},
     Map<int, FolderRowAction> rowActions = const {},
-    void Function(FolderDownload)? onEdit,
+    void Function(ModDownload)? onEdit,
   }) =>
       pumpLocalized(
         tester,
@@ -99,7 +97,7 @@ void main() {
       (tester) async {
     await pump(
       tester,
-      origin(companions: [companion()]),
+      origin(patches: [patch()]),
       knownNames: const {
         585282: 'Pulchra - Bottom Heavy',
         605460: 'Pulchra Bottom Heavy - Reworked',
@@ -113,17 +111,14 @@ void main() {
     expect(find.text('Patch'), findsOneWidget);
   });
 
-  testWidgets('the same pair reads the same when the patch is the primary',
+  testWidgets('the same pair reads the same whichever went in first',
       (tester) async {
-    // **The asymmetry this design exists to remove.** Same two mods, sidecar
-    // mirrored because they were installed in the other order — and the section
-    // must be indistinguishable.
+    // **The asymmetry the stack removed.** Same two mods, and whichever the
+    // user installed first, the record is the same stack — so there is nothing
+    // left for this section to normalise. The base is at the bottom either way.
     await pump(
       tester,
-      origin(
-        modId: 605460,
-        companions: [companion(role: CompanionRole.base, modId: 585282)],
-      ),
+      origin(modId: 585282, patches: [patch(modId: 605460)]),
       knownNames: const {
         585282: 'Pulchra - Bottom Heavy',
         605460: 'Pulchra Bottom Heavy - Reworked',
@@ -141,7 +136,7 @@ void main() {
     // Better than an id and better than a spinner: it is the name the user
     // knows this thing by everywhere else in the app. Only the folder's own
     // entry has one to fall back to.
-    await pump(tester, origin(companions: [companion()]));
+    await pump(tester, origin(patches: [patch()]));
 
     expect(find.text('Pulchra-BottomHeavy(NSFW)'), findsOneWidget);
     expect(find.text('GameBanana mod #605460'), findsOneWidget);
@@ -150,7 +145,7 @@ void main() {
   testWidgets('a name fetched earlier this session is used', (tester) async {
     await pump(
       tester,
-      origin(companions: [companion()]),
+      origin(patches: [patch()]),
       sessionRecords: const {
         605460: GbMod(idRow: 605460, name: 'Pulchra Bottom Heavy - Reworked'),
       },
@@ -164,7 +159,7 @@ void main() {
     // "the file you chose" names no file, and for a patch the app downloaded
     // itself it is not even true. `_sVersion` is routinely null upstream, so
     // this is the common case rather than a corner.
-    await pump(tester, origin(companions: [companion()]));
+    await pump(tester, origin(patches: [patch()]));
 
     expect(find.textContaining('you chose'), findsNothing);
     expect(find.textContaining('you downloaded'), findsNothing);
@@ -173,7 +168,7 @@ void main() {
   testWidgets('a version string on record is named', (tester) async {
     await pump(
       tester,
-      origin(companions: [companion(version: '1.02', versionLabel: 'Reworked')]),
+      origin(patches: [patch(version: '1.02', versionLabel: 'Reworked')]),
     );
 
     expect(find.text('1.02 · Reworked'), findsOneWidget);
@@ -183,8 +178,8 @@ void main() {
     await pump(
       tester,
       origin(
-        companions: [
-          companion(fileId: null, versionConfidence: OriginConfidence.unknown),
+        patches: [
+          patch(fileId: null, versionConfidence: OriginConfidence.unknown),
         ],
       ),
     );
@@ -193,13 +188,13 @@ void main() {
   });
 
   testWidgets('a page that has gone says that on its own row', (tester) async {
-    await pump(tester, origin(companions: [companion(remoteMissing: true)]));
+    await pump(tester, origin(patches: [patch(remoteMissing: true)]));
 
     expect(find.text('Its mod page is no longer available.'), findsOneWidget);
   });
 
   testWidgets('every row links to its page', (tester) async {
-    await pump(tester, origin(companions: [companion()]));
+    await pump(tester, origin(patches: [patch()]));
 
     expect(find.byIcon(Icons.open_in_new), findsNWidgets(2));
   });
@@ -207,7 +202,7 @@ void main() {
   testWidgets('a note lands under the download it belongs to', (tester) async {
     await pump(
       tester,
-      origin(companions: [companion()]),
+      origin(patches: [patch()]),
       notes: const {
         585282: 'Updates: This is the latest file',
         605460: 'Updates: An update is available',
@@ -221,13 +216,10 @@ void main() {
   testWidgets('only a row given an action offers one', (tester) async {
     // A button on a row nothing can be done to would do nothing when pressed,
     // so the caller names the rows rather than the widget guessing.
-    FolderDownload? acted;
+    ModDownload? acted;
     await pump(
       tester,
-      origin(
-        modId: 605460,
-        companions: [companion(role: CompanionRole.base, modId: 585282)],
-      ),
+      origin(modId: 585282, patches: [patch(modId: 605460)]),
       rowActions: const {585282: FolderRowAction.change},
       onEdit: (download) => acted = download,
     );
@@ -235,7 +227,7 @@ void main() {
     expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
     await tester.tap(find.byIcon(Icons.edit_outlined));
     expect(acted?.modId, 585282);
-    expect(acted?.role, FolderDownloadRole.mod);
+    expect(acted?.role, DownloadRole.base);
   });
 
   testWidgets('a row that can only be dropped says so, not "change"',
@@ -243,10 +235,10 @@ void main() {
     // The affordance has to name what it does. A patch the app installed knows
     // exactly what it is, so "change which mod this is" would offer something
     // that must not happen.
-    FolderDownload? acted;
+    ModDownload? acted;
     await pump(
       tester,
-      origin(companions: [companion()]),
+      origin(patches: [patch()]),
       rowActions: const {605460: FolderRowAction.remove},
       onEdit: (download) => acted = download,
     );
@@ -255,19 +247,17 @@ void main() {
     expect(find.byIcon(Icons.delete_outline), findsOneWidget);
     await tester.tap(find.byIcon(Icons.delete_outline));
     expect(acted?.modId, 605460);
-    expect(acted?.role, FolderDownloadRole.patch);
+    expect(acted?.role, DownloadRole.patch);
   });
 
   testWidgets('each row gets its own action, and only its own',
       (tester) async {
-    // Both companions recorded at once: the affordances must not swap places.
+    // A three-deep stack: the affordances must not swap places.
     await pump(
       tester,
       origin(
-        companions: [
-          companion(role: CompanionRole.base, modId: 585283),
-          companion(),
-        ],
+        modId: 585283,
+        patches: [patch(modId: 585282), patch()],
       ),
       rowActions: const {
         585283: FolderRowAction.change,
@@ -281,7 +271,7 @@ void main() {
   });
 
   testWidgets('no affordance when no row has an action', (tester) async {
-    await pump(tester, origin(companions: [companion()]));
+    await pump(tester, origin(patches: [patch()]));
 
     expect(find.byIcon(Icons.edit_outlined), findsNothing);
     expect(find.byIcon(Icons.delete_outline), findsNothing);

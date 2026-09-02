@@ -3,7 +3,7 @@ import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_page.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_update.dart';
-import 'package:mod_manager_flutter/models/mod_companion.dart';
+import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
@@ -38,7 +38,7 @@ void main() {
     DateTime? dismissedUntil,
     OriginTracking tracking = OriginTracking.auto,
     bool patchShaped = false,
-    List<ModCompanion> companions = const [],
+    List<ModDownload> patches = const [],
   }) =>
       originFixture(
         source: 'gamebanana',
@@ -53,18 +53,12 @@ void main() {
         updatesDismissedUntil: dismissedUntil,
         tracking: tracking,
         ingest: patchShaped ? const ModIngest(patchShaped: true) : null,
-        companions: companions,
+        patches: patches,
       );
 
-  /// A second identity in the same folder, at the tier the resolve dialog
-  /// writes — `user`, never `exact`: we did not download it.
-  ModCompanion companion(
-    int modId, {
-    int? fileId,
-    CompanionRole role = CompanionRole.base,
-  }) =>
-      ModCompanion(
-        role: role,
+  /// A layer written **over** the folder's bottom one, at the tier the resolve
+  /// dialog writes — `user`, never `exact`: we did not download it.
+  ModDownload patch(int modId, {int? fileId}) => patchFixture(
         modId: modId,
         modIdConfidence: OriginConfidence.user,
         fileId: fileId,
@@ -839,11 +833,10 @@ void main() {
       final rebound = origin(
         fileId: mainV74,
         dismissedUntil: DateTime.utc(2030),
-      ).boundTo(
-        modId: 999,
-        confidence: OriginConfidence.user,
-        source: 'gamebanana',
-      );
+      ).withBase((download) => download.boundTo(
+            modId: 999,
+            confidence: OriginConfidence.user,
+          ));
       expect(rebound.updatesDismissedUntil, isNull);
     });
   });
@@ -939,7 +932,7 @@ void main() {
           fileId: mainV77,
           versionLabel: 'Main file',
           patchShaped: true,
-          companions: [companion(megalodonId)],
+          patches: [patch(megalodonId)],
         ),
         remote: rabbitFx,
         companionRemotes: {megalodonId: megalodon},
@@ -968,7 +961,7 @@ void main() {
         primary: origin(
           fileId: mainV77,
           versionLabel: 'Main file',
-          companions: [companion(megalodonId, fileId: megalodonOldFile)],
+          patches: [patch(megalodonId, fileId: megalodonOldFile)],
         ),
         remotes: {megalodonId: megalodon},
       );
@@ -994,15 +987,15 @@ void main() {
         primary: origin(
           fileId: mainV77,
           versionLabel: 'Main file',
-          companions: [companion(megalodonId, fileId: megalodonOldFile)],
+          patches: [patch(megalodonId, fileId: megalodonOldFile)],
         ),
         remotes: {megalodonId: megalodon},
       );
 
-      expect(check.companions.length, 1);
-      expect(check.companions.single.companion.modId, megalodonId);
-      expect(check.companions.single.check.outcome,
-          UpdateOutcome.possiblyOutdated);
+      // Every layer's verdict is kept, base included — two here.
+      expect(check.layers.length, 2);
+      expect(check.layers.map((l) => l.download.modId), [531649, megalodonId]);
+      expect(check.layers.last.check.outcome, UpdateOutcome.possiblyOutdated);
     });
 
     test('up to date is only claimed when every identity agrees', () {
@@ -1017,7 +1010,7 @@ void main() {
         primary: origin(
           fileId: mainV77,
           versionLabel: 'Main file',
-          companions: [companion(megalodonId)],
+          patches: [patch(megalodonId)],
         ),
         remotes: const {},
       );
@@ -1030,17 +1023,18 @@ void main() {
       );
     });
 
-    test('the primary still wins when it is the one with the update', () {
+    test('the bottom layer wins when it is the one with the update', () {
       final check = folded(
         primary: origin(
           fileId: mainV74, // archived — superseded
-          companions: [companion(megalodonId, fileId: megalodonNewestFile)],
+          patches: [patch(megalodonId, fileId: megalodonNewestFile)],
         ),
         remotes: {megalodonId: megalodon},
       );
       expect(check.outcome, UpdateOutcome.updateAvailable);
-      expect(check.subjectModId, isNull,
-          reason: 'null means the folder\'s own primary identity');
+      expect(check.subjectModId, 531649,
+          reason: 'every layer is named by its own id — there is no longer a '
+              'spelling that means "the folder\'s own"');
     });
 
     test('a companion that cannot be judged is not silently clean', () {
@@ -1051,7 +1045,7 @@ void main() {
         primary: origin(
           fileId: mainV77,
           versionLabel: 'Main file',
-          companions: [companion(megalodonId)],
+          patches: [patch(megalodonId)],
         ),
         remotes: {megalodonId: megalodon},
       );
@@ -1066,12 +1060,12 @@ void main() {
       final check = folded(
         primary: origin(
           tracking: OriginTracking.off,
-          companions: [companion(megalodonId, fileId: megalodonOldFile)],
+          patches: [patch(megalodonId, fileId: megalodonOldFile)],
         ),
         remotes: {megalodonId: megalodon},
       );
       expect(check.outcome, UpdateOutcome.trackingOff);
-      expect(check.companions, isEmpty,
+      expect(check.layers, isEmpty,
           reason: 'nothing is asked about a folder the user declared local');
     });
 
@@ -1082,7 +1076,7 @@ void main() {
         primary: origin(
           fileId: mainV74, // superseded, so the primary has a finding
           dismissedUntil: DateTime.utc(2030),
-          companions: [companion(megalodonId, fileId: megalodonOldFile)],
+          patches: [patch(megalodonId, fileId: megalodonOldFile)],
         ),
         remotes: {megalodonId: megalodon},
       );
@@ -1090,9 +1084,14 @@ void main() {
       expect(check.hasUpdate, isTrue);
       expect(check.subjectModId, megalodonId);
       expect(
-        check.companions.single.check.dismissed,
+        check.layers.last.check.dismissed,
         isFalse,
-        reason: 'the dismissal was written against the primary\'s releases',
+        reason: 'the dismissal was written against the other layer\'s releases',
+      );
+      expect(
+        check.layers.first.check.dismissed,
+        isTrue,
+        reason: 'and it did silence the layer it was written to',
       );
     });
 
@@ -1101,9 +1100,8 @@ void main() {
       // other mod is in the folder. It compares against a baseline instead of
       // a file, and it must still be able to find something.
       final check = checkForUpdate(
-        origin: origin(fileId: mainV77, versionLabel: 'Main file', companions: [
-          ModCompanion(
-            role: CompanionRole.base,
+        origin: origin(fileId: mainV77, versionLabel: 'Main file', patches: [
+          patchFixture(
             modId: megalodonId,
             modIdConfidence: OriginConfidence.user,
             versionConfidence: OriginConfidence.assumedLatest,
@@ -1126,7 +1124,7 @@ void main() {
         primary: origin(
           fileId: mainV74,
           dismissedUntil: DateTime.utc(2030),
-          companions: [companion(megalodonId, fileId: megalodonOldFile)],
+          patches: [patch(megalodonId, fileId: megalodonOldFile)],
         ),
         remotes: {megalodonId: megalodon},
       );

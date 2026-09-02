@@ -62,6 +62,17 @@ extension OriginShorthand on ModOrigin {
           ));
 }
 
+/// The bottom layer of a **serialised** block, for assertions about what
+/// reached disk.
+///
+/// `origin['mod_id']` used to be the whole answer; the stack puts every
+/// identity field one level down, under `downloads[0]`.
+Map<String, Object?> baseJson(Object? origin) {
+  final downloads = (origin as Map)['downloads'];
+  if (downloads is! List || downloads.isEmpty) return const {};
+  return Map<String, Object?>.from(downloads.first as Map);
+}
+
 /// A folder holding **one** download, from the flat parameters this suite's
 /// fixtures were written against.
 ///

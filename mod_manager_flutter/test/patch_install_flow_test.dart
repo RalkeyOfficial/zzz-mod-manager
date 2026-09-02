@@ -6,7 +6,7 @@ import 'package:mod_manager_flutter/l10n/app_localizations.dart';
 import 'package:mod_manager_flutter/models/app_notification.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gamebanana.dart';
-import 'package:mod_manager_flutter/models/mod_companion.dart';
+import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/dialogs/patch_install_flow.dart';
@@ -20,6 +20,8 @@ import 'package:mod_manager_flutter/services/patch_detection.dart';
 import 'package:mod_manager_flutter/services/patch_scan.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_applier.dart';
 import 'package:path/path.dart' as p;
+
+import 'support/origin_shorthand.dart';
 
 /// **The patch install, shared by both ways a mod gets into the library.**
 ///
@@ -176,7 +178,7 @@ void main() {
           isActive: false,
           origin: modId == null
               ? null
-              : ModOrigin(
+              : originFixture(
                   source: 'gamebanana',
                   modId: modId,
                   modIdConfidence: OriginConfidence.exact,
@@ -398,8 +400,7 @@ void main() {
         folders: [folder],
         answers: {
           'Ellen Fix': const InstallAsNewMod(
-            base: ModCompanion(
-              role: CompanionRole.base,
+            base: ModDownload(
               modId: 7100,
               modIdConfidence: OriginConfidence.user,
             ),
@@ -448,7 +449,7 @@ void main() {
     test('a mod page download is recorded against the mod it went into',
         () async {
       library('Ellen', {'ellen.ini': 'x', 'Body.dds': 'v1'},
-          origin: const ModOrigin(
+          origin: originFixture(
             provenance: OriginProvenance.downloaded,
             source: 'gamebanana',
             modId: 4001,
@@ -479,15 +480,17 @@ void main() {
       expect(origin.ingest?.patchShaped ?? false, isFalse,
           reason: 'the mirror-image mistake: that flag says the folder *is* a '
               'patch missing its base, which is the opposite of this');
-      expect(origin.needsCompanion, isFalse,
+      expect(origin.needsBase, isFalse,
           reason: 'nothing about this folder is unanswered');
-      final companion = origin.companionOfRole(CompanionRole.patch)!;
-      expect(companion.modId, 5100);
-      expect(companion.modIdConfidence, OriginConfidence.exact,
-          reason: 'the one path to exact on a companion: we performed this '
-              'download and know precisely what it was');
-      expect(companion.version, '1.2');
-      expect(companion.archiveMd5, 'abc123');
+      final layer = origin.patches.single;
+      expect(layer.modId, 5100);
+      expect(layer.role, DownloadRole.patch,
+          reason: 'it went on top of what was already there');
+      expect(layer.modIdConfidence, OriginConfidence.exact,
+          reason: 'the one path to exact for a layer nobody identified by '
+              'hand: we performed this download and know what it was');
+      expect(layer.version, '1.2');
+      expect(layer.archiveMd5, 'abc123');
     });
 
     test('a folder dragged off a disk is installed with nothing recorded',
@@ -495,7 +498,7 @@ void main() {
       // It has no mod page, so there is no second identity to record — and a
       // companion must name one. The files still go in, the copy is still
       // saved first, and the mod keeps saying exactly what it said before.
-      const was = ModOrigin(
+      final was = originFixture(
         provenance: OriginProvenance.downloaded,
         source: 'gamebanana',
         modId: 4001,
@@ -550,8 +553,7 @@ void main() {
       );
 
       expect(read(p.join(modsPath, 'Hand Copied'), 'Body.dds'), 'v2');
-      expect(origins['Hand Copied']!.companionOfRole(CompanionRole.patch),
-          isNotNull,
+      expect(origins['Hand Copied']!.downloads.last.modId, isNotNull,
           reason: 'a block is created for it — the patch is a fact about the '
               'folder whether or not the folder was tracked');
     });
@@ -569,8 +571,7 @@ void main() {
         scan: const PlannedPatchScan(iniPatches: {'Ellen Fix', 'Some Patch'}),
         destinations: const {
           'Ellen Fix': InstallAsNewMod(
-            base: ModCompanion(
-              role: CompanionRole.base,
+            base: ModDownload(
               modId: 7100,
               modIdConfidence: OriginConfidence.user,
             ),
@@ -588,11 +589,17 @@ void main() {
         amend: amend,
       );
 
-      expect(origins['Ellen Fix']!.ingest!.patchShaped, isTrue);
-      expect(origins['Ellen Fix']!.needsCompanion, isFalse,
+      // **The flag is the question, and answering it retires it.** Naming the
+      // base puts that mod at the bottom of the stack, so there is nothing left
+      // to ask — and leaving the flag set would have the resolve dialog go on
+      // asking about a folder whose base is on file.
+      expect(origins['Ellen Fix']!.needsBase, isFalse,
           reason: 'they just said what it patches');
+      expect(origins['Ellen Fix']!.base!.modId, 7100,
+          reason: 'and it went underneath');
+
       expect(origins['Some Patch']!.ingest!.patchShaped, isTrue);
-      expect(origins['Some Patch']!.needsCompanion, isTrue,
+      expect(origins['Some Patch']!.needsBase, isTrue,
           reason: 'nobody said, so the question is still open');
     });
 
@@ -609,7 +616,7 @@ void main() {
           '[TextureOverrideBody]\nps-t0 = R\n\n[R]\nfilename = Body.dds\n');
       await repository.recordOrigin(
         'Ellen Fix',
-        const ModOrigin(
+        originFixture(
           provenance: OriginProvenance.downloaded,
           source: 'gamebanana',
           modId: 5100,
@@ -634,7 +641,7 @@ void main() {
           await ModMetadataService().read(p.join(modsPath, 'Ellen Fix'));
       final origin = sidecar!.origin!;
       expect(origin.ingest!.patchShaped, isTrue);
-      expect(origin.needsCompanion, isTrue);
+      expect(origin.needsBase, isTrue);
       expect(modOriginStatus(origin), ModOriginStatus.secondIdentityUnknown,
           reason: 'the amber mark on the card, and its own sentence');
       expect(modNeedsAttention(origin), isTrue,
@@ -645,8 +652,7 @@ void main() {
     /// A folder holding only a patch does nothing in the game, so recording the
     /// answer and stopping there left the user exactly where they started.
     group('the base the user named', () {
-      const base = ModCompanion(
-        role: CompanionRole.base,
+      const base = ModDownload(
         modId: 7100,
         modIdConfidence: OriginConfidence.user,
       );
@@ -704,11 +710,13 @@ void main() {
           installBase: (modName, named, chosen) async => false,
         );
 
-        expect(origins['Ellen Fix']!.companionOfRole(CompanionRole.base), base,
+        expect(origins['Ellen Fix']!.base!.modId, base.modId,
             reason: 'they said what it patches, and that stands');
-        expect(origins['Ellen Fix']!.ingest!.patchShaped, isTrue);
+        // **The record is the answer, not a claim the bytes arrived.** The
+        // fetch failed, so the folder still holds only the patch — and the
+        // warning is what says so, exactly as it did before the record existed.
         expect(lines.single.title, loc.t('mods.snackbar.import_patch_title'),
-            reason: 'and the folder still does not work, so it still says so');
+            reason: 'the folder still does not work, so it still says so');
       });
 
       test('an answer with no file to install fetches nothing', () async {
@@ -734,7 +742,7 @@ void main() {
         );
 
         expect(called, isFalse);
-        expect(origins['Ellen Fix']!.companionOfRole(CompanionRole.base), base);
+        expect(origins['Ellen Fix']!.base!.modId, base.modId);
       });
 
       test('a mod the import never created is not fetched for', () async {
@@ -815,8 +823,7 @@ void main() {
           scan: PlannedPatchScan(iniPatches: {'Ellen Fix'}),
           destinations: {
             'Ellen Fix': InstallAsNewMod(
-              base: ModCompanion(
-                role: CompanionRole.base,
+              base: ModDownload(
                 modId: 7100,
                 modIdConfidence: OriginConfidence.user,
               ),

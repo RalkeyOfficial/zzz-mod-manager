@@ -5,7 +5,6 @@ import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_update.dart';
-import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/components/launch_update_check_host.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';

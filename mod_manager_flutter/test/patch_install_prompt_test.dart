@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/core/constants.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
-import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/dialogs/patch_install_prompt.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_client.dart';

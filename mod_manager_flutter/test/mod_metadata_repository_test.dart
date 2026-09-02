@@ -233,8 +233,8 @@ void main() {
 
       final written = sidecarOf('Legacy Mod')!;
       final origin = written['origin'] as Map;
-      expect(origin['mod_id'], 531649);
-      expect(origin['mod_id_confidence'], 'inferred');
+      expect(baseJson(origin)['mod_id'], 531649);
+      expect(baseJson(origin)['mod_id_confidence'], 'inferred');
       expect(origin['source'], 'gamebanana');
       expect(origin['installed_at_is_proxy'], isTrue,
           reason: 'a derived date must never look observed');
@@ -372,7 +372,7 @@ void main() {
       final meta = await repo.loadOrMigrate('Mistyped Mod', dir.path);
 
       expect(meta.origin?.modId, 222);
-      final written = sidecarOf('Mistyped Mod')!['origin'] as Map;
+      final written = baseJson(sidecarOf('Mistyped Mod')!['origin']);
       expect(written['mod_id'], 222);
       expect(written.containsKey('file_id'), isFalse,
           reason: 'file 555 belonged to the mod we are no longer pointing at');
@@ -439,7 +439,7 @@ void main() {
       final raw = sidecarOf('Raced Mod')!;
       expect(raw['description'], 'notes the user just typed');
       expect(raw['character_id'], 'ellen');
-      expect((raw['origin'] as Map)['mod_id'], 531649,
+      expect(baseJson(raw['origin'])['mod_id'],531649,
           reason: 'and the backfill still contributes its own key');
     });
 
@@ -533,7 +533,7 @@ void main() {
 
         await repo.loadOrMigrate('Locked Then Fixed', dir);
         expect(repo.takeBackfillWriteFailures(), isEmpty);
-        expect((sidecarOf('Locked Then Fixed')!['origin'] as Map)['mod_id'],
+        expect(baseJson(sidecarOf('Locked Then Fixed')!['origin'])['mod_id'],
             531649);
       });
 
@@ -588,7 +588,7 @@ void main() {
       expect(raw.containsKey('character_id'), isFalse, reason: 'placeholder must not persist');
       expect(raw['vendor_x'], {'id': 7}, reason: 'unknown key survives a user edit');
       expect(
-        (raw['origin'] as Map)['mod_id'],
+        baseJson(raw['origin'])['mod_id'],
         7,
         reason: 'the typed origin block survives a user edit too — this is the '
             'exact regression that would silently untrack an installed mod',
@@ -656,7 +656,7 @@ void main() {
       final raw = sidecarOf('Origin Mod')!;
       expect(raw['character_id'], 'ellen');
       expect(raw['vendor_x'], {'id': 99});
-      expect((raw['origin'] as Map)['mod_id'], 99);
+      expect(baseJson(raw['origin'])['mod_id'],99);
     });
   });
 
@@ -666,6 +666,10 @@ void main() {
       String? md5 = 'aaaa',
     }) =>
         originFixture(
+          // Untracked on purpose: this group is about what `recordOrigin` puts
+          // on disk for a folder with no remote identity, and a service name
+          // would be a claim it does not make.
+          source: null,
           provenance: provenance,
           archiveMd5: md5,
           ingest: const ModIngest(folders: ['Mod']),
@@ -679,7 +683,7 @@ void main() {
 
       final raw = sidecarOf('Fresh Mod')!;
       expect((raw['origin'] as Map)['provenance'], 'imported_archive');
-      expect((raw['origin'] as Map)['archive_md5'], 'aaaa');
+      expect(baseJson(raw['origin'])['archive_md5'], 'aaaa');
     });
 
     test("drops a stranger's origin block but keeps their user data", () async {
@@ -717,14 +721,15 @@ void main() {
       final raw = sidecarOf('Shared Mod')!;
       final written = raw['origin'] as Map;
 
-      // The foreign identity is gone entirely...
-      expect(written.containsKey('mod_id'), isFalse);
-      expect(written.containsKey('file_id'), isFalse);
+      // The foreign identity is gone entirely — every field of it lives on a
+      // layer, so it is the layer that must carry none of theirs.
+      expect(baseJson(written).containsKey('mod_id'), isFalse);
+      expect(baseJson(written).containsKey('file_id'), isFalse);
       expect(written.containsKey('source'), isFalse);
       expect(written['provenance'], 'imported_folder');
       // ...and with it every claim of exactness.
-      expect(written.containsKey('mod_id_confidence'), isFalse);
-      expect(written.containsKey('version_confidence'), isFalse);
+      expect(baseJson(written).containsKey('mod_id_confidence'), isFalse);
+      expect(baseJson(written).containsKey('version_confidence'), isFalse);
 
       final parsed = ModOrigin.fromJson(written)!;
       expect(parsed.allowsUnattendedUpdate, isFalse);
@@ -750,7 +755,7 @@ void main() {
 
       final raw = sidecarOf('Tracked')!;
       expect(raw['description'], 'my notes');
-      expect((raw['origin'] as Map)['archive_md5'], 'aaaa');
+      expect(baseJson(raw['origin'])['archive_md5'], 'aaaa');
     });
 
     test('an origin forged on ModInfo in memory can never reach disk', () async {
@@ -781,9 +786,9 @@ void main() {
 
       final written = sidecarOf('Tracked')!['origin'] as Map;
       expect(written['provenance'], 'imported_archive');
-      expect(written['archive_md5'], 'aaaa');
-      expect(written.containsKey('mod_id'), isFalse);
-      expect(written.containsKey('mod_id_confidence'), isFalse);
+      expect(baseJson(written)['archive_md5'], 'aaaa');
+      expect(baseJson(written).containsKey('mod_id'), isFalse);
+      expect(baseJson(written).containsKey('mod_id_confidence'), isFalse);
       expect(ModOrigin.fromJson(written)!.allowsUnattendedUpdate, isFalse);
     });
 
@@ -839,19 +844,22 @@ void main() {
 
       final ok = await repo.updateOrigin(
         'Legacy Mod',
-        (current) => current!.copyWith(
+        (current) => current!.copyBase(
           modId: 555,
           modIdConfidence: OriginConfidence.user,
         ),
       );
 
       expect(ok, isTrue);
-      final block = sidecarOf('Legacy Mod')!['origin'] as Map;
-      expect(block['mod_id'], 555);
-      expect(block['mod_id_confidence'], 'user');
-      expect(block['archive_md5'], 'bbbb');
-      expect(block['provenance'], 'imported_archive');
-      expect((block['ingest'] as Map)['folders'], ['Legacy Mod']);
+      final origin = sidecarOf('Legacy Mod')!['origin'] as Map;
+      final layer = baseJson(origin);
+      expect(layer['mod_id'], 555);
+      expect(layer['mod_id_confidence'], 'user');
+      expect(layer['archive_md5'], 'bbbb');
+      // The folder's own facts sit beside the stack, not in it, and the
+      // amendment must leave them alone.
+      expect(origin['provenance'], 'imported_archive');
+      expect((origin['ingest'] as Map)['folders'], ['Legacy Mod']);
     });
 
     test('hands the update the block on disk, not the one held in memory',
@@ -884,7 +892,7 @@ void main() {
       );
 
       expect(await repo.updateOrigin('Rebound Mod', (_) => null), isFalse);
-      expect((sidecarOf('Rebound Mod')!['origin'] as Map)['mod_id'], 7);
+      expect(baseJson(sidecarOf('Rebound Mod')!['origin'])['mod_id'], 7);
     });
 
     test('preserves user data and unknown keys around the amendment', () async {
@@ -906,7 +914,7 @@ void main() {
       expect(raw['description'], 'from the author');
       expect(raw['tags'], ['ellen']);
       expect(raw['future_key'], {'kept': true});
-      expect((raw['origin'] as Map)['mod_id'], 900);
+      expect(baseJson(raw['origin'])['mod_id'],900);
     });
 
     test('writes a block for a mod that had no sidecar at all', () async {
@@ -1141,7 +1149,7 @@ void main() {
 
       await repo.applyRemoteMetadata(['Ellen Swimsuit'], remote());
 
-      final origin = sidecarOf('Ellen Swimsuit')!['origin'] as Map;
+      final origin = baseJson(sidecarOf('Ellen Swimsuit')!['origin']);
       expect(origin['mod_id'], 531275);
       expect(origin['mod_id_confidence'], 'exact');
     });

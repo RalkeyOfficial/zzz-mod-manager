@@ -98,7 +98,16 @@ dependency at all: see `test/origin_backfill_test.dart` and
     "provenance": "downloaded",
     "ingest": { "mode": "separate", "folders": ["Ellen Swimsuit"] },
     "installed_at": "2026-08-01T12:34:56.000Z",
-    "archive_md5": "9e107d9d372bb6826bd81d3542a419d6"
+    "downloads": [
+      {
+        "role": "base",
+        "mod_id": 123456,
+        "mod_id_confidence": "exact",
+        "file_id": 1433843,
+        "version_confidence": "exact",
+        "archive_md5": "9e107d9d372bb6826bd81d3542a419d6"
+      }
+    ]
   }
 }
 ```
@@ -120,21 +129,66 @@ modelled by `ModOrigin` (`lib/models/mod_origin.dart`). Every sub-field is optio
 except `provenance`, and **anything equal to its read-side default is omitted**, so
 the common block is the four keys shown above rather than fifteen mostly-null ones.
 
-| Field | Meaning |
+**A folder is a stack of downloads plus the facts a folder has exactly one of**,
+and the split between the two is the only structural decision in the block. What
+a folder has one of sits on `origin`; everything that describes *a download*
+lives on an entry in `downloads`.
+
+| On the folder | Meaning |
 |---|---|
-| `source` | Which service, e.g. `gamebanana`. |
-| `mod_id` / `file_id` | Remote handles. A mod publishes many files, so both are needed to say what is installed. |
+| `source` | Which service, e.g. `gamebanana`. One folder, one service: a stack whose layers came from different sites is not a shape this app installs. |
+| `provenance` | `downloaded` \| `imported_archive` \| `imported_folder`. How the folder got here. |
+| `installed_at` / `installed_at_is_proxy` | When, and whether that was observed or derived from file mtimes. One folder, one install date. |
+| `tracking` | `auto` \| `off` (the user declared the mod local). **Never per layer** — "it's my own" is a statement about the folder, a per-layer mute would be a second switch on one card, and the installed-mods index depends on there being exactly one. |
+| `ingest` | `mode` (`separate`/`combined`), `folders` (archive-relative **basenames**), `sibling_group`, `patch_shaped` (this download **replaces rather than adds** — either it brought `.ini` files and none of the content they reference, or it brought game assets and no `.ini` to load them; see [`applying-updates.md` §2](applying-updates.md#2-patch-detection). Knowable only at install), and `patch_files` (below). The layout is the folder's because it is what the mod's own `.ini` paths were written against. |
+| `downloads` | **The stack, bottom-most first.** Absent when empty, which is every mod the offline backfill could derive nothing about. |
+
+| On each download | Meaning |
+|---|---|
+| `role` | `base` at index 0, `patch` above it. **Redundant with the position**, which is the authority — see below. |
+| `mod_id` / `file_id` | Remote handles. A mod publishes many files, so both are needed to say what is installed. `mod_id` may be absent: a patch written in from a local archive has no page, and the layer is still worth recording. |
 | `mod_id_confidence` / `version_confidence` | `exact` \| `user` \| `inferred` \| `assumed_latest` \| `unknown`. Identity and version resolve independently, so they carry separate confidences. What each tier means and who may write it: [`origin-tracking.md`](origin-tracking.md#1-two-axes-confidence-and-provenance). |
 | `version` / `version_label` | `version` is a version string; `version_label` is the author's free-text *variant* marker ("white hair ver"). **Never conflate them** — that makes two variants of one release look like two releases. |
-| `provenance` | `downloaded` \| `imported_archive` \| `imported_folder`. |
-| `ingest` | `mode` (`separate`/`combined`), `folders` (archive-relative **basenames**), `sibling_group`, `patch_shaped` (this download **replaces rather than adds** — either it brought `.ini` files and none of the content they reference, or it brought game assets and no `.ini` to load them; see [`applying-updates.md` §2](applying-updates.md#2-patch-detection). Knowable only at install), `files` and `patch_files` (below). |
-| `companions` | The **other downloads in this folder**, when the user has named any. Each is a remote identity plus what is known about which file of it, and deliberately not a second `origin`: see [`origin-tracking.md` §10](origin-tracking.md#10-a-folder-that-holds-two-downloads). Carries its own `files` on the same terms as `ingest.files`. Absent when empty, which is almost every sidecar. |
-| `installed_at` / `installed_at_is_proxy` | When, and whether that was observed or derived from file mtimes. |
-| `baseline_remote_date` | For `assumed_latest`: only flag remote files newer than this. |
-| `archive_md5` | md5 of the archive it was extracted from. |
-| `tracking` | `auto` \| `off` (the user declared the mod local). |
+| `archive_md5` | md5 of the archive **this layer** came from. |
+| `baseline_remote_date` | For `assumed_latest`: only flag remote files newer than this. Per layer, because the downloads arrived at different times. |
 | `remote_missing` | Gone upstream — read from the remote's explicit private/trashed/withheld flags, not inferred from a 404. |
-| `updates_dismissed_until` | "I have seen what this mod published up to here and I don't want it." A **date rather than a file id**, so it expires by itself the moment something newer appears; cleared when the folder is rebound to a different mod. Not the same as `tracking: "off"`, which silences the mod forever. See [`update-checks.md`](update-checks.md#4-dismissing-an-update). |
+| `updates_dismissed_until` | "I have seen what this mod published up to here and I don't want it." A **date rather than a file id**, so it expires by itself the moment something newer appears; cleared when that layer is rebound. Per layer, and that is the point: waving away the patch's release must not silence the mod it patches. Not the same as `tracking: "off"`, which silences the folder forever. See [`update-checks.md`](update-checks.md#4-dismissing-an-update). |
+| `files` | Which files this layer laid down (below). |
+
+### `role` is written from the position, and loses to it on read
+
+The list is ordered bottom-up, so index 0 is the `base` and everything above it
+is a `patch`. The tag is written from the index every time; on read, a tag that
+disagrees with its index **loses**, and the disagreement is logged under the
+`sidecar` tag.
+
+It is stored for two reasons. A sidecar is a file people open and share, so a
+hand edit that reordered the list would otherwise change what every entry means
+in silence — and `"role": "patch"` on the second entry tells a reader what the
+ordering means without their having to know the rule.
+
+**`base` is not "is a whole mod".** For a folder the app recognised as
+patch-shaped and whose real base nobody has named, the patch is the bottom of the
+stack that exists and carries that role; `ingest.patch_shaped` is the separate
+fact that the folder's own ingest was a patch, which position cannot express.
+
+### What the stack replaced, and why
+
+The block used to keep **one** download in `origin`'s own fields and the rest in
+a `companions` list with a role *relative* to it — and which one landed where was
+**install order**. Patch a mod and the mod was primary; install the patch first
+and name the mod afterwards and the patch was. The folders were physically
+identical and the records were mirror images, so every reader paid to undo it,
+and one operation — taking a patch back out — could not be expressed at all for
+one of the two orderings.
+
+Reading a block in that shape still works: with no `downloads` key,
+`ModOrigin.migrateFlatBlock` reads it as `[base companions…, own, patch
+companions…]` — the ordering the old code already derived at read time, which is
+what makes the migration lossless rather than a guess. The next save emits a
+stack. It needs no version bump: the flat shape never shipped (2.2.2 predates the
+whole `origin` block), so the only sidecars in it were written by development
+builds.
 
 ### The file record: `files` per download, `patch_files` for the folder
 
@@ -145,13 +199,16 @@ on disk. Absent when empty, which is every sidecar written before this existed.
 "ingest": {
   "mode": "separate",
   "folders": ["Ellen Swimsuit"],
-  "files": [
-    { "path": "ellen.ini", "role": "added", "bytes": 2048 },
-    { "path": "Textures/Body.dds", "role": "added", "bytes": 5242880 }
-  ],
   "patch_files": ["Textures/Body.dds"]
 },
-"companions": [
+"downloads": [
+  {
+    "role": "base", "mod_id": 585282,
+    "files": [
+      { "path": "ellen.ini", "role": "added", "bytes": 2048 },
+      { "path": "Textures/Body.dds", "role": "added", "bytes": 5242880 }
+    ]
+  },
   {
     "role": "patch", "mod_id": 605460,
     "files": [
@@ -168,11 +225,10 @@ of that is possible without knowing which files are the patch's. Like
 indistinguishable from an ordinary one — and it is recorded rather than
 re-downloaded because a patch's mod page can be gone by the time the base updates.
 
-**Per download, not per folder.** `ingest.files` is the folder's own download;
-each companion carries its own. One flat list cannot say whose a file is, and a
-folder can legitimately hold two patches — which is why `withAppliedPatch`
-deduplicates by mod id. Without the attribution, only "remove every patch" is
-expressible.
+**Per download, on the layer that wrote it.** One flat list on the folder cannot
+say whose a file is, and a folder can legitimately hold two patches — which is
+why `withLayerOnTop` deduplicates by mod id. Without the attribution, only
+"remove every patch" is expressible.
 
 Three fields, and each earns its place:
 
@@ -190,13 +246,13 @@ not have. Here the weak answer is the dangerous one: `added` is what licenses a
 not.
 
 **`patch_files` stays a plain `string[]`, permanently**, and is written as the
-derived union of every download whose absolute role is *patch*
-(`derivedPatchFiles`, `services/folder_downloads.dart`). That is compatibility
-rather than duplication: `ModIngest` filters that key to strings, so an
-already-released build reading per-download objects there would see *no* patch
-files and flatten the patch away on the next base update. New code never reads it
-as the source of truth, and a folder with no per-download registries is left with
-whatever `patch_files` it already had rather than having it rebuilt to nothing.
+union of every layer above the bottom of the stack (`derivedPatchFiles`,
+`services/folder_downloads.dart`). That is compatibility rather than duplication:
+`ModIngest` filters that key to strings, so an already-released build reading
+per-download objects there would see *no* patch files and flatten the patch away
+on the next base update. New code never reads it as the source of truth, and a
+folder with no per-layer registries is left with whatever `patch_files` it
+already had rather than having it rebuilt to nothing.
 
 Two things follow from all of it, and both bite:
 

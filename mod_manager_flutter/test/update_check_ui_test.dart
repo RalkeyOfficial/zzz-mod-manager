@@ -5,7 +5,6 @@ import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_exceptions.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
-import 'package:mod_manager_flutter/models/mod_companion.dart';
 import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
@@ -21,12 +20,13 @@ import 'package:mod_manager_flutter/utils/state_providers.dart';
 import 'support/fake_http_transport.dart';
 import 'support/fixtures.dart';
 import 'support/localized_harness.dart';
+import 'support/origin_shorthand.dart';
 
 /// The two surfaces the update check reaches the user through: the toolbar
 /// button that checks the whole library, and the per-mod dialog.
 void main() {
   ModOrigin origin({int? modId = 531649, int? fileId, DateTime? installedAt}) =>
-      ModOrigin(
+      originFixture(
         source: modId == null ? null : 'gamebanana',
         modId: modId,
         modIdConfidence:
@@ -635,7 +635,7 @@ void main() {
     testWidgets('a guessed answer is labelled as one', (tester) async {
       // The locked decision: with a guessed installed version the strongest
       // available claim is "possibly", and the caveat has to be visible.
-      final guessed = ModOrigin(
+      final guessed = originFixture(
         source: 'gamebanana',
         modId: 531649,
         modIdConfidence: OriginConfidence.inferred,
@@ -699,7 +699,7 @@ void main() {
         tester,
         mod(
           'Ellen',
-          origin: ModOrigin(
+          origin: originFixture(
             source: 'gamebanana',
             modId: 531649,
             modIdConfidence: OriginConfidence.user,
@@ -1003,23 +1003,21 @@ void main() {
         );
       }
 
-      /// A folder whose primary is RabbitFX's newest file — up to date on its
-      /// own — with the other mod recorded as a companion.
-      ModInfo mixedMod({int? companionFileId = 1258541}) => mod(
+      /// A folder holding RabbitFX's newest file — up to date on its own — with
+      /// the other mod as a second layer.
+      ModInfo mixedMod({int? otherFileId = 1258541}) => mod(
             'EllenBikini',
-            origin: origin(fileId: 1732269).copyWith(
-              companions: [
-                ModCompanion(
-                  role: CompanionRole.base,
-                  modId: 528481,
-                  modIdConfidence: OriginConfidence.user,
-                  fileId: companionFileId,
-                  versionConfidence: companionFileId == null
-                      ? OriginConfidence.unknown
-                      : OriginConfidence.user,
-                ),
-              ],
-            ),
+            origin: origin(fileId: 1732269).copyWith(downloads: [
+              origin(fileId: 1732269).base!,
+              patchFixture(
+                modId: 528481,
+                modIdConfidence: OriginConfidence.user,
+                fileId: otherFileId,
+                versionConfidence: otherFileId == null
+                    ? OriginConfidence.unknown
+                    : OriginConfidence.user,
+              ),
+            ]),
           );
 
       testWidgets('the other mod\'s page is fetched too', (tester) async {
@@ -1072,9 +1070,9 @@ void main() {
         final target = mod(
           'EllenBikini',
           origin: origin(fileId: 1732269).copyWith(
-            companions: [
-              const ModCompanion(
-                role: CompanionRole.patch,
+            downloads: [
+              origin(fileId: 1732269).base!,
+              patchFixture(
                 modId: 528481,
                 modIdConfidence: OriginConfidence.exact,
                 // Megalodon Maid Ellen's newest file, so this half is current
@@ -1130,9 +1128,9 @@ void main() {
         final target = mod(
           'EllenBikini',
           origin: origin(fileId: 1732269).copyWith(
-            companions: [
-              const ModCompanion(
-                role: CompanionRole.patch,
+            downloads: [
+              origin(fileId: 1732269).base!,
+              patchFixture(
                 modId: 528481,
                 modIdConfidence: OriginConfidence.exact,
                 fileId: 1462303,
@@ -1229,14 +1227,14 @@ void main() {
         // disable updating the mod you actually installed.
         await tester.pumpWidget(const SizedBox());
         final (client, _) = mixedClient();
-        // The primary is on an archived file, so the finding is the patch's
-        // own; the companion is on its newest and has nothing to report.
+        // The bottom layer is on an archived file, so the finding is its own;
+        // the layer above is on its newest and has nothing to report.
         final target = mod(
           'EllenBikini',
           origin: origin(fileId: 1696178).copyWith(
-            companions: [
-              const ModCompanion(
-                role: CompanionRole.base,
+            downloads: [
+              origin(fileId: 1696178).base!,
+              patchFixture(
                 modId: 528481,
                 modIdConfidence: OriginConfidence.user,
                 fileId: 1462303,
@@ -1285,9 +1283,9 @@ void main() {
         await tester.pumpAndSettle();
 
         final block = written.single!;
-        expect(block.updatesDismissedUntil, isNull,
-            reason: 'the folder\'s own releases were never in question');
-        expect(block.companions.single.updatesDismissedUntil, isNotNull);
+        expect(block.base!.updatesDismissedUntil, isNull,
+            reason: 'the bottom layer\'s releases were never in question');
+        expect(block.patches.single.updatesDismissedUntil, isNotNull);
       });
 
       testWidgets('an unnamed patch still says only the patch is tracked',

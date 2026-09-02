@@ -150,7 +150,7 @@ void main() {
     });
 
     test('leaves everything the action is not about alone', () {
-      final before = origin().copyWith(archiveMd5: 'a' * 32);
+      final before = origin().copyBase(archiveMd5: 'a' * 32);
       final after = bulkAssumeCurrent(before)!;
       expect(after.archiveMd5, before.archiveMd5);
       expect(after.provenance, before.provenance);

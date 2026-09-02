@@ -71,8 +71,8 @@ in the running app, including the ones that must produce nothing; then test
 counts and analyzer numbers, in a line — evidence, not the report.
 
 State a limit as the behaviour I will meet, never as the reason in the code: "a
-patch you dragged in has no mod page, so only the mod it went into stays tracked",
-not "a companion record requires a mod id". The reasoning is not dropped, it
+patch you dragged in has no mod page, so only the mod it went into is checked for
+updates", not "that layer carries a null `mod_id`". The reasoning is not dropped, it
 moves — decisions and rejected alternatives still go in `docs/` in full.
 
 ## Commands

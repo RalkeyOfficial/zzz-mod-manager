@@ -340,11 +340,11 @@ class _FolderDownloadsSummaryState
   /// GameBanana's `_sVersion` is routinely null. On a row whose job is naming a
   /// download, that renders as filler.
   ///
-  /// One of them is also wrong for a companion. [summarizeCompanion] folds
-  /// `exact` to *chosen* on the grounds that a companion is a download the app
-  /// did not perform, which was never true of every layer — the install prompt
-  /// writes a patch at `exact` precisely because the app fetched those bytes.
-  /// One summariser over one type is what removed that wart.
+  /// One of them would also be **wrong for the wrong layer**, which is why
+  /// [summarizeDownload] reads that layer's own archive hash rather than only
+  /// the folder's provenance: a patch the app fetched into a hand-imported
+  /// folder is a file we downloaded, and calling it a checksum match credits
+  /// the user with a choice they never made.
   ///
   /// What survives is the half a reader can act on: the version when there is
   /// one, and the caveat when the record is short of a file.

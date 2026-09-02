@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/installed_file.dart';
-import 'package:mod_manager_flutter/models/mod_companion.dart';
+import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/backup/snapshot_service.dart';
@@ -105,12 +105,14 @@ void main() {
 
     return ModOrigin(
       source: 'gamebanana',
-      modId: 585282,
-      modIdConfidence: OriginConfidence.exact,
       provenance: OriginProvenance.downloaded,
-      companions: const [
-        ModCompanion(
-          role: CompanionRole.patch,
+      downloads: const [
+        ModDownload(
+          modId: 585282,
+          modIdConfidence: OriginConfidence.exact,
+        ),
+        ModDownload(
+          role: DownloadRole.patch,
           modId: patchId,
           modIdConfidence: OriginConfidence.exact,
           versionConfidence: OriginConfidence.exact,
@@ -129,7 +131,7 @@ void main() {
   Future<PatchRemovalResult> remove(ModOrigin origin) async {
     final onDisk = await readFolderContents(folder);
     final stored = <String>{
-      for (final file in origin.companions.single.files)
+      for (final file in origin.patches.single.files)
         if (await store.holds(
           modFolder: folder,
           patchModId: patchId,
@@ -236,11 +238,11 @@ void main() {
     write('Textures/Body.dds', 'the patch\'s body');
     final origin = ModOrigin(
       source: 'gamebanana',
-      modId: 585282,
       provenance: OriginProvenance.downloaded,
-      companions: const [
-        ModCompanion(
-          role: CompanionRole.patch,
+      downloads: const [
+        ModDownload(modId: 585282),
+        ModDownload(
+          role: DownloadRole.patch,
           modId: patchId,
           files: [
             InstalledFile(
@@ -285,11 +287,11 @@ void main() {
 
     final origin = ModOrigin(
       source: 'gamebanana',
-      modId: 585282,
       provenance: OriginProvenance.downloaded,
-      companions: const [
-        ModCompanion(
-          role: CompanionRole.patch,
+      downloads: const [
+        ModDownload(modId: 585282),
+        ModDownload(
+          role: DownloadRole.patch,
           modId: patchId,
           files: [
             InstalledFile(
@@ -298,8 +300,8 @@ void main() {
             ),
           ],
         ),
-        ModCompanion(
-          role: CompanionRole.patch,
+        ModDownload(
+          role: DownloadRole.patch,
           modId: 611203,
           files: [
             InstalledFile(path: 'b_patch.ini', role: InstalledFileRole.added),

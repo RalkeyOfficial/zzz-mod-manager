@@ -55,12 +55,15 @@ ModOrigin? withPatchShape(ModOrigin? current, {ModDownload? base}) {
     ingest: (current.ingest ?? const ModIngest()).copyWith(patchShaped: true),
   );
   if (base == null) return withRebuiltPatchFiles(shaped);
-  // **Only ever added, never replaced from here.** An unanswered prompt is the
-  // user not saying, which is not the same as them saying there is nothing
-  // there — and this runs again on every re-import of the same folder. A folder
-  // that already has something underneath is left alone: it is not a patch
-  // missing its base any more.
-  if (shaped.downloads.length > 1) return withRebuiltPatchFiles(shaped);
+
+  // **Inserted once, never twice.** This runs again on every re-import of the
+  // same folder, so a stack that already has something underneath gets its
+  // bottom layer *replaced* rather than a second base pushed under it: a folder
+  // patches one mod, so two would be a contradiction rather than more
+  // information.
+  if (shaped.downloads.length > 1) {
+    return withRebuiltPatchFiles(shaped.withBase((_) => base));
+  }
   return withRebuiltPatchFiles(shaped.withBaseInserted(base));
 }
 

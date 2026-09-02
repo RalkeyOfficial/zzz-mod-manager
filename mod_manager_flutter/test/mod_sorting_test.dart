@@ -4,6 +4,8 @@ import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/utils/mod_sorting.dart';
 
+import 'support/origin_shorthand.dart';
+
 /// "Recently added", over a library where most mods have no date at all.
 ///
 /// The undated majority is the case that decides the design: a library that has
@@ -109,7 +111,7 @@ void main() {
       name: 'Tracked',
       characterId: 'ellen',
       isActive: false,
-      origin: const ModOrigin(
+      origin: originFixture(
         provenance: OriginProvenance.importedFolder,
         modId: 5,
       ),

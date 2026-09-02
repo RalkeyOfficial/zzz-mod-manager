@@ -53,6 +53,8 @@ void main() {
         source: 'gamebanana',
         provenance: OriginProvenance.downloaded,
         installedAt: installedAt,
+        // Observed, not proxied: we watched it happen.
+        installedAtIsProxy: false,
       );
 
   test('the dismissal is cleared, or the next release stays silent', () {

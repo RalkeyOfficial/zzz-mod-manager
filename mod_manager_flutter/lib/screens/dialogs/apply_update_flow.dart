@@ -442,7 +442,7 @@ Future<bool> applyPatchUpdateFlow(
 /// Both confidences reach `exact` here on the same grounds a marketplace
 /// install does — the user picked this row of this mod's file list and we wrote
 /// exactly that file id — and the clearing rules live in [ModOrigin.updatedTo]
-/// and [withCompanionUpdatedTo] rather than here.
+/// and [ModDownload.updatedTo] rather than here.
 ///
 /// **Against the identity that was actually written.** A folder can hold two
 /// downloads, and stamping a companion's file id onto the primary would claim the
@@ -522,6 +522,10 @@ Future<void> _recordOrigin({
     return withRebuiltPatchFiles(block.copyWith(
       provenance: OriginProvenance.downloaded,
       installedAt: now,
+      // **Observed, so the proxy flag goes.** We watched this happen; leaving a
+      // flag that says the date was derived from file timestamps would have
+      // anything comparing dates distrust one it can rely on.
+      installedAtIsProxy: false,
     ));
   });
 }

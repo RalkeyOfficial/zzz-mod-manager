@@ -730,111 +730,120 @@ flow fills them in. Nothing may be built on file-level knowledge being present.
 match the local folders, and each publishes 3–4 files — which is the ambiguity the
 file-level marker exists for.)
 
-A folder's **companions** are indexed alongside its own identity — see
-[§10](#10-a-folder-that-holds-two-downloads).
+**Every layer of a folder's stack is indexed**, not only its bottom — see
+[§10](#10-a-folder-that-holds-two-downloads). A patched folder really does hold
+both mods' files, and before that the mod which was not the folder's headline
+showed no badge on its own page at all.
 
 ---
 
 ## 10. A folder that holds two downloads
 
-A mod folder is frequently two downloads: a *patch* plus the mod it patches. The
-`origin` block's own fields describe one of them, and in the common ordering they
-describe the patch — so everything above answers about the wrong half.
-`origin.companions` is the rest of the folder.
+A mod folder is frequently two downloads: a *patch* plus the mod it patches. It is
+recorded as a **stack**, `origin.downloads`, written bottom-up — index 0 is what
+the folder is and everything above it is written over what is below.
 
-### What a companion is, and the six fields it does not carry
+That is the whole model, and everything in this section follows from it: position
+is the role, so there is nothing to derive and nothing that can disagree.
 
-`ModCompanion` (`models/mod_companion.dart`) is a **remote identity plus what is
-known about which file of it**: `role`, `mod_id`, `mod_id_confidence`, `file_id`,
-`version`, `version_label`, `version_confidence`, `archive_md5`,
-`baseline_remote_date`, `remote_missing`, `updates_dismissed_until`, `files`.
+### What the stack replaced
 
-`files` is the one thing here that is not about identity, and it is not one of the
-six below: each of those describes *this folder's ingest* — how we came to put the
-folder here — while which files a download laid down is a fact about that download
-itself ([`metadata-schema.md`](metadata-schema.md)). It is non-empty only where
-the app wrote the bytes, which is the install prompt's `role: patch`; a companion
-the user named after the fact describes files somebody moved in by hand, and the
-app never saw them arrive.
+The block used to keep **one** download in `origin`'s own fields and the rest in
+`origin.companions`, each with a role *relative* to the primary. **Which download
+landed where was install order.** Patch a mod and the mod was primary; install the
+patch first and name the mod afterwards and the patch was. The two folders were
+byte-for-byte identical and the two records were mirror images.
 
-It is deliberately **not** a second `ModOrigin`. Six of that type's fields describe
-*this folder's ingest*, and a companion is a statement about a download the app did
-not perform:
+So every reader paid to undo it — an absolute-role enum, a per-entry wrapper, a
+two-signal derivation, a partition, a second summariser, a discarded verdict
+recovered through a `folderOwn` field, and a five-branch write router — and one
+operation could not be expressed at all. "Take this patch out" is removing the top
+layer, and both orderings put the patch on top *physically*; only the record
+disagreed, so for one of them the button had nowhere to point.
 
-| Dropped | Why |
-|---|---|
-| `provenance` | Describes how we put the folder here. We didn't put this part of it here. |
-| `ingest` | There was no ingest — the user dragged the files in. |
-| `installed_at` / `installed_at_is_proxy` | The folder has one install date, not two. |
-| `source` | One folder, one service. Inherited from the primary. |
-| `tracking` | "Not from GameBanana / it's my own" is about the **folder**. One mute switch, and the installed-mods index depends on there being exactly one. |
+In the stack the same folder is the same list either way round. What is left of
+that compensation layer is one function: `derivedPatchFiles`, which keeps the flat
+`ingest.patch_files` in step for builds that read it
+([`metadata-schema.md`](metadata-schema.md)).
 
-The three date-and-state fields it *does* keep are the ones that genuinely differ
-between two downloads: a baseline, whether that page has gone, and whether the user
-has waved its releases away. A dismissal on the patch must not silence the base mod.
+Reading a sidecar written in the flat shape still works — `migrateFlatBlock` reads
+it as `[base companions…, own, patch companions…]`, the ordering the old code
+already derived — and the next save emits a stack. No version bump: that shape
+never shipped.
+
+### What a layer is
+
+`ModDownload` (`models/mod_download.dart`) is **which remote file this layer is,
+how sure we are, and which files it laid down**. Every layer carries the same
+fields, because there is no privileged one.
+
+What stays **outside** the list, on `ModOrigin` itself, is what a folder has
+exactly one of: the service, how it got here, when it was installed, the archive
+layout to replay, and whether the user wants it watched at all. A per-layer mute
+would be a second switch on one card, and the installed-mods index depends on
+there being exactly one.
+
+**`mod_id` is nullable on every layer, including a patch.** A patch written in
+from a local archive has no page — but the install still knows exactly which files
+it laid down, so the layer is worth recording: it gets set aside when the base
+updates and it can be taken back out. What it cannot do is be checked for updates,
+and that follows from the null rather than needing to be said anywhere else. The
+old shape *required* an identity and therefore recorded nothing at all for such a
+patch.
 
 ### It lives inside `origin`, and that is what keeps it additive
 
-`companions` is a key **inside** the `origin` object rather than a restructuring of
+`downloads` is a key **inside** the `origin` object rather than a restructuring of
 it. Making `origin` an array instead would have an older build's `fromJson` return
 null and silently untrack the mod; as a key it round-trips through
 `ModMetadata.extra`, `ModInfo.origin` is unchanged, no schema bump is required, and
 the rescan guard rides the value equality `ModOrigin` already has
 ([`metadata-schema.md`](metadata-schema.md#modinfoorigin-is-read-only-and-why-that-was-allowed)).
 
-Equality over the list is **order-independent**: it is a set of identities, and a
-rewrite in a different order is not a change the user can see.
+Equality over the list is **order-dependent**, unlike the set it replaced: order
+is meaning now, so two layers swapped is a different folder and a rescan has to
+say so.
 
 ### Parse rules
 
-The sidecar's three load-bearing rules apply, with consequences specific to a list:
+The sidecar's load-bearing rules apply, with consequences specific to an ordered
+list:
 
-- **An entry that cannot say what it is, is dropped** — no parseable `mod_id`, or no
-  recognised `role`. An unknown role does *not* degrade to `base`: role decides which
-  page is treated as which, and guessing costs more than losing the entry. Everything
-  else degrades to absence, because an entry that still names a page is worth keeping.
-- **One bad entry costs only itself.** The rest of the list and the primary block
-  survive it.
-- **Duplicate ids collapse.** A companion naming the primary is the same thing said
-  twice; a repeated companion id keeps the first. Either would have the check ask one
-  page twice and report two verdicts for one folder.
-- **No nesting.** A companion carries no companions of its own.
-- Absent from the json when empty, which is every sidecar that has never needed one.
+- **An entry that knows nothing is still kept**, and this is the one rule that
+  would be wrong in the old shape. A companion with no identity was worthless,
+  because a companion *was* an identity. A layer with no identity and no file list
+  still carries its **position** — "there is a download here and we know nothing
+  about it" — and dropping it would renumber everything above it, turning a patch
+  into the thing it was written over. Only an entry that is not an object at all
+  is dropped.
+- **A role that disagrees with its index loses to the index**, and the
+  disagreement is logged. An unrecognised role loses the same way.
+- **One bad entry costs only itself.** The rest of the list and the folder's own
+  facts survive it.
+- **A repeated mod id keeps the lower layer.** Kept, the second would have the
+  check ask one page twice and report two verdicts for one folder — and the lower
+  one is the one whose files the upper would have overwritten.
+- **No nesting.** A layer carries no stack of its own.
+- Absent from the json when empty, which is every sidecar that records only how
+  the folder got here.
 
 ### Where it is shown
 
 **Three dialogs, one implementation** — the details view, the resolve dialog and the
-update dialog, through `screens/components/folder_downloads_summary.dart` over the
-pure `services/folder_downloads.dart`.
+update dialog, through `screens/components/folder_downloads_summary.dart`.
 
-**Nothing in it ranks the folder's own download above the other one**, and that is
-the whole design rather than a nicety. Which of a mod and its patch lands in
-`origin`'s own fields is **install order**: patch the mod and the mod is the primary;
-install the patch first and name the mod afterwards and the patch is. The block is
-identical in substance either way. So a section that read the block straight would
-put the same pair of mods in different places for two users who did the same thing in
-a different sequence — the base mod demoted to a footnote for one of them.
+**It renders the stack in the order the stack is in**, and there is nothing else to
+it. That was the point of the change: this section used to hold a derivation
+(`folderDownloads`) that read two signals to work out which entry was the patch,
+and a partition to put the mod's half first, because a section that read the old
+block straight would have put the same pair of mods in different places for two
+users who did the same thing in a different sequence.
 
-`folderDownloads` flattens that. It emits one entry per download, each carrying an
-**absolute** role — `mod` or `patch` — derived rather than read off a field, since
-`ModCompanion.role` is *relative* to the primary and therefore describes opposite
-folders depending on which end you start from:
-
-| Evidence | Makes the folder's own download |
-|---|---|
-| `ingest.patch_shaped` | a **patch** — captured at install, the only moment a patch folder is legible, and the only signal available before anyone has named the base |
-| a companion at `role: base` | a **patch** — the user having answered *what does this patch?*, and the only signal on a sidecar written before `ingest` existed |
-| neither | the **mod** |
-
-Entries are ordered **mod first, then patches** — the order the files themselves go
-on disk ([`applying-updates.md` §6](applying-updates.md#6-the-order-and-why-it-is-the-safety-argument)),
-and the one ordering that reads the same for both install orders. Partitioned rather
-than sorted, because `List.sort` is not stable in Dart and peers that reshuffled on a
-rewrite would make a sidecar edit look like a change to the folder.
-
-`isFolderOwn` survives on each entry, and **not for ranking**: it decides what a row
-falls back to when nothing has named it, and lets the update dialog point at the
-identity its Update button acts on.
+Bottom-first is the order the files themselves go on disk
+([`applying-updates.md` §6](applying-updates.md#6-the-order-and-why-it-is-the-safety-argument)),
+so the list needs no sorting — which also disposes of a hazard: `List.sort` is not
+stable in Dart, and peers that reshuffled on a rewrite would make a sidecar edit
+look like a change to the folder.
 
 **Absent entirely for a folder with one download.** A one-row list is a heading plus a
 restatement of the mod already on screen; and saying "nothing else here" would be a
@@ -851,9 +860,10 @@ and the row falls back:
 | Details view | The session's records, else the fallback. **It never fetches**: a read-only view opened on a mod should not spend a request the reader did not ask for. | **yes** — the surface whose job is "what is this", and the one with a scrollable column to spend on it |
 
 The fallback itself differs by entry and each uses the best thing available: the
-folder's own download falls back to **the folder name**, which is what the user knows
-it by everywhere else in the app; a companion falls back to its id. Every row links
-to its page either way, because an id is not something a person can act on.
+**bottom** layer falls back to **the folder name**, which is what the user knows it
+by everywhere else in the app and what the folder is named after; a layer above it
+falls back to its id. Every row links to its page either way, because an id is not
+something a person can act on.
 
 **The file line appears only when it carries something.** Not
 `describeRecordedFile`, which the resolve surfaces use and which always produces a
@@ -863,12 +873,14 @@ and a download carrying a `file_id` and no version string is the common case, si
 `_sVersion` is routinely null. On a row whose job is naming a download, that renders
 as filler.
 
-One of them is also **wrong for a companion**. `summarizeCompanion` folds `exact` to
-*chosen* on the grounds that a companion is a download the app did not perform — true
-of `base`, which only a person can name, and false of `patch`, which the install
-prompt writes at `exact` precisely *because* the app fetched those bytes. So the line
-credited the user with a choice they never made. What survives is the version when
-there is one, and the caveat when the record is short of a file.
+One of them used to be **wrong for the other download**, and one summariser over
+one type is what removed the wart. The old `summarizeCompanion` folded `exact` to
+*chosen* on the grounds that a companion is a download the app did not perform —
+true of a user-named base, false of a patch the install prompt wrote at `exact`
+precisely *because* the app fetched those bytes. So the line credited the user with
+a choice they never made. `summarizeDownload` takes one layer and reads that
+layer's own archive hash as the better witness where it has one. What survives is
+the version when there is one, and the caveat when the record is short of a file.
 
 **The update dialog does not use this section.** It renders a *full report* per
 download instead — verdict, before-and-after box, file list, notes, and its own
@@ -883,13 +895,13 @@ surfaces where the folder's contents are *context* rather than the subject.
 the list would put one download in a place of its own again; as a button on the row
 it looks like every other entry with one more thing on it. Which rows offer one, and
 which of the two actions each offers, is passed in by mod id rather than derived:
-what can be done to an entry depends on which flows exist, not on anything visible
+what can be done to a layer depends on which flows exist, not on anything visible
 in the row, and a widget guessing would offer a button that does nothing. The
-resolve dialog gives every recorded companion one — *change* for the mod a patch
-applies to, *remove* for a patch installed into the folder (see [below](#declaring-a-patch-gone)) —
-and the details view gives none, being a read-only answer to "what is this".
+resolve dialog gives a patch *remove* and a patch-shaped folder's bottom layer
+*change* (see [below](#taking-a-patch-out)); the details view gives none, being a
+read-only answer to "what is this".
 
-### Naming one
+### Naming what a patch applies to
 
 Only the user can. They assembled the folder by hand, possibly from a source the app
 never saw, so there is nothing to infer from and no bulk pass can propose it — folder
@@ -897,7 +909,8 @@ names match one mod at most.
 
 The route is a **pushed step** off the resolve dialog
 (`screens/dialogs/companion_resolve_dialog.dart`), reached from a row that appears
-only when the folder is recorded as patch-shaped or already carries a companion. It
+only when the folder is recorded as patch-shaped, or from that folder's bottom
+layer once one has been named. It
 is pushed rather than inline because that dialog is at its height budget and its two
 escape hatches must stay one click from the bottom ([§5](#5-the-resolve-dialog)) — a
 second identity card inline is exactly what pushes them off it.
@@ -906,14 +919,14 @@ Both steps share `IdentitySearchPanel` and `FileChoicePanel`
 (`screens/components/resolve/`), so "on record" and "our best guess" cannot come to
 mean different things on the two screens.
 
-What it may write is narrower than the primary step:
+What it may write is narrower than the identity step:
 
 | Answer | Writes |
 |---|---|
-| Pick a mod page | `mod_id` at **`user`**, `role: base`. Never `exact` — we did not download these bytes. |
-| Pick a file | `file_id`, `version`, `version_label` at `user`. A banked-hash row's `exact` is discarded: the hash is a fact about the archive the *primary* came from. |
+| Pick a mod page | A layer **inserted at index 0**, `mod_id` at **`user`**. Never `exact` — we did not download these bytes. What was the only layer becomes the patch above it, with no role field to rewrite. |
+| Pick a file | `file_id`, `version`, `version_label` at `user` on that layer. A banked-hash row's `exact` is discarded: the hash is a fact about the archive the layer *above* came from. |
 | "I don't know which" | `assumed_latest` plus the other mod's **own creation date** as the baseline. The folder's install date belongs to the download we performed. |
-| "This folder is one mod after all" | Removes the entry. A wrong answer has to be undoable, or naming one is a trap. |
+| "This folder is one mod after all" | Removes the bottom layer and clears `patch_shaped`. What is left is one download that patches nothing, which is an ordinary mod. A wrong answer has to be undoable, or naming one is a trap. |
 
 Changing the identity clears whatever was answered about the previous one, and the
 baseline is read from the profile **when the answer is written** rather than held
@@ -922,69 +935,75 @@ against a mod created earlier it sits in that mod's future, and a baseline later
 than its subject hides every file published before it — silently, which is the one
 direction this feature cannot afford.
 
-`role` is never asked. Reached from a patch-shaped folder, the primary is the patch
-and the companion is the `base`; asking the user to classify their own folder is a
-quiz whose answer the app already has.
+`role` is never asked, and there is nothing to ask: the answer goes **underneath**,
+so its role follows from the position. Reached from a patch-shaped folder, what the
+user is naming is the mod their patch applies to; asking them to classify their own
+folder would be a quiz whose answer the app already has.
 
 **This step runs in one direction only, and that is why it is not the flow for a
-`role: patch` companion.** Every string in it reads *"this mod holds a patch"* →
+patch written into a folder.** Every string in it reads *"this mod holds a patch"* →
 *"name the mod it patches"*, and the search-plus-file-picker shape exists because a
-download nobody recorded has to be identified from scratch. A patch installed *into*
-a folder whose primary is the mod — written by the install prompt below with both
-axes already `exact` — needs none of that: the app performed the download and knows
-exactly which file it was. Offering the search would let an exact record be re-aimed
+download nobody recorded has to be identified from scratch. A patch the install
+prompt wrote — with both axes already `exact` — needs none of that: the app
+performed the download and knows exactly which file it was. Offering the search
+would let an exact record be re-aimed
 at a mod page its bytes never came from.
 
-### Declaring a patch gone
+### Taking a patch out
 
-The one thing a `role: patch` record cannot know on its own is whether those files
-are still in the folder. It goes stale for reasons unrelated to how confident it
-was: the user deletes the patch by hand, an update overwrites the folder and
-flattens it away ([`applying-updates.md`](applying-updates.md) §1), or its page
-comes down. A stale one keeps a second mod page on the folder's books — its verdict
-competes for the folder's headline through `foldCompanions`
+The one thing a patch's record cannot know on its own is whether those files are
+still in the folder. It goes stale for reasons unrelated to how confident it was:
+the user deletes the patch by hand, an update overwrites the folder and flattens it
+away ([`applying-updates.md`](applying-updates.md) §1), or its page comes down. A
+stale one keeps a second mod page on the folder's books — its verdict competes for
+the folder's headline through `foldDownloads`
 ([`update-checks.md`](update-checks.md)), and the updates dialog offers to write
 files back that the user removed on purpose.
 
-So that row's affordance is **removal, not a rebind** — a confirmation
-(`showCompanionRemoveDialog`), and the only correction this direction accepts:
+**The row runs the real removal**, the same
+[`removePatchFlow`](applying-updates.md#taking-a-patch-back-out) the mod's
+right-click menu does: it deletes what the patch added, puts the mod's own files
+back, and snapshots first.
 
-| Answer | Writes |
+**Forgetting the record while the files stayed was worse than doing nothing**, and
+that is why it is not an option. The record is what makes the next base update set
+the patch aside instead of writing over it, and what makes the confirmation warn
+when it cannot — so "stop tracking this patch" took the patch's only protection
+away and left the patch. Worse, with a *second* patch recorded the derived
+`patch_files` was rebuilt without the forgotten one, so the next base update
+flattened it with no warning at all.
+
+So there is one action, and it does what the situation allows:
+
+| The recorded files are | What happens |
 |---|---|
-| "This patch is no longer here" | Drops that entry, matched by mod id, and rebuilds `ingest.patch_files` from what is left. Nothing else in the block changes, and no metadata is pulled off the folder's own mod page — the answer endorses nothing about it. |
-| Cancel | Nothing. |
+| **gone from the folder** | The record is dropped. There is nothing else to do, and the record was a lie. |
+| **there, and the registry knows them** | The real removal: `added` files deleted, `replaced` files restored from the store. |
+| **there, with no registry** | **Refused, and the record is kept.** Nothing says which of the folder's files are the patch's, and the record is what still makes the base update warn. What is useful to say is: delete those files yourself and the app will see they are gone. |
 
-It is confirmed rather than immediate because a delete affordance's first suggestion
-is that files go, and none do; the confirmation's job is saying so before it is
-answered. Recorded through `logConfirmation('companion.remove', …)`, since an entry
-that quietly left the record is otherwise indistinguishable from one that was never
-written. Installing that patch through the app again records it again — the install
-prompt is the only route to a `role: patch` companion, in either direction.
+The removal is confirmed rather than immediate, and the confirmation states counts
+— what goes, what comes back, and what it cannot put back — because a delete
+affordance's first suggestion is that the *mod's* files go, and none do. Recorded
+through `logConfirmation('patch.remove', …)`. Installing that patch through the app
+again records it again; the install prompt is the only route to one.
 
-**This row forgets the record; it never moves a file.** Where the app *does* know
-which files that patch put in the folder, there is a real uninstall — **"Remove
-patch…"** in the mod's right-click menu, which deletes what the patch added and
-puts the mod's own files back
-([`applying-updates.md` §6](applying-updates.md#taking-a-patch-back-out)). The
-confirmation here names it, because a user who came to get rid of a patch would
-otherwise leave believing they had.
+**Both surfaces run the same flow**, and that is deliberate rather than convenient:
+the menu entry is where a mod action belongs, and the row is where the user is
+looking at the patch. Two spellings of one operation is how the record-only version
+came to exist.
 
-The two live on different surfaces on purpose. Deleting and restoring files is a
-mod action and belongs with the other ones; a row in a dialog about *tracking* that
-quietly performed a snapshot-and-write would make a real operation look like a
-bookkeeping tweak. And the record-only answer still has to exist for the folders
-the menu entry cannot serve — merged by hand, or patched before the file registry
-existed — where forgetting the record is the *only* honest correction available.
-
-**Which affordance a row carries comes from how the entry was learned, never from
-where it sits** (`FolderRowAction`, `screens/components/folder_downloads_summary.dart`).
-Deriving it from the role would be right today by coincidence and wrong the moment a
-third flow exists, so the caller states it per row.
+**Which affordance a row carries comes from what can be done to that layer**
+(`FolderRowAction`, `screens/components/folder_downloads_summary.dart`), stated per
+row by the caller rather than derived: what is possible depends on which flows
+exist, not on anything visible in the row, and a widget guessing would offer a
+button that does nothing. In the resolve dialog a patch row offers removal, and the
+**bottom** layer offers *change* only for a patch-shaped folder — the one place a
+"this is just one mod after all" undo exists. An ordinary mod's base row carries
+nothing, because the identity card above it is the whole story there.
 
 The row that *opens* the naming step is only the **empty** case — patch-shaped,
-nothing named. Once a companion exists it is a row in the folder's list carrying its
-own affordance, because a second row below the list for the same download would rank
-it above the other one again.
+nothing underneath. Once a base exists it is the layer the identity card edits, so a
+second row for it would be the duplicate this section exists to avoid.
 
 The write happens on its own rather than folding into Save — it is a decision about a
 different mod, and making the user press Save afterwards invites them to close the
@@ -1011,8 +1030,8 @@ own `origin` *is* the base), so it stops being asked.
 
 | Answer | What the install does |
 |---|---|
-| Its own folder, naming what it patches **and which file** | Writes `patch_shaped` and a `role: base` companion, then **fetches that file and writes it into the folder** — base first, patch placed back over it. No warning: the folder works |
-| Its own folder, naming the mod but not the file | Writes `patch_shaped` and the companion. Nothing to fetch, so the pinned warning stands |
+| Its own folder, naming what it patches **and which file** | Writes `patch_shaped` and inserts that mod as the bottom layer, then **fetches that file and writes it into the folder** — base first, patch placed back over it. No warning: the folder works |
+| Its own folder, naming the mod but not the file | Writes `patch_shaped` and inserts the layer. Nothing to fetch, so the pinned warning stands |
 | Its own folder, saying nothing | Writes `patch_shaped` only, and the pinned warning stands |
 | Into a library mod | **No new folder at all** — see below |
 | Declines | Nothing is copied. A patch with nothing to patch is a folder the user may well not want |
@@ -1034,9 +1053,11 @@ Two consequences worth stating:
   download or an unpickable file leaves as much to do as saying nothing did, so
   the warning stands.
 - **The answer is recorded before the download starts**, so a cancelled or failed
-  fetch leaves the companion the user named rather than nothing. A successful one
-  upgrades that entry to `exact` on its way past — the second route to `exact` on
-  a companion, and for the same reason as the first: we fetched those bytes.
+  fetch leaves the layer the user named rather than nothing. A successful one
+  upgrades that layer to `exact` on its way past — the second route to `exact` for
+  a layer nobody identified by hand, and for the same reason as the first: we
+  fetched those bytes. The record is the *answer*, never a claim the bytes
+  arrived; the pinned warning is what says the folder still does not work.
 
 The second destination is not offered when the import picker already chose to
 combine several folders into one mod (different destinations), or when the library
@@ -1046,10 +1067,13 @@ is empty (nowhere to install into). Both say why rather than hiding the control.
 (`patch_install_flow.dart`) — one decision before either path's copy, one set of
 writes after it. What differs is only what can be *recorded*: a Marketplace
 download knows which mod page and file it is, and a folder dragged off a disk has
-none, so the `role: patch` companion is written for the first and not the second.
-A companion must name a mod id, and inventing one would be worse than recording
-nothing. The install itself — the placement, the snapshot, the refusals, the
-warnings — is the same operation either way.
+none — so the layer written for the second carries **no `mod_id`**. It is still
+written: a layer with no identity is a download nobody can name, and its *files*
+are known, which is enough to set it aside on a base update and to take it back
+out. What it cannot do is be checked for updates. (The old shape required an
+identity and therefore recorded nothing at all for such a patch.) The install
+itself — the placement, the snapshot, the refusals, the warnings — is the same
+operation either way.
 
 **With no identity the card stays quiet, and that ordering is deliberate.**
 `untracked` outranks `secondIdentityUnknown` in `modOriginStatus`, so a hand-dragged
@@ -1057,8 +1081,8 @@ patch shows the quiet informational mark rather than the amber one — there is 
 to watch for *either* half of the folder yet, so the amber state's offer ("name the
 other mod and get a real answer about it") has nothing to be an offer about. It is
 still counted in **needs attention** as untracked, so the folder is never lost, and
-the resolve dialog offers the companion row regardless — that row keys on
-`needsCompanion`, not on the badge. The amber mark appears the moment the folder is
+the resolve dialog offers the naming row regardless — that row keys on
+`needsBase`, not on the badge. The amber mark appears the moment the folder is
 resolved to a mod page, which is the whole reason the flag is written at install
 rather than when it is wanted. The same ordering is what keeps the bulk "assume
 current" pass from writing baselines for folders it cannot check.
@@ -1081,11 +1105,12 @@ on the frame.
 
 ### Installing a patch into a mod that already works
 
-The library mod the user picked is the one that ends up holding both downloads. It
-keeps its own identity — its `origin` is still the base mod, because that is still
-what it mostly is — and gains a **`role: patch` companion at `exact`**. That is the
-one path to `exact` on a companion: every other route is the user telling us about
-bytes they moved in themselves, which cannot be better than `user`.
+The library mod the user picked is the one that ends up holding both downloads. Its
+bottom layer is untouched — the folder is still that mod, because that is still
+what it mostly is — and the patch is **added on top at `exact`**. That is the one
+path to `exact` for a layer nobody identified by hand: every other route is the
+user telling us about bytes they moved in themselves, which cannot be better than
+`user`.
 
 **Base first, then patch, whichever of the two the `origin` names.** A collision
 resolves in favour of the patch, always — not "the newer file", not "whichever we
@@ -1130,13 +1155,13 @@ Two rules it holds:
   patch-shaped mods; a modal each is a queue to clear rather than a question.
 
 An unanswered prompt is the user declining to say, which is not the same as saying
-there is nothing — so the write only ever *adds* a companion and never clears one.
+there is nothing — so the write only ever *adds* a layer and never clears one.
 
 Once answered, the row states **both axes**: which mod, and which file of it. Naming
 only the mod leaves a recorded file indistinguishable from "I don't know which" —
 two states that are checked differently and one of which puts an amber mark on the
 card. The file half is phrased by `describeRecordedFile`, the same function the
 resolve dialog's own "currently tracked" line uses
-(`summarizeCompanion` folds a companion into the summary that feeds it), so "the
-file you chose" cannot come to mean one thing about a folder's own download and
-another about the other one in it.
+(`summarizeDownload` folds a layer into the summary that feeds it), so "the file
+you chose" cannot come to mean one thing about one layer of a folder and something
+else about another.

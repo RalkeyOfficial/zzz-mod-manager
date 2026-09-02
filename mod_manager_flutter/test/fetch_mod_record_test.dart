@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_exceptions.dart';
-import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/bulk_update_check.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_client.dart';
@@ -65,7 +64,7 @@ void main() {
       // Installed on RabbitFX's archived "Main file" v7.4, whose successor
       // under the same label is v7.7 — the one case where the strong verdict is
       // earned rather than folded down to a guess.
-      origin: const originFixture(
+      origin: originFixture(
         source: 'gamebanana',
         modId: 531649,
         modIdConfidence: OriginConfidence.user,

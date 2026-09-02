@@ -8,6 +8,8 @@ import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/mod_metadata_service.dart';
 import 'package:mod_manager_flutter/utils/zzz_characters.dart';
 
+import 'support/origin_shorthand.dart';
+
 /// A sidecar with **every** typed field set to a non-null value.
 ///
 /// Adding a typed field to [ModMetadata] means adding it here too. The
@@ -156,7 +158,7 @@ void main() {
       expect(json['schema_version'], 7, reason: 'machine-owned: carried from disk');
       expect(json['vendor_x'], {'id': 1}, reason: 'unknown: carried from disk');
       expect(
-        (json['origin'] as Map)['mod_id'],
+        baseJson(json['origin'])['mod_id'],
         123,
         reason: 'typed machine-owned field survives a user edit',
       );
@@ -242,7 +244,9 @@ void main() {
       final json = onDisk.copyWith(characterId: 'miyabi').toJson();
       expect(json['character_id'], 'miyabi');
       expect(json['vendor_x'], {'id': 456});
-      expect((json['origin'] as Map)['mod_id'], 456);
+      expect(baseJson(json['origin'])['mod_id'], 456,
+          reason: 'the flat block migrated on read and the stack was written '
+              'back, with the identity intact');
     });
   });
 

@@ -17,7 +17,7 @@ before changing anything it covers.
 | [`library-screen.md`](../docs/library-screen.md) | The **Mods tab** — card, status slot, toolbar, bulk actions, its dialogs |
 | [`notifications.md`](../docs/notifications.md) | **What the app tells the user** — whether to speak at all, the two levels, the card |
 | [`metadata-schema.md`](../docs/metadata-schema.md) | The sidecar **file format** |
-| [`origin-tracking.md`](../docs/origin-tracking.md) | **Where a mod came from** — confidence model, backfill, resolve flow |
+| [`origin-tracking.md`](../docs/origin-tracking.md) | **Where a mod came from** — the folder as a stack of downloads, confidence model, backfill, resolve flow |
 | [`metadata-autofill.md`](../docs/metadata-autofill.md) | What an install **copies from a mod page** |
 | [`update-checks.md`](../docs/update-checks.md) | Whether a mod **has a newer version** |
 | [`applying-updates.md`](../docs/applying-updates.md) | How an update **is written over an installed mod** |
@@ -81,6 +81,11 @@ resolving a character from an id must handle both, plus the `unknown` placeholde
   and **never writes without a snapshot first**. A mod folder frequently holds a
   second download that replacing would destroy. Taking a patch out follows the
   same order and the same refusal.
+- **A mod folder is a stack of downloads** (`origin.downloads`, bottom-most
+  first) and **position is the role**. Never reintroduce a field that says which
+  download is "the folder's own": that was install order, not a fact about the
+  folder, and every reader paid to undo it. `DownloadRole` is stored, written
+  from the index, and loses to the index on read.
 - **An `InstalledFileRole` we do not recognise is `replaced`, never `added`** —
   the one lenient parse in this codebase that resolves *upward*. `added` licenses
   a delete, and leaving a file behind is recoverable where deleting the mod's own

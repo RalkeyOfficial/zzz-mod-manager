@@ -1,306 +1,136 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/installed_file.dart';
-import 'package:mod_manager_flutter/models/mod_companion.dart';
+import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/folder_downloads.dart';
-import 'package:mod_manager_flutter/services/origin_summary.dart';
 
-/// Flattening a folder's origin block into peers.
+/// **The flat patch-file list, derived from the stack.**
 ///
-/// **The property under test is symmetry.** Install a patch and then name the
-/// mod it patches, or install the mod and then patch it, and the sidecar comes
-/// out mirrored: the same two mods, with whichever was installed first in
-/// `origin`'s own fields and the other in `companions`. The block is identical
-/// in substance, so what this produces has to be identical too — same roles,
-/// same order — or the same folder reads differently for two users who did the
-/// same thing in a different sequence.
+/// This file used to hold the whole compensation layer for a model that stored
+/// one download in `origin`'s own fields and the rest in a companion list with
+/// roles *relative* to it: an absolute-role enum, a per-entry wrapper, a
+/// derivation from two signals, and a partition to put the mod's half first.
+/// Every test here was a test of that derivation.
+///
+/// `ModOrigin.downloads` is ordered bottom-up, so **the symmetry it was
+/// defending is now structural**: `origin.base`, `origin.patches` and the order
+/// the list is already in. There is nothing left to derive except the one thing
+/// that genuinely has to be — the `string[]` an already-released build reads out
+/// of `ingest.patch_files`.
 void main() {
-  ModCompanion companion({
-    required CompanionRole role,
-    int modId = 605460,
-    int? fileId = 1473174,
-    OriginConfidence versionConfidence = OriginConfidence.exact,
-    bool remoteMissing = false,
-  }) =>
-      ModCompanion(
-        role: role,
+  ModDownload patch(int modId, List<String> paths) => ModDownload(
+        role: DownloadRole.patch,
         modId: modId,
         modIdConfidence: OriginConfidence.exact,
-        fileId: fileId,
-        versionConfidence: versionConfidence,
-        remoteMissing: remoteMissing,
+        files: [for (final p in paths) InstalledFile(path: p)],
       );
 
   ModOrigin origin({
     int? modId = 585282,
-    List<ModCompanion> companions = const [],
+    List<String> baseFiles = const [],
+    List<ModDownload> patches = const [],
     bool patchShaped = false,
-    bool remoteMissing = false,
   }) =>
       ModOrigin(
         source: 'gamebanana',
-        modId: modId,
-        modIdConfidence: OriginConfidence.exact,
-        fileId: 1433843,
-        versionConfidence: OriginConfidence.exact,
         provenance: OriginProvenance.downloaded,
         ingest: patchShaped ? const ModIngest(patchShaped: true) : null,
-        companions: companions,
-        remoteMissing: remoteMissing,
-      );
-
-  group('roles', () {
-    test('a folder that is the mod, with a patch in it', () {
-      final downloads = folderDownloads(
-        origin(companions: [companion(role: CompanionRole.patch)]),
-      );
-
-      expect(downloads.map((d) => d.role), [
-        FolderDownloadRole.mod,
-        FolderDownloadRole.patch,
-      ]);
-      expect(downloads.first.modId, 585282);
-      expect(downloads.first.isFolderOwn, isTrue);
-      expect(downloads.last.modId, 605460);
-    });
-
-    test('a folder that is the patch, with the mod named', () {
-      // The mirror image. The mod comes first *even though it is the companion*,
-      // which is the whole point: the list is ordered by what each download is,
-      // never by where the sidecar keeps it.
-      final downloads = folderDownloads(
-        origin(companions: [companion(role: CompanionRole.base)]),
-      );
-
-      expect(downloads.map((d) => d.role), [
-        FolderDownloadRole.mod,
-        FolderDownloadRole.patch,
-      ]);
-      expect(downloads.first.modId, 605460, reason: 'the mod, a companion');
-      expect(downloads.first.isFolderOwn, isFalse);
-      expect(downloads.last.modId, 585282, reason: 'the patch, the own block');
-      expect(downloads.last.isFolderOwn, isTrue);
-    });
-
-    test('the two orderings differ only in which entry is the folder\'s own',
-        () {
-      // Stated as one assertion because it is the invariant, not a coincidence
-      // of the two tests above.
-      final asMod =
-          folderDownloads(origin(companions: [companion(role: CompanionRole.patch)]));
-      final asPatch = folderDownloads(
-        origin(modId: 605460, companions: [companion(role: CompanionRole.base, modId: 585282)]),
-      );
-
-      expect(asMod.map((d) => d.role), asPatch.map((d) => d.role));
-      expect(asMod.map((d) => d.modId), asPatch.map((d) => d.modId));
-      // And the flag that does differ points at opposite entries, which is what
-      // makes it useless for ranking and fine for naming.
-      expect(asMod.map((d) => d.isFolderOwn), [true, false]);
-      expect(asPatch.map((d) => d.isFolderOwn), [false, true]);
-    });
-
-    test('a patch-shaped folder is a patch before anything is named', () {
-      // `ingest.patch_shaped` is captured at install because that is the only
-      // moment a patch folder is legible. It has to be enough on its own: the
-      // base is not named yet, so no companion can say which way round this is.
-      final downloads = folderDownloads(origin(patchShaped: true));
-
-      expect(downloads, hasLength(1));
-      expect(downloads.single.role, FolderDownloadRole.patch);
-    });
-
-    test('a base companion makes it a patch with no ingest block at all', () {
-      // The other route, and it has to work alone: a sidecar written before
-      // `ingest` existed carries no `patch_shaped`, and the user answering
-      // "what does this patch?" is then the only evidence.
-      final downloads = folderDownloads(
-        origin(companions: [companion(role: CompanionRole.base)]),
-      );
-
-      expect(
-        downloads.firstWhere((d) => d.isFolderOwn).role,
-        FolderDownloadRole.patch,
-      );
-    });
-
-    test('an ordinary mod is one entry, not none', () {
-      // The caller decides whether one entry is worth a section. Returning
-      // nothing here would make "this folder holds one mod" and "this folder
-      // has no origin block" the same answer, and they are not.
-      final downloads = folderDownloads(origin());
-
-      expect(downloads, hasLength(1));
-      expect(downloads.single.role, FolderDownloadRole.mod);
-    });
-
-    test('no origin block is no entries', () {
-      expect(folderDownloads(null), isEmpty);
-    });
-  });
-
-  group('what each entry carries', () {
-    test('the folder\'s own entry is summarised as an origin', () {
-      final downloads = folderDownloads(
-        origin(companions: [companion(role: CompanionRole.patch)]),
-      );
-      final own = downloads.firstWhere((d) => d.isFolderOwn);
-
-      // `downloaded`, which is a claim only the folder's own ingest can make.
-      expect(own.summary.version, VersionSummary.downloaded);
-      expect(own.summary.identity, IdentitySummary.downloaded);
-    });
-
-    test('a companion is summarised as a companion', () {
-      final downloads = folderDownloads(
-        origin(companions: [companion(role: CompanionRole.patch)]),
-      );
-      final other = downloads.firstWhere((d) => !d.isFolderOwn);
-
-      // Never `downloaded`: that phrasing is about this folder's ingest, and a
-      // companion is a different download. See `summarizeCompanion`.
-      expect(other.summary.version, VersionSummary.chosen);
-    });
-
-    test('an unresolved companion carries no file', () {
-      final downloads = folderDownloads(
-        origin(
-          companions: [
-            companion(
-              role: CompanionRole.patch,
-              fileId: null,
-              versionConfidence: OriginConfidence.unknown,
-            ),
-          ],
-        ),
-      );
-
-      expect(
-        downloads.firstWhere((d) => !d.isFolderOwn).summary.version,
-        VersionSummary.none,
-      );
-    });
-
-    test('a gone page is carried per entry, from whichever field holds it', () {
-      final ownGone = folderDownloads(
-        origin(
-          remoteMissing: true,
-          companions: [companion(role: CompanionRole.patch)],
-        ),
-      );
-      expect(ownGone.firstWhere((d) => d.isFolderOwn).remoteMissing, isTrue);
-      expect(ownGone.firstWhere((d) => !d.isFolderOwn).remoteMissing, isFalse);
-
-      final otherGone = folderDownloads(
-        origin(
-          companions: [companion(role: CompanionRole.patch, remoteMissing: true)],
-        ),
-      );
-      expect(otherGone.firstWhere((d) => d.isFolderOwn).remoteMissing, isFalse);
-      expect(otherGone.firstWhere((d) => !d.isFolderOwn).remoteMissing, isTrue);
-    });
-  });
-
-  test('several patches keep the order the block lists them in', () {
-    // Not sorted — `List.sort` is not stable in Dart, and peers that reshuffled
-    // on a rewrite would make a sidecar edit look like a change to the folder.
-    final downloads = folderDownloads(
-      origin(
-        companions: [
-          companion(role: CompanionRole.patch, modId: 111),
-          companion(role: CompanionRole.patch, modId: 222),
-          companion(role: CompanionRole.patch, modId: 333),
+        downloads: [
+          ModDownload(
+            modId: modId,
+            modIdConfidence: OriginConfidence.exact,
+            files: [for (final p in baseFiles) InstalledFile(path: p)],
+          ),
+          ...patches,
         ],
-      ),
-    );
+      );
 
-    expect(downloads.map((d) => d.modId), [585282, 111, 222, 333]);
+  test('a folder with one download has no patch files', () {
+    expect(derivedPatchFiles(origin(baseFiles: ['Ellen.ini'])), isEmpty);
   });
 
-  /// The flat `ingest.patch_files`, rebuilt from the per-download registries.
-  ///
-  /// **Both shapes are written, and that is compatibility rather than
-  /// tidiness.** `ModIngest` filters `patch_files` to plain strings, so a
-  /// released build reading per-download objects would see no patch files at all
-  /// and the next base update would flatten the patch away.
-  group('the derived patch file list', () {
-    ModCompanion withFiles(
-      CompanionRole role,
-      List<String> paths, {
-      int modId = 605460,
-    }) =>
-        companion(role: role, modId: modId)
-            .copyWith(files: [for (final p in paths) InstalledFile(path: p)]);
+  test('every layer above the bottom contributes, in stack order', () {
+    final files = derivedPatchFiles(origin(
+      baseFiles: ['Ellen.ini', 'Textures/Body.dds'],
+      patches: [
+        patch(111, ['Body.dds']),
+        patch(222, ['Face.dds', 'Hair.dds']),
+      ],
+    ));
 
-    ModOrigin ownFiles(ModOrigin block, List<String> paths) => block.copyWith(
-          ingest: (block.ingest ?? const ModIngest())
-              .copyWith(files: [for (final p in paths) InstalledFile(path: p)]),
-        );
+    // Stack order, which is the order the files themselves go on disk.
+    expect(files, ['Body.dds', 'Face.dds', 'Hair.dds']);
+  });
 
-    test('is the same set whichever download the sidecar stored first', () {
-      // The symmetry this whole file exists for, applied to the file record: the
-      // same two downloads must yield the same patch files either way round.
-      final patchInside = derivedPatchFiles(ownFiles(
-        origin(companions: [withFiles(CompanionRole.patch, ['Body.dds'])]),
-        ['Ellen.ini', 'Textures/Body.dds'],
-      ));
+  test('the mod\'s own files are never in it', () {
+    final files = derivedPatchFiles(origin(
+      baseFiles: ['Ellen.ini'],
+      patches: [patch(111, ['Body.dds'])],
+    ));
 
-      final patchIsOwn = derivedPatchFiles(ownFiles(
-        origin(
-          modId: 605460,
-          companions: [withFiles(CompanionRole.base, [
-            'Ellen.ini',
-            'Textures/Body.dds',
-          ], modId: 585282)],
-        ),
-        ['Body.dds'],
-      ));
+    expect(files, isNot(contains('Ellen.ini')));
+  });
 
-      expect(patchInside, ['Body.dds']);
-      expect(patchIsOwn, ['Body.dds']);
-    });
+  test('a patch-shaped folder with nothing under it derives nothing', () {
+    // Its only layer is at the bottom — the bottom of what exists — and
+    // `patch_shaped` is the separate claim that something is missing beneath
+    // it. Nothing is *above* anything, so there is no patch half to list.
+    //
+    // That is a real change: the old derivation read the flag and counted the
+    // folder's own files, because "which entry is the patch" was a question it
+    // had to answer. `patch_files` is for setting a layer aside while the one
+    // below it is rewritten, and a folder with nothing below has no such write.
+    expect(
+      derivedPatchFiles(origin(baseFiles: ['Body.dds'], patchShaped: true)),
+      isEmpty,
+    );
+  });
 
-    test('the mod\'s own files are never in it', () {
-      final files = derivedPatchFiles(ownFiles(
-        origin(companions: [withFiles(CompanionRole.patch, ['Body.dds'])]),
-        ['Ellen.ini'],
-      ));
+  test('naming the base makes the folder\'s own layer the patch half', () {
+    // Which is what closes the case above: the insert puts the mod underneath,
+    // and the patch's files are now a layer above something.
+    final named = origin(baseFiles: ['Body.dds'], patchShaped: true)
+        .withBaseInserted(const ModDownload(
+      modId: 585283,
+      modIdConfidence: OriginConfidence.user,
+    ));
 
-      expect(files, isNot(contains('Ellen.ini')));
-    });
+    expect(derivedPatchFiles(named), ['Body.dds']);
+  });
 
-    test('two patches both contribute', () {
-      final files = derivedPatchFiles(origin(companions: [
-        withFiles(CompanionRole.patch, ['Body.dds'], modId: 111),
-        withFiles(CompanionRole.patch, ['Face.dds'], modId: 222),
-      ]));
+  test('a layer with no file registry contributes nothing of its own', () {
+    // Everything installed before the registries existed has none. A caller
+    // must read an empty result as "nothing to derive" and leave whatever
+    // `patch_files` is already recorded alone — that hand-written list is the
+    // only thing making such a folder rebuildable.
+    expect(
+      derivedPatchFiles(origin(patches: [patch(111, const [])])),
+      isEmpty,
+    );
+  });
 
-      expect(files, ['Body.dds', 'Face.dds']);
-    });
+  test('a layer nobody can name still contributes its files', () {
+    // A patch written in from a local archive has no page, and the old shape
+    // therefore recorded nothing at all for it. Its files are known, so it is
+    // set aside like any other.
+    final files = derivedPatchFiles(origin(patches: [
+      const ModDownload(
+        role: DownloadRole.patch,
+        files: [InstalledFile(path: 'Body.dds')],
+      ),
+    ]));
 
-    test('a patch-shaped folder counts its own files even with nothing named',
-        () {
-      // `patch_shaped` exists before anyone has answered *what does this
-      // patch*, and it is enough on its own.
-      final files = derivedPatchFiles(
-        ownFiles(origin(patchShaped: true), ['Body.dds']),
-      );
+    expect(files, ['Body.dds']);
+  });
 
-      expect(files, ['Body.dds']);
-    });
-
-    test('a folder with no registries derives nothing', () {
-      // Everything installed before the registries existed has a hand-written
-      // `patch_files` and no `files` to derive one from, so the caller must
-      // leave that record alone rather than replacing it with an empty list.
-      expect(
-        derivedPatchFiles(
-          origin(companions: [companion(role: CompanionRole.patch)]),
-        ),
-        isEmpty,
-      );
-    });
+  test('the on-disk spelling survives', () {
+    // These paths open and delete files; a lower-cased one deletes nothing on
+    // Linux and leaves a second copy behind.
+    expect(
+      derivedPatchFiles(origin(patches: [patch(111, ['Textures/BodyA.dds'])])),
+      ['Textures/BodyA.dds'],
+    );
   });
 }

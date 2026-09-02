@@ -24,8 +24,9 @@ enum DownloadRole {
   /// **Not the same as "is a whole mod".** For a folder the app recognised as
   /// patch-shaped and whose real base nobody has named, the patch is the bottom
   /// of the stack that exists and carries this role; `ingest.patch_shaped` is
-  /// the separate claim that something is missing underneath it. Position cannot
-  /// express "incomplete", so that flag does.
+  /// the separate fact that the folder's own ingest was a patch. Position
+  /// cannot express that, so the flag does — and it survives being told what
+  /// the patch applies to, because what was ingested does not change.
   base('base'),
 
   /// Written over what is below it, replacing some of those files and adding

@@ -367,8 +367,9 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// what makes install order unable to change how the folder reads.
   ///
   /// The fold keeps every layer's own verdict beside the winning one, so this is
-  /// a lookup rather than a reconstruction — there is no discarded verdict to
-  /// recover, which is what `folderOwn` used to exist for.
+  /// a **lookup**. Nothing has to be reconstructed, because the fold discards
+  /// nothing: a stack has no privileged entry whose answer could be the one left
+  /// out.
   List<_Section> _sections(UpdateCheck folded) {
     final downloads = widget.mod.origin?.downloads ?? const <ModDownload>[];
     if (downloads.isEmpty) return const <_Section>[];
@@ -377,6 +378,15 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       for (final layer in folded.layers)
         if (layer.download.modId case final id?) id: layer.check,
     };
+
+    // **A verdict with no per-layer breakdown belongs to the only layer there
+    // is.** A folder with one download folds to it, so the two are the same
+    // answer — and a check that arrived without the breakdown (an older stored
+    // one, or a caller that built the verdict rather than computing it) must
+    // not render as "nothing may be concluded" about a mod it plainly judged.
+    if (byMod.isEmpty && downloads.length == 1) {
+      if (downloads.single.modId case final id?) byMod[id] = folded;
+    }
 
     return [
       for (final download in downloads)

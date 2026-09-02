@@ -294,8 +294,8 @@ way, and they can decline to answer and move on.
 
   The **only** difference between the two is what the patch's own identity is: a
   Marketplace download has a mod page and file, and a hand-dragged folder has
-  neither. That decides whether a `role: patch` companion can be recorded on the
-  mod a patch is written into, and nothing else
+  neither. That decides whether the layer added on top of the mod carries a
+  `mod_id` — the layer itself is recorded either way — and nothing else
   ([`origin-tracking.md` §10](origin-tracking.md#the-install-asks-too-at-the-moment-it-finds-a-patch)).
 - **Before an update.** If the *incoming* download has dangling references, the
   folder being written into must be mixed. The confirmation says so, and states that
@@ -714,10 +714,11 @@ identity:
    the PATCH updated → placed over the base, by basename
 ```
 
-`update_write_route.dart` is that decision, alone and pure, because it is read
-from `role` rather than from which record the verdict came out of — a patch
-installed as its own mod has the patch as its **primary** and the base as a
-companion, and a patch installed *into* a mod is the reverse.
+`update_write_route.dart` is that decision, alone and pure, and it is read from the
+layer's **index**. It used to read a role *relative* to whichever download a
+sidecar happened to call primary, because the two install orders put the same
+download in different records; the stack has no such ambiguity, so the whole
+five-branch table is now `indexOf` and two cases.
 
 **Skipping the re-placement fails silently, which is why it is not optional:**
 
@@ -754,9 +755,9 @@ predecessor of the file that replaced it.
 
 The **per-download file registry** ([`metadata-schema.md`](metadata-schema.md)) is
 the record all of that depends on, and it is written by every path that lays files
-into a folder — an ordinary install included, not only a patch. `ingest.files` is
-the folder's own download, each companion carries its own, and the flat
-`ingest.patch_files` is the derived union of whichever of them are patches.
+into a folder — an ordinary install included, not only a patch. Each layer of
+`origin.downloads` carries its own list, and the flat `ingest.patch_files` is the
+derived union of every layer above the bottom.
 
 **Every entry says whether it went over something**, and that is what makes the
 record act on rather than merely read. `added` is the download's alone; `replaced`
@@ -818,14 +819,22 @@ that the folder holds that patch, and afterwards it does not — a record kept
 "until the files are sorted out" would go on offering to update a patch that has
 been taken out. The leftovers are named on screen instead.
 
-**Only a `role: patch` companion, and only one with a registry.** A folder that
-*is* the patch has no such operation: stripping it would leave a block naming a
-mod the folder does not hold, and the thing the user wants there is deleting the
-mod, which already exists. A patch merged in by hand is recorded, is checked for
-updates, and still cannot be removed, because nothing says which of the folder's
-files are its — so the action is **absent** rather than present and refusing. The
-tracking dialog's row still forgets the record for that case, saying plainly that
-the files stay ([`origin-tracking.md` §10](origin-tracking.md#declaring-a-patch-gone)).
+**Never the bottom layer.** Removing what the folder *is* would leave a patch with
+nothing to patch — the broken state `patch_shaped` exists to warn about — so it is
+refused on its merits rather than being unexpressible; the thing a user wants there
+is deleting the mod, which already exists. Layers come out **topmost first**: one
+with another over it has had some of its own files overwritten in turn, so pulling
+it out from underneath would put the mod's originals back *over* the patch still
+sitting on top.
+
+**And only a layer with a file registry.** A patch merged in by hand is recorded,
+may be checked for updates, and still cannot be removed, because nothing says which
+of the folder's files are its — so the menu entry is **absent** rather than present
+and refusing. Forgetting the record instead is *not* offered for that case, and
+that is a correction to an earlier design: the record is what makes the next base
+update set the patch aside and what makes the confirmation warn when it cannot, so
+dropping it while the files stayed took the patch's only protection away
+([`origin-tracking.md` §10](origin-tracking.md#taking-a-patch-out)).
 
 ---
 
@@ -888,7 +897,7 @@ Stated because each one bounds what this feature currently promises.
   Two things close it, and the second needs a person:
   `ingest.patch_shaped` is recorded at install, which is enough to refuse the clean
   verdict ([`UpdateOutcome.tracksPatchOnly`]) but not to watch the other mod; naming
-  that mod adds a **companion** to the block, and the check then folds both pages
+  that mod **inserts it as the bottom layer**, and the check then folds both pages
   into one verdict ([`origin-tracking.md`](origin-tracking.md#10-a-folder-that-holds-two-downloads)).
   **The flag is recorded rather than derived because the folder is legible only at
   install**: once the base mod's files are dragged in around the patch, every

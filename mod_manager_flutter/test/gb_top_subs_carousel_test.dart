@@ -8,7 +8,6 @@ import 'package:mod_manager_flutter/models/gamebanana/gb_page.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_submitter.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_top_sub.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
-import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/components/marketplace/gb_top_subs_carousel.dart';
 import 'package:mod_manager_flutter/services/gamebanana/content_filter.dart';
@@ -18,6 +17,7 @@ import 'package:mod_manager_flutter/utils/state_providers.dart';
 
 import 'support/fixtures.dart';
 import 'support/localized_harness.dart';
+import 'support/origin_shorthand.dart';
 
 /// The "best of" carousel — **one card at a time**, stepped with arrows.
 ///
@@ -462,7 +462,7 @@ void main() {
             name: folder,
             characterId: 'unknown',
             isActive: false,
-            origin: ModOrigin(
+            origin: originFixture(
               provenance: OriginProvenance.importedFolder,
               source: 'gamebanana',
               modId: modId,

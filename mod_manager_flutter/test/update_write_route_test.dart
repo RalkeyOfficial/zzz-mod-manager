@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mod_manager_flutter/models/mod_companion.dart';
+import 'package:mod_manager_flutter/models/installed_file.dart';
+import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
@@ -7,94 +8,113 @@ import 'package:mod_manager_flutter/services/update_apply/update_write_route.dar
 
 /// **Which write installs an update into a folder that holds two downloads.**
 ///
-/// One rule decides it, and it is not "which record did the finding come from":
+/// A layer's **position** decides it:
 ///
 /// ```
-///   the BASE  updated → write it by layout, then the patch back on top
-///   the PATCH updated → place it over the base, by basename
+///   the bottom layer updated → write it by layout, then the layers above back on top
+///   any layer above it      → place it over what is below, by basename
 /// ```
 ///
-/// Layout belongs to the base — it decides where files live. Replaying the
+/// Layout belongs to the bottom — it decides where files live. Replaying the
 /// folder's layout for a *patch* archive writes its files beside the ones they
 /// should replace, where the `.ini` goes on loading the base's, nothing errors,
 /// and the update appears to have done nothing at all.
 ///
-/// The two shapes a mixed folder comes in put the same download in different
-/// records, which is exactly why the role is what is read:
-///
-/// - a patch installed as its own mod, told what it patches → primary is the
-///   **patch**, companion is the `base`;
-/// - a patch installed *into* a mod → primary is the **base**, companion is the
-///   `patch`.
+/// This used to read a **relative** role off a companion record, because the two
+/// shapes a mixed folder came in put the same download in different records
+/// depending on install order. **That ambiguity is gone**: both orderings are
+/// the same stack, so the two groups below — which were the two shapes — now
+/// assert the same answers, and `indexOf` is the whole decision.
 void main() {
-  const base = ModCompanion(
-    role: CompanionRole.base,
-    modId: 7100,
-    modIdConfidence: OriginConfidence.user,
-  );
-  const patch = ModCompanion(
-    role: CompanionRole.patch,
-    modId: 5100,
-    modIdConfidence: OriginConfidence.exact,
-  );
-  const primary = ModOrigin(
-    provenance: OriginProvenance.downloaded,
-    source: 'gamebanana',
-    modId: 4001,
-    modIdConfidence: OriginConfidence.exact,
-    ingest: ModIngest(patchFiles: ['Textures/Body.dds']),
-  );
+  /// A folder holding the mod with a patch over it. Both install orders produce
+  /// this, which is the point.
+  ModOrigin mixed({ModIngest? ingest}) => ModOrigin(
+        provenance: OriginProvenance.downloaded,
+        source: 'gamebanana',
+        ingest: ingest ?? const ModIngest(patchFiles: ['Textures/Body.dds']),
+        downloads: const [
+          ModDownload(modId: 7100, modIdConfidence: OriginConfidence.user),
+          ModDownload(
+            role: DownloadRole.patch,
+            modId: 5100,
+            modIdConfidence: OriginConfidence.exact,
+          ),
+        ],
+      );
 
-  group('a folder whose primary is the patch', () {
-    final origin = primary.copyWith(companions: const [base]);
-
-    test('the base updating writes the base and replaces the patch', () {
-      final route = updateWriteRoute(origin: origin, subjectModId: 7100);
-
-      expect(route.kind, UpdateWriteKind.base);
-      expect(route.asCompanion, isTrue, reason: 'the base is the companion here');
-      expect(route.patchFiles, ['Textures/Body.dds']);
-    });
-
-    test('the patch updating is placed over what is in there', () {
-      // The folder's own identity, and it is still the patch — so this is a
-      // placement, not a layout replay.
-      final route = updateWriteRoute(origin: origin, subjectModId: null);
-
-      expect(route.kind, UpdateWriteKind.patch);
-      expect(route.asCompanion, isFalse);
-    });
-  });
-
-  group('a folder whose primary is the base', () {
-    final origin = primary.copyWith(companions: const [patch]);
-
-    test('the primary updating writes the base and replaces the patch', () {
-      final route = updateWriteRoute(origin: origin, subjectModId: null);
+  group('a folder that holds a mod and a patch', () {
+    test('the bottom layer writes by layout, with the patch set aside', () {
+      final route = updateWriteRoute(origin: mixed(), subjectModId: 7100);
 
       expect(route.kind, UpdateWriteKind.base);
       expect(route.asCompanion, isFalse);
       expect(route.patchFiles, ['Textures/Body.dds']);
+      expect(route.patchModId, 5100,
+          reason: 'whose displaced originals get rebuilt as it goes back');
     });
 
-    test('the patch updating is placed over the base', () {
-      final route = updateWriteRoute(origin: origin, subjectModId: 5100);
+    test('the layer above is placed over what is below it', () {
+      final route = updateWriteRoute(origin: mixed(), subjectModId: 5100);
 
       expect(route.kind, UpdateWriteKind.patch);
       expect(route.asCompanion, isTrue);
     });
+
+    test('install order cannot change either answer', () {
+      // The property the stack exists for. Whichever download the user
+      // installed first, the record is the same list — so there is no second
+      // shape for this function to have an opinion about.
+      final byPatchFirst = ModOrigin(
+        provenance: OriginProvenance.downloaded,
+        source: 'gamebanana',
+        ingest: const ModIngest(patchFiles: ['Textures/Body.dds']),
+        // Written by "install the patch, then name what it patches": the base
+        // is fetched and placed *underneath*, exactly as above.
+        downloads: const [
+          ModDownload(modId: 7100, modIdConfidence: OriginConfidence.user),
+          ModDownload(
+            role: DownloadRole.patch,
+            modId: 5100,
+            modIdConfidence: OriginConfidence.exact,
+          ),
+        ],
+      );
+
+      expect(
+        updateWriteRoute(origin: byPatchFirst, subjectModId: 7100).kind,
+        updateWriteRoute(origin: mixed(), subjectModId: 7100).kind,
+      );
+      expect(
+        updateWriteRoute(origin: byPatchFirst, subjectModId: 5100).kind,
+        updateWriteRoute(origin: mixed(), subjectModId: 5100).kind,
+      );
+    });
+
+    test('the topmost layer is the one whose store is rebuilt', () {
+      // Three deep: one store, and it is the layer sitting on top of everything.
+      final deep = mixed().withLayerOnTop(const ModDownload(
+        modId: 9000,
+        modIdConfidence: OriginConfidence.exact,
+      ));
+
+      expect(
+        updateWriteRoute(origin: deep, subjectModId: 7100).patchModId,
+        9000,
+      );
+    });
   });
 
   group('a folder that is one download', () {
-    const alone = ModOrigin(
+    final alone = ModOrigin(
       provenance: OriginProvenance.downloaded,
       source: 'gamebanana',
-      modId: 4001,
-      modIdConfidence: OriginConfidence.exact,
+      downloads: const [
+        ModDownload(modId: 4001, modIdConfidence: OriginConfidence.exact),
+      ],
     );
 
     test('it is an ordinary update', () {
-      final route = updateWriteRoute(origin: alone, subjectModId: null);
+      final route = updateWriteRoute(origin: alone, subjectModId: 4001);
 
       expect(route.kind, UpdateWriteKind.base);
       expect(route.asCompanion, isFalse);
@@ -102,27 +122,33 @@ void main() {
           reason: 'nothing in it is recorded as a patch, so there is nothing '
               'to set aside — and this is the ordinary overwrite');
       expect(route.flattensPatch, isFalse);
+      expect(route.patchModId, isNull);
     });
 
     test('a patch with no identity of its own is still set aside', () {
-      // A patch dragged off a disk and installed into a mod records no
-      // companion — there is no mod page to name — but its *files* are
-      // recorded, and that is what the write needs.
+      // A patch written in from a local archive is a layer with no mod page.
+      // It is recorded now — the old shape required an identity and therefore
+      // recorded nothing at all — and its *files* are what the write needs.
       final route = updateWriteRoute(
         origin: alone.copyWith(
           ingest: const ModIngest(patchFiles: ['Textures/Body.dds']),
+          downloads: [
+            alone.base!,
+            const ModDownload(
+              role: DownloadRole.patch,
+              files: [InstalledFile(path: 'Textures/Body.dds')],
+            ),
+          ],
         ),
-        subjectModId: null,
+        subjectModId: 4001,
       );
 
       expect(route.kind, UpdateWriteKind.base);
       expect(route.patchFiles, ['Textures/Body.dds']);
-    });
-
-    test('a folder with no origin block at all is an ordinary update', () {
-      final route = updateWriteRoute(origin: null, subjectModId: null);
-      expect(route.kind, UpdateWriteKind.base);
-      expect(route.patchFiles, isEmpty);
+      expect(route.patchModId, isNull,
+          reason: 'no page means no store to key by, and no removal either');
+      expect(route.flattensPatch, isFalse,
+          reason: 'the files are on record, so it can be put back');
     });
   });
 
@@ -130,24 +156,35 @@ void main() {
     test('a subject that is not in the folder is not written', () {
       // A verdict about a mod this folder does not claim to hold. Writing it
       // would overwrite one mod with another.
-      final route = updateWriteRoute(
-        origin: primary.copyWith(companions: const [base]),
-        subjectModId: 999,
+      expect(
+        updateWriteRoute(origin: mixed(), subjectModId: 999).kind,
+        UpdateWriteKind.none,
       );
-
-      expect(route.kind, UpdateWriteKind.none);
     });
 
-    test('a base update with no patch on record is still offered', () {
+    test('a folder with no origin block at all', () {
+      expect(
+        updateWriteRoute(origin: null, subjectModId: 4001).kind,
+        UpdateWriteKind.none,
+      );
+    });
+
+    test('no subject at all', () {
+      // Every layer is addressed by its own id now. Null used to mean "the
+      // folder's own", which was the spelling that made one download special.
+      expect(
+        updateWriteRoute(origin: mixed(), subjectModId: null).kind,
+        UpdateWriteKind.none,
+      );
+    });
+
+    test('a base update with a patch whose files are unrecorded', () {
       // A folder from before the record existed, or one merged by hand. The
       // base update is what the user wants and the snapshot makes it
       // reversible — but nothing can be put back on top, so the caller has to
       // say so.
       final route = updateWriteRoute(
-        origin: primary.copyWith(
-          ingest: const ModIngest(),
-          companions: const [base],
-        ),
+        origin: mixed(ingest: const ModIngest()),
         subjectModId: 7100,
       );
 
@@ -159,10 +196,7 @@ void main() {
 
     test('a folder with the record intact claims nothing of the kind', () {
       expect(
-        updateWriteRoute(
-          origin: primary.copyWith(companions: const [patch]),
-          subjectModId: null,
-        ).flattensPatch,
+        updateWriteRoute(origin: mixed(), subjectModId: 7100).flattensPatch,
         isFalse,
       );
     });

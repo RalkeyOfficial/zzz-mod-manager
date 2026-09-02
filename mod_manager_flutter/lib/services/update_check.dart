@@ -430,7 +430,7 @@ UpdateCheck? verdictWithoutAsking(ModOrigin? origin) {
 /// [companionRemotes] and [companionReleases] are keyed by remote mod id and
 /// supply the records for the folder's *other* downloads. **A caller that omits
 /// one for a companion the block names gets [UpdateOutcome.indeterminate]**,
-/// never a clean bill — see [foldCompanions].
+/// never a clean bill — see [foldDownloads].
 UpdateCheck checkForUpdate({
   required ModOrigin? origin,
   required GbMod remote,

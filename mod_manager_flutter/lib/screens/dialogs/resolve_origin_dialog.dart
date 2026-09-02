@@ -552,16 +552,26 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
   /// [_companionRow] — because there is no entry to hang one on until something
   /// is named.
   ///
-  /// **The bottom layer carries no affordance here**, and that is the one
-  /// redundancy the stack removed: it is what the identity card above already
-  /// edits, and a second way to change the same thing in the same dialog reads
-  /// as two different settings. Every layer above it offers removal.
+  /// Which affordance a row carries follows from what can be done to that
+  /// layer, and the two are genuinely different operations:
+  ///
+  /// - **A patch is taken out** — its files deleted, the mod's put back.
+  /// - **The base of a patch-shaped folder can be re-answered**, which is the
+  ///   only way to undo a wrong "it patches this" and the only way back to
+  ///   "this is just one mod after all". The identity card above edits the same
+  ///   layer, but for a different question — which mod the folder *is* — and it
+  ///   cannot express either of those answers.
+  ///
+  /// So the base row is offered only where that undo exists: a folder recorded
+  /// as patch-shaped. An ordinary mod with a patch on top gets no row action for
+  /// its base, because the card is the whole story there.
   ///
   /// Above the escape hatches, which have to stay near the bottom.
   List<Widget> _folderSection() {
     final origin = _origin;
     if (origin == null || !origin.isMixed) return const <Widget>[];
 
+    final wasPatchShaped = origin.ingest?.patchShaped ?? false;
     return [
       FolderDownloadsSummary(
         origin: origin,
@@ -573,13 +583,29 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
         },
         lookUpNames: true,
         rowActions: {
+          if (wasPatchShaped)
+            if (origin.base?.modId case final id?) id: FolderRowAction.change,
           for (final patch in origin.patches)
             if (patch.modId case final id?) id: FolderRowAction.remove,
         },
-        onEdit: _takeOutPatch,
+        onEdit: _actOnLayer,
       ),
       const SizedBox(height: 8),
     ];
+  }
+
+  /// Routes a row to the flow for **that** layer, matched by mod id.
+  ///
+  /// The id is what the row displays and links to, so it is the only thing that
+  /// cannot act on a different download than the one pressed.
+  void _actOnLayer(ModDownload download) {
+    final origin = _origin;
+    if (origin == null || download.modId == null) return;
+    if (download.modId == origin.base?.modId) {
+      _nameTheBase();
+    } else {
+      _takeOutPatch(download);
+    }
   }
 
   /// **Takes the patch out**, files and all — the same operation the mod's
@@ -651,12 +677,17 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
   /// different download, and making the user press Save afterwards invites them
   /// to close the dialog believing they already had.
   Future<void> _nameTheBase() async {
-    final modId = _modId;
-    if (modId == null) return;
+    final origin = _origin;
+    if (origin == null) return;
+    final named = origin.isMixed ? origin.base : null;
     final outcome = await showCompanionResolveDialog(
       context,
       modName: widget.mod.name,
-      primaryModId: modId,
+      // What the folder's own download is, so the step can refuse naming it as
+      // its own base. Null once a base is on file: the bottom layer is then the
+      // base itself, and refusing it would refuse re-confirming the answer.
+      primaryModId: named == null ? _modId : null,
+      existing: named,
     );
     if (outcome == null || !mounted) return;
 
@@ -665,15 +696,19 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
       return withRebuiltPatchFiles(switch (outcome) {
         // Under everything, which is what makes the folder's own layer a patch
         // — with no field to rewrite, because the role follows the position.
-        CompanionNamed(:final companion) =>
-          current.withBaseInserted(companion),
-        // "This is just one mod after all": nothing was inserted, so there is
-        // nothing to take out. The flag is what said otherwise.
-        CompanionRemoved() => current.copyWith(
-            ingest:
-                (current.ingest ?? const ModIngest()).copyWith(
-              patchShaped: false,
-            ),
+        // A base already on file is replaced rather than pushed under.
+        CompanionNamed(:final companion) => current.isMixed
+            ? current.withBase((_) => companion)
+            : current.withBaseInserted(companion),
+        // "This is just one mod after all". The layer goes and the flag goes
+        // with it: what is left is one download that patches nothing, which is
+        // an ordinary mod.
+        CompanionRemoved() => (current.isMixed
+                ? current.copyWith(downloads: current.patches)
+                : current)
+            .copyWith(
+            ingest: (current.ingest ?? const ModIngest())
+                .copyWith(patchShaped: false),
           ),
       });
     });

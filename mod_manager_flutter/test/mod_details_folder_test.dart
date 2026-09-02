@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
-import 'package:mod_manager_flutter/models/mod_companion.dart';
+import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/dialogs/mod_details_dialog.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
 import 'support/localized_harness.dart';
+import 'support/origin_shorthand.dart';
 
 /// The details view saying **what this folder holds**.
 ///
@@ -30,18 +31,17 @@ void main() {
         origin: origin,
       );
 
-  ModOrigin origin({List<ModCompanion> companions = const []}) => ModOrigin(
+  ModOrigin origin({List<ModDownload> patches = const []}) => originFixture(
         source: 'gamebanana',
         modId: 585282,
         modIdConfidence: OriginConfidence.exact,
         fileId: 1433843,
         versionConfidence: OriginConfidence.exact,
         provenance: OriginProvenance.downloaded,
-        companions: companions,
+        patches: patches,
       );
 
-  const patch = ModCompanion(
-    role: CompanionRole.patch,
+  final patch = patchFixture(
     modId: 605460,
     modIdConfidence: OriginConfidence.exact,
     fileId: 1473174,
@@ -77,7 +77,7 @@ void main() {
   testWidgets('both downloads are listed, each with its role', (tester) async {
     await open(
       tester,
-      mod(origin: origin(companions: const [patch])),
+      mod(origin: origin(patches: [patch])),
       sessionRecords: const {
         605460: GbMod(idRow: 605460, name: 'Pulchra Bottom Heavy - Reworked'),
       },
@@ -98,7 +98,7 @@ void main() {
     // The one caller that shows the hint: the details view's job is answering
     // "what is this", and its column has the room. The action dialogs are at
     // their height budget and a sentence there competes with their controls.
-    await open(tester, mod(origin: origin(companions: const [patch])));
+    await open(tester, mod(origin: origin(patches: [patch])));
 
     expect(find.textContaining('A patch replaces some of a mod\'s files'),
         findsOneWidget);
@@ -109,7 +109,7 @@ void main() {
     // **And spends no request to find one.** A read-only view opened on a mod
     // should not reach the network for a label, so an unnamed download shows
     // its id — which is why every row also carries a link to its page.
-    await open(tester, mod(origin: origin(companions: const [patch])));
+    await open(tester, mod(origin: origin(patches: [patch])));
 
     expect(find.text('GameBanana mod #605460'), findsOneWidget);
     expect(find.byIcon(Icons.open_in_new), findsWidgets);
