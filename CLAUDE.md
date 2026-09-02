@@ -103,8 +103,7 @@ In an active `flutter run` session (same terminal):
 Codebase-specific gotchas:
 
 - Parsed keybinds (`IniParserService`) are produced during a folder scan and cached in
-  provider state. After editing the parser, hot **restart** (`R`) and re-trigger a scan —
-  `r` alone won't re-parse.
+  provider state, so after editing the parser hot **restart** (`R`) and re-scan.
 - Mod metadata/scan logic lives in services held as singletons via `ApiService`; changes
   there generally need `R`.
 
@@ -149,6 +148,7 @@ mistake.
 > | [`library-screen.md`](docs/library-screen.md) | The **Mods tab** — card, status slot, toolbar, bulk actions |
 > | [`notifications.md`](docs/notifications.md) | **What the app tells the user** — whether to speak, the two levels, the card |
 > | [`metadata-schema.md`](docs/metadata-schema.md) | The **file format** of a mod's `metadata.json` sidecar |
+> | [`migrations.md`](docs/migrations.md) | **Reading data an older version wrote** — every migration and tolerance, across all three stores. There is no `migrations/` folder and that doc says why |
 > | [`origin-tracking.md`](docs/origin-tracking.md) | **Where a mod came from** — the confidence model, the backfill, the resolve flow |
 > | [`metadata-autofill.md`](docs/metadata-autofill.md) | What an install **copies from a mod page** |
 > | [`update-checks.md`](docs/update-checks.md) | Whether a mod **has a newer version** |

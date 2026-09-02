@@ -17,6 +17,7 @@ before changing anything it covers.
 | [`library-screen.md`](../docs/library-screen.md) | The **Mods tab** — card, status slot, toolbar, bulk actions, its dialogs |
 | [`notifications.md`](../docs/notifications.md) | **What the app tells the user** — whether to speak at all, the two levels, the card |
 | [`metadata-schema.md`](../docs/metadata-schema.md) | The sidecar **file format** |
+| [`migrations.md`](../docs/migrations.md) | **Reading data an older version wrote** — every migration and tolerance; there is no `migrations/` folder and it says why |
 | [`origin-tracking.md`](../docs/origin-tracking.md) | **Where a mod came from** — the folder as a stack of downloads, confidence model, backfill, resolve flow |
 | [`metadata-autofill.md`](../docs/metadata-autofill.md) | What an install **copies from a mod page** |
 | [`update-checks.md`](../docs/update-checks.md) | Whether a mod **has a newer version** |
@@ -164,9 +165,9 @@ Custom JSON i18n (not ARB/gen-l10n). Strings live in `assets/l10n/en.json` and
   - `_few` is **optional** and exists only in `pluralFewLocales`; a locale
     without one falls back to `_plural`. Adding one to `en.json` is a second
     copy of a string nothing selects.
-  - `_single` is **not "exactly one"** — Ukrainian reaches it at 1, 21, 31, 101.
-    So a `_single` string whose `_plural` names a count must name one too;
-    hardcoding "1 mod" or writing "this mod" is wrong at 21. Pinned by a test.
+  - `_single` is **not "exactly one"** — Ukrainian reaches it at 1, 21, 31, 101,
+    so one whose `_plural` names a count must name one too: "1 mod" or "this
+    mod" is wrong at 21. Pinned by a test.
 - Much of the codebase still has legacy Ukrainian comments and strings. Per the
   root `CLAUDE.md`, write all new and edited code in English regardless — a bulk
   translation of the legacy text is not being done right now.
@@ -177,10 +178,9 @@ Custom JSON i18n (not ARB/gen-l10n). Strings live in `assets/l10n/en.json` and
   `MaterialApp`. `AppLocalizations.delegate` loads its JSON from the asset bundle
   asynchronously and **`pumpAndSettle` does not wait for real async I/O** — it
   returns once no frames are scheduled, long before a bundle read finishes. The
-  result renders an empty box forever with **no exception**, so every `find`
-  returns nothing and every assertion passes vacuously. The harness preloads via
-  `runAsync`; call `expectBuilt(...)` after pumping so that failure can never be
-  silent again.
+  result renders an empty box forever with **no exception**, so every assertion
+  passes vacuously. The harness preloads via `runAsync`; call `expectBuilt(...)`
+  after pumping so that failure can never be silent.
 - The same trap applies to `Image.asset`: assert about the `AssetImage`'s
   `assetName`, never about pixels.
 - Dialogs that write must take a seam. `ApiService` is static and lazily builds

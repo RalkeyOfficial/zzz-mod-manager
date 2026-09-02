@@ -13,6 +13,7 @@ the root [`README.md`](../README.md).
 | [`notifications.md`](notifications.md) | **What the app tells the user in passing**: whether to speak at all, the headline-and-subject rule, the card's leading slot, the stack and its clock |
 | [`downloads.md`](downloads.md) | **Fetching mod archives**: the spawned-isolate pump and the measurements behind it, resume policy, backpressure, the stall timeout, the background queue and the panel that shows it |
 | [`metadata-schema.md`](metadata-schema.md) | The **file format** of a mod's `metadata.json` sidecar: every field, save and round-trip semantics, schema versioning and the migration hook |
+| [`migrations.md`](migrations.md) | **Reading data an older version wrote** — every migration, tolerance and cleanup across all three stores, why they are read-side rather than a numbered folder, and where to add one |
 | [`origin-tracking.md`](origin-tracking.md) | What the app **knows about where a mod came from**: the confidence model, every route that writes an `origin` block, the offline backfill, the resolve flow, and the installed-mods index |
 | [`metadata-autofill.md`](metadata-autofill.md) | What a marketplace install **copies from a mod page** into the new mod: description, character, tags and gallery |
 | [`update-checks.md`](update-checks.md) | How the app decides a mod **has a newer version published**: the comparator, the confidence-aware verdicts, the whole-library pass and the two surfaces that show a result |
