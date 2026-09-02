@@ -20,6 +20,7 @@ void showModContextMenu(
   required VoidCallback onToggleFavorite,
   required VoidCallback onResolveOrigin,
   required VoidCallback onCheckForUpdate,
+  required VoidCallback onReinstall,
   required VoidCallback onRestoreBackup,
   required VoidCallback onDelete,
   required void Function(ModDownload patch) onRemovePatch,
@@ -133,6 +134,21 @@ void showModContextMenu(
             ],
           ),
           onTap: () => Future.delayed(Duration.zero, onCheckForUpdate),
+        ),
+      // **Only for a folder that records the exact file it came from**, which
+      // is what a repair fetches again. A mod known only by its page has no
+      // version to put back — offering "reinstall" and then having to ask which
+      // file would be an update in everything but name.
+      if (mod.origin?.base?.fileId != null)
+        PopupMenuItem(
+          child: Row(
+            children: [
+              const Icon(Icons.restart_alt, size: 18),
+              const SizedBox(width: 8),
+              Text(loc.t('mods.context_menu.reinstall')),
+            ],
+          ),
+          onTap: () => Future.delayed(Duration.zero, onReinstall),
         ),
       // Only where there is something to restore. A rollback is the recourse
       // for every loss the update path deliberately accepts, so it has to be

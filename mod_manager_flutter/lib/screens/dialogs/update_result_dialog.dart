@@ -25,10 +25,16 @@ Future<void> showUpdateResultDialog(
   required ModInfo mod,
   required GbFile file,
   required UpdateApplyResult result,
+  bool reinstall = false,
 }) =>
     showDialog<void>(
       context: context,
-      builder: (_) => _UpdateResultDialog(mod: mod, file: file, result: result),
+      builder: (_) => _UpdateResultDialog(
+        mod: mod,
+        file: file,
+        result: result,
+        reinstall: reinstall,
+      ),
     );
 
 class _UpdateResultDialog extends StatelessWidget {
@@ -36,11 +42,17 @@ class _UpdateResultDialog extends StatelessWidget {
     required this.mod,
     required this.file,
     required this.result,
+    this.reinstall = false,
   });
 
   final ModInfo mod;
   final GbFile file;
   final UpdateApplyResult result;
+
+  /// The version already installed, written again — so the headline says the
+  /// mod was repaired rather than updated. Everything below it is the same
+  /// report either way.
+  final bool reinstall;
 
   @override
   Widget build(BuildContext context) {
@@ -54,7 +66,12 @@ class _UpdateResultDialog extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              loc.t('mods.update_apply.done_title', params: {'mod': mod.name}),
+              loc.t(
+                reinstall
+                    ? 'mods.reinstall.done_title'
+                    : 'mods.update_apply.done_title',
+                params: {'mod': mod.name},
+              ),
             ),
           ),
         ],

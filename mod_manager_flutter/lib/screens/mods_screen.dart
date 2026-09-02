@@ -45,6 +45,7 @@ import 'dialogs/mod_details_dialog.dart';
 import 'dialogs/mod_backups_dialog.dart';
 import 'dialogs/mod_update_dialog.dart';
 import 'dialogs/patch_install_flow.dart';
+import 'dialogs/reinstall_flow.dart';
 import 'dialogs/resolve_origin_dialog.dart';
 import '../utils/url_utils.dart';
 
@@ -620,6 +621,14 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     }
   }
 
+  /// Writes the version already installed over the folder again, and rescans:
+  /// the files change even though the recorded version does not.
+  Future<void> _reinstall(ModInfo mod) async {
+    if (await reinstallFlow(context, ref, mod: mod)) {
+      await loadMods(showLoading: false);
+    }
+  }
+
   /// Opens the rollback list and rescans if anything was restored — the folder
   /// itself changes, not just the sidecar.
   Future<void> _restoreBackup(ModInfo mod) async {
@@ -650,6 +659,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       position,
       onResolveOrigin: () => unawaited(_resolveOrigin(mod)),
       onCheckForUpdate: () => unawaited(_checkForUpdate(mod)),
+      onReinstall: () => unawaited(_reinstall(mod)),
       onRestoreBackup: () => unawaited(_restoreBackup(mod)),
       onRemovePatch: (patch) => unawaited(_removePatch(mod, patch)),
       // Whatever this session already knows. Nothing is fetched for a menu.

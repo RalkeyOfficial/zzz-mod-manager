@@ -14,10 +14,11 @@
 /// on loading the base's, nothing errors, and the update appears to have done
 /// nothing at all.
 ///
-/// This used to read a **relative** role off a companion record, because the two
-/// shapes a mixed folder came in put the same download in different records
-/// depending on install order. The stack has no such ambiguity: the index is the
-/// answer, and `indexOf` is the whole decision.
+/// **The index is the answer**, and `indexOf` is the whole decision. A role held
+/// *relative* to a companion record is the rejected alternative: the two shapes
+/// a mixed folder comes in put the same download in different records depending
+/// on install order, so the same folder answers differently depending on which
+/// half arrived first. The stack has no such ambiguity.
 ///
 /// Pure, so the decision can be tested without a download, a folder or a dialog.
 library;

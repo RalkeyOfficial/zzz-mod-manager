@@ -104,6 +104,43 @@ void main() {
     });
   });
 
+  group('fileWithId', () {
+    GbMod profile(String fixture) =>
+        GbMod.fromJson(parseObject(loadGbFixture(fixture)))!;
+
+    test('finds the file a recorded id names', () {
+      final mod = profile('mod_profile_531649');
+      expect(fileWithId(mod.allFiles, 1732269)?.file, 'v77.zip');
+    });
+
+    test('finds an archived one, which is the whole point', () {
+      // The opposite of `selectDefaultFile`'s rule, deliberately. A repair asks
+      // for the version on disk, and that becomes archived the moment the
+      // author publishes anything — this fixture has eight of them against six
+      // current, so refusing archived files would make a repair impossible on
+      // exactly the mods most likely to need one.
+      final mod = profile('mod_profile_531649');
+      final archived = fileWithId(mod.allFiles, 1694708);
+
+      expect(archived?.file, 'v72.zip');
+      expect(archived?.isArchived, isTrue);
+      expect(selectDefaultFile(mod.allFiles).file?.idRow, isNot(1694708),
+          reason: 'the same file is never something to preselect');
+    });
+
+    test('an id the page no longer carries is null, not the newest file', () {
+      // GameBanana deletes file ids. Substituting the current file here would
+      // silently turn a repair into an update, over a folder the user asked to
+      // have put back as it was.
+      final mod = profile('mod_profile_531649');
+      expect(fileWithId(mod.allFiles, 999999), isNull);
+    });
+
+    test('a list that was never requested is null', () {
+      expect(fileWithId(null, 1732269), isNull);
+    });
+  });
+
   group('how a file is named on screen', () {
     test('the filename is the title, never the author label', () {
       // This led with `_sDescription` and it was wrong: that field is free

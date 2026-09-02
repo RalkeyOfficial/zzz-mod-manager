@@ -54,6 +54,7 @@ void main() {
     UpdatePreview value, {
     Size surfaceSize = const Size(1200, 800),
     bool flattensPatch = false,
+    bool reinstall = false,
   }) async {
     UpdateConfirmChoice? choice;
     var opened = false;
@@ -69,6 +70,7 @@ void main() {
               file: file,
               preview: value,
               flattensPatch: flattensPatch,
+              reinstall: reinstall,
             );
           },
           child: const Text('open'),
@@ -111,6 +113,19 @@ void main() {
   testWidgets('an ordinary update says nothing of the kind', (tester) async {
     await open(tester, preview());
     expect(find.textContaining('holds a patch as well'), findsNothing);
+  });
+
+  testWidgets('a repair asks to reinstall, not to update', (tester) async {
+    // The same write, and the user asked for a different thing: "Update Ellen?"
+    // in front of a reinstall reads as an offer of something newer, which is
+    // the one thing a repair is not.
+    await open(tester, preview(), reinstall: true);
+
+    expect(find.text('Reinstall Ellen?'), findsOneWidget);
+    expect(find.text('Reinstall'), findsWidgets);
+    expect(find.text('Update Ellen?'), findsNothing);
+    // Everything below the headline describes the write, which is identical.
+    expect(find.textContaining('A copy of this mod'), findsOneWidget);
   });
 
   testWidgets('cancelling answers nothing', (tester) async {

@@ -41,6 +41,7 @@ void main() {
     WidgetTester tester,
     UpdateApplyResult value, {
     Size surfaceSize = const Size(1200, 800),
+    bool reinstall = false,
   }) async {
     await pumpLocalized(
       tester,
@@ -51,6 +52,7 @@ void main() {
             mod: mod,
             file: file,
             result: value,
+            reinstall: reinstall,
           ),
           child: const Text('open'),
         ),
@@ -67,6 +69,14 @@ void main() {
     await open(tester, result());
     expect(find.text('What changed'), findsOneWidget);
     expect(find.textContaining('Restore a previous version'), findsOneWidget);
+  });
+
+  testWidgets('a repair says the mod was reinstalled', (tester) async {
+    // Nothing was updated — the version on disk is the version that went on —
+    // and the headline is the only place that can say which act this was.
+    await open(tester, result(), reinstall: true);
+    expect(find.text('Ellen reinstalled'), findsOneWidget);
+    expect(find.text('Ellen updated'), findsNothing);
   });
 
   testWidgets('no hotkey moved means no hotkey section at all', (tester) async {

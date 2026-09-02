@@ -97,6 +97,14 @@ Future<bool> applyUpdateFlow(
   /// records which files are its. Stated on the confirmation, where it is the
   /// one loss not already paid for by a rule.
   bool flattensPatch = false,
+
+  /// Whether this is a **repair** — the version already installed, written over
+  /// the folder again ([reinstallFlow]).
+  ///
+  /// Wording only: the operation is identical, and the two screens have to say
+  /// which one the user asked for. "Update Ellen?" in front of a reinstall
+  /// reads as an offer of something newer.
+  bool reinstall = false,
 }) async {
   final loc = context.loc;
   final notify = context.notify;
@@ -194,6 +202,7 @@ Future<bool> applyUpdateFlow(
             file: file,
             preview: preview,
             flattensPatch: flattensPatch,
+            reinstall: reinstall,
           )
         : const UpdateConfirmChoice(removeStaleInis: true);
     if (confirm) {
@@ -205,6 +214,7 @@ Future<bool> applyUpdateFlow(
             'to': file.version ?? file.description,
             'file_id': file.idRow,
             'flattens_patch': flattensPatch,
+            if (reinstall) 'reinstall': true,
             if (choice != null) 'remove_stale_inis': choice.removeStaleInis,
           });
     }
@@ -267,7 +277,13 @@ Future<bool> applyUpdateFlow(
     ref.invalidate(installedModsIndexProvider);
 
     if (!context.mounted) return true;
-    await showUpdateResultDialog(context, mod: mod, file: file, result: result);
+    await showUpdateResultDialog(
+      context,
+      mod: mod,
+      file: file,
+      result: result,
+      reinstall: reinstall,
+    );
     return true;
   } catch (e) {
     if (context.mounted) {

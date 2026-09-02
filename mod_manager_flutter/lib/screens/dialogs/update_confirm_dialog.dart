@@ -39,6 +39,7 @@ Future<UpdateConfirmChoice?> showUpdateConfirmDialog(
   required GbFile file,
   required UpdatePreview preview,
   bool flattensPatch = false,
+  bool reinstall = false,
 }) =>
     showDialog<UpdateConfirmChoice>(
       context: context,
@@ -47,6 +48,7 @@ Future<UpdateConfirmChoice?> showUpdateConfirmDialog(
         file: file,
         preview: preview,
         flattensPatch: flattensPatch,
+        reinstall: reinstall,
       ),
     );
 
@@ -56,6 +58,7 @@ class _UpdateConfirmDialog extends StatefulWidget {
     required this.file,
     required this.preview,
     this.flattensPatch = false,
+    this.reinstall = false,
   });
 
   final ModInfo mod;
@@ -70,6 +73,12 @@ class _UpdateConfirmDialog extends StatefulWidget {
   /// makes it reversible — but it must not happen without this said, because the
   /// loss is otherwise invisible: the folder looks complete either way.
   final bool flattensPatch;
+
+  /// The version already installed, going on again — a repair rather than an
+  /// update. Changes the headline and the button and nothing else: what the
+  /// write does to the folder is identical, and every notice below describes
+  /// the write.
+  final bool reinstall;
 
   @override
   State<_UpdateConfirmDialog> createState() => _UpdateConfirmDialogState();
@@ -92,9 +101,11 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
     return AlertDialog(
       title: Text(
         loc.t(
-          blocked == null
-              ? 'mods.update_apply.title'
-              : 'mods.update_apply.blocked_title',
+          blocked != null
+              ? 'mods.update_apply.blocked_title'
+              : widget.reinstall
+                  ? 'mods.reinstall.title'
+                  : 'mods.update_apply.title',
           params: {'mod': widget.mod.name},
         ),
       ),
@@ -126,7 +137,9 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
             onPressed: () => Navigator.of(context).pop(
               UpdateConfirmChoice(removeStaleInis: _removeStale),
             ),
-            child: Text(loc.t('mods.update_apply.confirm')),
+            child: Text(loc.t(widget.reinstall
+                ? 'mods.reinstall.confirm'
+                : 'mods.update_apply.confirm')),
           ),
       ],
     );
@@ -186,8 +199,10 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
         title: loc.t('mods.update_apply.what_heading'),
         children: [
           DialogFact(
-            icon: Icons.arrow_circle_up,
-            label: loc.t('mods.update_apply.installing'),
+            icon: widget.reinstall ? Icons.restart_alt : Icons.arrow_circle_up,
+            label: loc.t(widget.reinstall
+                ? 'mods.reinstall.installing'
+                : 'mods.update_apply.installing'),
             value: fileDisplayName(widget.file),
             detail: fileDisplayDetail(widget.file),
           ),

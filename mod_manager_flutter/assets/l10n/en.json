@@ -261,6 +261,7 @@
       "delete": "Delete",
       "resolve_origin": "Update tracking…",
       "check_update": "Check for updates…",
+      "reinstall": "Reinstall this version…",
       "restore_backup": "Restore a previous version…",
       "remove_patch": "Remove patch…",
       "remove_patch_named": "Remove patch: {patch}"
@@ -559,6 +560,16 @@
       "notes_untitled": "Update",
       "pick_chosen": "your choice"
     },
+    "reinstall": {
+      "title": "Reinstall {mod}?",
+      "installing": "Reinstalling",
+      "confirm": "Reinstall",
+      "done_title": "{mod} reinstalled",
+      "offline_title": "Couldn't reach GameBanana",
+      "offline_body": "The page for “{mod}” didn't load, so nothing was changed. Check your connection, then try again.",
+      "unavailable_title": "That version isn't on the page any more",
+      "unavailable_body": "GameBanana no longer offers the file “{mod}” was installed from, so it can't be put back. Check for updates to install the current version instead."
+    },
     "update_apply": {
       "action": "Update",
       "title": "Update {mod}?",
@@ -568,7 +579,7 @@
       "dropped_note_single": "{count} file from the version you have isn't in the new one, so it's removed rather than left loading in the game.",
       "dropped_note_plural": "{count} files from the version you have aren't in the new one, so they're removed rather than left loading in the game.",
       "snapshot_note": "A copy of this mod as it is now is saved first. You can put it back from the mod's right-click menu.",
-      "keybind_note": "If you rebound any keys inside this mod's .ini, the new version's own file replaces them. The saved copy still has them.",
+      "keybind_note": "If you rebound any keys inside this mod's .ini, the file that comes with this download replaces them. The saved copy still has them.",
       "patch_unrecorded_note": "This folder holds a patch as well, and nothing records which files came from it — so anything the new version ships under the same name replaces it. The saved copy still has it.",
       "patch_warning": "This download is a patch: it contains .ini files and none of the {count} file(s) they need, so it expects the mod it patches to already be in this folder. Only its .ini files are being replaced — everything else here is left as it is.",
       "unused_folders": "The archive also contains {folders}, which isn't part of this mod and won't be installed.",

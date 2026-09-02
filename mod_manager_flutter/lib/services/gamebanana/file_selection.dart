@@ -77,6 +77,27 @@ FileDefault selectDefaultFile(List<GbFile>? files) {
   return const FileDefault(null, FileDefaultReason.ambiguous);
 }
 
+/// The one file a recorded `file_id` names, for asking for **the version the
+/// user already has** rather than the newest one.
+///
+/// **An archived file counts here, and that is the opposite of
+/// [selectDefaultFile]'s rule for the same reason.** There, archived means
+/// superseded and preselecting one would install an old release by accident.
+/// Here the caller is reinstalling what is on disk, which becomes an old
+/// release the moment the author publishes anything — refusing archived files
+/// would make a repair impossible on exactly the mods most likely to need one.
+///
+/// Null when [files] is null (never requested) or nothing matches. GameBanana
+/// deletes file ids, so a mod re-uploaded since the install has nothing to
+/// repair from — and the caller has to say so rather than quietly substituting
+/// the newest file, which would be an update wearing a repair's label.
+GbFile? fileWithId(List<GbFile>? files, int fileId) {
+  for (final file in files ?? const <GbFile>[]) {
+    if (file.idRow == fileId) return file;
+  }
+  return null;
+}
+
 /// What a file row is **titled**: its filename.
 ///
 /// This used to lead with the author's `_sDescription`, and that was wrong in a

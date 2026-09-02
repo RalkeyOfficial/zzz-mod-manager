@@ -352,12 +352,11 @@ installed before the record existed has none, and re-downloading the old archive
 to reconstruct one is a second full transfer (22 MB median, 1.24 GB tail)
 against file ids GameBanana deletes.
 
-- [ ] Reuse this same path for a **reinstall / repair** action — it's the identical
-  operation at the same file id, so it costs nothing extra. `applyUpdateFlow` takes
-  a `GbFile` and does not care whether it is newer than what is installed. What is
-  missing is a surface: the update dialog only appears with a finding, and a repair
-  is wanted precisely when there is none. It wants its own context menu entry that
-  fetches the profile and re-applies `origin.file_id`.
+**"Reinstall this version…"** is that same path at the file id already recorded
+([`docs/applying-updates.md`](docs/applying-updates.md) §6) — one surface, no
+second write. It puts the author's files back and nothing else: what the user
+added stays, and a file GameBanana has taken down is reported rather than
+swapped for the current release.
 
 ### 4.2 Backups — where they live
 

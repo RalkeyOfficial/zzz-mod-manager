@@ -730,6 +730,36 @@ and is tested against real temp directories rather than a fake filesystem — th
 of the mechanism is what it does to files, so a fake would be asserting the fake's
 semantics.
 
+### The same order, for a repair
+
+**"Reinstall this version…" is an update at the file id already recorded.**
+`screens/dialogs/reinstall_flow.dart` fetches the mod page, finds that one file and
+hands it to the same flow — so a repair inherits the snapshot, the patch set-aside,
+the leftover removal and the confirmation without any of them existing twice. Only
+the wording differs, and it has to: "Update Ellen?" in front of a reinstall reads as
+an offer of something newer.
+
+It needs its own surface because the update dialog appears when there is a *finding*,
+and a repair is wanted precisely when there is none — a mod broken by a game patch, a
+file deleted by accident, an edit that went wrong.
+
+Two things it is not:
+
+- **Not a factory reset of the directory.** The record licenses removing what this
+  app wrote and nothing else, so a second mod merged in by hand, or a texture the
+  user swapped, stays exactly where it is. What comes back is the author's files.
+- **Not a fallback to the newest file.** GameBanana deletes file ids, so a mod
+  re-uploaded since the install has nothing to repair from — and the flow says so
+  rather than substituting the current release, which would be an update wearing a
+  repair's label. `fileWithId` accepts an **archived** file for the same reason
+  `selectDefaultFile` refuses one: the version on disk becomes archived the moment
+  the author publishes anything, so refusing archived files would make a repair
+  impossible on exactly the mods most likely to need one.
+
+The entry is offered only where `origin.downloads.first` records a `file_id`. A mod
+known only by its page has no version to put back, and asking which file to install
+would be that same update in disguise.
+
 ### The same order, for a patch installed into a mod
 
 `UpdateApplier.applyPatchInto` is the second caller of that order, and it is here
@@ -774,10 +804,11 @@ identity:
 ```
 
 `update_write_route.dart` is that decision, alone and pure, and it is read from the
-layer's **index**. It used to read a role *relative* to whichever download a
-sidecar happened to call primary, because the two install orders put the same
-download in different records; the stack has no such ambiguity, so the whole
-five-branch table is now `indexOf` and two cases.
+layer's **index** — `indexOf` and two cases. A role held *relative* to whichever
+download a sidecar called primary is the rejected alternative: the two install
+orders put the same download in different records, so the same folder needed five
+branches and answered differently depending on which half arrived first. The stack
+has no such ambiguity.
 
 **Skipping the re-placement fails silently, which is why it is not optional:**
 
