@@ -42,11 +42,16 @@ class PathHelper {
     return _appDataPath!;
   }
 
-  /// Get the path for mod_images directory
-  /// This uses user's home directory to ensure write permissions
-  /// Path: 
-  ///   Windows: %APPDATA%\zzz-mod-manager\mod_images
-  ///   Linux: ~/.local/share/zzz-mod-manager/mod_images
+  /// **Legacy**, and read by exactly one thing: the migration that pulls a
+  /// pre-sidecar image into the mod folder it belongs to
+  /// (`ModMetadataRepository.loadOrMigrate`). Never written to.
+  ///
+  ///   Windows: `%APPDATA%\zzz-mod-manager\mod_images`
+  ///   Linux:   `~/.local/share/zzz-mod-manager/mod_images`
+  ///
+  /// The directory empties itself as mods migrate — the source is deleted once
+  /// the sidecar naming the copy is written, and `sweepLegacyImages` clears
+  /// what no mod can reach. Nothing recreates it.
   static String getModImagesPath() {
     if (_modImagesPath != null) {
       return _modImagesPath!;
@@ -75,14 +80,6 @@ class PathHelper {
     }
 
     return _modImagesPath!;
-  }
-
-  /// Ensure the mod_images directory exists
-  static Future<void> ensureModImagesDirectoryExists() async {
-    final dir = Directory(getModImagesPath());
-    if (!await dir.exists()) {
-      await dir.create(recursive: true);
-    }
   }
 
   /// Where downloaded mod archives land.

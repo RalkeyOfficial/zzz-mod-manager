@@ -23,6 +23,14 @@ class ModMetadataService {
   String imagesDir(String modFolderPath) =>
       path.join(metadataDir(modFolderPath), AppConstants.modMetadataImagesDirName);
 
+  /// Whether this folder has a sidecar at all, without parsing it.
+  ///
+  /// The question "has this mod been migrated?" — which is not the same as
+  /// "does it have metadata": a sidecar that cannot be parsed still means the
+  /// migration branch will not run again for it.
+  Future<bool> hasSidecar(String modFolderPath) =>
+      File(metadataFile(modFolderPath)).exists();
+
   /// Reads the sidecar. Returns null if it doesn't exist or can't be parsed.
   Future<ModMetadata?> read(String modFolderPath) async {
     try {

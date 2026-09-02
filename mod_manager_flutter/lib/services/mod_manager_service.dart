@@ -139,6 +139,11 @@ class ModManagerService {
         ),
       );
 
+      // **After the scan, which is what makes it decidable.** Every mod has
+      // been read by here, so the legacy image dir can be judged against what
+      // actually exists rather than against a name.
+      await _metadata.sweepLegacyImages(modNames);
+
       return modsInfo;
     } catch (e) {
       return [];

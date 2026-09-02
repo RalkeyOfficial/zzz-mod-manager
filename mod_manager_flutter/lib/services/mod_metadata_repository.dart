@@ -177,11 +177,88 @@ class ModMetadataRepository {
     // first snapshot to get one is a folder whose history a rename in the
     // meantime would have stranded.
     final identified = migrated.copyWith(uid: ModUid.newUid());
-    if (await _service.write(modFolder, identified)) return identified;
+    if (await _service.write(modFolder, identified)) {
+      // **Only now**, and only on a write that landed. A migration is not done
+      // until the sidecar naming the copy is on disk: delete the source before
+      // that and a failed write loses the image entirely, since the copy inside
+      // the folder is referenced by nothing and read by nothing.
+      if (migratedImageRel != null) await _dropLegacyImage(modName);
+      return identified;
+    }
 
     // Unwritable, so the values still come back in memory — without the
     // identity, because nothing could be filed under one that is not on disk.
     return migrated;
+  }
+
+  /// Removes one mod's image from the legacy app-data directory, now that the
+  /// mod folder holds it.
+  Future<void> _dropLegacyImage(String modName) async {
+    try {
+      final legacy = File(path.join(_legacyImagesPath(), '$modName.png'));
+      if (await legacy.exists()) await legacy.delete();
+    } catch (e) {
+      // Wasted bytes, not a failed migration: the sidecar naming the copy is
+      // already written, so the mod is fine and the sweep will get this later.
+      _log.debug('could not remove a migrated legacy image',
+          fields: {'mod': modName, 'reason': '$e'});
+    }
+  }
+
+  /// Deletes every file in `<appData>/mod_images/` that nothing can reach.
+  ///
+  /// **The legacy directory has exactly one reader** — the migration in
+  /// [loadOrMigrate], on the branch taken only when a mod has no sidecar. So a
+  /// file there is reachable if and only if the mod it names still exists *and*
+  /// still has no sidecar. Everything else is dead weight:
+  ///
+  /// - the mod was renamed or deleted, so no scan will ever look for that name
+  ///   again (the reason this accumulates at all: the store is keyed by folder
+  ///   name and a rename is not an event this app sees);
+  /// - or the mod has a sidecar, so the migration branch is never taken for it
+  ///   and its images come from the sidecar or a shipped preview.
+  ///
+  /// Measured on a real library before this existed: 17 files, **33 MB**, and
+  /// not one of them named a mod that still existed. It ran once per install
+  /// forever, because nothing deleted the source it had copied.
+  ///
+  /// [modNames] is the scan that has just finished, so this is decided against
+  /// what is on disk rather than against a stale list. Returns how many files
+  /// went, for a caller that wants to say so.
+  Future<int> sweepLegacyImages(Iterable<String> modNames) async {
+    final dir = Directory(_legacyImagesPath());
+    if (!await dir.exists()) return 0;
+    final live = modNames.toSet();
+    var removed = 0;
+    var bytes = 0;
+    try {
+      await for (final entity in dir.list(followLinks: false)) {
+        if (entity is! File) continue;
+        final modName = path.basenameWithoutExtension(entity.path);
+        if (live.contains(modName) &&
+            !await _service.hasSidecar(_folderOf(modName)!)) {
+          continue; // still the only copy of this mod's image
+        }
+        try {
+          bytes += await entity.length();
+          await entity.delete();
+          removed++;
+        } catch (e) {
+          _log.debug('could not remove an unreachable legacy image',
+              fields: {'file': path.basename(entity.path), 'reason': '$e'});
+        }
+      }
+    } catch (e) {
+      _log.warning('could not sweep the legacy image directory', error: e);
+      return removed;
+    }
+    // One line for the whole sweep, not one per file: it is a bulk cleanup, and
+    // after the first run there is nothing left for it to do.
+    if (removed > 0) {
+      _log.info('removed legacy images nothing could reach',
+          fields: {'files': removed, 'bytes': bytes});
+    }
+    return removed;
   }
 
   /// Derives an origin block for an already-sidecar'd mod that predates one,

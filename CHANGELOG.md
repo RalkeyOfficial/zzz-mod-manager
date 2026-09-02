@@ -92,6 +92,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Mod images left in the app's own data folder by versions before 2.0.0 are cleared once they're inside the mod they belong to, instead of being kept twice forever. A library upgraded long ago can get hundreds of megabytes back.
 - The app shows its own icon and name in the taskbar and window switcher instead of a blank placeholder.
   - On Wayland the window no longer carries two stacked title bars.
   - The portable build gets its icon on Wayland by running `packaging/install-desktop-entry.sh` once. It stays out of your application launcher unless you pass `--menu`.

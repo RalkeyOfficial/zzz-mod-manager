@@ -184,6 +184,102 @@ void main() {
         File(path.join(modsDir.path, 'Anby Mod', meta.images.first)).readAsBytesSync(),
         [1, 2, 3],
       );
+      // **And takes the source with it.** A migration that copies and leaves
+      // the original behind pays for the image twice, forever: the legacy
+      // directory has one reader and it will never look at this name again.
+      expect(File(path.join(legacyImages.path, 'Anby Mod.png')).existsSync(),
+          isFalse);
+    });
+
+    test('the legacy image survives a sidecar that could not be written',
+        () async {
+      // Ordering, and the reason the delete is not next to the copy: until the
+      // sidecar naming the copy is on disk, the copy inside the mod folder is
+      // referenced by nothing and read by nothing. Deleting the source first
+      // would lose the image outright.
+      final dir = makeMod('Anby Mod');
+      final legacy = File(path.join(legacyImages.path, 'Anby Mod.png'))
+        ..writeAsBytesSync([1, 2, 3]);
+
+      // Read-only, so the sidecar write fails. Skipped where permissions are
+      // not enforced (running as root) rather than asserting something untrue.
+      await Process.run('chmod', ['500', dir.path]);
+      addTearDown(() => Process.run('chmod', ['700', dir.path]));
+      final probe = File(path.join(dir.path, 'probe'));
+      try {
+        probe.writeAsStringSync('x');
+        probe.deleteSync();
+        return;
+      } catch (_) {
+        // Good: the write below cannot land.
+      }
+
+      await repo.loadOrMigrate('Anby Mod', dir.path);
+
+      expect(legacy.existsSync(), isTrue,
+          reason: 'the only copy of the image must not be the one deleted');
+    });
+
+    group('sweeping the legacy image directory', () {
+      /// A file in `<appData>/mod_images`, the way a pre-sidecar build left one.
+      File legacyImage(String modName) =>
+          File(path.join(legacyImages.path, '$modName.png'))
+            ..writeAsBytesSync([1, 2, 3]);
+
+      /// A mod that has been through the migration once, so its branch is
+      /// never taken again.
+      void migratedMod(String modName) {
+        final dir = makeMod(modName);
+        File(path.join(dir.path, '.zzz-mod-manager', 'metadata.json'))
+          ..createSync(recursive: true)
+          ..writeAsStringSync('{"schema_version": 2}');
+      }
+
+      test('a mod that no longer exists loses its image', () async {
+        // **The 33 MB case, measured on a real library:** 17 files, not one
+        // naming a mod that still existed. The directory is keyed by folder
+        // name, and a rename is not an event this app sees — so a scan will
+        // never look for that name again, and nothing was deleting them.
+        final orphan = legacyImage('Deleted Long Ago');
+
+        expect(await repo.sweepLegacyImages(const <String>[]), 1);
+        expect(orphan.existsSync(), isFalse);
+      });
+
+      test('a mod that has already migrated loses its image', () async {
+        // It has a sidecar, so the migration branch is never taken for it
+        // again: its images come from the sidecar or a shipped preview, and
+        // this file is unreachable however much it looks live.
+        migratedMod('Migrated Mod');
+        final stale = legacyImage('Migrated Mod');
+
+        expect(await repo.sweepLegacyImages(const ['Migrated Mod']), 1);
+        expect(stale.existsSync(), isFalse);
+      });
+
+      test('a mod still waiting to migrate keeps its image', () async {
+        // The one reachable case, and the one that must survive: this file is
+        // the only copy of that mod's cover until its first scan migrates it.
+        makeMod('Not Yet Scanned');
+        final pending = legacyImage('Not Yet Scanned');
+
+        expect(await repo.sweepLegacyImages(const ['Not Yet Scanned']), 0);
+        expect(pending.existsSync(), isTrue);
+      });
+
+      test('a second sweep has nothing left to do', () async {
+        legacyImage('Deleted Long Ago');
+        migratedMod('Migrated Mod');
+        legacyImage('Migrated Mod');
+
+        expect(await repo.sweepLegacyImages(const ['Migrated Mod']), 2);
+        expect(await repo.sweepLegacyImages(const ['Migrated Mod']), 0);
+      });
+
+      test('no legacy directory at all is not an error', () async {
+        legacyImages.deleteSync(recursive: true);
+        expect(await repo.sweepLegacyImages(const <String>[]), 0);
+      });
     });
 
     test('an existing sidecar wins outright and is not re-migrated', () async {

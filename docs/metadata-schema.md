@@ -756,9 +756,26 @@ sidecar entirely:
 1. Read the sidecar. If present, this branch is not taken.
 2. Gather legacy data: the character tag from `config.json`, and
    `<appData>/mod_images/<mod>.png` if it exists.
-3. Write the sidecar **only if** something was actually found (`!metadata.isEmpty`).
-4. Either way, return usable values in memory — a read-only or unwritable mod
+3. Write the sidecar — always, since every mod gets a `uid`.
+4. **Then** delete the legacy image, and only on a write that landed. Until the
+   sidecar naming the copy is on disk, the copy inside the mod folder is
+   referenced by nothing and read by nothing, so deleting the source first
+   loses the image outright.
+5. Either way, return usable values in memory — a read-only or unwritable mod
    folder must not break the app.
+
+**A migration that copies and does not delete pays for its data forever**, and
+this one did. `<appData>/mod_images/` is keyed by folder name and a rename is
+not an event this app sees, so an image whose mod was renamed or deleted since
+became unreachable: no scan would look for that name again, and nothing removed
+it. Measured on a real library: **17 files, 33 MB, and not one of them named a
+mod that still existed.**
+
+So `sweepLegacyImages` runs after each scan and clears what nothing can reach.
+The directory has exactly **one** reader — step 2 above, on the branch taken
+only when a mod has no sidecar — so a file there is reachable if and only if the
+mod it names still exists *and* still has no sidecar. Everything else goes. The
+directory empties itself as mods migrate, and nothing recreates it.
 
 **Origin backfill** — for a mod that *has* a sidecar but predates the origin
 block. It parses the existing `source_url` for a `gamebanana.com/mods/<id>` link
