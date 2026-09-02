@@ -69,6 +69,58 @@ void main() {
     return json['character_id'] as String?;
   }
 
+  /// The mod's own identity, which is what its saved versions get filed under.
+  Future<String?> sidecarUid(String modName) async {
+    final file = File(path.join(
+      modsDir.path,
+      modName,
+      '.zzz-mod-manager',
+      'metadata.json',
+    ));
+    if (!await file.exists()) return null;
+    final json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+    return json['uid'] as String?;
+  }
+
+  group('an installed mod gets an identity', () {
+    test('at install, without waiting for a scan or a snapshot', () async {
+      // A mod installed and updated in one session must be identifiable before
+      // anything rescans, or its first snapshot has nowhere to go.
+      final folder = await sourceFolder('Ellen Swimsuit');
+
+      await service.importMods([folder]);
+
+      expect(await sidecarUid('Ellen Swimsuit'), isNotNull);
+    });
+
+    test('a fresh one, never the one the folder came with', () async {
+      // The ingest copies `.zzz-mod-manager/` wholesale on purpose, so a shared
+      // folder arrives with its author's sidecar — uid included. Inheriting it
+      // would hand two mods one snapshot group.
+      final folder = await sourceFolder('Shared Ellen');
+      final sidecar =
+          Directory(path.join(folder, '.zzz-mod-manager'))..createSync();
+      File(path.join(sidecar.path, 'metadata.json')).writeAsStringSync(
+        '{"schema_version": 2, "uid": "somebody-elses", '
+        '"description": "from whoever shared this"}',
+      );
+
+      await service.importMods([folder]);
+
+      expect(await sidecarUid('Shared Ellen'), isNot('somebody-elses'));
+      expect(await sidecarUid('Shared Ellen'), isNotNull);
+    });
+
+    test('and two mods out of one shared folder do not share it', () async {
+      final first = await sourceFolder('Ellen A');
+      final second = await sourceFolder('Ellen B');
+
+      await service.importMods([first, second]);
+
+      expect(await sidecarUid('Ellen A'), isNot(await sidecarUid('Ellen B')));
+    });
+  });
+
   group('importMods', () {
     test('a told character beats what the name reads as', () async {
       final folder = await sourceFolder('Zhao Nicole');

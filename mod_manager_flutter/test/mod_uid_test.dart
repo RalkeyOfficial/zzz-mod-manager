@@ -98,6 +98,45 @@ void main() {
     expect(await uids.ensure(mod), isNull);
   });
 
+  group('assign, for a folder the app has just created', () {
+    test('replaces an identity the folder arrived with', () async {
+      // `copyDirectory` carries `.zzz-mod-manager/` wholesale on ingest — on
+      // purpose, so a shared folder keeps its author's description and gallery
+      // — so an imported folder can arrive holding **somebody else's** uid.
+      // Inheriting it would give two mods one identity the moment the same
+      // shared folder is imported twice, and one snapshot group between them.
+      final mod = modFolder('Ellen');
+      await sidecars.write(
+        mod.path,
+        const ModMetadata(
+          uid: 'somebody-elses-identity',
+          description: 'from whoever shared this',
+        ),
+      );
+
+      final assigned = await uids.assign(mod);
+
+      expect(assigned, isNot('somebody-elses-identity'));
+      expect(await uids.read(mod), assigned);
+      expect((await sidecars.read(mod.path))!.description,
+          'from whoever shared this',
+          reason: "the author's own fields are kept — it is the claim about "
+              'an install that is dropped, the same rule the inbound origin '
+              'block follows');
+    });
+
+    test('twice over gives two identities, not one', () async {
+      // The same archive installed as two mods. Under `ensure` both would end
+      // up with the first one's identity.
+      final first = modFolder('Ellen');
+      final second = modFolder('Ellen 2');
+      await sidecars.write(first.path, const ModMetadata(uid: 'shared'));
+      await sidecars.write(second.path, const ModMetadata(uid: 'shared'));
+
+      expect(await uids.assign(first), isNot(await uids.assign(second)));
+    });
+  });
+
   test('a copied folder carries the same uid, and nothing here notices',
       () async {
     // Filed, not fixed, and pinned so it is a known shape rather than a

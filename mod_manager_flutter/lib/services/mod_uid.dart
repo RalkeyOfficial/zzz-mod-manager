@@ -32,48 +32,56 @@ import 'mod_metadata_service.dart';
 /// when the thing it derives from changes, which is the entire failure being
 /// fixed.
 ///
-/// ## Assigned on first need, never backfilled
+/// ## Where one comes from
 ///
-/// A mod gets a uid the first time something has to remember it — today, the
-/// first snapshot taken of it. There is no scan-time pass that stamps the
-/// library, which would be a write into every mod folder for data most of them
-/// have no use for yet, and a write against read-only folders that would fail
-/// and be logged for no benefit.
+/// | When | Which call | Why that one |
+/// |---|---|---|
+/// | a mod is **installed** | [assign] | the folder is new, so any uid inside it came from whoever shared it |
+/// | a mod is **scanned** and has none | [ensure], through `loadOrMigrate` | the catch-up for a library that predates this |
+/// | a **snapshot** is about to be taken | [ensure] | the guarantee: no identity, no snapshot |
 ///
-/// **A mod with no uid has no saved versions**, and that is an identity rather
-/// than an approximation: nothing could have filed anything under a uid it
-/// never had.
+/// The scan case is what gives an existing library its identities, one write
+/// per mod and then never again — the same shape as the legacy migration it
+/// sits beside (`docs/metadata-schema.md` §4).
 ///
 /// ## What it does not fix
 ///
 /// **A duplicated folder carries a duplicated uid.** Copying a mod folder in a
 /// file manager is a thing people do, and both copies then claim one history —
 /// where an update to either prunes the other's. Nothing here detects that; the
-/// scan is where it would have to, and it is filed rather than built.
+/// scan is where it would have to, and it is filed rather than built. Note the
+/// *install* path is not this case: it assigns rather than inheriting, so
+/// importing one shared folder twice produces two identities.
 ///
-/// **A deleted sidecar orphans the history it named.** The mod gets a fresh uid
-/// on its next snapshot and the old group becomes unclaimable. That is the
+/// **A deleted sidecar orphans the history it named.** The mod takes a fresh
+/// uid on its next scan and the old group becomes unclaimable. That is the
 /// user's own doing, but it is silent, which is why unclaimed groups are
 /// reported rather than left to accumulate.
 class ModUid {
-  ModUid({ModMetadataService? sidecars})
-      : _sidecars = sidecars ?? ModMetadataService();
+  ModUid({ModMetadataService? service})
+      : _sidecars = service ?? ModMetadataService();
 
   final ModMetadataService _sidecars;
 
   static final Random _random = Random.secure();
   static final Logger _log = Logger('metadata');
 
-  /// This folder's uid, **assigning one if it has none**.
+  /// **Gives a folder the app has just created a fresh identity**, replacing
+  /// any it arrived with.
   ///
-  /// Null only when the sidecar could not be written, which is a folder that
-  /// cannot be modified at all — so the operation that asked for the uid was
-  /// about to fail anyway. Callers treat it the way they treat a snapshot that
-  /// could not be taken: stop, rather than proceed unrecorded.
-  Future<String?> ensure(Directory modFolder) async {
-    final existing = await read(modFolder);
-    if (existing != null) return existing;
-
+  /// Not [ensure], and the difference matters: `copyDirectory` carries
+  /// `.zzz-mod-manager/` wholesale on ingest — deliberately, so a shared folder
+  /// keeps its author's description and gallery — so an imported folder can
+  /// arrive **holding somebody else's uid**. Keeping it would give two mods one
+  /// identity the moment the same shared folder is imported twice, and they
+  /// would then share one snapshot group where an update to either prunes the
+  /// other's history.
+  ///
+  /// The same rule the inbound `origin` block already follows, for the same
+  /// reason: it is a statement about someone else's install.
+  ///
+  /// Null when the sidecar could not be written.
+  Future<String?> assign(Directory modFolder) async {
     final metadata = await _sidecars.read(modFolder.path);
     final uid = newUid();
     final written = await _sidecars.write(
@@ -86,6 +94,16 @@ class ModUid {
       return null;
     }
     return uid;
+  }
+
+  /// This folder's uid, **assigning one if it has none**.
+  ///
+  /// Null only when the sidecar could not be written, which is a folder that
+  /// cannot be modified at all — so the operation that asked for the uid was
+  /// about to fail anyway. Callers treat it the way they treat a snapshot that
+  /// could not be taken: stop, rather than proceed unrecorded.
+  Future<String?> ensure(Directory modFolder) async {
+    return await read(modFolder) ?? await assign(modFolder);
   }
 
   /// This folder's uid, or null when it has never needed one.

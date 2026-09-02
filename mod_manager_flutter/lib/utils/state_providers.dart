@@ -489,8 +489,10 @@ final snapshotServiceProvider = Provider<SnapshotService>(
 ///
 /// Uids rather than mod names, because that is what the store is keyed by; the
 /// caller compares against `ModInfo.uid`, which the scan already carries. A mod
-/// with no uid is absent from this by construction, which is correct — it has
-/// never had an identity to file a snapshot under.
+/// with no uid is absent from this by construction, which is correct — every
+/// mod is given one at install or on the scan, so the only folder without one
+/// is one that cannot be written, and nothing could have been filed under an
+/// identity that never reached disk.
 ///
 /// Invalidated by whatever writes a snapshot; there is no watcher, because the
 /// only things that create one are inside this app.

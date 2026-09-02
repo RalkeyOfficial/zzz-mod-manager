@@ -116,7 +116,7 @@ dependency at all: see `test/origin_backfill_test.dart` and
 | Field | Type | Written when | Meaning |
 |---|---|---|---|
 | `schema_version` | `int` | always | On-disk format version. Missing → assumed `ModMetadata.assumedSchemaVersion`. See [§4](#4-versioning-and-migration). |
-| `uid` | `string?` | non-null only | This folder's **identity**, for what has to outlive its name. Opaque, machine-owned, assigned on first need. See below. |
+| `uid` | `string?` | non-null only | This folder's **identity**, for what has to outlive its name. Opaque, machine-owned, written at install and migrated onto everything else by the scan. See below. |
 | `description` | `string?` | non-null only | Free-form, **rendered as markdown** in the UI (`utils/markdown_description.dart`). Users can paste rich text and get markdown — see the clipboard-HTML note in `CLAUDE.md`. |
 | `source_url` | `string?` | non-null only | The mod's **page** URL. User-facing and user-editable via the edit dialog. |
 | `tags` | `string[]` | **always** (even `[]`) | Arbitrary user tags. Drive the tag filters in the mods toolbar. |
@@ -148,12 +148,27 @@ assigns one.
   derived from the folder name, the install date or the origin block: a derived
   id changes when the thing it derives from changes, which is the failure being
   fixed.
-- **Assigned on first need, never backfilled.** A mod gets one the first time
-  something has to remember it — today, its first snapshot. There is no
-  scan-time pass stamping the library, which would write into every mod folder
-  for data most have no use for and fail against read-only ones for no gain. **A
-  mod with no uid has no saved versions**, which is an identity rather than an
-  approximation.
+- **Assigned at install, and to everything else on the scan.** Three callers,
+  and which one runs is the whole of the policy:
+
+  | When | Call | Why that one |
+  |---|---|---|
+  | a mod is installed | `ModUid.assign` | the folder is new, so any uid *inside* it came from whoever shared it |
+  | a mod is scanned and has none | `ModUid.assign`, via `loadOrMigrate` | the catch-up for a library that predates this |
+  | a snapshot is about to be taken | `ModUid.ensure` | the guarantee — no identity, no snapshot, and so no write |
+
+  **An inbound uid is dropped, exactly as the inbound `origin` block is**, and
+  for the same reason: the ingest copies `.zzz-mod-manager/` wholesale on
+  purpose (so a shared folder keeps its author's description and gallery), so a
+  folder can arrive holding someone else's identity. Inheriting it would give
+  two mods one identity the moment the same shared folder is installed twice —
+  and one snapshot group between them, where an update to either prunes the
+  other's history.
+- **The scan pass is the migration**, in the shape [§4](#the-migration-hook)
+  requires of one: idempotent (a mod that has one costs a read) and offline. It
+  is the whole library rather than the mods that look like they need it, because
+  what needs it is a *later* event — the first snapshot, taken long after any
+  rename that would have stranded it.
 - **Machine-owned, so it is carried through every save**
   (`replaceUserFields`, `copyWith`, `withOrigin`). A new machine-owned field
   left off those lists is erased by the first description edit — see
@@ -165,13 +180,14 @@ assigns one.
 
 Two things it deliberately does not fix:
 
-- **A duplicated folder carries a duplicated uid.** Copying a mod folder is
-  something people do, and both copies then claim one history — where an update
-  to either prunes the other's. The scan is where that would have to be caught;
-  it is filed, and pinned by a test so it is a known shape rather than a
+- **A folder duplicated in a file manager carries a duplicated uid**, and both
+  copies then claim one history — where an update to either prunes the other's.
+  The *install* path is not this case (it assigns rather than inheriting); a
+  copy made outside the app is, and the scan is where it would have to be
+  caught. Filed, and pinned by a test so it is a known shape rather than a
   surprise.
 - **A deleted sidecar orphans the history it named.** The mod takes a fresh uid
-  on its next snapshot and the old group becomes unclaimable. The user's own
+  on its next scan and the old group becomes unclaimable. The user's own
   doing, but silent — which is why unclaimed groups are reported rather than
   left to accumulate.
 
@@ -541,15 +557,29 @@ doesn't exist, instead of relying on `create(recursive: true)`. This prevents th
 otherwise be re-materialised as a folder containing nothing but our sidecar.
 Preserve this guard in any new write path.
 
-### Don't litter empty sidecars
+### Nothing in a sidecar that says nothing
 
-A mod with nothing worth saving should get **no `.zzz-mod-manager` directory at
-all**. Users who never touch metadata shouldn't find new files appearing inside
-their mods. `ModMetadataRepository.loadOrMigrate()` enforces this by writing only when
-`!metadata.isEmpty` — i.e. only when it actually migrated something. The one
-deliberate exception is the user answering "not from GameBanana / it's my own",
-which has to record that answer somewhere
+The rule was **no `.zzz-mod-manager` directory at all** for a mod with nothing
+worth saving: users who never touch metadata shouldn't find new files appearing
+inside their mods.
+
+**Every mod now gets one, because every mod gets a `uid`** — and that is a
+change of scope rather than of principle. What the rule protects against is a
+file that carries no information; an identity is information, and it is the one
+piece a mod cannot acquire later without having already lost something. A folder
+that waits for its first snapshot to be identified is a folder whose history any
+rename in the meantime has stranded, silently, with no way to tell that from a
+deletion. So `loadOrMigrate()` writes for every mod, once, and `isEmpty` counts
+a uid as content.
+
+The user answering "not from GameBanana / it's my own" is the other thing that
+has to be recorded somewhere
 ([`origin-tracking.md`](origin-tracking.md#what-it-is-allowed-to-write)).
+
+What has not changed: **nothing else is invented to fill a file.** No origin
+block is written for a mod whose `source_url` names no mod page, no
+`character_id` is written for an untagged mod, and a second scan of a mod with
+nothing to derive is a read and no write at all.
 
 ---
 
@@ -743,6 +773,13 @@ config character tag and an app-data image, and can never have a url to parse.
 A backfill chained after the legacy migration would sit where `sourceUrl` is
 null by construction and never fire once.
 
+**The identity migration is a third piece, and it is not a sibling of those
+two** — it runs on both branches, because a mod may be missing a `uid` whether
+or not it has a sidecar. It is also the only one that touches every mod: the
+other two fire on evidence (a `source_url` to parse, legacy storage to pull in),
+while this one fires on absence.
+
 Follow this shape for new migrations. Two properties matter: it's **idempotent**
-(re-running is harmless) and it's **offline** (scans happen on every launch with
-no network, so a migration must never require a request).
+(re-running is harmless — a mod that already has a uid costs one read) and it's
+**offline** (scans happen on every launch with no network, so a migration must
+never require a request).

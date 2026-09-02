@@ -108,13 +108,41 @@ void main() {
   });
 
   group('loadOrMigrate', () {
-    test('writes no sidecar when there is nothing to migrate', () async {
+    test('gives a mod with nothing to migrate an identity, and only that',
+        () async {
+      // **The one thing a scan writes into a folder that has nothing.** The
+      // rule used to be "no sidecar unless there is something to preserve",
+      // and an identity is now something to preserve: it is what this mod's
+      // saved versions get filed under, and a folder that waits for its first
+      // snapshot to be identified is one whose history a rename in between
+      // would have stranded.
       makeMod('Bare Mod');
       final meta = await repo.loadOrMigrate('Bare Mod', path.join(modsDir.path, 'Bare Mod'));
 
-      expect(meta.isEmpty, isTrue);
-      expect(sidecarOf('Bare Mod'), isNull,
-          reason: 'a user who never touches metadata should see no new files');
+      expect(meta.uid, isNotNull);
+      expect(meta.description, isNull);
+      expect(meta.characterId, isNull);
+      expect(meta.tags, isEmpty);
+      expect(meta.origin, isNull);
+
+      final onDisk = sidecarOf('Bare Mod')!;
+      expect(onDisk.keys, containsAll(<String>['schema_version', 'uid']));
+      expect(onDisk['uid'], meta.uid,
+          reason: 'the identity in memory is the one on disk, or nothing '
+              'could be filed under it');
+    });
+
+    test('the identity it hands out does not change on the next scan', () async {
+      // Idempotence, which every migration here has to have: re-running must be
+      // a read. A uid that was re-issued per scan would strand the mod's saved
+      // versions every time the library was rescanned.
+      makeMod('Bare Mod');
+      final folder = path.join(modsDir.path, 'Bare Mod');
+
+      final first = await repo.loadOrMigrate('Bare Mod', folder);
+      final second = await repo.loadOrMigrate('Bare Mod', folder);
+
+      expect(second.uid, first.uid);
     });
 
     test('migrates a legacy character tag out of config.json', () async {
@@ -130,8 +158,7 @@ void main() {
 
     test('treats a legacy "unknown" tag as untagged, not as a character', () async {
       // Older builds wrote the runtime placeholder into config.json. Copying it
-      // into a sidecar would both violate the never-persist rule and litter a
-      // sidecar with nothing meaningful in it.
+      // into a sidecar would violate the never-persist rule.
       makeMod('Mystery Mod');
       await config.setModCharacterTag('Mystery Mod', 'unknown');
 
@@ -139,7 +166,11 @@ void main() {
           'Mystery Mod', path.join(modsDir.path, 'Mystery Mod'));
 
       expect(meta.characterId, isNull);
-      expect(sidecarOf('Mystery Mod'), isNull);
+      // The sidecar exists — every mod is given an identity — and what must
+      // not be in it is the placeholder.
+      final onDisk = sidecarOf('Mystery Mod')!;
+      expect(onDisk.containsKey('character_id'), isFalse);
+      expect(onDisk['uid'], isNotNull);
     });
 
     test('migrates a legacy app-data image into the mod folder', () async {
@@ -278,25 +309,44 @@ void main() {
               'every scan — this is what keeps it off the hot path');
     });
 
-    test('writes nothing at all when no id is derivable', () async {
-      // The don't-litter rule, and the reason there is no "already swept"
-      // marker: re-sniffing costs one string parse, and a marker would need a
-      // file we have decided not to create.
+    test('writes no origin block at all when no id is derivable', () async {
+      // The don't-litter rule as it stands: no *block* is invented for a mod
+      // whose url names no mod page, and re-sniffing costs one string parse —
+      // which is why there is no "already swept" marker either.
       final dir = sidecarMod('Local Mod', {
         'source_url': 'https://drive.google.com/file/d/abc',
         'tags': ['mine'],
       });
-      final before = File(path.join(dir.path, '.zzz-mod-manager', 'metadata.json'))
-          .readAsStringSync();
 
       final meta = await repo.loadOrMigrate('Local Mod', dir.path);
 
       expect(meta.origin, isNull);
-      expect(
-        File(path.join(dir.path, '.zzz-mod-manager', 'metadata.json'))
-            .readAsStringSync(),
-        before,
-      );
+      final after =
+          jsonDecode(File(path.join(dir.path, '.zzz-mod-manager', 'metadata.json'))
+              .readAsStringSync()) as Map<String, Object?>;
+      expect(after.containsKey('origin'), isFalse);
+      // The user's own fields are untouched. The identity is the one thing this
+      // pass adds, to every mod, once.
+      expect(after['source_url'], 'https://drive.google.com/file/d/abc');
+      expect(after['tags'], ['mine']);
+      expect(after['uid'], meta.uid);
+    });
+
+    test('a second scan re-sniffs but does not rewrite the file', () async {
+      // What the assertion above used to make: once the identity is on disk,
+      // a scan of a mod with nothing to derive is a read and nothing else.
+      final dir = sidecarMod('Local Mod', {
+        'source_url': 'https://drive.google.com/file/d/abc',
+        'tags': ['mine'],
+      });
+      await repo.loadOrMigrate('Local Mod', dir.path);
+      final sidecar =
+          File(path.join(dir.path, '.zzz-mod-manager', 'metadata.json'));
+      final before = sidecar.readAsStringSync();
+
+      await repo.loadOrMigrate('Local Mod', dir.path);
+
+      expect(sidecar.readAsStringSync(), before);
     });
 
     test('never rebinds a mod that already has an identity', () async {
@@ -550,14 +600,14 @@ void main() {
     test('a mod with no sidecar is left to the legacy migration', () async {
       // The branch that makes the sibling framing concrete: no sidecar means no
       // source_url to parse, so there is nothing for the backfill to do and no
-      // empty file gets created on its behalf.
+      // block gets invented on its behalf.
       makeMod('Untouched Mod');
 
       final meta = await repo.loadOrMigrate(
           'Untouched Mod', path.join(modsDir.path, 'Untouched Mod'));
 
       expect(meta.origin, isNull);
-      expect(sidecarOf('Untouched Mod'), isNull);
+      expect(sidecarOf('Untouched Mod')!.containsKey('origin'), isFalse);
     });
   });
 

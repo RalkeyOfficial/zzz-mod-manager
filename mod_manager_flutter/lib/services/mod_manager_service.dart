@@ -551,6 +551,13 @@ class ModManagerService {
         // The inbound origin block is dropped, so any displaced originals that
         // came with the folder are bytes nothing can explain.
         await const PatchStore().discardAll(targetDir);
+        // **An identity from the moment the folder exists**, whatever created
+        // it: a folder dragged off a disk has no origin seed and so never
+        // reaches the origin write below, and a mod installed and updated in
+        // one session must not wait for a scan to be identifiable. A copied
+        // sidecar's uid is not inherited — `discardAll` above is the same
+        // rule for the same reason, and the inbound block is dropped too.
+        await _uids.assign(targetDir);
         importedMods.add(modName);
         sourceOf[modName] = folderPath;
 

@@ -41,15 +41,18 @@ class ModMetadata {
   /// versions are the one thing where that costs gigabytes, so they key by this
   /// instead and a rename becomes a non-event, in the app or out of it.
   ///
-  /// Null until something needs to remember this folder, which today means
-  /// until its first snapshot ([ModUid]). A mod with no uid has no history, and
-  /// that is not an approximation — it is the same statement.
+  /// Written **at install**, and given to a library that predates identities on
+  /// the scan that reads it (`ModUid`, `loadOrMigrate`). An inbound one is
+  /// dropped rather than inherited, exactly as [origin] is: a shared folder
+  /// arrives carrying its author's, and keeping it would hand two mods one
+  /// history. Null only for a folder that cannot be written.
   ///
   /// Two things it deliberately does not fix, because the folder name is the
   /// right identity for them: per-install state in `config.json` (a rename
   /// through the app migrates it, and an outside rename costs a favourite star
-  /// rather than a library), and telling two copies of one folder apart — a
-  /// duplicated folder carries a duplicated uid, and the scan has to notice.
+  /// rather than a library), and telling apart two copies of one folder made
+  /// **outside** the app — those carry one uid, and the scan would have to
+  /// notice.
   final String? uid;
 
   /// Free-form description.

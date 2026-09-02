@@ -11,6 +11,7 @@ import 'http/image_fetcher.dart';
 import 'log/logger.dart';
 import 'metadata_autofill.dart';
 import 'mod_metadata_service.dart';
+import 'mod_uid.dart';
 import 'origin_backfill.dart';
 
 /// The slice of `ConfigService` this repository needs: the legacy per-mod
@@ -55,6 +56,10 @@ class ModMetadataRepository {
   final String Function() _legacyImagesPath;
   final OriginBackfill _backfill;
 
+  /// Gives a mod that predates identities one, on the scan — see
+  /// [loadOrMigrate].
+  final ModUid _uids;
+
   /// Mods whose scan-time origin backfill could not be written, drained by the
   /// UI once it has reported them.
   ///
@@ -76,7 +81,9 @@ class ModMetadataRepository {
     String Function()? legacyImagesPath,
     OriginBackfill? backfill,
     ImageFetcher? imageFetcher,
+    ModUid? uids,
   })  : _modsPath = modsPath,
+        _uids = uids ?? ModUid(service: service),
         _service = service ?? ModMetadataService(),
         _legacyImagesPath = legacyImagesPath ?? PathHelper.getModImagesPath,
         _backfill = backfill ?? const OriginBackfill(),
@@ -103,7 +110,14 @@ class ModMetadataRepository {
 
   /// Loads a mod's metadata sidecar, bringing it up to date on the way past.
   ///
-  /// Two independent pieces of catch-up work hang off this, and they are
+  /// **The identity comes first, and it is the one piece of catch-up common to
+  /// both branches below.** A mod installed by this build is given one at
+  /// ingest; a library that predates that gets one here, one write per mod and
+  /// then never again. It has to be the whole library rather than the mods that
+  /// happen to need it, because what needs it is a *later* event — the first
+  /// snapshot, taken long after any rename that would have stranded it.
+  ///
+  /// Two further pieces of catch-up work hang off this, and they are
   /// **siblings on opposite branches** rather than one pipeline:
   ///
   /// - A mod that *has* a sidecar may still predate the origin block, but it
@@ -122,7 +136,18 @@ class ModMetadataRepository {
   /// values still come back in memory so the app works against a read-only
   /// library.
   Future<ModMetadata> loadOrMigrate(String modName, String modFolder) async {
-    final existing = await _service.read(modFolder);
+    var existing = await _service.read(modFolder);
+
+    // **Idempotent and offline**, the two properties every migration here has
+    // to have: a mod that already has one is a read and nothing more, and this
+    // needs no network on a path that runs at every launch. A folder that
+    // cannot be written keeps working without one — it simply has no saved
+    // versions, which is true rather than approximate.
+    if (existing != null && existing.uid == null) {
+      final uid = await _uids.assign(Directory(modFolder));
+      if (uid != null) existing = existing.copyWith(uid: uid);
+    }
+
     if (existing != null) return _backfillOrigin(modName, modFolder, existing);
 
     // No sidecar yet — gather legacy data to migrate. config.json may hold the
@@ -139,17 +164,24 @@ class ModMetadataRepository {
       // Ignore: app-data image is optional.
     }
 
-    final metadata = ModMetadata(
+    final migrated = ModMetadata(
       characterId: legacyChar,
       images: migratedImageRel != null ? [migratedImageRel] : const [],
     );
 
-    // Only persist when there is something to preserve, so we don't litter
-    // every mod folder with empty sidecars.
-    if (!metadata.isEmpty) {
-      await _service.write(modFolder, metadata);
-    }
-    return metadata;
+    // **The identity goes in the same write as the legacy data**, so a folder
+    // with nothing to migrate is still identified without a second pass over
+    // it. That does mean every mod folder now gets a sidecar, where the rule
+    // used to be "only when there is something to preserve" — deliberately: an
+    // identity *is* something to preserve, and a folder that waits for its
+    // first snapshot to get one is a folder whose history a rename in the
+    // meantime would have stranded.
+    final identified = migrated.copyWith(uid: ModUid.newUid());
+    if (await _service.write(modFolder, identified)) return identified;
+
+    // Unwritable, so the values still come back in memory — without the
+    // identity, because nothing could be filed under one that is not on disk.
+    return migrated;
   }
 
   /// Derives an origin block for an already-sidecar'd mod that predates one,
