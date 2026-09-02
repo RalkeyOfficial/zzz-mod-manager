@@ -45,8 +45,18 @@ import 'log/logger.dart';
 /// and the real path lives in the sidecar's registry rather than on disk. An
 /// asset that no `.ini` references is inert on its own.
 ///
-/// **Not verified against ZZMI.** It is a claim about someone else's loader, and
-/// the check is one launch of the game with a patched mod active.
+/// **The loader selects by extension, which is what makes this work.** ZZMI's
+/// `d3dx.ini` pulls in the whole tree with `include_recursive = Mods`, describes
+/// what that means as "every .ini file", and excludes only `DISABLED*` and
+/// `desktop.ini` — a named `.ini`, which a broader matcher would not have needed
+/// spelled out. Mods in the wild rely on the same thing: authors ship
+/// `Belle.ini.back` and `Yidhari.ini.bak` beside the live `.ini` and load
+/// normally, and our own `.zzz-mod-manager/` has sat inside active folders from
+/// the start.
+///
+/// The basis is that configuration plus those mods, not a read of 3DMigoto's
+/// source — so a future loader that globbed more loosely would break this, and
+/// the symptom would be doubled hotkeys on a patched mod.
 class PatchStore {
   const PatchStore();
 

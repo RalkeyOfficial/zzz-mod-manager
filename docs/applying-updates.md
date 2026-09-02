@@ -496,9 +496,16 @@ installation.
 replacing the base's `.ini` is the common case, so this store holds exactly the
 file that would cause a duplicate-hotkey failure. `.orig` takes it out of any
 `*.ini` glob, the true path lives in the registry rather than on disk, and an
-asset no `.ini` references is inert on its own. **Not verified against ZZMI** —
-it is a claim about someone else's loader, and the check is one launch of the game
-with a patched mod active.
+asset no `.ini` references is inert on its own.
+
+**The loader selects by extension.** ZZMI's `d3dx.ini` pulls in the whole tree
+with `include_recursive = Mods`, describes what that covers as "every .ini
+file", and excludes only `DISABLED*` and `desktop.ini` — a named `.ini`, which a
+looser matcher would not have needed spelled out. Mods in the wild depend on the
+same behaviour: authors ship `Belle.ini.back` and `Yidhari.ini.bak` beside the
+live `.ini` and load normally. The basis is that configuration and those mods,
+not a read of 3DMigoto's source, so a loader that globbed more loosely would
+break this — with doubled hotkeys on a patched mod as the symptom.
 
 Three rules keep it honest:
 
