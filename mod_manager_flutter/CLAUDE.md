@@ -60,9 +60,8 @@ resolving a character from an id must handle both, plus the `unknown` placeholde
   goes in the sidebar.
 - **The application id is one string in three places** — `APPLICATION_ID` in
   `linux/CMakeLists.txt`, the `linux/packaging/<id>.desktop` filename, and the
-  installed icon's filename. A Wayland compositor reads the window's icon from
-  the desktop entry it matches by app id, so the icon silently disappears if any
-  of the three drifts.
+  installed icon's filename. A compositor reads the window's icon from the
+  desktop entry it matches by app id, so it disappears if any of the three drifts.
 
 **Characters**
 - The `characterAliases` map is **duplicated** in `_detectCharacterFromName` and
@@ -103,8 +102,7 @@ resolving a character from an id must handle both, plus the `unknown` placeholde
   but a checksum match ever reaches `exact`.
 - **The app never presses F10 for the user.** Built, measured, removed — an
   injected key does not reliably reach a Proton game, and a reload is invisible
-  from outside it ([`mod-reload.md`](../docs/mod-reload.md)). Read that before
-  rebuilding it.
+  from outside it ([`mod-reload.md`](../docs/mod-reload.md)). Read it first.
 
 **Notifications** — full rules in [`notifications.md`](../docs/notifications.md)
 - Never call `ScaffoldMessenger`. `context.notify.<severity>(…)` is the only way.
@@ -136,9 +134,11 @@ not ad-hoc. One exception: `utils/marketplace_providers.dart` holds the
 marketplace's browsing session, which is one screen's state rather than the app's.
 
 **The three tabs are keyed `AnimatedSwitcher` children with no keep-alive**, so
-the inactive tab's `State` is *disposed*. Anything that must survive a tab switch
-takes its own snapshot (`installedModsIndexProvider`) rather than deriving from a
-provider the disposed screen was keeping current.
+the inactive tab's `State` is *disposed* and `charactersProvider` — written only
+by `ModsScreen`, with `modsProvider` over it — is as old as the last visit.
+Anything that must outlive a tab switch takes its own snapshot
+(`installedModsIndexProvider`), and **a modal answering a question about the
+library reads it when it opens** (`test/modal_freshness_test.dart`).
 
 **Work that outlives the press that started it must not be owned by a tab.**
 Its `BuildContext` dies on the next tab switch, silently and mid-await. Mount a
@@ -177,10 +177,10 @@ Custom JSON i18n (not ARB/gen-l10n). Strings live in `assets/l10n/en.json` and
   `MaterialApp`. `AppLocalizations.delegate` loads its JSON from the asset bundle
   asynchronously and **`pumpAndSettle` does not wait for real async I/O** — it
   returns once no frames are scheduled, long before a bundle read finishes. The
-  result is a `Localizations` that renders an empty box forever with *no
-  exception*, so every `find` returns nothing and every assertion passes
-  vacuously. The harness preloads via `runAsync`; call `expectBuilt(...)` after
-  pumping so that failure mode can never be silent again.
+  result renders an empty box forever with **no exception**, so every `find`
+  returns nothing and every assertion passes vacuously. The harness preloads via
+  `runAsync`; call `expectBuilt(...)` after pumping so that failure can never be
+  silent again.
 - The same trap applies to `Image.asset`: assert about the `AssetImage`'s
   `assetName`, never about pixels.
 - Dialogs that write must take a seam. `ApiService` is static and lazily builds

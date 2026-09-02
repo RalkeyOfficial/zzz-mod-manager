@@ -31,9 +31,11 @@ import '../../models/character_info.dart';
 import '../../models/gamebanana/gamebanana.dart';
 import '../../models/mod_download.dart';
 import '../../models/origin_enums.dart';
+import '../../services/api_service.dart';
 import '../../services/folder_contents.dart';
 import '../../services/library_file_index.dart';
 import '../../services/log/confirmations.dart';
+import '../../services/log/logger.dart';
 import '../../services/patch_destination_ranking.dart';
 import '../../services/patch_placement.dart';
 import '../../services/patch_record.dart';
@@ -220,7 +222,6 @@ Future<PatchInstallDecision?> decidePatchInstall(
   required ImportPlan plan,
   required List<String> folders,
   required String modsPath,
-  required List<ModInfo> library,
   int? patchModId,
   List<GbRequirement> patchRequirements = const <GbRequirement>[],
   PatchDestinationPrompt prompt = showPatchInstallPrompt,
@@ -230,6 +231,12 @@ Future<PatchInstallDecision?> decidePatchInstall(
   // ships its textures in one folder and its `.ini` in another reads as a patch.
   final scan = await scanPlannedMods(plannedMods(plan, folders));
   if (scan.patchShaped.isEmpty) return PatchInstallDecision(scan: scan);
+
+  // **Read here rather than handed in**, and after the scan has established
+  // there is something to ask about — so an ordinary install pays nothing for
+  // it. See [_libraryNow]: what this prompt lists has to be the library as it
+  // is when the prompt opens.
+  final library = await _libraryNow();
 
   // Only where a library destination is on offer at all: a combined install
   // does not get that choice, so the walk would have no reader.
@@ -295,6 +302,33 @@ Future<PatchInstallDecision?> decidePatchInstall(
     folders: folders,
     modsPath: modsPath,
   );
+}
+
+/// The library as it is **on disk, at the moment the prompt opens**.
+///
+/// Never handed in from the widget tree. `modsProvider` derives from
+/// `charactersProvider`, which only `ModsScreen` writes — and that screen is a
+/// keyed child of a switcher with no keep-alive, so it is disposed while the
+/// marketplace is open and its list is as old as the last visit to the Mods
+/// tab. A patch installed straight after the mod it patches was therefore
+/// offered every folder in the library **except that one**, which is the folder
+/// the question is about.
+///
+/// One scan, and only for an install that has something to ask: 4 ms warm, 12 ms
+/// cold over a real 23-mod library, against a path that has just unpacked an
+/// archive.
+///
+/// Empty when the library cannot be read, and the prompt says so out loud
+/// rather than falling back to an older list — being offered a folder that is
+/// no longer there is worse than not being offered one.
+Future<List<ModInfo>> _libraryNow() async {
+  try {
+    return await ApiService.getMods();
+  } catch (e) {
+    Logger('install').warning('could not read the library for the patch prompt',
+        error: e);
+    return const <ModInfo>[];
+  }
 }
 
 /// Puts each patch's likeliest destinations first, per patch-shaped mod.

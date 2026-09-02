@@ -1514,7 +1514,6 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
           plan: plan,
           folders: folderPaths,
           modsPath: modsPath,
-          library: ref.read(modsProvider),
         );
         // Only this prompt can offer "don't install it at all", and only here,
         // where nothing has been written yet.
