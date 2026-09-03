@@ -231,8 +231,9 @@ class _ModBackupsDialogState extends ConsumerState<ModBackupsDialog> {
       return;
     }
     final mods = await ApiService.getModManagerService();
+    final snapshots = ref.read(snapshotServiceProvider);
     final applier = UpdateApplier(
-      snapshots: ref.read(snapshotServiceProvider),
+      snapshots: snapshots,
       activation: ModManagerActivationPort(mods),
     );
     final result = await applier.restore(
@@ -240,6 +241,12 @@ class _ModBackupsDialogState extends ConsumerState<ModBackupsDialog> {
       modFolder: Directory(path.join(modsPath, widget.mod.id)),
       snapshot: snapshot,
     );
+
+    // **A rollback takes a safety copy of its own before it writes**, so the
+    // budget has moved here as much as on any other write — and rolling back is
+    // when the store is most likely to be large, since that is what having one
+    // is for. Whether the restore landed or not: the copy was taken first.
+    if (result.snapshot != null) await snapshots.prune();
     if (!mounted) return;
 
     _changed = _changed || result.success;

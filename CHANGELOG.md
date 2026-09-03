@@ -49,6 +49,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - You're told what an update will do before it runs.
   - When a new version renames its .ini, the old one goes with it — or is offered for deletion, where the app has no record of what the last version shipped.
   - An update whose archive layout no longer matches the mod stops and says so rather than guessing.
+  - Updating a mod that came bundled with others offers all of them and downloads the archive once, instead of once per mod.
+  - The update dialog says how many other mods came from the same archive before you start.
+  - Each of those mods has its own tick box, and the ones the app can't place are listed with the reason.
+  - A mod that already has a newer file, or whose updates you're ignoring, is offered but not ticked, and the row says which.
+  - A progress bar counts through the folders as they're written, and the result names each one.
 - An install that turns out to be a patch says so, and remembers it for later.
   - Installing a patch asks where it goes: its own folder with the mod it patches fetched in for you, or straight into a mod you already have, picked from a searchable list with cover images.
   - That list puts the folders holding the files the patch replaces first, and each one says how many it holds.

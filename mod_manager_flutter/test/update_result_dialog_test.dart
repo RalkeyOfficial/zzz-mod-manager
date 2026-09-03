@@ -5,6 +5,7 @@ import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/screens/dialogs/update_result_dialog.dart';
 import 'package:mod_manager_flutter/services/update_apply/keybind_changes.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_applier.dart';
+import 'package:mod_manager_flutter/services/update_apply/update_target.dart';
 
 import 'support/localized_harness.dart';
 
@@ -150,5 +151,190 @@ void main() {
       surfaceSize: const Size(480, 900),
     );
     expect(tester.takeException(), isNull);
+  });
+
+  /// **One download written into several folders**, reported per folder.
+  ///
+  /// A group write is not all-or-nothing — each folder has its own snapshot and
+  /// its own copy — so which ones landed is the report, and a total could not
+  /// say it.
+  group('one archive written into several folders', () {
+    Future<void> openGroup(
+      WidgetTester tester,
+      List<AppliedUpdate> others, {
+      Size surfaceSize = const Size(1200, 900),
+    }) async {
+      await pumpLocalized(
+        tester,
+        Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showUpdateResultDialog(
+              context,
+              mod: mod,
+              file: file,
+              result: result(),
+              others: others,
+            ),
+            child: const Text('open'),
+          ),
+        ),
+        surfaceSize: surfaceSize,
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+    }
+
+    ModInfo other(String id) =>
+        ModInfo(id: id, name: id, characterId: 'ellen', isActive: false);
+
+    testWidgets('counts them and names each folder', (tester) async {
+      await openGroup(tester, [
+        AppliedUpdate(mod: other('Ellen Blue'), result: result()),
+        AppliedUpdate(mod: other('Ellen Red'), result: result()),
+      ]);
+      expectBuilt(AlertDialog);
+
+      expect(find.text('3 mods updated'), findsOneWidget);
+      expect(find.text('Ellen'), findsOneWidget);
+      expect(find.text('Ellen Blue'), findsOneWidget);
+      expect(find.text('Ellen Red'), findsOneWidget);
+    });
+
+    testWidgets('a folder that failed is named and counted out',
+        (tester) async {
+      await openGroup(tester, [
+        AppliedUpdate(
+          mod: other('Ellen Blue'),
+          result: const UpdateApplyResult(
+            snapshot: null,
+            filesWritten: 0,
+            removedInis: [],
+            keybindChanges: [],
+            reactivated: false,
+            failure: UpdateApplyFailure.copy,
+          ),
+        ),
+      ]);
+
+      expect(find.text('1 mod updated'), findsOneWidget,
+          reason: 'one of the two landed, and the count says which happened');
+      expect(find.text('Ellen Blue'), findsOneWidget);
+      expect(find.text('The update failed part-way'), findsOneWidget);
+      // Every fact in the ordinary block describes a write that landed, so a
+      // failure showing "0 files written" would read as a successful no-op.
+      expect(find.text('0 file(s) copied into the mod folder'), findsNothing);
+    });
+
+    testWidgets('every folder failing does not report a success',
+        (tester) async {
+      // The one case the headline can be wrong in: a single failure goes out as
+      // a notification and never reaches this dialog, so a group is the only
+      // way to get here with nothing written. `_modBlock` is careful not to
+      // print "0 files written" beside a failure; a tick over "0 mods updated"
+      // would undo that.
+      await pumpLocalized(
+        tester,
+        Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showUpdateResultDialog(
+              context,
+              mod: mod,
+              file: file,
+              result: const UpdateApplyResult(
+                snapshot: null,
+                filesWritten: 0,
+                removedInis: [],
+                keybindChanges: [],
+                reactivated: false,
+                failure: UpdateApplyFailure.snapshot,
+              ),
+              others: [
+                AppliedUpdate(
+                  mod: other('Ellen Blue'),
+                  result: const UpdateApplyResult(
+                    snapshot: null,
+                    filesWritten: 0,
+                    removedInis: [],
+                    keybindChanges: [],
+                    reactivated: false,
+                    failure: UpdateApplyFailure.copy,
+                  ),
+                ),
+              ],
+            ),
+            child: const Text('open'),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nothing was updated'), findsOneWidget);
+      expect(find.byIcon(Icons.check_circle_outline), findsNothing);
+      expect(find.byIcon(Icons.error_outline), findsWidgets);
+    });
+
+    testWidgets('each folder keeps its own hotkey diff', (tester) async {
+      // The one place the update path's accepted loss becomes visible, so it is
+      // per folder rather than summarised: the keys that changed in one mod are
+      // not the keys that changed in another.
+      await openGroup(tester, [
+        AppliedUpdate(
+          mod: other('Ellen Blue'),
+          result: result(changes: const [
+            KeybindChange(
+              section: 'KeySkin',
+              displayName: 'Blue skin',
+              before: 'F7',
+              after: 'F9',
+              kind: KeybindChangeKind.rebound,
+            ),
+          ]),
+        ),
+      ]);
+
+      expect(find.text('Blue skin'), findsOneWidget);
+      expect(find.text('1 hotkey changed'), findsOneWidget);
+    });
+
+    testWidgets('the way back is stated once, not per folder', (tester) async {
+      await openGroup(tester, [
+        AppliedUpdate(mod: other('Ellen Blue'), result: result()),
+        AppliedUpdate(mod: other('Ellen Red'), result: result()),
+      ]);
+
+      expect(find.textContaining('Restore a previous version'), findsOneWidget);
+    });
+
+    testWidgets('it fits the narrowest window with four folders showing',
+        (tester) async {
+      await openGroup(
+        tester,
+        [
+          AppliedUpdate(
+            mod: other('Ellen Blue with a very long folder name'),
+            result: result(
+              removed: const ['a_very_long_leftover_name.ini'],
+              reactivated: true,
+            ),
+          ),
+          AppliedUpdate(mod: other('Ellen Red'), result: result()),
+          AppliedUpdate(
+            mod: other('Ellen Green'),
+            result: const UpdateApplyResult(
+              snapshot: null,
+              filesWritten: 0,
+              removedInis: [],
+              keybindChanges: [],
+              reactivated: false,
+              failure: UpdateApplyFailure.snapshot,
+            ),
+          ),
+        ],
+        surfaceSize: const Size(480, 900),
+      );
+
+      expect(tester.takeException(), isNull);
+    });
   });
 }

@@ -473,6 +473,107 @@ Folders in the archive that are not part of this mod — a `previews/` folder, o
 sibling mod that lives in its own library folder — are named in the confirmation
 rather than dropped silently.
 
+### One archive, several mods, one download
+
+An archive that installed as several mods produces several folders, each with its own
+origin block, its own update check and its own layout to replay. Pressing Update on
+one of them downloads once and offers **every** member of the group on the same
+confirmation, each ticked. `sibling_group.dart` is the decision and it is pure.
+
+**Two identifiers, and neither is a folder name.**
+
+| Question | Answer | Why not the obvious thing |
+|---|---|---|
+| Which mods came from one archive? | `ingest.sibling_group` | Not `mod_id` + `file_id`: two mods from one *page* installed separately carry the same pair, and the offline backfill produces exactly that by accident — [`origin-tracking.md` §3](origin-tracking.md#3-the-offline-backfill) |
+| Which folder of the archive is which mod? | `ingest.folders` | Not the mod's own folder name, which the user renames. The sidecar survives a rename; that is what the field is for — see `ModIngest.folders` |
+
+**"Sibling" means two unrelated things in this feature's neighbourhood**, and they
+meet here. A *sibling variant* is a co-released file on one mod page, used to
+suppress a verdict ([`update-checks.md` §3](update-checks.md#3-how-the-comparison-actually-works)); a *sibling group* is
+a set of mods from one archive, used to fan a write out. The hazard the cautions
+below exist for is precisely one being written into the other.
+
+**A record may drive a write where a guess may not.** Every other multi-mod inference
+here informs and never drives. A sibling group is not an inference: the app watched
+one archive become these folders and wrote it down, which is the same grounds on which
+the write it authorises is `exact`. The consequence is that a **backfilled library has
+no groups and never will** — nothing on disk records that two folders came from one
+archive — so this only ever fires for an archive installed through the app.
+
+Four refusals, each named on the confirmation rather than silently dropping a member:
+
+| Refusal | What it means |
+|---|---|
+| `notBase` | Its stack does not put this download at the bottom, or does not record it at all |
+| `alreadyCurrent` | It already holds the file that would be installed. The recorded file id — offline, exact, no check |
+| `layoutChanged` | Its recorded folder is not in the archive under any name, and there is more than one to pick from |
+| `sourceCollision` | Two members claim the same folder of the archive |
+
+**Two cautions sit between offering a folder and refusing it**, and are the middle
+state because both describe something the user may well want and neither is a thing
+to do to them by default. The row is listed, carries its reason, and starts
+**unticked**:
+
+| Caution | What it means |
+|---|---|
+| `holdsNewer` | It holds a file published *after* the one being installed, so writing it is a downgrade |
+| `dismissed` | The user waved this mod's updates away, and this file is not past the point they waved away up to |
+
+`holdsNewer` is the routine one, because members diverge as soon as one is updated
+alone — which is the status quo this feature replaces. The user pressed Update while
+looking at *another* mod's file list, so nothing on screen said what this one was on.
+Neither is a refusal: the archive is already downloaded, so offering costs nothing,
+and deliberately taking one variant across a whole group is exactly what this screen
+is for. A downgrade beats a dismissal where both apply, being the larger surprise.
+
+`dismissed` matters more than it looks, because `ModDownload.updatedTo` **clears**
+`updates_dismissed_until` — so writing a member the user had ignored would not merely
+override the instruction, it would erase it.
+
+**The comparison uses data already in hand**, with no extra request:
+`UpdateCheck.newerFiles`, the check's own candidate pool, is what a member's recorded
+file is placed against. That pool is **already filtered**, though — archived files,
+release-group siblings of the primary's installed file, and anything stamped with the
+primary's version are all gone from it — so a member the pool cannot place gets no
+caution. That is a real hole and not an impossibility; it is named in
+[§7](#known-gaps). Erring toward offering is still the right side: a wrong caution
+costs a tick, where refusing hides a mod. The repair and patch paths pass no pool at
+all and reduce to "is it on this exact file?", losing nothing they had.
+
+**The collision guard is what grouping buys beyond bandwidth.** On its own each member
+matches its recorded folder, writes, and is silently wrong — one folder's contents
+landing in two mods. Every claimant is refused, **the primary included**: guessing
+which of two mods a folder became is what `layoutChanged` already refuses to do, and
+being the mod the user pressed the button on is not evidence. It also catches the
+commoner shape, since the single-folder rename absorption above is right for a lone
+mod and wrong for a group — an archive that collapsed three folders into one would
+otherwise have every member absorb the same one.
+
+**The write is per folder and not all-or-nothing.** Each member is deactivated,
+snapshotted, written and reactivated on its own, so one failing leaves the others
+correctly updated — and stopping would waste the download this exists to share. The
+result dialog reports a block per folder with that folder's own keybind diff, because
+which folder a fact belongs to is part of the fact.
+
+**Two things are said once for the group** rather than per member: the snapshot,
+overwrite and keybind notices, and the leftover-`.ini` question. That question has the
+same answer every time — an orphaned `.ini` is live the moment the loader reads a
+folder, and the rule that produced each list already refused every leftover it could
+not prove describes the incoming content — so a checkbox per folder would be a quiz.
+The counts differ per folder and stay on their own rows.
+
+**Retention runs between folders, not once at the end.** Three members of a large
+archive add three whole-folder snapshots against the 5 GB budget in
+[§5](#retention) and an archive's tail is 1.24 GB, so a single prune afterwards could
+land the store over budget and then report the overage. Each folder's own new snapshot
+is the tier retention never prunes, so pruning as it goes cannot delete what it just
+took.
+
+**Afterwards, only the folders that took the write lose their update mark.** Neither
+"every folder attempted" nor "every folder but the one the dialog was opened on": a
+folder the user unticked still has its update to take, and one whose write failed
+needs its mark more than before.
+
 ### After a successful update
 
 `ModOrigin.updatedTo` rewrites the block. Both confidences reach `exact` on the same
@@ -673,8 +774,18 @@ If the budget is still exceeded after tier 3, the plan **reports the overage**
 1.2 GB mod is over any sane budget by keeping a single snapshot of it, and the honest
 answer is to say so, not to leave them with no rollback.
 
-Pruning runs after a successful update — the one moment a snapshot has just been
-added, and already an operation the user is waiting on. Nothing else triggers it.
+Pruning runs **whenever a snapshot has just been taken** — the one moment the budget
+has moved, and already an operation the user is waiting on. Nothing else triggers it,
+and all four paths that take one follow the rule: a base update, a patch placement, a
+patch removal, and a rollback's own safety copy.
+
+That is deliberately not "after a successful write": the snapshot comes **before** the
+copy, so one that failed part-way still added a whole folder to the budget, and a retry
+against a nearly full disk is exactly when this is load-bearing. It also means a write
+into several folders prunes between them rather than once at the end
+([§4](#one-archive-several-mods-one-download)), and that a rollback prunes at all —
+which it did not, before this rule was written down.
+
 The numbers are **not user-configurable**; add a setting only if it is actually asked
 for.
 
@@ -993,6 +1104,14 @@ Two things follow, and the second is the one that is easy to get wrong:
   none of the accepted losses announce themselves, which is exactly why the age
   floor beats the count cap. A recovery nobody knows to reach for is not a
   substitute for the user having seen the change happen.
+- **Nor is the folder the unit.** One `exact` verdict now fans out to **N
+  folders** ([§4](#one-archive-several-mods-one-download)), and one banked
+  archive hash can mark a whole sibling group `exact` at once — so an unattended
+  write would rewrite every member of an archive from a single decision nobody
+  watched. Whoever builds this has two obligations the attended path discharges
+  on screen: snapshot the **group** rather than the folder, and honour the two
+  cautions §4 states, since a member that has diverged or been ignored is
+  precisely the one an unattended pass would get wrong with nothing to say so.
 
 **Checking is a different act and is automatable**, because it reads a mod page
 and draws a badge: nothing it does is hard to undo. That half is opt-in and
@@ -1007,10 +1126,24 @@ and its tests are what pin the tier table
 
 Stated because each one bounds what this feature currently promises.
 
-- **A sibling group updates one member at a time**, and each member re-downloads the
-  same archive. One archive can install as several mods, each with its own origin
-  block and its own update check; nothing groups their updates. For a 1.24 GB archive
-  that is a real cost.
+- **A group only exists for an archive installed through the app.** `sibling_group` is
+  written at install and the offline backfill cannot reconstruct it, so a library that
+  predates the origin block gets no grouped updates, ever
+  ([§4](#one-archive-several-mods-one-download)).
+- **A member holding an *archived* newer file is still offered ticked.** The
+  downgrade caution places a member's recorded file against the check's candidate
+  pool, and that pool excludes files the author has archived — so a member updated
+  alone to a file since superseded cannot be placed, and writing this one takes it
+  back two releases. Closing it needs `GbMod.allFiles` instead of the pool, which is a
+  second request on the update path; the caution catches every *published* newer file
+  as it stands.
+- **A repair does not group, so it still pays one download per folder.** `reinstall`
+  suppresses the group outright, on the grounds that the user asked about one folder —
+  which leaves three broken members of one archive costing three transfers of it, the
+  exact cost [§4](#one-archive-several-mods-one-download) exists to remove. It is the
+  one place the original problem survives. Repairing several folders is also a
+  different question from updating them, since nothing is newer and the only reason to
+  do it in bulk is that they broke together.
 - **The precise file list an archive laid down is not recorded.** With it, an update
   could remove exactly the paths the old version wrote before writing the new ones,
   and an overwritten patch would be detectable. The data does not exist for a single

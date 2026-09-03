@@ -5,6 +5,7 @@ import '../../models/character_info.dart';
 import '../../models/gamebanana/gamebanana.dart';
 import '../../services/gamebanana/file_selection.dart';
 import '../../services/update_apply/update_applier.dart';
+import '../../services/update_apply/update_target.dart';
 import '../components/dialog_section.dart';
 
 /// What the update did, said once, right afterwards.
@@ -20,12 +21,18 @@ import '../components/dialog_section.dart';
 /// it is the only place the update path's accepted loss becomes visible. It is
 /// also **a diff and not an inventory** — see `keybind_changes.dart` — so it is
 /// absent entirely when the author changed no keys, which is the common case.
+///
+/// **One block per folder when one download went into several.** Kept per mod
+/// rather than summarised: the keybind diff is the only place an accepted loss
+/// becomes visible, and a group write is not all-or-nothing, so which folder a
+/// fact belongs to is part of the fact.
 Future<void> showUpdateResultDialog(
   BuildContext context, {
   required ModInfo mod,
   required GbFile file,
   required UpdateApplyResult result,
   bool reinstall = false,
+  List<AppliedUpdate> others = const <AppliedUpdate>[],
 }) =>
     showDialog<void>(
       context: context,
@@ -34,6 +41,7 @@ Future<void> showUpdateResultDialog(
         file: file,
         result: result,
         reinstall: reinstall,
+        others: others,
       ),
     );
 
@@ -43,37 +51,45 @@ class _UpdateResultDialog extends StatelessWidget {
     required this.file,
     required this.result,
     this.reinstall = false,
+    this.others = const <AppliedUpdate>[],
   });
 
   final ModInfo mod;
   final GbFile file;
   final UpdateApplyResult result;
 
+  /// The other folders this one download was written into.
+  final List<AppliedUpdate> others;
+
   /// The version already installed, written again — so the headline says the
   /// mod was repaired rather than updated. Everything below it is the same
   /// report either way.
   final bool reinstall;
 
+  List<AppliedUpdate> get _all =>
+      [AppliedUpdate(mod: mod, result: result), ...others];
+
   @override
   Widget build(BuildContext context) {
     final loc = context.loc;
     final scheme = Theme.of(context).colorScheme;
+    final all = _all;
+    // **Only ever false for a group.** A single failure goes out as a
+    // notification and never reaches this dialog, so the one place the icon can
+    // be wrong is the case it was hard-coded for: every folder failing, under a
+    // primary-coloured tick. `_modBlock` is careful not to print "0 files
+    // written" beside a failure; a tick over "0 mods updated" undoes that.
+    final anySuccess = all.any((entry) => entry.result.success);
 
     return AlertDialog(
       title: Row(
         children: [
-          Icon(Icons.check_circle_outline, color: scheme.primary),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              loc.t(
-                reinstall
-                    ? 'mods.reinstall.done_title'
-                    : 'mods.update_apply.done_title',
-                params: {'mod': mod.name},
-              ),
-            ),
+          Icon(
+            anySuccess ? Icons.check_circle_outline : Icons.error_outline,
+            color: anySuccess ? scheme.primary : scheme.error,
           ),
+          const SizedBox(width: 10),
+          Expanded(child: Text(_title(loc, all))),
         ],
       ),
       content: SizedBox(
@@ -83,6 +99,110 @@ class _UpdateResultDialog extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
+              for (final entry in all) ...[
+                // Named only when there is more than one, so a single update
+                // reads as one report rather than a list of one.
+                if (all.length > 1) _modHeading(context, entry),
+                ..._modBlock(context, loc, entry.result),
+                if (entry != all.last) const SizedBox(height: 18),
+              ],
+              const SizedBox(height: 18),
+              DialogNotice(
+                icon: Icons.history,
+                message: loc.t('mods.update_apply.rollback_hint'),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(loc.t('mods.update.close')),
+        ),
+      ],
+    );
+  }
+
+  /// One mod's name, or how many folders were written.
+  String _title(AppLocalizations loc, List<AppliedUpdate> all) {
+    if (all.length == 1) {
+      return loc.t(
+        reinstall
+            ? 'mods.reinstall.done_title'
+            : 'mods.update_apply.done_title',
+        params: {'mod': mod.name},
+      );
+    }
+    final wrote = all.where((e) => e.result.success).length;
+    // Its own sentence rather than the plural of "{count} mods updated" at
+    // zero, which reads as a successful count of nothing.
+    if (wrote == 0) return loc.t('mods.update_apply.group_done_none_title');
+    return loc.plural(
+      'mods.update_apply.group_done_title',
+      wrote,
+      params: {'count': '$wrote'},
+    );
+  }
+
+  Widget _modHeading(BuildContext context, AppliedUpdate entry) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Icon(
+            entry.result.success ? Icons.folder_outlined : Icons.error_outline,
+            size: 18,
+            color: entry.result.success ? scheme.onSurfaceVariant : scheme.error,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              entry.mod.name,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyLarge
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// What happened to one folder.
+  ///
+  /// A folder that failed reports the reason and nothing else: every fact below
+  /// describes a write that landed, and printing "0 files written" beside a
+  /// failure invites reading it as a successful no-op.
+  List<Widget> _modBlock(
+    BuildContext context,
+    AppLocalizations loc,
+    UpdateApplyResult result,
+  ) {
+    if (!result.success) {
+      return [
+        DialogSection(
+          title: loc.t('mods.update_apply.group_done_failed_heading'),
+          children: [
+            DialogNotice(
+              icon: Icons.error_outline,
+              emphasis: true,
+              message: loc.t(switch (result.failure) {
+                UpdateApplyFailure.snapshot =>
+                  'mods.update_apply.snapshot_failed_title',
+                UpdateApplyFailure.modMissing =>
+                  'mods.update_apply.mod_missing_title',
+                UpdateApplyFailure.copy => 'mods.update_apply.copy_failed_title',
+                _ => 'mods.update_apply.layout_failed_title',
+              }),
+            ),
+          ],
+        ),
+      ];
+    }
+    return [
               DialogSection(
                 title: loc.t('mods.update_apply.done_what_heading'),
                 children: [
@@ -138,23 +258,9 @@ class _UpdateResultDialog extends StatelessWidget {
                     ),
                 ],
               ),
-              if (result.keybindChanges.isNotEmpty) ..._keybinds(context, loc),
-              const SizedBox(height: 18),
-              DialogNotice(
-                icon: Icons.history,
-                message: loc.t('mods.update_apply.rollback_hint'),
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(loc.t('mods.update.close')),
-        ),
-      ],
-    );
+      if (result.keybindChanges.isNotEmpty)
+        ..._keybinds(context, loc, result),
+    ];
   }
 
   /// The accepted loss, named.
@@ -164,7 +270,11 @@ class _UpdateResultDialog extends StatelessWidget {
   /// heading says what happened, the sentence under it says why nothing was put
   /// back and where to change it, and each row is a before → after so it can be
   /// read without remembering anything.
-  List<Widget> _keybinds(BuildContext context, AppLocalizations loc) {
+  List<Widget> _keybinds(
+    BuildContext context,
+    AppLocalizations loc,
+    UpdateApplyResult result,
+  ) {
     final scheme = Theme.of(context).colorScheme;
     final count = result.keybindChanges.length;
     return [

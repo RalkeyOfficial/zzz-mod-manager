@@ -255,19 +255,6 @@ Two things are **refused rather than unbuilt**, both recorded in
 
 ### Open around applying an update (known, deliberately not built)
 
-- [ ] **A sibling group updates one member at a time, re-downloading the archive
-  for each.** One archive can install as several mods, each with its own origin
-  block and its own update check, and nothing groups their updates: updating
-  three siblings means three full transfers of the same file.
-  [`docs/gamebanana-api.md`](docs/gamebanana-api.md) §8 measured a 1.24 GB tail,
-  so this is a real cost rather than a tidiness point. It is not
-  *wrong* — each folder is updated correctly — and it is bounded by how rare
-  multi-folder archives are, which is why it was filed rather than built. The
-  cheap half is a notice ("two other mods came from this archive"); the real fix
-  is one download feeding every member of `ingest.sibling_group`. **Note the
-  interaction already recorded under auto-update:** one banked hash can mark a
-  whole group `exact`, so an unattended update would rewrite all of them at
-  once, and *that* path must snapshot the group rather than the folder.
 - [ ] **There is no "update all".** The bulk check finds every mod with something
   newer and the filter lists them, and then each one is a dialog. For the 3-of-128
   case that is fine; for a library that has not been updated in months it is not.
@@ -277,18 +264,6 @@ Two things are **refused rather than unbuilt**, both recorded in
   button. The two need visibly different weight before they share a surface —
   and each apply already has its own confirmation, its own snapshot and its own
   stale-`.ini` question, none of which collapses into a checkbox.
-**Renaming a mod no longer strands its snapshots**, in the app or outside it: the
-store is keyed by the folder's own `uid` rather than its name, so a rename is a
-non-event and there is no hook to write
-([`docs/applying-updates.md`](docs/applying-updates.md) §5). It is also what
-makes the space reclaimable — a group whose uid no folder claims is
-unambiguously a deleted mod, where an unmatched *name* might be a mod the user
-renamed and still wants.
-
-**Deleting a mod deletes its saved versions too**, and the confirmation says how
-many. The identity is read *before* the folder goes — it lives in the sidecar
-inside it, so the operation meant to reclaim the space would otherwise be the
-one that orphaned it.
 - [ ] **Nothing reports a group no folder claims.** Three ways to get one and
   all of them silent: a mod deleted outside the app, a folder duplicated in a
   file manager (both copies carry one uid, and an update to either prunes the
@@ -354,21 +329,9 @@ other download, and the common case is worse than losing a fix — the app knows
 folder as *the patch*, so what remains is a lone `.ini` with nothing to apply to.
 
 Everything that follows from that — the patch test, the stale-`.ini` rule, the
-layout replay, the ordering that is the safety argument — is
+layout replay, removing what the last version shipped, replaying one archive into
+every mod it installed, and the ordering that is the safety argument — is
 [`docs/applying-updates.md`](docs/applying-updates.md).
-
-An update also **removes what the last version wrote and the new one does not
-ship** — the bottom layer by deleting, a patch layer by putting the mod's own
-file back from its store. Forward-only, and self-healing per §7.7: a folder
-installed before the record existed has none, and re-downloading the old archive
-to reconstruct one is a second full transfer (22 MB median, 1.24 GB tail)
-against file ids GameBanana deletes.
-
-**"Reinstall this version…"** is that same path at the file id already recorded
-([`docs/applying-updates.md`](docs/applying-updates.md) §6) — one surface, no
-second write. It puts the author's files back and nothing else: what the user
-added stays, and a file GameBanana has taken down is reported rather than
-swapped for the current release.
 
 ### 4.2 Backups — where they live
 
@@ -573,13 +536,13 @@ normal scan, strictly locally, hooked into the lazy per-mod migration in
 #### Open around the backfill (known, deliberately not built)
 
 - **A backfilled sibling group can't be reconstructed, and two mods sharing a
-  `mod_id` must not be read as one.** `origin.ingest.sibling_group` is what makes
-  §4's "an update acts on the whole sibling group at once" work, and nothing on
-  disk records that two folders came from one archive — so the backfill leaves it
-  null, honestly. But mods sharing a `mod_id` are *common*: two occurrences in a
-  real 23-mod library (two variants of one mod, installed as separate folders).
-  §4 and §7.6 must treat "same `mod_id`, no group" as **independent mods that
-  happen to share a page**, not as a group to rewrite together.
+  `mod_id` must not be read as one.** Nothing on disk records that two folders
+  came from one archive, so the backfill leaves the group null — while mods
+  sharing a `mod_id` are *common*: two occurrences in a real 23-mod library, two
+  variants of one mod installed as separate folders. §7.6 must treat "same
+  `mod_id`, no group" as **independent mods that happen to share a page**. What
+  the group now drives, and what its absence costs, is
+  [`docs/applying-updates.md`](docs/applying-updates.md) §4.
 - [ ] **A mod resolved by *search* gets no "open mod page" link.** `openModLink`
   (`utils/url_utils.dart`) reads `mod.sourceUrl` and nothing else, so a mod whose
   origin block knows the page but whose `source_url` is empty has no way to reach

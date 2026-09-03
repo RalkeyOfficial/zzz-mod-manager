@@ -8,6 +8,8 @@ import '../../models/character_info.dart';
 import '../../models/gamebanana/gamebanana.dart';
 import '../../models/mod_origin.dart';
 import '../../services/api_service.dart';
+import '../../services/log/logger.dart';
+import '../../services/update_apply/sibling_group.dart';
 import '../../utils/notifications.dart';
 import '../../models/mod_download.dart';
 import '../../models/origin_enums.dart';
@@ -64,6 +66,13 @@ class ModUpdateGateway {
     String modId,
     ModOrigin? Function(ModOrigin? current) update,
   ) => ApiService.updateModOrigin(modId, update);
+
+  /// The library, for finding the other mods one archive installed.
+  ///
+  /// A folder scan, so it is asked for **only** when the mod on screen records a
+  /// sibling group — one field already in hand, and null for every mod in a
+  /// backfilled library.
+  Future<List<ModInfo>> library() => ApiService.getMods();
 }
 
 /// One download in the folder, with everything needed to render a section for
@@ -172,6 +181,11 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   bool _dismissalEdited = false;
   bool _wrote = false;
 
+  /// The library as it was when this dialog opened, or null until it has been
+  /// read — and permanently null for a mod with no sibling group, which is what
+  /// stops the scan happening at all.
+  List<ModInfo>? _library;
+
   @override
   void initState() {
     super.initState();
@@ -185,6 +199,42 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       _check();
     } else {
       _lookUpNames();
+      unawaited(_lookUpSiblings());
+    }
+  }
+
+  /// The other mods this mod's archive installed, for the notice below the
+  /// verdict.
+  ///
+  /// **Read on open rather than off a provider.** `charactersProvider` is
+  /// written only by the Mods tab, which is disposed while another tab is up, so
+  /// a cached list is as old as the last visit — and this dialog is reachable
+  /// from a card the marketplace just installed. See
+  /// `test/modal_freshness_test.dart`.
+  ///
+  /// A failure is silent: the notice is an aid to a dialog that works without
+  /// it, and the confirmation reads the library again anyway.
+  ///
+  /// **Two gates, and both are about not paying for a folder walk over the whole
+  /// library.** No sibling group is the case for every mod that predates the
+  /// origin block, and no finding means there is no Update button for the notice
+  /// to sit beside — so an up-to-date mod in a group must not pay for it either.
+  Future<void> _lookUpSiblings() async {
+    if (widget.mod.origin?.ingest?.siblingGroup == null) return;
+    // **`read`, not `_stored`.** An async body runs synchronously up to its
+    // first `await`, and one caller is `initState` — where `_stored`'s
+    // `ref.watch` throws before the lookup ever starts. Same reason `initState`
+    // reads the provider directly two lines above its own branch.
+    final check = verdictWithoutAsking(widget.mod.origin) ??
+        ref.read(modUpdateChecksProvider)[widget.mod.id];
+    if (check == null || !(check.hasUpdate || check.dismissed)) return;
+    try {
+      final library = await widget.gateway.library();
+      if (!mounted) return;
+      setState(() => _library = library);
+    } catch (e) {
+      Logger('update').debug('could not read the library for a sibling group',
+          fields: {'mod': widget.mod.id, 'reason': '$e'});
     }
   }
 
@@ -323,6 +373,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
         _notesRequestedFor.addAll(feeds.keys);
       });
       _store(_fold());
+      unawaited(_lookUpSiblings());
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -612,6 +663,13 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
             patchModId: route.patchModId,
             asCompanion: route.asCompanion,
             flattensPatch: route.flattensPatch,
+            // **What this check found newer than what this mod holds.** The
+            // group needs it to tell a sibling that wants this file from one
+            // that has already gone past it — see `sibling_group.dart`. The
+            // section's own list, because a folder holding two downloads has
+            // one per layer.
+            published: (section?.check ?? _stored)?.newerFiles ??
+                const <GbFile>[],
           );
     if (!mounted) return;
     setState(() {
@@ -619,8 +677,14 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       _wrote = _wrote || changed;
     });
     if (!changed) return;
-    final notifier = ref.read(modUpdateChecksProvider.notifier);
-    notifier.state = {...notifier.state}..remove(widget.mod.id);
+    // **Not cleared here.** The base write can go into several folders and can
+    // skip this one entirely — the user may untick it in favour of the archive's
+    // other mods — so only the flow knows which marks are stale. The patch path
+    // writes this folder and nothing else, so it clears its own.
+    if (route.kind == UpdateWriteKind.patch) {
+      final notifier = ref.read(modUpdateChecksProvider.notifier);
+      notifier.state = {...notifier.state}..remove(widget.mod.id);
+    }
     if (mounted) Navigator.of(context).pop(true);
   }
 
@@ -702,6 +766,10 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
                   _notice(loc.t('mods.update.not_checked'), Icons.help_outline)
                 else
                   ..._body(check),
+                // **Last, next to the button it is about.** It says nothing
+                // about the mod's own verdict, and it is only true where there
+                // is something to install.
+                if (installable case final file?) ..._siblingNotice(file),
               ],
             ),
           ),
@@ -1580,6 +1648,39 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
         ),
       ],
     );
+  }
+
+  /// "2 other mods came from this archive."
+  ///
+  /// **It promises nothing about them**, deliberately. Whether each one's folder
+  /// still matches this archive needs the archive, which is not downloaded yet
+  /// — so this says how many share the download and leaves the offer to the
+  /// confirmation, which can answer it.
+  List<Widget> _siblingNotice(GbFile file) {
+    final library = _library;
+    final modId = widget.mod.origin?.base?.modId;
+    if (library == null || modId == null) return const <Widget>[];
+
+    final waiting = siblingsAwaiting(
+      primary: widget.mod,
+      library: library,
+      subjectModId: modId,
+      target: file,
+      published: _stored?.newerFiles ?? const <GbFile>[],
+    );
+    if (waiting.isEmpty) return const <Widget>[];
+
+    return [
+      const SizedBox(height: 4),
+      _notice(
+        loc.plural(
+          'mods.update.siblings',
+          waiting.length,
+          params: {'count': '${waiting.length}'},
+        ),
+        Icons.folder_copy_outlined,
+      ),
+    ];
   }
 
   Widget _notice(String message, IconData icon) {

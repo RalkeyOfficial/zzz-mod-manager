@@ -968,6 +968,167 @@ void main() {
       expect(find.text('This is the latest file'), findsOneWidget);
     });
 
+    /// **The archive's other mods, said before the download.**
+    ///
+    /// It promises nothing about them — whether each one's folder still matches
+    /// the archive needs the archive, and there isn't one yet — so what is
+    /// pinned is the count, and that a mod outside a group never pays for the
+    /// library scan that produces it.
+    group('other mods from the same archive', () {
+      ModInfo member(String id, {String? group, int? fileId = 1696178}) => mod(
+            id,
+            origin: originFixture(
+              source: 'gamebanana',
+              modId: 531649,
+              modIdConfidence: OriginConfidence.user,
+              fileId: fileId,
+              versionConfidence: OriginConfidence.user,
+              provenance: OriginProvenance.downloaded,
+              ingest: ModIngest(folders: [id], siblingGroup: group),
+            ),
+          );
+
+      Future<_RecordingGateway> pumpWithLibrary(
+        WidgetTester tester,
+        ModInfo target,
+        List<ModInfo> library, {
+        /// A verdict already in the session cache, which is what makes
+        /// `initState` skip its check — the **majority path**, since a launch
+        /// check or "check all" fills that cache before the user opens
+        /// anything.
+        UpdateCheck? stored,
+      }) async {
+        await tester.pumpWidget(const SizedBox());
+        final (client, _) = fakeClient();
+        final gateway =
+            _RecordingGateway(target.origin, <ModOrigin?>[], mods: library);
+        await pumpLocalized(
+          tester,
+          ModUpdateDialog(mod: target, gateway: gateway),
+          overrides: [
+            gameBananaClientProvider.overrideWithValue(client),
+            if (stored != null)
+              modUpdateChecksProvider.overrideWith((ref) => {target.id: stored}),
+          ],
+        );
+        await tester.pumpAndSettle();
+        return gateway;
+      }
+
+      testWidgets('are counted next to the Update button', (tester) async {
+        final target = member('Ellen Red', group: 'g1');
+        await pumpWithLibrary(tester, target, [
+          target,
+          member('Ellen Blue', group: 'g1'),
+          member('Ellen Green', group: 'g1'),
+        ]);
+
+        expect(
+          find.textContaining('2 other mods came from the same archive'),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('are counted when the verdict was already in the cache',
+          (tester) async {
+        // **The majority path**, and the one that broke: a launch check or
+        // "check all" fills the session cache, so `initState` skips its own
+        // check and the lookup runs *synchronously inside it* up to its first
+        // await. Reading the provider with `watch` there throws before the
+        // lookup starts, and the `unawaited` sends the error to the zone — so
+        // the notice silently never appeared and no test saw it, because both
+        // other tests reach the lookup through `_check`'s async tail.
+        final target = member('Ellen Red', group: 'g1');
+        final gateway = await pumpWithLibrary(
+          tester,
+          target,
+          [target, member('Ellen Blue', group: 'g1')],
+          stored: UpdateCheck(
+            outcome: UpdateOutcome.updateAvailable,
+            // The layer the verdict is about, without which no write is offered
+            // and so no notice sits beside one.
+            subjectModId: 531649,
+            candidate: GbFile(idRow: 1732269, dateAdded: DateTime.utc(2026, 6)),
+            newerFiles: [
+              GbFile(idRow: 1732269, dateAdded: DateTime.utc(2026, 6)),
+            ],
+          ),
+        );
+
+        expect(tester.takeException(), isNull);
+        expect(gateway.libraryReads, 1);
+        expect(
+          find.textContaining('1 other mod came from the same archive'),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('a mod with no group costs no library scan', (tester) async {
+        // The scan is a folder walk over the whole library, and no group is the
+        // case for every mod that predates the origin block — so the field
+        // being absent has to be the end of it, not the start of a lookup.
+        final target = member('Ellen Red');
+        final gateway = await pumpWithLibrary(tester, target, [
+          target,
+          member('Ellen Blue'),
+        ]);
+
+        expect(gateway.libraryReads, 0);
+        expect(find.textContaining('came from the same archive'), findsNothing);
+      });
+
+      testWidgets('a mod in a group scans once', (tester) async {
+        final target = member('Ellen Red', group: 'g1');
+        final gateway = await pumpWithLibrary(tester, target, [
+          target,
+          member('Ellen Blue', group: 'g1'),
+        ]);
+
+        expect(gateway.libraryReads, 1);
+      });
+
+      testWidgets('an up-to-date mod in a group costs no scan either',
+          (tester) async {
+        // File 1732269 is the newest on the captured page, so there is no
+        // Update button for the notice to sit beside — and the notice is the
+        // only thing the scan feeds.
+        final target = member('Ellen Red', group: 'g1', fileId: 1732269);
+        final gateway = await pumpWithLibrary(tester, target, [
+          target,
+          member('Ellen Blue', group: 'g1'),
+        ]);
+
+        expect(find.text('This is the latest file'), findsOneWidget);
+        expect(gateway.libraryReads, 0);
+      });
+
+      testWidgets('a member already on this file is not counted',
+          (tester) async {
+        // RabbitFX 7.7 is file 1732269 on the captured page, which is what the
+        // Update button would install. A sibling already holding it has nothing
+        // to gain from the write.
+        final target = member('Ellen Red', group: 'g1');
+        await pumpWithLibrary(tester, target, [
+          target,
+          member('Ellen Blue', group: 'g1', fileId: 1732269),
+        ]);
+
+        expect(find.textContaining('came from the same archive'), findsNothing);
+      });
+
+      testWidgets('a shared mod id is not a group', (tester) async {
+        // Two mods from one *page*, which the offline backfill produces by
+        // accident and which must never be read as one archive.
+        final target = member('Ellen Red');
+        await pumpWithLibrary(tester, target, [
+          target,
+          member('Ellen Blue'),
+        ]);
+
+        expect(find.textContaining('came from the same archive'), findsNothing);
+      });
+    });
+
     group('a folder holding two mods', () {
       /// The same fake client, plus the **other** mod in the folder — a second
       /// captured page whose newest file is not the one recorded here.
@@ -1319,9 +1480,18 @@ void main() {
 /// Captures what the dialog would write, instead of touching the real sidecar
 /// (and, through `ApiService`, the developer's real `config.json`).
 class _RecordingGateway implements ModUpdateGateway {
-  _RecordingGateway(this._current, this._written);
+  _RecordingGateway(this._current, this._written, {this.mods = const []});
   final ModOrigin? _current;
   final List<ModOrigin?> _written;
+
+  /// The library this dialog sees. Empty unless a test is about the archive's
+  /// other mods — and never read at all for a mod with no sibling group, which
+  /// is what the gateway seam is here to prove.
+  final List<ModInfo> mods;
+
+  /// How many times the library was scanned. Zero is the assertion for a mod
+  /// with no sibling group: the scan is a folder walk over the whole library.
+  int libraryReads = 0;
 
   @override
   Future<bool> writeOrigin(
@@ -1330,6 +1500,12 @@ class _RecordingGateway implements ModUpdateGateway {
   ) async {
     _written.add(update(_current));
     return true;
+  }
+
+  @override
+  Future<List<ModInfo>> library() async {
+    libraryReads++;
+    return mods;
   }
 }
 

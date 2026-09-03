@@ -98,8 +98,9 @@ Future<bool> removePatchFlow(
   );
   if (!accepted || !context.mounted) return false;
 
+  final snapshots = ref.read(snapshotServiceProvider);
   final applier = UpdateApplier(
-    snapshots: ref.read(snapshotServiceProvider),
+    snapshots: snapshots,
     activation: ModManagerActivationPort(mods),
   );
   final result = await applier.removePatch(
@@ -112,7 +113,15 @@ Future<bool> removePatchFlow(
   // **Before the success check**, the same as the update path: a snapshot exists
   // the moment the capture succeeded, and the failure branch is where a user
   // needs "Restore a previous version…" to be in the menu.
-  if (result.snapshot != null) ref.invalidate(modBackupsProvider);
+  //
+  // Retention runs on the same condition and for the same reason: the snapshot
+  // comes before anything is moved, so a removal that failed part-way still
+  // added a whole folder to the budget — see §5 of
+  // `docs/applying-updates.md`.
+  if (result.snapshot != null) {
+    ref.invalidate(modBackupsProvider);
+    await snapshots.prune();
+  }
 
   if (!result.success) {
     if (!context.mounted) return false;
@@ -136,7 +145,7 @@ Future<bool> removePatchFlow(
   // offering to update a patch that has been taken out.
   await _forget(mod, patch);
 
-  await ref.read(snapshotServiceProvider).prune();
+  // Pruning already ran with the snapshot, above.
   ref.invalidate(modBackupsProvider);
   ref.invalidate(installedModsIndexProvider);
 

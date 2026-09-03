@@ -917,6 +917,38 @@ install pipeline, which lives in `marketplace_screen` and is not extracted —
 filed rather than done, and the reason the "view in marketplace" button is the
 action here.
 
+### The other mods from the same archive
+
+One archive can have installed several mods, and pressing Update covers all of
+them from a single download — that write and its rules are
+[`applying-updates.md` §4](applying-updates.md#one-archive-several-mods-one-download).
+What belongs *here* is the one line this dialog carries about it: *"2 other mods
+came from the same archive as this one. Updating will offer them too."*
+
+**It promises nothing about those mods**, and cannot. Whether each one's folder
+still matches this archive is a question about the archive, which is not
+downloaded yet — so the offer belongs to the confirmation, which is the first
+screen that can answer it. What this line *can* say exactly is who is in the
+group and who already holds the file being installed, because both are on record.
+
+The count is screened on the same rule the confirmation uses, offline: a matching
+`ingest.sibling_group`, a stack that puts this download at the bottom, and a
+recorded file id that is not already this one. Sharing that screening is
+deliberate — a mod named here and then missing from the next screen would read as
+the app having lost it. Members the confirmation will offer *unticked* are still
+counted, because "offer" is all this line claims.
+
+**Two gates keep it free, both about not paying for a folder walk over the whole
+library.** No sibling group is the case for every mod that predates the origin
+block, so the field being absent ends it rather than starting a scan — and no
+finding means there is no Update button for the line to sit beside, so an
+up-to-date mod that *is* in a group does not pay for it either. The library
+is read when the dialog opens rather than off a provider, for the reason in
+[`../mod_manager_flutter/CLAUDE.md`](../mod_manager_flutter/CLAUDE.md)'s State
+section: the Mods tab owns the cached list and is disposed while another tab is
+up, so a mod the marketplace installed a moment ago would be missing from a group
+it belongs to.
+
 ---
 
 ## 7. How a file is named
