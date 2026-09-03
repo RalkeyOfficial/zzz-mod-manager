@@ -29,6 +29,7 @@ import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
 import '../components/extract_failure_message.dart';
 import 'download_with_progress.dart';
+import 'progress_modal.dart';
 import 'update_confirm_dialog.dart';
 import 'update_progress_dialog.dart';
 import 'update_result_dialog.dart';
@@ -148,18 +149,28 @@ Future<bool> applyUpdateFlow(
   }
 
   if (!context.mounted) return false;
+  // **One window from the press to the question.** The download's modal stays
+  // up through the unpacking and the two folder walks below, because closing it
+  // there is the same signal the user gets when a job has finished — and on a
+  // big archive the silence that follows is long enough to read as one.
+  final hold = ProgressHold();
   final download = await downloadFileWithProgress(
     context,
     ref,
     file,
     characterId: mod.characterId,
     subject: mod.name,
+    hold: hold,
   );
-  if (download == null) return false;
+  if (download == null) {
+    hold.dispose();
+    return false;
+  }
 
   var archiveConsumed = false;
   Directory? extractRoot;
   try {
+    hold.say(loc.t('marketplace.preparing_unpacking'));
     final extraction = await ArchiveService.extractArchive(
       archiveFile: download.file,
       knownMd5: download.md5,
@@ -196,6 +207,7 @@ Future<bool> applyUpdateFlow(
       activation: ModManagerActivationPort(mods),
     );
 
+    hold.say(loc.t('marketplace.preparing_comparing'));
     final preview = await applier.preview(
       modFolder: modFolder,
       incomingFolders: folders,
@@ -234,6 +246,10 @@ Future<bool> applyUpdateFlow(
             folders: folders,
           )
         : const _SiblingPreviews();
+
+    // **Down immediately before the question**, so the two never overlap and
+    // there is no gap between them either.
+    hold.release();
 
     if (!context.mounted) return false;
     final choice = confirm
@@ -363,6 +379,9 @@ Future<bool> applyUpdateFlow(
     }
     return false;
   } finally {
+    // Belt and braces: every path above releases it, and a throw between the
+    // download and the question would otherwise leave the modal up for good.
+    hold.dispose();
     await _cleanupExtract(extractRoot);
     if (archiveConsumed) await _deleteArchive(download.file);
   }
@@ -405,18 +424,27 @@ Future<bool> applyPatchUpdateFlow(
   }
 
   if (!context.mounted) return false;
+  // **The whole wait, because this path asks nothing.** A patch placement has
+  // no confirmation between the download and the write, so the modal carries
+  // on through the unpacking *and* the copy, and comes down on the result.
+  final hold = ProgressHold();
   final download = await downloadFileWithProgress(
     context,
     ref,
     file,
     characterId: mod.characterId,
     subject: mod.name,
+    hold: hold,
   );
-  if (download == null) return false;
+  if (download == null) {
+    hold.dispose();
+    return false;
+  }
 
   var archiveConsumed = false;
   Directory? extractRoot;
   try {
+    hold.say(loc.t('marketplace.preparing_unpacking'));
     final extraction = await ArchiveService.extractArchive(
       archiveFile: download.file,
       knownMd5: download.md5,
@@ -442,6 +470,7 @@ Future<bool> applyPatchUpdateFlow(
     }
     extractRoot = Directory(folders.first).parent;
 
+    hold.say(loc.t('marketplace.preparing_comparing'));
     // One folder's contents, never the folder itself — an extraction wrapper
     // invented for a rootless archive must not end up nested inside the target.
     final source = Directory(folders.first);
@@ -452,6 +481,7 @@ Future<bool> applyPatchUpdateFlow(
       target: existing.files,
     );
 
+    hold.say(loc.t('marketplace.preparing_writing'));
     final mods = await ApiService.getModManagerService();
     final snapshots = ref.read(snapshotServiceProvider);
     final applier = UpdateApplier(
@@ -480,6 +510,9 @@ Future<bool> applyPatchUpdateFlow(
       // some of its files in turn — those paths are not this layer's to touch.
       claimedAbove: _recordedAbove(mod.origin, remoteModId),
     );
+    // The write is over, so the wait is: whatever comes next is the report.
+    hold.release();
+
     if (result.snapshot != null) {
       ref.invalidate(modBackupsProvider);
       // **Whenever one was taken, not only on a write that landed.** The
@@ -542,6 +575,7 @@ Future<bool> applyPatchUpdateFlow(
     }
     return false;
   } finally {
+    hold.dispose();
     await _cleanupExtract(extractRoot);
     if (archiveConsumed) await _deleteArchive(download.file);
   }

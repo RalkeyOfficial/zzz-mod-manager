@@ -280,12 +280,6 @@ Two things are **refused rather than unbuilt**, both recorded in
   with §6's Settings work, and the age floor has to keep beating the count cap in
   the UI too — a settings screen that presents them as two independent numbers
   would invite exactly the configuration §4.2 argues against.
-- [ ] **The update flow is silent between the download finishing and the
-  confirmation appearing.** Extraction plus two folder walks, with no modal up:
-  the same shape as the install path's quiet window, and the same fix (keep the
-  progress dialog open through a "preparing" phase rather than bolting a spinner
-  onto one step). Longer than the install's for a big archive, because extraction
-  is the slow part and it happens before anything is shown.
 - **Cancelling at the update confirmation still costs a full re-download.**
   `archiveConsumed` is set once extraction succeeds and the dialog comes after,
   so backing out deletes the archive. Deliberate — the alternative is keeping

@@ -253,9 +253,52 @@ rest of the session.
 
 ## 9. What the user sees
 
-Two surfaces, and they answer different questions. The **notification** says
-*something is happening and here is how fast*; the **panel** says *what,
-exactly, and let me change it*.
+Three surfaces, and they answer different questions. The **wait modal** says
+*you are waiting for this, and it is still going*; the **notification** says
+*something is happening in the background and here is how fast*; the **panel**
+says *what, exactly, and let me change it*.
+
+### The wait modal: one window from the press to the question
+
+`ProgressModal` covers the whole wait a foreground transfer puts the user in,
+and it has **two phases and one window**:
+
+1. the transfer — a rate and an ETA rather than only a bar, for the reason in
+   [§5](#5-the-timeout-is-a-stall-timeout-never-a-total-duration): over a wait
+   that can run 25 minutes a bare percentage does not answer the only question
+   the user has;
+2. **preparing** — unpacking the archive, and reading both it and the folder it
+   is going into.
+
+**Why the second phase exists.** A modal that closes is the same signal the user
+gets when a job has *finished*, so closing it at the end of the transfer and
+opening a confirmation seconds later reads as "that's done" followed by an
+interruption. The wait between them is not short: extraction is the slow part
+and it scales with the archive, which reaches 1.24 GB
+([`gamebanana-api.md`](gamebanana-api.md) §8). There are also **two** slow steps
+in a row, so a spinner bolted onto either still leaves a blank screen for the
+other — which is why this is one window across the wait rather than a second
+dialog after the first.
+
+**Ownership is split, because neither side can do it alone.** Only the download
+knows which queue job Cancel belongs to; only the caller knows when its question
+is ready. So `downloadFileWithProgress` hands its closer to a `ProgressHold`
+rather than using it, and the caller releases it immediately before the next
+thing the user sees. Without a hold the download closes its own modal, which is
+what the marketplace's own use wants — nothing follows the transfer there.
+
+**The preparing phase is not cancellable, and the button goes rather than being
+disabled.** Unpacking cannot be stopped half way and leave anything usable, and
+a dead control invites the press that proves it is dead. The bar is
+indeterminate for the same kind of reason: extraction reports no progress, and a
+bar pretending to know how far along it is would be worse than not saying.
+
+**The install path has the same wait without the first phase.** Its transfer ran
+in the background queue ([§8](#8-where-a-download-ends-and-who-finishes-it)) and
+the user was told it arrived, so `showPreparingModal` opens the window straight
+into its second phase for the unpacking. That modal is the optional half: with
+no live context there is nothing to draw on, and the unpacking still has to
+happen.
 
 ### The pinned progress notification
 

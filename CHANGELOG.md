@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Downloads can be cancelled while running.
   - A sidebar button opens the list of downloads, where a failed one can be retried and finished ones cleared.
   - One notification shows overall download progress until the last one finishes.
+  - A download that has landed says it's unpacking, rather than going quiet between finishing and asking where the mod goes.
 - Mods record where they came from, so they can be checked for updates.
   - Existing mods are linked back to their GameBanana page from the source URL they already carry.
   - Mod cards show a mark for how well each mod is set up for update checking, and a toolbar button filters the library to the ones that need attention.
@@ -54,6 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Each of those mods has its own tick box, and the ones the app can't place are listed with the reason.
   - A mod that already has a newer file, or whose updates you're ignoring, is offered but not ticked, and the row says which.
   - A progress bar counts through the folders as they're written, and the result names each one.
+  - The window you wait in stays up from pressing Update until you're asked, saying whether it's unpacking the download or checking what it changes, instead of vanishing for a few seconds first.
 - An install that turns out to be a patch says so, and remembers it for later.
   - Installing a patch asks where it goes: its own folder with the mod it patches fetched in for you, or straight into a mod you already have, picked from a searchable list with cover images.
   - That list puts the folders holding the files the patch replaces first, and each one says how many it holds.

@@ -22,6 +22,7 @@ import '../../utils/state_providers.dart';
 import '../components/extract_failure_message.dart';
 import 'duplicate_archive_dialog.dart';
 import 'import_selection_dialog.dart';
+import 'progress_modal.dart';
 import 'patch_install_flow.dart';
 
 /// Turning a downloaded GameBanana archive into a mod folder, end to end.
@@ -71,11 +72,29 @@ Future<InstallResult> installArchiveFlow(
       );
     }
 
+    // **The install path's own quiet window.** This runs when a background
+    // download lands, so the user has been told the archive arrived and then
+    // waits with nothing on screen while it is unpacked. Same wait as the
+    // update path's, without a download modal already up to carry on from — so
+    // one is opened here, straight into its preparing phase.
+    //
+    // Conditional on the context because the modal is the optional half: with
+    // nothing to draw on, the unpacking still has to happen, and the guards
+    // further down are what refuse to ask a dead context a question.
+    final hold = context.mounted
+        ? showPreparingModal(
+            context,
+            message: loc.t('marketplace.preparing_unpacking'),
+          )
+        : ProgressHold();
     final extractionResult = await ArchiveService.extractArchive(
       archiveFile: archiveFile,
       knownMd5: knownMd5,
       nameHint: requestedName,
     );
+    // Down before anything else: every branch below either asks the user
+    // something or reports, and two modals must never be up at once.
+    hold.release();
 
     if (!extractionResult.success) {
       // Keep the archive: the user can still extract it by hand, and telling

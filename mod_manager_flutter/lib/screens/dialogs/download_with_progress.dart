@@ -12,7 +12,7 @@ import '../../services/download/download_progress.dart';
 import '../../services/download/download_queue.dart';
 import '../../services/download/queue_policy.dart';
 import '../../utils/notifications.dart';
-import 'download_progress_dialog.dart';
+import 'progress_modal.dart';
 
 /// Fetches one published file **while the user waits**, with a modal progress
 /// dialog in front of it.
@@ -46,6 +46,15 @@ Future<DownloadResult?> downloadFileWithProgress(
   /// What the download is *of*, for the body line. `file.file` is a filename,
   /// not a mod name.
   String? subject,
+
+  /// Handed in by a caller that still has work to do before it can ask the user
+  /// anything — unpacking the archive, reading the folder it is going into.
+  ///
+  /// With one, the modal **stays up** and switches to its preparing phase, and
+  /// the caller takes it down when its question is ready. Without one the modal
+  /// closes here, which is what a caller with nothing further to do wants. See
+  /// [ProgressHold].
+  ProgressHold? hold,
 }) async {
   final loc = context.loc;
   // Read before the first await and kept: the dialog this runs behind can be
@@ -109,16 +118,33 @@ Future<DownloadResult?> downloadFileWithProgress(
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => DownloadProgressDialog(
+      builder: (_) => ProgressModal(
         progress: progress,
         onCancel: () => unawaited(queue.cancel(job.seq)),
+        hold: hold ?? ProgressHold(),
       ),
     ),
   );
 
+  // Whether the modal is the caller's problem now. Everything below has to
+  // leave it alone once it is: closing it, or disposing what it is still
+  // listening to, would take the window down mid-wait.
+  var handedOver = false;
+
   try {
     final result = await queue.completionOf(job.seq);
-    close();
+    // **Handed over rather than closed**, when the caller has more to do: the
+    // bytes have landed but there is still nothing to ask about, and a modal
+    // that closes here is the same signal the user gets when a job is done.
+    if (hold != null) {
+      handedOver = true;
+      hold.handOver(() {
+        close();
+        progress.dispose();
+      });
+    } else {
+      close();
+    }
     return result;
   } on DownloadCancelledException {
     close();
@@ -138,9 +164,11 @@ Future<DownloadResult?> downloadFileWithProgress(
     }
     return null;
   } finally {
-    close();
     await subscription.cancel();
-    progress.dispose();
+    if (!handedOver) {
+      close();
+      progress.dispose();
+    }
     // A foreground download leaves no row behind. The panel is a list of work
     // the user cannot otherwise see, and this one they watched from start to
     // finish inside a dialog.
