@@ -72,6 +72,9 @@ void main() {
     'mods.update.launch_checked_',
     'marketplace.content_filter_',
     'language_names.',
+    // Each category's one-line explanation is its label key plus `_hint`.
+    'storage.categories.',
+    'storage.free.',
     // Chosen at runtime by a ternary *inside* `t(...)`, so the call-site regex
     // above sees `t(cond ? …` and matches nothing at all.
     'mods.backups.restored_',

@@ -6,9 +6,70 @@
   "navigation": {
     "mods": "Mods",
     "marketplace": "Marketplace",
+    "storage": "Storage",
     "settings": "Settings",
     "expand": "Expand",
     "collapse": "Collapse"
+  },
+  "storage": {
+    "title": "Storage",
+    "total": "Stored by this app",
+    "measuring": "Measuring…",
+    "at_least": "at least {size}",
+    "rescan": "Rescan the library",
+    "library_changed": "Your library has changed since this scan.",
+    "more_single": "and {count} more",
+    "more_plural": "and {count} more",
+    "empty": "Nothing stored yet.",
+    "reclaim": {
+      "action": "Free up space",
+      "working": "Freeing up space…",
+      "title": "Free up space?",
+      "body": "This deletes downloaded archives you've already installed, abandoned downloads, leftover extraction folders and old logs.",
+      "safe": "Your mods and your saved versions are not touched.",
+      "confirm": "Free up space",
+      "cancel": "Cancel",
+      "done_title": "Freed {size}",
+      "done_body": "Removed {count} items.",
+      "nothing_title": "Nothing to free up",
+      "nothing_body": "There was no leftover data to remove.",
+      "skipped_downloads": "Left your downloads alone — a transfer is in progress.",
+      "skipped_install": "Left the unpacked files alone — an install is in progress.",
+      "skipped_library": "Left the old images alone — your mods folder could not be read."
+    },
+    "categories": {
+      "mods": "Mods",
+      "mods_hint": "Your mod folders, without their covers and metadata.",
+      "saved_versions": "Saved versions",
+      "saved_versions_hint": "What each mod looked like before an update.",
+      "downloads": "Downloads",
+      "downloads_hint": "Archives waiting to be installed, and partly-fetched ones.",
+      "sidecars": "Covers & metadata",
+      "sidecars_hint": "Screenshots, descriptions and the files a patch replaced.",
+      "logs": "Logs",
+      "logs_hint": "This run's log and the ones kept beside it.",
+      "leftovers": "Leftovers",
+      "leftovers_hint": "Unpacked copies left behind by installing mods, and cover images from older versions. Nothing needs these."
+    },
+    "read": {
+      "not_configured": "No folder set",
+      "absent": "Folder not found",
+      "unreadable": "Could not be read"
+    },
+    "free": {
+      "app_data": "App data",
+      "mods_library": "Mods library",
+      "temp": "Temporary files",
+      "available": "{size} free",
+      "unknown": "Free space unknown"
+    },
+    "item": {
+      "linked": "Linked elsewhere",
+      "extraction": "Unpacked copy left behind by an install",
+      "legacy_image": "Cover image from an older version",
+      "versions_single": "{count} saved version",
+      "versions_plural": "{count} saved versions"
+    }
   },
   "marketplace": {
     "back": "Back",

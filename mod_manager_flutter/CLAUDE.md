@@ -22,6 +22,7 @@ This file is **rules and pointers only**. Every subject below has a doc in [`../
 | [`logging.md`](../docs/logging.md) | **What the app records about itself** — levels, tags, the rotating file, redaction |
 | [`mod-reload.md`](../docs/mod-reload.md) | **Why the app does not press F10 for you** — what was measured, and why the feature is removed rather than fixed |
 | [`desktop-integration.md`](../docs/desktop-integration.md) | **The window itself** — the application id, the desktop entry and the icon that depends on it, and why the title bar is the window manager's |
+| [`disk-usage.md`](../docs/disk-usage.md) | **What the app is keeping on disk** — the Storage tab's categories, apparent size vs free space, the shared directory walk, and what the reclaim may delete |
 | [`configuration.md`](../docs/configuration.md) | The app's **own settings** |
 
 ## How mods work
@@ -92,7 +93,8 @@ One exception: `utils/marketplace_providers.dart` holds the marketplace's browsi
 **The library is `libraryProvider` and belongs to no screen.** It owns the scan; `modsProvider` is its plain-list view, `installedModsIndexProvider` derives from it, and the Mods tab builds `charactersProvider`'s localized groups from it.
 So: **whoever changes a mod folder invalidates `libraryProvider`**, never only something derived from it — invalidating the index alone rebuilds it from the same cached scan.
 **One walk of the folder at a time**: a `rescan()` during a running scan takes that answer, and a scan never overwrites an edit published while it was walking.
-The three tabs are keyed `AnimatedSwitcher` children with no keep-alive, so the inactive tab's `State` is *disposed* and nothing a tab owns may be the only copy of something another surface needs.
+The four tabs are keyed `AnimatedSwitcher` children with no keep-alive, so the inactive tab's `State` is *disposed* and nothing a tab owns may be the only copy of something another surface needs.
+A provider in the root container is not disposed with it, which is how the Storage tab's scan survives a tab switch without a host widget.
 **A question asked mid-install reads the disk instead** — nothing has invalidated anything yet (`test/modal_freshness_test.dart`).
 
 **Work that outlives the press that started it must not be owned by a tab.** Its `BuildContext` dies on the next tab switch, silently and mid-await.

@@ -7,6 +7,7 @@ import 'package:path/path.dart' as path;
 import '../utils/byte_format.dart';
 import '../utils/process_probe.dart';
 import '../utils/seven_zip_listing.dart';
+import 'archive_activity.dart';
 import 'archive_hash.dart';
 import 'log/logger.dart';
 import 'platform_service_factory.dart';
@@ -176,6 +177,9 @@ class ArchiveService {
     Future<int?> Function(String path)? freeSpace,
   }) async {
     final started = DateTime.now();
+    // Held for the whole unpack so the storage reclaim can see work the
+    // download queue cannot: a dragged-in archive has no job behind it.
+    ArchiveActivity.begin();
     try {
       final tempExtractDir = destinationDir ??
           await Directory.systemTemp.createTemp('zzz_archive_extract_');
@@ -263,6 +267,8 @@ class ArchiveService {
           stack: stack,
           fields: {'archive': path.basename(archiveFile.path)});
       return ArchiveExtractionResult.failure('Extraction failed: $error');
+    } finally {
+      ArchiveActivity.end();
     }
   }
 

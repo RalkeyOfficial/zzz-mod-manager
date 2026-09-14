@@ -113,6 +113,7 @@ Required rather than optional — a reader of the history is entitled to know wh
 > | [`update-checks.md`](docs/update-checks.md) | Whether a mod **has a newer version** |
 > | [`applying-updates.md`](docs/applying-updates.md) | How an update **is written over an installed mod** |
 > | [`patch-destinations.md`](docs/patch-destinations.md) | **Which mod folder a patch goes into** — the signals, what each measures, why the list is ordered and never narrowed |
+> | [`disk-usage.md`](docs/disk-usage.md) | **What the app is keeping on disk** — the Storage tab's categories, apparent size vs free space, the shared directory walk, and what the reclaim may delete |
 > | [`configuration.md`](docs/configuration.md) | The app's **own settings** |
 > | [`logging.md`](docs/logging.md) | **What the app records about itself** — levels, the rotating file, redaction |
 > | [`mod-reload.md`](docs/mod-reload.md) | **Why the app does not press F10 for you** — what was measured, and why the feature is removed rather than fixed |

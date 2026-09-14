@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - A download that has landed says it's unpacking, rather than going quiet between finishing and asking where the mod goes.
 - An archive that won't fit when unpacked is refused before unpacking, saying how much is needed and how much is free. The archive is kept, so clearing space and installing again is all it takes.
 - A mod that won't fit in your mods folder is refused before anything is copied there, saying how much is needed and how much is free.
+- A Storage tab shows what the app is keeping on disk, as a chart broken down by kind: mods, saved versions, downloads, covers and metadata, logs, and leftovers.
+  - Each category opens to list its biggest items, and free space is shown for every disk the app writes to.
+  - "Free up space" deletes installed archives, abandoned downloads, leftover extraction folders and old logs. It never touches your mods or your saved versions.
+  - It leaves your downloads alone while a transfer or install is running, and says so rather than doing it quietly.
 - Mods record where they came from, so they can be checked for updates.
   - Existing mods are linked back to their GameBanana page from the source URL they already carry.
   - Mod cards show a mark for how well each mod is set up for update checking, and a toolbar button filters the library to the ones that need attention.

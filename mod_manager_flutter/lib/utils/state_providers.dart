@@ -51,12 +51,15 @@ final gameBananaClientProvider = Provider<GameBananaClient>((ref) {
 
 // `downloadQueueProvider` and `downloadServiceProvider` live in
 // `services/download/download_queue.dart`, for the same reason the notification
-// stack lives in `notifications.dart`.
+// stack lives in `notifications.dart`. The Storage tab's providers live in
+// `services/storage/storage_providers.dart` on the same terms — they are one
+// feature's state, and holding them here would pull the whole storage service
+// graph into this file's imports.
 
 /// The library: every mod, once each, flat.
 ///
 /// **The root everything else about the library derives from, and it belongs to
-/// no screen.** The three tabs are keyed children of an `AnimatedSwitcher` with
+/// no screen.** The four tabs are keyed children of an `AnimatedSwitcher` with
 /// no keep-alive, so the Mods tab's `State` is *disposed* the moment the user
 /// looks at the marketplace. A library owned by that screen is therefore as old
 /// as the last visit to it for as long as the user is anywhere else — and the

@@ -14,8 +14,9 @@ doc. This file is the map; the rules that must never be missed are in the
 
 - **`main.dart`** — app entry. Initializes `window_manager` (custom hidden title
   bar — the app draws its own window chrome) and wraps the app in a Riverpod
-  `ProviderScope`. `MainScreen` is a sidebar + `AnimatedSwitcher` over three tabs:
-  Mods (0), Marketplace (1), Settings (2), selected via `tabIndexProvider`.
+  `ProviderScope`. `MainScreen` is a sidebar + `AnimatedSwitcher` over four tabs:
+  Mods (0), Marketplace (1), Storage (2), Settings (3), selected via
+  `tabIndexProvider`.
   **The tabs are keyed children with no keep-alive**, so the inactive tab's
   `State` is *disposed* — which is why nothing a tab owns may be the only copy of
   something another surface needs. The library is the case that decided the rule:

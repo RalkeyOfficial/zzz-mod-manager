@@ -19,6 +19,7 @@ the root [`README.md`](../README.md).
 | [`update-checks.md`](update-checks.md) | How the app decides a mod **has a newer version published**: the comparator, the confidence-aware verdicts, the whole-library pass and the two surfaces that show a result |
 | [`applying-updates.md`](applying-updates.md) | How a newer download is **written over an installed mod**: the overwrite, patch detection, orphaned `.ini` files, replaying the install layout, snapshots and rollback |
 | [`patch-destinations.md`](patch-destinations.md) | **Which mod folder a patch is installed into**: the filename fingerprint, the author's declared requirement, what each is measured to be worth, and why the list is ordered rather than narrowed |
+| [`disk-usage.md`](disk-usage.md) | **What the app is keeping on disk**: the Storage tab's six categories and why they are disjoint, apparent size versus free space, the shared directory walk, and what the reclaim may delete |
 | [`configuration.md`](configuration.md) | The app's **own settings**: `config.json`, the SharedPreferences mirror, the dual-storage pattern, and how to add a setting |
 | [`logging.md`](logging.md) | **What the app records about itself**: the levels and tags, what each area logs, the rotating file and its header, and what redaction does and does not promise |
 | [`mod-reload.md`](mod-reload.md) | **Why the app does not press F10 for you**: what 3DMigoto actually needs, what was measured on Wayland, and why the feature was removed rather than fixed |

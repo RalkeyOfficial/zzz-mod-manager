@@ -62,3 +62,32 @@ List<String> planLogRotation(Iterable<String> names, {int keep = 7}) {
   if (ours.length <= survivors) return const <String>[];
   return ours.take(ours.length - survivors).toList();
 }
+
+/// What to delete when pruning the directory **mid-session**, on request.
+///
+/// Two differences from [planLogRotation], and both are bugs if they are missed:
+///
+/// - **No room is reserved.** Nothing is about to be opened, so reserving a slot
+///   here deletes one file more than the user asked to keep.
+/// - **[current] never goes.** On Windows deleting the open file fails; on Linux
+///   it *succeeds*, the sink keeps writing to an unlinked inode, the space is
+///   not returned until the app exits, and the user loses the log of the run
+///   they are about to report a problem from.
+///
+/// The rule about unrecognised names is [planLogRotation]'s and is inherited:
+/// the user is invited into this directory, and whatever they left there is
+/// theirs.
+List<String> planLogReclaim(
+  Iterable<String> names, {
+  String? current,
+  int keep = 7,
+}) {
+  final ours = [
+    for (final name in names)
+      if (isLogFileName(name) && name != current) name,
+  ]..sort();
+
+  if (keep <= 0) return ours;
+  if (ours.length <= keep) return const <String>[];
+  return ours.take(ours.length - keep).toList();
+}

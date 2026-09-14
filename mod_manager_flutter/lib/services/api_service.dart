@@ -67,6 +67,8 @@ class ApiService {
           _configService!.updateCheckOnLaunch;
       _container!.read(fileLoggingProvider.notifier).state =
           _configService!.fileLogging;
+      _container!.read(modsPathProvider.notifier).state =
+          _configService!.modsPath ?? '';
     }
 
     _modManager ??= ModManagerService(_configService!);
@@ -324,6 +326,9 @@ class ApiService {
     try {
       await initialize();
       await _configService!.setPaths(modsPath, saveModsPath);
+      // Repointing the library has to reach the providers that derive from it,
+      // or the Storage tab keeps measuring the folder that was set at launch.
+      _container?.read(modsPathProvider.notifier).state = modsPath;
       return 'Конфігурацію збережено';
     } catch (e) {
       throw Exception('Помилка оновлення конфігурації: $e');

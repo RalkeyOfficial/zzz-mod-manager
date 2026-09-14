@@ -15,6 +15,7 @@ import 'screens/components/launch_update_check_host.dart';
 import 'screens/components/notification_overlay.dart';
 import 'screens/components/sidebar_nav_item.dart';
 import 'screens/settings_screen.dart';
+import 'screens/storage_screen.dart';
 import 'screens/welcome_screen.dart';
 import 'screens/marketplace_screen.dart';
 import 'utils/state_providers.dart';
@@ -556,13 +557,23 @@ class _MainScreenState extends ConsumerState<MainScreen>
                                 ),
                                 const SizedBox(height: 8),
                                 SidebarNavItem(
-                                  icon: Icons.settings_rounded,
-                                  label: loc.t('navigation.settings'),
+                                  icon: Icons.pie_chart_outline_rounded,
+                                  label: loc.t('navigation.storage'),
                                   isActive: currentTab == 2,
                                   collapsed: isSidebarCollapsed,
                                   onTap: () => ref
                                       .read(tabIndexProvider.notifier)
                                       .state = 2,
+                                ),
+                                const SizedBox(height: 8),
+                                SidebarNavItem(
+                                  icon: Icons.settings_rounded,
+                                  label: loc.t('navigation.settings'),
+                                  isActive: currentTab == 3,
+                                  collapsed: isSidebarCollapsed,
+                                  onTap: () => ref
+                                      .read(tabIndexProvider.notifier)
+                                      .state = 3,
                                 ),
                               ],
                             ),
@@ -639,6 +650,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
                       1 => const MarketplaceScreen(
                         key: ValueKey('marketplace'),
                       ),
+                      2 => const StorageScreen(key: ValueKey('storage')),
                       _ => const SettingsScreen(key: ValueKey('settings')),
                     },
                   ),

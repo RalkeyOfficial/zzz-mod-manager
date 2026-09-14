@@ -292,7 +292,7 @@ three things happens:
 | `callerHandles` | the caller awaiting `completionOf`, i.e. `applyUpdateFlow` |
 
 **Where the host is mounted is the whole design.** It wraps the tab switcher in
-`main.dart`: the three tabs are keyed `AnimatedSwitcher` children with no
+`main.dart`: the four tabs are keyed `AnimatedSwitcher` children with no
 keep-alive and are *disposed* as the user moves between them, so an install owned
 by `MarketplaceScreen` dies on the first tab switch with the archive already on
 disk. Owning it there is safe only behind a modal dialog that makes walking away
