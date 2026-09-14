@@ -3,6 +3,7 @@ import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../models/mod_download.dart';
 import '../../services/patch_removal.dart';
+import '../../utils/url_utils.dart';
 
 /// The right-click menu for a mod card. A thin dispatcher: each entry runs the
 /// matching callback (deferred so the menu closes first). The caller wires the
@@ -91,8 +92,8 @@ void showModContextMenu(
         ),
         onTap: () => Future.delayed(Duration.zero, onOpenFolder),
       ),
-      // Відкрити сторінку джерела, якщо вказано посилання
-      if (mod.sourceUrl != null && mod.sourceUrl!.isNotEmpty)
+      // The mod's page, when anything about the mod names one.
+      if (modPageUrl(mod) != null)
         PopupMenuItem(
           child: Row(
             children: [

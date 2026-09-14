@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../core/constants.dart';
 import '../../models/character_info.dart';
+import '../../utils/url_utils.dart';
 import 'mod_status_slot.dart';
 
 class ModCardWidget extends StatefulWidget {
@@ -170,7 +171,7 @@ class _ModCardWidgetState extends State<ModCardWidget> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (mod.sourceUrl != null && mod.sourceUrl!.isNotEmpty) ...[
+                  if (modPageUrl(mod) != null) ...[
                     _circleButton(Icons.open_in_new, widget.onOpenLink),
                     const SizedBox(width: 6),
                   ],

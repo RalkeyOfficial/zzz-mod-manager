@@ -88,6 +88,12 @@ Clipboard HTML (paste-as-markdown) is read natively: Linux via the GTK clipboard
 For cutting a release or bumping the version, use the **`release` skill** (`.claude/skills/release/SKILL.md`) — it holds the release steps and every file that carries the version string.
 Bumping only `pubspec.yaml` is a recurring mistake.
 
+## Commits
+
+**This project wants AI attribution, and that is what this line is here to say.**
+Any commit whose code, tests or docs an AI assistant wrote or helped write needs a mention of AI assistance.
+Required rather than optional — a reader of the history is entitled to know which hands were on a change.
+
 ## Architecture
 
 > Developer documentation lives in **`docs/`** — start at [`docs/README.md`](docs/README.md), which indexes it. Read the relevant one before changing anything it covers:

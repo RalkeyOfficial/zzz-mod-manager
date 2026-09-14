@@ -508,16 +508,6 @@ normal scan, strictly locally, hooked into the lazy per-mod migration in
   `mod_id`, no group" as **independent mods that happen to share a page**. What
   the group now drives, and what its absence costs, is
   [`docs/applying-updates.md`](docs/applying-updates.md) §4.
-- [ ] **A mod resolved by *search* gets no "open mod page" link.** `openModLink`
-  (`utils/url_utils.dart`) reads `mod.sourceUrl` and nothing else, so a mod whose
-  origin block knows the page but whose `source_url` is empty has no way to reach
-  it. That is a narrow set: an install writes `source_url` through the autofill,
-  and the backfill derives `mod_id` *from* `source_url`, so both of those routes
-  leave one behind. What does not is the resolve dialog — neither it nor
-  `origin_resolution.dart` touches `sourceUrl` at all, so picking a mod out of its
-  search box records `mod_id` at `user` and leaves the link empty. Either that path
-  should normalise `source_url` to the mod page, or `openModLink` should fall back
-  to `origin.mod_id`.
 
 ### 7.4 Visual status — one slot, three states
 

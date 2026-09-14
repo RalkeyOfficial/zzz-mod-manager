@@ -31,7 +31,7 @@ void showModDetailsDialog(
       .toList();
   final hasCharacter =
       !isUnassignedCharacterId(mod.characterId);
-  final hasUrl = mod.sourceUrl != null && mod.sourceUrl!.isNotEmpty;
+  final pageUrl = modPageUrl(mod);
 
   // Inline description editing state, kept for the dialog's lifetime. The
   // rendered markdown swaps to a TextField when the user taps the pencil.
@@ -278,7 +278,7 @@ void showModDetailsDialog(
                           ),
                           const SizedBox(height: 16),
                         ],
-                        if (hasUrl) ...[
+                        if (pageUrl != null) ...[
                           _detailSectionLabel(
                             loc.t('mods.dialog.source_url'),
                           ),
@@ -295,7 +295,7 @@ void showModDetailsDialog(
                                 const SizedBox(width: 6),
                                 Expanded(
                                   child: Text(
-                                    mod.sourceUrl!,
+                                    pageUrl,
                                     style: const TextStyle(
                                       fontSize: 13,
                                       color: Color(0xFF6366F1),

@@ -124,6 +124,18 @@ and that is load-bearing rather than tidy: the canonical form is what
 the origin block already holds, sees them agree, and writes nothing. A url in any
 other shape would invite the two to argue about which mod this is.
 
+**Where only one of the two is filled, the link is derived rather than written.**
+`modPageUrl` (`utils/url_utils.dart`) is what every surface offering a mod's page
+asks — the card's ↗ button, the context menu entry and the details view — and it
+answers `source_url` when there is one, else `gameBananaModUrl(base.mod_id)`. The
+route that fills only the id is the resolve dialog's search box (§5), which records
+an identity and never touches the user's url; without the fallback that mod is
+checked for updates on a page nothing in the app can open. Deriving it also reaches
+every mod already in that state, where a write-back would only fix the next one —
+and `source_url` stays the user's field, which is the rule the autofill obeys too.
+The id is the **base** layer's: a patch written on top modifies the mod, it does not
+change which page the folder belongs to.
+
 ---
 
 ## 3. The offline backfill
