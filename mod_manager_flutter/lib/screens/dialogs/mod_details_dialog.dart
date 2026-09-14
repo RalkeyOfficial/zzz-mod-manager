@@ -280,7 +280,7 @@ void showModDetailsDialog(
                         ],
                         if (pageUrl != null) ...[
                           _detailSectionLabel(
-                            loc.t('mods.dialog.source_url'),
+                            loc.t('mods.dialog.mod_page'),
                           ),
                           const SizedBox(height: 4),
                           InkWell(

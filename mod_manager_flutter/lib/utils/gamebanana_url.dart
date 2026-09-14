@@ -5,7 +5,7 @@
 /// folder scan, which runs on every launch and must never touch the network.
 /// This is a pure string function with no client and no I/O.
 ///
-/// It is deliberately strict. `source_url` is a free-form field a human typed,
+/// It is deliberately strict. `source_url` was a free-form field a human typed,
 /// so it may hold a collection link, a Drive link, a file link, or a different
 /// mod entirely — and a wrong id silently binds a local folder to an unrelated
 /// remote mod, after which an "update" would overwrite it with another mod's
@@ -93,8 +93,8 @@ int? gameBananaModIdFromUrl(String? url) {
 /// anywhere; `_sProfileUrl` on a File comes back as the broken
 /// `https://gamebanana.com//<id>`, and the legacy Core API's `File` fields list
 /// offers nothing better. So a `/dl/` link is only useful **once the mod is
-/// already known**, where it picks a row out of that mod's file list. Never
-/// write it to `source_url`, which stays mod-page-only.
+/// already known**, where it picks a row out of that mod's file list. A file id
+/// is never an answer to "which mod is this?".
 int? gameBananaFileIdFromUrl(String? url) {
   final trimmed = url?.trim();
   if (trimmed == null || trimmed.isEmpty) return null;
@@ -137,7 +137,7 @@ bool isGameBananaUrl(String? url) {
 
 /// The canonical mod-page url for [modId].
 ///
-/// `source_url` stays user-facing and mod-page-only — machine handles and
-/// `/dl/<fileid>` links belong in the origin block, never here — so this is
-/// what a resolved id normalises back to.
+/// Every link the app shows for a mod is built here, from the id its folder is
+/// tracked against — nothing stores a url. Also the form
+/// [gameBananaModIdFromUrl] parses back, which is what lets the two agree.
 String gameBananaModUrl(int modId) => 'https://gamebanana.com/mods/$modId';

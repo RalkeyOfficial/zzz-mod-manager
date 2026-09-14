@@ -51,7 +51,7 @@ rather than a pipeline.
 | What | Where | From → to | Notes |
 |---|---|---|---|
 | Character tag in `config.json` and image in `<appData>/mod_images/` → the mod's own sidecar | `loadOrMigrate`, no-sidecar branch | pre-2.0.0 → 2.0.0 | Writes the sidecar, then deletes the legacy image — **in that order**, since the copy is referenced by nothing until the sidecar names it |
-| `source_url` → an `origin` block at `inferred` confidence | `loadOrMigrate`, has-sidecar branch (`OriginBackfill`) | 2.2.2 → 3.0.0 | Writes only when it actually derives something. Pure and filesystem-free, so it is tested on its own ([`origin-tracking.md`](origin-tracking.md#3-the-offline-backfill)) |
+| `source_url` → an `origin` block at `inferred` confidence | `loadOrMigrate`, has-sidecar branch (`OriginBackfill`) | 2.2.2 → 3.0.0 | Writes only when it actually derives something. Pure and filesystem-free, so it is tested on its own ([`origin-tracking.md`](origin-tracking.md#3-the-offline-backfill)). **This is now the key's only reader** — nothing writes a `source_url` any more, and it leaves a file once the block names a mod ([`metadata-schema.md` §4.1](metadata-schema.md#41-a-key-that-is-only-read)) |
 | A mod folder gets a `uid` | `loadOrMigrate`, **both** branches | 2.2.2 → 3.0.0 | The only one that touches every mod: the others fire on evidence, this one on absence. See [`metadata-schema.md`](metadata-schema.md#uid--the-identity-a-rename-cannot-take-away) |
 | Flat `origin` block + `companions` → the `downloads` stack | `ModOrigin.migrateFlatBlock` | dev builds only | The flat shape never shipped, so this reads sidecars written by development builds and nothing else. No version bump: the next save emits a stack |
 

@@ -330,16 +330,15 @@ class ModMetadataRepository {
       }
 
       // Replace the user-editable fields wholesale so emptied fields (e.g. a
-      // cleared URL) are actually removed, rather than copyWith keeping the old
-      // value. ModInfo carries every user-editable field, so this is a full
-      // save — while replaceUserFields carries the machine-owned ones
+      // cleared description) are actually removed, rather than copyWith keeping
+      // the old value. ModInfo carries every user-editable field, so this is a
+      // full save — while replaceUserFields carries the machine-owned ones
       // (schema_version, origin) and any unknown keys over from the copy on
       // disk.
       final existing = await _service.read(modFolder);
       String? orNull(String? v) => (v == null || v.isEmpty) ? null : v;
       final metadata = (existing ?? const ModMetadata()).replaceUserFields(
         description: orNull(mod.description),
-        sourceUrl: orNull(mod.sourceUrl),
         tags: mod.tags,
         characterId: mod.characterId, // normalised by replaceUserFields
         images: relImages,
@@ -573,7 +572,6 @@ class ModMetadataRepository {
         // it wanted nothing else. Writing here would leave an *empty* sidecar in
         // a folder that had none, breaking the don't-litter rule for no gain.
         if (plan.description == null &&
-            plan.sourceUrl == null &&
             plan.tags == null &&
             plan.characterId == null &&
             storedImages == 0) {
@@ -582,7 +580,6 @@ class ModMetadataRepository {
 
         final metadata = fresh.replaceUserFields(
           description: plan.description ?? fresh.description,
-          sourceUrl: plan.sourceUrl ?? fresh.sourceUrl,
           tags: plan.tags ?? fresh.tags,
           characterId: plan.characterId ?? fresh.characterId,
           images: galleryImages,
@@ -655,7 +652,6 @@ class ModMetadataRepository {
         modFolder,
         existing.replaceUserFields(
           description: existing.description,
-          sourceUrl: existing.sourceUrl,
           tags: existing.tags,
           characterId: canonical,
           images: existing.images,

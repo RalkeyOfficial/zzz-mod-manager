@@ -53,24 +53,21 @@ description still gets a gallery.
 | Field | Source | Notes |
 |---|---|---|
 | `description` | `_sText`, converted | HTML upstream, markdown here, through `utils/html_to_markdown.dart` — shared with the editors' paste-as-markdown so the two conversions can't drift. |
-| `source_url` | the mod **id** | Not a field on the page. Built with `gameBananaModUrl(idRow)`, so it is the one form `gameBananaModIdFromUrl` parses back. |
 | `character_id` | the **category** name | Not the mod name, not the tags. Under Character Skins the category is the character's full in-world name, picked from a list; `detectCharacterId()` resolves it. On a marketplace install it is passed *into* the import and replaces folder-name detection — see below. |
 | `tags` | `_aTags`, flattened | All-or-nothing: a non-empty local list is a curation, and merging into it would produce a set nobody chose. |
 | `images` | `_aPreviewContent`, fetched | The only field that needs the network, because our `images` are paths inside the mod folder. Comes from the mod's **profile**, which is what carries the full gallery — a listing record holds only the cover. |
 
 Five decisions inside that are load-bearing rather than arbitrary:
 
-- **The source url comes from the identity, not from `_sProfileUrl`.** The page
-  publishes its own url and it says the same thing, but the canonical form is what
-  the offline backfill's parse returns — so the url and `origin.mod_id` agree by
-  construction and the backfill has nothing to revise
-  ([`origin-tracking.md`](origin-tracking.md#2-where-an-origin-comes-from)). The two
-  fields are kept rather than collapsed because they answer to different readers:
-  `mod_id` is the machine handle, `source_url` is the link the user clicks. One
-  consequence worth stating, because it looks like an oversight: `RemoteModMetadata`
-  is now **never** `isEmpty` for a real mod page, since a page always has an id.
-  That is the honest answer — a link back to where a mod came from is worth a
-  sidecar on its own — and the cost is one metadata read per installed mod.
+- **No link is written, because the install already recorded which mod this is.**
+  The page's own url and a url built from the id say the same thing as
+  `origin.mod_id`, and a stored copy would be a second answer to the question the
+  block exists to answer — editable where the block is not, and read by nothing.
+  Every link the app shows is built from the block instead
+  ([`origin-tracking.md`](origin-tracking.md#2-where-an-origin-comes-from)). So a
+  page with no description, tags, character or gallery is genuinely `isEmpty` and
+  no sidecar is written for it, which is what makes the early-out worth having
+  again.
 
 - **The character comes from the category because that mapping is exact, and
   measured.** All **60** children of Character Skins resolve to a roster id, and

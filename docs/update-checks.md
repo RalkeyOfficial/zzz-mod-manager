@@ -83,9 +83,9 @@ must stay distinct from `sourceGone`.
 
 ### The order the checks run in
 
-`tracking: "off"` is tested **before** identity, matching the status slot: a
-stale `source_url` still sitting in the block must not talk the user out of a
-decision they made. That prefix — the answers no request could improve on — is
+`tracking: "off"` is tested **before** identity, matching the status slot: an id
+worked out from a link that was wrong must not talk the user out of a decision
+they made. That prefix — the answers no request could improve on — is
 `verdictWithoutAsking()`, shared with the bulk planner so a mod can never be
 requested and then given an answer that ignores the response.
 

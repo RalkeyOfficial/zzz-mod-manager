@@ -400,9 +400,8 @@ class DownloadCheck {
 /// spinner over a question that has an offline answer.
 ///
 /// Order matters. "Not from GameBanana / it's my own" is checked **before**
-/// identity, the same precedence the status slot uses: a stale `source_url`
-/// still sitting in the block must not talk the user out of a decision they
-/// made.
+/// identity, the same precedence the status slot uses: an id worked out from a
+/// link that was wrong must not talk the user out of a decision they made.
 UpdateCheck? verdictWithoutAsking(ModOrigin? origin) {
   if (origin == null) {
     return const UpdateCheck(outcome: UpdateOutcome.untracked);

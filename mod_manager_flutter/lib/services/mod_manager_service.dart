@@ -195,7 +195,6 @@ class ModManagerService {
       isActive: isActive,
       imagePath: images.isNotEmpty ? images.first : null,
       description: metadata.description,
-      sourceUrl: metadata.sourceUrl,
       tags: metadata.tags,
       images: images,
       isFavorite: favoriteSet.contains(modName),

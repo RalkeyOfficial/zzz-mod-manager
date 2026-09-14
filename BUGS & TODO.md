@@ -457,7 +457,7 @@ rather than collapsed into one enum:
 
 | | Recoverable offline? |
 |---|---|
-| **Which remote mod is this?** (identity) | **Often yes.** `source_url` already exists and is user-editable; parsing `gamebanana.com/mods/<id>` recovers identity for free. Measured: **23 of 23** mods in a real library, since the edit dialog is where people paste the mod page. |
+| **Which remote mod is this?** (identity) | **Often yes.** A pre-3.0.0 sidecar carries a `source_url` the user typed, and parsing `gamebanana.com/mods/<id>` out of it recovers identity for free. Measured: **23 of 23** mods in a real library, since the edit dialog used to be where people pasted the mod page. |
 | **Which file/version is installed?** | **Almost never.** The archive is deleted after extraction (§5), so GameBanana's per-file md5 has nothing local left to match against. |
 
 ### 7.2 Confidence-tiered origin block
@@ -576,10 +576,6 @@ and what survives a rebind. Entry points: the status slot and the mod context me
   origin block, so unifying it with these two would be forcing one typedef over
   two different writes — but it is the same rationale spelled out a third time,
   which is the thing worth noticing.
-- [ ] **The resolve dialog cannot be reached from the edit-mod dialog.** §7.5
-  names three entry points; the status slot and the context menu are wired, the
-  edit dialog is not. That is the dialog where `source_url` is shown and edited,
-  so it is where a user most plausibly notices the binding is wrong.
 - [ ] **`CharacterInfo.keybinds` is never written, and one widget renders it.**
   `enrichCharactersWithKeybinds` sets keybinds on each `ModInfo` and carries the
   group through with `character.copyWith(skins: …)`, so the group-level field

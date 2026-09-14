@@ -25,7 +25,6 @@ Future<void> showEditModDialog(
   final loc = context.loc;
   final notify = context.notify;
   final selectedChar = ValueNotifier<String>(mod.characterId);
-  final urlController = TextEditingController(text: mod.sourceUrl ?? '');
   final descController = TextEditingController(text: mod.description ?? '');
   final tagController = TextEditingController();
   final tags = ValueNotifier<List<String>>(List<String>.from(mod.tags));
@@ -179,28 +178,6 @@ Future<void> showEditModDialog(
                     ),
                   );
                 },
-              ),
-              const SizedBox(height: 16),
-              Text(
-                loc.t('mods.dialog.source_url'),
-                style: const TextStyle(fontSize: 13),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: urlController,
-                keyboardType: TextInputType.url,
-                decoration: InputDecoration(
-                  hintText: loc.t('mods.dialog.source_url_hint'),
-                  prefixIcon: const Icon(Icons.link, size: 20),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  isDense: true,
-                ),
               ),
               const SizedBox(height: 16),
               Text(
@@ -372,7 +349,6 @@ Future<void> showEditModDialog(
             );
             final updated = mod.copyWith(
               characterId: selectedChar.value,
-              sourceUrl: urlController.text.trim(),
               description: descController.text.trim(),
               tags: tags.value,
               images: committedImages,

@@ -16,6 +16,14 @@ import 'support/origin_shorthand.dart';
 /// `knownKeys` test below derives both of its expectations from this fixture,
 /// so it can only police fields it can see — a conditionally-emitted field
 /// (most of them) left out of here is invisible to it.
+/// Keys read from the sidecar that a fully-known mod is not written with.
+///
+/// `source_url` is the whole set: it stays in `knownKeys` so an existing file's
+/// copy cannot fall through to `extra` and be preserved forever, and it is
+/// emitted only while the origin block names no mod — which the fixture below
+/// does, so it is absent there.
+const _readOnlyKeys = <String>{'source_url'};
+
 const _fullyPopulatedJson = <String, dynamic>{
   'schema_version': 2,
   'uid': 'a1b2c3d4e5f60718293a4b5c6d7e8f90',
@@ -64,14 +72,12 @@ void main() {
     test('toJson/fromJson round-trips', () {
       const meta = ModMetadata(
         description: 'A cool mod',
-        sourceUrl: 'https://gamebanana.com/mods/123',
         tags: ['nsfw', 'recolor'],
         characterId: 'miyabi',
         images: ['.zzz-mod-manager/images/01.png'],
       );
       final restored = ModMetadata.fromJson(meta.toJson());
       expect(restored.description, meta.description);
-      expect(restored.sourceUrl, meta.sourceUrl);
       expect(restored.tags, meta.tags);
       expect(restored.characterId, meta.characterId);
       expect(restored.images, meta.images);
@@ -118,10 +124,58 @@ void main() {
       expect(meta.extra, isEmpty, reason: 'a typed key leaked into extra');
       expect(
         meta.toJson().keys.toSet(),
-        ModMetadata.knownKeys,
+        ModMetadata.knownKeys.difference(_readOnlyKeys),
         reason: 'a typed field that failed to parse emits nothing and silently '
             'drops out of this set — check its fromJson against the fixture',
       );
+    });
+
+    group('the legacy link', () {
+      // `source_url` is *known* so it cannot fall through to `extra`, which
+      // would preserve it forever, and it is written only while it is still the
+      // only thing that names the mod — which is the whole of what it is for
+      // now, as the offline backfill's input.
+      test('is read, and kept while nothing else names the mod', () {
+        final onDisk = ModMetadata.fromJson({
+          'source_url': 'https://gamebanana.com/mods/123',
+          'description': 'd',
+          'vendor_x': {'id': 1},
+        });
+        expect(onDisk.sourceUrl, 'https://gamebanana.com/mods/123',
+            reason: 'the backfill has nothing else to parse');
+        expect(onDisk.extra.containsKey('source_url'), isFalse);
+
+        final written = onDisk.toJson();
+        expect(written['source_url'], 'https://gamebanana.com/mods/123',
+            reason: 'a save landing before the backfill ran must not take the '
+                'only candidate away with it');
+        expect(written['description'], 'd');
+        expect(written['vendor_x'], {'id': 1},
+            reason: 'a key we simply do not know is someone else\'s data');
+      });
+
+      test('goes once the block names one', () {
+        final onDisk = ModMetadata.fromJson({
+          'source_url': 'https://gamebanana.com/mods/123',
+          'origin': {
+            'provenance': 'downloaded',
+            'downloads': [
+              {'role': 'base', 'mod_id': 123, 'mod_id_confidence': 'inferred'},
+            ],
+          },
+        });
+        expect(onDisk.toJson().containsKey('source_url'), isFalse);
+      });
+
+      test('a url naming no mod page is kept, not discarded', () {
+        // Nothing derived anything from it, so it is still the only candidate
+        // — and a later build may parse what this one cannot.
+        final onDisk = ModMetadata.fromJson({
+          'source_url': 'https://example.com/my-mirror',
+          'description': 'd',
+        });
+        expect(onDisk.toJson()['source_url'], 'https://example.com/my-mirror');
+      });
     });
 
     test('extra is unmodifiable on every path it arrives through', () {
@@ -149,7 +203,6 @@ void main() {
       });
       final saved = onDisk.replaceUserFields(
         description: null,
-        sourceUrl: null,
         tags: const [],
         characterId: null,
         images: const [],
@@ -180,7 +233,6 @@ void main() {
       for (final placeholder in [unknownCharacterId, '']) {
         final json = const ModMetadata().replaceUserFields(
           description: null,
-          sourceUrl: null,
           tags: const [],
           characterId: placeholder,
           images: const [],
@@ -205,7 +257,6 @@ void main() {
         final onDisk = ModMetadata.fromJson({'schema_version': 1, 'tags': ['a']});
         final saved = onDisk.replaceUserFields(
           description: 'new',
-          sourceUrl: null,
           tags: const [],
           characterId: null,
           images: const [],

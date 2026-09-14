@@ -91,7 +91,6 @@ dependency at all: see `test/origin_backfill_test.dart` and
   "schema_version": 2,
   "uid": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
   "description": "Ellen swimsuit retexture.\n\nSupports **markdown**.",
-  "source_url": "https://gamebanana.com/mods/123456",
   "tags": ["swimsuit", "4k"],
   "character_id": "ellen",
   "images": [".zzz-mod-manager/images/01.png", "Preview.png"],
@@ -118,7 +117,7 @@ dependency at all: see `test/origin_backfill_test.dart` and
 | `schema_version` | `int` | always | On-disk format version. Missing → assumed `ModMetadata.assumedSchemaVersion`. See [§4](#4-versioning-and-migration). |
 | `uid` | `string?` | non-null only | This folder's **identity**, for what has to outlive its name. Opaque, machine-owned, written at install and migrated onto everything else by the scan. See below. |
 | `description` | `string?` | non-null only | Free-form, **rendered as markdown** in the UI (`utils/markdown_description.dart`). Users can paste rich text and get markdown — see the clipboard-HTML note in `CLAUDE.md`. |
-| `source_url` | `string?` | non-null only | The mod's **page** URL. User-facing and user-editable via the edit dialog. |
+| `source_url` | `string?` | **read-only legacy** | The mod's page URL as older builds wrote it. Nothing produces it now; it is the offline backfill's only input, and it is written back only while the `origin` block names no mod — see [§4.1](#41-a-key-that-is-only-read). |
 | `tags` | `string[]` | **always** (even `[]`) | Arbitrary user tags. Drive the tag filters in the mods toolbar. |
 | `character_id` | `string?` | non-null only | Canonical character/category id. Normalised through `canonicalCharacterId()` (`utils/zzz_characters.dart`) on read. |
 | `images` | `string[]` | **always** (even `[]`) | Gallery, **relative to the mod folder root**. First entry is the cover. |
@@ -383,16 +382,13 @@ rather than reinterpreting this field.
 
 ### Field rules that aren't obvious from the type
 
-- **`source_url` is mod-page-only.** Don't write machine handles, direct
-  `/dl/<fileid>` links, or API URLs into it — it's a human-facing field shown as a
-  clickable link and editable as free text. Machine identifiers have their own
-  fields in the [`origin` block](#the-origin-block) — the two coexist and say
-  different things, one to the user and one to the app. A marketplace install
-  fills this with `https://gamebanana.com/mods/<id>` alongside the origin block's
-  `mod_id`, deliberately in that canonical form so the offline backfill's parse
-  agrees with what the block already records. It is still **absence-filled, never
-  displaced**: a url the user typed, or one that travelled in an inbound sidecar,
-  wins over the canonical one.
+- **`source_url` is not written, and nothing reads it but the backfill.** It held
+  the mod's page as free text the user could edit — a second answer to "which mod
+  is this?" beside the [`origin` block](#the-origin-block)'s `mod_id`, editable
+  where the answer that actually drives the update check was not. The block
+  answers it now and every link the app shows is built from it
+  (`utils/url_utils.dart`), so nothing here produces a url at all. What the key
+  still does is [§4.1](#41-a-key-that-is-only-read).
 - **`images` entries are relative paths, always.** Two valid shapes: a file we
   imported (`.zzz-mod-manager/images/01.png`) or a file the mod author shipped
   (`Preview.png`). On load they're resolved to absolute paths and **silently
@@ -424,7 +420,7 @@ rather than reinterpreting this field.
 `ModMetadataRepository.save()` builds the sidecar **from scratch** out of
 the in-memory `ModInfo` rather than patching the existing file. That is
 deliberate and must stay: `copyWith`-style merging can't tell "unchanged" from
-"the user cleared this field", so merging would make emptying a description or URL
+"the user cleared this field", so merging would make emptying a description
 impossible.
 
 But full replacement is only correct for fields `ModInfo` actually carries. The
@@ -433,9 +429,13 @@ from `ModInfo`:
 
 | Class | Examples | Save behaviour |
 |---|---|---|
-| **User-editable** | `description`, `source_url`, `tags`, `character_id`, `images` | Replaced wholesale from `ModInfo` — clearing must work |
-| **Machine-owned** | `schema_version`, `origin` | Carried over from the file on disk, never sourced from `ModInfo` |
+| **User-editable** | `description`, `tags`, `character_id`, `images` | Replaced wholesale from `ModInfo` — clearing must work |
+| **Machine-owned** | `schema_version`, `origin`, `source_url` | Carried over from the file on disk, never sourced from `ModInfo` |
 | **Unknown / future** | any key this build doesn't recognise | Passed through verbatim via `ModMetadata.extra` |
+
+`source_url` is in the second class rather than the first, which reads oddly for
+a field a user once typed: nothing sources it any more, and a save that dropped
+it would take the backfill's only input away mid-scan ([§4.1](#41-a-key-that-is-only-read)).
 
 All three are handled by one method, `ModMetadata.replaceUserFields()`, which is
 what `ModMetadataRepository.save()` calls on the copy read from disk:
@@ -443,7 +443,7 @@ what `ModMetadataRepository.save()` calls on the copy read from disk:
 ```dart
 final existing = await _metadataService.read(modFolder);
 final metadata = (existing ?? const ModMetadata()).replaceUserFields(
-  description: …, sourceUrl: …, tags: …, characterId: …, images: …,
+  description: …, tags: …, characterId: …, images: …,
 );
 ```
 
@@ -798,3 +798,32 @@ Follow this shape for new migrations. Two properties matter: it's **idempotent**
 (re-running is harmless — a mod that already has a uid costs one read) and it's
 **offline** (scans happen on every launch with no network, so a migration must
 never require a request).
+
+### 4.1 A key that is only read
+
+`source_url` is the app's first **retired** key, and retiring one is not the same
+as deleting it. The field was the mod's page as free text — a second answer to
+which mod a folder is, editable where the `origin` block's `mod_id` was not — and
+it drove nothing. What it still does is feed the backfill above, so it leaves the
+model in one direction only: parsed by `fromJson`, never sourced from `ModInfo`,
+and written by `toJson` **only while the block names no mod**.
+
+Three things decide that shape, and each would be a bug the other way round:
+
+- **It stays in `knownKeys`.** Take it out and every existing file's copy becomes
+  an unknown key, which [`extra`](#unknown-keys-extra-and-knownkeys) preserves
+  verbatim and forever — the exact opposite of retiring it.
+- **It is carried like a machine-owned field**, through `replaceUserFields`,
+  `copyWith` and `withOrigin`. A user's edit can land in the middle of the scan
+  that is backfilling that same mod (the folder walk is an await), and a save that
+  rebuilt the file without it would delete the only thing the walk was going to
+  read — the backfill's own re-read then finds nothing and writes nothing, so the
+  id is lost rather than delayed.
+- **It is emitted only while `origin.downloads[0].mod_id` is null.** Once an id
+  exists the key has done its job and goes on that save. Until then it is the only
+  candidate, including when it names no mod page at all: a mirror or an author
+  page is kept rather than discarded, because a later build may parse what this
+  one cannot.
+
+The end state is a library that empties the key out as its mods become tracked,
+with no version-upgrade step and nothing to run.

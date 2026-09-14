@@ -52,9 +52,6 @@ class ModInfo {
   final String? imagePath;
   final String? description;
 
-  /// Link to the mod's source page (GameBanana or any URL).
-  final String? sourceUrl;
-
   /// User tags.
   final List<String> tags;
 
@@ -97,7 +94,6 @@ class ModInfo {
     required this.isActive,
     this.imagePath,
     this.description,
-    this.sourceUrl,
     this.tags = const [],
     this.images = const [],
     this.isFavorite = false,
@@ -113,7 +109,6 @@ class ModInfo {
     bool? isActive,
     String? imagePath,
     String? description,
-    String? sourceUrl,
     List<String>? tags,
     List<String>? images,
     bool? isFavorite,
@@ -128,7 +123,6 @@ class ModInfo {
       isActive: isActive ?? this.isActive,
       imagePath: imagePath ?? this.imagePath,
       description: description ?? this.description,
-      sourceUrl: sourceUrl ?? this.sourceUrl,
       tags: tags ?? this.tags,
       images: images ?? this.images,
       isFavorite: isFavorite ?? this.isFavorite,
@@ -164,7 +158,6 @@ class ModInfo {
           other.isActive == isActive &&
           other.imagePath == imagePath &&
           other.description == description &&
-          other.sourceUrl == sourceUrl &&
           other.isFavorite == isFavorite &&
           other.origin == origin &&
           other.uid == uid &&
@@ -180,7 +173,6 @@ class ModInfo {
         isActive,
         imagePath,
         description,
-        sourceUrl,
         isFavorite,
         origin,
         uid,

@@ -110,31 +110,26 @@ release too) and `remote_missing`. `tracking` survives untouched — it is the u
 own statement about whether the mod should be watched at all. `ingest` is refreshed
 from the layout the update actually used, which is how a pre-`ingest` mod gains one.
 
-**A marketplace install writes both `origin.mod_id` and `source_url`**, and they are
-kept apart because they answer to different readers: `mod_id` is the machine handle
-this whole document is about, while `source_url` is the link the user clicks. The url
-is filled by the autofill rather than by the origin write, so it obeys the same rule
-every user-editable field does — *fill absence, never displace*. A folder that arrived
-carrying somebody's own sidecar keeps their url, which may point at a mirror, a
-collection or the author's page.
+**`mod_id` is the only record of which mod a folder is, and every link is built
+from it.** `modPageUrl` (`utils/url_utils.dart`) is what each surface offering a
+mod's page asks — the card's ↗ button, the context menu entry, the details view —
+and it answers `gameBananaModUrl(base.mod_id)` or nothing. The id is the **base**
+layer's: a patch written on top modifies the mod, it does not change which page
+the folder belongs to.
 
-It is written as `gameBananaModUrl(mod_id)` rather than copied from `_sProfileUrl`,
-and that is load-bearing rather than tidy: the canonical form is what
-`gameBananaModIdFromUrl` parses back, so the offline backfill (§3) reads the same id
-the origin block already holds, sees them agree, and writes nothing. A url in any
-other shape would invite the two to argue about which mod this is.
+There was a second answer, and losing it is the point. `source_url` was the mod's
+page as free text on the sidecar, shown as a link and editable in the edit dialog —
+so a user who noticed a folder bound to the wrong mod could correct the half that
+drove nothing, while the half the update check reads could not be edited at all.
+Worse, the two routes that filled them were different: an install wrote both, but
+resolving a mod through the dialog's search box (§5) wrote only the id, leaving a
+mod checked for updates on a page nothing in the app would open. The block answers
+it now, and the way to correct a wrong binding is the tracking dialog — which is
+also what makes the correction reach the update check.
 
-**Where only one of the two is filled, the link is derived rather than written.**
-`modPageUrl` (`utils/url_utils.dart`) is what every surface offering a mod's page
-asks — the card's ↗ button, the context menu entry and the details view — and it
-answers `source_url` when there is one, else `gameBananaModUrl(base.mod_id)`. The
-route that fills only the id is the resolve dialog's search box (§5), which records
-an identity and never touches the user's url; without the fallback that mod is
-checked for updates on a page nothing in the app can open. Deriving it also reaches
-every mod already in that state, where a write-back would only fix the next one —
-and `source_url` stays the user's field, which is the rule the autofill obeys too.
-The id is the **base** layer's: a patch written on top modifies the mod, it does not
-change which page the folder belongs to.
+The key is not deleted from files that carry it: it is the offline backfill's only
+input (§3), so it is read, never written, and leaves each sidecar once the block
+names a mod ([`metadata-schema.md` §4.1](metadata-schema.md#41-a-key-that-is-only-read)).
 
 ---
 
@@ -155,12 +150,12 @@ Two rules govern every decision:
 - **It never displaces something better** — which is narrower than "it only fills
   absence", and the difference matters. A stored `mod_id` at `exact` or `user` is
   never overruled: those came from a download, a checksum match, or the user
-  confirming it, none of which came from `source_url`. But an id at any weaker tier —
+  confirming it, none of which came from a link. But an id at any weaker tier —
   including our own earlier backfill — **follows the url**, because that is where it
-  came from. Otherwise a user who pasted the wrong mod page once is stuck with it:
-  correcting the url would be a silent no-op. A `tracking: off` mod is skipped
-  entirely — "not from GameBanana / it's my own" is a decision the user made, and a
-  stale `source_url` is exactly why they might have made it.
+  came from, and a sidecar whose two halves disagree is one the url half is more
+  likely to be right about. A `tracking: off` mod is skipped entirely — "not from
+  GameBanana / it's my own" is a decision the user made, and an id worked out from a
+  link that was wrong is exactly why they might have made it.
 - **Re-pointing at a different mod clears what described the old one.** `file_id`,
   `version`, `version_label` and `baseline_remote_date` mean something only relative
   to one mod page, so carrying them across a rebind would leave a block asserting
@@ -269,7 +264,8 @@ Three of those rows are decisions rather than mechanics:
 - **`tracking: "off"` silences the slot; `remote_missing` gets a state of its own.**
   The first is the user's explicit "not from GameBanana / it's my own", and the
   promise attached to it is permanence — it wins over everything, including a gone
-  page, because a stale `source_url` is exactly why somebody might have set it. The
+  page, because an id worked out from a link that was wrong is exactly why somebody
+  might have set it. The
   second is not amber, for the reason amber cannot be honoured here: that state's
   entire offer is *click to set the version*, which means reading a mod page that is
   private, trashed or withheld. It is not silence either: silence is defensible only
@@ -727,11 +723,11 @@ Three properties are load-bearing rather than incidental:
   read as a sibling *group* either (see
   [the backfill's known limit](#3-the-offline-backfill)).
 - **`tracking: "off"` is excluded from the identity keys but not from the hash key.**
-  That setting is the user saying "not from GameBanana / it's my own", and a stale
-  `source_url` is exactly why they might have said it — so a leftover mod id must not
-  badge somebody else's mod page. A hash is a fact about bytes on disk rather than a
-  claim about which remote mod they are, so local dedup keeps working for a mod
-  declared local.
+  That setting is the user saying "not from GameBanana / it's my own", and an id
+  worked out from a link that was wrong is exactly why they might have said it — so a
+  leftover mod id must not badge somebody else's mod page. A hash is a fact about
+  bytes on disk rather than a claim about which remote mod they are, so local dedup
+  keeps working for a mod declared local.
 - **A file-id match and a hash match stay distinguishable.** The first is a record of
   what we installed; the second says only that the bytes matched. They are worded
   differently in the UI for the reason `archive_md5` carries its own warning in

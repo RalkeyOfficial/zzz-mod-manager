@@ -87,8 +87,8 @@ enum ModOriginStatus {
 ///
 /// - **`tracking: off` wins over everything.** It is the user saying "not from
 ///   GameBanana / it's my own", and the promise attached to it is that the slot
-///   goes quiet permanently. A stale `source_url` still sitting in the sidecar
-///   must not talk them out of it.
+///   goes quiet permanently. An id worked out from a link that was wrong is
+///   exactly why they might have said it, so it must not talk them out of it.
 /// - **`remote_missing` gets its own state**, and does not borrow amber's. The
 ///   amber state's whole offer is "click to set the version", and that means
 ///   reading a mod page that is private, trashed or withheld — offering an

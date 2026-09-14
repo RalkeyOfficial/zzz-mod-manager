@@ -70,7 +70,7 @@ update into a teardown.
 ## 2. `ModStatusSlot`
 
 **Bottom-left of the cover**, the one corner `ModCardWidget` had free (top-left is
-details, top-right the enable switch, bottom-right the source link and favourite).
+details, top-right the enable switch, bottom-right the mod-page link and favourite).
 
 It keeps a **constant footprint across states**, so resolving a mod doesn't reflow
 the artwork under it, and it uses a **literal amber** rather than a scheme colour —

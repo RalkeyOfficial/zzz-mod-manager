@@ -15,6 +15,11 @@ class ModMetadata {
   ///
   /// **Adding a typed field means adding its key here.** Miss it and the field
   /// round-trips through [extra] as well, shadowing the typed one.
+  ///
+  /// `source_url` is here for the opposite reason, and it is the one key this
+  /// build reads and never writes: leaving it out would make every existing
+  /// file's copy an unknown key, preserved forever by the very rule above. See
+  /// [sourceUrl].
   static const Set<String> knownKeys = {
     'schema_version',
     'uid',
@@ -58,7 +63,22 @@ class ModMetadata {
   /// Free-form description.
   final String? description;
 
-  /// Link to the mod's source page (GameBanana or any URL).
+  /// **Read from the file, and written back only while nothing else names the
+  /// mod** — the one input the offline backfill has.
+  ///
+  /// It was the mod's page as a user-editable link, which is a second answer to
+  /// "which mod is this?" beside `origin.mod_id` — one the user could edit and
+  /// which drove nothing, while the one that drives the update check could not
+  /// be edited at all. The block answers it now, and every surface that shows a
+  /// link derives it from there (`utils/url_utils.dart`).
+  ///
+  /// What survives is the migration: a sidecar written before the block existed
+  /// carries this, and `OriginBackfill` parses a `mod_id` out of it
+  /// ([`origin-tracking.md`](../../docs/origin-tracking.md) §3). So the key
+  /// leaves a file the moment the block names a mod, and stays in one where it
+  /// does not — a url naming no mod page is kept rather than discarded, since a
+  /// later build may parse what this one cannot, and dropping it while it is
+  /// still the only candidate would end the migration mid-scan.
   final String? sourceUrl;
 
   /// Arbitrary user tags.
@@ -139,9 +159,11 @@ class ModMetadata {
   /// True when there is nothing worth persisting. Unknown keys count as content:
   /// they're someone else's data and dropping them is exactly what [extra]
   /// exists to prevent.
+  ///
+  /// [sourceUrl] does not count, because nothing here would write it: a file
+  /// holding only that has nothing this build would put back.
   bool get isEmpty =>
       (description == null || description!.isEmpty) &&
-      (sourceUrl == null || sourceUrl!.isEmpty) &&
       tags.isEmpty &&
       (characterId == null || characterId!.isEmpty) &&
       images.isEmpty &&
@@ -175,7 +197,13 @@ class ModMetadata {
       'schema_version': schemaVersion,
       if (uid != null) 'uid': uid,
       if (description != null) 'description': description,
-      if (sourceUrl != null) 'source_url': sourceUrl,
+      // **Kept only while it is still the only thing that names the mod.** Once
+      // the block carries an id the key has done its job and leaves the file on
+      // this save; until then dropping it would throw away the backfill's only
+      // input — and a user's edit landing mid-scan is exactly when that
+      // happens. See [sourceUrl].
+      if (sourceUrl != null && origin?.base?.modId == null)
+        'source_url': sourceUrl,
       'tags': tags,
       if (characterId != null) 'character_id': characterId,
       'images': images,
@@ -203,7 +231,9 @@ class ModMetadata {
   /// **A new machine-owned field has to be carried here explicitly**, because
   /// this builds a fresh instance: one left off the list defaults to null and
   /// is erased the first time anyone edits a description. That is the hole
-  /// `ModInfo.origin`'s doc describes having already been paid for once.
+  /// `ModInfo.origin`'s doc describes having already been paid for once, and
+  /// [sourceUrl] is carried on the same terms — an edit landing before the
+  /// backfill has run must not take its only input away.
   ///
   /// [characterId] is normalised through [storedCharacterId], so callers may
   /// hand over the runtime `"unknown"` placeholder without it reaching disk.
@@ -211,7 +241,6 @@ class ModMetadata {
   /// (the marketplace install) can't reintroduce the placeholder by omission.
   ModMetadata replaceUserFields({
     required String? description,
-    required String? sourceUrl,
     required List<String> tags,
     required String? characterId,
     required List<String> images,
@@ -220,9 +249,9 @@ class ModMetadata {
       schemaVersion: schemaVersion, // machine-owned: from disk
       uid: uid, // machine-owned: from disk
       origin: origin, // machine-owned: from disk
+      sourceUrl: sourceUrl, // legacy input: from disk, see [sourceUrl]
       extra: extra, // unknown: from disk
       description: description,
-      sourceUrl: sourceUrl,
       tags: tags,
       characterId: storedCharacterId(characterId),
       images: images,
@@ -233,7 +262,6 @@ class ModMetadata {
     int? schemaVersion,
     String? uid,
     String? description,
-    String? sourceUrl,
     List<String>? tags,
     String? characterId,
     List<String>? images,
@@ -244,7 +272,7 @@ class ModMetadata {
       schemaVersion: schemaVersion ?? this.schemaVersion,
       uid: uid ?? this.uid,
       description: description ?? this.description,
-      sourceUrl: sourceUrl ?? this.sourceUrl,
+      sourceUrl: sourceUrl, // no parameter: nothing in this build sets one
       tags: tags ?? this.tags,
       characterId: characterId ?? this.characterId,
       images: images ?? this.images,

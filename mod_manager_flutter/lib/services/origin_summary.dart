@@ -23,8 +23,8 @@ enum IdentitySummary {
   /// No `mod_id` at all — the dialog is in its search state.
   none,
 
-  /// Derived from the user's `source_url` by the offline backfill. A guess
-  /// about a free-form field a human typed.
+  /// Worked out by the offline backfill from the link an older sidecar carries.
+  /// A guess about a free-form field a human typed.
   inferred,
 
   /// The user picked this mod page in this dialog.

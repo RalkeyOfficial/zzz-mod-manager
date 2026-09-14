@@ -48,11 +48,12 @@ class InstalledModsIndex {
   /// Two rules worth knowing:
   ///
   /// - A mod at `tracking: "off"` is left out of the **identity** indexes. That
-  ///   setting is the user saying "not from GameBanana / it's my own", and a
-  ///   stale `source_url` is exactly why they might have said it — so a mod id
-  ///   still sitting in that block must not put an "in your library" badge on
-  ///   somebody else's mod page. Its archive hash is still indexed: a hash is a
-  ///   fact about bytes on disk, not a claim about which remote mod they are.
+  ///   setting is the user saying "not from GameBanana / it's my own", and an id
+  ///   worked out from a link that was wrong is exactly why they might have said
+  ///   it — so a mod id still sitting in that block must not put an "in your
+  ///   library" badge on somebody else's mod page. Its archive hash is still
+  ///   indexed: a hash is a fact about bytes on disk, not a claim about which
+  ///   remote mod they are.
   /// - Folder lists are sorted case-insensitively, so what the UI shows doesn't
   ///   depend on the order the filesystem happened to enumerate the library in.
   factory InstalledModsIndex.fromMods(Iterable<ModInfo> mods) {

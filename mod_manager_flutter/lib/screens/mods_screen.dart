@@ -383,8 +383,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
   }
 
   /// Reflects a saved edit in the UI without a rescan. [updated] carries the
-  /// edited fields (character, url, description, tags, images) already written
-  /// to disk; a character change moves the mod between groups via [_buildGroups].
+  /// edited fields (character, description, tags, images) already written to
+  /// disk; a character change moves the mod between groups via [_buildGroups].
   void _onModEdited(ModInfo updated) {
     final allMods = _currentAllMods();
     final index = allMods?.indexWhere((m) => m.id == updated.id) ?? -1;
@@ -400,7 +400,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       charId = detectCharacterId(updated.name) ?? charId;
     }
     // Rebuild explicitly (not copyWith) so cleared fields — a removed cover or
-    // emptied url/description — actually reset instead of keeping stale values.
+    // an emptied description — actually reset instead of keeping stale values.
     allMods[index] = ModInfo(
       id: updated.id,
       name: updated.name,
@@ -408,7 +408,6 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       isActive: existing.isActive,
       imagePath: updated.images.isNotEmpty ? updated.images.first : null,
       description: updated.description,
-      sourceUrl: updated.sourceUrl,
       tags: updated.tags,
       images: updated.images,
       isFavorite: existing.isFavorite,

@@ -179,7 +179,8 @@ BulkResolutionPlan planBulkResolution({
     final origin = mod.origin;
     // "Not from GameBanana / it's my own" is a decision, and this screen is not
     // where it gets revisited. Checked before identity for the same reason the
-    // status slot does: a stale `source_url` must not talk the user out of it.
+    // status slot does: an id worked out from a link that was wrong must not
+    // talk the user out of it.
     if (origin?.tracking == OriginTracking.off) {
       settled++;
       continue;

@@ -95,11 +95,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Downloaded archives land in the app's own downloads folder and are deleted once installed. Anything left over is cleared when you next start the app.
 - The window uses your desktop's own title bar, so its buttons sit where the rest of your system puts them and it has the window menu, keyboard shortcuts and decoration theme every other window has.
 - Settings offers Light, System or Dark in place of the dark-mode switch. System is what the app starts on, and it follows your desktop's own light or dark setting for as long as you leave it there.
+- A mod's ↗ button, its right-click "Open source page" and its details row all open the page it's tracked against, so a mod you linked through "Update tracking…" has them without you typing a link.
 
 ### Removed
 
 - The embedded webview (Windows) and the Downloads-folder watcher (Linux), replaced by the built-in browser.
 - F10 auto-reload — the F10 button, the auto-reload toggle and the "Automatic mod reload" settings section — because a keypress the app sends never reaches a game running under Proton, so it only ever claimed to work. Press F10 in the game; xdotool is no longer needed.
+- The Source link box in a mod's Edit dialog. Which mod page a mod belongs to is set by "Update tracking…" now, which is also what decides where updates are checked.
 
 ### Fixed
 

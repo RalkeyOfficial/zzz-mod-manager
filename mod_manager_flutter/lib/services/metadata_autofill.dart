@@ -11,7 +11,6 @@ import 'gamebanana/remote_mod_metadata.dart';
 class MetadataAutofillPlan {
   const MetadataAutofillPlan({
     this.description,
-    this.sourceUrl,
     this.tags,
     this.characterId,
     this.imageUrls = const [],
@@ -19,14 +18,6 @@ class MetadataAutofillPlan {
   });
 
   final String? description;
-
-  /// The mod page to link back to.
-  ///
-  /// A user-facing field, and the reason it is filled here rather than by the
-  /// install: the origin block records *which* mod this is for the app's own
-  /// use, while this is the link the user clicks. Both are kept — the two
-  /// answer to different readers.
-  final String? sourceUrl;
 
   final List<String>? tags;
   final String? characterId;
@@ -43,7 +34,6 @@ class MetadataAutofillPlan {
 
   bool get isEmpty =>
       description == null &&
-      sourceUrl == null &&
       tags == null &&
       characterId == null &&
       imageUrls.isEmpty;
@@ -124,15 +114,6 @@ MetadataAutofillPlan planMetadataAutofill({
       ? remote.description
       : null;
 
-  // The same rule, and it earns it here more than anywhere: a url the user
-  // typed, or one the archive's own sidecar carried, may point at a collection,
-  // a mirror, or the author's page — all better than the canonical link we
-  // would substitute, and all impossible to recover once overwritten.
-  final sourceUrl =
-      (existing.sourceUrl == null || existing.sourceUrl!.isEmpty)
-          ? remote.sourceUrl
-          : null;
-
   final tags = existing.tags.isEmpty && remote.tags.isNotEmpty
       ? List<String>.unmodifiable(remote.tags)
       : null;
@@ -149,7 +130,6 @@ MetadataAutofillPlan planMetadataAutofill({
 
   return MetadataAutofillPlan(
     description: description,
-    sourceUrl: sourceUrl,
     tags: tags,
     characterId: characterId,
     imageUrls: wantsImages ? List<Uri>.unmodifiable(remote.imageUrls) : const [],

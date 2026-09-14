@@ -205,7 +205,6 @@ void main() {
       bool isActive = false,
       String? imagePath = '/img/a.png',
       String? description = 'notes',
-      String? sourceUrl = 'https://gamebanana.com/mods/1',
       List<String> tags = const ['x'],
       List<String> images = const ['/img/a.png'],
       bool isFavorite = false,
@@ -220,7 +219,6 @@ void main() {
           isActive: isActive,
           imagePath: imagePath,
           description: description,
-          sourceUrl: sourceUrl,
           tags: tags,
           images: images,
           isFavorite: isFavorite,
@@ -242,7 +240,6 @@ void main() {
         'isActive': full(isActive: true),
         'imagePath': full(imagePath: '/img/b.png'),
         'description': full(description: 'other'),
-        'sourceUrl': full(sourceUrl: 'https://gamebanana.com/mods/2'),
         'tags': full(tags: const ['y']),
         'images': full(images: const ['/img/b.png']),
         'isFavorite': full(isFavorite: true),
@@ -272,8 +269,7 @@ void main() {
       // case above fails here.
       const compared = {
         'id', 'name', 'characterId', 'isActive', 'imagePath', 'description',
-        'sourceUrl', 'tags', 'images', 'isFavorite', 'keybinds', 'origin',
-        'uid',
+        'tags', 'images', 'isFavorite', 'keybinds', 'origin', 'uid',
       };
       final source = File('lib/models/character_info.dart').readAsStringSync();
       final body = source.substring(source.indexOf('class ModInfo'));

@@ -13,9 +13,13 @@ typedef InstallDateProbe = Future<DateTime?> Function(String modFolder);
 ///
 /// Everything installed before the origin block existed has none — the whole
 /// pre-existing library — and without identity those mods are permanently
-/// invisible to update checking. One thing is recoverable for free: `source_url`
-/// is an existing user-editable field, and a `gamebanana.com/mods/<id>` link in
-/// it yields the remote mod id. On a real 23-mod library, all 23 carried one.
+/// invisible to update checking. One thing is recoverable for free: those
+/// sidecars carry a `source_url`, and a `gamebanana.com/mods/<id>` link in it
+/// yields the remote mod id. On a real 23-mod library, all 23 carried one.
+///
+/// **That key is now read here and nowhere else.** Nothing writes a link any
+/// more — every link the app shows is built from the id this recovers — so the
+/// field is an input to this migration and no longer a field of the app.
 ///
 /// **This is a sibling of the legacy migration, not an extension of it.**
 /// `ModMetadataRepository.loadOrMigrate` returns early the moment a sidecar
@@ -46,8 +50,8 @@ class OriginBackfill {
   final InstallDateProbe _probe;
 
   /// Tiers a url parse must never overrule. Both represent knowledge that did
-  /// not come from `source_url`: `exact` was established by a download or a
-  /// checksum match, `user` by the user confirming it in the resolve dialog.
+  /// not come from a link: `exact` was established by a download or a checksum
+  /// match, `user` by the user confirming it in the resolve dialog.
   static const Set<OriginConfidence> _confirmedTiers = {
     OriginConfidence.exact,
     OriginConfidence.user,
@@ -71,8 +75,8 @@ class OriginBackfill {
 
     // The user declared this mod local ("not from GameBanana / it's my own").
     // Re-attaching a remote identity behind their back would undo an explicit
-    // decision — and a stale `source_url` is exactly why they might have made
-    // it. `tracking: off` is permanent until the user themselves reverses it.
+    // decision — and a link that named the wrong mod is exactly why they might
+    // have made it. `tracking: off` is permanent until they reverse it.
     if (origin.tracking == OriginTracking.off) return null;
 
     // **Against what the folder *is*** — its bottom layer. A url in the mod's
