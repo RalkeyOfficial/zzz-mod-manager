@@ -575,6 +575,7 @@
       "bulk_failed_plural": "{count} mods couldn't be checked",
       "dismiss": "Ignore this update",
       "undismiss": "Stop ignoring it",
+      "patch_menu": "What to do with this patch",
       "dismissed": "You're ignoring this update — the mark is gone from this mod's card. If the author publishes anything newer, it will show up again on its own.",
       "dismiss_failed_title": "Couldn't ignore that update",
       "dismiss_failed": "“{mod}” — the folder may be read-only.",

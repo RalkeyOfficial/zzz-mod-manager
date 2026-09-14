@@ -5,6 +5,7 @@ import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_exceptions.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
+import 'package:mod_manager_flutter/models/installed_file.dart';
 import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
@@ -1178,7 +1179,11 @@ void main() {
 
       /// A folder holding RabbitFX's newest file — up to date on its own — with
       /// the other mod as a second layer.
-      ModInfo mixedMod({int? otherFileId = 1258541}) => mod(
+      ModInfo mixedMod({
+        int? otherFileId = 1258541,
+        List<InstalledFile> patchFiles = const <InstalledFile>[],
+      }) =>
+          mod(
             'EllenBikini',
             origin: origin(fileId: 1732269).copyWith(downloads: [
               origin(fileId: 1732269).base!,
@@ -1189,6 +1194,7 @@ void main() {
                 versionConfidence: otherFileId == null
                     ? OriginConfidence.unknown
                     : OriginConfidence.user,
+                files: patchFiles,
               ),
             ]),
           );
@@ -1428,6 +1434,58 @@ void main() {
 
         expect(find.text('An update is available'), findsOneWidget);
         expect(find.text('Update'), findsOneWidget);
+      });
+
+      testWidgets('the layer that can come out says so, and the mod does not',
+          (tester) async {
+        // The surface reporting a patch's update is where a user meets a patch
+        // they no longer want, and the only routes out of one were the card's
+        // right-click menu and the tracking dialog. The menu is on the layer
+        // rather than in the row below it: those buttons act on the update,
+        // this acts on whether the folder holds the patch at all.
+        await tester.pumpWidget(const SizedBox());
+        final (client, _) = mixedClient();
+        final target = mixedMod(patchFiles: const [
+          InstalledFile(path: 'Hair.ini', role: InstalledFileRole.replaced),
+        ]);
+        await pumpLocalized(
+          tester,
+          ModUpdateDialog(
+            mod: target,
+            gateway: _RecordingGateway(target.origin, <ModOrigin?>[]),
+          ),
+          overrides: [gameBananaClientProvider.overrideWithValue(client)],
+        );
+        await tester.pumpAndSettle();
+
+        // One, not two: the bottom layer is what the folder *is*, and a folder
+        // cannot be asked to give that up from here.
+        expect(find.byIcon(Icons.more_vert), findsOneWidget);
+
+        await tester.tap(find.byIcon(Icons.more_vert));
+        await tester.pumpAndSettle();
+        expect(find.text('Remove patch…'), findsOneWidget);
+      });
+
+      testWidgets('a layer whose files were never recorded cannot come out',
+          (tester) async {
+        // `removablePatches` decides, so this offers exactly what the context
+        // menu offers: with no file registry nothing says which of the folder's
+        // files are the patch's, so there is nothing to take out.
+        await tester.pumpWidget(const SizedBox());
+        final (client, _) = mixedClient();
+        final target = mixedMod();
+        await pumpLocalized(
+          tester,
+          ModUpdateDialog(
+            mod: target,
+            gateway: _RecordingGateway(target.origin, <ModOrigin?>[]),
+          ),
+          overrides: [gameBananaClientProvider.overrideWithValue(client)],
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byIcon(Icons.more_vert), findsNothing);
       });
 
       testWidgets('ignoring a companion\'s update writes it on the companion',

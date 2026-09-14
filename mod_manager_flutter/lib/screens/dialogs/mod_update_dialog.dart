@@ -15,6 +15,7 @@ import '../../models/mod_download.dart';
 import '../../models/origin_enums.dart';
 import '../../services/gamebanana/file_selection.dart';
 import '../../services/origin_summary.dart';
+import '../../services/patch_removal.dart';
 import '../../services/update_check.dart';
 import '../../services/update_check_run.dart';
 import '../../services/update_apply/update_write_route.dart';
@@ -26,6 +27,10 @@ import '../../utils/state_providers.dart';
 import '../../utils/url_utils.dart';
 import '../components/mod_status_slot.dart';
 import 'apply_update_flow.dart';
+import 'remove_patch_flow.dart';
+
+/// The one thing a layer's own menu offers.
+enum _PatchAction { remove }
 
 /// One mod's update verdict, and the honest set of things a user can do about
 /// it today.
@@ -945,8 +950,75 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
             visualDensity: VisualDensity.compact,
             onPressed: () => launchExternalUrl(context, gameBananaModUrl(id)),
           ),
+        // **On the layer, not in the row of buttons below it.** Those two act on
+        // the update being reported; this acts on whether the folder holds this
+        // patch at all, which is a different question about a different thing —
+        // and the surface reporting a patch's update is where a user meets the
+        // patch they no longer have.
+        if (_removablePatch(section))
+          PopupMenuButton<_PatchAction>(
+            icon: const Icon(Icons.more_vert, size: 16),
+            tooltip: loc.t('mods.update.patch_menu'),
+            enabled: !_busy,
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: _PatchAction.remove,
+                child: Row(
+                  children: [
+                    const Icon(Icons.layers_clear, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        loc.t('mods.context_menu.remove_patch'),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            onSelected: (_) => _removePatch(section),
+          ),
       ],
     );
+  }
+
+  /// Whether this section's layer is one the folder can be asked to give up.
+  ///
+  /// Through [removablePatches] rather than its own test, so "which patches can
+  /// come out" is one rule: the context menu and this offer the same set, and a
+  /// layer with no file registry is excluded by both.
+  bool _removablePatch(_Section section) {
+    if (!section.isPatch) return false;
+    return removablePatches(widget.mod.origin)
+        .any((patch) => patch.modId == section.download.modId);
+  }
+
+  /// Takes this patch out of the folder, through the flow the context menu uses.
+  ///
+  /// Closes on success for the same reason [_applyUpdate] does: the sections are
+  /// built from the block this dialog read when it opened, and one of the layers
+  /// they describe is now gone. The session verdict goes with it — this write
+  /// touches this folder and nothing else, so it is exactly the mark that has
+  /// gone stale.
+  Future<void> _removePatch(_Section section) async {
+    setState(() => _writing = true);
+    final removed = await removePatchFlow(
+      context,
+      ref,
+      mod: widget.mod,
+      patch: section.download,
+      patchName: section.name,
+    );
+    if (!mounted) return;
+    setState(() {
+      _writing = false;
+      _wrote = _wrote || removed;
+    });
+    if (!removed) return;
+    final notifier = ref.read(modUpdateChecksProvider.notifier);
+    notifier.state = {...notifier.state}..remove(widget.mod.id);
+    if (mounted) Navigator.of(context).pop(true);
   }
 
   List<Widget> _verdict(_Section section, {required bool withActions}) {

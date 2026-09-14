@@ -1087,6 +1087,15 @@ update set the patch aside and what makes the confirmation warn when it cannot, 
 dropping it while the files stayed took the patch's only protection away
 ([`origin-tracking.md` §10](origin-tracking.md#taking-a-patch-out)).
 
+**Two ways in, offering the same set.** The card's right-click menu names each
+removable patch, and the update dialog carries the same entry on the patch's own
+layer — in a menu beside that layer's ↗, not in the row of update buttons under
+it: those act on the release being reported, this acts on whether the folder
+holds the patch at all. It is the surface that matters most for the case, since a
+patch somebody no longer has is usually noticed when something offers to update
+it. Both ask `removablePatches`, so neither can offer what the other refuses, and
+the dialog closes after a removal because the layers it drew are what changed.
+
 ---
 
 ## 7. What is not built, and what is refused
