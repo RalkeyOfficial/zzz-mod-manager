@@ -221,13 +221,6 @@ Two things are **refused rather than unbuilt**, both recorded in
 
 ### Open around the update check (known, deliberately not built)
 
-- [ ] **"In your library as …" is a dead label.** The opposite direction to the
-  refusal above, and the thing actually missing: a mod you already own is named
-  on the marketplace card and in the detail view's notice, and neither takes you
-  to it. A link to the library entry is useful whether or not anything is out of
-  date, needs no check to have run, and is the honest answer to "I already have
-  this — what do I do about it?". Wants deciding where it lands the user: the
-  Mods tab filtered to that folder, or the folder's own dialog.
 - **The batch bisect could ask the error which id was bad.** A
   `NO_SUCH_RECORD` response names the offending id in `_sErrorMessage`
   (`Record Mod.999999999 doesn't exist`), so a parser could drop it and retry
