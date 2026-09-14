@@ -125,6 +125,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Metadata written by a newer version of the app is no longer erased when you edit a mod's description, tags or character.
 - Saving a mod with no character no longer records "unknown" as its character.
 - The theme you pick is still there the next time you start the app.
+- A saved version's size is measured past a file the app can't read, instead of stopping there and reporting the short total as the whole.
 
 ## [2.2.2] - 2026-07-19
 

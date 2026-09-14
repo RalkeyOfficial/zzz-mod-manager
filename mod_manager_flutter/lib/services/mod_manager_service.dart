@@ -7,6 +7,7 @@ import 'patch_store.dart';
 import '../models/mod_origin_seed.dart';
 import '../models/keybind_info.dart';
 import '../utils/directory_copy.dart';
+import '../utils/directory_size.dart';
 import '../utils/shipped_preview.dart';
 import '../utils/zzz_characters.dart';
 import 'backup/snapshot_service.dart';
@@ -668,20 +669,19 @@ class ModManagerService {
     );
   }
 
-  /// Every byte under [directory], or null if it could not be walked.
+  /// Every byte under [directory], or null if any of it could not be read.
+  ///
+  /// **A partial answer is null here, not a smaller number.** This decides
+  /// whether an import fits, so a total short by one unreadable folder would
+  /// approve a copy that then fills the disk — and running out of space partway
+  /// through is the failure the preflight exists to avoid. "I don't know" leaves
+  /// the check to skip itself, which is the safe way to be wrong.
   Future<int?> _bytesUnder(Directory directory) async {
-    try {
-      var total = 0;
-      await for (final entity
-          in directory.list(recursive: true, followLinks: false)) {
-        if (entity is File) total += await entity.length();
-      }
-      return total;
-    } catch (e) {
-      _files.debug('could not size a folder',
-          fields: {'path': directory.path, 'reason': '$e'});
-      return null;
-    }
+    final size = await measureDirectory(directory.path);
+    if (size.complete) return size.bytes;
+    _files.debug('could not size a folder',
+        fields: {'path': directory.path, 'unreadable': size.unreadable});
+    return null;
   }
 
   /// Mods whose origin block could not be written, drained by the UI.

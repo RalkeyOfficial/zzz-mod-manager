@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path/path.dart' as path;
 
 import '../../utils/directory_copy.dart';
+import '../../utils/directory_size.dart';
 import '../../utils/path_helper.dart';
 import '../log/logger.dart';
 import 'retention.dart';
@@ -331,17 +332,11 @@ class SnapshotService {
     );
   }
 
-  Future<int> _directorySize(Directory dir) async {
-    var total = 0;
-    try {
-      await for (final entity in dir.list(recursive: true, followLinks: false)) {
-        if (entity is File) total += await entity.length();
-      }
-    } catch (_) {
-      // Best effort — a size we could not read is reported as what we could.
-    }
-    return total;
-  }
+  /// Best effort — a size we could not read is reported as what we could, which
+  /// is what retention wants: a snapshot that measures short still counts
+  /// towards the budget instead of being treated as free.
+  Future<int> _directorySize(Directory dir) async =>
+      (await measureDirectory(dir.path)).bytes;
 }
 
 /// Why a snapshot was taken. Shown in the restore list, because "before the
