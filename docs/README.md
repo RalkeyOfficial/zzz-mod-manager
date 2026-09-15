@@ -25,13 +25,14 @@ the root [`README.md`](../README.md).
 | [`mod-reload.md`](mod-reload.md) | **Why the app does not press F10 for you**: what 3DMigoto actually needs, what was measured on Wayland, and why the feature was removed rather than fixed |
 | [`desktop-integration.md`](desktop-integration.md) | **The window itself** — the application id, the desktop entry and the icon that depends on it, and why the title bar is the window manager's |
 | [`gamebanana-api.md`](gamebanana-api.md) | The **remote protocol**: which of the two APIs to use, browsing/filtering/sorting, the mod and file objects, NSFW handling, downloads, the category tree, and the gotchas |
+| [`writing-conventions.md`](writing-conventions.md) | How to write anything meant for a person to read: present-tense prose, and reporting finished work as user experience |
 
 ## Related files outside this directory
 
 | File | Covers |
 |---|---|
-| [`../CLAUDE.md`](../CLAUDE.md) | Repo-wide rules: language policy, dev workflow (hot reload vs restart), changelog conventions, the non-negotiables |
-| [`../mod_manager_flutter/CLAUDE.md`](../mod_manager_flutter/CLAUDE.md) | The app's rules and the index into this directory. **Rules and pointers only** — anything that needs explaining belongs in a doc here |
+| [`../CLAUDE.md`](../CLAUDE.md) | Repo-wide rules: language policy, packaging, changelog conventions |
+| [`../mod_manager_flutter/CLAUDE.md`](../mod_manager_flutter/CLAUDE.md) | The app's rules, its dev workflow, and the index into this directory. **Rules and pointers only** — anything that needs explaining belongs in a doc here |
 | [`../CHANGELOG.md`](../CHANGELOG.md) | Release history (Keep a Changelog / SemVer) |
 | [`../BUILD_WINDOWS_GUIDE.md`](../BUILD_WINDOWS_GUIDE.md) | Windows build and packaging |
 
