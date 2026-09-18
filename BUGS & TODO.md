@@ -129,8 +129,7 @@ second transfer is still coming in.
 ### Later — backlog
 
 Everything under "Additional feature ideas" (paste-URL install, wishlist, feeds,
-profiles, conflict detection, storage view). Pull items forward as they earn
-priority.
+profiles, conflict detection). Pull items forward as they earn priority.
 
 ---
 
@@ -244,16 +243,16 @@ Two things are **refused rather than unbuilt**, both recorded in
   popups in a row they cannot see the end of, having already pressed the button
   that agreed to all of them. The surfaces also carry different weight for a
   reason: the bulk screen otherwise only ever rewrites *sidecars*.
-- [ ] **Nothing reports a group no folder claims.** Three ways to get one and
-  all of them silent: a mod deleted outside the app, a folder duplicated in a
-  file manager (both copies carry one uid, and an update to either prunes the
-  other's), and a sidecar deleted by hand. Belongs with the disk-usage page
-  below, which is where `SnapshotService.totalBytes()` gets its first reader.
-- [ ] **Total backup size is not surfaced anywhere.** The rollback dialog shows a
-  size per snapshot and there is no whole-library figure. Moved to the disk-usage
-  page at the end of this file, which is the screen it belongs on; worth pairing
-  there with a "delete all saved versions of this mod" action, which the per-row
-  delete currently makes tedious.
+- [ ] **The Storage tab shows a saved-versions group whose mod is gone exactly like one whose mod is still there.**
+  Three ways to get one and all of them silent: a mod deleted outside the app,
+  a folder duplicated in a file manager (both copies carry one uid, and an update to either prunes the other's),
+  and a sidecar deleted by hand. The tab's saved-versions category names and sizes every group,
+  so the data is on screen — but nothing compares a group's uid against the library, so an unclaimed group carries no mark.
+  And there is no way to delete one: the per-snapshot delete lives in the saved-versions dialog,
+  which opens from the mod's own row on the Mods tab, and this mod has no row.
+  We change it to mark a group no folder claims,
+  and give every group on the Storage tab a "delete all saved versions" action — which also spares the per-row deleting
+  that the dialog makes tedious for a mod that is still there.
 - **The retention numbers are not user-configurable**, deliberately for now
   (30 days / 3 per mod / 5 GB). They are the kind of setting that is easy to add
   and hard to remove, and nobody has asked. If they are ever exposed it belongs
@@ -742,8 +741,10 @@ Two limits, because they bound what may be built on it:
   - **Not** per-mod settings saves — a mod's in-game state/config is owned by
     ZZMI itself, not this manager, so we can't snapshot it.
 - [ ] **Conflict detection** — warn when two mods target the same character/slot.
-- [ ] **Storage view + orphan cleanup** — disk usage per mod, prune dead links /
-  stale downloads.
+- **Dead links in the game's mods folder are never pruned — refused, in any form.** A link whose target is missing
+  is not garbage: the folder may be on a drive that is not mounted, restored from a backup, or moved back,
+  and the link works again the moment it is. Removing it would silently lose the fact that the mod was enabled,
+  and nothing would ever put it back. This is why the Storage tab's reclaim never touches `modsPath`.
 - [ ] **Mod grouping — only when someone asks for it.** The need is "handle these
   two mods together"; the answer is a grouping in the library listing, not a
   folder holding both. **A folder must never hold two independent mods**: they
@@ -796,14 +797,6 @@ Waiting on it:
 
 Other todo's:
 
-- [ ] Add a disk usage page, where you can see with graphs how much disk is being used and for what (images, mods, backups / previous versions, etc.)
-  - It owns two things filed elsewhere, because both are the same screen: the
-    **whole-library backup figure** (`SnapshotService.totalBytes()`, which has
-    no reader, so the 5 GB retention budget currently bounds something
-    invisible) and the **saved versions no folder claims any more** — a mod
-    deleted outside the app, a duplicated folder, a deleted sidecar. Those are
-    reported and reclaimed by hand, never swept automatically: an unclaimed
-    group is recoverable data right up until it is deleted.
 - [ ] **Give the portable build its icon with nothing to install** — set it via
   `xdg_toplevel_icon_v1` from the runner, dropping the one-command setup. GTK3
   can't, but the runner can bind the protocol itself; newer compositors only.
