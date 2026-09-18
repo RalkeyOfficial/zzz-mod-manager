@@ -382,6 +382,12 @@
       "show_updates": "Show only the {count} mods with updates",
       "library": "Library"
     },
+    "nudge": {
+      "title_single": "{count} mod isn't set up for update checking",
+      "title_plural": "{count} mods aren't set up for update checking",
+      "hint": "Link them to their GameBanana pages, and the app can tell you when a newer version is out.",
+      "dismiss": "Dismiss"
+    },
     "sort": {
       "added": "Recently added",
       "name_asc": "Name (A–Z)",
@@ -796,7 +802,9 @@
     },
     "updates": {
       "check_on_launch": "Check for updates when the app starts",
-      "check_on_launch_hint": "Contacts GameBanana once at startup and marks mods that have a newer version published. Nothing is downloaded or installed — updates are always applied by you."
+      "check_on_launch_hint": "Contacts GameBanana once at startup and marks mods that have a newer version published. Nothing is downloaded or installed — updates are always applied by you.",
+      "tracking_nudge": "Remind me about mods that aren't set up for update checking",
+      "tracking_nudge_hint": "Shows a reminder above the mods list while some mods can't be checked for updates. Closing the reminder turns this off."
     },
     "marketplace": {
       "content_filter_hint": "How mods GameBanana flags as adult appear while you browse. The same setting as the one in the Marketplace toolbar."

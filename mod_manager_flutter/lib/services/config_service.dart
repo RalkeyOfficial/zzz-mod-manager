@@ -20,6 +20,7 @@ class ConfigService implements ModCharacterTagStore {
   static const String _keyContentFilter = 'content_filter';
   static const String _keyMarketplaceSort = 'marketplace_sort';
   static const String _keyUpdateCheckOnLaunch = 'update_check_on_launch';
+  static const String _keyTrackingNudgeDismissed = 'tracking_nudge_dismissed';
 
   /// Mirrored by `services/log/log_setup.dart`, which reads the same key
   /// straight off `config.json` during bootstrap — `SharedPreferences` does not
@@ -109,6 +110,10 @@ class ConfigService implements ModCharacterTagStore {
   /// without the user present.
   bool get updateCheckOnLaunch =>
       _prefs.getBool(_keyUpdateCheckOnLaunch) ?? false;
+
+  /// Whether the user has closed the reminder that some mods are not set up for update checking.
+  bool get trackingNudgeDismissed =>
+      _prefs.getBool(_keyTrackingNudgeDismissed) ?? false;
 
   /// Whether each run writes a log file.
   ///
@@ -355,6 +360,16 @@ class ConfigService implements ModCharacterTagStore {
     }
   }
 
+  Future<bool> setTrackingNudgeDismissed(bool dismissed) async {
+    try {
+      await _prefs.setBool(_keyTrackingNudgeDismissed, dismissed);
+      await _saveToFile();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<bool> setFileLogging(bool enabled) async {
     try {
       await _prefs.setBool(_keyFileLogging, enabled);
@@ -420,6 +435,12 @@ class ConfigService implements ModCharacterTagStore {
           config['update_check_on_launch'],
         );
       }
+      if (config.containsKey('tracking_nudge_dismissed')) {
+        await _prefs.setBool(
+          _keyTrackingNudgeDismissed,
+          config['tracking_nudge_dismissed'],
+        );
+      }
       if (config.containsKey('file_logging')) {
         await _prefs.setBool(_keyFileLogging, config['file_logging']);
       }
@@ -448,6 +469,7 @@ class ConfigService implements ModCharacterTagStore {
         'content_filter': contentFilter,
         'marketplace_sort': marketplaceSort,
         'update_check_on_launch': updateCheckOnLaunch,
+        'tracking_nudge_dismissed': trackingNudgeDismissed,
         'file_logging': fileLogging,
         'mod_character_tags': modCharacterTags,
         'first_run': false,

@@ -65,6 +65,8 @@ class ApiService {
           parseThemeMode(_configService!.theme);
       _container!.read(updateCheckOnLaunchProvider.notifier).state =
           _configService!.updateCheckOnLaunch;
+      _container!.read(trackingNudgeDismissedProvider.notifier).state =
+          _configService!.trackingNudgeDismissed;
       _container!.read(fileLoggingProvider.notifier).state =
           _configService!.fileLogging;
       _container!.read(modsPathProvider.notifier).state =
@@ -306,6 +308,13 @@ class ApiService {
     await initialize();
     await _configService!.setUpdateCheckOnLaunch(enabled);
     _container?.read(updateCheckOnLaunchProvider.notifier).state = enabled;
+  }
+
+  /// Persists whether the reminder about mods not set up for update checking has been closed.
+  static Future<void> setTrackingNudgeDismissed(bool dismissed) async {
+    await initialize();
+    await _configService!.setTrackingNudgeDismissed(dismissed);
+    _container?.read(trackingNudgeDismissedProvider.notifier).state = dismissed;
   }
 
   /// Persists the setting **and applies it now**, in that order.

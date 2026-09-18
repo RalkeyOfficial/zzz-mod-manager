@@ -38,6 +38,7 @@ App-data locations are `~/.local/share/zzz-mod-manager` (Linux) and
   "content_filter": "blur",
   "marketplace_sort": "newest",
   "update_check_on_launch": false,
+  "tracking_nudge_dismissed": false,
   "file_logging": true,
   "mod_character_tags": { "Ellen Swimsuit": "ellen" },
   "first_run": false
@@ -60,6 +61,7 @@ App-data locations are `~/.local/share/zzz-mod-manager` (Linux) and
 | `content_filter` | `content_filter` | Marketplace adult-content treatment: `blur` (default) \| `show` \| `hide`. Stored as a raw string and parsed by `ContentFilterMode.parse`, which **degrades anything unrecognised to `blur`** — the only value that is wrong in neither direction ([§3](#3-parsing-a-stored-value)) |
 | `marketplace_sort` | `marketplace_sort` | The **marketplace browse** sort, as a `GbModSort` Dart name (`newest`, `latestModified`, …). Empty until chosen ([§3](#3-parsing-a-stored-value)) |
 | `update_check_on_launch` | `update_check_on_launch` | Bool, **default `false`**. Whether the whole-library update check runs by itself at startup ([`update-checks.md` §5.1](update-checks.md#51-checking-at-startup)). The default is the safety property: the standing rule is that a check never runs unpressed, and this is the only opt-in out of it. It governs *checking* — nothing here consents to an update being applied |
+| `tracking_nudge_dismissed` | `tracking_nudge_dismissed` | Bool, **default `false`**. Whether the user has closed the reminder above the mods list that some mods are not set up for update checking. Closing the reminder sets it, and the **Updates** section's second switch clears it. Read on `containsKey` like the row above, so a stored `false` is a choice and not an absence |
 | `file_logging` | `file_logging` | Bool, **default `true`** — the opposite call from the row above, and for the opposite reason: a log reaches nothing and costs kilobytes, and is worthless if it was switched off on the run that broke. **This is the one key read outside `ConfigService`**: `log_setup.dart` reads it straight off the file during bootstrap, because SharedPreferences does not exist until the first frame and the first lines worth keeping are written before that. Any failure to read it means `true` ([`logging.md` §9](logging.md#9-settings)) |
 | `mod_character_tags` | `mod_character_tags` | JSON-encoded string in SharedPreferences, real object in the file. **Legacy** — superseded by the sidecar's `character_id`, still mirrored by `ModMetadataRepository.setCharacter()` for backward compatibility. See [`metadata-schema.md`](metadata-schema.md) |
 | `first_run` | `first_run` | Bool; always serialised as `false` by `_saveToFile()` |
@@ -225,7 +227,6 @@ Recorded so each is not mistaken for an oversight:
 | The download directory | Not configurable at all. Archives land in `<appData>/downloads` and are deleted once installed — see [`downloads.md`](downloads.md). A setting would have to come after making it configurable, not before. |
 | Backup retention (30 days / 3 per mod / 5 GB) | Deliberately fixed, and [`applying-updates.md` §5](applying-updates.md#retention) argues why: the age floor has to beat the count cap, and a screen presenting them as two independent numbers invites exactly the configuration that breaks it. Add it only if it is actually asked for. |
 | The remote response cache TTL | The client's ten-minute cache is in memory and per session; there is no persisted cache to configure. |
-| The post-upgrade "N mods aren't tracked" nudge | The feature is not built, so its dismissed flag has nothing to dismiss. |
 | Automatic updating | Refused, not unbuilt — [`applying-updates.md` §7](applying-updates.md#automatic-updating--considered-and-refused). The **Updates** section's one switch is about *checking*, and its wording keeps that distinction visible. |
 
 **A palette picker** is the one appearance choice not offered. *Light / System /

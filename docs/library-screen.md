@@ -119,6 +119,12 @@ height and buys every control a fixed place.
 is usually either nothing or most of the library, and both are worth knowing before
 pressing rather than after landing on an empty grid.
 
+**A reminder sits above the toolbar while any mod in the library needs attention**, saying how many and carrying the *sort out tracking* action.
+It counts the whole library rather than the view, since it is about the state of the user's mods and not about the tab they happen to be on.
+Its close button records the dismissal in config, so it stays away across restarts; the **Updates** section in Settings has a switch that brings it back.
+It is a strip in the toolbar rather than a dialog or a notification: a dialog would stand between the user and their mods on every launch until they acted,
+and a notification would be gone in eight seconds with nothing to press.
+
 **The library menu holds the three bulk actions** (check, sort out tracking, mark
 all as current), each with the count of mods it would act on and disabled when it
 can do nothing — except *sort out tracking*, which is offered at zero because it

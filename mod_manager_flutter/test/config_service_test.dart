@@ -147,6 +147,32 @@ void main() {
     });
   });
 
+  group('the tracking reminder', () {
+    test('starts shown', () async {
+      expect((await build()).trackingNudgeDismissed, isFalse);
+    });
+
+    test('closing it survives into a fresh session', () async {
+      await (await build()).setTrackingNudgeDismissed(true);
+
+      SharedPreferences.setMockInitialValues({});
+      final next = await build();
+      await next.loadFromFile();
+      expect(next.trackingNudgeDismissed, isTrue);
+    });
+
+    test('bringing it back survives too', () async {
+      final service = await build();
+      await service.setTrackingNudgeDismissed(true);
+      await service.setTrackingNudgeDismissed(false);
+
+      SharedPreferences.setMockInitialValues({});
+      final next = await build();
+      await next.loadFromFile();
+      expect(next.trackingNudgeDismissed, isFalse);
+    });
+  });
+
   group('writing a log file', () {
     test('defaults to on, so the run that broke was already recorded', () async {
       // The opposite default from the startup check above, and deliberately:
@@ -238,6 +264,7 @@ void main() {
       'content_filter': next.contentFilter,
       'marketplace_sort': next.marketplaceSort,
       'update_check_on_launch': next.updateCheckOnLaunch,
+      'tracking_nudge_dismissed': next.trackingNudgeDismissed,
       'file_logging': next.fileLogging,
       'active_mods': next.activeMods,
       'favorite_mods': next.favoriteMods,

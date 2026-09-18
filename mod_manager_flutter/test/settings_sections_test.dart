@@ -119,12 +119,12 @@ void main() {
       );
 
       expect(
-        tester.widget<Switch>(find.byType(Switch)).value,
+        tester.widget<Switch>(find.byType(Switch).first).value,
         isFalse,
         reason: 'no launch contacts the network unless the user asked',
       );
 
-      await tester.tap(find.byType(Switch));
+      await tester.tap(find.byType(Switch).first);
       await tester.pumpAndSettle();
 
       // Both halves: the provider so the check reads it this session, and the
@@ -142,7 +142,29 @@ void main() {
         container: container,
       );
 
-      expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+      expect(tester.widget<Switch>(find.byType(Switch).first).value, isTrue);
+    });
+
+    testWidgets('the reminder switch is on until dismissed, and switching it writes the dismissal',
+        (tester) async {
+      bool? written;
+      await pumpLocalized(
+        tester,
+        UpdatesSettingsSection(
+          writer: _noopBool,
+          nudgeWriter: (dismissed) async => written = dismissed,
+        ),
+        container: container,
+      );
+
+      final reminder = find.byType(Switch).last;
+      expect(tester.widget<Switch>(reminder).value, isTrue);
+
+      await tester.tap(reminder);
+      await tester.pumpAndSettle();
+
+      expect(container.read(trackingNudgeDismissedProvider), isTrue);
+      expect(written, isTrue);
     });
   });
 

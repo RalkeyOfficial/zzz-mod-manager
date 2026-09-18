@@ -13,6 +13,7 @@ import '../../utils/state_providers.dart';
 import '../dialogs/assume_current_dialog.dart';
 import '../dialogs/bulk_resolution_dialog.dart';
 import 'mod_status_slot.dart';
+import 'tracking_nudge.dart';
 import 'update_check_feedback.dart';
 
 /// Search + sort + tag-filter + favorites toolbar shown above the mods grid.
@@ -26,6 +27,7 @@ class ModsToolbar extends ConsumerStatefulWidget {
     super.key,
     this.onLibraryChanged,
     this.originWriter,
+    this.nudgeWriter,
     this.updateFetcher,
     this.updatesFetcher,
   });
@@ -37,6 +39,9 @@ class ModsToolbar extends ConsumerStatefulWidget {
 
   /// Injected only by tests — see [BulkOriginWriter].
   final BulkOriginWriter? originWriter;
+
+  /// Injected only by tests — see [NudgeDismissWriter].
+  final NudgeDismissWriter? nudgeWriter;
 
   /// Injected only by tests. Defaults to the shared GameBanana client, which a
   /// widget test must not be allowed to reach — the same reason the origin
@@ -114,6 +119,8 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
     final isFiltering = ref.watch(modFiltersActiveProvider);
     final needsAttentionCount = ref.watch(modsNeedingAttentionCountProvider);
     final needsAttentionActive = ref.watch(modNeedsAttentionOnlyProvider);
+    final untrackedCount = ref.watch(untrackedModsCountProvider);
+    final nudgeDismissed = ref.watch(trackingNudgeDismissedProvider);
     return Padding(
       padding: EdgeInsets.fromLTRB(
         AppConstants.defaultPadding,
@@ -124,6 +131,14 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (untrackedCount > 0 && !nudgeDismissed)
+            TrackingNudge(
+              count: untrackedCount,
+              onSortOut: () => unawaited(
+                _openResolution(ref.read(bulkUpdateCheckPlanProvider)),
+              ),
+              onDismiss: _dismissNudge,
+            ),
           // **Row one is search plus the library menu; row two is every
           // filter.** Interleaving actions with filters puts a bulk write beside
           // a filter reset in a row that appears and disappears, which is how
@@ -672,6 +687,12 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
       // without a record.
       unreachable: outcome.failed.length,
     );
+  }
+
+  /// The provider first so the reminder leaves this frame, then the write so it stays away after a restart.
+  void _dismissNudge() {
+    ref.read(trackingNudgeDismissedProvider.notifier).state = true;
+    unawaited((widget.nudgeWriter ?? ApiService.setTrackingNudgeDismissed)(true));
   }
 
   /// The menu's "sort out mod tracking" — the same screen, on demand.

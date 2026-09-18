@@ -78,6 +78,8 @@ void main() {
       ]);
       addTearDown(container.dispose);
       container.read(charactersProvider.notifier).state = groups;
+      // Out of the way: it repeats the menu's "sort out" label, and it has its own test.
+      container.read(trackingNudgeDismissedProvider.notifier).state = true;
 
       await pumpLocalized(
         tester,

@@ -426,6 +426,15 @@ final modsNeedingAttentionCountProvider = Provider<int>((ref) {
       .length;
 });
 
+/// How many mods in the whole library need attention, for the reminder above the toolbar.
+final untrackedModsCountProvider = Provider<int>((ref) {
+  return ref.watch(modsProvider).where(modInfoNeedsAttention).length;
+});
+
+/// Whether the user has closed the reminder that some mods are not set up for update checking.
+/// Hydrated from `config.json` in `ApiService.initialize`, written through `ApiService.setTrackingNudgeDismissed`.
+final trackingNudgeDismissedProvider = StateProvider<bool>((ref) => false);
+
 /// Distinct tags present in the current view's mods (sorted), for the
 /// tag-filter dropdown.
 final availableModTagsProvider = Provider<List<String>>((ref) {

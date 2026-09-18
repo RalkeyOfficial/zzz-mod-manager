@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mods record where they came from, so they can be checked for updates.
   - Existing mods are linked back to their GameBanana page from the source URL they already carry.
   - Mod cards show a mark for how well each mod is set up for update checking, and a toolbar button filters the library to the ones that need attention.
+  - A reminder above the mods list says how many mods aren't set up for update checking, with a button to sort them out. Close it once and it stays away; a switch in Settings brings it back.
   - "Update tracking…" in a mod's right-click menu links it to its GameBanana page and records which file you have.
   - That dialog can settle for the install date instead, or stop asking if the mod isn't from GameBanana.
   - "Mark all as current" settles every tracked mod with no known version, using each mod's install date.

@@ -233,6 +233,32 @@ Two things are **refused rather than unbuilt**, both recorded in
 
 ### Open around applying an update (known, deliberately not built)
 
+- [ ] **The update confirmation keeps offering to remove "leftover .ini files" from mods that have none.**
+  A plain mod, no patch applied into it and nothing merged by hand, updates through the app,
+  and the confirmation lists one or more of its `.ini` files as leftovers to remove.
+  Every such mod should reach that dialog with an empty list, and it happens constantly rather than occasionally.
+  The rule (`services/update_apply/stale_ini.dart`, `docs/applying-updates.md` §3) calls an `.ini` stale
+  when every resource it names and the folder holds is one the incoming download ships,
+  and it is meant to see only the unrecorded half of a library,
+  since a recorded install layout removes a renamed `.ini` by name before the rule runs.
+  Something in that chain is wrong for ordinary mods, and nothing on screen says which `.ini` was compared against what.
+  It may also be redundant: an update now downloads the base and the patch and applies the patch over the base,
+  which is the case the rule was written to protect, and whether anything is left for it to decide has not been rechecked.
+  The fix is not known yet. First reproduce it on a plain mod and record which file the rule flagged and against which download list;
+  then decide whether the rule survives the base-plus-patch update path at all, or goes.
+- [ ] **An update whose archive has more than one folder gives up and lists the folders instead of asking.**
+  The confirmation becomes "Can't update {mod} automatically", shows "Folders in this download" with, say, `Remielle` and `Previews`,
+  and tells the user to reinstall from the Marketplace and delete the old mod by hand.
+  The layout replay (`docs/applying-updates.md` §4) stops at `layoutUnknown` or `layoutChanged` whenever several folders are in the archive
+  and none is the recorded one, and that stop is a dead end: nothing lets the user say which folder is the mod.
+  The import path already answers exactly this question with a picker that pre-checks the folders holding a `.ini`
+  and leaves the preview folders unticked (`screens/dialogs/import_selection_dialog.dart`).
+  The doc's rule that an update never re-asks the layout is about an answer the app already has;
+  here it has none, so asking is not a quiz.
+  The one difference from import is that an update always lands in one folder,
+  so the separate-or-combined choice does not apply.
+  We change it to open the import's folder picker at the stop, in single-mod mode with the `.ini` folders pre-checked,
+  and record the answer as the mod's layout so the next update replays it.
 - **"Update all" is refused, not unbuilt.** The bulk check lists every mod with
   something newer and each one is then its own dialog, which is tedious for a
   library left alone for months — and it stays that way. One button that
@@ -336,12 +362,10 @@ landing spot, and the background queue.
 
 ## 6. Config / persistence
 
-- Keys for §7: the post-upgrade nudge's dismissed flag, and the remote-lookup
-  response cache — the latter should honour the API's own `max-age=600`, and
-  probably belongs in app-data rather than config.
-  Neither is due yet and both are waiting on their feature rather than on the
-  key: the nudge (§7.4) is not built, and the client's ten-minute cache is
-  in-memory and per session, so there is no persisted cache to configure.
+- Key for §7: the remote-lookup response cache, which should honour the API's own `max-age=600`,
+  and probably belongs in app-data rather than config.
+  Not due yet, and waiting on its feature rather than on the key:
+  the client's ten-minute cache is in-memory and per session, so there is no persisted cache to configure.
 - Key for §4.2: backup retention (count or age), once a cap is chosen. The cap
   is chosen (30 days / 3 per mod / 5 GB) and is deliberately **not** exposed —
   §4.2's own argument is that presenting the age floor and the count cap as two
@@ -493,11 +517,7 @@ normal scan, strictly locally, hooked into the lazy per-mod migration in
 
 ### 7.4 Visual status — one slot, three states
 
-- [ ] One-time dismissible nudge after the upgrade ("N mods aren't tracked for
-  updates"), re-openable from Settings. Not a modal wizard. **Not built** — the
-  toolbar's count is a passive version of the same fact and was enough to ship
-  the filter, but it only appears once the user is already looking at the Mods
-  tab toolbar. Still worth doing; still needs the dismissed flag from §6.
+**Shipped**, including the reminder above the toolbar — [`docs/library-screen.md`](docs/library-screen.md) §3.
 
 ### 7.5 Per-mod resolve dialog
 
@@ -520,12 +540,6 @@ and what survives a rebind. Entry points: the status slot and the mod context me
   drop-in: both read `profile.files` / `profile.archivedFiles` directly, and
   `Mod/Multi` returns the union under one key, so they have to move to
   `currentFiles` / `allFiles` first.
-- [ ] **A `/dl/` link could still pick the *file*, once the mod is known.** The
-  identity step rejects one honestly — neither API resolves a file id to a mod —
-  but the file step has the mod's `_aFiles` + `_aArchivedFiles` in hand, so a
-  pasted file id is a direct row match costing no request. Small, and it turns a
-  dead end into a shortcut for exactly the user who has the download link but not
-  the page.
 - [ ] **The resolve dialog reports an abandoned write as a read-only folder.**
   `ModMetadataRepository.updateOrigin` returns one bare `false` for three
   different things — folder missing, write failed, and the transform declined —
