@@ -540,38 +540,6 @@ and what survives a rebind. Entry points: the status slot and the mod context me
   drop-in: both read `profile.files` / `profile.archivedFiles` directly, and
   `Mod/Multi` returns the union under one key, so they have to move to
   `currentFiles` / `allFiles` first.
-- [ ] **The resolve dialog reports an abandoned write as a read-only folder.**
-  `ModMetadataRepository.updateOrigin` returns one bare `false` for three
-  different things — folder missing, write failed, and the transform declined —
-  and `mods.resolve.save_failed` renders all of them as "the folder may be
-  read-only". So the re-read guard doing exactly its job (the sidecar was
-  rebound while the dialog was open, so `pickFile` abandons rather than
-  attaching a `file_id` to somebody else's mod) tells the user they have a
-  filesystem permission problem. The **bulk** action hit the same conflation and
-  worked around it locally, by wrapping the transform so a decline is
-  distinguishable at the call site; the durable fix is for `updateOrigin` to
-  return a small result type instead of a bool, which would then serve both call
-  sites and let the workaround go.
-- [ ] **Two local-side write seams exist with the same signature.**
-  `ResolveOriginGateway.writeOrigin` and `BulkOriginWriter`
-  (`dialogs/assume_current_dialog.dart`) both wrap `ApiService.updateModOrigin`
-  for the same reason — a focused widget test asserts what the dialog *would*
-  write, so it wants the transform in hand rather than a library to write it into
-  — and both spell that rationale out. One shared typedef would stop them
-  drifting. It belongs with the item
-  above, since fixing `updateOrigin`'s return type has to touch both anyway.
-  The bulk resolution screen imports `BulkOriginWriter` rather than declaring a
-  third, so the drift did not get worse — but it now lives in
-  `assume_current_dialog.dart` and is used by two other files, which is the wrong
-  home for it, and the bool-return conflation is worked around a *second* time
-  there in the same shape. Two workarounds for one missing result type is the
-  point at which the durable fix is cheaper than the next copy.
-  **A third seam of the same shape but a different signature** is
-  `ContentFilterWriter` (`components/settings/marketplace_section.dart`, reused
-  by the marketplace's filtered-empty state). It writes a setting rather than an
-  origin block, so unifying it with these two would be forcing one typedef over
-  two different writes — but it is the same rationale spelled out a third time,
-  which is the thing worth noticing.
 - [ ] **`CharacterInfo.keybinds` is never written, and one widget renders it.**
   `enrichCharactersWithKeybinds` sets keybinds on each `ModInfo` and carries the
   group through with `character.copyWith(skins: …)`, so the group-level field

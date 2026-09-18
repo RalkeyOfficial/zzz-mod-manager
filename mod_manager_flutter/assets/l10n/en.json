@@ -478,6 +478,8 @@
       "cancel": "Cancel",
       "save_failed_title": "Update tracking not saved",
       "save_failed": "\"{mod}\" — the folder may be read-only.",
+      "save_declined": "\"{mod}\" — its tracking changed while this dialog was open. Close it and open it again to see the new state.",
+      "save_missing": "\"{mod}\" — the mod folder is gone.",
       "tracked_heading": "Currently tracked",
       "tracked_id_downloaded": "You downloaded this mod from here.",
       "tracked_id_confirmed": "You confirmed this is the right mod page.",

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
+import 'package:mod_manager_flutter/services/origin_write.dart';
 import 'package:mod_manager_flutter/screens/components/mods_toolbar.dart';
 import 'package:mod_manager_flutter/screens/components/tracking_nudge.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
@@ -50,7 +51,7 @@ void main() {
     await pumpLocalized(
       tester,
       ModsToolbar(
-        originWriter: (_, __) async => false,
+        originWriter: (_, __) async => OriginWriteResult.writeFailed,
         nudgeWriter: (value) async => written?.add(value),
       ),
       container: container,

@@ -155,7 +155,7 @@ class TempLibrary {
   /// widget test.
   Future<void> writeOrigin(String modName, ModOrigin origin) async {
     final written = await service.updateModOrigin(modName, (_) => origin);
-    expect(written, isTrue, reason: 'the origin fixture did not reach $modName');
+    expect(written.ok, isTrue, reason: 'the origin fixture did not reach $modName');
   }
 
   /// The origin block **as it is on disk now** — what a write is asserted

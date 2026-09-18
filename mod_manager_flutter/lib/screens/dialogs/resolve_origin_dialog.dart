@@ -9,6 +9,7 @@ import '../../models/mod_ingest.dart';
 import '../../models/mod_origin.dart';
 import '../../models/origin_enums.dart';
 import '../../services/api_service.dart';
+import '../../services/origin_write.dart';
 import '../../utils/notifications.dart';
 import '../../services/gamebanana/remote_mod_metadata.dart';
 import '../../services/log/logger.dart';
@@ -54,9 +55,8 @@ class ResolveOriginGateway {
   Future<DateTime?> installDateProxy(String modId) =>
       ApiService.installDateProxy(modId);
 
-  /// Applies one decision to the sidecar, re-reading it first. False means
-  /// nothing was written.
-  Future<bool> writeOrigin(
+  /// Applies one decision to the sidecar, re-reading it first.
+  Future<OriginWriteResult> writeOrigin(
     String modId,
     ModOrigin? Function(ModOrigin? current) update,
   ) =>
@@ -369,7 +369,8 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     bool fillMetadata = true,
   }) async {
     setState(() => _saving = true);
-    final ok = await widget.gateway.writeOrigin(widget.mod.id, update);
+    final result = await widget.gateway.writeOrigin(widget.mod.id, update);
+    final ok = result.ok;
 
     if (ok && fillMetadata && _alsoFillMetadata && _profile != null) {
       // Best-effort and deliberately not gating the result: the tracking data is
@@ -399,10 +400,16 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     if (!mounted) return;
     if (!ok) {
       setState(() => _saving = false);
+      final reason = switch (result) {
+        OriginWriteResult.declined => 'mods.resolve.save_declined',
+        OriginWriteResult.folderMissing => 'mods.resolve.save_missing',
+        OriginWriteResult.writeFailed ||
+        OriginWriteResult.written =>
+          'mods.resolve.save_failed',
+      };
       context.notify.warning(
         loc.t('mods.resolve.save_failed_title'),
-        body: loc.t('mods.resolve.save_failed',
-            params: {'mod': widget.mod.name}),
+        body: loc.t(reason, params: {'mod': widget.mod.name}),
         characterId: widget.mod.characterId,
       );
       return;

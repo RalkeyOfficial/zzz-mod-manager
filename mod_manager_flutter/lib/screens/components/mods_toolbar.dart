@@ -8,6 +8,7 @@ import '../../l10n/app_localizations.dart';
 import '../../services/api_service.dart';
 import '../../services/bulk_resolution.dart';
 import '../../services/bulk_update_check.dart';
+import '../../services/origin_write.dart';
 import '../../services/update_check_run.dart';
 import '../../utils/state_providers.dart';
 import '../dialogs/assume_current_dialog.dart';
@@ -37,8 +38,8 @@ class ModsToolbar extends ConsumerStatefulWidget {
   /// only a scan refreshes.
   final VoidCallback? onLibraryChanged;
 
-  /// Injected only by tests — see [BulkOriginWriter].
-  final BulkOriginWriter? originWriter;
+  /// Injected only by tests — see [OriginWriter].
+  final OriginWriter? originWriter;
 
   /// Injected only by tests — see [NudgeDismissWriter].
   final NudgeDismissWriter? nudgeWriter;

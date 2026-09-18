@@ -25,15 +25,6 @@ import '../models/mod_origin.dart';
 import '../models/origin_enums.dart';
 import 'folder_downloads.dart';
 
-/// How an import amends the origin block of a mod it has just created.
-///
-/// A seam rather than a direct call so this file stays testable against a real
-/// sidecar without a `ModManagerService` and its singletons behind it.
-typedef OriginAmender = Future<bool> Function(
-  String modName,
-  ModOrigin? Function(ModOrigin? current) update,
-);
-
 /// [current] recorded as **a patch whose base is missing**, with [base] named as
 /// the mod it applies to when the user has said which that is.
 ///

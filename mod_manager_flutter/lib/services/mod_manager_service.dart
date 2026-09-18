@@ -20,6 +20,7 @@ import 'metadata_autofill.dart';
 import 'mod_metadata_repository.dart';
 import 'mod_metadata_service.dart';
 import 'mod_uid.dart';
+import 'origin_write.dart';
 import 'platform_service.dart';
 import 'platform_service_factory.dart';
 import 'ini_parser_service.dart';
@@ -238,7 +239,7 @@ class ModManagerService {
 
   /// Amends an existing mod's origin block — the resolve dialog's write path.
   /// Rules and re-read-before-write both live in [ModMetadataRepository].
-  Future<bool> updateModOrigin(
+  Future<OriginWriteResult> updateModOrigin(
     String modName,
     ModOrigin? Function(ModOrigin? current) update,
   ) =>

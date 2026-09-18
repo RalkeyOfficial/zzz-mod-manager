@@ -9,6 +9,7 @@ import 'package:mod_manager_flutter/models/gamebanana/gamebanana.dart';
 import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
+import 'package:mod_manager_flutter/services/origin_write.dart';
 import 'package:mod_manager_flutter/screens/dialogs/patch_install_flow.dart';
 import 'package:mod_manager_flutter/screens/dialogs/patch_install_prompt.dart';
 import 'package:mod_manager_flutter/services/backup/snapshot_service.dart';
@@ -135,12 +136,12 @@ void main() {
   }
 
   /// Stands in for the sidecar. Records the amendment each mod ends up with.
-  Future<bool> amend(
+  Future<OriginWriteResult> amend(
     String modName,
     ModOrigin? Function(ModOrigin? current) update,
   ) async {
     origins[modName] = update(origins[modName]);
-    return true;
+    return OriginWriteResult.written;
   }
 
   const patchFromAPage = PatchIdentity(

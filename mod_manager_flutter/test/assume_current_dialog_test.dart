@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
+import 'package:mod_manager_flutter/services/origin_write.dart';
 import 'package:mod_manager_flutter/screens/components/mods_toolbar.dart';
 import 'package:mod_manager_flutter/screens/dialogs/assume_current_dialog.dart';
 import 'package:mod_manager_flutter/services/bulk_assume_current.dart';
@@ -66,17 +67,16 @@ void main() {
               context,
               plan,
               writer: (name, update) async {
-                if (failFor.contains(name)) return false;
+                if (failFor.contains(name)) return OriginWriteResult.writeFailed;
                 // Mirrors `updateOrigin`: the transform is handed the block as
                 // it is **on disk**, which `onDisk` can make differ from the
-                // one the plan was built from — and a null answer abandons the
-                // write, indistinguishable from a failure in the return value.
+                // one the plan was built from.
                 final next = update(onDisk.containsKey(name)
                     ? onDisk[name]
                     : plan.eligible.firstWhere((m) => m.id == name).origin);
-                if (next == null) return false;
+                if (next == null) return OriginWriteResult.declined;
                 written.add(name);
-                return true;
+                return OriginWriteResult.written;
               },
             );
             if (outcome == null) return;
@@ -225,12 +225,8 @@ void main() {
 
   testWidgets('a declined write is not reported as a read-only folder',
       (tester) async {
-    // The guard firing is the *designed* behaviour, and `updateOrigin` answers
-    // the same bare `false` for it as for a filesystem failure. Reachable
-    // without any concurrency: press the button, then press it again before the
-    // rescan has refreshed the plan. Reporting a permission error there sends
-    // the user hunting through folder permissions for a problem that is not
-    // there.
+    // The guard firing is the designed behaviour. Reachable without any concurrency:
+    // press the button, then press it again before the rescan has refreshed the plan.
     final plan = planBulkAssumeCurrent([
       mod('a', origin: origin()),
       mod('b', origin: origin()),
@@ -277,7 +273,9 @@ void main() {
           onLibraryChanged: onLibraryChanged,
           originWriter: (name, update) async {
             written.add(name);
-            return update(mods.firstWhere((m) => m.id == name).origin) != null;
+            return update(mods.firstWhere((m) => m.id == name).origin) == null
+                ? OriginWriteResult.declined
+                : OriginWriteResult.written;
           },
         ),
         container: container,

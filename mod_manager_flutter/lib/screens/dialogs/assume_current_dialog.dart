@@ -1,31 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../../l10n/app_localizations.dart';
-import '../../models/mod_origin.dart';
 import '../../services/api_service.dart';
 import '../../services/bulk_assume_current.dart';
+import '../../services/origin_write.dart';
 import '../../utils/notifications.dart';
-
-/// Writes one mod's origin block. Injected only by tests — `ApiService` lazily
-/// builds a `ConfigService` against the developer's **real**
-/// `<appData>/config.json`, so a widget test that merely pressed the confirm
-/// button would rewrite their library paths and favourites.
-typedef BulkOriginWriter = Future<bool> Function(
-  String modName,
-  ModOrigin? Function(ModOrigin? current) update,
-);
 
 /// How a bulk run ended.
 ///
-/// Three outcomes, not two, and separating the last two is the point.
-/// `updateOrigin` answers a bare `false` for both "the folder is unwritable" and
-/// "the transform declined" — but those are opposite facts. A failure is a state
-/// worth reporting, since nothing re-attempts an origin write. A **decline** is
-/// the guard working: the mod was already resolved by the time its turn came,
-/// which is precisely what the re-read exists to notice. Collapsing them would
-/// report the guard's own correct behaviour as a filesystem permission error,
-/// and the reachable case is mundane — press the button, then press it again
-/// before the rescan has refreshed the plan.
+/// A decline is the re-read guard working: the mod was already resolved by the time its turn came.
+/// It is counted apart from a failure, which is a state worth reporting since nothing re-attempts an origin write.
 class BulkAssumeCurrentOutcome {
   const BulkAssumeCurrentOutcome({
     required this.written,
@@ -55,7 +39,7 @@ class BulkAssumeCurrentOutcome {
 Future<BulkAssumeCurrentOutcome?> confirmAndApplyAssumeCurrent(
   BuildContext context,
   BulkAssumeCurrentPlan plan, {
-  BulkOriginWriter writer = ApiService.updateModOrigin,
+  OriginWriter writer = ApiService.updateModOrigin,
 }) async {
   if (!plan.hasWork) return null;
   final confirmed = await showDialog<bool>(
@@ -71,25 +55,14 @@ Future<BulkAssumeCurrentOutcome?> confirmAndApplyAssumeCurrent(
     // Sequential on purpose. These are small sidecar rewrites through one
     // service, and the ordering keeps a failure attributable to a mod rather
     // than to the batch.
-    //
-    // The transform is wrapped rather than passed straight through so its
-    // *decline* can be told apart from a failed write — the write path answers
-    // one `false` for both. Checking `plan.eligible`'s own blocks instead would
-    // not do: the plan is exactly the thing that has gone stale in the case
-    // that matters, so it would agree the mod is eligible right up until the
-    // fresh read disagrees.
-    var declined = false;
-    final ok = await writer(mod.id, (current) {
-      final next = bulkAssumeCurrent(current);
-      if (next == null) declined = true;
-      return next;
-    });
-    if (ok) {
-      written++;
-    } else if (declined) {
-      skipped++;
-    } else {
-      failed++;
+    switch (await writer(mod.id, bulkAssumeCurrent)) {
+      case OriginWriteResult.written:
+        written++;
+      case OriginWriteResult.declined:
+        skipped++;
+      case OriginWriteResult.folderMissing:
+      case OriginWriteResult.writeFailed:
+        failed++;
     }
   }
   return BulkAssumeCurrentOutcome(

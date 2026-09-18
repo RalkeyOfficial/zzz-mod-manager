@@ -12,6 +12,7 @@ import '../models/gamebanana/gb_enums.dart';
 import '../models/mod_origin.dart';
 import 'gamebanana/content_filter.dart';
 import 'mod_manager_service.dart';
+import 'origin_write.dart';
 import 'platform_service_factory.dart';
 
 /// API сервіс для роботи з модами
@@ -372,11 +373,11 @@ class ApiService {
   /// one the caller last saw, and returning null from it abandons the write. See
   /// `ModMetadataRepository.updateOrigin`.
   ///
-  /// Returns false rather than throwing, unlike the neighbours above: every
+  /// Answers with a result rather than throwing, unlike the neighbours above: every
   /// caller's answer to a failed origin write is to tell the user once, and a
   /// thrown exception here would have to be caught at each call site to say the
   /// same thing.
-  static Future<bool> updateModOrigin(
+  static Future<OriginWriteResult> updateModOrigin(
     String modId,
     ModOrigin? Function(ModOrigin? current) update,
   ) async {

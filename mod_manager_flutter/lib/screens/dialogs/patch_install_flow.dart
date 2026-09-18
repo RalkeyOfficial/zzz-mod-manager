@@ -36,6 +36,7 @@ import '../../services/folder_contents.dart';
 import '../../services/library_file_index.dart';
 import '../../services/log/confirmations.dart';
 import '../../services/log/logger.dart';
+import '../../services/origin_write.dart';
 import '../../services/patch_destination_ranking.dart';
 import '../../services/patch_placement.dart';
 import '../../services/patch_record.dart';
@@ -476,7 +477,7 @@ Future<List<NotificationLines>> applyPatchInstall(
   required Iterable<String> importedMods,
   required String modsPath,
   required UpdateApplier applier,
-  required OriginAmender amend,
+  required OriginWriter amend,
   PatchIdentity? patch,
   BaseInstaller? installBase,
 }) async {

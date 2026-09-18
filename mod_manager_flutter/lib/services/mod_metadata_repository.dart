@@ -13,6 +13,7 @@ import 'metadata_autofill.dart';
 import 'mod_metadata_service.dart';
 import 'mod_uid.dart';
 import 'origin_backfill.dart';
+import 'origin_write.dart';
 
 /// The slice of `ConfigService` this repository needs: the legacy per-mod
 /// character tag mirror in `config.json`.
@@ -398,26 +399,27 @@ class ModMetadataRepository {
   /// decision that no longer makes sense against what came back (the folder was
   /// rebound to a different mod meanwhile) declines to clobber it.
   ///
-  /// Returns false when the folder is missing, unwritable, or the decision was
-  /// abandoned. Callers surface that rather than retrying: nothing re-attempts
-  /// this write, and the scan-time backfill is no substitute — it only ever
-  /// recovers identity from a `source_url`, at a weaker confidence than anything
-  /// decided here.
-  Future<bool> updateOrigin(
+  /// Callers surface anything but [OriginWriteResult.written] rather than retrying:
+  /// nothing re-attempts this write, and the scan-time backfill is no substitute,
+  /// since it only ever recovers identity from a `source_url` at a weaker confidence than anything decided here.
+  Future<OriginWriteResult> updateOrigin(
     String modName,
     ModOrigin? Function(ModOrigin? current) update,
   ) async {
     try {
       final modFolder = _folderOf(modName);
-      if (modFolder == null) return false;
+      if (modFolder == null || !await Directory(modFolder).exists()) {
+        return OriginWriteResult.folderMissing;
+      }
       final existing = await _service.read(modFolder) ?? const ModMetadata();
       final next = update(existing.origin);
-      if (next == null) return false;
-      return await _service.write(modFolder, existing.withOrigin(next));
+      if (next == null) return OriginWriteResult.declined;
+      final written = await _service.write(modFolder, existing.withOrigin(next));
+      return written ? OriginWriteResult.written : OriginWriteResult.writeFailed;
     } catch (e) {
       _log.error('could not update an origin',
           error: e, fields: {'mod': modName});
-      return false;
+      return OriginWriteResult.writeFailed;
     }
   }
 

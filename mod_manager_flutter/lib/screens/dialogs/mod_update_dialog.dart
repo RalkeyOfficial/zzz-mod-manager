@@ -9,6 +9,7 @@ import '../../models/gamebanana/gamebanana.dart';
 import '../../models/mod_origin.dart';
 import '../../services/api_service.dart';
 import '../../services/log/logger.dart';
+import '../../services/origin_write.dart';
 import '../../services/update_apply/sibling_group.dart';
 import '../../utils/notifications.dart';
 import '../../models/mod_download.dart';
@@ -67,7 +68,7 @@ Future<bool> showModUpdateDialog(BuildContext context, ModInfo mod) async {
 class ModUpdateGateway {
   const ModUpdateGateway();
 
-  Future<bool> writeOrigin(
+  Future<OriginWriteResult> writeOrigin(
     String modId,
     ModOrigin? Function(ModOrigin? current) update,
   ) => ApiService.updateModOrigin(modId, update);
@@ -542,10 +543,11 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
 
     if (subject == null) return;
     setState(() => _writing = true);
-    final ok = await widget.gateway.writeOrigin(
+    final result = await widget.gateway.writeOrigin(
       widget.mod.id,
       (block) => block?.withDismissal(subject: subject, until: until),
     );
+    final ok = result.ok;
     if (!mounted) return;
     setState(() {
       _writing = false;

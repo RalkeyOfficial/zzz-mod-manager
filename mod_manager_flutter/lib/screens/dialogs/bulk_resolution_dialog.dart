@@ -7,11 +7,11 @@ import '../../services/api_service.dart';
 import '../../services/bulk_resolution.dart';
 import '../../services/gamebanana/file_selection.dart';
 import '../../services/origin_resolution.dart';
+import '../../services/origin_write.dart';
 import '../../utils/gamebanana_url.dart';
 import '../../utils/notifications.dart';
 import '../../utils/url_utils.dart';
 import '../components/dialog_section.dart';
-import 'assume_current_dialog.dart' show BulkOriginWriter;
 
 /// The bulk check's **results screen**, which is also the bulk **resolution**
 /// screen.
@@ -59,7 +59,7 @@ Future<bool> showBulkResolutionDialog(
   BulkResolutionPlan plan, {
   int updatesFound = 0,
   int unreachable = 0,
-  BulkOriginWriter writer = ApiService.updateModOrigin,
+  OriginWriter writer = ApiService.updateModOrigin,
 }) async {
   if (!plan.hasWork) return false;
   final answers = await showDialog<Map<String, BulkResolutionAnswer>>(
@@ -81,13 +81,8 @@ Future<bool> showBulkResolutionDialog(
 
 /// How the write loop ended.
 ///
-/// Three outcomes rather than two, exactly as the bulk "assume current" action
-/// found it had to be: `updateOrigin` answers one bare `false` for "the folder
-/// is unwritable" and "the transform declined", and those are opposite facts. A
-/// decline is the re-read guard doing its job — the mod was resolved by
-/// something else between building this list and pressing Apply — and reporting
-/// it as a filesystem permission error would blame the user for the guard
-/// working.
+/// A decline is the re-read guard doing its job: the mod was resolved by something else
+/// between building this list and pressing Apply. It is counted apart from a failure.
 class BulkResolutionOutcome {
   const BulkResolutionOutcome({
     required this.written,
@@ -102,7 +97,7 @@ class BulkResolutionOutcome {
 
 Future<BulkResolutionOutcome> _applyAnswers(
   Map<String, BulkResolutionAnswer> answers,
-  BulkOriginWriter writer,
+  OriginWriter writer,
 ) async {
   var written = 0;
   var skipped = 0;
@@ -111,18 +106,18 @@ Future<BulkResolutionOutcome> _applyAnswers(
     // Sequential, like every other bulk write here: these are small sidecar
     // rewrites through one service, and the ordering keeps a failure
     // attributable to a mod rather than to the batch.
-    var declined = false;
-    final ok = await writer(entry.key, (current) {
-      final next = applyBulkResolution(current, entry.value);
-      if (next == null) declined = true;
-      return next;
-    });
-    if (ok) {
-      written++;
-    } else if (declined) {
-      skipped++;
-    } else {
-      failed++;
+    final result = await writer(
+      entry.key,
+      (current) => applyBulkResolution(current, entry.value),
+    );
+    switch (result) {
+      case OriginWriteResult.written:
+        written++;
+      case OriginWriteResult.declined:
+        skipped++;
+      case OriginWriteResult.folderMissing:
+      case OriginWriteResult.writeFailed:
+        failed++;
     }
   }
   return BulkResolutionOutcome(

@@ -171,13 +171,15 @@ Future<bool> removePatchFlow(
 ///
 /// Both in one write: a `patch_files` still naming a patch that has gone would
 /// have the next base update set aside files nothing owns.
-Future<bool> _forget(ModInfo mod, ModDownload patch) =>
-    ApiService.updateModOrigin(
-      mod.id,
-      (current) => current == null
-          ? null
-          : withRebuiltPatchFiles(current.withoutDownload(patch.modId!)),
-    );
+Future<bool> _forget(ModInfo mod, ModDownload patch) async {
+  final result = await ApiService.updateModOrigin(
+    mod.id,
+    (current) => current == null
+        ? null
+        : withRebuiltPatchFiles(current.withoutDownload(patch.modId!)),
+  );
+  return result.ok;
+}
 
 /// What will happen, as counts.
 ///

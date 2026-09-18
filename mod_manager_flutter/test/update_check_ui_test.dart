@@ -9,6 +9,7 @@ import 'package:mod_manager_flutter/models/installed_file.dart';
 import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
+import 'package:mod_manager_flutter/services/origin_write.dart';
 import 'package:mod_manager_flutter/screens/components/mods_toolbar.dart';
 import 'package:mod_manager_flutter/screens/dialogs/bulk_resolution_dialog.dart';
 import 'package:mod_manager_flutter/screens/dialogs/mod_update_dialog.dart';
@@ -91,7 +92,9 @@ void main() {
           // against the developer's own `<appData>/config.json`.
           originWriter: (name, update) async {
             written?.add(name);
-            return written != null;
+            return written != null
+                ? OriginWriteResult.written
+                : OriginWriteResult.writeFailed;
           },
         ),
         container: container,
@@ -1566,12 +1569,12 @@ class _RecordingGateway implements ModUpdateGateway {
   int libraryReads = 0;
 
   @override
-  Future<bool> writeOrigin(
+  Future<OriginWriteResult> writeOrigin(
     String modId,
     ModOrigin? Function(ModOrigin? current) update,
   ) async {
     _written.add(update(_current));
-    return true;
+    return OriginWriteResult.written;
   }
 
   @override

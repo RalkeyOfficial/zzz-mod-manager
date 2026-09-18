@@ -5,6 +5,7 @@ import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
+import 'package:mod_manager_flutter/services/origin_write.dart';
 import 'package:mod_manager_flutter/screens/dialogs/bulk_resolution_dialog.dart';
 import 'package:mod_manager_flutter/services/bulk_resolution.dart';
 
@@ -83,7 +84,7 @@ void main() {
             context,
             plan,
             writer: (name, update) async {
-              if (failFor.contains(name)) return false;
+              if (failFor.contains(name)) return OriginWriteResult.writeFailed;
               // Mirrors `updateOrigin`: the transform sees the block as it is
               // **on disk**, which `onDisk` can make differ from the one the
               // plan was built from.
@@ -91,10 +92,10 @@ void main() {
                   ? onDisk[name]
                   : plan.rows.firstWhere((r) => r.mod.id == name).mod.origin;
               final next = update(current);
-              if (next == null) return false;
+              if (next == null) return OriginWriteResult.declined;
               written.add(name);
               results[name] = next;
-              return true;
+              return OriginWriteResult.written;
             },
           ),
           child: const Text('run'),
@@ -357,9 +358,7 @@ void main() {
 
   testWidgets('a mod resolved while the screen was open is a skip, not a failure',
       (tester) async {
-    // `updateOrigin` answers one bare `false` for "unwritable" and "the
-    // transform declined". Reporting the guard doing its job as a filesystem
-    // permission error is the conflation this outcome split exists to avoid.
+    // The guard doing its job must never be reported as a filesystem permission error.
     final plan = planBulkResolution(
       mods: [
         mod('Ellen',

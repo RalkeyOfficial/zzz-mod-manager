@@ -7,6 +7,7 @@ import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
+import 'package:mod_manager_flutter/services/origin_write.dart';
 import 'package:mod_manager_flutter/services/gamebanana/remote_mod_metadata.dart';
 import 'package:mod_manager_flutter/services/http/image_fetcher.dart';
 import 'package:mod_manager_flutter/services/mod_metadata_repository.dart';
@@ -1003,7 +1004,7 @@ void main() {
         ),
       );
 
-      expect(ok, isTrue);
+      expect(ok, OriginWriteResult.written);
       final origin = sidecarOf('Legacy Mod')!['origin'] as Map;
       final layer = baseJson(origin);
       expect(layer['mod_id'], 555);
@@ -1044,7 +1045,10 @@ void main() {
         originFixture(provenance: OriginProvenance.importedFolder, modId: 7),
       );
 
-      expect(await repo.updateOrigin('Rebound Mod', (_) => null), isFalse);
+      expect(
+        await repo.updateOrigin('Rebound Mod', (_) => null),
+        OriginWriteResult.declined,
+      );
       expect(baseJson(sidecarOf('Rebound Mod')!['origin'])['mod_id'], 7);
     });
 
@@ -1080,23 +1084,23 @@ void main() {
         (current) => OriginResolution.stopTracking(current),
       );
 
-      expect(ok, isTrue);
+      expect(ok, OriginWriteResult.written);
       expect((sidecarOf('My Own Mod')!['origin'] as Map)['tracking'], 'off');
     });
 
     test('never recreates a mod folder that no longer exists', () async {
       expect(
         await repo.updateOrigin('Vanished', (c) => OriginResolution.bind(c, 1)),
-        isFalse,
+        OriginWriteResult.folderMissing,
       );
       expect(Directory(path.join(modsDir.path, 'Vanished')).existsSync(), isFalse);
     });
 
-    test('returns false when no library is configured', () async {
+    test('says the folder is missing when no library is configured', () async {
       final orphan = ModMetadataRepository(config, modsPath: () => null);
       expect(
         await orphan.updateOrigin('Any', (c) => OriginResolution.bind(c, 1)),
-        isFalse,
+        OriginWriteResult.folderMissing,
       );
     });
   });

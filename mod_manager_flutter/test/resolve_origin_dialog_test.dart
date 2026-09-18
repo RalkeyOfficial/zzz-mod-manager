@@ -7,6 +7,7 @@ import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
+import 'package:mod_manager_flutter/services/origin_write.dart';
 import 'package:mod_manager_flutter/screens/dialogs/resolve_origin_dialog.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_client.dart';
 import 'package:mod_manager_flutter/services/gamebanana/remote_mod_metadata.dart';
@@ -26,10 +27,16 @@ import 'support/temp_library.dart';
 /// so a test using it would clobber their library paths and favourites just by
 /// mounting the widget.
 class _FakeGateway implements ResolveOriginGateway {
-  _FakeGateway({this.probe, this.result = true, this.current});
+  _FakeGateway({
+    this.probe,
+    this.result = OriginWriteResult.written,
+    this.current,
+  });
 
   final DateTime? probe;
-  final bool result;
+
+  /// What a write that the transform did not decline answers.
+  final OriginWriteResult result;
 
   /// The block "on disk" the write path hands to the update function. Set it
   /// to something other than what the dialog was opened with to stand in for a
@@ -49,14 +56,14 @@ class _FakeGateway implements ResolveOriginGateway {
   }
 
   @override
-  Future<bool> writeOrigin(
+  Future<OriginWriteResult> writeOrigin(
     String modId,
     ModOrigin? Function(ModOrigin? current) update,
   ) async {
     writes++;
     written = update(current);
     abandoned = written == null;
-    return result && written != null;
+    return abandoned ? OriginWriteResult.declined : result;
   }
 
   @override
@@ -249,8 +256,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(gateway.abandoned, isTrue);
-      // Still open, with a warning — the dialog does not report success.
+      // Still open, with a warning that names the real reason rather than the filesystem.
       expect(find.byType(ResolveOriginDialog), findsOneWidget);
+      expect(find.textContaining('changed while this dialog was open'), findsOneWidget);
+      expect(find.textContaining('may be read-only'), findsNothing);
     });
 
     testWidgets('"I don\'t know which" needs no file and records a baseline',
@@ -299,7 +308,10 @@ void main() {
       // A read-only mod folder or an odd network share. Closing on a failed
       // write would leave the user believing the mod is tracked when nothing
       // was recorded — and nothing re-attempts this write.
-      final gateway = _FakeGateway(current: tracked(), result: false);
+      final gateway = _FakeGateway(
+        current: tracked(),
+        result: OriginWriteResult.writeFailed,
+      );
       await pumpDialog(
         tester,
         target: mod(origin: tracked()),

@@ -434,12 +434,9 @@ Four rules, in the order they matter:
   — abandoning that one mod — for anything that is no longer `versionUnknown`.
   Without it, a mod resolved *exactly* while the batch was running would be
   **downgraded** to a guess, silently, in a pass nobody is watching per-mod.
-  A decline is reported as a decline, never as a failure. `updateOrigin` answers one
-  bare `false` for "unwritable folder" and "the transform said no", so the loop wraps
-  the transform to tell them apart — otherwise the guard's own correct behaviour
-  surfaces as "those folders may be read-only". The reachable case needs no
-  concurrency at all: press the button, then press it again before the rescan has
-  refreshed the plan.
+  A decline is reported as a decline, never as a failure: `updateOrigin` answers `declined` for it,
+  distinct from `folderMissing` and `writeFailed`, so the guard's own correct behaviour never surfaces as "those folders may be read-only".
+  The reachable case needs no concurrency at all: press the button, then press it again before the rescan has refreshed the plan.
 - **The confirmation states the size first.** The answer is usually either nothing or
   most of the library, and a user expecting the first who gets the second has had
   dozens of mods rewritten on a press. It also names what it is *not* touching
@@ -641,10 +638,8 @@ meanwhile abandons the whole row. But a **declined file does not abandon a confi
 identity**: they are independent answers about the same mod, and the version being
 settled elsewhere is no reason to throw away the user's "yes, that's the mod".
 
-A declined write is reported as a decline, never as a failure —
-`updateOrigin` answers one bare `false` for "unwritable folder" and "the transform
-said no", and blaming the user's filesystem for the guard working is the conflation
-[§6](#6-assume-current-in-bulk) already had to untangle once.
+A declined write is reported as a decline, never as a failure,
+for the same reason as in [§6](#6-assume-current-in-bulk).
 
 ### The comparison is name to name
 
@@ -692,6 +687,11 @@ re-reads for. Returning **null from `update` abandons the write**, which is how 
 decision that no longer makes sense against what came back (the folder was rebound to
 a different mod meanwhile) declines to clobber it rather than attaching a `file_id`
 to somebody else's mod.
+
+It answers an `OriginWriteResult` (`services/origin_write.dart`): `written`, `declined`, `folderMissing` or `writeFailed`.
+Every surface that writes an origin block takes the same `OriginWriter` seam, so a test can hand it a closure instead of a library.
+The per-mod dialog words each answer differently, since "your tracking changed while this dialog was open" and "the folder may be read-only" call for different actions,
+and the bulk surfaces count a decline apart from a failure.
 
 A failed write is reported, not swallowed: nothing re-attempts it, and the scan-time
 backfill is no substitute — it only ever recovers identity from a `source_url`, at a
