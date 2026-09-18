@@ -185,10 +185,8 @@ Two things it deliberately does not fix:
   copy made outside the app is, and the scan is where it would have to be
   caught. Filed, and pinned by a test so it is a known shape rather than a
   surprise.
-- **A deleted sidecar orphans the history it named.** The mod takes a fresh uid
-  on its next scan and the old group becomes unclaimable. The user's own
-  doing, but silent — which is why unclaimed groups are reported rather than
-  left to accumulate.
+- **A deleted sidecar orphans the history it named.** The mod takes a fresh uid on its next scan,
+  and the old group is swept the next time the user frees up space from the Storage tab.
 
 ### The `origin` block
 

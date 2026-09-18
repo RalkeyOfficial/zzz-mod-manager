@@ -74,6 +74,7 @@ class ReclaimService {
     required this.downloadsBusy,
     required this.installBusy,
     required this.modNames,
+    required this.claimedSnapshotUids,
     DateTime Function()? now,
     Future<int?> Function(String path)? freeSpace,
     this.rules = const ReclaimRules(),
@@ -94,6 +95,9 @@ class ReclaimService {
   /// empty list and delete everything.
   final Future<Set<String>?> Function() modNames;
 
+  /// The uid of every mod in the library, or null when it could not be read.
+  final Future<Set<String>?> Function() claimedSnapshotUids;
+
   final ReclaimRules rules;
 
   /// Asked one question only: whether a mod keeps its images in its own
@@ -107,6 +111,7 @@ class ReclaimService {
     final before = await _readFreeSpace();
 
     final library = await modNames();
+    final claimed = await claimedSnapshotUids();
     final inventory = await _gather();
     final reachable = await _reachableLegacyImages(library);
 
@@ -123,6 +128,7 @@ class ReclaimService {
       // copy of a cover.
       libraryReadable: library != null && reachable != null,
       reachableLegacyImages: reachable ?? const <String>{},
+      claimedSnapshotUids: claimed,
       currentLogFile: roots.currentLogFile == null
           ? null
           : path.basename(roots.currentLogFile!),
@@ -201,19 +207,19 @@ class ReclaimService {
         ReclaimTarget.abandonedPartials =>
           downloadsBusy() || installBusy(),
         ReclaimTarget.tempExtracts => installBusy(),
-        ReclaimTarget.legacyImages || ReclaimTarget.oldLogs => false,
+        ReclaimTarget.legacyImages ||
+        ReclaimTarget.oldLogs ||
+        ReclaimTarget.unclaimedSnapshots =>
+          false,
       };
 
-  /// **The file, never a shared directory.** `<appData>/downloads` holds every
-  /// other archive and every in-flight partial; removing the parent would take
-  /// all of them. A temp extraction directory is the one thing here deleted
-  /// whole, and only because the name it matched is ours.
+  /// **The file, never a shared directory.** `<appData>/downloads` holds every other archive and every in-flight partial,
+  /// so removing the parent would take all of them.
+  /// The two directories deleted whole are a temp extraction whose name is ours, and a backup group directly under `backups/`.
   Future<bool> _delete(ReclaimCandidate candidate) async {
     try {
       if (candidate.isDirectory) {
-        if (!path.basename(candidate.path).startsWith(archiveExtractPrefix)) {
-          return false;
-        }
+        if (!_isDeletableDirectory(candidate)) return false;
         await Directory(candidate.path).delete(recursive: true);
       } else {
         await File(candidate.path).delete();
@@ -228,10 +234,19 @@ class ReclaimService {
     }
   }
 
+  bool _isDeletableDirectory(ReclaimCandidate candidate) => switch (candidate.target) {
+        ReclaimTarget.tempExtracts =>
+          path.basename(candidate.path).startsWith(archiveExtractPrefix),
+        ReclaimTarget.unclaimedSnapshots =>
+          path.equals(path.dirname(candidate.path), roots.backups.path),
+        _ => false,
+      };
+
   Future<List<ReclaimCandidate>> _gather() async {
     final inventory = <ReclaimCandidate>[];
     inventory.addAll(await _gatherDownloads());
     inventory.addAll(await _gatherTempExtracts());
+    inventory.addAll(await _gatherSnapshotGroups());
     inventory.addAll(await _gatherFlat(
       roots.legacyImages,
       ReclaimTarget.legacyImages,
@@ -312,6 +327,30 @@ class ReclaimService {
       }
     } catch (e) {
       _log.debug('could not list temp extractions', fields: {'reason': '$e'});
+    }
+    return found;
+  }
+
+  /// One candidate per group directory, named by the uid the planner checks against the library.
+  Future<List<ReclaimCandidate>> _gatherSnapshotGroups() async {
+    final found = <ReclaimCandidate>[];
+    try {
+      if (!await roots.backups.exists()) return found;
+      await for (final entity in roots.backups.list(followLinks: false)) {
+        if (entity is! Directory) continue;
+        final size = await measureDirectory(entity.path);
+        final newest = await newestWriteWithin(entity);
+        found.add(ReclaimCandidate(
+          target: ReclaimTarget.unclaimedSnapshots,
+          path: entity.path,
+          name: path.basename(entity.path),
+          bytes: size.bytes,
+          modified: newest ?? _now(),
+          isDirectory: true,
+        ));
+      }
+    } catch (e) {
+      _log.debug('could not list saved versions', fields: {'reason': '$e'});
     }
     return found;
   }

@@ -9,9 +9,8 @@ library;
 
 import '../log/log_rotation.dart';
 
-/// The five stores the sweep may touch. The library, the sidecars and
-/// `<appData>/backups` are absent from this enum on purpose — the sweep has no
-/// vocabulary for them, so no future edit here can reach them.
+/// The six stores the sweep may touch. The library and the sidecars are absent on purpose,
+/// so no future edit here can reach them.
 enum ReclaimTarget {
   /// Completed archives in `<appData>/downloads` whose install never ran.
   completedArchives,
@@ -27,6 +26,9 @@ enum ReclaimTarget {
 
   /// Log files beyond the ones worth keeping.
   oldLogs,
+
+  /// Saved-versions groups in `<appData>/backups` whose uid no mod in the library carries.
+  unclaimedSnapshots,
 }
 
 /// Why something was left alone. Every one of these is shown to the user —
@@ -51,7 +53,7 @@ enum ReclaimSkipReason {
   /// This run's own log.
   currentSession,
 
-  /// Still reachable: the only copy of some mod's cover.
+  /// Still reachable: the only copy of some mod's cover, or a saved version of a mod still in the library.
   stillReferenced,
 }
 
@@ -179,6 +181,10 @@ ReclaimPlan planReclaim(
   required bool libraryReadable,
   required Set<String> reachableLegacyImages,
 
+  /// The uid of every mod in the library, or null when it could not be read.
+  /// A saved-versions group not in here has no mod left to claim it.
+  required Set<String>? claimedSnapshotUids,
+
   /// The **basename** of this run's log file, which never goes.
   String? currentLogFile,
   ReclaimRules rules = const ReclaimRules(),
@@ -229,6 +235,16 @@ ReclaimPlan planReclaim(
         if (!libraryReadable) {
           refuse(candidate, ReclaimSkipReason.libraryUnreadable);
         } else if (reachableLegacyImages.contains(candidate.name)) {
+          refuse(candidate, ReclaimSkipReason.stillReferenced);
+        } else {
+          remove.add(candidate);
+        }
+
+      case ReclaimTarget.unclaimedSnapshots:
+        // Same edge as the legacy images: an unreadable library makes every group look unclaimed.
+        if (claimedSnapshotUids == null) {
+          refuse(candidate, ReclaimSkipReason.libraryUnreadable);
+        } else if (claimedSnapshotUids.contains(candidate.name)) {
           refuse(candidate, ReclaimSkipReason.stillReferenced);
         } else {
           remove.add(candidate);

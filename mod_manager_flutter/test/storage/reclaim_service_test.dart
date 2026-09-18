@@ -49,12 +49,14 @@ void main() {
     bool downloadsBusy = false,
     bool installBusy = false,
     Set<String>? mods = const <String>{},
+    Set<String>? uids = const <String>{},
   }) =>
       ReclaimService(
         roots,
         downloadsBusy: () => downloadsBusy,
         installBusy: () => installBusy,
         modNames: () async => mods,
+        claimedSnapshotUids: () async => uids,
       );
 
   bool exists(String relative) => File(path.join(root.path, relative)).existsSync();
@@ -260,17 +262,53 @@ void main() {
     });
   });
 
+  group('saved versions', () {
+    test('a group no mod claims goes, with its bytes reported', () async {
+      write('appdata/backups/dead/20260101-000000-000/files/body.ini', 8000);
+
+      final outcome = await serviceOver(rootsIn(), uids: {'cafe'}).run();
+
+      expect(Directory(path.join(root.path, 'appdata', 'backups', 'dead')).existsSync(), isFalse);
+      expect(outcome.freedBytes, 8000);
+    });
+
+    test('a group a mod in the library claims is kept', () async {
+      write('appdata/backups/cafe/20260101-000000-000/files/body.ini', 8000);
+
+      final outcome = await serviceOver(rootsIn(), uids: {'cafe'}).run();
+
+      expect(exists('appdata/backups/cafe/20260101-000000-000/files/body.ini'), isTrue);
+      expect(outcome.freedBytes, 0);
+    });
+
+    test('an unreadable library sweeps none of them', () async {
+      write('appdata/backups/cafe/20260101-000000-000/files/body.ini', 8000);
+      write('appdata/backups/dead/20260101-000000-000/files/body.ini', 8000);
+
+      final outcome = await serviceOver(rootsIn(), uids: null).run();
+
+      expect(exists('appdata/backups/cafe/20260101-000000-000/files/body.ini'), isTrue);
+      expect(exists('appdata/backups/dead/20260101-000000-000/files/body.ini'), isTrue);
+      expect(
+        outcome.refused.map((r) => r.refusal),
+        contains(ReclaimSkipReason.libraryUnreadable),
+      );
+    });
+  });
+
   group('what it must never touch', () {
-    test('the library and the backups are not in its vocabulary', () async {
+    test('the library is not in its vocabulary', () async {
       final library = Directory(path.join(root.path, 'mods'))
         ..createSync(recursive: true);
       write('mods/Ellen/body.ini', 4000);
       write('appdata/backups/abc/20260101-000000-000/files/body.ini', 8000);
       write('appdata/downloads/mod.rar', 100);
 
-      final outcome =
-          await serviceOver(rootsIn(library: library.path), mods: {'Ellen'})
-              .run();
+      final outcome = await serviceOver(
+        rootsIn(library: library.path),
+        mods: {'Ellen'},
+        uids: {'abc'},
+      ).run();
 
       expect(exists('mods/Ellen/body.ini'), isTrue);
       expect(

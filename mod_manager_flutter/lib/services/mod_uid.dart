@@ -53,10 +53,8 @@ import 'mod_metadata_service.dart';
 /// *install* path is not this case: it assigns rather than inheriting, so
 /// importing one shared folder twice produces two identities.
 ///
-/// **A deleted sidecar orphans the history it named.** The mod takes a fresh
-/// uid on its next scan and the old group becomes unclaimable. That is the
-/// user's own doing, but it is silent, which is why unclaimed groups are
-/// reported rather than left to accumulate.
+/// **A deleted sidecar orphans the history it named.** The mod takes a fresh uid on its next scan,
+/// and the old group is swept the next time the user frees up space from the Storage tab.
 class ModUid {
   ModUid({ModMetadataService? service})
       : _sidecars = service ?? ModMetadataService();

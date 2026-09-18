@@ -25,8 +25,8 @@
       "action": "Free up space",
       "working": "Freeing up space…",
       "title": "Free up space?",
-      "body": "This deletes downloaded archives you've already installed, abandoned downloads, leftover extraction folders and old logs.",
-      "safe": "Your mods and your saved versions are not touched.",
+      "body": "This deletes downloaded archives you've already installed, abandoned downloads, leftover extraction folders, old logs, and the saved versions of mods that are no longer in your library.",
+      "safe": "Your mods, and the saved versions of mods you still have, are not touched.",
       "confirm": "Free up space",
       "cancel": "Cancel",
       "done_title": "Freed {size}",
@@ -35,7 +35,7 @@
       "nothing_body": "There was no leftover data to remove.",
       "skipped_downloads": "Left your downloads alone — a transfer is in progress.",
       "skipped_install": "Left the unpacked files alone — an install is in progress.",
-      "skipped_library": "Left the old images alone — your mods folder could not be read."
+      "skipped_library": "Left the old images and the saved versions of deleted mods alone — your mods folder could not be read."
     },
     "categories": {
       "mods": "Mods",

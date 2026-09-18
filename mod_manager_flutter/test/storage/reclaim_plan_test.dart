@@ -26,6 +26,7 @@ ReclaimPlan plan(
   bool installBusy = false,
   bool libraryReadable = true,
   Set<String> reachable = const <String>{},
+  Set<String>? claimed = const <String>{},
   String? currentLog,
 }) =>
     planReclaim(
@@ -35,6 +36,7 @@ ReclaimPlan plan(
       installBusy: installBusy,
       libraryReadable: libraryReadable,
       reachableLegacyImages: reachable,
+      claimedSnapshotUids: claimed,
       currentLogFile: currentLog,
     );
 
@@ -145,6 +147,44 @@ void main() {
       );
 
       expect(result.remove, isNotEmpty);
+    });
+  });
+
+  group('saved versions', () {
+    test('a group no mod claims goes', () {
+      final result = plan(
+        [candidate(ReclaimTarget.unclaimedSnapshots, 'deadbeef', isDirectory: true)],
+        claimed: {'cafe'},
+      );
+
+      expect(result.remove.single.name, 'deadbeef');
+    });
+
+    test('a group a mod in the library claims is kept', () {
+      final result = plan(
+        [candidate(ReclaimTarget.unclaimedSnapshots, 'cafe', isDirectory: true)],
+        claimed: {'cafe'},
+      );
+
+      expect(result.remove, isEmpty);
+      expect(result.skip.single.reason, ReclaimSkipReason.stillReferenced);
+    });
+
+    test('an unreadable library sweeps none of them', () {
+      // Every group would look unclaimed, and that is every saved version the user has.
+      final result = plan(
+        [
+          candidate(ReclaimTarget.unclaimedSnapshots, 'cafe', isDirectory: true),
+          candidate(ReclaimTarget.unclaimedSnapshots, 'beef', isDirectory: true),
+        ],
+        claimed: null,
+      );
+
+      expect(result.remove, isEmpty);
+      expect(
+        result.refusalFor(ReclaimTarget.unclaimedSnapshots),
+        ReclaimSkipReason.libraryUnreadable,
+      );
     });
   });
 

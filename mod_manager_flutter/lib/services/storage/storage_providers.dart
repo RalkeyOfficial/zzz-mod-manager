@@ -116,6 +116,14 @@ class ReclaimController extends AsyncNotifier<ReclaimOutcome?> {
           return null;
         }
       },
+      claimedSnapshotUids: () async {
+        try {
+          final mods = await ref.read(libraryProvider.future);
+          return mods.map((mod) => mod.uid).nonNulls.toSet();
+        } catch (_) {
+          return null;
+        }
+      },
       freeSpace: PlatformServiceFactory.getInstance().freeSpaceBytes,
     );
 
@@ -124,6 +132,7 @@ class ReclaimController extends AsyncNotifier<ReclaimOutcome?> {
       // Only what the sweep can touch. The library walk is untouched by it, and
       // re-running one would throw away seconds of work for nothing.
       for (final id in const [
+        StorageCategoryId.savedVersions,
         StorageCategoryId.downloads,
         StorageCategoryId.logs,
         StorageCategoryId.leftovers,

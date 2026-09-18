@@ -243,16 +243,6 @@ Two things are **refused rather than unbuilt**, both recorded in
   popups in a row they cannot see the end of, having already pressed the button
   that agreed to all of them. The surfaces also carry different weight for a
   reason: the bulk screen otherwise only ever rewrites *sidecars*.
-- [ ] **The Storage tab shows a saved-versions group whose mod is gone exactly like one whose mod is still there.**
-  Three ways to get one and all of them silent: a mod deleted outside the app,
-  a folder duplicated in a file manager (both copies carry one uid, and an update to either prunes the other's),
-  and a sidecar deleted by hand. The tab's saved-versions category names and sizes every group,
-  so the data is on screen — but nothing compares a group's uid against the library, so an unclaimed group carries no mark.
-  And there is no way to delete one: the per-snapshot delete lives in the saved-versions dialog,
-  which opens from the mod's own row on the Mods tab, and this mod has no row.
-  We change it to mark a group no folder claims,
-  and give every group on the Storage tab a "delete all saved versions" action — which also spares the per-row deleting
-  that the dialog makes tedious for a mod that is still there.
 - **The retention numbers are not user-configurable**, deliberately for now
   (30 days / 3 per mod / 5 GB). They are the kind of setting that is easy to add
   and hard to remove, and nobody has asked. If they are ever exposed it belongs

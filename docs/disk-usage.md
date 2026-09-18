@@ -69,7 +69,7 @@ The category providers are **not `autoDispose`**, and that is what makes the tab
 
 `storage/reclaim_plan.dart` is a pure function over plain records and a clock; `ReclaimService` lists, deletes and reports, and decides nothing. The whole safety argument is therefore testable without arranging real races.
 
-Five targets: completed archives, abandoned partials, temp extractions, legacy images, old logs. **The library, the sidecars and `<appData>/backups` are absent from the enum**, so no future edit here can reach them.
+Six targets: completed archives, abandoned partials, temp extractions, legacy images, old logs, and saved-versions groups no mod claims. **The library and the sidecars are absent from the enum**, so no future edit here can reach them. `<appData>/backups` is reachable through the one target, and only for a group whose uid no mod in the library carries.
 
 ### The gate
 
@@ -87,6 +87,7 @@ The gate is re-read immediately before the phase that depends on it. Nothing blo
 ### Two rules that are data-loss bugs if missed
 
 - **Legacy images.** A mod with no sidecar still reaches its cover through `<appData>/mod_images`. Reachability is decided against the library, and `sweepLegacyImages` handed an empty list considers *every* image unreachable — so an unset, missing or unreadable library skips the target entirely rather than running against a list that cannot be trusted.
+- **Saved versions.** The same edge: a group is unclaimed when no mod in the library carries its uid, so an unreadable library would make every group unclaimed and take every saved version the user has. It skips the target on the same condition as the images.
 - **Logs.** Only names `isLogFileName` recognises: the user is invited into that folder to attach a log to a report and may have left something of their own. And **never the running session's file** — on Windows the delete fails; on Linux it succeeds, the sink writes on to an unlinked inode, no space returns until exit, and the user loses the log of the run they are about to report. `planLogRotation` reserves a slot for a file about to be opened, so `planLogReclaim` is a separate function rather than a reused one.
 
 ### The grace on an extraction directory
@@ -95,8 +96,10 @@ An hour, measured from **the newest write anywhere inside**, never from the dire
 
 ### The risk budget
 
-What licenses accepting a millisecond race instead of building a lock: the sweep never touches `modsPath` or `<appData>/backups`, never deletes a file it does not recognise, and its worst outcome is a re-download.
+What licenses accepting a millisecond race instead of building a lock: the sweep never touches `modsPath`, never deletes a file it does not recognise, and for everything but an unclaimed saved-versions group its worst outcome is a re-download.
 
-## 9. Why nothing is swept automatically
+## 9. Unclaimed saved versions go with the button, and only with the button
 
-An unclaimed snapshot group — a mod deleted outside the app, a folder duplicated in a file manager, a sidecar deleted by hand — is **recoverable data right up until it is deleted**. It is reported and reclaimed by hand, never on a schedule. The same reasoning is why the reclaim button never touches saved versions: everything it does delete can be fetched again, and that is the line.
+An unclaimed snapshot group — a mod deleted outside the app, a sidecar deleted by hand — is the one thing the sweep deletes that cannot be fetched again. It goes anyway, because nothing else can reach it: the saved-versions dialog opens from the mod's own row, and this mod has no row. Retention protects each group's newest entry forever, so without the button a deleted mod's history would sit in the store for good, counting against the 5 GB budget.
+
+It is never swept on a schedule. The user presses the button, and the confirmation says that saved versions of mods no longer in the library are included. A mod moved out of the library and back in after the press has lost its history, and that is accepted: it takes three deliberate steps to arrive there, and a checkbox for it would cost every other user a decision.

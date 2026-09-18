@@ -75,10 +75,8 @@ void main() {
     await tester.tap(find.text('Free up space'));
     await tester.pumpAndSettle();
 
-    // Everything the sweep deletes can be got again; what the user is afraid of
-    // losing is the two things it cannot reach, so they are named up front.
     expect(
-      find.text('Your mods and your saved versions are not touched.'),
+      find.text('Your mods, and the saved versions of mods you still have, are not touched.'),
       findsOneWidget,
     );
   });
