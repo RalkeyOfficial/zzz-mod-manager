@@ -19,7 +19,6 @@ void main() {
         result: const UpdateApplyResult(
           snapshot: null,
           filesWritten: 12,
-          removedInis: [],
           keybindChanges: [],
           reactivated: false,
         ),
@@ -30,7 +29,6 @@ void main() {
         result: UpdateApplyResult(
           snapshot: null,
           filesWritten: 0,
-          removedInis: const [],
           keybindChanges: const [],
           reactivated: false,
           failure: failure,

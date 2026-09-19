@@ -233,19 +233,6 @@ Two things are **refused rather than unbuilt**, both recorded in
 
 ### Open around applying an update (known, deliberately not built)
 
-- [ ] **The update confirmation keeps offering to remove "leftover .ini files" from mods that have none.**
-  A plain mod, no patch applied into it and nothing merged by hand, updates through the app,
-  and the confirmation lists one or more of its `.ini` files as leftovers to remove.
-  Every such mod should reach that dialog with an empty list, and it happens constantly rather than occasionally.
-  The rule (`services/update_apply/stale_ini.dart`, `docs/applying-updates.md` §3) calls an `.ini` stale
-  when every resource it names and the folder holds is one the incoming download ships,
-  and it is meant to see only the unrecorded half of a library,
-  since a recorded install layout removes a renamed `.ini` by name before the rule runs.
-  Something in that chain is wrong for ordinary mods, and nothing on screen says which `.ini` was compared against what.
-  It may also be redundant: an update now downloads the base and the patch and applies the patch over the base,
-  which is the case the rule was written to protect, and whether anything is left for it to decide has not been rechecked.
-  The fix is not known yet. First reproduce it on a plain mod and record which file the rule flagged and against which download list;
-  then decide whether the rule survives the base-plus-patch update path at all, or goes.
 - [ ] **An update whose archive has more than one folder gives up and lists the folders instead of asking.**
   The confirmation becomes "Can't update {mod} automatically", shows "Folders in this download" with, say, `Remielle` and `Previews`,
   and tells the user to reinstall from the Marketplace and delete the old mod by hand.

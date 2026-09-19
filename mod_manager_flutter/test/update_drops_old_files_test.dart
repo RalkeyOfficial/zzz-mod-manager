@@ -10,11 +10,9 @@ import 'package:path/path.dart' as p;
 
 /// **An update removes what the last version wrote and the new one does not.**
 ///
-/// Real directories, because the claim is about files on disk: an overwrite only
-/// ever adds and replaces, so before this the leftovers stayed and went on being
-/// loaded — a renamed `.ini` doubling the mod's hotkeys, a dropped shader still
-/// applied. What makes removing them safe is that each download records the
-/// files it laid down, so nothing here is inferred from the folder.
+/// Real directories, because the claim is about files on disk: an overwrite only ever adds and replaces,
+/// so without this the leftovers would stay and go on being loaded — a renamed `.ini` doubling the mod's hotkeys, a dropped shader still applied.
+/// Each download records the files it laid down, and a folder with no record counts everything in it as the last version.
 class _FakeActivation implements ModActivationPort {
   final Set<String> active = {};
 
@@ -85,7 +83,6 @@ void main() {
     Directory source, {
     List<String> recorded = const <String>[],
     List<String> patchFiles = const <String>[],
-    bool deleteStale = true,
   }) async {
     final preview = await applier.preview(
       modFolder: folder,
@@ -98,14 +95,11 @@ void main() {
       modFolder: folder,
       preview: preview,
       patchFiles: patchFiles,
-      deleteStaleInis: deleteStale,
     );
   }
 
   test('a file the new version no longer ships is removed', () async {
-    // The case nothing else in this app can detect: `ShaderFixes/glow.hlsl` is
-    // referenced by no `.ini` in the folder, so the stale-`.ini` rule is blind
-    // to it and it stays applied in the game forever.
+    // `ShaderFixes/glow.hlsl` is referenced by no `.ini` in the folder, so nothing but the record can tell it was the old version's.
     final mod = modFolder('Ellen');
     write(mod, 'ellen.ini', modIni('Body.dds'));
     write(mod, 'Body.dds', 'v1');
@@ -177,23 +171,6 @@ void main() {
     expect(result.droppedFiles, isEmpty);
   });
 
-  test('a mod with no record still only overwrites', () async {
-    // Every mod installed before the record existed. It has to keep behaving
-    // exactly as it did.
-    final mod = modFolder('Ellen');
-    write(mod, 'ellen.ini', modIni('Body.dds'));
-    write(mod, 'Extra.dds', 'from v1');
-
-    final source = incoming('Ellen v2');
-    write(source, 'ellen.ini', modIni('Body.dds'));
-    write(source, 'Body.dds', 'v2');
-
-    final result = await run('Ellen', mod, source);
-
-    expect(result.droppedFiles, isEmpty);
-    expect(read(mod, 'Extra.dds'), 'from v1');
-  });
-
   test('the patch in the folder keeps the file the base gave up', () async {
     // The base recorded `Body.dds` and the new version drops it — but a patch
     // has since written its own over that path, so the file there now is the
@@ -221,10 +198,6 @@ void main() {
   });
 
   test('a renamed .ini is removed without being asked about', () async {
-    // The record settles what the stale-`.ini` rule could only infer, so the
-    // question is not put to the user — and declining it no longer keeps a file
-    // the record says is gone. The old prompt is what is left for the folders
-    // that have no record.
     final mod = modFolder('Ellen');
     write(mod, 'ellen.ini', modIni('Body.dds'));
     write(mod, 'Body.dds', 'v1');
@@ -238,16 +211,12 @@ void main() {
       incomingFolders: [source.path],
       recorded: recordOf(['ellen.ini', 'Body.dds']),
     );
-
     expect(preview.dropped.remove, ['ellen.ini']);
-    expect(preview.staleInis.stale, isEmpty,
-        reason: 'asking about a file that is going either way is not a choice');
 
     final result = await applier.apply(
       modName: 'Ellen',
       modFolder: mod,
       preview: preview,
-      deleteStaleInis: false,
     );
 
     expect(result.success, isTrue);
@@ -255,11 +224,8 @@ void main() {
     expect(has(mod, 'ellen_v2.ini'), isTrue);
   });
 
-  test('a second mod\'s .ini is still only ever offered, never removed',
-      () async {
-    // The same folder, without a record for the other download. It reaches the
-    // inference, which refuses it — and this is the case that makes the
-    // inference worth keeping.
+  test('a file nothing recorded writing is left alone', () async {
+    // The record says what the last version wrote, and `theirs.ini` is not in it.
     final mod = modFolder('Ellen');
     write(mod, 'ellen.ini', modIni('Body.dds'));
     write(mod, 'theirs.ini', modIni('Theirs.dds'));
@@ -269,14 +235,35 @@ void main() {
     write(source, 'ellen_v2.ini', modIni('Body.dds'));
     write(source, 'Body.dds', 'v2');
 
-    final preview = await applier.preview(
-      modFolder: mod,
-      incomingFolders: [source.path],
-      recorded: recordOf(['ellen.ini', 'Body.dds']),
-    );
+    final result = await run('Ellen', mod, source,
+        recorded: ['ellen.ini', 'Body.dds']);
 
-    expect(preview.dropped.remove, ['ellen.ini']);
-    expect(preview.staleInis.keptUndecidable, ['theirs.ini']);
+    expect(result.droppedFiles, ['ellen.ini']);
+    expect(has(mod, 'theirs.ini'), isTrue);
+    expect(has(mod, 'Theirs.dds'), isTrue);
+  });
+
+  test('with no record, everything in the folder counts as the last version',
+      () async {
+    // The same folder before the app recorded file lists: there is no way to tell `theirs.ini` from the old version, so it goes too.
+    // The snapshot is the way back.
+    final mod = modFolder('Ellen');
+    write(mod, 'ellen.ini', modIni('Body.dds'));
+    write(mod, 'Body.dds', 'v1');
+    write(mod, 'theirs.ini', modIni('Theirs.dds'));
+    write(mod, 'Theirs.dds', 'a whole other mod');
+
+    final source = incoming('Ellen v2');
+    write(source, 'ellen_v2.ini', modIni('Body.dds'));
+    write(source, 'Body.dds', 'v2');
+
+    final result = await run('Ellen', mod, source);
+
+    expect(result.droppedFiles,
+        unorderedEquals(['ellen.ini', 'theirs.ini', 'Theirs.dds']));
+    expect(has(mod, 'ellen_v2.ini'), isTrue);
+    expect(read(mod, 'Body.dds'), 'v2');
+    expect(has(mod, 'theirs.ini'), isFalse);
   });
 
   test('a texture the new .ini still names but the archive omits stays',

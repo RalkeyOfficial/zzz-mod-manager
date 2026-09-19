@@ -15,8 +15,7 @@
 ///
 /// The one thing the two entry points do not share is the patch's own identity:
 /// a Marketplace download knows which mod page and file it is, and a hand-
-/// dragged folder has none. That changes what can be *recorded*, never what is
-/// installed — see [PatchIdentity].
+/// dragged folder has none. Both record the files they wrote; only the first can be checked for updates — see [PatchIdentity].
 library;
 
 import 'dart:io';
@@ -70,11 +69,9 @@ List<PlannedMod> plannedMods(ImportPlan plan, List<String> folders) =>
 
 /// The patch's **own** remote identity, for the installs that have one.
 ///
-/// A Marketplace download knows exactly which mod page and file it is, and that
-/// is what gets recorded against the mod it is written into. A folder dragged
-/// off a disk has no page at all — so there is nothing to record, and a
-/// companion cannot be written without one. The install is the same operation
-/// either way; only the bookkeeping differs.
+/// A Marketplace download knows exactly which mod page and file it is, and that is what gets recorded against the mod it is written into.
+/// A folder dragged off a disk has no page at all, so its layer records only the files it wrote and cannot be checked for updates.
+/// The install is the same operation either way; only the bookkeeping differs.
 class PatchIdentity {
   const PatchIdentity({
     required this.modId,
@@ -503,24 +500,15 @@ Future<List<NotificationLines>> applyPatchInstall(
     }
     patchedInto[entry.key] = write.into;
 
-    // **On the target, and only when there is something to name.** The folder
-    // is still the base mod — that is what its `origin` says and what it mostly
-    // is — and the patch is the second thing in it. A hand-dragged folder has
-    // no mod page, so there is no second identity to record and nothing is
-    // written rather than something invented.
-    if (patch case final identity?) {
-      await amend(
-        write.into.modId,
-        // **With the files it actually wrote.** The paths are the target's, not
-        // the ones the archive shipped, and the copy is the only thing that
-        // knows them — every rule that puts this patch back, or takes it out,
-        // reads this list.
-        (current) => withAppliedPatch(
-          current,
-          identity.layer.copyWith(files: result.writtenFiles),
-        ),
-      );
-    }
+    // Recorded on the target with the files it actually wrote, in the target's paths.
+    // A hand-dragged folder has no mod page, so its layer has no id, but the file list is what lets a base update put it back.
+    await amend(
+      write.into.modId,
+      (current) => withAppliedPatch(
+        current,
+        (patch?.layer ?? const ModDownload()).copyWith(files: result.writtenFiles),
+      ),
+    );
   }
 
   // The scan ran against what the install *planned*, and a folder that already

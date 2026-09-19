@@ -19,14 +19,12 @@ final Logger _log = Logger('update.reinstall');
 /// The same operation as an update at the same file id, and deliberately the
 /// same code: [applyUpdateFlow] takes a `GbFile` and does not care whether it is
 /// newer than what is on disk. So a repair inherits the snapshot, the patch
-/// set-aside, the leftover removal and the confirmation without any of them
+/// set-aside, the old-file removal and the confirmation without any of them
 /// being written twice.
 ///
-/// **What it puts back is the author's files, not the folder.** The record
-/// licenses removing what this app wrote and nothing else, so a second mod
-/// merged in by hand or a texture the user swapped in stays exactly where it is.
-/// A repair is therefore *not* a factory reset of the directory, and the
-/// confirmation says as much.
+/// **What it removes is what the record says the last version wrote and the file does not ship.**
+/// With a record, a second mod merged in by hand or a texture the user swapped in stays where it is.
+/// With none, the whole folder counts as the last version, and the confirmation names what goes.
 ///
 /// The surface exists because the update dialog only appears when there is a
 /// finding, and a repair is wanted precisely when there is none — a mod broken

@@ -4,8 +4,8 @@ import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/screens/dialogs/update_confirm_dialog.dart';
 import 'package:mod_manager_flutter/services/patch_detection.dart';
+import 'package:mod_manager_flutter/services/update_apply/dropped_files.dart';
 import 'package:mod_manager_flutter/services/update_apply/sibling_group.dart';
-import 'package:mod_manager_flutter/services/update_apply/stale_ini.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_applier.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_layout.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_target.dart';
@@ -15,9 +15,8 @@ import 'support/localized_harness.dart';
 /// The last screen before an update touches a live install.
 ///
 /// What is worth pinning is not the layout but the promises: it says what it is
-/// about to do *before* doing it, it refuses rather than guessing where the
-/// layout cannot be reconciled, and the one question it asks comes back as an
-/// answer the caller can act on.
+/// about to do *before* doing it, and it refuses rather than guessing where the
+/// layout cannot be reconciled.
 void main() {
   final mod = ModInfo(
     id: 'Ellen',
@@ -31,8 +30,8 @@ void main() {
     UpdateLayoutProblem? problem,
     List<String> unused = const [],
     List<String> missing = const [],
-    List<StaleIni> stale = const [],
-    List<String> kept = const [],
+    List<String> dropped = const [],
+    bool unrecorded = false,
   }) =>
       UpdatePreview(
         layout: UpdateLayout(
@@ -48,7 +47,8 @@ void main() {
           required: missing.length,
           hasIni: true,
         ),
-        staleInis: StaleIniAssessment(stale: stale, keptUndecidable: kept),
+        dropped: DroppedFiles(remove: dropped),
+        unrecorded: unrecorded,
       );
 
   Future<UpdateConfirmChoice?> open(
@@ -162,73 +162,26 @@ void main() {
     expect(find.textContaining('none of the 2 file'), findsOneWidget);
   });
 
-  testWidgets('the stale-.ini question defaults to removing it',
+  testWidgets('says how many old files go, and asks nothing about them',
       (tester) async {
-    UpdateConfirmChoice? choice;
-    await pumpLocalized(
-      tester,
-      Builder(
-        builder: (context) => TextButton(
-          onPressed: () async {
-            choice = await showUpdateConfirmDialog(
-              context,
-              mod: mod,
-              file: file,
-              preview: preview(
-                stale: const [StaleIni(path: 'ellen.ini', sharedResources: 2)],
-                kept: const ['lycaon.ini'],
-              ),
-            );
-          },
-          child: const Text('open'),
-        ),
-      ),
-    );
-    await tester.tap(find.text('open'));
-    await tester.pumpAndSettle();
+    await open(tester, preview(dropped: const ['ellen.ini', 'old.dds']));
 
-    expect(find.textContaining('ellen.ini'), findsOneWidget);
-    // The one the rule refused to touch is named too, and never as something
-    // to delete: it belongs to a second mod merged into the same folder.
-    expect(find.textContaining('Left alone: lycaon.ini'), findsOneWidget);
-
-    await tester.tap(find.text('Update').last);
-    await tester.pumpAndSettle();
-    expect(choice?.removeStaleInis, isTrue);
+    expect(find.textContaining("2 files from the version you have aren't"),
+        findsOneWidget);
+    expect(find.byType(Checkbox), findsNothing);
   });
 
-  testWidgets('unticking it comes back as a refusal, not a silent default',
+  testWidgets('with no record, the files going are named as possibly the user\'s own',
       (tester) async {
-    UpdateConfirmChoice? choice;
-    await pumpLocalized(
+    // Read off the folder rather than a record, so one of them may be something the user put there.
+    await open(
       tester,
-      Builder(
-        builder: (context) => TextButton(
-          onPressed: () async {
-            choice = await showUpdateConfirmDialog(
-              context,
-              mod: mod,
-              file: file,
-              preview: preview(
-                stale: const [StaleIni(path: 'ellen.ini', sharedResources: 2)],
-              ),
-            );
-          },
-          child: const Text('open'),
-        ),
-      ),
+      preview(dropped: const ['ellen.ini', 'mine.dds'], unrecorded: true),
     );
-    await tester.tap(find.text('open'));
-    await tester.pumpAndSettle();
-    // The dialog scrolls, and the question sits below the fold once every
-    // notice is present — a tap on an off-screen checkbox is silently swallowed.
-    await tester.ensureVisible(find.byType(Checkbox));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byType(Checkbox));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Update').last);
-    await tester.pumpAndSettle();
-    expect(choice?.removeStaleInis, isFalse);
+
+    expect(find.textContaining('Nothing records which files'), findsOneWidget);
+    expect(find.textContaining('ellen.ini, mine.dds'), findsOneWidget);
+    expect(find.textContaining("from the version you have aren't"), findsNothing);
   });
 
   testWidgets('an unreconcilable layout offers no way to proceed',
@@ -250,8 +203,8 @@ void main() {
       preview(
         missing: const ['body.dds'],
         unused: const ['previews'],
-        stale: const [StaleIni(path: 'a_very_long_old_name.ini', sharedResources: 9)],
-        kept: const ['another_mod_merged_in_here.ini'],
+        dropped: const ['a_very_long_old_name.ini', 'another_very_long_old_name.dds'],
+        unrecorded: true,
       ),
       surfaceSize: const Size(480, 900),
     );
@@ -278,18 +231,20 @@ void main() {
 
     UpdateTarget target(
       String id, {
-      List<StaleIni> stale = const [],
+      List<String> dropped = const [],
       List<String> missing = const [],
       bool flattensPatch = false,
+      bool unrecorded = false,
       UpdateLayoutProblem? problem,
       SiblingCaution? caution,
     }) =>
         UpdateTarget(
           mod: sibling(id),
           preview: preview(
-            stale: stale,
+            dropped: dropped,
             missing: missing,
             problem: problem,
+            unrecorded: unrecorded,
           ),
           flattensPatch: flattensPatch,
           caution: caution,
@@ -519,7 +474,7 @@ void main() {
 
       // **And the body describes the refusal, not the write.** Nothing here can
       // be written, so a screen that goes on to say which file is being
-      // installed, offers to remove leftovers and promises a saved copy first
+      // installed and promises a saved copy first
       // is describing a write that cannot happen — under a title that says it
       // cannot happen.
       expect(find.textContaining('Installing'), findsNothing);
@@ -546,46 +501,36 @@ void main() {
       expect(boxes.length, 1, reason: 'only the sibling is writable');
     });
 
-    testWidgets('the leftover question is asked once for the whole group',
+    testWidgets('each row counts the old files its own folder loses',
         (tester) async {
+      // Per folder, not summed: the count differs per folder and a total would describe nothing the user can act on.
       await openGroup(
         tester,
-        primary: preview(
-          stale: const [StaleIni(path: 'ellen_old.ini', sharedResources: 3)],
-        ),
+        primary: preview(dropped: const ['ellen_old.ini']),
         siblings: [
-          target('Ellen Blue', stale: const [
-            StaleIni(path: 'blue_old.ini', sharedResources: 3),
-          ]),
+          target('Ellen Blue', dropped: const ['blue_old.ini', 'blue.dds']),
         ],
       );
 
-      // One checkbox for the leftovers, naming the folders rather than the
-      // files: the same filename in two mods is two files.
-      expect(find.textContaining('Remove 2 leftover .ini files from'),
-          findsOneWidget);
-      expect(find.textContaining('Ellen, Ellen Blue'), findsOneWidget);
+      expect(find.textContaining('removes 1 old file'), findsOneWidget);
+      expect(find.textContaining('removes 2 old files'), findsOneWidget);
+      expect(find.textContaining("from the version you have"), findsNothing,
+          reason: 'the single-mod note would be naming one of several');
     });
 
-    testWidgets('unticking a folder takes its leftovers out of the count',
+    testWidgets('folders with no record are named, and only those',
         (tester) async {
       await openGroup(
         tester,
-        primary: preview(
-          stale: const [StaleIni(path: 'ellen_old.ini', sharedResources: 3)],
-        ),
+        primary: preview(dropped: const ['ellen_old.ini']),
         siblings: [
-          target('Ellen Blue', stale: const [
-            StaleIni(path: 'blue_old.ini', sharedResources: 3),
-          ]),
+          target('Ellen Blue', dropped: const ['blue_old.ini'], unrecorded: true),
+          target('Ellen Red', unrecorded: true),
         ],
       );
 
-      await tester.tap(find.text('Ellen Blue'));
-      await tester.pumpAndSettle();
-
-      // Down to one folder, so it names the file again.
-      expect(find.textContaining('ellen_old.ini'), findsOneWidget);
+      expect(find.textContaining('the version Ellen Blue have'), findsOneWidget,
+          reason: 'Ellen Red loses nothing, so there is nothing to say about it');
     });
 
     testWidgets('a folder nothing writes is named as exactly that',
@@ -639,16 +584,12 @@ void main() {
         (tester) async {
       await openGroup(
         tester,
-        primary: preview(
-          stale: const [StaleIni(path: 'ellen_old.ini', sharedResources: 3)],
-        ),
+        primary: preview(dropped: const ['ellen_old.ini']),
         siblings: [
           target('Ellen Blue with a very long folder name',
               missing: const ['body.dds']),
           target('Ellen Red', flattensPatch: true),
-          target('Ellen Green', stale: const [
-            StaleIni(path: 'green_old.ini', sharedResources: 3),
-          ]),
+          target('Ellen Green', dropped: const ['green_old.ini']),
         ],
         refused: [
           SiblingRefused(

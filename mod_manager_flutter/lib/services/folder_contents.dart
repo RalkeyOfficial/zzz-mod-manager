@@ -8,7 +8,7 @@ import 'ini_resources.dart';
 /// One walk of a mod-shaped folder, in the spelling the pure units compare in.
 ///
 /// The three decision units that read a folder — patch detection, the
-/// stale-`.ini` rule and the update layout — are all pure and take sets of
+/// old-file removal and the update layout — are all pure and take sets of
 /// normalised relative paths. This is the single place that produces them, so
 /// there is one definition of "what is in this folder" rather than three
 /// slightly different walks.
@@ -50,10 +50,10 @@ class FolderContents {
   /// have.
   ///
   /// This is not theoretical. Mod authors ship `Ellen.ini`, `Miyabi.ini`,
-  /// `MasterNico.ini`; all-lower-case is the rare spelling. Deleting a stale
+  /// `MasterNico.ini`; all-lower-case is the rare spelling. Deleting an old
   /// `.ini` through the normalised path silently deleted nothing — `exists()`
   /// answered false, the loop reported nothing removed, and the user was left
-  /// with the two live `.ini` files the whole rule exists to prevent.
+  /// with two live `.ini` files.
   ///
   /// So: **compare with the key, touch the filesystem with the value.**
   final Map<String, String> actualPaths;
@@ -99,8 +99,7 @@ class FolderContents {
   ///
   /// For judging one download in a folder that holds two: the patch's files
   /// belong to neither side of an update to the base — they are going back on
-  /// top afterwards — and left in, they make the base's update look like it is
-  /// leaving `.ini` files behind that are not its own.
+  /// top afterwards — and left in, they count as the old version's and go with it.
   ///
   /// Takes either spelling. A caller holds the on-disk one, because that is what
   /// a record stores and what opens a file.

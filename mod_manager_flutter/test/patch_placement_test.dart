@@ -56,8 +56,7 @@ void main() {
 
     test('an .ini of the same name is replaced in place', () {
       // The ordinary case for a patch that ships its own `.ini`: same name,
-      // overwritten rather than orphaned. The orphaned-`.ini` rule is what
-      // covers the renamed case, and it is not this file's business.
+      // overwritten rather than left beside its successor.
       final placement = resolvePatchPlacement(
         incoming: const {'chara.ini'},
         target: nested,

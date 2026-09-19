@@ -25,23 +25,16 @@ import '../components/dialog_section.dart';
 /// pays for — not at the top of the dialog, where it would answer a question
 /// nobody has asked yet.
 ///
-/// It answers one question, `removeStaleInis`, and refuses in three cases it
-/// cannot answer at all. That asymmetry is the design: a dialog that offered
-/// "install anyway" against an unreconcilable layout would be inviting the user
-/// to guess where the app would not.
+/// It refuses in three cases it cannot answer at all. That asymmetry is the design:
+/// a dialog that offered "install anyway" against an unreconcilable layout would be inviting the user to guess where the app would not.
 ///
 /// **One archive can be going into several folders**, when the mod was installed
 /// alongside siblings out of the same download. Every one of them is a row here
 /// with its own facts, because they are separate mods being overwritten and the
 /// user is consenting to each. What stays shared is stated once: the snapshot,
-/// the overwrite, the keybinds, and the one question.
+/// the overwrite and the keybinds.
 class UpdateConfirmChoice {
-  const UpdateConfirmChoice({
-    required this.removeStaleInis,
-    this.accepted = const <String>{},
-  });
-
-  final bool removeStaleInis;
+  const UpdateConfirmChoice({this.accepted = const <String>{}});
 
   /// The mod folder ids the user left ticked. Empty when the dialog offered a
   /// single mod, which the caller already has in hand.
@@ -135,12 +128,6 @@ class _UpdateConfirmDialog extends StatefulWidget {
 }
 
 class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
-  /// Default on. An orphaned `.ini` is live the moment the loader reads the
-  /// folder, and the rule that produced this list already refused every
-  /// leftover it could not prove describes the incoming content — so what is
-  /// left is a duplicate fighting the file that just landed.
-  bool _removeStale = true;
-
   /// Ticked on open, every folder the archive can be written into.
   ///
   /// **Opt out rather than opt in**: one download covers all of them, which is
@@ -211,7 +198,7 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
     // primary's own archive folder is fine, another mod just claims it too. The
     // blocked body says so from the refused list instead; what it must not do
     // is fall through to the confirmation, which describes a write that cannot
-    // happen and offers to remove leftovers from folders nothing will touch.
+    // happen.
     final problem = nothingWritable ? widget.preview.layout.problem : null;
     final chosen = _chosen;
 
@@ -248,7 +235,6 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
                 ? null
                 : () => Navigator.of(context).pop(
                       UpdateConfirmChoice(
-                        removeStaleInis: _removeStale,
                         accepted: {for (final t in chosen) t.mod.id},
                       ),
                     ),
@@ -364,6 +350,11 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
       for (final target in chosen)
         if (target.flattensPatch) target.mod.name,
     ];
+    final unrecorded = [
+      for (final target in chosen)
+        if (target.preview.unrecorded && target.preview.dropped.remove.isNotEmpty)
+          target.mod.name,
+    ];
 
     return [
       DialogSection(
@@ -442,13 +433,29 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
           //
           // For a group the count belongs on each row instead: it differs per
           // folder, and summing it would describe nothing the user can act on.
+          //
+          // With no record the files going were read off the folder and may be the user's own,
+          // so they are named rather than counted: this is the one case where the user may recognise one.
           if (!_isGroup && preview.dropped.remove.isNotEmpty)
             DialogNotice(
               icon: Icons.auto_delete_outlined,
               message: loc.plural(
-                'mods.update_apply.dropped_note',
+                preview.unrecorded
+                    ? 'mods.update_apply.unrecorded_note'
+                    : 'mods.update_apply.dropped_note',
                 preview.dropped.remove.length,
-                params: {'count': '${preview.dropped.remove.length}'},
+                params: {
+                  'count': '${preview.dropped.remove.length}',
+                  'files': preview.dropped.remove.join(', '),
+                },
+              ),
+            ),
+          if (_isGroup && unrecorded.isNotEmpty)
+            DialogNotice(
+              icon: Icons.auto_delete_outlined,
+              message: loc.t(
+                'mods.update_apply.group_unrecorded',
+                params: {'mods': unrecorded.join(', ')},
               ),
             ),
           // The accepted loss, named rather than discovered. Re-applying the
@@ -499,8 +506,6 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
             ),
         ],
       ),
-
-      ..._leftoversSection(chosen),
     ];
   }
 
@@ -508,9 +513,8 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
 
   /// One row per folder the archive goes into, ticked.
   ///
-  /// Each row carries only what differs between folders — how much lands, what
-  /// gets dropped, what is left over. Everything the write does the same way
-  /// everywhere stays in the effects section below, said once.
+  /// Each row carries only what differs between folders — how much lands and what gets dropped.
+  /// Everything the write does the same way everywhere stays in the effects section below, said once.
   List<Widget> _membersSection() => [
         const SizedBox(height: 16),
         DialogSection(
@@ -545,7 +549,6 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
 
   String _rowDetail(UpdateTarget target) {
     final dropped = target.preview.dropped.remove.length;
-    final leftovers = target.leftoverCount;
     return <String>[
       // **First, because it is why the row is unticked.** The counts describe
       // what the write would do; this says whether it should happen at all.
@@ -564,12 +567,6 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
           'mods.update_apply.group_row_dropped',
           dropped,
           params: {'count': '$dropped'},
-        ),
-      if (leftovers > 0)
-        loc.plural(
-          'mods.update_apply.group_row_leftovers',
-          leftovers,
-          params: {'count': '$leftovers'},
         ),
     ].join(' · ');
   }
@@ -605,89 +602,4 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
         ),
       ];
 
-  // ---------------------------------------------------------------- leftovers
-
-  /// The one question this dialog asks, asked **once** for the whole group.
-  ///
-  /// A checkbox per folder would be a quiz whose answer is the same every time:
-  /// an orphaned `.ini` is live the moment the loader reads the folder, and the
-  /// rule that produced each list already refused every leftover it could not
-  /// prove describes the incoming content. So the count is the total across the
-  /// ticked folders, and where more than one contributes the folders are named
-  /// instead of the files — the same filename in two mods is two files.
-  List<Widget> _leftoversSection(List<UpdateTarget> chosen) {
-    final contributing = [
-      for (final target in chosen)
-        if (target.leftoverCount > 0) target,
-    ];
-    final total = contributing.fold<int>(0, (sum, t) => sum + t.leftoverCount);
-    final kept = [
-      for (final target in chosen)
-        for (final path in target.preview.staleInis.keptUndecidable)
-          target.preview.onDisk(path),
-    ];
-    if (total == 0 && kept.isEmpty) return const <Widget>[];
-
-    return [
-      const SizedBox(height: 16),
-      DialogSection(
-        title: loc.t('mods.update_apply.leftovers_heading'),
-        subtitle:
-            total == 0 ? null : loc.t('mods.update_apply.remove_stale_why'),
-        children: [
-          if (total > 0)
-            CheckboxListTile(
-              value: _removeStale,
-              onChanged: (value) =>
-                  setState(() => _removeStale = value ?? true),
-              contentPadding: EdgeInsets.zero,
-              controlAffinity: ListTileControlAffinity.leading,
-              title: Text(
-                _removeStaleLabel(contributing, total),
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-            ),
-          // Never offered for deletion, and said out loud. These are the
-          // hand-merged-second-mod case: an .ini naming files this download
-          // knows nothing about belongs to something else in the same folder.
-          if (kept.isNotEmpty)
-            Text(
-              loc.t(
-                'mods.update_apply.kept_inis',
-                params: {'files': kept.join(', ')},
-              ),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-            ),
-        ],
-      ),
-    ];
-  }
-
-  String _removeStaleLabel(List<UpdateTarget> contributing, int total) {
-    if (contributing.length == 1) {
-      final only = contributing.single.preview;
-      return loc.plural(
-        'mods.update_apply.remove_stale',
-        total,
-        params: {
-          'count': '$total',
-          // The real spelling, not the normalised one this rule compares in:
-          // naming a file the user does not have is its own small lie, and it
-          // is the same mistake that made the deletion silently do nothing.
-          'files':
-              only.staleInis.stale.map((s) => only.onDisk(s.path)).join(', '),
-        },
-      );
-    }
-    return loc.plural(
-      'mods.update_apply.group_remove_stale',
-      total,
-      params: {
-        'count': '$total',
-        'mods': contributing.map((t) => t.mod.name).join(', '),
-      },
-    );
-  }
 }

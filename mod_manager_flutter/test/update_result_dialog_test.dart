@@ -27,13 +27,13 @@ void main() {
 
   UpdateApplyResult result({
     List<KeybindChange> changes = const [],
-    List<String> removed = const [],
+    List<String> dropped = const [],
     bool reactivated = false,
   }) =>
       UpdateApplyResult(
         snapshot: null,
         filesWritten: 12,
-        removedInis: removed,
+        droppedFiles: dropped,
         keybindChanges: changes,
         reactivated: reactivated,
       );
@@ -136,7 +136,7 @@ void main() {
     await open(
       tester,
       result(
-        removed: const ['a_very_long_leftover_name.ini'],
+        dropped: const ['a_very_long_old_name.ini'],
         reactivated: true,
         changes: const [
           KeybindChange(
@@ -208,7 +208,6 @@ void main() {
           result: const UpdateApplyResult(
             snapshot: null,
             filesWritten: 0,
-            removedInis: [],
             keybindChanges: [],
             reactivated: false,
             failure: UpdateApplyFailure.copy,
@@ -243,7 +242,6 @@ void main() {
               result: const UpdateApplyResult(
                 snapshot: null,
                 filesWritten: 0,
-                removedInis: [],
                 keybindChanges: [],
                 reactivated: false,
                 failure: UpdateApplyFailure.snapshot,
@@ -254,7 +252,6 @@ void main() {
                   result: const UpdateApplyResult(
                     snapshot: null,
                     filesWritten: 0,
-                    removedInis: [],
                     keybindChanges: [],
                     reactivated: false,
                     failure: UpdateApplyFailure.copy,
@@ -314,7 +311,7 @@ void main() {
           AppliedUpdate(
             mod: other('Ellen Blue with a very long folder name'),
             result: result(
-              removed: const ['a_very_long_leftover_name.ini'],
+              dropped: const ['a_very_long_old_name.ini'],
               reactivated: true,
             ),
           ),
@@ -324,7 +321,6 @@ void main() {
             result: const UpdateApplyResult(
               snapshot: null,
               filesWritten: 0,
-              removedInis: [],
               keybindChanges: [],
               reactivated: false,
               failure: UpdateApplyFailure.snapshot,

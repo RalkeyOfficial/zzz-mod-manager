@@ -5,15 +5,10 @@
 /// under a name the new one does not use is therefore left exactly where it was,
 /// and it keeps working: the loader reads every `.ini` in the folder and every
 /// asset those reference, so a renamed `.ini` doubles the mod's hotkeys and a
-/// shader the author dropped goes on being applied. `stale_ini.dart` catches the
-/// `.ini` half by inference — is this file describing the content we just
-/// wrote? — and cannot see anything else.
+/// shader the author dropped goes on being applied.
 ///
-/// This does not infer. Each download records the files it laid down
-/// ([InstalledFile]), so the answer is a set difference: recorded last time,
-/// not shipped this time. What that buys over the inference is the case the
-/// inference has no signal for at all — an asset no `.ini` in the folder
-/// mentions any more.
+/// Nothing is inferred. Each download records the files it laid down ([InstalledFile]),
+/// so the answer is a set difference: recorded last time, not shipped this time.
 ///
 /// Pure, the shape `retention.dart` and `patch_removal.dart` use: the part worth
 /// testing is which file gets which treatment, and that needs no folder.
@@ -35,7 +30,7 @@ class DroppedFiles {
 
   static const DroppedFiles nothing = DroppedFiles();
 
-  /// This download put them here, nothing else claims them, and the new version
+  /// The record names them, nothing else claims them, and the new version
   /// has no file by that name. They go.
   ///
   /// On-disk spelling — these paths delete files, and a lower-cased one deletes
@@ -69,9 +64,8 @@ class DroppedFiles {
   /// not carry the file**, so the file already there is what will satisfy it.
   ///
   /// Real, and not rare: an author who replaced only one component ships a
-  /// fraction of what their own `.ini` references (`stale_ini.dart` measured 8
-  /// of 36 on one mod). Removing this file would take a working mod and break
-  /// it on the update that was supposed to improve it — the one outcome worse
+  /// fraction of what their own `.ini` references (8 of 36 on one real mod).
+  /// Removing this file would take a working mod and break it on the update that was supposed to improve it — the one outcome worse
   /// than a leftover, so the leftover wins.
   final List<String> stillNeeded;
 
@@ -134,9 +128,8 @@ class DroppedFiles {
 /// become `replaced` when a base is put underneath it — which is the operation
 /// that builds the store.
 ///
-/// Returns [DroppedFiles.nothing] for a download with no file record: a folder
-/// installed before the record existed has no way to tell its files from
-/// anything else's, and guessing would delete the mod.
+/// Returns [DroppedFiles.nothing] for an empty record: this never infers anything from the folder.
+/// Treating a folder with no record as its own record is `UpdateApplier.preview`'s decision, made where the patch above is known and excluded first.
 DroppedFiles planDroppedFiles({
   required List<InstalledFile> recorded,
   required Set<String> incoming,

@@ -116,7 +116,6 @@ void main() {
     List<Directory> baseSources, {
     required List<String> patchFiles,
     ModIngest? ingest,
-    bool deleteStale = true,
   }) async {
     final preview = await applier.preview(
       modFolder: folder,
@@ -129,7 +128,6 @@ void main() {
       modFolder: folder,
       preview: preview,
       patchFiles: patchFiles,
-      deleteStaleInis: deleteStale,
     );
   }
 
@@ -351,11 +349,35 @@ void main() {
     });
   });
 
-  group('the patch is not part of the base update', () {
-    test('the patch\'s own .ini is never offered as a stale leftover',
+  group('the placement ignores the old files going', () {
+    test('a name the old base kept elsewhere does not make the placement ambiguous',
         () async {
-      // `fix.ini` belongs to the other download. Offered for deletion it reads
-      // as "the update renamed this", and accepting it deletes the patch.
+      // Old base at `Textures/Body.dds`, new base at `Body.dds`, patch at `Body.dds`.
+      // Judged against the folder as it stands the patch has two candidates and the write would refuse;
+      // the old one is about to be removed, so only the new base's file counts.
+      final mod = modFolder('Ellen Fix');
+      write(mod, 'ellen.ini', modIni('Textures/Body.dds'));
+      write(mod, 'Textures/Body.dds', 'base v1');
+      write(mod, 'Body.dds', 'patched');
+
+      final base = incoming('Ellen');
+      write(base, 'ellen.ini', modIni('Body.dds'));
+      write(base, 'Body.dds', 'base v2');
+
+      final result =
+          await run('Ellen Fix', mod, [base], patchFiles: ['Body.dds']);
+
+      expect(result.success, isTrue);
+      expect(read(mod, 'Body.dds'), 'patched');
+      expect(read(mod, 'Textures/Body.dds'), isNull);
+      expect(result.patchFiles, ['Body.dds']);
+    });
+  });
+
+  group('the patch is not part of the base update', () {
+    test('the patch\'s own files are never removed as the old version\'s',
+        () async {
+      // `fix.ini` and `Body.dds` belong to the other download, which is going back on top.
       final mod = modFolder('Ellen Fix');
       write(mod, 'fix.ini', modIni('Body.dds'));
       write(mod, 'Body.dds', 'patched');
@@ -370,11 +392,11 @@ void main() {
         excluding: ['fix.ini', 'Body.dds'],
       );
 
-      expect(preview.staleInis.stale, isEmpty);
+      expect(preview.dropped.remove, isEmpty);
     });
 
-    test('a stale .ini of the base itself is still offered', () async {
-      // The exclusion must not blind the rule to the base's own leftovers.
+    test('an old file of the base itself still goes', () async {
+      // The exclusion must not blind the removal to the base's own old files.
       final mod = modFolder('Ellen Fix');
       write(mod, 'ellen.ini', modIni('Body.dds'));
       write(mod, 'Body.dds', 'base v1');
@@ -390,8 +412,7 @@ void main() {
         excluding: ['Patch.dds'],
       );
 
-      expect(preview.staleInis.stale.map((ini) => ini.path),
-          contains('ellen.ini'));
+      expect(preview.dropped.remove, ['ellen.ini']);
     });
 
     test('the folder is judged as if the patch were not in it', () async {

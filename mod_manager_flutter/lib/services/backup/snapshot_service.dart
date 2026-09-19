@@ -191,13 +191,8 @@ class SnapshotService {
 
   /// Writes a snapshot's `files/` back over [modFolder].
   ///
-  /// **Overwrite, like the update itself.** Restoring by emptying the folder
-  /// first would destroy anything the user added since — the very case the
-  /// update path refuses to destroy. What that leaves behind is files the newer
-  /// version shipped and the older one did not, which matters for exactly one
-  /// file class: an orphaned `.ini` fights the restored one. The caller resolves
-  /// that with the same stale-`.ini` rule the update uses, in the opposite
-  /// direction.
+  /// A copy, not a replacement: the caller removes what the newer version added afterwards,
+  /// so a copy that fails part-way has deleted nothing.
   Future<bool> restoreInto(ModSnapshot snapshot, Directory modFolder) async {
     try {
       final files = Directory(path.join(snapshot.directory.path, 'files'));

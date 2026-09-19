@@ -6,9 +6,8 @@
 /// different question that the update path depends on: *which files on disk does
 /// this `.ini` expect to find?* A download whose `.ini` names resources it does
 /// not ship cannot stand on its own, which is the definition of a patch (see
-/// `services/patch_detection.dart`), and an `.ini` left behind by an upstream
-/// rename is recognised by the resources it names still being present (see
-/// `services/update_apply/stale_ini.dart`).
+/// `services/patch_detection.dart`),
+/// and a file an update would remove is kept when the new `.ini` still names it (see `services/update_apply/dropped_files.dart`).
 ///
 /// **Pure.** The caller reads the files; this only parses text. That is what
 /// lets both uses be tested against fixture strings rather than a temp

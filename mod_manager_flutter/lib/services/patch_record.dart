@@ -70,12 +70,9 @@ ModOrigin? withPatchShape(ModOrigin? current, {ModDownload? base}) {
 /// feature quietly unavailable for exactly the folders most likely to be
 /// hand-assembled.
 ///
-/// **A patch with no mod id is still recorded**, unlike under the old shape,
-/// which required an identity and therefore wrote nothing at all for a patch
-/// dragged off a disk. The install knows exactly which files it laid down even
-/// when it cannot say which mod they are, and that is enough to set the layer
-/// aside on a base update and to take it back out. What it cannot do is be
-/// checked for updates, which follows from the null id on its own.
+/// **A patch with no mod id is still recorded.** The install knows exactly which files it laid down even when it cannot say which mod they are,
+/// and that is enough to set the layer aside on a base update.
+/// What it cannot do is be checked for updates or be taken back out: both need a page, the second because the store of displaced files is keyed by it.
 ModOrigin withAppliedPatch(ModOrigin? current, ModDownload patch) {
   final base =
       current ?? const ModOrigin(provenance: OriginProvenance.importedFolder);

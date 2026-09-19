@@ -17,7 +17,7 @@ the root [`README.md`](../README.md).
 | [`origin-tracking.md`](origin-tracking.md) | What the app **knows about where a mod came from**: the confidence model, every route that writes an `origin` block, the offline backfill, the resolve flow, and the installed-mods index |
 | [`metadata-autofill.md`](metadata-autofill.md) | What a marketplace install **copies from a mod page** into the new mod: description, character, tags and gallery |
 | [`update-checks.md`](update-checks.md) | How the app decides a mod **has a newer version published**: the comparator, the confidence-aware verdicts, the whole-library pass and the two surfaces that show a result |
-| [`applying-updates.md`](applying-updates.md) | How a newer download is **written over an installed mod**: the overwrite, patch detection, orphaned `.ini` files, replaying the install layout, snapshots and rollback |
+| [`applying-updates.md`](applying-updates.md) | How a newer download is **written over an installed mod**: the overwrite, patch detection, removing the old version's files, replaying the install layout, snapshots and rollback |
 | [`patch-destinations.md`](patch-destinations.md) | **Which mod folder a patch is installed into**: the filename fingerprint, the author's declared requirement, what each is measured to be worth, and why the list is ordered rather than narrowed |
 | [`disk-usage.md`](disk-usage.md) | **What the app is keeping on disk**: the Storage tab's six categories and why they are disjoint, apparent size versus free space, the shared directory walk, and what the reclaim may delete |
 | [`configuration.md`](configuration.md) | The app's **own settings**: `config.json`, the SharedPreferences mirror, the dual-storage pattern, and how to add a setting |

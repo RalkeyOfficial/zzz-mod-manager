@@ -58,7 +58,6 @@ void main() {
     Directory folder,
     List<Directory> sources, {
     ModIngest? ingest,
-    bool deleteStale = true,
   }) async {
     final preview = await applier.preview(
       modFolder: folder,
@@ -69,13 +68,12 @@ void main() {
       modName: modName,
       modFolder: folder,
       preview: preview,
-      deleteStaleInis: deleteStale,
     );
   }
 
-  test('an update overwrites colliding files and leaves the rest alone', () async {
-    // The whole reason overwrite was chosen over replace: `hand_merged.dds` is
-    // a second download living in the folder, and replacing would destroy it.
+  test('with no record, everything in the folder counts as the old version', () async {
+    // Nothing says what the last version wrote, so `hand_merged.dds` goes with it: the folder ends up holding the new version and nothing else.
+    // The snapshot is the way back.
     final mod = modFolder('Ellen');
     write(mod, 'ellen.ini', 'filename = Body.dds');
     write(mod, 'Body.dds', 'v1');
@@ -89,7 +87,8 @@ void main() {
 
     expect(result.success, isTrue);
     expect(read(mod, 'Body.dds'), 'v2');
-    expect(read(mod, 'hand_merged.dds'), 'somebody else');
+    expect(read(mod, 'hand_merged.dds'), isNull);
+    expect(result.droppedFiles, ['hand_merged.dds']);
   });
 
   test('the folder keeps its own name even when the archive renamed its own',
@@ -137,7 +136,8 @@ void main() {
     expect(sidecar, contains('"uid"'));
   });
 
-  test('a renamed upstream .ini is offered up and removed', () async {
+  test('a renamed upstream .ini goes with the old version', () async {
+    // Left in place it would load beside its successor, doubling the mod's hotkeys.
     final mod = modFolder('Ellen');
     write(mod, 'ellen.ini', 'filename = Body.dds');
     write(mod, 'Body.dds', 'v1');
@@ -150,28 +150,21 @@ void main() {
       modFolder: mod,
       incomingFolders: [source.path],
     );
-    expect(preview.staleInis.stale.map((s) => s.path), ['ellen.ini']);
+    expect(preview.dropped.remove, ['ellen.ini']);
 
     final result = await applier.apply(
       modName: 'Ellen',
       modFolder: mod,
       preview: preview,
-      deleteStaleInis: true,
     );
-    expect(result.removedInis, ['ellen.ini']);
+    expect(result.droppedFiles, ['ellen.ini']);
     expect(read(mod, 'ellen.ini'), isNull);
     expect(read(mod, 'ellen_v2.ini'), isNotNull);
   });
 
-  test('a stale .ini is deleted under its real, mixed-case name', () async {
-    // The regression this whole `actualPaths` mechanism exists for. Every other
-    // test here writes a lower-case `ellen.ini`, which is the one spelling that
-    // happened to work — mod authors ship `Ellen.ini`, `Miyabi.ini`,
-    // `MasterNico.ini`. Comparison is normalised (3DMigoto is
-    // case-insensitive), so the path reaching `File` was lower-cased, `exists()`
-    // answered false on Linux, nothing was deleted and nothing was reported:
-    // the user consented, saw no error, and kept the two live `.ini` files the
-    // rule exists to prevent.
+  test('an old .ini is deleted under its real, mixed-case name', () async {
+    // Mod authors ship `Ellen.ini`, `Miyabi.ini`, `MasterNico.ini`, and comparison is normalised because 3DMigoto is case-insensitive.
+    // A lower-cased path reaching `File` opens nothing on Linux, so nothing would be deleted and nothing reported.
     final mod = modFolder('Ellen');
     write(mod, 'Ellen.ini', 'filename = Body.dds');
     write(mod, 'Body.dds', 'v1');
@@ -182,13 +175,13 @@ void main() {
 
     final result = await run('Ellen', mod, [source]);
 
-    expect(result.removedInis, ['Ellen.ini'],
+    expect(result.droppedFiles, ['Ellen.ini'],
         reason: 'reported under the name the user actually has');
     expect(read(mod, 'Ellen.ini'), isNull);
     expect(read(mod, 'Ellen_v2.ini'), isNotNull);
   });
 
-  test('the preview names leftovers as they are spelled on disk', () async {
+  test('the preview names old files as they are spelled on disk', () async {
     final mod = modFolder('Ellen');
     write(mod, 'Ellen.ini', 'filename = Body.dds');
     write(mod, 'Body.dds', 'v1');
@@ -200,24 +193,9 @@ void main() {
       modFolder: mod,
       incomingFolders: [source.path],
     );
-    // Normalised for comparing, real for showing — the confirmation quotes the
-    // second, or it names a file the user does not have.
-    expect(preview.staleInis.stale.single.path, 'ellen.ini');
+    // The confirmation quotes these, so they must name a file the user has.
+    expect(preview.dropped.remove, ['Ellen.ini']);
     expect(preview.onDisk('ellen.ini'), 'Ellen.ini');
-  });
-
-  test('declining the prompt keeps the leftover .ini', () async {
-    final mod = modFolder('Ellen');
-    write(mod, 'ellen.ini', 'filename = Body.dds');
-    write(mod, 'Body.dds', 'v1');
-
-    final source = incoming('Ellen');
-    write(source, 'ellen_v2.ini', 'filename = Body.dds');
-    write(source, 'Body.dds', 'v2');
-
-    final result = await run('Ellen', mod, [source], deleteStale: false);
-    expect(result.removedInis, isEmpty);
-    expect(read(mod, 'ellen.ini'), isNotNull);
   });
 
   test('an incoming patch is reported before anything is written', () async {
@@ -356,7 +334,6 @@ void main() {
       modName: 'Ellen',
       modFolder: mod,
       preview: preview,
-      deleteStaleInis: true,
     );
 
     expect(result.success, isFalse);
@@ -406,7 +383,6 @@ void main() {
       modName: 'Ellen',
       modFolder: mod,
       preview: preview,
-      deleteStaleInis: true,
     );
 
     expect(result.success, isFalse);
@@ -463,7 +439,6 @@ void main() {
       modName: 'Ellen',
       modFolder: mod,
       preview: preview,
-      deleteStaleInis: true,
     );
     expect(result.failure, UpdateApplyFailure.layout);
     expect(read(mod, 'ellen.ini'), 'x = 1');
@@ -554,7 +529,7 @@ void main() {
       expect((await snapshots.list(uid)).length, 2);
     });
 
-    test('removes the .ini the newer version added, in reverse', () async {
+    test('removes what the newer version added, in reverse', () async {
       final mod = modFolder('Ellen');
       write(mod, 'ellen.ini', 'filename = Body.dds');
       write(mod, 'Body.dds', 'v1');
@@ -562,16 +537,21 @@ void main() {
       final source = incoming('Ellen');
       write(source, 'ellen_v2.ini', 'filename = Body.dds');
       write(source, 'Body.dds', 'v2');
+      write(source, 'Textures/Glow.dds', 'new');
       final applied = await run('Ellen', mod, [source]);
       expect(read(mod, 'ellen.ini'), isNull);
 
-      await applier.restore(
+      final restored = await applier.restore(
         modName: 'Ellen',
         modFolder: mod,
         snapshot: applied.snapshot!,
       );
       expect(read(mod, 'ellen.ini'), isNotNull);
       expect(read(mod, 'ellen_v2.ini'), isNull);
+      expect(read(mod, 'Textures/Glow.dds'), isNull);
+      expect(Directory(p.join(mod.path, 'Textures')).existsSync(), isFalse,
+          reason: 'a folder only the newer version used goes with its file');
+      expect(restored.droppedFiles, unorderedEquals(['ellen_v2.ini', 'Textures/Glow.dds']));
     });
   });
 

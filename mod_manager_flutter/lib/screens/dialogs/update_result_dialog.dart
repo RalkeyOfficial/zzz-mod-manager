@@ -219,15 +219,6 @@ class _UpdateResultDialog extends StatelessWidget {
                       params: {'count': '${result.filesWritten}'},
                     ),
                   ),
-                  if (result.removedInis.isNotEmpty)
-                    DialogFact(
-                      icon: Icons.delete_outline,
-                      label: loc.t('mods.update_apply.done_removed_label'),
-                      value: result.removedInis.join(', '),
-                    ),
-                  // Its own row rather than folded into the one above: those
-                  // were `.ini` files the user ticked a box for, and these are
-                  // the ones the record settled without asking.
                   if (result.droppedFiles.isNotEmpty)
                     DialogFact(
                       icon: Icons.auto_delete_outlined,

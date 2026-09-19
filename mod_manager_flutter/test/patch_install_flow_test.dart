@@ -494,11 +494,10 @@ void main() {
       expect(layer.archiveMd5, 'abc123');
     });
 
-    test('a folder dragged off a disk is installed with nothing recorded',
+    test('a folder dragged off a disk is recorded by its files alone',
         () async {
-      // It has no mod page, so there is no second identity to record — and a
-      // companion must name one. The files still go in, the copy is still
-      // saved first, and the mod keeps saying exactly what it said before.
+      // It has no mod page, so the layer has no id and cannot be checked for updates.
+      // The files it wrote are still recorded, which is what lets a base update put it back.
       final was = originFixture(
         provenance: OriginProvenance.downloaded,
         source: 'gamebanana',
@@ -525,8 +524,12 @@ void main() {
 
       expect(read(p.join(modsPath, 'Ellen'), 'Body.dds'), 'v2',
           reason: 'the install itself is the same operation either way');
-      expect(origins['Ellen'], was,
-          reason: 'no invented identity, and nothing quietly rewritten');
+      final recorded = origins['Ellen']!;
+      expect(recorded.base, was.base, reason: 'the mod underneath is untouched');
+      final layer = recorded.patches.single;
+      expect(layer.modId, isNull, reason: 'no invented identity');
+      expect(layer.files.map((file) => file.path), ['Body.dds']);
+      expect(recorded.ingest?.patchFiles, ['Body.dds']);
       expect(lines.map((l) => l.title),
           contains(loc.t('mods.snackbar.patch_applied_title')));
     });

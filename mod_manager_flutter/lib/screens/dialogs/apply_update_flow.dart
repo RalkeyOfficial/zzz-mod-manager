@@ -50,9 +50,8 @@ import 'update_result_dialog.dart';
 ///    half-finished extraction never touches the installed mod, which is the
 ///    crash-safety property the rejected swap-the-folder design needed a swap
 ///    for.
-/// 3. **Preview.** Patch shape, orphaned `.ini` files, and whether the archive's
-///    layout still matches how this mod was installed — every question that can
-///    only be asked before the copy.
+/// 3. **Preview.** Patch shape, the old files going, and whether the archive's layout still matches how this mod was installed —
+///    every question that can only be asked before the copy.
 /// 4. **Ask.** Including the one thing the user must be told rather than
 ///    discover: keybinds they rebound inside the folder will be reverted by a
 ///    shipped `.ini`, and the snapshot is the way back.
@@ -221,14 +220,12 @@ Future<bool> applyUpdateFlow(
       incomingFolders: folders,
       ingest: mod.origin?.ingest,
       // The patch belongs to neither side of the base's update: it is going back
-      // on top afterwards. Left in, its own `.ini` is assessed as a leftover the
-      // base renamed and offered for deletion, which deletes the patch.
+      // on top afterwards. Left in, its files count as the old version's and go.
       excluding: patchFiles,
       // **The bottom layer's record**, because that is the layer this writes.
       // What it names is removed where the new version has no file by that name,
-      // which is how a renamed `.ini` or a dropped shader stops being loaded
-      // instead of lingering. Empty for a mod installed before the record
-      // existed — see `dropped_files.dart`.
+      // which is how a renamed `.ini` or a dropped shader stops being loaded instead of lingering.
+      // Empty for a mod installed before the record existed, and then the whole folder counts as the old version.
       recorded: mod.origin?.base?.files ?? const <InstalledFile>[],
     );
 
@@ -275,7 +272,7 @@ Future<bool> applyUpdateFlow(
             refused: group.refused,
             otherFolders: group.otherFolders,
           )
-        : const UpdateConfirmChoice(removeStaleInis: true);
+        : const UpdateConfirmChoice();
     if (confirm) {
       // **What the consent covered, keyed on what was accepted rather than on
       // how many.** Unticking the mod the dialog was opened on is coherent, and
@@ -291,7 +288,6 @@ Future<bool> applyUpdateFlow(
             'file_id': file.idRow,
             'flattens_patch': flattensPatch,
             if (reinstall) 'reinstall': true,
-            if (choice != null) 'remove_stale_inis': choice.removeStaleInis,
             if (also.isNotEmpty) 'also': also,
             if (accepted.isNotEmpty && !accepted.contains(mod.id))
               'subject_skipped': true,
@@ -330,7 +326,6 @@ Future<bool> applyUpdateFlow(
       remoteModId: remoteModId,
       file: file,
       archiveMd5: extraction.archiveMd5 ?? download.md5,
-      deleteStaleInis: choice.removeStaleInis,
       asCompanion: asCompanion,
       primary: primary,
     );
@@ -755,7 +750,6 @@ Future<List<AppliedUpdate>> _writeAll({
   required int remoteModId,
   required GbFile file,
   required String? archiveMd5,
-  required bool deleteStaleInis,
   required bool asCompanion,
   required UpdateTarget primary,
 }) async {
@@ -769,7 +763,6 @@ Future<List<AppliedUpdate>> _writeAll({
         modName: target.mod.id,
         modFolder: Directory(path.join(modsPath, target.mod.id)),
         preview: target.preview,
-        deleteStaleInis: deleteStaleInis,
         patchFiles: target.patchFiles,
         patchModId: target.patchModId,
         previousVersion: target.mod.origin?.base?.version,

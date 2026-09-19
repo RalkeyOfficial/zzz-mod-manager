@@ -1084,9 +1084,9 @@ writes after it. What differs is only what can be *recorded*: a Marketplace
 download knows which mod page and file it is, and a folder dragged off a disk has
 none — so the layer written for the second carries **no `mod_id`**. It is still
 written: a layer with no identity is a download nobody can name, and its *files*
-are known, which is enough to set it aside on a base update and to take it back
-out. What it cannot do is be checked for updates. (The old shape required an
-identity and therefore recorded nothing at all for such a patch.) The install
+are known, which is enough to set it aside on a base update.
+What it cannot do is be checked for updates or be taken back out: both need a page,
+the second because the mod's displaced files are kept under the patch's id. The install
 itself — the placement, the snapshot, the refusals, the warnings — is the same
 operation either way.
 

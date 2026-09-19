@@ -90,7 +90,6 @@ void main() {
       'mods.update.bulk_found',
       'mods.update.launch_checked',
       'mods.update_apply.keybinds_heading',
-      'mods.update_apply.remove_stale',
       'settings.auto_tag.tag',
     ];
     for (final loc in [en, uk]) {

@@ -7,7 +7,7 @@ refuses to do, and how a bad update is undone.
 implemented, it says so.
 
 > Scope: the mechanism that touches a live install — the overwrite, patch detection,
-> the orphaned-`.ini` rule, replaying the recorded install layout, the pre-update
+> removing the old version's files, replaying the recorded install layout, the pre-update
 > snapshot and its retention, and rollback. Deciding *whether* a mod has a newer
 > version is [`update-checks.md`](update-checks.md); this doc starts once that
 > question is answered and the user has pressed Update. What a **fresh install**
@@ -20,29 +20,16 @@ Related: [`../CLAUDE.md`](../CLAUDE.md) for the service/layer architecture.
 
 ## 1. The mechanism is overwrite
 
-**Extract to a temp directory, sanity-check it, then copy over the live folder.**
-Never empty it, never move it, never delete it. Everything else in this document
-follows from that one decision, so the reasoning comes first.
+**Extract to a temp directory, sanity-check it, copy over the live folder, then remove what the previous version shipped and the new one does not.**
+The folder itself is never moved, emptied or replaced.
 
 A mod folder is often **mixed**: it holds files from two downloads, because a *patch
 mod* was applied into it. Patches replace rather than add — a patch `.ini` carries
 the **same filename** as the mod's own and takes its place, and a patch asset
 likewise overwrites one of the mod's files. So a mixed folder looks completely
 ordinary from the outside: one `.ini`, every referenced file present, nothing extra.
-There is no way to look at such a folder and see that it is two things.
-
-Replacing such a folder destroys the other download, and the common case is worse
-than losing a fix. The ordering that produces it is routine:
-
-1. A page looks like a normal mod, so it gets installed.
-2. The game shows nothing.
-3. The user reads the page properly, finds it is a patch, and drags the base mod's
-   files in around it.
-
-The app now knows that folder as **the patch**. Replace it and what remains is a lone
-`.ini` with nothing to apply to — the mod is *gone*, not merely unfixed. Overwrite in
-the same situation copies the new patch file over the old one and touches nothing
-else, which is exactly right.
+What tells the two apart is the record each download keeps of the files it wrote ([§3](#3-a-mod-with-no-file-record) covers the folders that have none),
+and an update to one download sets the other aside and puts it back ([§6](#base-first-then-patch--for-both-halves-of-a-mixed-folder)).
 
 Three properties fall out of overwrite for free, each of which the rejected
 swap-the-folder design needed machinery for:
@@ -81,12 +68,8 @@ claimed by no other download in the folder. `services/update_apply/dropped_files
 decides it before anything is written; the applier deletes those paths after the copy
 and removes a directory whose last file it just took.
 
-That is asked, but not offered as a choice the way [§3](#3-orphaned-ini-files)'s
-prompt is. §3 is an inference and can be wrong about somebody's merged second mod;
-this is the download's own record of what it wrote, and a file the new version has no
-name for is exactly what "update this mod" means to remove. What it buys over §3 is
-the case §3 has no signal for at all — an asset no `.ini` in the folder mentions any
-more.
+It is not offered as a choice: a file the new version has no name for is exactly what "update this mod" means to remove,
+and the snapshot is the way back. Nothing is inferred from the folder's contents.
 
 Five things it refuses to touch, and each is a different reason:
 
@@ -95,7 +78,7 @@ Five things it refuses to touch, and each is a different reason:
 | a path **another** download in the folder records | the file there now is that download's, not the old version's — deleting it is the destruction overwrite exists to avoid |
 | a file **the new version's own `.ini` still names** and the archive did not carry | an author who replaced one component ships a fraction of what their `.ini` references, and removing it breaks a working mod on the update meant to improve it |
 | a recorded file that is **already gone** | the record says what the app wrote, so the user deleting one since is an edit rather than damage |
-| a file **nothing recorded writing** | there is no licence to delete it; a folder with no record at all behaves exactly as it did before this existed |
+| a file **nothing recorded writing**, where a record exists | there is no licence to delete it; a folder with no record at all is [§3](#3-a-mod-with-no-file-record) |
 | a **displaced original that was never kept** | deleting it would leave a hole where the file underneath used to be — see [§5](#a-patchs-displaced-files-are-kept-separately-and-in-the-folder) |
 
 **The role on a record is not the test, and getting that backwards would silently do
@@ -112,11 +95,8 @@ added. The stored copy is deliberately left where it is: the path is one the pat
 longer touches, and if a later version reaches for it again `PatchStore.keep` finds an
 original already on hand — the mod's, which is the one that has to survive.
 
-Two caveats worth knowing rather than discovering:
+One caveat worth knowing rather than discovering:
 
-- Do **not** "solve" leftovers by clearing all `.ini` files before copying. Harmless
-  on a folder with one `.ini`, destructive on a folder where two are live (two mods
-  merged by hand), and it buys only what §3's prompt already does with consent.
 - Shaders are picked up by **filename convention**, from the single directory
   `override_directory` names in `d3dx.ini` — `ShaderFixes` at the game root, not
   recursively and not per-mod. So a `ShaderFixes/` folder left inside a mod folder
@@ -125,6 +105,24 @@ Two caveats worth knowing rather than discovering:
   `.ini`-referenced and covered by the rules above. **The leftover that can still
   be live is a shader the user copied to the game root**, which no mod folder
   contains and nothing here records.
+
+### Comparison paths are normalised; filesystem paths are not
+
+Every path in `FolderContents` is lower-cased, because 3DMigoto is case-insensitive
+and the comparison has to be. **That spelling is correct for comparing and wrong for
+everything else.** `FolderContents.actualPaths` maps each normalised path back to the
+name on disk, and anything that touches `File` or reaches a user goes through it.
+
+This is not a hypothetical. Mod authors ship `Ellen.ini`, `Miyabi.ini`,
+`MasterNico.ini`; all-lower-case is the rare spelling. Deleting an old `.ini` through
+the normalised path opened nothing on Linux — `exists()` answered false, the loop
+reported nothing removed, no error was raised anywhere, and the user was left with
+two live `.ini` files. The confirmation had the same fault cosmetically, naming `ellen.ini` for a
+file called `Ellen.ini`.
+
+**Every test in the suite wrote a lower-case filename**, which is why nothing caught
+it: the feature was only ever exercised on the one spelling that happened to work.
+`update_applier_test.dart` pins the mixed-case case.
 
 ### Excluded from the copy: `.zzz-mod-manager/`
 
@@ -277,9 +275,8 @@ It no longer carries the patch verdict — "brought no content" does that — bu
 not redundant:
 
 - It keeps `PatchAssessment.missing` honest, which is the count the warning quotes.
-- **The stale-`.ini` rule depends on it** ([§3](#3-orphaned-ini-files)), and that rule
-  is about overlap rather than absence, so a dead declaration there changes the
-  answer.
+- **The old-file removal depends on it** ([§1](#what-overwrite-leaves-behind-and-what-is-taken-away-instead)):
+  a file the new `.ini` still names is kept, so a dead declaration there keeps a file nothing loads.
 
 ### The asset patch: an asset with no `.ini` is waiting for someone else's
 
@@ -358,80 +355,23 @@ own update usually contains the same fix.
 
 ---
 
-## 3. Orphaned `.ini` files
+## 3. A mod with no file record
 
-The loader reads **every** `.ini` in a mod folder. When an update renames its own —
-`ellen.ini` becomes `ellen_v2.ini` — the overwrite writes the new one and the old one
-simply stays, and both are live: duplicate hotkeys, two sets of overrides on the same
-hashes, and a user who reports that the update broke their mod.
+Every mod installed before the app recorded file lists has nothing that says which files its last version wrote.
+On its first update through the app, **everything in the folder counts as the previous version**:
+the removal in [§1](#what-overwrite-leaves-behind-and-what-is-taken-away-instead) runs over the folder's own contents as if they were the record,
+with the same exceptions, so a file the new `.ini` still names stays and a recorded patch above the base is set aside first and put back afterwards.
+What is left is the new version, the patch, and the sidecar.
 
-**Where the last version's file list is on record this rule never sees the rename**,
-because [§1](#what-overwrite-leaves-behind-and-what-is-taken-away-instead) has
-already removed `ellen.ini` by name — and putting a question to the user about a file
-that is going either way is not offering a choice. What is left for the inference
-below is the unrecorded half of a library: mods installed before the record existed,
-and the second download in a folder somebody merged by hand.
+The confirmation says that nothing records the version on disk and names the files going, since this is the one case where the user may recognise one as their own,
+and asks nothing else. The update records the files it wrote, so the mod's next update works from a record like any other.
 
-The obvious rule — *any `.ini` we did not just write is a leftover* — is wrong, and
-wrong in the direction this whole path exists to avoid. It would offer, by default,
-to delete the `.ini` of a second mod merged into the same folder.
+**What this gives up.** A second mod merged into the same folder by hand in a file manager, with nothing recorded about it,
+goes with the old version on that first update. The app cannot tell it from the old version, and it does not guess.
+That folder is a state the user built outside the app, and the snapshot taken before the write still holds every file.
 
-So the test is not "did we write this file" but **"does this file describe the
-content we just wrote"**:
-
-> A leftover `.ini` is stale when every resource it names **and the folder actually
-> has** is a file the incoming download ships.
-
-- An upstream rename satisfies that by construction: the renamed `.ini` is a full
-  replacement for the old one, so it references the same resources.
-- A hand-merged second mod does not — it names *its own* files, which the incoming
-  download knows nothing about.
-- A patch `.ini` shares the mod's filename, so it is **overwritten** rather than
-  orphaned and never reaches this rule at all. That is why this is an occasional
-  prompt rather than a routine screen needing a bulk path.
-
-**"And the folder actually has" is load-bearing, not a guard.** Because of the
-template-`.ini` idiom described in [§2](#2-patch-detection), an ordinary mod's `.ini`
-references several components' worth of files it never shipped. Comparing against the
-whole reference list would find those absent from the incoming download too, conclude
-"not stale", and quietly stop offering to remove the very file this rule exists for.
-Restricting to references the folder satisfies today asks the question that was always
-meant.
-
-An `.ini` naming nothing checkable is **kept without asking**. "We could not tell" is
-not "safe to delete", and the cost of keeping one is a duplicate the user can still
-remove by hand, against the cost of deleting somebody's merged mod.
-
-### Comparison paths are normalised; filesystem paths are not
-
-Every path in `FolderContents` is lower-cased, because 3DMigoto is case-insensitive
-and the comparison has to be. **That spelling is correct for comparing and wrong for
-everything else.** `FolderContents.actualPaths` maps each normalised path back to the
-name on disk, and anything that touches `File` or reaches a user goes through it.
-
-This is not a hypothetical. Mod authors ship `Ellen.ini`, `Miyabi.ini`,
-`MasterNico.ini`; all-lower-case is the rare spelling. Deleting a stale `.ini` through
-the normalised path opened nothing on Linux — `exists()` answered false, the loop
-reported nothing removed, no error was raised anywhere, and the user was left with the
-two live `.ini` files this rule exists to prevent, having ticked the box and been told
-nothing. The confirmation had the same fault cosmetically, naming `ellen.ini` for a
-file called `Ellen.ini`.
-
-**Every test in the suite wrote a lower-case filename**, which is why nothing caught
-it: the feature was only ever exercised on the one spelling that happened to work.
-`update_applier_test.dart` now pins the mixed-case case in both directions.
-
-The confirmation defaults to **remove**, names the files, and separately names the
-ones the rule refused to touch — the second list is also the signal that the folder
-is mixed.
-
-The residual cost is honest and small: if a stale file had itself been patched,
-deleting it drops the patch. Keeping it is worse (two live `.ini` files), and the
-snapshot still holds it.
-
-`services/update_apply/stale_ini.dart` is the rule, and it is used in **both
-directions** — a rollback orphans the `.ini` the newer version added, which is stale
-exactly when the snapshot carries everything it names.
+Inferring which `.ini` files are the old version's from the resources they name, and asking before deleting them, is rejected.
+It asks on every unrecorded mod's first update, about files the user has never seen, and the answer is always the same.
 
 ---
 
@@ -552,9 +492,7 @@ otherwise have every member absorb the same one.
 **With nothing left writable, the screen says what stopped each mod and stops
 there.** A group can refuse every one of its members while each member's own layout
 is fine, so "blocked" is *nothing is writable*, never *the layout is unreadable* —
-and a confirmation body below that title would describe a write that cannot happen,
-name the file being installed and offer to remove leftovers from folders nothing
-will touch.
+and a confirmation body below that title would describe a write that cannot happen and name the file being installed.
 
 **A folder the write does not go into is named as unused, whichever member recorded
 it.** That list is the complement of what is written, so a refused member's folder
@@ -568,11 +506,7 @@ correctly updated — and stopping would waste the download this exists to share
 result dialog reports a block per folder with that folder's own keybind diff, because
 which folder a fact belongs to is part of the fact.
 
-**Two things are said once for the group** rather than per member: the snapshot,
-overwrite and keybind notices, and the leftover-`.ini` question. That question has the
-same answer every time — an orphaned `.ini` is live the moment the loader reads a
-folder, and the rule that produced each list already refused every leftover it could
-not prove describes the incoming content — so a checkbox per folder would be a quiz.
+**The snapshot, overwrite and keybind notices are said once for the group** rather than per member.
 The counts differ per folder and stay on their own rows.
 
 **Retention runs between folders, not once at the end.** Three members of a large
@@ -694,7 +628,7 @@ Three rules keep it honest:
 
 A snapshot placed *inside* the mod folder is reachable through the active symlink, so
 the loader walks into it and reads the old version's `.ini` alongside the new one —
-the exact duplicate-hotkey failure §3 exists to prevent. It is a *verbatim* copy,
+the exact duplicate-hotkey failure removing old files exists to prevent. It is a *verbatim* copy,
 so unlike the store above there is no renaming that could make it safe.
 
 ```
@@ -809,8 +743,9 @@ Reachable from a mod's right-click menu, and only for mods that have a snapshot 
 finding `<appData>/backups/` in a file manager, "recoverable from the snapshot" would
 not be a real answer to a user who has just lost a mesh fix.
 
-A restore **snapshots first**, so it is itself undoable, then overwrite-copies the
-snapshot back and applies §3's rule in reverse.
+A restore **snapshots first**, so it is itself undoable, then copies the snapshot back and removes the files the newer version added,
+so nothing of it is left loading. That removal has none of §1's exceptions: a file added by hand since the snapshot goes too,
+and the backups dialog says so. The sidecar comes back with the copy, unlike on an update, so the record matches the restored files.
 
 **The rollback list is refreshed whenever a snapshot was taken, not only when the
 update succeeded** — and the failure path is the one that matters. A copy that broke
@@ -873,7 +808,7 @@ the next one refusable:
 1. **Download** to `<appData>/downloads`. Cancellable; nothing local has changed.
 2. **Extract to temp** and check it produced folders. A failed extraction keeps the
    archive and says where it is.
-3. **Preview** — layout, patch shape, orphaned `.ini` files. Every question that can
+3. **Preview** — layout, patch shape, the old files going. Every question that can
    only be asked before the copy.
 4. **Ask.** Including the accepted keybind loss and the snapshot, stated rather than
    discovered. Those three sit together under *what this does to the folder*, with
@@ -882,7 +817,7 @@ the next one refusable:
    things it pays for. The patch warning is the only notice given the amber emphasis,
    because it is the only one that changes what the update will *do* rather than
    describing it.
-5. **Deactivate → snapshot → copy → resolve leftovers → reactivate.**
+5. **Deactivate → snapshot → copy → remove the old version's files → reactivate.**
 6. **Record** the new origin block, prune snapshots, rescan.
 
 The orchestration is at the widget layer because it is a *conversation*. Every
@@ -896,7 +831,7 @@ semantics.
 **"Reinstall this version…" is an update at the file id already recorded.**
 `screens/dialogs/reinstall_flow.dart` fetches the mod page, finds that one file and
 hands it to the same flow — so a repair inherits the snapshot, the patch set-aside,
-the leftover removal and the confirmation without any of them existing twice. Only
+the old-file removal and the confirmation without any of them existing twice. Only
 the wording differs, and it has to: "Update Ellen?" in front of a reinstall reads as
 an offer of something newer.
 
@@ -940,10 +875,8 @@ Three consequences of the file-by-file copy:
   is the *contents* of the source folder, never the folder — so a folder invented for
   a rootless archive cannot become a subfolder holding a second live `.ini` whose
   `filename` paths resolve beside itself.
-- **The orphaned-`.ini` rule has nothing true to say**, so nothing is removed. It
-  looks for an `.ini` whose every resource the incoming download also carries — the
-  renamed predecessor of an update — and a patch by definition carries less than the
-  mod it patches.
+- **Nothing is removed on a fresh install**: there is no previous version of the patch to take away.
+  An update to the patch removes what its last version recorded and the new one does not ship, as [§1](#what-overwrite-leaves-behind-and-what-is-taken-away-instead) describes.
 - **Our own sidecar is skipped**, as on the update path. An archive can arrive
   carrying one, and copying it over would replace the target's description, gallery
   and origin block.
@@ -991,16 +924,12 @@ one it should have replaced.
 the folder, writes the base as any download is written, and copies them back from
 the snapshot onto the new layout. Nothing is copied to a second temporary place,
 because the snapshot §5 takes unconditionally is already a full copy — and with the
-patch out of the way, the base's write is an ordinary update: `preview`'s
-stale-`.ini` rule sees only the base's own `.ini` files and cannot offer the
-patch's.
+patch out of the way, the base's write is an ordinary update: the patch's files count as neither side of it,
+so they are never removed as the old version's, whether or not the base has a record.
 
-Order inside it is load-bearing twice over. The placement is resolved **before
-anything is deleted** — against the folder the copy is about to produce — so a
-target that cannot be settled stops the operation while the patch is still in
-place. And the stale-`.ini` removal runs **before the patch goes back**, or a patch
-that had replaced the base's `.ini` would be put back and then deleted as the
-predecessor of the file that replaced it.
+Order inside it is load-bearing twice over. The placement is resolved **before anything is deleted** — against the folder the copy is about to produce,
+old files excluded — so a target that cannot be settled stops the operation while the patch is still in place.
+And the old files are removed **before the patch goes back**, or a patch placed onto a path the old version used would be put back and then deleted as the old version's.
 
 ### Which files are the patch's
 

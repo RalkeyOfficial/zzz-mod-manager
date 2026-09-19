@@ -19,55 +19,23 @@ import '../patch_detection.dart';
 import '../patch_placement.dart';
 import 'dropped_files.dart';
 import 'keybind_changes.dart';
-import 'stale_ini.dart';
 import 'update_layout.dart';
 
 /// Writing a newer download over an installed mod.
 ///
-/// **The mechanism is overwrite — extract to temp, sanity-check, then copy over
-/// the live folder.** Never empty it, never move it, never delete it.
-/// Everything else here follows from that one decision, so the reasoning comes
-/// first.
+/// **Extract to temp, sanity-check, then copy over the live folder** and delete what the previous version shipped and the new one does not.
+/// The folder is never moved or replaced, so its name, its active link and its `config.json` keys survive by construction,
+/// and a half-finished extraction never reaches the install.
+/// Deactivation is for open file handles only: the game's loader keeps them on Windows and the copy fails against them.
 ///
-/// A mod folder is often **mixed**: it holds files from two downloads, because a
-/// patch mod was applied into it. Patches replace rather than add — a patch
-/// `.ini` carries the same filename as the mod's own and takes its place, and a
-/// patch asset likewise overwrites one of the mod's files — so a mixed folder
-/// looks completely ordinary from outside: one `.ini`, every referenced file
-/// present, nothing extra.
+/// Which files count as the previous version is the download's own record (`ModDownload.files`).
+/// A folder with no record counts every file in it as the previous version, so its first update leaves exactly the new version behind,
+/// plus any patch recorded on top, which is set aside and put back.
 ///
-/// Replacing such a folder destroys the other download, and the common case is
-/// worse than losing a fix. The ordering that produces it is routine: a page
-/// looks like a normal mod, so it gets installed; the game shows nothing; the
-/// user reads the page properly, finds it is a patch, and drags the base mod's
-/// files in around it. The app now knows that folder as **the patch**. Replace
-/// it and what is left is a lone `.ini` with nothing to apply to — the mod is
-/// gone, not merely unfixed. Overwrite in the same situation copies the new
-/// patch file over the old one and touches nothing else, which is exactly right.
-///
-/// Three properties fall out of it for free, each of which the rejected
-/// swap-the-folder design needed machinery for:
-///
-/// - **The active link survives by construction.** Moving the folder would
-///   dangle `saveModsPath/<name>`, which the next scan prunes — silently
-///   switching the mod off. Nothing moves here, so nothing dangles.
-/// - **The folder name never changes**, so `config.json`'s `active_mods`,
-///   `favorite_mods` and `mod_character_tags` keys stay valid even though the
-///   new archive's root folder is frequently named differently.
-/// - **A half-finished extraction never touches the install**, because the
-///   extraction happens into a temp directory and only the final copy reaches
-///   the mod folder.
-///
-/// Deactivation is still performed, but for **open file handles only** — the
-/// game's loader keeps them on Windows and the copy fails against them — never
-/// for link integrity.
-///
-/// The decisions are all in pure units next door: [planUpdateLayout],
-/// [assessPatchShape], [assessStaleInis]. This file does the I/O and the
-/// ordering.
-/// One tag with a `phase` field, rather than a tag per phase: the five places
-/// this can fail are five stages of one operation, and a reader wants them
-/// together.
+/// The decisions are all in pure units next door: [planUpdateLayout], [assessPatchShape], [planDroppedFiles].
+/// This file does the I/O and the ordering.
+/// One tag with a `phase` field, rather than a tag per phase: the five places this can fail are five stages of one operation,
+/// and a reader wants them together.
 final Logger _log = Logger('update.apply');
 
 class UpdateApplier {
@@ -101,27 +69,22 @@ class UpdateApplier {
 
   /// Everything that can be known **before** anything is written.
   ///
-  /// Deliberately a separate step: the user is shown a patch warning, a
-  /// stale-`.ini` question and a layout mismatch *before* consenting, and none
-  /// of those can be raised after the copy has started.
+  /// Deliberately a separate step: the user is shown a patch warning, the count of old files going and a layout mismatch *before* consenting,
+  /// and none of those can be raised after the copy has started.
   Future<UpdatePreview> preview({
     required Directory modFolder,
     required List<String> incomingFolders,
     ModIngest? ingest,
 
-    /// Files in [modFolder] to judge this update **as if they were not there** —
-    /// the other download in a mixed folder.
+    /// Files in [modFolder] to judge this update **as if they were not there** — the other download in a mixed folder.
     ///
-    /// Without it the patch's own `.ini` is assessed as a leftover of the base's
-    /// update and offered for deletion, which reads as "the update renamed this"
-    /// and deletes the patch if accepted. See [applyBaseThenPatch], which puts
-    /// those files back on top once the base has landed.
+    /// Left in, the patch's files count as the old version's and go with it.
+    /// See [applyBaseThenPatch], which puts them back on top once the base has landed.
     Iterable<String> excluding = const <String>[],
 
-    /// **What the download being replaced laid down last time**
-    /// (`ModDownload.files`), so the files this version drops can be removed
-    /// rather than left loading. Empty for a folder installed before the record
-    /// existed, which degrades to the inference in `stale_ini.dart`.
+    /// **What the download being replaced laid down last time** (`ModDownload.files`),
+    /// so the files this version drops can be removed rather than left loading.
+    /// Empty for a folder installed before the record existed, and then everything in the folder counts as the previous version.
     List<InstalledFile> recorded = const <InstalledFile>[],
   }) async {
     final byName = {
@@ -152,21 +115,22 @@ class UpdateApplier {
     // The bottom layer keeps nothing it displaces — there is nothing under it —
     // so a `replaced` entry here is the *previous version of this same
     // download*, which is what the update is replacing.
+    // With no record, the whole folder (less the patch above) is the previous version.
     final dropped = planDroppedFiles(
-      recorded: recorded,
+      recorded: recorded.isNotEmpty
+          ? recorded
+          : [
+              for (final file in existing.files)
+                InstalledFile(
+                  path: existing.onDisk(file),
+                  role: InstalledFileRole.replaced,
+                ),
+            ],
       incoming: incoming.files,
       onDisk: existing.files,
       claimedByOthers: excluding,
       incomingReferences: incoming.references.paths,
     );
-
-    // **The `.ini` inference is asked about the folder the removals leave.** A
-    // renamed `.ini` the record already names is deleted outright, and offering
-    // it a second time as a guess would ask the user to approve something that
-    // is happening either way. What is left for the guess is the folder's
-    // unrecorded half — a second mod merged in by hand, or a library that
-    // predates the record.
-    final judged = existing.without(dropped.remove);
 
     return UpdatePreview(
       layout: layout,
@@ -174,6 +138,7 @@ class UpdateApplier {
       incoming: incoming,
       existing: existing,
       dropped: dropped,
+      unrecorded: recorded.isEmpty,
       // Does the *download* stand on its own? A patch-shaped one proves the
       // folder it is going into is mixed, which is the only signal available for
       // that with no recorded file list and no extra request.
@@ -183,27 +148,17 @@ class UpdateApplier {
         directories: incoming.directories,
         hasIni: incoming.hasIni,
       ),
-      staleInis: assessStaleInis(
-        existingReferences: judged.references,
-        existingInis: judged.iniPaths,
-        existingFiles: judged.files,
-        incomingInis: incoming.iniPaths,
-        incomingFiles: incoming.files,
-      ),
     );
   }
 
   /// Carries out an update the user has consented to.
   ///
-  /// Order is the design: deactivate (handles), snapshot (the only way back),
-  /// copy, resolve leftovers, reactivate. A failure at any step past the
-  /// snapshot leaves a folder the user can roll back, which is the whole reason
-  /// the snapshot is unconditional.
+  /// Order is the design: deactivate (handles), snapshot (the only way back), copy, remove the old version's files, reactivate.
+  /// A failure at any step past the snapshot leaves a folder the user can roll back, which is the whole reason the snapshot is unconditional.
   Future<UpdateApplyResult> apply({
     required String modName,
     required Directory modFolder,
     required UpdatePreview preview,
-    required bool deleteStaleInis,
     String? previousVersion,
     String? previousVersionLabel,
   }) =>
@@ -211,7 +166,6 @@ class UpdateApplier {
         modName: modName,
         modFolder: modFolder,
         preview: preview,
-        deleteStaleInis: deleteStaleInis,
         previousVersion: previousVersion,
         previousVersionLabel: previousVersionLabel,
         patchFiles: const <String>[],
@@ -245,7 +199,6 @@ class UpdateApplier {
     required String modName,
     required Directory modFolder,
     required UpdatePreview preview,
-    required bool deleteStaleInis,
     required Iterable<String> patchFiles,
     int? patchModId,
     String? previousVersion,
@@ -255,7 +208,6 @@ class UpdateApplier {
         modName: modName,
         modFolder: modFolder,
         preview: preview,
-        deleteStaleInis: deleteStaleInis,
         previousVersion: previousVersion,
         previousVersionLabel: previousVersionLabel,
         patchFiles: patchFiles,
@@ -266,7 +218,6 @@ class UpdateApplier {
     required String modName,
     required Directory modFolder,
     required UpdatePreview preview,
-    required bool deleteStaleInis,
     required Iterable<String> patchFiles,
     int? patchModId,
     String? previousVersion,
@@ -363,18 +314,6 @@ class UpdateApplier {
       spelling: preview.existing,
     );
 
-    // **Before the patch goes back**, deliberately. The stale list names `.ini`
-    // files the *base* renamed, and the patch's own `.ini` was taken out above —
-    // so nothing here can reach it. Run the other way round, a patch that had
-    // replaced the base's `.ini` would be placed back and then deleted as the
-    // predecessor of the file that replaced it.
-    final deleted = await _removeStale(
-      enabled: deleteStaleInis,
-      modFolder: modFolder,
-      stale: preview.staleInis.stale,
-      spelling: preview.existing,
-    );
-
     final placed = await _putPatchBack(
       modFolder: modFolder,
       snapshot: snapshot,
@@ -388,7 +327,6 @@ class UpdateApplier {
       snapshot: snapshot,
       filesWritten: written.length + placed.length,
       writtenFiles: written,
-      removedInis: deleted,
       droppedFiles: droppedFiles,
       patchFiles: [for (final file in placed) file.path],
       placedPatchFiles: placed,
@@ -407,20 +345,20 @@ class UpdateApplier {
 
   /// Where the recorded patch files will land **once the base has been written**.
   ///
-  /// Computed against the folder the copy is about to produce — what is there now
-  /// minus the patch, plus what the base lays down — rather than against the
-  /// folder as it stands. That is what lets an unsettleable placement stop the
-  /// operation before anything is deleted.
+  /// Computed against the folder the copy is about to produce — what is there now minus the patch and the old files going,
+  /// plus what the base lays down — rather than against the folder as it stands.
+  /// That is what lets an unsettleable placement stop the operation before anything is deleted.
   PatchPlacement _placementFor({
     required UpdatePreview preview,
     required List<String> patchFiles,
   }) {
     final patch = {for (final file in patchFiles) normalizeIniPath(file)};
+    final going = {for (final file in preview.dropped.remove) normalizeIniPath(file)};
     return resolvePatchPlacement(
       incoming: patch,
       target: {
         for (final file in preview.existing.files)
-          if (!patch.contains(file)) file,
+          if (!patch.contains(file) && !going.contains(file)) file,
         ...preview.incoming.files,
       },
     );
@@ -690,11 +628,6 @@ class UpdateApplier {
       // *target's*, not the ones the archive shipped, and that is the point.
       patchFiles: [for (final file in placed) file.path],
       writtenFiles: placed,
-      // Nothing is removed on this path. The stale-`.ini` rule looks for an
-      // `.ini` whose every resource the incoming download also carries — the
-      // renamed predecessor of an update — and a patch by definition carries
-      // less than the mod it patches, so the rule has nothing true to say here.
-      removedInis: const <String>[],
       keybindChanges: keybindChanges(
         before: keybindsBefore,
         after: await _keybindsIn(modFolder, modName),
@@ -793,15 +726,13 @@ class UpdateApplier {
   ///
   /// It **snapshots first**, so a rollback is itself undoable — a user who rolls
   /// back the wrong mod, or discovers the old version was the broken one, is one
-  /// click from where they were. The leftovers are resolved with the same
-  /// stale-`.ini` rule the update uses, in the opposite direction: an `.ini` the
-  /// newer version added, whose every resource the snapshot also carries, is the
-  /// renamed successor of a restored file and would fight it.
+  /// click from where they were. Files the folder holds and the snapshot does not are removed after the copy,
+  /// so what is left is the saved version and nothing of the newer one.
+  /// The sidecar comes back with the copy, so the record matches the restored files.
   Future<UpdateApplyResult> restore({
     required String modName,
     required Directory modFolder,
     required ModSnapshot snapshot,
-    bool deleteStaleInis = true,
   }) async {
     final wasActive = await activation.isActive(modName);
     if (wasActive) await activation.deactivate(modName);
@@ -820,13 +751,6 @@ class UpdateApplier {
       Directory(path.join(snapshot.directory.path, 'files')),
     );
     final current = await readFolderContents(modFolder);
-    final stale = assessStaleInis(
-      existingReferences: current.references,
-      existingInis: current.iniPaths,
-      existingFiles: current.files,
-      incomingInis: restoring.iniPaths,
-      incomingFiles: restoring.files,
-    );
 
     if (!await snapshots.restoreInto(snapshot, modFolder)) {
       if (wasActive) await activation.activate(modName);
@@ -836,10 +760,12 @@ class UpdateApplier {
       );
     }
 
-    final deleted = await _removeStale(
-      enabled: deleteStaleInis,
+    final droppedFiles = await _removeDropped(
       modFolder: modFolder,
-      stale: stale.stale,
+      dropped: DroppedFiles(remove: [
+        for (final file in current.files)
+          if (!restoring.files.contains(file)) current.onDisk(file),
+      ]),
       spelling: current,
     );
 
@@ -848,7 +774,7 @@ class UpdateApplier {
     return UpdateApplyResult(
       snapshot: safety,
       filesWritten: restoring.files.length,
-      removedInis: deleted,
+      droppedFiles: droppedFiles,
       keybindChanges: const [],
       reactivated: wasActive,
     );
@@ -937,11 +863,8 @@ class UpdateApplier {
   /// Deletes the files the new version no longer ships, and the directories
   /// that held nothing else.
   ///
-  /// **Not offered as a choice**, unlike the stale-`.ini` deletion below. That
-  /// one is an inference and can be wrong about somebody's merged second mod;
-  /// this is the download's own record of what it wrote, and a file the new
-  /// version has no name for is exactly what "update this mod" means to remove.
-  /// The snapshot taken above is the way back either way.
+  /// **Not offered as a choice.** A file the new version has no name for is exactly what "update this mod" means to remove,
+  /// and the snapshot taken above is the way back.
   ///
   /// A path that cannot be deleted is logged and skipped: it is the old
   /// version's file, so leaving it is the state the app was already in before
@@ -1009,46 +932,6 @@ class UpdateApplier {
     }
   }
 
-  /// Deletes the orphaned `.ini` files the user agreed to, **by their real
-  /// name**.
-  ///
-  /// One copy for both directions, and it exists because getting this wrong is
-  /// silent. `StaleIni.path` is normalised — lower-cased, because 3DMigoto is
-  /// case-insensitive and the comparison has to be — and handing that to `File`
-  /// opens nothing on Linux when the author shipped `Ellen.ini`. `exists()`
-  /// answered false, the loop reported nothing removed, no error was raised,
-  /// and the folder kept the two live `.ini` files this whole rule exists to
-  /// prevent. [spelling] is the walk that produced those paths, so it is the
-  /// one thing that knows how they are really written.
-  ///
-  /// The **reported** names are the real ones too: a summary naming a file the
-  /// user does not have is its own small lie.
-  Future<List<String>> _removeStale({
-    required bool enabled,
-    required Directory modFolder,
-    required List<StaleIni> stale,
-    required FolderContents spelling,
-  }) async {
-    if (!enabled) return const [];
-    final deleted = <String>[];
-    for (final entry in stale) {
-      final onDisk = spelling.onDisk(entry.path);
-      final file = File(
-        path.joinAll([modFolder.path, ...onDisk.split('/')]),
-      );
-      try {
-        if (await file.exists()) {
-          await file.delete();
-          deleted.add(onDisk);
-        }
-      } catch (e) {
-        _log.warning('could not remove a stale file',
-            error: e, fields: {'file': onDisk, 'phase': 'remove'});
-      }
-    }
-    return deleted;
-  }
-
   /// Zero rather than throwing: a size that could not be read is a weaker
   /// record of a file that copied successfully, and failing the write over it
   /// would trade a working install for a missing one.
@@ -1094,8 +977,8 @@ class UpdatePreview {
     this.incoming = FolderContents.empty,
     this.existing = FolderContents.empty,
     this.patch = PatchAssessment.none,
-    this.staleInis = StaleIniAssessment.none,
     this.dropped = DroppedFiles.nothing,
+    this.unrecorded = false,
   });
 
   final UpdateLayout layout;
@@ -1110,11 +993,14 @@ class UpdatePreview {
   final FolderContents existing;
 
   final PatchAssessment patch;
-  final StaleIniAssessment staleInis;
 
-  /// What the version being replaced leaves behind that the new one has no name
-  /// for. Empty when nothing records what the last version wrote.
+  /// What the version being replaced leaves behind that the new one has no name for.
+  /// With no record of the last version, the folder's contents stand in for it, less the patch above and anything the new `.ini` still names.
   final DroppedFiles dropped;
+
+  /// Nothing recorded the last version, so [dropped] was worked out from the folder rather than from a record.
+  /// The confirmation says so, since the files going may be the user's own.
+  final bool unrecorded;
 
   bool get canProceed => layout.canProceed;
 
@@ -1163,7 +1049,6 @@ class UpdateApplyResult {
   const UpdateApplyResult({
     required this.snapshot,
     required this.filesWritten,
-    required this.removedInis,
     required this.keybindChanges,
     required this.reactivated,
     this.failure,
@@ -1184,7 +1069,6 @@ class UpdateApplyResult {
       UpdateApplyResult(
         snapshot: snapshot,
         filesWritten: 0,
-        removedInis: const [],
         keybindChanges: const [],
         reactivated: false,
         failure: failure,
@@ -1209,14 +1093,10 @@ class UpdateApplyResult {
   /// replacing it with nothing.
   final List<InstalledFile> writtenFiles;
 
-  final List<String> removedInis;
-
   /// The last version's files that the new one no longer ships, **gone**.
   ///
   /// On-disk spelling, and only what was really deleted — a path that could not
   /// be removed is logged and left out, so this never overstates what happened.
-  /// Separate from [removedInis]: those were a guess the user approved, these
-  /// are the download's own record of what it wrote.
   final List<String> droppedFiles;
 
   /// **The mod's own files, back where a patch had written over them** — paths

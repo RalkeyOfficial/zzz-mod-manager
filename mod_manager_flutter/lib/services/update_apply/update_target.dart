@@ -62,10 +62,6 @@ class UpdateTarget {
   /// Whether this row starts ticked. Every writable folder does, except the
   /// ones a [caution] applies to.
   bool get startsAccepted => canProceed && caution == null;
-
-  /// How many `.ini` files would be removed from this folder as leftovers, if
-  /// the user says so.
-  int get leftoverCount => preview.staleInis.stale.length;
 }
 
 /// What the write did to one folder.

@@ -46,17 +46,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Settings can check for updates at startup. Off by default, and it never installs anything.
 - Updates can be installed from the update dialog. The mod keeps its name, character tag, favourite star and on/off state.
   - The dialog lists every newer file and marks the one it would pick.
-  - Updating writes over the files the new version replaces and leaves anything you added yourself alone.
-  - An update also takes away the files the version you had shipped and the new one doesn't, so nothing of the old one is left loading in the game.
+  - Updating replaces the mod's files with the new version's. Old files are removed.
+  - A mod installed before the app kept file lists counts everything in its folder as the old version on its first update. The saved copy still has all of it.
   - Every update saves a copy of the mod first, and "Restore a previous version…" puts it back.
   - Saved versions survive renaming a mod, including renaming its folder outside the app.
   - Deleting a mod deletes every saved version of it too, and the confirmation says how many.
-  - "Reinstall this version…" in a mod's right-click menu puts the author's files back over a mod that has stopped working, without changing which version you have. Anything you added yourself stays.
+  - "Reinstall this version…" in a mod's right-click menu puts the author's files back over a mod that has stopped working, without changing which version you have.
   - A mod whose file has been taken off GameBanana says so instead of quietly reinstalling a different version.
   - The dialog shows the author's release notes for anything published since your version.
   - Hotkeys the new version moved are listed after an update.
   - You're told what an update will do before it runs.
-  - When a new version renames its .ini, the old one goes with it — or is offered for deletion, where the app has no record of what the last version shipped.
   - An update whose archive layout no longer matches the mod stops and says so rather than guessing.
   - Updating a mod that came bundled with others offers all of them and downloads the archive once, instead of once per mod.
   - The update dialog says how many other mods came from the same archive before you start.
@@ -74,7 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Its details and tracking dialog list both mods side by side, each marked as the mod or the patch. Which one you installed first makes no difference to how any of it reads.
   - A patch can be taken back out, from "Remove patch…" in the mod's right-click menu or from its row in the tracking dialog: the files it added are deleted and the mod's own files come back. It saves a copy of the mod first, tells you what it will do before it does it, and says so when one of your mod's files was never saved.
   - Updating a patch takes its old version back out: your mod's own files return wherever the new patch no longer replaces them, and anything the old patch added and the new one doesn't goes.
-  - A patch you dragged in yourself is remembered too, so it survives an update to the mod under it and can be taken out again — even though it has no page to check for updates.
+  - A patch you dragged in yourself is remembered too, so it survives an update to the mod under it — even though it has no page to check for updates and can't be taken out from the menu.
 - Every install records the files it wrote, with their sizes.
   - An update to either mod in such a folder can be installed: the base mod goes in and the patch is put back over the top. Folders you merged by hand say so first, since the app can't tell which files are which.
 - The app writes a log file for each run, keeping the last seven, with your username removed and file paths shortened.
