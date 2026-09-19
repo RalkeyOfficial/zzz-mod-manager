@@ -74,9 +74,11 @@ void main() {
     required List<ModInfo> library,
     List<String> incoming = const ['Ellen Red', 'Ellen Blue'],
     List<GbFile> published = const <GbFile>[],
+    ModIngest? primaryIngest,
   }) =>
       planSiblingUpdates(
         primary: primary,
+        primaryIngest: primaryIngest,
         library: library,
         subjectModId: archiveModId,
         target: target,
@@ -227,6 +229,44 @@ void main() {
       // Unused like any other refused member's folder: nothing writes it, and
       // the primary is not an exception to what that list means.
       expect(result.otherFolders, ['Ellen Everything v4']);
+    });
+
+    test('a layout picked at a stop claims its folders like a recorded one', () {
+      // The author renamed the primary's folder, so its record stops and the user is asked.
+      // Ticking the sibling's folder too makes the primary combined over both, and the sibling is written from the same folder:
+      // the collision the guard exists to refuse, which it can only see if it is handed the pick.
+      final primary = mod('Ellen Red', group: 'g1', folders: ['Ellen Red']);
+      final sibling = mod('Ellen Blue', group: 'g1', folders: ['Ellen Blue']);
+
+      final result = plan(
+        primary: primary,
+        library: [primary, sibling],
+        incoming: ['Ellen Red v2', 'Ellen Blue'],
+        primaryIngest: const ModIngest(
+          mode: IngestMode.combined,
+          folders: ['Ellen Red v2', 'Ellen Blue'],
+        ),
+      );
+
+      expect(result.targets, isEmpty);
+      expect(result.refused.single.reason, SiblingRefusal.sourceCollision);
+      expect(result.primaryRefused, SiblingRefusal.sourceCollision);
+    });
+
+    test('a picked folder is not named as unused', () {
+      final primary = mod('Ellen Red', group: 'g1', folders: ['Ellen Red']);
+      final sibling = mod('Ellen Blue', group: 'g1', folders: ['Ellen Blue']);
+
+      final result = plan(
+        primary: primary,
+        library: [primary, sibling],
+        incoming: ['Ellen Red v2', 'Ellen Blue', 'previews'],
+        primaryIngest: const ModIngest(folders: ['Ellen Red v2']),
+      );
+
+      expect(result.targets.single.mod.id, 'Ellen Blue');
+      expect(result.primaryRefused, isNull);
+      expect(result.otherFolders, ['previews']);
     });
 
     test('a collision between two siblings leaves its folder unused', () {

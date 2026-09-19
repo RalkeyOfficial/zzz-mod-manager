@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
 import '../../l10n/app_localizations.dart';
+import '../../models/character_info.dart';
 import '../../services/archive_service.dart';
+import '../../services/update_apply/update_layout.dart';
 
 /// One extracted/dropped top-level folder offered for import.
 class ImportFolderChoice {
@@ -113,14 +115,65 @@ Future<ImportPlan?> resolveImportSelection(
   );
 }
 
+/// Asks which of an update archive's folders are [mod], for an update whose layout the app has no usable record of.
+///
+/// The import's picker without the separate-or-combined choice: an update always lands in the one folder it is for.
+/// Pre-ticked are the folders named like the mod's own folder or its recorded folders, since an archive holding several mods
+/// holds a `.ini` in each of them; only when nothing matches does the `.ini` rule decide.
+/// Returns the chosen folder paths, or null when cancelled.
+Future<List<String>?> pickUpdateFolders(
+  BuildContext context, {
+  required ModInfo mod,
+  required List<ImportFolderChoice> choices,
+  required UpdateLayoutProblem problem,
+  bool reinstall = false,
+}) async {
+  final known = {
+    mod.id.toLowerCase(),
+    for (final folder in mod.origin?.ingest?.folders ?? const <String>[])
+      folder.toLowerCase(),
+  };
+  final named = {
+    for (final choice in choices)
+      if (known.contains(choice.name.toLowerCase())) choice.path,
+  };
+
+  final loc = context.loc;
+  final selection = await showImportSelectionDialog(
+    context,
+    choices,
+    defaultCombinedName: mod.name,
+    singleMod: true,
+    preselected: named.isEmpty ? null : named,
+    title: loc.t('mods.update_apply.pick_title', params: {'mod': mod.name}),
+    intro: loc.t(problem == UpdateLayoutProblem.layoutChanged
+        ? 'mods.update_apply.pick_intro_changed'
+        : 'mods.update_apply.pick_intro_unknown'),
+    confirmLabel: loc.t(
+      reinstall ? 'mods.reinstall.confirm' : 'mods.update_apply.pick_confirm',
+    ),
+  );
+  if (selection == null || selection.folders.isEmpty) return null;
+  return selection.folders;
+}
+
 /// Lets the user pick which of several extracted/dropped folders to install and
 /// whether they become separate mods or one combined mod. Folders containing a
 /// `.ini` are pre-checked; folders without one (likely previews/images) are
 /// shown unchecked and labelled. Returns the selection, or null if cancelled.
+///
+/// With [singleMod] the separate-or-combined choice and the name field are left out,
+/// and [title], [intro] and [confirmLabel] say what the one mod is.
+/// [preselected] replaces the `.ini` pre-check with the caller's own set of paths.
 Future<ImportSelection?> showImportSelectionDialog(
   BuildContext context,
   List<ImportFolderChoice> choices, {
   required String defaultCombinedName,
+  bool singleMod = false,
+  Set<String>? preselected,
+  String? title,
+  String? intro,
+  String? confirmLabel,
 }) {
   final loc = context.loc;
 
@@ -128,7 +181,7 @@ Future<ImportSelection?> showImportSelectionDialog(
   // the user isn't faced with an empty selection.
   final modLike = choices.where((c) => c.looksLikeMod).map((c) => c.path);
   final selected = <String>{
-    ...(modLike.isEmpty ? choices.map((c) => c.path) : modLike),
+    ...(preselected ?? (modLike.isEmpty ? choices.map((c) => c.path) : modLike)),
   };
   final nameController = TextEditingController(text: defaultCombinedName);
   var combine = false;
@@ -162,7 +215,7 @@ Future<ImportSelection?> showImportSelectionDialog(
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    loc.t('mods.dialog.import_select_title'),
+                    title ?? loc.t('mods.dialog.import_select_title'),
                     style: const TextStyle(fontSize: 18),
                   ),
                 ),
@@ -174,24 +227,26 @@ Future<ImportSelection?> showImportSelectionDialog(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(loc.t('mods.dialog.import_select_message')),
+                  Text(intro ?? loc.t('mods.dialog.import_select_message')),
                   const SizedBox(height: 8),
-                  RadioListTile<bool>(
-                    value: false,
-                    groupValue: combine,
-                    onChanged: (v) => setLocal(() => combine = false),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(loc.t('mods.dialog.import_select_separate')),
-                  ),
-                  RadioListTile<bool>(
-                    value: true,
-                    groupValue: combine,
-                    onChanged: (v) => setLocal(() => combine = true),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(loc.t('mods.dialog.import_select_combine')),
-                  ),
+                  if (!singleMod) ...[
+                    RadioListTile<bool>(
+                      value: false,
+                      groupValue: combine,
+                      onChanged: (v) => setLocal(() => combine = false),
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(loc.t('mods.dialog.import_select_separate')),
+                    ),
+                    RadioListTile<bool>(
+                      value: true,
+                      groupValue: combine,
+                      onChanged: (v) => setLocal(() => combine = true),
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(loc.t('mods.dialog.import_select_combine')),
+                    ),
+                  ],
                   if (combine) ...[
                     const SizedBox(height: 4),
                     TextField(
@@ -253,12 +308,13 @@ Future<ImportSelection?> showImportSelectionDialog(
               FilledButton(
                 onPressed: canConfirm ? confirm : null,
                 child: Text(
-                  combine
-                      ? loc.t('mods.dialog.import_select_confirm_one')
-                      : loc.t(
-                          'mods.dialog.import_select_confirm',
-                          params: {'count': selected.length.toString()},
-                        ),
+                  confirmLabel ??
+                      (combine
+                          ? loc.t('mods.dialog.import_select_confirm_one')
+                          : loc.t(
+                              'mods.dialog.import_select_confirm',
+                              params: {'count': selected.length.toString()},
+                            )),
                 ),
               ),
             ],

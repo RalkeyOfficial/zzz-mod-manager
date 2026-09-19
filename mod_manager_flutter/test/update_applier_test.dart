@@ -9,6 +9,7 @@ import 'package:mod_manager_flutter/services/folder_contents.dart';
 import 'package:mod_manager_flutter/services/mod_uid.dart';
 import 'package:mod_manager_flutter/services/patch_placement.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_applier.dart';
+import 'package:mod_manager_flutter/services/update_apply/update_layout.dart';
 import 'package:path/path.dart' as p;
 
 /// Real directories, not mocks. The whole point of the overwrite mechanism is
@@ -421,6 +422,30 @@ void main() {
     expect(result.success, isTrue);
     expect(read(mod, 'Skin/Body.dds'), 'v2');
     expect(read(mod, 'Dep/dep.dds'), 'v2');
+  });
+
+  test('a layout the user picked is previewed like a recorded one', () async {
+    // The stop is the same as below; the flow then asks, and previews again with the answer.
+    final mod = modFolder('Ellen');
+    write(mod, 'ellen.ini', 'x = 1');
+    final a = incoming('Ellen');
+    write(a, 'ellen.ini', 'x = 2');
+    final b = incoming('Wings');
+    write(b, 'wings.dds', 'x');
+
+    final stopped =
+        await applier.preview(modFolder: mod, incomingFolders: [a.path, b.path]);
+    expect(stopped.layout.problem, UpdateLayoutProblem.layoutUnknown);
+
+    final picked = await applier.preview(
+      modFolder: mod,
+      incomingFolders: [a.path, b.path],
+      ingest: ingestFromPick(['Ellen', 'Wings']),
+    );
+    expect(picked.canProceed, isTrue);
+    expect(picked.layout.mappings.map((m) => m.targetSubPath),
+        unorderedEquals(['Ellen', 'Wings']));
+    expect(picked.incoming.files, {'ellen/ellen.ini', 'wings/wings.dds'});
   });
 
   test('an unreplayable layout refuses rather than guessing', () async {

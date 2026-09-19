@@ -2,26 +2,23 @@
 /// mod folder.
 ///
 /// An update is not a re-run of the import path, and the difference is a rule
-/// rather than an optimisation: **never re-ask the import questions.** The
+/// rather than an optimisation: **never re-ask a question the app has the answer to.** The
 /// install already asked "which of these folders, and separately or combined?"
 /// and the answer was recorded in the origin block's `ingest`. Asking again for
 /// every update turns a one-click action into a quiz whose right answer the app
 /// already knows, and a user who answers differently the second time silently
 /// restructures their own mod.
 ///
-/// So this replays the recorded answer, and where it cannot, it **stops and
-/// asks** rather than guessing. Those are the only two outcomes; there is no
-/// third where it picks something plausible.
+/// So this replays the recorded answer, and where it cannot, it **stops** rather than guessing.
+/// The caller then asks once, with the import's folder picker, and the answer is recorded so the next update replays it.
 ///
 /// ## The unrecorded case is the common one, not the exception
 ///
 /// `ingest` is written at install by this build and by nothing else. Every mod
 /// that predates it — which on a real library is all of them, since the offline
 /// backfill recovers identity and deliberately not layout — has none. That path
-/// is therefore the one that matters most, and it is answered by the only
-/// unambiguous shape: **exactly one top-level folder in the archive maps to the
-/// mod folder itself.** Anything else is ambiguous with nothing to disambiguate
-/// it, and says so.
+/// is therefore the one that matters most. One top-level folder in the archive maps to the mod folder itself without asking;
+/// anything else is the one question the app cannot answer.
 ///
 /// ## A renamed upstream folder is expected, not a mismatch
 ///
@@ -260,12 +257,28 @@ ModIngest? ingestAfterUpdate(
       ? current
       : (current ?? const ModIngest()).copyWith(patchFiles: patchFiles);
   if (layout.mappings.isEmpty) return carried;
-  if (carried?.mode == IngestMode.combined) return carried;
+  // Rebuilt from the mappings rather than carried, so an answer the user gave at the stop is what the next update replays.
+  // A combined replay keeps its recorded subfolder names, which is what the mappings hold.
+  if (layout.mappings.any((mapping) => !mapping.isRoot)) {
+    return (carried ?? const ModIngest()).copyWith(
+      mode: IngestMode.combined,
+      folders: [for (final mapping in layout.mappings) mapping.targetSubPath],
+    );
+  }
   return (carried ?? const ModIngest()).copyWith(
     mode: IngestMode.separate,
     folders: [layout.mappings.single.source],
   );
 }
+
+/// The layout the user picked at a stop, as the record an install would have written.
+///
+/// One folder is the mod itself; several become subfolders named after each, the shape a combined import produces.
+/// [folderNames] are basenames, as `ingest.folders` always are.
+ModIngest ingestFromPick(List<String> folderNames) => ModIngest(
+      mode: folderNames.length == 1 ? IngestMode.separate : IngestMode.combined,
+      folders: List<String>.from(folderNames),
+    );
 
 /// Case-insensitive, because an archive repacked on another machine routinely
 /// changes only the case of a folder name.

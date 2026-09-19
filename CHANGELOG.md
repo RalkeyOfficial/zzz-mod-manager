@@ -56,7 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The dialog shows the author's release notes for anything published since your version.
   - Hotkeys the new version moved are listed after an update.
   - You're told what an update will do before it runs.
-  - An update whose archive layout no longer matches the mod stops and says so rather than guessing.
+  - An update whose archive has several folders, with no record of which is the mod or a record that no longer matches, asks which folders are the mod and remembers the answer.
   - Updating a mod that came bundled with others offers all of them and downloads the archive once, instead of once per mod.
   - The update dialog says how many other mods came from the same archive before you start.
   - Each of those mods has its own tick box, and the ones the app can't place are listed with the reason.

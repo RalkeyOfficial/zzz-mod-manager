@@ -41,6 +41,7 @@ library;
 import '../../models/character_info.dart';
 import '../../models/gamebanana/gb_file.dart';
 import '../../models/mod_download.dart';
+import '../../models/mod_ingest.dart';
 import 'update_layout.dart';
 import 'update_write_route.dart';
 
@@ -172,6 +173,10 @@ SiblingGroupPlan planSiblingUpdates({
   required GbFile target,
   required List<String> incomingFolders,
   List<GbFile> published = const <GbFile>[],
+
+  /// The layout the primary is written with when it is not its recorded one: the answer the user gave at a layout stop.
+  /// Without it the primary's claims are read off a record that just failed to replay, so it claims nothing.
+  ModIngest? primaryIngest,
 }) {
   final screened = _screenMembers(
     primary: primary,
@@ -213,7 +218,10 @@ SiblingGroupPlan planSiblingUpdates({
     ));
   }
 
-  final primarySource = _sourceFor(primary, incomingFolders);
+  final primarySources = _sourcesFor(
+    primaryIngest ?? primary.origin?.ingest,
+    incomingFolders,
+  );
 
   // **The collision guard**, and the one thing grouping can see that a per-mod
   // update structurally cannot: on its own each member matches its recorded
@@ -233,7 +241,7 @@ SiblingGroupPlan planSiblingUpdates({
   // takes the ordinary single-mod path.
   final claims = <String, int>{};
   for (final source in [
-    if (primarySource != null) primarySource,
+    ...primarySources,
     for (final target in targets) target.source,
   ]) {
     final key = source.toLowerCase();
@@ -252,7 +260,7 @@ SiblingGroupPlan planSiblingUpdates({
     kept.add(target);
   }
 
-  final primaryRefused = primarySource != null && contested(primarySource);
+  final primaryRefused = primarySources.any(contested);
 
   // **What this write actually goes into**, which is what [otherFolders] is the
   // complement of. The primary is a member like any other here: a refused
@@ -260,7 +268,8 @@ SiblingGroupPlan planSiblingUpdates({
   // keeping it out would omit exactly one refused folder from that list, on no
   // rule the screen could state.
   final claimed = <String>{
-    if (primarySource != null && !primaryRefused) primarySource.toLowerCase(),
+    if (!primaryRefused)
+      for (final source in primarySources) source.toLowerCase(),
     for (final target in kept) target.source.toLowerCase(),
   };
 
@@ -420,13 +429,13 @@ SiblingCaution? _cautionFor({
   return null;
 }
 
-/// Which folder of the archive the primary takes, or null when its own layout
-/// cannot be replayed — in which case it claims nothing and cannot be contested.
-String? _sourceFor(ModInfo mod, List<String> incomingFolders) {
+/// Which folders of the archive the primary takes: one for a separate layout, several for a combined one,
+/// and none when [ingest] cannot be replayed, in which case it claims nothing and cannot be contested.
+List<String> _sourcesFor(ModIngest? ingest, List<String> incomingFolders) {
   final layout = planUpdateLayout(
-    ingest: mod.origin?.ingest,
+    ingest: ingest,
     incomingFolders: incomingFolders,
   );
-  if (!layout.canProceed || layout.mappings.length != 1) return null;
-  return layout.mappings.single.source;
+  if (!layout.canProceed) return const <String>[];
+  return [for (final mapping in layout.mappings) mapping.source];
 }

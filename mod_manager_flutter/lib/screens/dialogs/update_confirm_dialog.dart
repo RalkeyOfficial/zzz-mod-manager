@@ -285,10 +285,9 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
 
   /// The three states where the app stops rather than guessing.
   ///
-  /// `layoutUnknown` is by far the commonest and is not an error: nothing was
-  /// ever recorded about how this mod was installed, because `ingest` is
-  /// written by this build and the whole pre-existing library predates it. The
-  /// wording says that rather than implying something is broken.
+  /// `layoutUnknown` and `layoutChanged` are not errors: nothing was recorded about how this mod was installed, or what was recorded no longer matches.
+  /// The update flow asks the user which folders are the mod before it gets here, so through it these two are not reached;
+  /// the dialog still renders them, because the planner still produces them.
   /// [problem] is null when the layout is fine and the **group** is what
   /// refuses: every member, primary included, claims a folder another member
   /// claims too. The refused list is the whole explanation there, so it is what

@@ -9,6 +9,7 @@ import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../models/gamebanana/gamebanana.dart';
 import '../../models/installed_file.dart';
+import '../../models/mod_ingest.dart';
 import '../../models/mod_origin.dart';
 import '../../models/origin_enums.dart';
 import '../../services/api_service.dart';
@@ -29,6 +30,7 @@ import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
 import '../components/extract_failure_message.dart';
 import 'download_with_progress.dart';
+import 'import_selection_dialog.dart';
 import 'progress_modal.dart';
 import 'update_confirm_dialog.dart';
 import 'update_progress_dialog.dart';
@@ -215,19 +217,56 @@ Future<bool> applyUpdateFlow(
     );
 
     hold.say(loc.t('marketplace.preparing_comparing'));
-    final preview = await applier.preview(
-      modFolder: modFolder,
-      incomingFolders: folders,
-      ingest: mod.origin?.ingest,
-      // The patch belongs to neither side of the base's update: it is going back
-      // on top afterwards. Left in, its files count as the old version's and go.
-      excluding: patchFiles,
-      // **The bottom layer's record**, because that is the layer this writes.
-      // What it names is removed where the new version has no file by that name,
-      // which is how a renamed `.ini` or a dropped shader stops being loaded instead of lingering.
-      // Empty for a mod installed before the record existed, and then the whole folder counts as the old version.
-      recorded: mod.origin?.base?.files ?? const <InstalledFile>[],
-    );
+    Future<UpdatePreview> previewWith(ModIngest? ingest) => applier.preview(
+          modFolder: modFolder,
+          incomingFolders: folders,
+          ingest: ingest,
+          // The patch belongs to neither side of the base's update: it is going back
+          // on top afterwards. Left in, its files count as the old version's and go.
+          excluding: patchFiles,
+          // **The bottom layer's record**, because that is the layer this writes.
+          // What it names is removed where the new version has no file by that name,
+          // which is how a renamed `.ini` or a dropped shader stops being loaded instead of lingering.
+          // Empty for a mod installed before the record existed, and then the whole folder counts as the old version.
+          recorded: mod.origin?.base?.files ?? const <InstalledFile>[],
+        );
+    var preview = await previewWith(mod.origin?.ingest);
+
+    // **Asked once, whether or not [confirm] is set**: a skipped confirmation covers a question the user already answered,
+    // and which folder is the mod is not one anybody has asked. The answer is recorded after the write, so the next update replays it.
+    ModIngest? picked;
+    final problem = preview.layout.problem;
+    if (problem == UpdateLayoutProblem.layoutUnknown ||
+        problem == UpdateLayoutProblem.layoutChanged) {
+      // The `.ini` walk runs under the progress window, so it comes down right before the question.
+      final choices = [
+        for (final folder in folders)
+          ImportFolderChoice(
+            path: folder,
+            name: path.basename(folder),
+            looksLikeMod: await ArchiveService.containsIniFile(folder),
+          ),
+      ];
+      hold.release();
+      if (!context.mounted) return false;
+      final chosen = await pickUpdateFolders(
+        context,
+        mod: mod,
+        choices: choices,
+        problem: problem!,
+        reinstall: reinstall,
+      );
+      logConfirmation('update.layout',
+          accepted: chosen != null,
+          subject: mod.id,
+          fields: {
+            'problem': problem.name,
+            if (chosen != null) 'folders': [for (final folder in chosen) path.basename(folder)],
+          });
+      if (chosen == null) return false;
+      picked = ingestFromPick([for (final folder in chosen) path.basename(folder)]);
+      preview = await previewWith(picked);
+    }
 
     final primary = UpdateTarget(
       mod: mod,
@@ -244,6 +283,7 @@ Future<bool> applyUpdateFlow(
         ? await _previewSiblings(
             applier: applier,
             mod: mod,
+            primaryIngest: picked,
             modsPath: modsPath,
             remoteModId: remoteModId,
             file: file,
@@ -614,6 +654,9 @@ class _SiblingPreviews {
 Future<_SiblingPreviews> _previewSiblings({
   required UpdateApplier applier,
   required ModInfo mod,
+
+  /// The layout the user picked at a stop, so the group sees what the primary is really written with.
+  required ModIngest? primaryIngest,
   required String modsPath,
   required int remoteModId,
   required GbFile file,
@@ -635,6 +678,7 @@ Future<_SiblingPreviews> _previewSiblings({
 
   final plan = planSiblingUpdates(
     primary: mod,
+    primaryIngest: primaryIngest,
     library: library,
     subjectModId: remoteModId,
     target: file,

@@ -115,6 +115,20 @@ void main() {
     expect(layout.problem, UpdateLayoutProblem.layoutChanged);
   });
 
+  group('the answer picked at a stop', () {
+    test('one folder is the mod itself', () {
+      final ingest = ingestFromPick(['Ellen']);
+      expect(ingest.mode, IngestMode.separate);
+      expect(ingest.folders, ['Ellen']);
+    });
+
+    test('several folders become subfolders, as a combined import would', () {
+      final ingest = ingestFromPick(['Body', 'Wings']);
+      expect(ingest.mode, IngestMode.combined);
+      expect(ingest.folders, ['Body', 'Wings']);
+    });
+  });
+
   /// What gets written back after an update, which is where the *next* one reads
   /// its answer from.
   group('the record an update leaves behind', () {
@@ -150,13 +164,55 @@ void main() {
       expect(ingest.siblingGroup, 'group-7');
     });
 
-    test('a combined record is kept verbatim, patch record and all', () {
+    test('a combined record comes back as it was, patch record and all', () {
       const current = ModIngest(
         mode: IngestMode.combined,
         folders: ['Body', 'Wings'],
         patchFiles: ['Body/Skin.dds'],
       );
-      expect(ingestAfterUpdate(layoutFor('Body'), current), current);
+      final layout = planUpdateLayout(
+        ingest: current,
+        incomingFolders: ['Wings', 'Body'],
+      );
+      expect(ingestAfterUpdate(layout, current), current);
+    });
+
+    test('a layout the user picked at the stop is what the next update replays',
+        () {
+      // Two folders ticked become a combined record, whatever the old record said.
+      final picked = ingestFromPick(['Body', 'Wings']);
+      final layout = planUpdateLayout(
+        ingest: picked,
+        incomingFolders: ['Body', 'Wings', 'previews'],
+      );
+      expect(layout.canProceed, isTrue);
+
+      final ingest = ingestAfterUpdate(
+        layout,
+        const ModIngest(folders: ['Old'], siblingGroup: 'group-7'),
+      )!;
+      expect(ingest.mode, IngestMode.combined);
+      expect(ingest.folders, ['Body', 'Wings']);
+      expect(ingest.siblingGroup, 'group-7');
+      expect(
+        planUpdateLayout(ingest: ingest, incomingFolders: ['Body', 'Wings'])
+            .canProceed,
+        isTrue,
+      );
+    });
+
+    test('one folder picked replaces a combined record that no longer matches',
+        () {
+      final layout = planUpdateLayout(
+        ingest: ingestFromPick(['Ellen v2']),
+        incomingFolders: ['Ellen v2', 'previews'],
+      );
+      final ingest = ingestAfterUpdate(
+        layout,
+        const ModIngest(mode: IngestMode.combined, folders: ['Body', 'Wings']),
+      )!;
+      expect(ingest.mode, IngestMode.separate);
+      expect(ingest.folders, ['Ellen v2']);
     });
 
     test('the moved patch replaces the recorded paths', () {

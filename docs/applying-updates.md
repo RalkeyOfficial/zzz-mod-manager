@@ -379,12 +379,12 @@ It asks on every unrecorded mod's first update, about files the user has never s
 
 One archive does not map to one mod folder. The install asks "which of these folders,
 and separately or combined?" and records the answer in `origin.ingest`. **An update
-never re-asks it.** Asking again turns a one-click action into a quiz whose right
+never re-asks a question it has the answer to.** Asking again turns a one-click action into a quiz whose right
 answer the app already knows, and a user who answers differently the second time
 silently restructures their own mod.
 
 `services/update_apply/update_layout.dart` is the pure replay. It has exactly two
-outcomes: a set of mappings, or a **stop-and-ask**. There is no third where it picks
+outcomes: a set of mappings, or a **stop**. There is no third where it picks
 something plausible.
 
 | Recorded | Archive | Result |
@@ -397,10 +397,20 @@ something plausible.
 | `combined`, N folders | all N present | each → its recorded subfolder |
 | `combined`, N folders | any missing | **stop**: `layoutChanged` |
 
+**At a stop the flow asks once**, with the import's folder picker (`import_selection_dialog.dart`, `pickUpdateFolders`):
+the archive's folders, and no separate-or-combined choice, since an update lands in the one folder it is for.
+One folder ticked is the mod itself; several become subfolders named after each, the shape a combined import produces (`ingestFromPick`).
+The preview is taken again with that answer, the confirmation is the ordinary one, and after the write `ingestAfterUpdate` records the layout from the mappings,
+so the next update replays it. Cancelling the picker is the same as cancelling the confirmation.
+Pre-ticked are the folders named like the mod's own folder or its recorded folders; the `.ini` rule decides only when nothing matches,
+because an archive that installed several mods holds a `.ini` in each, and ticking them all would fold the other mods into this one.
+The group planner is handed the picked layout too, so a folder the pick claims and a sibling claims is refused for both, as any other collision is.
+An empty extraction never reaches a preview: it is reported as a notification first.
+
 **The unrecorded case is the common one, not the exception.** `ingest` is written by
 this build and by nothing else, and the offline backfill deliberately recovers
-identity and not layout — so on a pre-existing library it is absent everywhere. That
-path is answered by the only unambiguous shape, one top-level folder.
+identity and not layout — so on a pre-existing library it is absent everywhere. One top-level folder is taken as the mod without asking;
+anything else is asked once.
 
 A **renamed upstream folder is expected, not a mismatch**, and is absorbed for a
 single folder. It cannot be absorbed for a combined install: with three subfolders
