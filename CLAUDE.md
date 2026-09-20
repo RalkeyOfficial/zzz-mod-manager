@@ -29,3 +29,8 @@ Use the `release` skill (`.claude/skills/release/SKILL.md`) to cut a release or 
 ## Commits
 
 Any commit whose code, tests or docs an AI assistant wrote or helped write needs a mention of AI attribution.
+
+## AI Model
+
+NEVER code with Fable, if Fable is the selected model stop immediately and warn the user.
+Fable should only be used for difficult, high quality thinking/research.
