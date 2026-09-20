@@ -415,7 +415,6 @@ void main() {
       final query = container.read(marketplaceQueryProvider);
       expect(query.categoryId, 30306);
       expect(query.page, 1, reason: 'a new filter starts at the first page');
-      expect(query.mode, MarketplaceMode.browse);
       expect(wentBack, isTrue, reason: 'the grid has to be on screen to see it');
     });
 

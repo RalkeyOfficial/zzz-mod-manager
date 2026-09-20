@@ -216,8 +216,25 @@ not enough for a detail view.
 
 ### `Subfeed` vs `Index`
 
-`Game/<id>/Subfeed` is the site's activity feed: no filters, no sort control. Fine for
-a "what's new" strip; use `Index` for anything the user controls.
+`Game/<id>/Subfeed` is the site's activity feed: no `_aFilters`, and the only `_sSort`
+it accepts is `default`. It does take `_sName`, which is what the search box on a
+game's own page sends (`Subfeed?_sSort=default&_sName=…`), but it matches across
+**every submission type** — a title fragment brings back Questions and Tools beside
+the Mods. Fine for a "what's new" strip; use `Index` for anything the user controls.
+
+### Three ways to look a mod up by name
+
+All three were measured with the exact title of one mod, against the ZZZ game id:
+
+| Request | Matches | Result for the exact title |
+|---|---|---|
+| `Mod/Index` + `_aFilters[Generic_Name]=contains,<text>` | The text anywhere in the **title**, case-insensitive, mods only; combines with category and sort | 1 |
+| `Game/<id>/Subfeed?_sName=<text>` | The same title match, but across all submission types; no filters, no sort | 1 |
+| `Util/Search/Results?_sSearchString=<text>` | **Any one word** of the text in the title, description, readme, tags, studio, submitter or credits | 714 |
+
+The marketplace's search box is the first one, so a search keeps the category and
+sort beside it. The resolve flow's search uses the third, where matching a folder
+name on a single word is the point.
 
 ### 3.1 Top submissions — `Game/<id>/TopSubs`
 
@@ -273,6 +290,15 @@ curl 'https://gamebanana.com/apiv13/Util/Search/Results?_sModelName=Mod\
 `_idGameRow` scopes it to one game. **Hard-capped at 15 per page** — page through it.
 Note it's a *different* parameter style from `Index` (`_idGameRow`, not a filter),
 which is easy to get wrong.
+
+This is the site's `/search` page, and it matches **any one word** of the text in
+any of seven fields, so a whole title returns hundreds of mods that share a word with
+it. Two parameters the page sends narrow it, both undocumented and both verified to
+change the result: `_csvFields` picks the fields (`name`, `description`, `article`,
+`attribs`, `studio`, `owner`, `credits`; `_csvFields=name` cut 714 results to 33),
+and `_sOrder` ranks them (`best_match`, `popularity`, `date`, `udate`). Even
+`_csvFields=name` is still a per-word match, so for "this title" use `Index`'s name
+filter ([above](#three-ways-to-look-a-mod-up-by-name)).
 
 ### Mod detail — `Mod/<id>/ProfilePage`
 
@@ -503,7 +529,7 @@ wasn't.
 | `Generic_Game` | game id | `19567` for ZZZ. The one you always send. |
 | `Generic_Category` | category id | Works on **root or sub** categories; a root category **includes its subcategories**. |
 | `Generic_Submitter` | member id | Everything by one author. |
-| `Generic_Name` | — | Exists, but rejects plain strings (`INVALID_FILTER_VALUE`). Use `Util/Search/Results` for text instead. |
+| `Generic_Name` | `contains,<text>` or `equals,<text>` | The operator comes first, then a comma, then the text. A bare string, `starts,…` or an empty text is `INVALID_FILTER_VALUE`. `contains` is a case-insensitive substring of the title; surrounding spaces are matched literally, so trim. A comma inside the text splits it into terms that are **or**-ed (`contains,ZZMI,Censor` matched both). |
 
 Rejected: `Generic_Tag`, `Generic_ContentRating`, `Generic_HasFiles`,
 `Generic_Featured`, `Generic_Section`, `Generic_RootCategory`. **There is no
@@ -1009,9 +1035,10 @@ runtime and cache it — new characters appear with every game patch, and a hard
 copy is exactly what goes stale. (Confirmed live: still exactly 60 children.)
 
 > **A local list of character *names* cannot drive this filter.** `Generic_Category`
-> accepts a category id and nothing else — `Generic_Name` exists but rejects plain
-> strings ([§4](#4-sorting-and-filtering)). So filtering by character requires the ids
-> from this endpoint; a name list can only produce filter values the API refuses.
+> accepts a category id and nothing else — `Generic_Name` filters the mod's *title*,
+> not its category ([§4](#4-sorting-and-filtering)). So filtering by character
+> requires the ids from this endpoint; a name list can only produce filter values the
+> API refuses.
 > Filtering offline therefore means **persisting the fetched id↔name mapping**, not
 > keeping a static roster.
 
@@ -1080,6 +1107,10 @@ Collected so nobody rediscovers them:
 - **`_csvProperties` only works on `Multi`.** `Index` ignores it.
 - **Search takes `_idGameRow`; `Index` takes `_aFilters[Generic_Game]`.** Same idea,
   different spelling, no overlap.
+- **`Util/Search/Results` is not a title search.** It matches any single word in any
+  field, so one exact title returned 714 mods. A title lookup is `Index`'s
+  `Generic_Name` filter, and its value needs the `contains,` operator prefix
+  ([§3](#three-ways-to-look-a-mod-up-by-name)).
 - **Some endpoints return a bare array** (`Multi`, `Mod/Categories`) instead of the
   `_aMetadata`/`_aRecords` envelope. Don't write one generic response parser and
   assume it fits all.

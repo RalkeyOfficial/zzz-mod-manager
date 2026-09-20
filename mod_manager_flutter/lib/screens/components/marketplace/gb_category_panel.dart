@@ -206,17 +206,11 @@ class _Children extends ConsumerWidget {
   }
 }
 
-/// Applies a category selection, leaving search mode if it was active.
-///
-/// `Util/Search/Results` accepts no category filter at all, so a category picked
-/// while a search is showing could not be honoured. Silently ignoring the click
-/// would be the worst option; switching back to browsing is what the click
-/// evidently means.
+/// Applies a category selection. A search term stays in force, since the name
+/// filter and the category go in the same request.
 void selectCategory(WidgetRef ref, int? categoryId) {
   final query = ref.read(marketplaceQueryProvider);
   ref.read(marketplaceQueryProvider.notifier).state = query.refine(
-    mode: MarketplaceMode.browse,
-    text: '',
     categoryId: categoryId,
     clearCategory: categoryId == null,
   );

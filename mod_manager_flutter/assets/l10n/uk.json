@@ -76,7 +76,7 @@
   "marketplace": {
     "back": "Назад",
     "reload": "Оновити",
-    "search_hint": "Пошук ZZZ-модів на GameBanana",
+    "search_hint": "Пошук ZZZ-модів за назвою",
     "download_title": "Завантажити мод?",
     "download_message": "Завантажити {filename}?",
     "unknown_file": "Невідомий файл",
@@ -134,7 +134,6 @@
     "sort_latestModified": "Нещодавно оновлені",
     "sort_latestComment": "Нещодавні обговорення",
     "filter_all": "Усі",
-    "search_scope_note": "Пошук охоплює всі ZZZ-моди; фільтри категорій і сортування не діють для результатів пошуку.",
     "content_filter": "Контент для дорослих",
     "content_filter_blur": "Розмивати",
     "content_filter_show": "Показувати без розмивання",

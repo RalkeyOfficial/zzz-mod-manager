@@ -197,7 +197,7 @@ void main() {
       ]);
       addTearDown(container.dispose);
       container.read(marketplaceQueryProvider.notifier).state =
-          const MarketplaceQuery(mode: MarketplaceMode.search, text: 'zzzzqqq');
+          const MarketplaceQuery(text: 'zzzzqqq', categoryId: 30341);
 
       await pumpBrowse(tester, error: null, container: container);
 
@@ -205,11 +205,10 @@ void main() {
       await tester.tap(find.text('Clear search'));
       await tester.pumpAndSettle();
 
-      expect(
-        container.read(marketplaceQueryProvider).mode,
-        MarketplaceMode.browse,
-      );
-      expect(container.read(marketplaceQueryProvider).text, isEmpty);
+      final query = container.read(marketplaceQueryProvider);
+      expect(query.text, isEmpty);
+      expect(query.categoryId, 30341,
+          reason: 'clearing the search keeps the category');
     });
 
     testWidgets('an empty page past the first offers a way back',

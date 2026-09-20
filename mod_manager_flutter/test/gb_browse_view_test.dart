@@ -153,10 +153,7 @@ void main() {
     expect(header.right, moreOrLessEquals(list.right, epsilon: 0.5));
   });
 
-  testWidgets('the search field does not fight the query state', (tester) async {
-    // Types a search, submits, then selects a category — which leaves search mode.
-    // The controller is cleared from a listener rather than during build; doing it
-    // in build looped forever, so settling here is the assertion.
+  testWidgets('a search term and a category combine', (tester) async {
     await pumpBrowse(tester);
 
     await tester.enterText(find.byType(TextField), 'ellen');
@@ -167,8 +164,36 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
+    final query = ProviderScope.containerOf(
+      tester.element(find.byType(GbBrowseView)),
+    ).read(marketplaceQueryProvider);
+    expect(query.text, 'ellen');
+    expect(query.categoryId, 29874);
+    expect(find.text('ellen'), findsOneWidget,
+        reason: 'the term is still applied, so the box still shows it');
+    expect(find.byType(GbTopSubsCarousel), findsNothing);
+  });
+
+  testWidgets('the search field does not fight the query state', (tester) async {
+    // Types a search, submits, then clears it from the query rather than the box.
+    // The controller is cleared from a listener rather than during build; doing it
+    // in build looped forever, so settling here is the assertion.
+    await pumpBrowse(tester);
+
+    await tester.enterText(find.byType(TextField), 'ellen');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(GbBrowseView)),
+    );
+    container.read(marketplaceQueryProvider.notifier).state =
+        container.read(marketplaceQueryProvider).refine(text: '');
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
     expect(find.text('ellen'), findsNothing,
-        reason: 'leaving search mode should clear the box');
+        reason: 'a lifted filter should clear the box');
   });
 
   testWidgets('expanding a root loads and shows its children', (tester) async {

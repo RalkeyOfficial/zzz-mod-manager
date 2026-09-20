@@ -24,26 +24,41 @@ class GameBananaEndpoints {
   /// only expressible as a `Generic_Category` over the children of the
   /// Character Skins category.
   ///
+  /// [name] is the marketplace's search box: `Generic_Name` with the `contains`
+  /// operator matches the text anywhere in the title, ignoring case, and still
+  /// takes the category and sort beside it. The text is trimmed because the
+  /// server matches surrounding spaces literally, and a blank one is left out
+  /// because an empty filter value is a hard `INVALID_FILTER_VALUE`.
+  ///
   /// Note `_nPerpage` is clamped to 50 — asking for more is a hard
   /// `INVALID_PERPAGE` error, not a silent cap.
   Uri modIndex({
     int? categoryId,
     int? submitterId,
+    String? name,
     GbModSort sort = GbModSort.newest,
     int page = 1,
     int perPage = 30,
   }) {
+    final title = name?.trim() ?? '';
     return _uri('Mod/Index', {
       if (gameId != null) '_aFilters[Generic_Game]': '$gameId',
       if (categoryId != null) '_aFilters[Generic_Category]': '$categoryId',
       if (submitterId != null) '_aFilters[Generic_Submitter]': '$submitterId',
+      if (title.isNotEmpty) '_aFilters[Generic_Name]': 'contains,$title',
       '_sSort': sort.wireValue,
       '_nPerpage': '${clampPerPage(perPage)}',
       '_nPage': '${page < 1 ? 1 : page}',
     });
   }
 
-  /// `Util/Search/Results` — text search.
+  /// `Util/Search/Results` — the site-wide text search.
+  ///
+  /// This matches any one word of the text against the title, description,
+  /// readme, tags, studio, submitter and credits, so a full title brings back
+  /// hundreds of unrelated mods. That is why the marketplace's search box is
+  /// [modIndex]'s name filter instead; this stays for the resolve flow, where
+  /// a folder name may only share a word with the mod page.
   ///
   /// Note the parameter spellings differ from [modIndex] entirely: search takes
   /// `_idGameRow`, while Index takes `_aFilters[Generic_Game]`. They do not

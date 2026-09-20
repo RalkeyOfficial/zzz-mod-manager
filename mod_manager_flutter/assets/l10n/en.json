@@ -74,7 +74,7 @@
   "marketplace": {
     "back": "Back",
     "reload": "Refresh",
-    "search_hint": "Search ZZZ mods on GameBanana",
+    "search_hint": "Search ZZZ mods by name",
     "download_title": "Download mod?",
     "download_message": "Do you want to download {filename}?",
     "unknown_file": "Unknown file",
@@ -132,7 +132,6 @@
     "sort_latestModified": "Recently updated",
     "sort_latestComment": "Recent discussion",
     "filter_all": "All",
-    "search_scope_note": "Search covers all ZZZ mods; category and sort filters don't apply to search results.",
     "content_filter": "Adult content",
     "content_filter_blur": "Blur",
     "content_filter_show": "Show without blur",

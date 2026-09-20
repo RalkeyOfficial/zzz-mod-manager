@@ -14,45 +14,39 @@ import '../models/gamebanana/gamebanana.dart';
 import '../services/gamebanana/gamebanana_client.dart';
 import 'state_providers.dart';
 
-/// Which listing the results grid is showing.
-///
-/// Browse and search are genuinely different endpoints, not one endpoint with an
-/// optional parameter: `Mod/Index` filters and sorts but cannot take text, while
-/// `Util/Search/Results` takes text but supports neither a category filter nor a
-/// sort, and silently caps at 15 per page. Modelling them as one "query with an
-/// optional string" would quietly promise filters that search cannot honour.
-enum MarketplaceMode { browse, search }
-
 /// Everything that identifies one page of results.
+///
+/// One `Mod/Index` request, whatever is set: the search text is a filter on the
+/// title beside the category and sort, not a different listing. The site-wide
+/// search endpoint matches any one word in any field, so a full title returned
+/// hundreds of unrelated mods where the site's own name filter returns one.
 ///
 /// Immutable and value-equal so the results provider re-fetches exactly when
 /// something meaningful changed — typing in the search box without submitting
 /// must not fire a request per keystroke.
 class MarketplaceQuery {
   const MarketplaceQuery({
-    this.mode = MarketplaceMode.browse,
     this.text = '',
     this.categoryId,
     this.sort = kDefaultMarketplaceSort,
     this.page = 1,
   });
 
-  final MarketplaceMode mode;
-
-  /// The submitted search text. Only meaningful in [MarketplaceMode.search].
+  /// The submitted search text, matched anywhere in a mod's title. Empty means
+  /// no name filter.
   final String text;
 
-  /// A `Generic_Category` id — a root category or a character. Browse only.
+  /// A `Generic_Category` id — a root category or a character.
   final int? categoryId;
 
-  /// Browse only; search has no sort control.
   final GbModSort sort;
 
   /// 1-based.
   final int page;
 
+  bool get hasText => text.isNotEmpty;
+
   MarketplaceQuery copyWith({
-    MarketplaceMode? mode,
     String? text,
     int? categoryId,
     bool clearCategory = false,
@@ -60,7 +54,6 @@ class MarketplaceQuery {
     int? page,
   }) {
     return MarketplaceQuery(
-      mode: mode ?? this.mode,
       text: text ?? this.text,
       // copyWith can't express "back to no category" with a nullable value, and
       // an "All" filter chip has to be able to.
@@ -73,14 +66,12 @@ class MarketplaceQuery {
   /// Any change to what is being asked for resets to page 1. Staying on page 7
   /// while switching filters lands the user in an empty page for no reason.
   MarketplaceQuery refine({
-    MarketplaceMode? mode,
     String? text,
     int? categoryId,
     bool clearCategory = false,
     GbModSort? sort,
   }) =>
       copyWith(
-        mode: mode,
         text: text,
         categoryId: categoryId,
         clearCategory: clearCategory,
@@ -91,14 +82,13 @@ class MarketplaceQuery {
   @override
   bool operator ==(Object other) =>
       other is MarketplaceQuery &&
-      other.mode == mode &&
       other.text == text &&
       other.categoryId == categoryId &&
       other.sort == sort &&
       other.page == page;
 
   @override
-  int get hashCode => Object.hash(mode, text, categoryId, sort, page);
+  int get hashCode => Object.hash(text, categoryId, sort, page);
 }
 
 /// What the results grid is currently asking for.
@@ -136,11 +126,9 @@ Future<GbPage<GbMod>> fetchMarketplaceResults(
   MarketplaceQuery query, {
   bool refresh = false,
 }) {
-  if (query.mode == MarketplaceMode.search) {
-    return client.searchMods(query.text, page: query.page, refresh: refresh);
-  }
   return client.browseMods(
     categoryId: query.categoryId,
+    name: query.text,
     sort: query.sort,
     page: query.page,
     refresh: refresh,

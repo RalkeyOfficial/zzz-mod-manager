@@ -30,9 +30,12 @@ State lives in `utils/marketplace_providers.dart`, **not** the central
 app-wide state. The content filter *is* app-wide and stays in the registry,
 hydrated from config in `ApiService.initialize`.
 
-**Browse and search are separate modes**, because they are separate endpoints with
-different capabilities — search takes text but supports neither category filter nor
-sort, so the sort control is disabled rather than silently ignored.
+**The search box is a name filter on the one listing, not a second mode.** The
+submitted text goes to `Mod/Index` as `Generic_Name` beside the category and the
+sort, so all three combine and the carousel hides for any of them. The site-wide
+search endpoint was tried first and rejected: it matches any single word in any
+field, so the exact title of one mod returned 714 results where the site's own name
+lookup returns one ([`gamebanana-api.md`](gamebanana-api.md) §3).
 
 ## 3. The two views are an `IndexedStack`, not a conditional
 

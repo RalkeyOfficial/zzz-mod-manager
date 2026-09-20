@@ -66,11 +66,13 @@ class GameBananaClient {
 
   /// Browses mods via `Mod/Index`.
   ///
-  /// [perPage] is clamped to the server's maximum of 50; read
-  /// [GbPage.perPage] back for what was actually applied.
+  /// [name] narrows the listing to titles containing the text, on top of the
+  /// category and sort. [perPage] is clamped to the server's maximum of 50;
+  /// read [GbPage.perPage] back for what was actually applied.
   Future<GbPage<GbMod>> browseMods({
     int? categoryId,
     int? submitterId,
+    String? name,
     GbModSort sort = GbModSort.newest,
     int page = 1,
     int perPage = 30,
@@ -80,6 +82,7 @@ class GameBananaClient {
       _endpoints.modIndex(
         categoryId: categoryId,
         submitterId: submitterId,
+        name: name,
         sort: sort,
         page: page,
         perPage: perPage,
@@ -89,8 +92,10 @@ class GameBananaClient {
     );
   }
 
-  /// Text search via `Util/Search/Results`.
+  /// Site-wide text search via `Util/Search/Results`, used by the resolve flow.
   ///
+  /// Matches any word of the text in any field of a mod page, so it is far
+  /// broader than [browseMods]'s name filter; the marketplace does not use it.
   /// There is no page-size parameter on purpose: the server silently caps this
   /// endpoint at 15 results per page, so the applied value is only knowable
   /// from [GbPage.perPage].

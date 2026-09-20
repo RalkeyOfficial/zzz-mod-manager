@@ -77,19 +77,19 @@ void main() {
           reason: 'a refresh that returned the old page would be the old bug');
     });
 
-    test('a search refresh bypasses the cache too', () async {
-      // Two endpoints behind one button; only exercising browse would leave half
-      // the button broken.
-      const query =
-          MarketplaceQuery(mode: MarketplaceMode.search, text: 'ellen');
-      final url = client.endpoints.search('ellen', page: 1);
+    test('a search term goes to Index as a name filter', () async {
+      const query = MarketplaceQuery(text: 'ellen', categoryId: 30341);
+      final url = client.endpoints.modIndex(name: 'ellen', categoryId: 30341);
       transport.stub(url, body: page1);
 
       await fetchMarketplaceResults(client, query);
       await fetchMarketplaceResults(client, query, refresh: true);
 
       expect(transport.callCount, 2);
-      expect(transport.requests.every((r) => r.path.contains('Search')), isTrue);
+      expect(transport.requests.every((r) => r.path.endsWith('Mod/Index')),
+          isTrue);
+      expect(transport.requests.first.toString(),
+          contains('Generic_Name%5D=contains%2Cellen'));
     });
 
     test('honours the query it is given rather than a default', () async {

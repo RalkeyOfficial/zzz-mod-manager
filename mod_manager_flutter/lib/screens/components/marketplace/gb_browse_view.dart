@@ -45,10 +45,9 @@ class GbBrowseView extends ConsumerWidget {
     final installed = ref.watch(installedModsIndexProvider).valueOrNull ??
         InstalledModsIndex.empty;
 
-    // "All" means browsing with no category — not merely page 1, so the carousel
-    // doesn't vanish and re-appear as the user pages through the grid.
-    final isAllView =
-        query.mode == MarketplaceMode.browse && query.categoryId == null;
+    // "All" means no category and no search text — not merely page 1, so the
+    // carousel doesn't vanish and re-appear as the user pages through the grid.
+    final isAllView = query.categoryId == null && !query.hasText;
 
     final scheme = Theme.of(context).colorScheme;
 
@@ -59,8 +58,7 @@ class GbBrowseView extends ConsumerWidget {
     // controls *and* the categories header side by side, so they share one height
     // and one continuous bottom border no matter what either contains. Nesting the
     // header inside the right-hand column instead would mean matching its padding
-    // to the filter bar's by hand — which is how they came to disagree, and would
-    // break again the moment the filter bar gained its second line while searching.
+    // to the filter bar's by hand — which is how they came to disagree.
     return Column(
       children: [
         Container(
@@ -256,8 +254,7 @@ class _Pager extends ConsumerWidget {
     final total = page.pageCount;
     final canGoBack = query.page > 1;
     // `_bIsComplete` is the server's own "this page exhausts the set", which is
-    // more reliable than comparing a computed page count — search reports a
-    // per-page it silently capped.
+    // more reliable than comparing a computed page count.
     final canGoForward = !page.isComplete &&
         (total == null || query.page < total);
 
@@ -309,24 +306,20 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
     super.dispose();
   }
 
-  /// Submitting empty text returns to browsing rather than searching for "",
-  /// which would be an endpoint call with nothing to find.
+  /// The trimmed text becomes the name filter; empty text lifts it. Either way
+  /// the category and sort stay as they are.
   void _submitSearch(String raw) {
-    final text = raw.trim();
     final notifier = ref.read(marketplaceQueryProvider.notifier);
-    notifier.state = text.isEmpty
-        ? notifier.state.refine(mode: MarketplaceMode.browse, text: '')
-        : notifier.state.refine(mode: MarketplaceMode.search, text: text);
+    notifier.state = notifier.state.refine(text: raw.trim());
   }
 
   @override
   Widget build(BuildContext context) {
     final loc = context.loc;
-    final scheme = Theme.of(context).colorScheme;
     final query = ref.watch(marketplaceQueryProvider);
-    final isSearching = query.mode == MarketplaceMode.search;
+    final isSearching = query.hasText;
 
-    // Picking a category exits search mode (search cannot take a category filter),
+    // The empty state's "Clear search" lifts the filter from outside this widget,
     // so the box has to stop showing a term that is no longer being applied.
     //
     // Through `ref.listen`, never inline in build. `_search.clear()` notifies the
@@ -337,8 +330,7 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
     // provider changes, outside the build phase, which is where a mutation like
     // this belongs.
     ref.listen(marketplaceQueryProvider, (previous, next) {
-      final leftSearch = next.mode == MarketplaceMode.browse && next.text.isEmpty;
-      if (leftSearch && _search.text.isNotEmpty) _search.clear();
+      if (!next.hasText && _search.text.isNotEmpty) _search.clear();
     });
 
     // Padding only — the background and the bottom border belong to the shared
@@ -377,33 +369,13 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
                 ),
               ),
               const SizedBox(width: 10),
-              // Search supports no sort at all, so the control is disabled
-              // rather than silently ignored while searching.
-              _SortMenu(enabled: !isSearching),
+              const _SortMenu(),
               const SizedBox(width: 6),
               const _ContentFilterMenu(),
               const SizedBox(width: 6),
               const _RefreshButton(),
             ],
           ),
-          if (isSearching)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline,
-                      size: 14, color: scheme.onSurfaceVariant),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      loc.t('marketplace.search_scope_note'),
-                      style: TextStyle(
-                          fontSize: 11, color: scheme.onSurfaceVariant),
-                    ),
-                  ),
-                ],
-              ),
-            ),
         ],
       ),
     );
@@ -486,9 +458,7 @@ class _RefreshButtonState extends ConsumerState<_RefreshButton>
 }
 
 class _SortMenu extends ConsumerWidget {
-  const _SortMenu({required this.enabled});
-
-  final bool enabled;
+  const _SortMenu();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -496,9 +466,8 @@ class _SortMenu extends ConsumerWidget {
     final query = ref.watch(marketplaceQueryProvider);
 
     return PopupMenuButton<GbModSort>(
-      enabled: enabled,
       tooltip: loc.t('marketplace.sort'),
-      icon: Icon(Icons.sort, color: enabled ? null : Theme.of(context).disabledColor),
+      icon: const Icon(Icons.sort),
       initialValue: query.sort,
       // Both, in this order: the query so the grid refetches now, and config so the
       // choice is still there next launch.
@@ -564,13 +533,12 @@ Widget _noResultsEmptyState(
   final notifier = ref.read(marketplaceQueryProvider.notifier);
 
   Widget? action;
-  if (query.mode == MarketplaceMode.search) {
+  if (query.hasText) {
     // Exactly what submitting an empty box does, so the search field empties
-    // itself for free — `_FilterBar` already listens for the query leaving
-    // search mode and clears its controller then.
+    // itself for free — `_FilterBar` already listens for the text going away
+    // and clears its controller then.
     action = FilledButton.icon(
-      onPressed: () => notifier.state =
-          query.refine(mode: MarketplaceMode.browse, text: ''),
+      onPressed: () => notifier.state = query.refine(text: ''),
       icon: const Icon(Icons.close, size: 16),
       label: Text(loc.t('marketplace.empty_search_action')),
     );

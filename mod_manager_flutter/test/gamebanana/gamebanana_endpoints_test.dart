@@ -45,6 +45,32 @@ void main() {
       expect(endpoints.modIndex().queryParameters['_sSort'], 'Generic_Newest');
     });
 
+    test('a search term is a name filter beside the category and sort', () {
+      // The site-wide search endpoint matches any word in any field and returned
+      // 714 mods for one exact title; `Generic_Name` with `contains` returns one.
+      final uri = endpoints.modIndex(
+        name: 'ZZMI RabbitFX - Glow FX + Censor Remover',
+        categoryId: 30341,
+        sort: GbModSort.mostLiked,
+      );
+      expect(uri.queryParameters['_aFilters[Generic_Name]'],
+          'contains,ZZMI RabbitFX - Glow FX + Censor Remover');
+      expect(uri.queryParameters['_aFilters[Generic_Category]'], '30341');
+      expect(uri.queryParameters['_sSort'], 'Generic_MostLiked');
+    });
+
+    test('trims the search term and omits a blank one', () {
+      // The server matches surrounding spaces literally and rejects an empty
+      // filter value outright.
+      const key = '_aFilters[Generic_Name]';
+      expect(endpoints.modIndex(name: '  ellen ').queryParameters[key],
+          'contains,ellen');
+      for (final blank in [null, '', '   ']) {
+        expect(endpoints.modIndex(name: blank).queryParameters.containsKey(key),
+            isFalse);
+      }
+    });
+
     test('clamps perPage to 50 instead of triggering INVALID_PERPAGE', () {
       expect(endpoints.modIndex(perPage: 100).queryParameters['_nPerpage'], '50');
       expect(endpoints.modIndex(perPage: 0).queryParameters['_nPerpage'], '1');
