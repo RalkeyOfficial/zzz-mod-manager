@@ -6,6 +6,7 @@ import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../models/keybind_info.dart';
 import '../../services/api_service.dart';
+import '../../services/cover_thumbnail.dart';
 import '../../utils/notifications.dart';
 import '../../utils/categories.dart';
 import '../../utils/markdown_description.dart';
@@ -476,12 +477,14 @@ Widget _detailGallery(
                           ),
                           clipBehavior: Clip.antiAlias,
                           child: Image.file(
-                            File(mod.images[i]),
+                            // The thumbnail where one exists, for the same
+                            // reason as the decode width below. The large
+                            // viewer above and the zoomable full-screen view
+                            // read the original — those genuinely want the
+                            // pixels.
+                            coverFileFor(mod.images[i]) ?? File(mod.images[i]),
                             fit: BoxFit.contain,
-                            // A 56px strip has no use for a 2560px decode. The
-                            // large viewer above and the zoomable full-screen view
-                            // are deliberately left unbounded — those genuinely
-                            // want the pixels.
+                            // A 56px strip has no use for a 2560px decode.
                             cacheWidth: 128,
                             errorBuilder: (_, __, ___) =>
                                 _detailImagePlaceholder(52),

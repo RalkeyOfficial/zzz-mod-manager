@@ -65,6 +65,11 @@ class AppConstants {
   /// this became visible: opening the Mods tab flushed them, and returning to the
   /// marketplace re-downloaded every preview. Decoding at display size instead
   /// takes those same 49 covers to roughly 5 MB.
+  ///
+  /// Also the width of the thumbnail an import writes beside a cover
+  /// (`services/cover_thumbnail.dart`), so a card that reads the thumbnail
+  /// decodes exactly what it would have decoded from the original, without
+  /// reading the original.
   static const int modCardDecodeWidth = 640;
 
   /// Width to decode a mod cover at when it is a **list row thumbnail** rather
@@ -134,11 +139,13 @@ class AppConstants {
   static const String configFileName = 'config.json';
 
   // Per-mod metadata, stored inside each mod's own folder so it travels with
-  // the mod (shareable, rename-safe). Layout: <mod>/.zzz-mod-manager/metadata.json
-  // and <mod>/.zzz-mod-manager/images/*
+  // the mod (shareable, rename-safe). Layout: <mod>/.zzz-mod-manager/metadata.json,
+  // <mod>/.zzz-mod-manager/images/* and, beside each imported image, its
+  // card-sized copy under <mod>/.zzz-mod-manager/thumbnails/*.
   static const String modMetadataDirName = '.zzz-mod-manager';
   static const String modMetadataFileName = 'metadata.json';
   static const String modMetadataImagesDirName = 'images';
+  static const String modMetadataThumbnailsDirName = 'thumbnails';
 
   // Window dimensions
   static const double minWindowWidth = 800;

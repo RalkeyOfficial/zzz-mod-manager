@@ -16,6 +16,7 @@ import '../../services/api_service.dart';
 import '../../services/archive_service.dart';
 import '../../services/backup/snapshot_service.dart';
 import '../../services/folder_contents.dart';
+import '../../services/mod_manager_service.dart';
 import '../../services/log/confirmations.dart';
 import '../../services/log/logger.dart';
 import '../../services/patch_placement.dart';
@@ -207,7 +208,7 @@ Future<bool> applyUpdateFlow(
     }
     extractRoot = Directory(folders.first).parent;
 
-    final mods = await ApiService.getModManagerService();
+    final mods = await container.read(modManagerServiceProvider.future);
     // Read once, before anything is written: retention is a disk operation and
     // has to run even if the widget that owns `ref` has gone by then.
     final snapshots = ref.read(snapshotServiceProvider);
@@ -355,6 +356,7 @@ Future<bool> applyUpdateFlow(
       progress: progress,
       applier: applier,
       snapshots: snapshots,
+      mods: mods,
       // Handed in as a callback so the write itself holds no provider handle.
       // The container rather than `ref` for the same reason as above: a
       // `WidgetRef` throws once its widget is disposed, and a throw between the
@@ -523,7 +525,7 @@ Future<bool> applyPatchUpdateFlow(
     );
 
     hold.say(loc.t('marketplace.preparing_writing'));
-    final mods = await ApiService.getModManagerService();
+    final mods = await ref.read(modManagerServiceProvider.future);
     final snapshots = ref.read(snapshotServiceProvider);
     final applier = UpdateApplier(
       snapshots: snapshots,
@@ -578,7 +580,7 @@ Future<bool> applyPatchUpdateFlow(
     // folder's shape belongs to its bottom layer, and this archive's folder
     // names describe a patch. `patch_files` is re-derived from the layers by
     // `withDownloadUpdatedTo`, so it follows the files recorded just below.
-    await ApiService.updateModOrigin(mod.id, (current) {
+    await mods.updateModOrigin(mod.id, (current) {
       if (current == null) return null;
       final updated = withDownloadUpdatedTo(
         current,
@@ -785,6 +787,7 @@ Future<List<AppliedUpdate>> _writeAll({
   required _GroupProgress progress,
   required UpdateApplier applier,
   required SnapshotService snapshots,
+  required ModManagerService mods,
 
   /// Called after a folder's snapshot exists, so the rollback menu can be
   /// re-read. A callback rather than a `ref` for the reason above.
@@ -833,6 +836,7 @@ Future<List<AppliedUpdate>> _writeAll({
       if (!result.success) continue;
 
       await _recordOrigin(
+        mods: mods,
         mod: target.mod,
         remoteModId: remoteModId,
         file: file,
@@ -898,6 +902,7 @@ List<String> _recordedAbove(ModOrigin? origin, int modId) {
 /// Which of the two records is the folder's own depends on [asCompanion], and
 /// nothing else about the write does.
 Future<void> _recordOrigin({
+  required ModManagerService mods,
   required ModInfo mod,
   required int remoteModId,
   required GbFile file,
@@ -909,7 +914,7 @@ Future<void> _recordOrigin({
   List<InstalledFile>? placedPatchFiles,
 }) async {
   final now = DateTime.now();
-  await ApiService.updateModOrigin(mod.id, (current) {
+  await mods.updateModOrigin(mod.id, (current) {
     var block = current ??
         const ModOrigin(provenance: OriginProvenance.downloaded);
 

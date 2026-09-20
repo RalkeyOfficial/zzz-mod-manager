@@ -159,10 +159,11 @@ tagging**, **Appearance**, **Diagnostics**. Only the paths are applied by the
 
 Anything with a description of its own lives in `screens/components/settings/` as
 its own widget rather than inside the screen, which is already over a thousand
-lines. Each takes a **writer seam** defaulting to the `ApiService` call, because
-`ApiService` lazily builds a `ConfigService` against the developer's real
+lines. Each takes a **seam** for its write defaulting to the production call,
+because `ApiService` lazily builds a `ConfigService` against the developer's real
 `<appData>/config.json` — a widget test that merely mounted such a section would
-rewrite their library paths.
+rewrite their library paths. The auto-tag section's seam is the pass itself, and
+its default reads the library service through `modManagerServiceProvider`.
 
 `SettingsRow` (label, description, control) exists because a setting with a
 consequence cannot be a bare label. The older `_buildSettingRow` inside the screen
@@ -187,13 +188,13 @@ about which brightness is on screen.
 
 ### Progress belongs on the control, not over the page
 
-The screen's `isLoading` flag swaps the **entire body** for a spinner. That is
-right exactly once — the first load, when there is nothing to show yet — and wrong
-for everything after it, because the swap unmounts the `AnimationLimiter` that
-wraps the sections. `_AnimationLimiterState` only lets its children animate during
-the first frame after its own `initState`, so tearing the body down and putting it
-back hands every section a fresh limiter and the whole page replays its 375 ms
-staggered entrance. A change that touches nothing on the page appears to reload it.
+The screen's `_loaded` flag swaps the **entire body** for a spinner until the first
+read of the config lands, and it flips once: nothing sets it back, because the swap
+unmounts the `AnimationLimiter` that wraps the sections. `_AnimationLimiterState`
+only lets its children animate during the first frame after its own `initState`,
+so tearing the body down and putting it back would hand every section a fresh
+limiter and the whole page would replay its 375 ms staggered entrance. A change
+that touches nothing on the page would appear to reload it.
 
 Raising a blocking modal over the swap does not rescue it: the modal hides the swap
 on the way in, leaving the user only the replay on the way out.

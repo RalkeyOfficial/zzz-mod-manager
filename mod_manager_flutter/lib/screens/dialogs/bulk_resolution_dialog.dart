@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/gamebanana/gb_file.dart';
 import '../../models/origin_enums.dart';
-import '../../services/api_service.dart';
 import '../../services/bulk_resolution.dart';
 import '../../services/gamebanana/file_selection.dart';
 import '../../services/origin_resolution.dart';
@@ -59,7 +58,7 @@ Future<bool> showBulkResolutionDialog(
   BulkResolutionPlan plan, {
   int updatesFound = 0,
   int unreachable = 0,
-  OriginWriter writer = ApiService.updateModOrigin,
+  required OriginWriter writer,
 }) async {
   if (!plan.hasWork) return false;
   final answers = await showDialog<Map<String, BulkResolutionAnswer>>(

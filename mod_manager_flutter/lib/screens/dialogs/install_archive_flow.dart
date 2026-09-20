@@ -208,7 +208,8 @@ Future<InstallResult> installArchiveFlow(
     // Nicole, since the longest matching term wins.
     final remote = RemoteModMetadata.fromMod(mod);
 
-    final ModManagerService modManager = await ApiService.getModManagerService();
+    final ModManagerService modManager =
+        await ref.read(modManagerServiceProvider.future);
     // The auto-tag map the import returns is deliberately dropped here: on
     // this path the character came from the mod page in the first place, and
     // "Zhao Nicole → zhao" is the app narrating its own bookkeeping back at

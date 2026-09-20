@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/screens/components/settings/appearance_section.dart';
+import 'package:mod_manager_flutter/screens/components/settings/auto_tag_section.dart';
 import 'package:mod_manager_flutter/screens/components/settings/diagnostics_section.dart';
 import 'package:mod_manager_flutter/screens/components/settings/marketplace_section.dart';
 import 'package:mod_manager_flutter/screens/components/settings/updates_section.dart';
@@ -20,6 +23,7 @@ import 'support/localized_harness.dart';
 Future<void> _noopBool(bool _) async {}
 Future<void> _noopTheme(ThemeMode _) async {}
 Future<void> _noopMode(ContentFilterMode _) async {}
+Future<Map<String, String>> _tagsNothing() async => const {};
 
 void main() {
   late ProviderContainer container;
@@ -186,6 +190,8 @@ void main() {
             UpdatesSettingsSection(writer: _noopBool),
             SizedBox(height: 16),
             MarketplaceSettingsSection(writer: _noopMode),
+            SizedBox(height: 16),
+            AutoTagSettingsSection(runner: _tagsNothing),
           ],
         ),
       ),
@@ -195,7 +201,108 @@ void main() {
     expectBuilt(AppearanceSettingsSection);
     expectBuilt(UpdatesSettingsSection);
     expectBuilt(MarketplaceSettingsSection);
+    expectBuilt(AutoTagSettingsSection);
     expect(tester.takeException(), isNull);
+  });
+
+  group('automatic tagging', () {
+    testWidgets('names the pass and what it needs', (tester) async {
+      await pumpLocalized(
+        tester,
+        AutoTagSettingsSection(runner: _tagsNothing),
+        container: container,
+      );
+      expectBuilt(AutoTagSettingsSection);
+
+      expect(find.text('Detect tags for all mods'), findsOneWidget);
+      expect(find.textContaining('Folder name should include'), findsOneWidget);
+    });
+
+    testWidgets('runs the pass once, and the button is out while it runs',
+        (tester) async {
+      // The button is the whole guard against two passes racing on the same
+      // sidecars, so it has to be gone for the duration and back afterwards.
+      final pass = Completer<Map<String, String>>();
+      var runs = 0;
+      await pumpLocalized(
+        tester,
+        AutoTagSettingsSection(runner: () {
+          runs++;
+          return pass.future;
+        }),
+        container: container,
+      );
+
+      await tester.tap(find.text('Detect tags for all mods'));
+      await tester.pump();
+
+      expect(runs, 1);
+      expect(find.text('Detecting tags...'), findsOneWidget);
+      expect(
+        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNull,
+      );
+
+      pass.complete(const {});
+      await tester.pumpAndSettle();
+
+      expect(find.text('Detect tags for all mods'), findsOneWidget);
+      expect(
+        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNotNull,
+      );
+    });
+
+    testWidgets('a pass that tagged nothing says so', (tester) async {
+      await pumpLocalized(
+        tester,
+        AutoTagSettingsSection(runner: _tagsNothing),
+        container: container,
+      );
+
+      await tester.tap(find.text('Detect tags for all mods'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nothing to tag'), findsOneWidget);
+    });
+
+    testWidgets('a pass that tagged mods lists them by character',
+        (tester) async {
+      // The tagging happens on another tab, so it is a change the user cannot
+      // see, and those may report their success.
+      await pumpLocalized(
+        tester,
+        AutoTagSettingsSection(
+          runner: () async => const {
+            'Ellen_Summer': 'ellen',
+            'Miyabi_Kimono': 'miyabi',
+          },
+        ),
+        container: container,
+      );
+
+      await tester.tap(find.text('Detect tags for all mods'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tags detected!'), findsOneWidget);
+      expect(find.textContaining('Ellen_Summer → Ellen'), findsOneWidget);
+      expect(find.textContaining('Miyabi_Kimono → Miyabi'), findsOneWidget);
+    });
+
+    testWidgets('a pass that failed says so', (tester) async {
+      await pumpLocalized(
+        tester,
+        AutoTagSettingsSection(
+          runner: () async => throw Exception('read-only'),
+        ),
+        container: container,
+      );
+
+      await tester.tap(find.text('Detect tags for all mods'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Auto-tagging failed'), findsOneWidget);
+    });
   });
 
   group('marketplace content filter', () {

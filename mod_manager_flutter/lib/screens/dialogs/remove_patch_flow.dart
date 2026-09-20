@@ -7,9 +7,9 @@ import 'package:path/path.dart' as path;
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../models/mod_download.dart';
-import '../../services/api_service.dart';
 import '../../services/folder_contents.dart';
 import '../../services/log/confirmations.dart';
+import '../../services/mod_manager_service.dart';
 import '../../services/patch_record.dart';
 import '../../services/patch_removal.dart';
 import '../../services/patch_store.dart';
@@ -44,7 +44,7 @@ Future<bool> removePatchFlow(
   // page has no store keyed by one and no update to check.
   final patchModId = patch.modId!;
 
-  final mods = await ApiService.getModManagerService();
+  final mods = await ref.read(modManagerServiceProvider.future);
   final modsPath = mods.modsPath;
   if (modsPath == null) return false;
   final modFolder = Directory(path.join(modsPath, mod.id));
@@ -74,7 +74,7 @@ Future<bool> removePatchFlow(
   // nothing. The record still goes, because the folder demonstrably does not
   // hold this patch any more.
   if (!plan.touchesFiles && !plan.leavesPatchBehind) {
-    final removed = await _forget(mod, patch);
+    final removed = await _forget(mods, mod, patch);
     if (!context.mounted) return removed;
     notify.info(
       loc.t('mods.remove_patch.already_gone_title'),
@@ -143,7 +143,7 @@ Future<bool> removePatchFlow(
   // is that this folder holds that patch, and after this it does not — the
   // leftovers are named on screen rather than kept as a claim that would go on
   // offering to update a patch that has been taken out.
-  await _forget(mod, patch);
+  await _forget(mods, mod, patch);
 
   // Pruning already ran with the snapshot, above.
   ref.invalidate(modBackupsProvider);
@@ -171,8 +171,12 @@ Future<bool> removePatchFlow(
 ///
 /// Both in one write: a `patch_files` still naming a patch that has gone would
 /// have the next base update set aside files nothing owns.
-Future<bool> _forget(ModInfo mod, ModDownload patch) async {
-  final result = await ApiService.updateModOrigin(
+Future<bool> _forget(
+  ModManagerService mods,
+  ModInfo mod,
+  ModDownload patch,
+) async {
+  final result = await mods.updateModOrigin(
     mod.id,
     (current) => current == null
         ? null

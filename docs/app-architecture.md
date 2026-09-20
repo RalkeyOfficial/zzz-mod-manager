@@ -51,11 +51,18 @@ markdown would otherwise flatten `<br>`×6 to the same break as `<br>`×2.
 
 ## 3. The service layer
 
-- **`ApiService`** (static facade) — the single entry point screens use **for local
-  mod operations**. Lazily initializes and holds singletons of `ConfigService` and
-  `ModManagerService`. Despite the name it makes **no network calls** — remote work
-  belongs to the GameBanana layer, which is reached through a Riverpod provider
-  instead precisely because a static singleton can't take an injected transport.
+- **`ApiService`** (static facade) — lazily initializes and holds the singletons of
+  `ConfigService` and `ModManagerService`, and is what screens call for the
+  config-backed settings (paths, language, sort, the switches) and the activation
+  toggles. **Anything on `ModManagerService` itself is reached through
+  `modManagerServiceProvider`**, never through `ApiService.getModManagerService`:
+  the provider is the one seam a test overrides to hand a widget a library of its
+  own, and a facade call beside it is a second path that override cannot see.
+  A flow that outlives its widget reads the provider through the app's
+  `ProviderContainer` rather than a `WidgetRef`, which throws once the widget is
+  gone. Despite the name it makes **no network calls** — remote work belongs to the
+  GameBanana layer, which is reached through a Riverpod provider instead precisely
+  because a static singleton can't take an injected transport.
 - **`ModManagerService`** — core mod logic: scans the mods folder, creates/removes
   links, tracks active mods, imports mods, auto-detects characters, reads keybinds.
 - **`ConfigService`** — persistence. **Dual storage**: writes through both

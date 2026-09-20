@@ -13,6 +13,7 @@ import '../models/character_info.dart';
 import '../models/mod_download.dart';
 import '../models/mod_origin_seed.dart';
 import '../services/api_service.dart';
+import '../services/cover_thumbnail.dart';
 import '../services/log/logger.dart';
 import '../services/archive_service.dart';
 import '../services/import_result.dart';
@@ -229,7 +230,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
   /// Shares the ingest path's wording: the user's loss is the same either way,
   /// and which of our two writers hit the read-only folder is our business.
   Future<void> _reportBackfillWriteFailures() async {
-    final service = await ApiService.getModManagerService();
+    final service = await ref.read(modManagerServiceProvider.future);
     final failures = service.takeBackfillWriteFailures();
     if (failures.isEmpty || !mounted) return;
 
@@ -354,7 +355,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
   Future<void> _onModRenamed(String oldId, String newName) async {
     final allMods = _currentAllMods();
     final index = allMods?.indexWhere((m) => m.id == oldId) ?? -1;
-    final modsPath = (await ApiService.getModManagerService()).modsPath;
+    final modsPath =
+        (await ref.read(modManagerServiceProvider.future)).modsPath;
     if (allMods == null || index == -1 || modsPath == null || !mounted) {
       unawaited(loadMods(showLoading: false));
       return;
@@ -1225,25 +1227,34 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                   borderRadius: const BorderRadius.vertical(
                     top: Radius.circular(12),
                   ),
-                  child:
-                      mod.imagePath != null && File(mod.imagePath!).existsSync()
-                      ? Image.file(
-                          File(mod.imagePath!),
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                          // Same reason as ModCardWidget: this is the other card
-                          // render path, and leaving it unbounded would keep the
-                          // ImageCache-flooding bug alive in whichever view uses it.
-                          cacheWidth: AppConstants.modCardDecodeWidth,
-                        )
-                      : Container(
-                          color: Colors.grey.withValues(alpha: 0.1),
-                          child: Icon(
-                            Icons.image_not_supported,
-                            size: 32,
-                            color: Colors.grey[600],
-                          ),
-                        ),
+                  // Inside a Builder so the cover is looked up on disk when
+                  // the drag starts, not on every rebuild of the grid.
+                  child: Builder(
+                    builder: (_) {
+                      final dragCover = mod.imagePath == null
+                          ? null
+                          : coverFileFor(mod.imagePath!);
+                      return dragCover != null
+                          ? Image.file(
+                              dragCover,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              // Same reason as ModCardWidget: this is the other
+                              // card render path, and leaving it unbounded would
+                              // keep the ImageCache-flooding bug alive in
+                              // whichever view uses it.
+                              cacheWidth: AppConstants.modCardDecodeWidth,
+                            )
+                          : Container(
+                              color: Colors.grey.withValues(alpha: 0.1),
+                              child: Icon(
+                                Icons.image_not_supported,
+                                size: 32,
+                                color: Colors.grey[600],
+                              ),
+                            );
+                    },
+                  ),
                 ),
               ),
               Padding(

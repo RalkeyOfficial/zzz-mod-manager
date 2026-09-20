@@ -152,33 +152,6 @@ class ModOrigin {
   bool get needsBase =>
       (ingest?.patchShaped ?? false) && downloads.length < 2;
 
-  /// The strongest thing this block can say about its bottom layer: we know
-  /// exactly which remote file is installed, the user has not declared the mod
-  /// their own, and the page is still there.
-  ///
-  /// Both axes must be `exact`, because knowing the mod but not the file is not
-  /// enough to know what would replace it.
-  ///
-  /// **It has no reader in `lib/`, and that is not an oversight.** It was
-  /// written as the gate for unattended auto-update, which is *refused* rather
-  /// than unbuilt — no update is applied without the user present, because
-  /// overwriting a live install in a scene with no standard means the person who
-  /// has to repair it must be there when it happens. See
-  /// `docs/applying-updates.md` §7.
-  ///
-  /// Kept because it is the one place the "`exact` on **both** axes" rule is
-  /// written as code, and `test/mod_origin_test.dart` is what pins the tier
-  /// table to it. Anything wanting "is this a guess?" wants
-  /// [OriginConfidence.isConfirmed], which is a weaker and different line.
-  bool get allowsUnattendedUpdate {
-    final layer = base;
-    return layer != null &&
-        tracking == OriginTracking.auto &&
-        !layer.remoteMissing &&
-        layer.modIdConfidence.allowsUnattendedUpdate &&
-        layer.versionConfidence.allowsUnattendedUpdate;
-  }
-
   /// Value equality over **every** field, deliberately.
   ///
   /// It exists for one caller — the "did anything actually change?" guard in

@@ -140,8 +140,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   ///
   /// This is where remote identity reaches the origin block: the mod id, file
   /// id, version and variant label are all known here, before a single byte is
-  /// fetched, so the block lands at `exact` — the one tier that may drive an
-  /// unattended update later. See `docs/origin-tracking.md` §2.
+  /// fetched, so the block lands at `exact` — the tier only a download or a
+  /// checksum match earns. See `docs/origin-tracking.md` §2.
   ///
   /// **It does not wait, and it does not own what happens next.** The transfer
   /// runs in the background so the user can keep browsing: archives reach

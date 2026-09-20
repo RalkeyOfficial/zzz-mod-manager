@@ -9,6 +9,7 @@ import '../../models/gamebanana/gamebanana.dart';
 import '../../models/mod_origin.dart';
 import '../../services/api_service.dart';
 import '../../services/log/logger.dart';
+import '../../services/mod_manager_service.dart';
 import '../../services/origin_write.dart';
 import '../../services/update_apply/sibling_group.dart';
 import '../../utils/notifications.dart';
@@ -61,17 +62,19 @@ Future<bool> showModUpdateDialog(BuildContext context, ModInfo mod) async {
 
 /// The local side of the dialog — the one thing it does that isn't a request.
 ///
-/// Same seam and same reason as `ResolveOriginGateway`: `ApiService` lazily
-/// builds a `ConfigService` against the developer's **real**
-/// `<appData>/config.json`, so a widget test that merely mounted this dialog
-/// would rewrite their library paths.
+/// Same seam and same reason as `ResolveOriginGateway`: production wraps the
+/// library service read through `modManagerServiceProvider`, and a test hands
+/// the dialog a recorder so mounting it reaches no library at all.
 class ModUpdateGateway {
-  const ModUpdateGateway();
+  const ModUpdateGateway(this._service);
+
+  final Future<ModManagerService> _service;
 
   Future<OriginWriteResult> writeOrigin(
     String modId,
     ModOrigin? Function(ModOrigin? current) update,
-  ) => ApiService.updateModOrigin(modId, update);
+  ) async =>
+      (await _service).updateModOrigin(modId, update);
 
   /// The library, for finding the other mods one archive installed.
   ///
@@ -110,19 +113,22 @@ class ModUpdateDialog extends ConsumerStatefulWidget {
   const ModUpdateDialog({
     super.key,
     required this.mod,
-    this.gateway = const ModUpdateGateway(),
+    this.gateway,
   });
 
   final ModInfo mod;
 
   /// Injected only by tests — see [ModUpdateGateway].
-  final ModUpdateGateway gateway;
+  final ModUpdateGateway? gateway;
 
   @override
   ConsumerState<ModUpdateDialog> createState() => _ModUpdateDialogState();
 }
 
 class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
+  late final ModUpdateGateway _gateway = widget.gateway ??
+      ModUpdateGateway(ref.read(modManagerServiceProvider.future));
+
   bool _checking = false;
   bool _writing = false;
   Object? _error;
@@ -235,7 +241,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
         ref.read(modUpdateChecksProvider)[widget.mod.id];
     if (check == null || !(check.hasUpdate || check.dismissed)) return;
     try {
-      final library = await widget.gateway.library();
+      final library = await _gateway.library();
       if (!mounted) return;
       setState(() => _library = library);
     } catch (e) {
@@ -543,7 +549,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
 
     if (subject == null) return;
     setState(() => _writing = true);
-    final result = await widget.gateway.writeOrigin(
+    final result = await _gateway.writeOrigin(
       widget.mod.id,
       (block) => block?.withDismissal(subject: subject, until: until),
     );

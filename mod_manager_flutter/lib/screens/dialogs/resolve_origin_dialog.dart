@@ -8,7 +8,7 @@ import '../../models/mod_download.dart';
 import '../../models/mod_ingest.dart';
 import '../../models/mod_origin.dart';
 import '../../models/origin_enums.dart';
-import '../../services/api_service.dart';
+import '../../services/mod_manager_service.dart';
 import '../../services/origin_write.dart';
 import '../../utils/notifications.dart';
 import '../../services/gamebanana/remote_mod_metadata.dart';
@@ -41,31 +41,30 @@ Future<bool> showResolveOriginDialog(BuildContext context, ModInfo mod) async {
 /// The local side of the dialog — everything it does that isn't a GameBanana
 /// request.
 ///
-/// Calling `ApiService` straight from a dialog is this codebase's convention
-/// (delete, rename and edit all do), and the default here keeps it. What the
-/// indirection buys is a test seam: `ApiService` lazily builds a `ConfigService`
-/// that writes the developer's **real** `<appData>/config.json`, so a widget
-/// test that so much as mounted this dialog would touch their library paths,
-/// active mods and favourites.
+/// Production wraps the library service read through
+/// `modManagerServiceProvider`. What the indirection buys is a test seam: a
+/// recorder stands in for the whole local side, so a widget test that mounts
+/// this dialog reaches no library at all.
 class ResolveOriginGateway {
-  const ResolveOriginGateway();
+  const ResolveOriginGateway(this._service);
+
+  final Future<ModManagerService> _service;
 
   /// The oldest file in the mod folder, when the sidecar records no install
   /// date of its own.
-  Future<DateTime?> installDateProxy(String modId) =>
-      ApiService.installDateProxy(modId);
+  Future<DateTime?> installDateProxy(String modId) async =>
+      (await _service).installDateProxy(modId);
 
   /// Applies one decision to the sidecar, re-reading it first.
   Future<OriginWriteResult> writeOrigin(
     String modId,
     ModOrigin? Function(ModOrigin? current) update,
-  ) =>
-      ApiService.updateModOrigin(modId, update);
+  ) async =>
+      (await _service).updateModOrigin(modId, update);
 
   /// The optional "also fill in what's missing" pass.
   Future<void> fillMetadata(String modId, RemoteModMetadata remote) async {
-    final service = await ApiService.getModManagerService();
-    await service.applyRemoteMetadata([modId], remote);
+    await (await _service).applyRemoteMetadata([modId], remote);
   }
 }
 
@@ -93,13 +92,13 @@ class ResolveOriginDialog extends ConsumerStatefulWidget {
   const ResolveOriginDialog({
     super.key,
     required this.mod,
-    this.gateway = const ResolveOriginGateway(),
+    this.gateway,
   });
 
   final ModInfo mod;
 
   /// Injected only by tests — see [ResolveOriginGateway].
-  final ResolveOriginGateway gateway;
+  final ResolveOriginGateway? gateway;
 
   @override
   ConsumerState<ResolveOriginDialog> createState() =>
@@ -107,6 +106,9 @@ class ResolveOriginDialog extends ConsumerStatefulWidget {
 }
 
 class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
+  late final ResolveOriginGateway _gateway = widget.gateway ??
+      ResolveOriginGateway(ref.read(modManagerServiceProvider.future));
+
   /// The identity currently on the table — from the sidecar, or whatever the
   /// user has since picked. Null puts the dialog in its search state, which
   /// [IdentitySearchPanel] owns entirely — including the seeded search it runs
@@ -161,7 +163,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
   /// Guarded on nothing being selected yet, so a user who picked a row while the
   /// walk was still running keeps their choice.
   Future<void> _probeInstallDate() async {
-    final probed = await widget.gateway.installDateProxy(widget.mod.id);
+    final probed = await _gateway.installDateProxy(widget.mod.id);
     if (!mounted || probed == null) return;
     setState(() => _installedAt = probed);
     if (_selectedFile == null) _applyDefaultSelection();
@@ -369,7 +371,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     bool fillMetadata = true,
   }) async {
     setState(() => _saving = true);
-    final result = await widget.gateway.writeOrigin(widget.mod.id, update);
+    final result = await _gateway.writeOrigin(widget.mod.id, update);
     final ok = result.ok;
 
     if (ok && fillMetadata && _alsoFillMetadata && _profile != null) {
@@ -378,7 +380,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
       // as a failed resolve. The fill rule is "fill absence, never displace", so
       // it cannot damage what the mod already had either.
       try {
-        await widget.gateway.fillMetadata(
+        await _gateway.fillMetadata(
           widget.mod.id,
           RemoteModMetadata.fromMod(_profile!),
         );

@@ -360,36 +360,6 @@ landing spot, and the background queue.
 The settings that *are* surfaced, and what asked for an entry and did not get one,
 are [`docs/configuration.md`](docs/configuration.md).
 
-### Filed while surfacing the settings
-
-- [ ] **The auto-tag section has no widget test.**
-  `_SettingsScreenState.initState` calls `ApiService.getConfig()`, so mounting
-  the whole screen requires a library installed first —
-  `test/support/temp_library.dart` provides one, and
-  `test/flutter_test_config.dart` makes forgetting it a failure rather than a
-  write to the developer's own `<appData>/config.json`. A section extracted to
-  `components/settings/` with a writer seam needs neither, which is the cheaper
-  shape for a section: `test/settings_sections_test.dart` covers the Updates and
-  Marketplace sections on exactly those terms, and the auto-tag section has not
-  had the treatment. Its `_buildRequirement` helper is used by nothing else, so
-  extracting the section takes the helper with it.
-- [ ] **`isLoading` is one flag doing two jobs, and only one of them is safe.**
-  It swaps the whole page body, which unmounts the `AnimationLimiter` and makes
-  every section replay its staggered entrance. That is correct for the first
-  load and wrong for anything else, and nothing in the code says so except a
-  comment on the field. A separate first-load flag — or a limiter that is not
-  inside the swapped subtree — would make the mistake unavailable rather than
-  merely documented.
-- [ ] **Two `allowsUnattendedUpdate` predicates have no reader and now never
-  will.** `ModOrigin.allowsUnattendedUpdate` and
-  `OriginConfidence.allowsUnattendedUpdate` (`origin_enums.dart`) — with
-  auto-update refused (§4) neither guards anything. Deleting them is not a
-  drive-by: between them they are the only place the "`exact` on **both** axes"
-  rule is written as code, and sixteen assertions across five test files use
-  them to pin the tier table — so whoever removes them has to decide where that
-  rule lives instead. Left in place with their doc comments corrected to say
-  what they express rather than what they were for.
-
 ### Filed by §1 (found while building the native browser)
 
 - **We cannot reproduce GameBanana's default ordering, and users will compare.**
@@ -421,11 +391,6 @@ are [`docs/configuration.md`](docs/configuration.md).
   holds decoded frames — but thumbnails are re-fetched from scratch after a restart. No
   dependency was added for this on purpose; revisit only if it is ever observed to be
   slow rather than assumed to be.
-- [ ] **Generate thumbnails for local covers on import.** `cacheWidth` bounds
-  *memory* only. The files are stored verbatim (measured: 3.8 MB PNGs, 2560px
-  wide), so every cold load reads and decodes a full-size screenshot from disk. A
-  cached thumbnail beside the original would cut disk reads and startup decode
-  cost. A new feature rather than a bug fix, hence filed.
 
 ## 7. Unknown origin — backfill, warnings, and resolution
 
@@ -672,12 +637,6 @@ Two limits, because they bound what may be built on it:
   under `test/`. Real services over a temp directory rather than a fake
   filesystem — these flows *are* the file writes, so a fake replaces the only
   part worth trusting.
-- [ ] **Widgets read the static facade instead of the providers that wrap it.**
-  `modManagerServiceProvider` exists and dialogs call `ApiService` directly: 13
-  `getModManagerService` and 9 `updateModOrigin` call sites over ~25 files. What
-  routing them buys is disposal, no static mutable state and no init ordering —
-  **not** coverage, since the library seam above already unblocks the tests, which
-  is why it is filed rather than built.
 
 ---
 

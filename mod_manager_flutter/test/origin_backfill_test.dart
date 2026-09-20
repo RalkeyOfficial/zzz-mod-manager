@@ -256,10 +256,10 @@ void main() {
       expect(origin.versionConfidence, OriginConfidence.inferred);
     });
 
-    test('a backfilled block can never drive an unattended update', () {
+    test('a backfilled identity stays inferred beside an exact version', () {
       // The whole point of `inferred`: it came from a free-form text field a
       // human typed, so it must be confirmed once before anything overwrites
-      // files. Even a *version* somehow being exact must not unlock it.
+      // files. A *version* somehow being exact does not lift the identity.
       final origin = OriginBackfill.merge(
         existing: originFixture(
           provenance: OriginProvenance.importedArchive,
@@ -268,7 +268,8 @@ void main() {
         modId: 531649,
         installedAt: installedAt,
       );
-      expect(origin.allowsUnattendedUpdate, isFalse);
+      expect(origin.modIdConfidence, OriginConfidence.inferred);
+      expect(origin.versionConfidence, OriginConfidence.exact);
     });
   });
 

@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as path;
+import 'package:mod_manager_flutter/core/constants.dart';
 import 'package:mod_manager_flutter/models/mod_metadata.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
@@ -416,6 +418,83 @@ void main() {
       final rel = await service.importImageFile(tmp.path, src.path);
       expect(rel, path.join('.zzz-mod-manager', 'images', '01.jpg'));
       expect(await File(path.join(tmp.path, rel!)).readAsBytes(), [9, 9, 9]);
+    });
+  });
+
+  /// The card-sized copy written beside an imported cover, so the grid never
+  /// decodes a full screenshot again. It is derived state: never listed in the
+  /// sidecar, best-effort to write, and gone with its image.
+  group('ModMetadataService thumbnails', () {
+    String thumbnail(String name) =>
+        path.join(tmp.path, '.zzz-mod-manager', 'thumbnails', name);
+
+    test('a cover wider than a card gets one, at the card width', () async {
+      final wide = img.encodePng(img.Image(width: 1600, height: 900));
+
+      final rel = await service.addImageBytes(tmp.path, wide);
+
+      expect(rel, path.join('.zzz-mod-manager', 'images', '01.png'));
+      final written = File(thumbnail('01.png'));
+      expect(written.existsSync(), isTrue);
+      final decoded = img.decodePng(written.readAsBytesSync())!;
+      expect(decoded.width, AppConstants.modCardDecodeWidth);
+      expect(decoded.height, 360, reason: 'the aspect ratio is kept');
+    });
+
+    test('an image no wider than a card gets none', () async {
+      // Nothing to gain: the original already decodes at card size.
+      final small = img.encodePng(img.Image(width: 640, height: 360));
+
+      await service.addImageBytes(tmp.path, small);
+
+      expect(File(thumbnail('01.png')).existsSync(), isFalse);
+    });
+
+    test('a jpeg cover gets a png thumbnail under its own number', () async {
+      final wide = img.encodeJpg(img.Image(width: 1280, height: 720));
+
+      final rel = await service.addImageBytes(tmp.path, wide, extension: 'jpg');
+
+      expect(rel, path.join('.zzz-mod-manager', 'images', '01.jpg'));
+      expect(File(thumbnail('01.png')).existsSync(), isTrue);
+    });
+
+    test('an animated format is stored as it is, with no thumbnail', () async {
+      // A copy of the first frame would stand in for the whole animation.
+      final gif = img.encodeGif(img.Image(width: 1600, height: 900));
+
+      final rel = await service.addImageBytes(tmp.path, gif, extension: 'gif');
+
+      expect(rel, path.join('.zzz-mod-manager', 'images', '01.gif'));
+      expect(File(thumbnail('01.png')).existsSync(), isFalse);
+    });
+
+    test('bytes that do not decode still import, without one', () async {
+      final rel = await service.addImageBytes(tmp.path, [1, 2, 3]);
+
+      expect(rel, path.join('.zzz-mod-manager', 'images', '01.png'));
+      expect(File(thumbnail('01.png')).existsSync(), isFalse);
+    });
+
+    test('removing a managed image takes its thumbnail with it', () async {
+      final wide = img.encodePng(img.Image(width: 1600, height: 900));
+      final rel = (await service.addImageBytes(tmp.path, wide))!;
+      final image = path.join(tmp.path, rel);
+      expect(File(thumbnail('01.png')).existsSync(), isTrue);
+
+      await service.removeManagedImage(tmp.path, image);
+
+      expect(File(image).existsSync(), isFalse);
+      expect(File(thumbnail('01.png')).existsSync(), isFalse);
+    });
+
+    test('removing never touches a file the mod author shipped', () async {
+      final preview = File(path.join(tmp.path, 'Preview.png'))
+        ..writeAsBytesSync([1]);
+
+      await service.removeManagedImage(tmp.path, preview.path);
+
+      expect(preview.existsSync(), isTrue);
     });
   });
 }

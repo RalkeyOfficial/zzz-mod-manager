@@ -357,8 +357,8 @@ class ModMetadataRepository {
   /// construction.** `_copyDirectory` copies a source folder's
   /// `.zzz-mod-manager/` wholesale, so a mod folder passed around on Discord
   /// arrives carrying *someone else's* origin block — a claim about a remote
-  /// file that we never made, sitting on the one field that gates unattended
-  /// updates. Because this method never reads or merges the inbound block, and
+  /// file that we never made, sitting on the field the update check trusts.
+  /// Because this method never reads or merges the inbound block, and
   /// [ModMetadata.withOrigin] replaces the field outright, there is no branch
   /// where a stranger's block can survive — and so no heuristic to get wrong.
   ///

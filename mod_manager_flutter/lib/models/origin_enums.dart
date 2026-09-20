@@ -14,8 +14,8 @@ library;
 /// How sure we are which remote file a local mod corresponds to.
 enum OriginConfidence {
   /// We know precisely: we downloaded it, or its archive md5 matched the
-  /// checksum the remote publishes. The only tier that may ever drive an
-  /// unattended destructive path.
+  /// checksum the remote publishes. The only tier that names the file itself
+  /// rather than who claims it.
   exact('exact'),
 
   /// The user told us. Trusted, but confirmed actions still get a prompt.
@@ -37,15 +37,6 @@ enum OriginConfidence {
   const OriginConfidence(this.wire);
 
   final String wire;
-
-  /// Whether this tier is the strongest one — we know the file itself, not
-  /// merely who claims it. Deliberately a property of the enum rather than a
-  /// scattered `== exact` check.
-  ///
-  /// Named for a feature that is **refused** rather than unbuilt: nothing in
-  /// this app updates a mod unattended (`docs/applying-updates.md` §7). See
-  /// `ModOrigin.allowsUnattendedUpdate` for why the predicate is kept anyway.
-  bool get allowsUnattendedUpdate => this == OriginConfidence.exact;
 
   /// Whether somebody actually *established* this, as opposed to us guessing.
   ///

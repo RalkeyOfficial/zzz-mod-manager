@@ -46,6 +46,11 @@ dependencies:
   # `depend_on_referenced_packages` and can disappear on a `pub upgrade`.
   crypto: ^3.0.6
 
+  # Decoding and resizing a cover at import, for the thumbnail written beside it.
+  # Resolves to 4.3.0 because 4.4 and later require `archive` 4, and the pin on
+  # `archive` above is what holds it there; bumping `archive` moves this too.
+  image: ^4.3.0
+
   # Path utilities
   path: ^1.9.1
 

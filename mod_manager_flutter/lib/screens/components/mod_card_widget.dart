@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../core/constants.dart';
 import '../../models/character_info.dart';
+import '../../services/cover_thumbnail.dart';
 import '../../utils/url_utils.dart';
 import 'mod_status_slot.dart';
 
@@ -41,8 +42,29 @@ class _ModCardWidgetState extends State<ModCardWidget> {
 
   bool isHovered = false;
 
-  bool get _hasImage =>
-      widget.mod.imagePath != null && File(widget.mod.imagePath!).existsSync();
+  /// The cover's thumbnail when one exists, else the cover, else nothing.
+  ///
+  /// Resolved when the cover changes rather than on every build: a hover
+  /// rebuilds the card, and a `stat` per hover frame across a grid is the kind
+  /// of disk I/O that shows up as jank.
+  File? _cover;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveCover();
+  }
+
+  @override
+  void didUpdateWidget(ModCardWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.mod.imagePath != widget.mod.imagePath) _resolveCover();
+  }
+
+  void _resolveCover() {
+    final imagePath = widget.mod.imagePath;
+    _cover = imagePath == null ? null : coverFileFor(imagePath);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -79,12 +101,22 @@ class _ModCardWidgetState extends State<ModCardWidget> {
     );
   }
 
+  Widget _placeholder() => Center(
+        child: Icon(
+          Icons.image_outlined,
+          size: 40,
+          color: widget.isDarkMode
+              ? const Color.fromRGBO(255, 255, 255, 0.4)
+              : const Color.fromRGBO(0, 0, 0, 0.4),
+        ),
+      );
+
   Widget _buildImage(ModInfo mod) {
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
       child: Container(
         decoration: BoxDecoration(
-          gradient: _hasImage
+          gradient: _cover != null
               ? null
               : LinearGradient(
                   begin: Alignment.topLeft,
@@ -102,28 +134,27 @@ class _ModCardWidgetState extends State<ModCardWidget> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (_hasImage)
+            if (_cover != null)
               Image.file(
-                File(mod.imagePath!),
+                _cover!,
                 fit: BoxFit.cover,
                 // Decode to the card's size rather than the file's. Without this a
                 // 2560px screenshot is held as 14 MB of pixels to fill a 320px
                 // card, and a handful of them evict the whole shared ImageCache —
                 // including the marketplace's previews. See
-                // AppConstants.modCardDecodeWidth for the measurements.
+                // AppConstants.modCardDecodeWidth for the measurements. Still
+                // set when the file is the thumbnail, which is already this
+                // wide: a shipped preview is not, and one rule covers both.
                 cacheWidth: AppConstants.modCardDecodeWidth,
                 key: ValueKey('${mod.id}_${mod.imagePath}'),
+                // The file was there when the card mounted and is checked
+                // again only when the path changes, so one deleted underneath
+                // an open tab lands here rather than as the framework's error
+                // widget.
+                errorBuilder: (_, __, ___) => _placeholder(),
               )
             else
-              Center(
-                child: Icon(
-                  Icons.image_outlined,
-                  size: 40,
-                  color: widget.isDarkMode
-                      ? const Color.fromRGBO(255, 255, 255, 0.4)
-                      : const Color.fromRGBO(0, 0, 0, 0.4),
-                ),
-              ),
+              _placeholder(),
 
             // Bottom scrim so overlay badges stay legible over any image.
             const DecoratedBox(

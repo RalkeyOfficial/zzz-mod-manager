@@ -565,6 +565,8 @@ class _PatchInstallPromptState extends ConsumerState<PatchInstallPrompt> {
   /// A missing file falls to the placeholder through `errorBuilder` rather than
   /// an `existsSync` guard: this builds once per visible row while the user
   /// scrolls and types, and that guard is synchronous disk I/O on the frame.
+  /// For the same reason it reads the original rather than probing for the
+  /// cover's thumbnail.
   Widget _thumbnail(ModInfo mod, {required bool selected}) {
     final scheme = Theme.of(context).colorScheme;
     Widget placeholder() => Icon(

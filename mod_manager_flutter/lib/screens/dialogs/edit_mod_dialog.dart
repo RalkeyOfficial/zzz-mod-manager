@@ -1,15 +1,18 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pasteboard/pasteboard.dart';
 import 'package:path/path.dart' as path;
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../models/edit_image.dart';
 import '../../services/api_service.dart';
+import '../../services/mod_manager_service.dart';
 import '../../utils/categories.dart';
 import '../../utils/markdown_editor.dart';
 import '../../utils/notifications.dart';
+import '../../utils/state_providers.dart';
 import '../../utils/zzz_characters.dart';
 import '../components/category_picker.dart';
 
@@ -24,6 +27,10 @@ Future<void> showEditModDialog(
 }) {
   final loc = context.loc;
   final notify = context.notify;
+  // Read at open rather than at save: the save runs behind a modal barrier,
+  // and a future taken now is good however long the dialog stays up.
+  final service = ProviderScope.containerOf(context, listen: false)
+      .read(modManagerServiceProvider.future);
   final selectedChar = ValueNotifier<String>(mod.characterId);
   final descController = TextEditingController(text: mod.description ?? '');
   final tagController = TextEditingController();
@@ -326,7 +333,7 @@ Future<void> showEditModDialog(
             // writes below would be no-ops but could otherwise leave a ghost
             // folder. Bail out and tell the user instead of silently dropping
             // their edits.
-            final modManager = await ApiService.getModManagerService();
+            final modManager = await service;
             final modsPath = modManager.modsPath;
             final stillExists = modsPath != null &&
                 await Directory(path.join(modsPath, mod.id)).exists();
@@ -344,6 +351,7 @@ Future<void> showEditModDialog(
             // 1) Persist everything (the actual save — fast disk writes):
             //    commit staged images, then the metadata + character tag.
             final committedImages = await _commitGalleryImages(
+              modManager,
               mod,
               images.value,
             );
@@ -458,16 +466,16 @@ Widget _editImageThumb(
 /// Commits the staged gallery to disk: imports newly picked files and pasted
 /// bytes into the mod folder, deletes removed images **only when they are
 /// managed copies** (inside `.zzz-mod-manager/images/` — never the mod's own
-/// files like a shipped Preview.png), and returns the final absolute paths.
+/// files like a shipped Preview.png, and the service is what draws that line),
+/// and returns the final absolute paths.
 Future<List<String>> _commitGalleryImages(
+  ModManagerService modManager,
   ModInfo mod,
   List<EditImage> items,
 ) async {
-  final modManager = await ApiService.getModManagerService();
   final modsPath = modManager.modsPath;
   if (modsPath == null) return mod.images;
   final folder = path.join(modsPath, mod.id);
-  final managedDir = modManager.metadataService.imagesDir(folder);
 
   final finalAbs = <String>[];
   final keptExisting = <String>{};
@@ -492,14 +500,7 @@ Future<List<String>> _commitGalleryImages(
 
   for (final original in mod.images) {
     if (keptExisting.contains(original)) continue;
-    if (path.isWithin(managedDir, original)) {
-      try {
-        final file = File(original);
-        if (await file.exists()) await file.delete();
-      } catch (_) {
-        // Ignore: file may already be gone.
-      }
-    }
+    await modManager.metadataService.removeManagedImage(folder, original);
   }
   return finalAbs;
 }

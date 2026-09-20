@@ -388,7 +388,10 @@ void main() {
       expect(origin.containsKey('version'), isFalse);
       expect(origin.containsKey('version_confidence'), isFalse,
           reason: 'unknown is the read-side default and is not written out');
-      expect(ModOrigin.fromJson(origin)!.allowsUnattendedUpdate, isFalse);
+      expect(
+        ModOrigin.fromJson(origin)!.versionConfidence,
+        OriginConfidence.unknown,
+      );
     });
 
     test('is idempotent — a second scan rewrites nothing', () async {
@@ -886,7 +889,8 @@ void main() {
       expect(baseJson(written).containsKey('version_confidence'), isFalse);
 
       final parsed = ModOrigin.fromJson(written)!;
-      expect(parsed.allowsUnattendedUpdate, isFalse);
+      expect(parsed.modIdConfidence, OriginConfidence.unknown);
+      expect(parsed.versionConfidence, OriginConfidence.unknown);
 
       // But the user-facing fields survive — those travelling with a shared
       // folder is the whole point of a sidecar.
@@ -943,7 +947,10 @@ void main() {
       expect(baseJson(written)['archive_md5'], 'aaaa');
       expect(baseJson(written).containsKey('mod_id'), isFalse);
       expect(baseJson(written).containsKey('mod_id_confidence'), isFalse);
-      expect(ModOrigin.fromJson(written)!.allowsUnattendedUpdate, isFalse);
+      expect(
+        ModOrigin.fromJson(written)!.modIdConfidence,
+        OriginConfidence.unknown,
+      );
     });
 
     test('the stored origin block is readable back in memory', () async {

@@ -6,9 +6,9 @@ import '../core/constants.dart';
 import '../services/api_service.dart';
 import '../utils/notifications.dart';
 import '../utils/state_providers.dart';
-import '../utils/zzz_characters.dart';
 import '../l10n/app_localizations.dart';
 import 'components/settings/appearance_section.dart';
+import 'components/settings/auto_tag_section.dart';
 import 'components/settings/diagnostics_section.dart';
 import 'components/settings/marketplace_section.dart';
 import 'components/settings/updates_section.dart';
@@ -23,16 +23,14 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProviderStateMixin {
   final _modsPathController = TextEditingController();
   final _saveModsPathController = TextEditingController();
-  /// The **first** load only, where there is nothing on screen yet.
-  ///
-  /// It swaps the whole page body, which disposes the [AnimationLimiter] below
-  /// — so anything that sets it makes the entire page replay its staggered
-  /// entrance on the way back. That is right exactly once, on the way in.
+  /// Whether the first read of the config has landed. Flipped once, and never
+  /// back: while it is false the whole page body is the loading spinner, and
+  /// swapping the body disposes the [AnimationLimiter] below, so anything that
+  /// cleared it later would make every section replay its staggered entrance.
   /// A long-running *action* reports on the control that started it instead.
-  bool isLoading = false;
+  bool _loaded = false;
   String _selectedLanguage = 'en';
   bool _isUpdatingLanguage = false;
-  bool _autoTagging = false;
   late AnimationController _loadingAnimationController;
   late Animation<double> _loadingAnimation;
 
@@ -62,17 +60,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
   }
 
   Future<void> loadConfig() async {
-    setState(() => isLoading = true);
     try {
       final config = await ApiService.getConfig();
+      if (!mounted) return;
       setState(() {
         _modsPathController.text = config['mods_path'] ?? '';
         _saveModsPathController.text = config['save_mods_path'] ?? '';
         _selectedLanguage = config['language'] ?? 'en';
-        isLoading = false;
+        _loaded = true;
       });
     } catch (e) {
-      setState(() => isLoading = false);
+      if (mounted) setState(() => _loaded = true);
     }
   }
 
@@ -145,7 +143,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
         ),
         // Content
         Expanded(
-          child: isLoading
+          child: !_loaded
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -251,7 +249,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
                           // Auto-Tagging Section
                           _buildSectionTitle(loc.t('settings.sections.auto_tag')),
                           const SizedBox(height: 16),
-                          _buildAutoTagSection(loc, isDarkMode),
+                          const AutoTagSettingsSection(),
                           const SizedBox(height: 32),
                           // Appearance Section
                           _buildSectionTitle(loc.t('settings.sections.appearance')),
@@ -390,334 +388,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
         setState(() => _isUpdatingLanguage = false);
       }
     }
-  }
-
-  Widget _buildAutoTagSection(AppLocalizations loc, bool isDarkMode) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDarkMode ? Colors.grey[850] : Colors.grey[50],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isDarkMode ? Colors.grey[700]! : Colors.grey[200]!,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF8B5CF6), Color(0xFFA855F7)],
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.auto_awesome,
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                loc.t('settings.auto_tag.title'),
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: isDarkMode ? Colors.white : Colors.black87,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            loc.t('settings.auto_tag.description'),
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[600],
-              height: 1.5,
-            ),
-          ),
-          const SizedBox(height: 16),
-          _buildRequirement('✓', loc.t('settings.auto_tag.import_hint'), Colors.green),
-          const SizedBox(height: 8),
-          _buildRequirement(
-            '✓',
-            loc.t(
-              'settings.auto_tag.characters_supported',
-              params: {'count': '${zzzCharactersData.length}'},
-            ),
-            Colors.green,
-          ),
-          const SizedBox(height: 8),
-          _buildRequirement('✓', loc.t('settings.auto_tag.naming_hint'), Colors.blue),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
-              ),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.lightbulb_outline,
-                  color: Color(0xFF8B5CF6),
-                  size: 20,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    loc.t('settings.auto_tag.example'),
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey[700],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              // Disabled while it runs, which is the whole guard: the work is a
-              // pass over every mod folder, and two of them interleaving would
-              // race on the same sidecars.
-              onPressed: _autoTagging ? null : _autoTagAllMods,
-              icon: _autoTagging
-                  // Sized to the icon it replaces, so the label does not shift
-                  // sideways when the spinner appears.
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
-                  : const Icon(Icons.auto_awesome, size: 18),
-              label: Text(
-                _autoTagging
-                    ? loc.t('settings.auto_tag.running')
-                    : loc.t('settings.auto_tag.run_action'),
-              ),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF8B5CF6),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            loc.t('settings.auto_tag.note'),
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[500],
-              fontStyle: FontStyle.italic,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Tags every mod whose folder name names a character.
-  ///
-  /// **The progress is on the button, not over the page.** Setting [isLoading]
-  /// here swaps the entire page body for the first-load spinner, and tearing the
-  /// page down disposes the [AnimationLimiter] — so rebuilding it hands every
-  /// section a fresh `_shouldRunAnimation` and the whole settings page replays
-  /// its 375 ms staggered entrance. A blocking modal on top would hide the swap
-  /// on the way in and not on the way out, which is the half the user sees: the
-  /// page appearing to reload for a change that touches nothing on it.
-  ///
-  /// [isLoading] is for the **first** load, where there is genuinely nothing to
-  /// show yet. Everything else on this page reports where it happens — the
-  /// language dropdown already spins in place beside itself.
-  ///
-  /// The result still gets a dialog: the tagging happens to mods on another
-  /// tab, so it is a change the user cannot see, and those may report their
-  /// success.
-  Future<void> _autoTagAllMods() async {
-    final loc = context.loc;
-    setState(() => _autoTagging = true);
-
-    try {
-      final autoTags = await ApiService.autoTagAllMods();
-
-      if (autoTags.isEmpty) {
-        if (mounted) {
-          context.notify.warning(
-            loc.t('settings.auto_tag.no_mods_title'),
-            body: loc.t('settings.auto_tag.no_mods_body'),
-          );
-        }
-      } else {
-        if (mounted) {
-          final tagLabel =
-              loc.plural('settings.auto_tag.tag', autoTags.length);
-          final summaryText = loc.t(
-            'settings.auto_tag.summary',
-            params: {
-              'count': '${autoTags.length}',
-              'plural': tagLabel,
-            },
-          );
-
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: Row(
-                children: [
-                  const Icon(Icons.auto_awesome, color: Color(0xFF8B5CF6), size: 28),
-                  const SizedBox(width: 8),
-                  Text(loc.t('settings.auto_tag.success_title')),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    summaryText,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.label,
-                              color: Color(0xFF8B5CF6),
-                              size: 18,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              loc.t('settings.auto_tag.list_title'),
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF8B5CF6),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        ...autoTags.entries.take(5).map(
-                              (entry) => Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 2,
-                                ),
-                                child: Text(
-                                  '• ${entry.key} → ${getCharacterDisplayName(entry.value)}',
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              ),
-                            ),
-                        if (autoTags.length > 5)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text(
-                              loc.t(
-                                'mods.import.auto_tag_and_more',
-                                params: {'count': '${autoTags.length - 5}'},
-                              ),
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    loc.t('settings.auto_tag.success_message'),
-                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                  ),
-                ],
-              ),
-              actions: [
-                FilledButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF8B5CF6),
-                  ),
-                  child: Text(loc.t('settings.auto_tag.ok')),
-                ),
-              ],
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        context.notify.error(
-          loc.t('settings.auto_tag.error_title'),
-          body: '$e',
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _autoTagging = false);
-      }
-    }
-  }
-
-  Widget _buildRequirement(String icon, String text, Color color) {
-    return Row(
-      children: [
-        Container(
-          width: 20,
-          alignment: Alignment.center,
-          child: Text(
-            icon,
-            style: TextStyle(
-              color: color,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            text,
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.grey[600],
-            ),
-          ),
-        ),
-      ],
-    );
   }
 
   Widget _buildSectionTitle(String title) {

@@ -230,7 +230,7 @@ class _ModBackupsDialogState extends ConsumerState<ModBackupsDialog> {
       );
       return;
     }
-    final mods = await ApiService.getModManagerService();
+    final mods = await ref.read(modManagerServiceProvider.future);
     final snapshots = ref.read(snapshotServiceProvider);
     final applier = UpdateApplier(
       snapshots: snapshots,

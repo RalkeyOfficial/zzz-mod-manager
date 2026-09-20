@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../l10n/app_localizations.dart';
-import '../../services/api_service.dart';
 import '../../services/bulk_assume_current.dart';
 import '../../services/origin_write.dart';
 import '../../utils/notifications.dart';
@@ -39,7 +38,7 @@ class BulkAssumeCurrentOutcome {
 Future<BulkAssumeCurrentOutcome?> confirmAndApplyAssumeCurrent(
   BuildContext context,
   BulkAssumeCurrentPlan plan, {
-  OriginWriter writer = ApiService.updateModOrigin,
+  required OriginWriter writer,
 }) async {
   if (!plan.hasWork) return null;
   final confirmed = await showDialog<bool>(

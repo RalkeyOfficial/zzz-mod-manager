@@ -14,7 +14,8 @@ enum OriginWriteResult {
 }
 
 /// Amends one mod's origin block, handing [update] the block as it is on disk.
-/// Production is `ApiService.updateModOrigin`; tests inject one so a widget never reaches the developer's own library.
+/// Production is the library service's `updateModOrigin`, reached through `modManagerServiceProvider`;
+/// tests inject one so a widget never reaches the developer's own library.
 typedef OriginWriter = Future<OriginWriteResult> Function(
   String modName,
   ModOrigin? Function(ModOrigin? current) update,

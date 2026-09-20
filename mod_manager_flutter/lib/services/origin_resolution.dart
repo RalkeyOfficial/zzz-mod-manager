@@ -63,8 +63,8 @@ class ResolveCandidate {
   /// Whether picking this row may be recorded at [OriginConfidence.exact].
   ///
   /// Only the hash match qualifies. Everything else is the user telling us,
-  /// which is [OriginConfidence.user] — trusted, but not the tier that gates
-  /// unattended overwrites.
+  /// which is [OriginConfidence.user] — trusted, but not a claim about the
+  /// bytes themselves.
   bool get isExact => reason == FileMatchReason.archiveHash;
 }
 
@@ -268,8 +268,9 @@ class OriginResolution {
   /// what we downloaded is [OriginConfidence.user]-grade evidence on its own, so
   /// a naive `exact ? exact : user` would take a mod we fetched ourselves and
   /// demote it to a guess — the one tier change that costs something, since
-  /// `exact` is what gates unattended updates. Harmless while nothing preselected
-  /// the recorded row; the moment the dialog does, pressing Save is enough.
+  /// `exact` records a checksum match and nothing short of another can restore
+  /// it. Harmless while nothing preselected the recorded row; the moment the
+  /// dialog does, pressing Save is enough.
   static ModOrigin? pickFile(
     ModOrigin? existing, {
     required int modId,
@@ -303,9 +304,9 @@ class OriginResolution {
   /// Separate from [pickFile] because it claims something weaker and is allowed
   /// to do less. The user consented to a plan; they did not look at this mod's
   /// file list and recognise their download, so the tier is
-  /// [OriginConfidence.inferred] — which never drives an unattended update and
-  /// renders as a guess on the card. Writing `user` here would launder a
-  /// one-line inference into the user's own testimony.
+  /// [OriginConfidence.inferred] — which renders as a guess on the card.
+  /// Writing `user` here would launder a one-line inference into the user's
+  /// own testimony.
   ///
   /// Returns null — abandoning that mod's write — unless the block as freshly
   /// read still names [modId] and still has **no** version at all. It never

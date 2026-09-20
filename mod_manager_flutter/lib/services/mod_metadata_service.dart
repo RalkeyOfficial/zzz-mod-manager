@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:path/path.dart' as path;
 import '../core/constants.dart';
 import '../models/mod_metadata.dart';
+import 'cover_thumbnail.dart';
 import 'log/logger.dart';
 
 final Logger _log = Logger('metadata');
@@ -22,6 +24,13 @@ class ModMetadataService {
   /// `<mod>/.zzz-mod-manager/images`
   String imagesDir(String modFolderPath) =>
       path.join(metadataDir(modFolderPath), AppConstants.modMetadataImagesDirName);
+
+  /// `<mod>/.zzz-mod-manager/thumbnails` — the card-sized copy of each image
+  /// in [imagesDir], under the same name. See `cover_thumbnail.dart`.
+  String thumbnailsDir(String modFolderPath) => path.join(
+        metadataDir(modFolderPath),
+        AppConstants.modMetadataThumbnailsDirName,
+      );
 
   /// Whether this folder has a sidecar at all, without parsing it.
   ///
@@ -75,6 +84,11 @@ class ModMetadataService {
   /// Copies/writes [bytes] into the mod's images dir under the next free
   /// `NN.<ext>` name and returns the path **relative to the mod folder root**
   /// (suitable for storing in [ModMetadata.images]). Returns null on failure.
+  ///
+  /// A still image wider than a card also gets its thumbnail written beside it.
+  /// That half is best-effort: the image is the user's, the thumbnail is
+  /// ours, and a cover that imported but has no small copy just loads the slow
+  /// way.
   Future<String?> addImageBytes(
     String modFolderPath,
     List<int> bytes, {
@@ -89,11 +103,53 @@ class ModMetadataService {
       final fileName = '${_nextImageIndex(dir).toString().padLeft(2, '0')}.$extension';
       final dest = File(path.join(dir.path, fileName));
       await dest.writeAsBytes(bytes);
+      if (wantsThumbnail(extension)) {
+        await _writeThumbnail(dest.path, bytes);
+      }
       return path.relative(dest.path, from: modFolderPath);
     } catch (e) {
       _log.error('could not save an image',
           error: e, fields: {'mod': modFolderPath});
       return null;
+    }
+  }
+
+  Future<void> _writeThumbnail(String imagePath, List<int> bytes) async {
+    final target = thumbnailPathFor(imagePath);
+    if (target == null) return;
+    try {
+      final encoded = await encodeThumbnail(
+        bytes is Uint8List ? bytes : Uint8List.fromList(bytes),
+      );
+      if (encoded == null) return;
+      final file = File(target);
+      await file.parent.create(recursive: true);
+      await file.writeAsBytes(encoded);
+    } catch (e) {
+      _log.warning('could not write a thumbnail',
+          error: e, fields: {'image': imagePath});
+    }
+  }
+
+  /// Deletes an image this app imported, together with its thumbnail.
+  ///
+  /// Only a file inside [imagesDir] is touched: a shipped `Preview.png` is the
+  /// mod author's, and taking it out of the gallery must not delete it. A file
+  /// already gone is not a failure.
+  Future<void> removeManagedImage(
+    String modFolderPath,
+    String absolutePath,
+  ) async {
+    if (!path.isWithin(imagesDir(modFolderPath), absolutePath)) return;
+    for (final candidate in [absolutePath, thumbnailPathFor(absolutePath)]) {
+      if (candidate == null) continue;
+      try {
+        final file = File(candidate);
+        if (await file.exists()) await file.delete();
+      } catch (e) {
+        _log.warning('could not delete an image',
+            error: e, fields: {'file': candidate});
+      }
     }
   }
 

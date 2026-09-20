@@ -16,6 +16,7 @@ import '../services/bulk_update_check.dart';
 import '../services/installed_mods_index.dart';
 import '../services/mod_manager_service.dart';
 import '../services/origin_status.dart';
+import '../services/origin_write.dart';
 import '../services/update_check.dart';
 import 'mod_sorting.dart';
 import 'zzz_characters.dart';
@@ -28,10 +29,23 @@ import 'zzz_characters.dart';
 // is one subsystem with its own vocabulary (severity, pinning, handles), and
 // call sites reach it through `context.notify` rather than through a provider.
 
-// API Service Provider
+/// The library's service: scanning, linking, importing, and the sidecar writes.
+///
+/// **Every widget reaches it through this**, never through
+/// `ApiService.getModManagerService`. The facade only builds the instance; a
+/// test hands a widget a library of its own by overriding this one provider
+/// (`TempLibrary.overrides`), and there is nothing else to substitute.
 final modManagerServiceProvider = FutureProvider<ModManagerService>((ref) async {
   return await ApiService.getModManagerService();
 });
+
+/// The production [OriginWriter], for the dialogs that take one as a seam.
+///
+/// Takes the service's future rather than a `ref`, and resolves it when the
+/// writer is called: a `WidgetRef` throws once its widget is gone, and a bulk
+/// write can outlive the tab that started it.
+OriginWriter originWriterFor(Future<ModManagerService> service) =>
+    (modId, update) async => (await service).updateModOrigin(modId, update);
 
 /// The GameBanana API client (browse / search / mod detail).
 ///
@@ -187,7 +201,7 @@ class LibraryNotifier extends AsyncNotifier<List<ModInfo>> {
 
     await configService.cleanupInvalidTags([for (final mod in mods) mod.id]);
 
-    final modManagerService = await ApiService.getModManagerService();
+    final modManagerService = await ref.read(modManagerServiceProvider.future);
     return modManagerService.enrichModsWithKeybinds(mods);
   }
 }

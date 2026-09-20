@@ -18,7 +18,7 @@ void main() {
     test('an unrecognised tier degrades to unknown, never to exact', () {
       // Load-bearing, not defensive style. A future build inventing a stronger
       // tier must never be read by this build as a claim it can act on: `exact`
-      // is the one tier permitted to overwrite a user's files unattended.
+      // is the one tier the update check reports a definite verdict on.
       expect(OriginConfidence.parse('attested'), OriginConfidence.unknown);
       expect(OriginConfidence.parse('verified'), OriginConfidence.unknown);
       expect(OriginConfidence.parse('EXACT'), OriginConfidence.unknown,
@@ -34,11 +34,11 @@ void main() {
       }
     });
 
-    test('only exact permits an unattended overwrite', () {
+    test('only exact and user count as confirmed', () {
       for (final tier in OriginConfidence.values) {
         expect(
-          tier.allowsUnattendedUpdate,
-          tier == OriginConfidence.exact,
+          tier.isConfirmed,
+          tier == OriginConfidence.exact || tier == OriginConfidence.user,
           reason: 'tier ${tier.wire}',
         );
       }
@@ -805,70 +805,4 @@ void main() {
     });
   });
 
-  group('allowsUnattendedUpdate', () {
-    ModOrigin origin({
-      OriginConfidence modIdConfidence = OriginConfidence.exact,
-      OriginConfidence versionConfidence = OriginConfidence.exact,
-      OriginTracking tracking = OriginTracking.auto,
-      bool remoteMissing = false,
-      OriginProvenance provenance = OriginProvenance.downloaded,
-    }) =>
-        ModOrigin(
-          provenance: provenance,
-          tracking: tracking,
-          downloads: [
-            ModDownload(
-              modId: 1,
-              modIdConfidence: modIdConfidence,
-              versionConfidence: versionConfidence,
-              remoteMissing: remoteMissing,
-            ),
-          ],
-        );
-
-    test('needs BOTH axes exact', () {
-      // Knowing the mod but not the file is not enough to know what would
-      // replace it.
-      expect(origin().allowsUnattendedUpdate, isTrue);
-      expect(
-        origin(modIdConfidence: OriginConfidence.user).allowsUnattendedUpdate,
-        isFalse,
-      );
-      expect(
-        origin(versionConfidence: OriginConfidence.user)
-            .allowsUnattendedUpdate,
-        isFalse,
-      );
-    });
-
-    test('is off when the user declared the mod local', () {
-      expect(
-        origin(tracking: OriginTracking.off).allowsUnattendedUpdate,
-        isFalse,
-      );
-    });
-
-    test('is off when the mod is gone upstream', () {
-      expect(origin(remoteMissing: true).allowsUnattendedUpdate, isFalse);
-    });
-
-    test('a hand-imported archive can still qualify', () {
-      // Provenance is not the gate; confidence is. A banked hash matching a
-      // published checksum is exact-grade knowledge about a folder nobody
-      // downloaded through the app.
-      expect(
-        origin(provenance: OriginProvenance.importedArchive)
-            .allowsUnattendedUpdate,
-        isTrue,
-      );
-    });
-
-    test('is off for a folder with no stack at all', () {
-      expect(
-        const ModOrigin(provenance: OriginProvenance.downloaded)
-            .allowsUnattendedUpdate,
-        isFalse,
-      );
-    });
-  });
 }

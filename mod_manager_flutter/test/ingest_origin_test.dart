@@ -105,7 +105,6 @@ void main() {
       expect(origin.modId, isNull);
       expect(origin.modIdConfidence, OriginConfidence.unknown);
       expect(origin.versionConfidence, OriginConfidence.unknown);
-      expect(origin.allowsUnattendedUpdate, isFalse);
     });
   });
 

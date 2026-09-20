@@ -1056,11 +1056,11 @@ days later that a mod they have since edited was silently replaced.
 
 Two things follow, and the second is the one that is easy to get wrong:
 
-- **Confidence is not the mitigation.** `ModOrigin.allowsUnattendedUpdate`
-  demands `exact` on both axes, which is a strong statement about *which file
-  this is*. It says nothing about what the folder holds, which is where every
-  hazard in this document lives. A byte-perfect identification of the right
-  successor still overwrites a hand-merged second mod.
+- **Confidence is not the mitigation.** `exact` on both axes is a strong
+  statement about *which file this is*. It says nothing about what the folder
+  holds, which is where every hazard in this document lives. A byte-perfect
+  identification of the right successor still overwrites a hand-merged second
+  mod.
 - **Nor is the snapshot.** §5 makes it unconditional, so recovery exists — but
   none of the accepted losses announce themselves, which is exactly why the age
   floor beats the count cap. A recovery nobody knows to reach for is not a
@@ -1078,10 +1078,9 @@ Two things follow, and the second is the one that is easy to get wrong:
 and draws a badge: nothing it does is hard to undo. That half is opt-in and
 shipped — [`update-checks.md` §5.1](update-checks.md#51-checking-at-startup).
 
-`allowsUnattendedUpdate` consequently has no reader in `lib/`. It is kept
-because it is the only place the "`exact` on both axes" rule is written as code,
-and its tests are what pin the tier table
-([`origin-tracking.md` §1](origin-tracking.md#1-two-axes-confidence-and-provenance)).
+Consequently no code gates on "`exact` on both axes": nothing acts unattended, so nothing needs the gate.
+The rule is stated in prose in [`origin-tracking.md` §1](origin-tracking.md#1-two-axes-confidence-and-provenance),
+and what the code does draw on is the weaker `OriginConfidence.isConfirmed` line, which caps the update verdict.
 
 ### Known gaps
 

@@ -80,7 +80,6 @@ void main() {
     final after = updated(before());
     expect(after.modIdConfidence, OriginConfidence.exact);
     expect(after.versionConfidence, OriginConfidence.exact);
-    expect(after.allowsUnattendedUpdate, isTrue);
   });
 
   test('provenance becomes downloaded even for a hand-imported folder', () {

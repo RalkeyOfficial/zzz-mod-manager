@@ -81,6 +81,9 @@ dependency at all: see `test/origin_backfill_test.dart` and
     ├── images/
     │   ├── 01.png
     │   └── 02.jpg
+    ├── thumbnails/                  ← card-sized copies, never listed in `images`
+    │   ├── 01.png
+    │   └── 02.png
     └── replaced/                    ← §5
         └── 605460/
             └── Textures/Body.dds.orig
@@ -396,6 +399,19 @@ rather than reinterpreting this field.
 - **Imported images are named `NN.<ext>`**, numbered by
   `_nextImageIndex()` (max existing number + 1). The extension follows the source
   file, so the gallery is a mix of `.png`/`.jpg`.
+- **An imported still image wider than a card gets a thumbnail** at
+  `.zzz-mod-manager/thumbnails/NN.png`, `AppConstants.modCardDecodeWidth` wide
+  (`services/cover_thumbnail.dart`). It is derived state: not listed in `images`,
+  written best-effort, deleted with its image by `removeManagedImage()`, and every
+  card reads it through `coverFileFor()`, which falls back to the original when it
+  is missing. Only an import writes one: a cover imported by an older version
+  keeps loading from the original until it is re-added through the edit dialog,
+  so a `thumbnails/` folder with fewer entries than `images/` is the expected
+  state of an upgraded library. The gallery viewer and the lightbox always read
+  the original. A
+  shipped `Preview.png` never gets one — the app writes nothing beside a mod
+  author's files — and neither does a `.gif` or `.webp`, whose copy would keep one
+  frame of an animation.
 - **`character_id` empty or `"unknown"` is normalised to `null` on save.** Treat
   "no character" as absence, never as the literal string `unknown` on disk. This
   holds on *every* route in: `ModMetadataRepository.save()`, `setCharacter()` (which also

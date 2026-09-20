@@ -99,6 +99,9 @@ Timeouts
 `utils/state_providers.dart` is the central registry — add global state there, not ad-hoc.
 One exception: `utils/marketplace_providers.dart` holds the marketplace's browsing session, which is one screen's state rather than the app's.
 
+Widgets and dialogs reach `ModManagerService` through `modManagerServiceProvider`, never `ApiService.getModManagerService` — the provider is the one seam a test overrides.
+A flow that outlives its widget reads it through the app's `ProviderContainer`, since a `WidgetRef` throws once its widget is gone.
+
 The library is `libraryProvider` and belongs to no screen. It owns the scan; `modsProvider` is its plain-list view, `installedModsIndexProvider` derives from it, and the Mods tab builds `charactersProvider`'s localized groups from it.
 So: whoever changes a mod folder invalidates `libraryProvider`, never only something derived from it — invalidating the index alone rebuilds it from the same cached scan.
 One walk of the folder at a time: a `rescan()` during a running scan takes that answer, and a scan never overwrites an edit published while it was walking.

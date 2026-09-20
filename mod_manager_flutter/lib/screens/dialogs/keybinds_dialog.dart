@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
@@ -7,6 +8,7 @@ import '../../models/keybind_info.dart';
 import '../../services/api_service.dart';
 import '../../services/log/logger.dart';
 import '../../utils/notifications.dart';
+import '../../utils/state_providers.dart';
 
 /// Lists a mod's keybinds as chips; tapping one opens [showEditKeybindDialog].
 /// [onSaved] runs after a keybind is successfully changed.
@@ -262,7 +264,10 @@ Future<void> _saveKeybindChange(
   final loc = context.loc;
   final notify = context.notify;
   try {
-    final modManagerService = await ApiService.getModManagerService();
+    final modManagerService = await ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(modManagerServiceProvider.future);
     final modsPath = modManagerService.modsPath;
 
     if (modsPath == null) {

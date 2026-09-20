@@ -95,6 +95,28 @@ void main() {
     expect(find.byType(Image), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('the card reads the thumbnail beside an imported cover',
+      (tester) async {
+    // The decode width bounds memory; this is what stops the card reading a
+    // 3.8 MB screenshot off the disk to get there.
+    // Synchronous on purpose: a `testWidgets` body runs in a fake-async zone
+    // where real file I/O never completes.
+    final managed = '${temp.path}/.zzz-mod-manager/images/01.png';
+    final thumbnail = '${temp.path}/.zzz-mod-manager/thumbnails/01.png';
+    File(managed)
+      ..createSync(recursive: true)
+      ..writeAsBytesSync(_onePixelPng);
+    File(thumbnail)
+      ..createSync(recursive: true)
+      ..writeAsBytesSync(_onePixelPng);
+
+    await pumpCard(tester, modWith(managed));
+
+    final image = tester.widget<Image>(find.byType(Image));
+    final provider = (image.image as ResizeImage).imageProvider as FileImage;
+    expect(provider.file.path, thumbnail);
+  });
 }
 
 /// Smallest valid PNG — the test asserts how the file is decoded, not what it is.

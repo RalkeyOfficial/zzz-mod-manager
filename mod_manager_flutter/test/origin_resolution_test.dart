@@ -299,12 +299,11 @@ void main() {
     test('a mod with no block at all gets one at user confidence', () {
       final origin = OriginResolution.bind(null, 555);
       expect(origin.modId, 555);
+      // Trusted, but not exact: the user did not download this file and no
+      // checksum matched it.
       expect(origin.modIdConfidence, OriginConfidence.user);
       expect(origin.source, 'gamebanana');
       expect(origin.provenance, OriginProvenance.importedFolder);
-      // Trusted, but not exact: the user did not download this file and no
-      // checksum matched it.
-      expect(origin.allowsUnattendedUpdate, isFalse);
     });
 
     test('confirming the id the backfill guessed keeps the file data', () {
@@ -359,15 +358,15 @@ void main() {
       expect(origin.versionConfidence, OriginConfidence.user);
     });
 
-    test('a hash-matched pick is exact and can drive auto-update', () {
+    test('a hash-matched pick is exact on both axes', () {
       final origin = OriginResolution.pickFile(
         bound(1).copyBase(modIdConfidence: OriginConfidence.exact),
         modId: 1,
         file: file,
         exact: true,
       )!;
+      expect(origin.modIdConfidence, OriginConfidence.exact);
       expect(origin.versionConfidence, OriginConfidence.exact);
-      expect(origin.allowsUnattendedUpdate, isTrue);
     });
 
     test('abandons rather than writing a file id against the wrong mod', () {
@@ -442,7 +441,7 @@ void main() {
     test('keeps the identity so resuming is a real undo', () {
       final off = OriginResolution.stopTracking(bound(555));
       expect(off.modId, 555);
-      expect(off.allowsUnattendedUpdate, isFalse);
+      expect(off.tracking, OriginTracking.off);
       expect(OriginResolution.resumeTracking(off).tracking, OriginTracking.auto);
     });
   });

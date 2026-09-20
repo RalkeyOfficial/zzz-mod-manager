@@ -728,7 +728,8 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
       plan,
       updatesFound: updatesFound,
       unreachable: unreachable,
-      writer: widget.originWriter ?? ApiService.updateModOrigin,
+      writer: widget.originWriter ??
+          originWriterFor(ref.read(modManagerServiceProvider.future)),
     );
     // Only on a write: the plan is derived from the records and the library, so
     // a run that changed nothing leaves nothing stale behind.
@@ -774,7 +775,8 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
       final outcome = await confirmAndApplyAssumeCurrent(
         context,
         plan,
-        writer: widget.originWriter ?? ApiService.updateModOrigin,
+        writer: widget.originWriter ??
+            originWriterFor(ref.read(modManagerServiceProvider.future)),
       );
       if (!mounted || outcome == null) {
         restoreFilter();
