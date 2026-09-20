@@ -71,7 +71,7 @@ Characters
 
 Claims the UI may make
 - An archive md5 match is a matching key, never an integrity claim — never render a match as "verified".
-- An update overwrites a mod folder; it never empties, moves or replaces it, and never writes without a snapshot first. Taking a patch out follows the same rule ([`applying-updates.md`](../docs/applying-updates.md)).
+- An update rewrites a mod folder in place: snapshot first, then everything but the sidecar is deleted and the new version written, with a recorded patch put back on top. The folder is never moved or replaced, and nothing decides which old files to keep ([`applying-updates.md`](../docs/applying-updates.md)). Taking a patch out follows the same snapshot-first rule.
 - A mod folder is a stack of downloads (`origin.downloads`, bottom-most first); position is the role, never a separate stored flag ([`origin-tracking.md`](../docs/origin-tracking.md)).
 - An `InstalledFileRole` we do not recognise resolves to `replaced`, never `added`.
 - A displaced original is renamed, never stored under its real name — files kept in `.zzz-mod-manager/replaced/` take a `.orig` suffix ([`applying-updates.md`](../docs/applying-updates.md) §5).

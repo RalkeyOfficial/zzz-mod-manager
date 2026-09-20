@@ -63,11 +63,12 @@ decisions made so far, not *how* to implement it. Items are grouped by area.
   first: `exact` is a claim about which remote file this is, and says nothing
   about what the mod folder holds, which is where every hazard of applying an
   update lives.
-- **An update overwrites, it never replaces.** New files are copied *over* the mod
-  folder; the folder is never emptied, moved or deleted. A mod folder frequently
-  holds files from a second download — a *patch mod*, or a hand-merge — and
-  replacing the folder destroys them. In the common case it destroys the mod
-  itself: see §4.1, which is the whole reasoning.
+- **An update wipes and rewrites the folder in place, and never decides which old
+  files to keep.** Snapshot first, then everything but the sidecar is deleted and
+  the new version written; the folder itself is never moved or replaced. A mod
+  folder frequently holds a second download — a *patch mod* — and the record of
+  its files is what puts it back from the snapshot; a hand-merge goes with the old
+  version and stays in the saved copy. See §4.1.
 - **An update always snapshots first, and never tries to reconstruct local
   edits.** Users rebind keybinds inside mod folders, and an update that ships the
   same `.ini` reverts them. That is **accepted loss**, recovered from the snapshot
@@ -282,19 +283,18 @@ Two things are **refused rather than unbuilt**, both recorded in
 
 ### 4.1 How an update is actually applied
 
-**The mechanism is overwrite** — extract to temp, then copy over the live folder.
-Never empty it, never move it, never delete it.
+**The mechanism is wipe and write** — extract to temp, snapshot, delete everything in the live folder but the sidecar, copy the new version in.
+Never move the folder, never replace it, never decide which old files to keep.
 
 A mod folder is often **mixed**: it holds files from two downloads, because a
 *patch mod* was applied into it. Patches replace rather than add, so a mixed folder
-looks completely ordinary from the outside. Replacing such a folder destroys the
-other download, and the common case is worse than losing a fix — the app knows the
-folder as *the patch*, so what remains is a lone `.ini` with nothing to apply to.
+looks completely ordinary from the outside. The wipe takes the patch with everything
+else, and the record of its files is what puts it back from the snapshot onto the new
+base's layout — without that record, what remains after an update is the base alone.
 
-Everything that follows from that — the patch test, the stale-`.ini` rule, the
-layout replay, removing what the last version shipped, replaying one archive into
-every mod it installed, and the ordering that is the safety argument — is
-[`docs/applying-updates.md`](docs/applying-updates.md).
+Everything that follows from that — the patch test, the layout replay, putting the
+patch back, replaying one archive into every mod it installed, and the ordering that
+is the safety argument — is [`docs/applying-updates.md`](docs/applying-updates.md).
 
 ### 4.2 Backups — where they live
 

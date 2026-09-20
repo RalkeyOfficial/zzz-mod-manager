@@ -8,11 +8,12 @@ import 'package:mod_manager_flutter/services/patch_placement.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_applier.dart';
 import 'package:path/path.dart' as p;
 
-/// **An update removes what the last version wrote and the new one does not.**
+/// **An update leaves the new version in the folder and nothing else.**
 ///
-/// Real directories, because the claim is about files on disk: an overwrite only ever adds and replaces,
-/// so without this the leftovers would stay and go on being loaded — a renamed `.ini` doubling the mod's hotkeys, a dropped shader still applied.
-/// Each download records the files it laid down, and a folder with no record counts everything in it as the last version.
+/// Real directories, because the claim is about files on disk: the folder is wiped before the copy,
+/// so a renamed `.ini` cannot double the mod's hotkeys and a dropped shader cannot go on being applied — and nothing decides which files were whose.
+/// A patch recorded on top is the one thing put back, and the sidecar the one thing the wipe leaves.
+/// A patch's own update is the exception, since it sits over a base that stays: those cases are the last group.
 class _FakeActivation implements ModActivationPort {
   final Set<String> active = {};
 
@@ -71,24 +72,16 @@ void main() {
   String modIni(String filename) =>
       '[TextureOverrideBody]\nps-t0 = R\n\n[R]\nfilename = $filename\n';
 
-  List<InstalledFile> recordOf(List<String> paths) => [
-        for (final path in paths)
-          InstalledFile(path: path, role: InstalledFileRole.replaced),
-      ];
-
-  /// Preview against the folder's record, then write.
+  /// Preview, then write base-then-patch.
   Future<UpdateApplyResult> run(
     String modName,
     Directory folder,
     Directory source, {
-    List<String> recorded = const <String>[],
     List<String> patchFiles = const <String>[],
   }) async {
     final preview = await applier.preview(
       modFolder: folder,
       incomingFolders: [source.path],
-      excluding: patchFiles,
-      recorded: recordOf(recorded),
     );
     return applier.applyBaseThenPatch(
       modName: modName,
@@ -98,8 +91,9 @@ void main() {
     );
   }
 
-  test('a file the new version no longer ships is removed', () async {
-    // `ShaderFixes/glow.hlsl` is referenced by no `.ini` in the folder, so nothing but the record can tell it was the old version's.
+  test('a file the new version no longer ships is gone', () async {
+    // `ShaderFixes/glow.hlsl` is referenced by no `.ini` in the folder, and
+    // left in place the loader would go on applying it.
     final mod = modFolder('Ellen');
     write(mod, 'ellen.ini', modIni('Body.dds'));
     write(mod, 'Body.dds', 'v1');
@@ -109,72 +103,61 @@ void main() {
     write(source, 'ellen.ini', modIni('Body.dds'));
     write(source, 'Body.dds', 'v2');
 
-    final result = await run('Ellen', mod, source,
-        recorded: ['ellen.ini', 'Body.dds', 'ShaderFixes/glow.hlsl']);
+    final result = await run('Ellen', mod, source);
 
     expect(result.success, isTrue);
-    expect(read(mod, 'Body.dds'), 'v2', reason: 'the ordinary overwrite');
+    expect(read(mod, 'Body.dds'), 'v2');
     expect(has(mod, 'ShaderFixes/glow.hlsl'), isFalse);
+    expect(Directory(p.join(mod.path, 'ShaderFixes')).existsSync(), isFalse,
+        reason: 'an empty ShaderFixes/ would look like the mod still ships shaders');
     expect(result.droppedFiles, ['ShaderFixes/glow.hlsl']);
   });
 
-  test('the directory it was the last file in goes with it', () async {
-    // The visible half. A mod folder holding an empty `ShaderFixes/` looks like
-    // it still ships shaders, and nobody can tell by looking.
-    final mod = modFolder('Ellen');
-    write(mod, 'ellen.ini', modIni('Body.dds'));
-    write(mod, 'ShaderFixes/glow.hlsl', 'old shader');
-
-    final source = incoming('Ellen v2');
-    write(source, 'ellen.ini', modIni('Body.dds'));
-
-    await run('Ellen', mod, source,
-        recorded: ['ellen.ini', 'ShaderFixes/glow.hlsl']);
-
-    expect(Directory(p.join(mod.path, 'ShaderFixes')).existsSync(), isFalse);
-  });
-
-  test('a directory still holding something is left alone', () async {
-    final mod = modFolder('Ellen');
-    write(mod, 'ellen.ini', modIni('Textures/Body.dds'));
-    write(mod, 'Textures/Body.dds', 'v1');
-    write(mod, 'Textures/mine.dds', 'i put this here');
-
-    final source = incoming('Ellen v2');
-    write(source, 'ellen.ini', modIni('Body.dds'));
-    write(source, 'Body.dds', 'v2');
-
-    await run('Ellen', mod, source,
-        recorded: ['ellen.ini', 'Textures/Body.dds']);
-
-    expect(read(mod, 'Textures/mine.dds'), 'i put this here');
-    expect(Directory(p.join(mod.path, 'Textures')).existsSync(), isTrue);
-  });
-
-  test('a file nothing recorded writing is never touched', () async {
-    // A second mod merged in by hand. The record is the licence to delete, and
-    // there is none for this file.
+  test('a file the app never wrote goes with the old version', () async {
+    // A second mod merged in by hand. Nothing decides whether it was the old
+    // version's or the user's: the folder is emptied, and the snapshot has it.
     final mod = modFolder('Ellen');
     write(mod, 'ellen.ini', modIni('Body.dds'));
     write(mod, 'somebody_elses.ini', modIni('Theirs.dds'));
-    write(mod, 'Theirs.dds', 'a whole other mod');
+    write(mod, 'Textures/Theirs.dds', 'a whole other mod');
 
     final source = incoming('Ellen v2');
     write(source, 'ellen.ini', modIni('Body.dds'));
     write(source, 'Body.dds', 'v2');
 
-    final result =
-        await run('Ellen', mod, source, recorded: ['ellen.ini', 'Body.dds']);
+    final result = await run('Ellen', mod, source);
 
-    expect(read(mod, 'Theirs.dds'), 'a whole other mod');
-    expect(read(mod, 'somebody_elses.ini'), isNotNull);
-    expect(result.droppedFiles, isEmpty);
+    expect(has(mod, 'somebody_elses.ini'), isFalse);
+    expect(has(mod, 'Textures/Theirs.dds'), isFalse);
+    expect(Directory(p.join(mod.path, 'Textures')).existsSync(), isFalse);
+    expect(result.droppedFiles,
+        unorderedEquals(['somebody_elses.ini', 'Textures/Theirs.dds']));
+    final saved = Directory(p.join(result.snapshot!.directory.path, 'files'));
+    expect(read(saved, 'Textures/Theirs.dds'), 'a whole other mod');
   });
 
-  test('the patch in the folder keeps the file the base gave up', () async {
-    // The base recorded `Body.dds` and the new version drops it — but a patch
-    // has since written its own over that path, so the file there now is the
-    // patch's. Deleting it is the destruction overwrite exists to avoid.
+  test('the sidecar is the one thing the wipe leaves', () async {
+    final mod = modFolder('Ellen');
+    write(mod, 'ellen.ini', modIni('Body.dds'));
+    write(mod, '.zzz-mod-manager/metadata.json', '{"description":"mine"}');
+    write(mod, '.zzz-mod-manager/images/01.png', 'cover');
+
+    final source = incoming('Ellen v2');
+    write(source, 'ellen.ini', modIni('Body.dds'));
+
+    final result = await run('Ellen', mod, source);
+
+    expect(result.success, isTrue);
+    expect(read(mod, '.zzz-mod-manager/metadata.json'), contains('mine'));
+    expect(read(mod, '.zzz-mod-manager/images/01.png'), 'cover');
+    expect(result.droppedFiles, isEmpty,
+        reason: 'the sidecar is not the old version, so it is not reported as removed');
+  });
+
+  test('the patch in the folder comes back onto the new layout', () async {
+    // The wipe takes the patch's `Body.dds` with everything else; the record
+    // names it, so it is read back from the snapshot and placed where the new
+    // base keeps that file.
     final mod = modFolder('Ellen');
     write(mod, 'ellen.ini', modIni('Body.dds'));
     write(mod, 'Body.dds', 'the patch');
@@ -183,75 +166,18 @@ void main() {
     write(source, 'ellen.ini', modIni('Textures/Body.dds'));
     write(source, 'Textures/Body.dds', 'v2 base');
 
-    final result = await run(
-      'Ellen',
-      mod,
-      source,
-      recorded: ['ellen.ini', 'Body.dds'],
-      patchFiles: ['Body.dds'],
-    );
+    final result = await run('Ellen', mod, source, patchFiles: ['Body.dds']);
 
     expect(result.success, isTrue);
-    expect(read(mod, 'Textures/Body.dds'), 'the patch',
-        reason: 'placed onto the new layout, not deleted as the base\'s own');
+    expect(read(mod, 'Textures/Body.dds'), 'the patch');
+    expect(has(mod, 'Body.dds'), isFalse);
     expect(result.droppedFiles, isEmpty);
   });
 
-  test('a renamed .ini is removed without being asked about', () async {
+  test('a renamed .ini is gone without being asked about', () async {
     final mod = modFolder('Ellen');
     write(mod, 'ellen.ini', modIni('Body.dds'));
     write(mod, 'Body.dds', 'v1');
-
-    final source = incoming('Ellen v2');
-    write(source, 'ellen_v2.ini', modIni('Body.dds'));
-    write(source, 'Body.dds', 'v2');
-
-    final preview = await applier.preview(
-      modFolder: mod,
-      incomingFolders: [source.path],
-      recorded: recordOf(['ellen.ini', 'Body.dds']),
-    );
-    expect(preview.dropped.remove, ['ellen.ini']);
-
-    final result = await applier.apply(
-      modName: 'Ellen',
-      modFolder: mod,
-      preview: preview,
-    );
-
-    expect(result.success, isTrue);
-    expect(has(mod, 'ellen.ini'), isFalse);
-    expect(has(mod, 'ellen_v2.ini'), isTrue);
-  });
-
-  test('a file nothing recorded writing is left alone', () async {
-    // The record says what the last version wrote, and `theirs.ini` is not in it.
-    final mod = modFolder('Ellen');
-    write(mod, 'ellen.ini', modIni('Body.dds'));
-    write(mod, 'theirs.ini', modIni('Theirs.dds'));
-    write(mod, 'Theirs.dds', 'a whole other mod');
-
-    final source = incoming('Ellen v2');
-    write(source, 'ellen_v2.ini', modIni('Body.dds'));
-    write(source, 'Body.dds', 'v2');
-
-    final result = await run('Ellen', mod, source,
-        recorded: ['ellen.ini', 'Body.dds']);
-
-    expect(result.droppedFiles, ['ellen.ini']);
-    expect(has(mod, 'theirs.ini'), isTrue);
-    expect(has(mod, 'Theirs.dds'), isTrue);
-  });
-
-  test('with no record, everything in the folder counts as the last version',
-      () async {
-    // The same folder before the app recorded file lists: there is no way to tell `theirs.ini` from the old version, so it goes too.
-    // The snapshot is the way back.
-    final mod = modFolder('Ellen');
-    write(mod, 'ellen.ini', modIni('Body.dds'));
-    write(mod, 'Body.dds', 'v1');
-    write(mod, 'theirs.ini', modIni('Theirs.dds'));
-    write(mod, 'Theirs.dds', 'a whole other mod');
 
     final source = incoming('Ellen v2');
     write(source, 'ellen_v2.ini', modIni('Body.dds'));
@@ -259,18 +185,18 @@ void main() {
 
     final result = await run('Ellen', mod, source);
 
-    expect(result.droppedFiles,
-        unorderedEquals(['ellen.ini', 'theirs.ini', 'Theirs.dds']));
+    expect(result.success, isTrue);
+    expect(has(mod, 'ellen.ini'), isFalse);
     expect(has(mod, 'ellen_v2.ini'), isTrue);
-    expect(read(mod, 'Body.dds'), 'v2');
-    expect(has(mod, 'theirs.ini'), isFalse);
+    expect(result.droppedFiles, ['ellen.ini']);
   });
 
-  test('a texture the new .ini still names but the archive omits stays',
+  test('a texture the new .ini still names but the archive omits goes too',
       () async {
-    // The author replaced only the `.ini` and shipped none of the assets it
-    // points at — common enough that the stale-`.ini` rule is built around it.
-    // Deleting `Body.dds` here would break the mod on the update.
+    // The author shipped the `.ini` and none of the assets it points at. The
+    // folder holds what the archive holds, and nothing else; if the mod is
+    // broken by that, the archive is what broke it and the snapshot is the way
+    // back.
     final mod = modFolder('Ellen');
     write(mod, 'ellen.ini', modIni('Body.dds'));
     write(mod, 'Body.dds', 'v1');
@@ -278,32 +204,13 @@ void main() {
     final source = incoming('Ellen v2');
     write(source, 'ellen.ini', modIni('Body.dds'));
 
-    final result =
-        await run('Ellen', mod, source, recorded: ['ellen.ini', 'Body.dds']);
+    final result = await run('Ellen', mod, source);
 
-    expect(read(mod, 'Body.dds'), 'v1');
-    expect(result.droppedFiles, isEmpty);
+    expect(has(mod, 'Body.dds'), isFalse);
+    expect(result.droppedFiles, ['Body.dds']);
   });
 
-  test('a recorded file the user deleted first is not reported as removed',
-      () async {
-    final mod = modFolder('Ellen');
-    write(mod, 'ellen.ini', modIni('Body.dds'));
-
-    final source = incoming('Ellen v2');
-    write(source, 'ellen.ini', modIni('Body.dds'));
-    write(source, 'Body.dds', 'v2');
-
-    final result = await run('Ellen', mod, source,
-        recorded: ['ellen.ini', 'Deleted_By_Hand.dds']);
-
-    expect(result.droppedFiles, isEmpty,
-        reason: 'a summary naming a file nothing touched is a small lie');
-  });
-
-  test('the real spelling is what gets deleted', () async {
-    // A lower-cased path deletes nothing on Linux, silently, and reports a file
-    // the user does not have — the same mistake the stale-`.ini` removal made.
+  test('what went is reported under its real spelling', () async {
     final mod = modFolder('Ellen');
     write(mod, 'Ellen.ini', modIni('Body.dds'));
     write(mod, 'Textures/BodyA.dds', 'v1');
@@ -312,8 +219,7 @@ void main() {
     write(source, 'Ellen.ini', modIni('Body.dds'));
     write(source, 'Body.dds', 'v2');
 
-    final result = await run('Ellen', mod, source,
-        recorded: ['Ellen.ini', 'Textures/BodyA.dds']);
+    final result = await run('Ellen', mod, source);
 
     expect(has(mod, 'Textures/BodyA.dds'), isFalse);
     expect(result.droppedFiles, ['Textures/BodyA.dds']);
@@ -454,7 +360,7 @@ void main() {
   });
 
   test('the snapshot still holds what was removed', () async {
-    // The removal is a write like any other, so it is covered by the same
+    // The wipe is a write like any other, so it is covered by the same
     // promise: the copy taken first is the way back.
     final mod = modFolder('Ellen');
     write(mod, 'ellen.ini', modIni('Body.dds'));
@@ -463,8 +369,7 @@ void main() {
     final source = incoming('Ellen v2');
     write(source, 'ellen.ini', modIni('Body.dds'));
 
-    final result = await run('Ellen', mod, source,
-        recorded: ['ellen.ini', 'ShaderFixes/glow.hlsl']);
+    final result = await run('Ellen', mod, source);
 
     final saved = Directory(p.join(result.snapshot!.directory.path, 'files'));
     expect(read(saved, 'ShaderFixes/glow.hlsl'), 'old shader');

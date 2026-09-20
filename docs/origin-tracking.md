@@ -800,8 +800,8 @@ there being exactly one.
 
 **`mod_id` is nullable on every layer, including a patch.** A patch written in
 from a local archive has no page — but the install still knows exactly which files
-it laid down, so the layer is worth recording: it gets set aside when the base
-updates and it can be taken back out. What it cannot do is be checked for updates,
+it laid down, so the layer is worth recording: it comes back from the snapshot when
+the base updates and it can be taken back out. What it cannot do is be checked for updates,
 and that follows from the null rather than needing to be said anywhere else. The
 old shape *required* an identity and therefore recorded nothing at all for such a
 patch.
@@ -1055,8 +1055,8 @@ own `origin` *is* the base), so it stops being asked.
 installed nothing, which left the folder doing nothing in the game — the thing
 naming it was supposed to fix. `installNamedBase` is that install, and it is the
 ordinary update flow with the whole folder passed as the patch: the folder holds
-only the patch at that moment, so it is set aside, the base is written, and the
-patch goes back onto the base's layout
+only the patch at that moment, so the folder is wiped, the base is written, and the
+patch comes back from the snapshot onto the base's layout
 ([`applying-updates.md` §6](applying-updates.md#base-first-then-patch--for-both-halves-of-a-mixed-folder)).
 No second confirmation — they answered this a moment ago in the prompt.
 

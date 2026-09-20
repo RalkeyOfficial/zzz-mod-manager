@@ -48,11 +48,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updates can be installed from the update dialog. The mod keeps its name, character tag, favourite star and on/off state.
   - The dialog lists every newer file and marks the one it would pick.
   - Updating replaces the mod's files with the new version's. Old files are removed.
-  - A mod installed before the app kept file lists counts everything in its folder as the old version on its first update. The saved copy still has all of it.
+  - An update empties the mod folder before writing the new version, so nothing of the old one is left loading. Anything you added to the folder by hand goes with it, and the saved copy still has all of it.
   - Every update saves a copy of the mod first, and "Restore a previous version…" puts it back.
   - Saved versions survive renaming a mod, including renaming its folder outside the app.
   - Deleting a mod deletes every saved version of it too, and the confirmation says how many.
-  - "Reinstall this version…" in a mod's right-click menu puts the author's files back over a mod that has stopped working, without changing which version you have.
+  - "Reinstall this version…" in a mod's right-click menu empties the folder and puts the author's files back, without changing which version you have.
   - A mod whose file has been taken off GameBanana says so instead of quietly reinstalling a different version.
   - The dialog shows the author's release notes for anything published since your version.
   - Hotkeys the new version moved are listed after an update.

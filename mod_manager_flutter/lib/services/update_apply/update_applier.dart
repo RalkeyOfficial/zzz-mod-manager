@@ -23,16 +23,15 @@ import 'update_layout.dart';
 
 /// Writing a newer download over an installed mod.
 ///
-/// **Extract to temp, sanity-check, then copy over the live folder** and delete what the previous version shipped and the new one does not.
-/// The folder is never moved or replaced, so its name, its active link and its `config.json` keys survive by construction,
+/// **Extract to temp, sanity-check, snapshot, wipe the folder, write the new version.**
+/// Everything in the folder except the sidecar is deleted before the copy, so what is left afterwards is the new version and nothing of the old one:
+/// no renamed `.ini` loading beside its successor, no shader the author dropped still applied, and nothing decided about which files were whose.
+/// A patch recorded on top is the one thing put back, from the snapshot, onto the new base's layout.
+/// The folder itself is never moved or replaced, so its name, its active link and its `config.json` keys survive by construction,
 /// and a half-finished extraction never reaches the install.
 /// Deactivation is for open file handles only: the game's loader keeps them on Windows and the copy fails against them.
 ///
-/// Which files count as the previous version is the download's own record (`ModDownload.files`).
-/// A folder with no record counts every file in it as the previous version, so its first update leaves exactly the new version behind,
-/// plus any patch recorded on top, which is set aside and put back.
-///
-/// The decisions are all in pure units next door: [planUpdateLayout], [assessPatchShape], [planDroppedFiles].
+/// The decisions are all in pure units next door: [planUpdateLayout], [assessPatchShape], and for a patch layer's own update [planDroppedFiles].
 /// This file does the I/O and the ordering.
 /// One tag with a `phase` field, rather than a tag per phase: the five places this can fail are five stages of one operation,
 /// and a reader wants them together.
@@ -69,23 +68,12 @@ class UpdateApplier {
 
   /// Everything that can be known **before** anything is written.
   ///
-  /// Deliberately a separate step: the user is shown a patch warning, the count of old files going and a layout mismatch *before* consenting,
-  /// and none of those can be raised after the copy has started.
+  /// Deliberately a separate step: the user is shown a patch warning and a layout mismatch *before* consenting,
+  /// and neither can be raised after the wipe has started.
   Future<UpdatePreview> preview({
     required Directory modFolder,
     required List<String> incomingFolders,
     ModIngest? ingest,
-
-    /// Files in [modFolder] to judge this update **as if they were not there** — the other download in a mixed folder.
-    ///
-    /// Left in, the patch's files count as the old version's and go with it.
-    /// See [applyBaseThenPatch], which puts them back on top once the base has landed.
-    Iterable<String> excluding = const <String>[],
-
-    /// **What the download being replaced laid down last time** (`ModDownload.files`),
-    /// so the files this version drops can be removed rather than left loading.
-    /// Empty for a folder installed before the record existed, and then everything in the folder counts as the previous version.
-    List<InstalledFile> recorded = const <InstalledFile>[],
   }) async {
     final byName = {
       for (final folder in incomingFolders) path.basename(folder): folder,
@@ -110,35 +98,10 @@ class UpdateApplier {
       incoming = incoming.merge(contents.underPrefix(mapping.targetSubPath));
     }
 
-    final existing = (await readFolderContents(modFolder)).without(excluding);
-
-    // The bottom layer keeps nothing it displaces — there is nothing under it —
-    // so a `replaced` entry here is the *previous version of this same
-    // download*, which is what the update is replacing.
-    // With no record, the whole folder (less the patch above) is the previous version.
-    final dropped = planDroppedFiles(
-      recorded: recorded.isNotEmpty
-          ? recorded
-          : [
-              for (final file in existing.files)
-                InstalledFile(
-                  path: existing.onDisk(file),
-                  role: InstalledFileRole.replaced,
-                ),
-            ],
-      incoming: incoming.files,
-      onDisk: existing.files,
-      claimedByOthers: excluding,
-      incomingReferences: incoming.references.paths,
-    );
-
     return UpdatePreview(
       layout: layout,
       sources: sources,
       incoming: incoming,
-      existing: existing,
-      dropped: dropped,
-      unrecorded: recorded.isEmpty,
       // Does the *download* stand on its own? A patch-shaped one proves the
       // folder it is going into is mixed, which is the only signal available for
       // that with no recorded file list and no extra request.
@@ -153,7 +116,7 @@ class UpdateApplier {
 
   /// Carries out an update the user has consented to.
   ///
-  /// Order is the design: deactivate (handles), snapshot (the only way back), copy, remove the old version's files, reactivate.
+  /// Order is the design: deactivate (handles), snapshot (the only way back), wipe, copy, reactivate.
   /// A failure at any step past the snapshot leaves a folder the user can roll back, which is the whole reason the snapshot is unconditional.
   Future<UpdateApplyResult> apply({
     required String modName,
@@ -174,20 +137,21 @@ class UpdateApplier {
   /// Writes a new **base** into a folder that also holds a patch, in the order
   /// that makes the patch survive it: **base first, then the patch back on top.**
   ///
-  /// The same operation as [apply] — deactivate, snapshot, copy, reactivate — with
-  /// two steps around the copy, and it is the same method underneath so the two
-  /// can never come to disagree about the order.
+  /// The same operation as [apply] — deactivate, snapshot, wipe, copy, reactivate
+  /// — with one step after the copy, and it is the same method underneath so the
+  /// two can never come to disagree about the order.
   ///
-  /// **Why the patch has to move rather than be left alone.** The base decides
-  /// where files live. A patch shipping `Body.dds` at its root, written into a mod
-  /// that keeps `Textures/Body.dds`, leaves both — and the `.ini` loads the
-  /// base's. Nothing is missing, nothing errors, the folder looks complete and the
-  /// patch does nothing. So the patch's files are taken out, the base is written,
-  /// and they are placed back by basename (`patch_placement.dart`).
+  /// **Why the patch goes back by placement rather than by path.** The base
+  /// decides where files live. A patch shipping `Body.dds` at its root, put
+  /// back into a mod that keeps `Textures/Body.dds`, leaves both — and the
+  /// `.ini` loads the base's. Nothing is missing, nothing errors, the folder
+  /// looks complete and the patch does nothing. So the patch's files are placed
+  /// back by basename (`patch_placement.dart`).
   ///
-  /// **The snapshot is the aside.** It is a full copy of the folder taken before
-  /// anything is written, so the patch's bytes are read back from there rather
-  /// than copied to a second temporary place that could itself be lost.
+  /// **The snapshot is the aside.** The wipe takes the patch's files with
+  /// everything else, and they are read back from the full copy taken before
+  /// anything was touched rather than from a second temporary place that could
+  /// itself be lost.
   ///
   /// [patchFiles] is the folder's recorded patch paths (`ingest.patch_files`), in
   /// on-disk spelling. Empty means nothing is known to be the patch, and this
@@ -231,12 +195,17 @@ class UpdateApplier {
     }
 
     // **Resolved before the folder is touched at all**, because a placement that
-    // cannot be settled has to stop this *now*: past the deletion below there is
-    // a folder with the patch taken out and nowhere to put it back.
+    // cannot be settled has to stop this *now*: past the wipe below there is a
+    // folder with the patch gone and nowhere to put it back. Judged against what
+    // the copy lays down and nothing else, since that is all the folder will
+    // hold by then.
     final recorded = patchFiles.toList();
     final placement = recorded.isEmpty
         ? PatchPlacement.nothing
-        : _placementFor(preview: preview, patchFiles: recorded);
+        : resolvePatchPlacement(
+            incoming: {for (final file in recorded) normalizeIniPath(file)},
+            target: preview.incoming.files,
+          );
     if (placement.needsChoice) {
       return UpdateApplyResult.failed(UpdateApplyFailure.layout);
     }
@@ -268,12 +237,26 @@ class UpdateApplier {
       modName,
     );
 
-    // Taken out before the base is written, which is what makes that write an
-    // ordinary update: the folder then holds only the old base, and every rule
-    // downstream compares like with like. The bytes are in the snapshot.
-    final aside = await _takePatchAside(modFolder, recorded);
+    // Read once before the wipe: it is what names the patch's files as they are
+    // spelled on disk, and what the old files are counted against afterwards.
+    final before = await readFolderContents(modFolder);
+    final aside = _findPatch(before, recorded);
 
     final written = <InstalledFile>[];
+    try {
+      await _wipe(modFolder);
+      _log.info('cleared the folder for the new version',
+          fields: {'mod': modName, 'files': before.files.length});
+    } catch (e) {
+      _log.error('update failed',
+          error: e, fields: {'mod': modName, 'phase': 'wipe'});
+      if (wasActive) await activation.activate(modName);
+      return UpdateApplyResult.failed(
+        UpdateApplyFailure.copy,
+        snapshot: snapshot,
+        error: '$e',
+      );
+    }
     try {
       for (final mapping in preview.layout.mappings) {
         final source = preview.sources[mapping]!;
@@ -303,17 +286,6 @@ class UpdateApplier {
       );
     }
 
-    // **After the copy, not before it.** These files are the old version's and
-    // the new one has no name for them, so nothing the copy writes touches them
-    // either way — and running afterwards means a copy that failed part-way
-    // leaves them where they are rather than deleting them to make room for
-    // something that never arrived.
-    final droppedFiles = await _removeDropped(
-      modFolder: modFolder,
-      dropped: preview.dropped,
-      spelling: preview.existing,
-    );
-
     final placed = await _putPatchBack(
       modFolder: modFolder,
       snapshot: snapshot,
@@ -322,6 +294,18 @@ class UpdateApplier {
       patchModId: patchModId,
     );
     if (wasActive) await activation.activate(modName);
+
+    // What the wipe took that nothing wrote again: a report, not a decision.
+    // The patch's files count as kept under the path they *left*, since where
+    // they came back is the new layout's business, not the old version's.
+    final kept = {
+      for (final file in written) normalizeIniPath(file.path),
+      ...aside.taken.keys,
+    };
+    final droppedFiles = [
+      for (final file in before.files)
+        if (!kept.contains(file)) before.onDisk(file),
+    ];
 
     return UpdateApplyResult(
       snapshot: snapshot,
@@ -343,60 +327,39 @@ class UpdateApplier {
     );
   }
 
-  /// Where the recorded patch files will land **once the base has been written**.
+  /// Which of the recorded patch files the folder holds, spelled as they are on
+  /// disk, which is where to read them back from inside the snapshot.
   ///
-  /// Computed against the folder the copy is about to produce — what is there now minus the patch and the old files going,
-  /// plus what the base lays down — rather than against the folder as it stands.
-  /// That is what lets an unsettleable placement stop the operation before anything is deleted.
-  PatchPlacement _placementFor({
-    required UpdatePreview preview,
-    required List<String> patchFiles,
-  }) {
-    final patch = {for (final file in patchFiles) normalizeIniPath(file)};
-    final going = {for (final file in preview.dropped.remove) normalizeIniPath(file)};
-    return resolvePatchPlacement(
-      incoming: patch,
-      target: {
-        for (final file in preview.existing.files)
-          if (!patch.contains(file) && !going.contains(file)) file,
-        ...preview.incoming.files,
-      },
-    );
-  }
-
-  /// Removes the recorded patch files from the folder, reporting what was there.
-  ///
-  /// Safe because the snapshot above is a full copy: these bytes are read back
-  /// from it. A recorded file that is no longer there is **named, not restored** —
-  /// the record says what the app wrote, and the user having deleted one since is
+  /// A recorded file that is no longer there is **named, not restored** — the
+  /// record says what the app wrote, and the user having deleted one since is
   /// an edit rather than damage.
-  Future<_PatchAside> _takePatchAside(
-    Directory modFolder,
-    List<String> patchFiles,
-  ) async {
+  _PatchAside _findPatch(FolderContents before, List<String> patchFiles) {
     if (patchFiles.isEmpty) return const _PatchAside();
-
-    final before = await readFolderContents(modFolder);
     final taken = <String, String>{};
     final missing = <String>[];
     for (final recorded in patchFiles) {
       final key = normalizeIniPath(recorded);
-      if (!before.files.contains(key)) {
+      if (before.files.contains(key)) {
+        taken[key] = before.onDisk(key);
+      } else {
         missing.add(recorded);
-        continue;
-      }
-      // The spelling on disk, not the spelling in the record — they agree today
-      // and a mismatch would silently delete nothing and leave a second copy.
-      final onDisk = before.onDisk(key);
-      taken[key] = onDisk;
-      try {
-        await File(path.join(modFolder.path, onDisk)).delete();
-      } catch (e) {
-        _log.warning('could not set a patch file aside',
-            error: e, fields: {'file': onDisk, 'phase': 'aside'});
       }
     }
     return _PatchAside(taken: taken, missing: missing);
+  }
+
+  /// Deletes everything in the folder except the sidecar.
+  ///
+  /// **Nothing is decided here**, which is the point: the old version, a file
+  /// the user merged in by hand and a patch the record names all go, and the
+  /// snapshot taken just before is what holds them. The folder itself stays, so
+  /// its name, its active link and its `config.json` keys are never in question.
+  Future<void> _wipe(Directory modFolder) async {
+    final entries = await modFolder.list(followLinks: false).toList();
+    for (final entity in entries) {
+      if (_isSidecar(path.basename(entity.path))) continue;
+      await entity.delete(recursive: true);
+    }
   }
 
   /// Copies the patch back out of the snapshot, onto the base's layout.
@@ -975,10 +938,7 @@ class UpdatePreview {
     required this.layout,
     required this.sources,
     this.incoming = FolderContents.empty,
-    this.existing = FolderContents.empty,
     this.patch = PatchAssessment.none,
-    this.dropped = DroppedFiles.nothing,
-    this.unrecorded = false,
   });
 
   final UpdateLayout layout;
@@ -989,31 +949,13 @@ class UpdatePreview {
   /// What the download would lay down, mod-folder-relative.
   final FolderContents incoming;
 
-  /// The mod folder as it is now.
-  final FolderContents existing;
-
   final PatchAssessment patch;
-
-  /// What the version being replaced leaves behind that the new one has no name for.
-  /// With no record of the last version, the folder's contents stand in for it, less the patch above and anything the new `.ini` still names.
-  final DroppedFiles dropped;
-
-  /// Nothing recorded the last version, so [dropped] was worked out from the folder rather than from a record.
-  /// The confirmation says so, since the files going may be the user's own.
-  final bool unrecorded;
 
   bool get canProceed => layout.canProceed;
 
   /// The download expects files it does not carry, so the folder it is going
   /// into holds more than one download and only part of it is being replaced.
   bool get incomingIsPatch => patch.looksLikePatch;
-
-  /// A normalised path as it is really spelled in the mod folder.
-  ///
-  /// Anything shown to a user or handed to `File` goes through here. The
-  /// normalised form is for comparing only — `ellen.ini` names no file the user
-  /// has when the author shipped `Ellen.ini`.
-  String onDisk(String normalised) => existing.onDisk(normalised);
 }
 
 enum UpdateApplyFailure {
@@ -1093,10 +1035,10 @@ class UpdateApplyResult {
   /// replacing it with nothing.
   final List<InstalledFile> writtenFiles;
 
-  /// The last version's files that the new one no longer ships, **gone**.
+  /// What was in the folder before and is not there now: the last version's
+  /// files the new one no longer ships, and anything else the wipe took.
   ///
-  /// On-disk spelling, and only what was really deleted — a path that could not
-  /// be removed is logged and left out, so this never overstates what happened.
+  /// On-disk spelling. A report of what happened, never an input to it.
   final List<String> droppedFiles;
 
   /// **The mod's own files, back where a patch had written over them** — paths

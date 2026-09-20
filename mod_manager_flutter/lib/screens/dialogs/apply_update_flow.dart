@@ -224,14 +224,6 @@ Future<bool> applyUpdateFlow(
           modFolder: modFolder,
           incomingFolders: folders,
           ingest: ingest,
-          // The patch belongs to neither side of the base's update: it is going back
-          // on top afterwards. Left in, its files count as the old version's and go.
-          excluding: patchFiles,
-          // **The bottom layer's record**, because that is the layer this writes.
-          // What it names is removed where the new version has no file by that name,
-          // which is how a renamed `.ini` or a dropped shader stops being loaded instead of lingering.
-          // Empty for a mod installed before the record existed, and then the whole folder counts as the old version.
-          recorded: mod.origin?.base?.files ?? const <InstalledFile>[],
         );
     var preview = await previewWith(mod.origin?.ingest);
 
@@ -711,8 +703,6 @@ Future<_SiblingPreviews> _previewSiblings({
         modFolder: folder,
         incomingFolders: folders,
         ingest: sibling.mod.origin?.ingest,
-        excluding: sibling.route.patchFiles,
-        recorded: sibling.mod.origin?.base?.files ?? const <InstalledFile>[],
       ),
       patchFiles: sibling.route.patchFiles,
       patchModId: sibling.route.patchModId,

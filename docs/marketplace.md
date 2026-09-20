@@ -135,7 +135,7 @@ second one here fails twice over:
   that already exists — so pressing it on a mod you own downloads a whole archive
   and reports *"Nothing imported"*, or, when the author renamed the folder between
   versions, silently lands a **second copy** beside the first. Updating is
-  `applyUpdateFlow`: snapshot, overwrite in place, keep the name, character,
+  `applyUpdateFlow`: snapshot, wipe and rewrite in place, keep the name, character,
   favourite and enabled state, reconcile moved keybinds, and ask first. §5 already
   says why those two are not folded together. So the badge without the action is a
   trap, and with it the whole update conversation moves into a browse screen.

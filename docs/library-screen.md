@@ -200,7 +200,7 @@ displays is exactly what this rule exists to prevent. See
   navigated away from. It still goes through the queue, exempt from the
   concurrency cap on the way in — see [`downloads.md`](downloads.md) §7.
   Only the *download* is shared with the marketplace, deliberately: the
-  marketplace imports an archive as a new mod folder while an update overwrites an
+  marketplace imports an archive as a new mod folder while an update rewrites an
   existing one, and folding those together is what would produce a shared
   "install" that quietly does the wrong one.
 

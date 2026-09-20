@@ -1,11 +1,12 @@
-/// **What the version being replaced put in the folder that the new one no
-/// longer ships**, decided before anything is written.
+/// **What the patch version being replaced put in the folder that the new one
+/// no longer ships**, decided before anything is written.
 ///
-/// An overwrite only ever *adds* and *replaces*. A file the last version shipped
-/// under a name the new one does not use is therefore left exactly where it was,
-/// and it keeps working: the loader reads every `.ini` in the folder and every
-/// asset those reference, so a renamed `.ini` doubles the mod's hotkeys and a
-/// shader the author dropped goes on being applied.
+/// A patch is written file by file over a base that stays, so it cannot be
+/// wiped the way a base update wipes the folder: taking the base with it is
+/// the destruction the whole layer exists to avoid. A file the last patch
+/// version placed under a name the new one does not use would therefore be
+/// left exactly where it was, and keep working — a renamed patch `.ini` doubles
+/// the mod's hotkeys, and a texture it stopped overriding stays overridden.
 ///
 /// Nothing is inferred. Each download records the files it laid down ([InstalledFile]),
 /// so the answer is a set difference: recorded last time, not shipped this time.
@@ -116,20 +117,12 @@ class DroppedFiles {
 /// displaced something and **not** that keeping it succeeded.
 ///
 /// [keepsDisplaced] says whether this download is one that keeps what it writes
-/// over. A patch layer does; the bottom layer has nothing underneath it to
-/// keep, so for it a `replaced` entry means *the previous version of itself* —
-/// which is exactly what an update is replacing, and deleting it is the whole
-/// point. Getting this backwards is the one dangerous mistake available here,
-/// which is why it is a named parameter rather than inferred from an empty
-/// store: an empty store is also what a failed keep leaves.
-///
-/// A layer with no store and a `replaced` entry does not arise: a patch is
-/// written into an empty folder as `added` throughout, and the roles only
-/// become `replaced` when a base is put underneath it — which is the operation
-/// that builds the store.
+/// over. A patch with a mod page does, through its store; a patch dragged off a
+/// disk has no store, so for it a `replaced` entry has nothing to put back and
+/// the path is emptied. A named parameter rather than inferred from an empty
+/// store, because an empty store is also what a failed keep leaves.
 ///
 /// Returns [DroppedFiles.nothing] for an empty record: this never infers anything from the folder.
-/// Treating a folder with no record as its own record is `UpdateApplier.preview`'s decision, made where the patch above is known and excluded first.
 DroppedFiles planDroppedFiles({
   required List<InstalledFile> recorded,
   required Set<String> incoming,

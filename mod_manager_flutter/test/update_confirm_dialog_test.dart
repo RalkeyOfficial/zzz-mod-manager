@@ -4,7 +4,6 @@ import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/screens/dialogs/update_confirm_dialog.dart';
 import 'package:mod_manager_flutter/services/patch_detection.dart';
-import 'package:mod_manager_flutter/services/update_apply/dropped_files.dart';
 import 'package:mod_manager_flutter/services/update_apply/sibling_group.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_applier.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_layout.dart';
@@ -30,8 +29,6 @@ void main() {
     UpdateLayoutProblem? problem,
     List<String> unused = const [],
     List<String> missing = const [],
-    List<String> dropped = const [],
-    bool unrecorded = false,
   }) =>
       UpdatePreview(
         layout: UpdateLayout(
@@ -47,8 +44,6 @@ void main() {
           required: missing.length,
           hasIni: true,
         ),
-        dropped: DroppedFiles(remove: dropped),
-        unrecorded: unrecorded,
       );
 
   Future<UpdateConfirmChoice?> open(
@@ -162,26 +157,16 @@ void main() {
     expect(find.textContaining('none of the 2 file'), findsOneWidget);
   });
 
-  testWidgets('says how many old files go, and asks nothing about them',
+  testWidgets('says the folder is emptied first, and asks nothing about it',
       (tester) async {
-    await open(tester, preview(dropped: const ['ellen.ini', 'old.dds']));
+    // The one fact about the write that cannot be seen afterwards: what the
+    // user put in the folder by hand goes with the old version.
+    await open(tester, preview());
 
-    expect(find.textContaining("2 files from the version you have aren't"),
+    expect(find.textContaining('Everything in this mod folder is replaced'),
         findsOneWidget);
+    expect(find.textContaining('anything you added by hand'), findsOneWidget);
     expect(find.byType(Checkbox), findsNothing);
-  });
-
-  testWidgets('with no record, the files going are named as possibly the user\'s own',
-      (tester) async {
-    // Read off the folder rather than a record, so one of them may be something the user put there.
-    await open(
-      tester,
-      preview(dropped: const ['ellen.ini', 'mine.dds'], unrecorded: true),
-    );
-
-    expect(find.textContaining('Nothing records which files'), findsOneWidget);
-    expect(find.textContaining('ellen.ini, mine.dds'), findsOneWidget);
-    expect(find.textContaining("from the version you have aren't"), findsNothing);
   });
 
   testWidgets('an unreconcilable layout offers no way to proceed',
@@ -203,9 +188,8 @@ void main() {
       preview(
         missing: const ['body.dds'],
         unused: const ['previews'],
-        dropped: const ['a_very_long_old_name.ini', 'another_very_long_old_name.dds'],
-        unrecorded: true,
       ),
+      flattensPatch: true,
       surfaceSize: const Size(480, 900),
     );
     expect(tester.takeException(), isNull);
@@ -231,21 +215,14 @@ void main() {
 
     UpdateTarget target(
       String id, {
-      List<String> dropped = const [],
       List<String> missing = const [],
       bool flattensPatch = false,
-      bool unrecorded = false,
       UpdateLayoutProblem? problem,
       SiblingCaution? caution,
     }) =>
         UpdateTarget(
           mod: sibling(id),
-          preview: preview(
-            dropped: dropped,
-            missing: missing,
-            problem: problem,
-            unrecorded: unrecorded,
-          ),
+          preview: preview(missing: missing, problem: problem),
           flattensPatch: flattensPatch,
           caution: caution,
         );
@@ -501,38 +478,6 @@ void main() {
       expect(boxes.length, 1, reason: 'only the sibling is writable');
     });
 
-    testWidgets('each row counts the old files its own folder loses',
-        (tester) async {
-      // Per folder, not summed: the count differs per folder and a total would describe nothing the user can act on.
-      await openGroup(
-        tester,
-        primary: preview(dropped: const ['ellen_old.ini']),
-        siblings: [
-          target('Ellen Blue', dropped: const ['blue_old.ini', 'blue.dds']),
-        ],
-      );
-
-      expect(find.textContaining('removes 1 old file'), findsOneWidget);
-      expect(find.textContaining('removes 2 old files'), findsOneWidget);
-      expect(find.textContaining("from the version you have"), findsNothing,
-          reason: 'the single-mod note would be naming one of several');
-    });
-
-    testWidgets('folders with no record are named, and only those',
-        (tester) async {
-      await openGroup(
-        tester,
-        primary: preview(dropped: const ['ellen_old.ini']),
-        siblings: [
-          target('Ellen Blue', dropped: const ['blue_old.ini'], unrecorded: true),
-          target('Ellen Red', unrecorded: true),
-        ],
-      );
-
-      expect(find.textContaining('the version Ellen Blue have'), findsOneWidget,
-          reason: 'Ellen Red loses nothing, so there is nothing to say about it');
-    });
-
     testWidgets('a folder nothing writes is named as exactly that',
         (tester) async {
       // Two wordings this must not use. The single-mod one calls it "not part
@@ -584,12 +529,12 @@ void main() {
         (tester) async {
       await openGroup(
         tester,
-        primary: preview(dropped: const ['ellen_old.ini']),
+        primary: preview(),
         siblings: [
           target('Ellen Blue with a very long folder name',
               missing: const ['body.dds']),
           target('Ellen Red', flattensPatch: true),
-          target('Ellen Green', dropped: const ['green_old.ini']),
+          target('Ellen Green'),
         ],
         refused: [
           SiblingRefused(

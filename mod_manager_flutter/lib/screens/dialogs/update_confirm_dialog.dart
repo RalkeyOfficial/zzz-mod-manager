@@ -349,11 +349,6 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
       for (final target in chosen)
         if (target.flattensPatch) target.mod.name,
     ];
-    final unrecorded = [
-      for (final target in chosen)
-        if (target.preview.unrecorded && target.preview.dropped.remove.isNotEmpty)
-          target.mod.name,
-    ];
 
     return [
       DialogSection(
@@ -421,42 +416,14 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
             icon: Icons.history,
             message: loc.t('mods.update_apply.snapshot_note'),
           ),
+          // Says the folder is emptied first, which is the one fact about the
+          // write the user cannot see afterwards: what comes back is the new
+          // version, and anything they had put in the folder by hand is in the
+          // saved copy and nowhere else.
           DialogNotice(
             icon: Icons.layers_outlined,
             message: loc.t('mods.update_apply.overwrite_note'),
           ),
-          // **Directly under the overwrite note**, because it is the one thing
-          // an overwrite would not do on its own. A count rather than a list:
-          // a version that reorganises its textures drops dozens of files, and
-          // the folder is not what the user is deciding about.
-          //
-          // For a group the count belongs on each row instead: it differs per
-          // folder, and summing it would describe nothing the user can act on.
-          //
-          // With no record the files going were read off the folder and may be the user's own,
-          // so they are named rather than counted: this is the one case where the user may recognise one.
-          if (!_isGroup && preview.dropped.remove.isNotEmpty)
-            DialogNotice(
-              icon: Icons.auto_delete_outlined,
-              message: loc.plural(
-                preview.unrecorded
-                    ? 'mods.update_apply.unrecorded_note'
-                    : 'mods.update_apply.dropped_note',
-                preview.dropped.remove.length,
-                params: {
-                  'count': '${preview.dropped.remove.length}',
-                  'files': preview.dropped.remove.join(', '),
-                },
-              ),
-            ),
-          if (_isGroup && unrecorded.isNotEmpty)
-            DialogNotice(
-              icon: Icons.auto_delete_outlined,
-              message: loc.t(
-                'mods.update_apply.group_unrecorded',
-                params: {'mods': unrecorded.join(', ')},
-              ),
-            ),
           // The accepted loss, named rather than discovered. Re-applying the
           // user's .ini edits was considered and rejected — there is no pristine
           // baseline to diff against, so a merge reports every *author* change
@@ -466,9 +433,9 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
             message: loc.t('mods.update_apply.keybind_note'),
           ),
           // **The one loss on this screen that is not paid for by a rule.** A
-          // patch whose files are recorded is set aside and placed back; this
-          // folder's are not on record, so anything the new version ships the
-          // same name for replaces it. Said here because it cannot be seen
+          // patch whose files are recorded comes back from the snapshot; this
+          // folder's are not on record, so the wipe takes them with the old
+          // version. Said here because it cannot be seen
           // afterwards — the folder looks complete either way.
           if (!_isGroup && widget.flattensPatch)
             DialogNotice(
@@ -547,7 +514,6 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
       ];
 
   String _rowDetail(UpdateTarget target) {
-    final dropped = target.preview.dropped.remove.length;
     return <String>[
       // **First, because it is why the row is unticked.** The counts describe
       // what the write would do; this says whether it should happen at all.
@@ -561,12 +527,6 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
         target.preview.incoming.files.length,
         params: {'count': '${target.preview.incoming.files.length}'},
       ),
-      if (dropped > 0)
-        loc.plural(
-          'mods.update_apply.group_row_dropped',
-          dropped,
-          params: {'count': '$dropped'},
-        ),
     ].join(' · ');
   }
 

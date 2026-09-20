@@ -6,8 +6,8 @@ refuses to do, and how a bad update is undone.
 **This documents what the code does today.** Where behaviour is planned but not
 implemented, it says so.
 
-> Scope: the mechanism that touches a live install — the overwrite, patch detection,
-> removing the old version's files, replaying the recorded install layout, the pre-update
+> Scope: the mechanism that touches a live install — the wipe and rewrite, patch detection,
+> putting a recorded patch back, replaying the recorded install layout, the pre-update
 > snapshot and its retention, and rollback. Deciding *whether* a mod has a newer
 > version is [`update-checks.md`](update-checks.md); this doc starts once that
 > question is answered and the user has pressed Update. What a **fresh install**
@@ -18,21 +18,22 @@ Related: [`../CLAUDE.md`](../CLAUDE.md) for the service/layer architecture.
 
 ---
 
-## 1. The mechanism is overwrite
+## 1. The mechanism is wipe and write
 
-**Extract to a temp directory, sanity-check it, copy over the live folder, then remove what the previous version shipped and the new one does not.**
-The folder itself is never moved, emptied or replaced.
+**Extract to a temp directory, sanity-check it, snapshot, delete everything in the live folder except the sidecar, then copy the new version in.**
+What is left afterwards is the new version and nothing of the old one, and nothing decides which old files were whose.
+The folder itself is never moved or replaced.
 
 A mod folder is often **mixed**: it holds files from two downloads, because a *patch
 mod* was applied into it. Patches replace rather than add — a patch `.ini` carries
 the **same filename** as the mod's own and takes its place, and a patch asset
 likewise overwrites one of the mod's files. So a mixed folder looks completely
 ordinary from the outside: one `.ini`, every referenced file present, nothing extra.
-What tells the two apart is the record each download keeps of the files it wrote ([§3](#3-a-mod-with-no-file-record) covers the folders that have none),
-and an update to one download sets the other aside and puts it back ([§6](#base-first-then-patch--for-both-halves-of-a-mixed-folder)).
+What tells the two apart is the record the patch keeps of the files it wrote, and that record is the one thing the wipe hands back:
+an update to the base puts the patch's files back from the snapshot onto the new layout ([§6](#base-first-then-patch--for-both-halves-of-a-mixed-folder)).
+A patch nothing recorded goes with the old version, and the confirmation says so ([§3](#3-a-mod-with-no-file-record)).
 
-Three properties fall out of overwrite for free, each of which the rejected
-swap-the-folder design needed machinery for:
+Three properties fall out of rewriting in place, each of which a design that swapped the folder for a new one would need machinery for:
 
 - **The active link survives by construction.** Moving the folder would dangle
   `saveModsPath/<name>`, which the next scan prunes — silently switching the mod off.
@@ -40,71 +41,68 @@ swap-the-folder design needed machinery for:
   needed for link integrity.
 - **The folder name never changes.** The new archive's root folder is frequently
   named differently (`Ellen` → `Ellen v2`), and `config.json` keys `active_mods`,
-  `favorite_mods` and `mod_character_tags` by folder name. Overwrite never names
+  `favorite_mods` and `mod_character_tags` by folder name. The write never names
   anything, so this is satisfied without a rule.
-- **A half-finished extraction never touches the install.** The crash-safety worry
-  that made the swap plan attractive is answered by the temp step, not by the swap.
+- **A half-finished extraction never touches the install.** The wipe runs only once
+  the archive has been unpacked and checked, so a broken download costs nothing.
 
-The mod **is** still deactivated for the duration of the copy, but for **open file
-handles only** — the game's loader holds them on Windows and the copy would fail
-against them. It is put back exactly as it was afterwards, active or not.
+The mod **is** still deactivated for the duration, but for **open file handles
+only** — the game's loader holds them on Windows and the delete and the copy would
+fail against them. It is put back exactly as it was afterwards, active or not.
 
-`utils/directory_copy.dart` is the copy: `Directory.create(recursive: true)` no-ops
-on an existing directory and `File.copy` replaces its destination, so colliding files
-are replaced and everything else is left alone.
+`UpdateApplier._wipe` is the delete: every entry at the folder's root except
+`.zzz-mod-manager/`, recursively. `utils/directory_copy.dart` is the copy into the
+emptied folder.
 
-### What overwrite leaves behind, and what is taken away instead
+### What goes, what comes back, and the patch layer's own update
 
-An overwrite only ever adds and replaces, so a file the last version shipped under a
-name the new one does not use would simply stay. The loader reads **every** `.ini` in
-the folder, so a renamed one stays live beside its successor — duplicate hotkeys and
-two sets of overrides on the same hashes — and everything else left over is dead
-weight nothing in the folder accounts for.
+**A base update takes everything.** The loader reads **every** `.ini` in the folder,
+so an old version's renamed `.ini` left beside its successor doubles the hotkeys and
+the overrides, and a shader the author dropped goes on being applied. Deciding which
+files were the old version's needs a record that most folders do not have and a set of
+exceptions for the ones that do, and every exception is a place a stale file can
+survive. So nothing is decided: the folder is emptied and the archive's contents are
+what it holds afterwards. A file the user merged in by hand, a texture they swapped,
+a `.ini` they edited — all of it goes with the old version, and the snapshot
+([§5](#5-snapshots)) is where it is. That is a trade made on purpose: a mod broken
+by a leftover is the app's fault, and a hand edit lost to an update the user pressed
+is theirs to take back from the saved copy.
 
-Each download records the files it laid down (`ModDownload.files`,
-[`metadata-schema.md`](metadata-schema.md)), so the answer is a **set difference and
-not an inference**: recorded last time, not shipped this time, still on disk, and
-claimed by no other download in the folder. `services/update_apply/dropped_files.dart`
-decides it before anything is written; the applier deletes those paths after the copy
-and removes a directory whose last file it just took.
+**The one thing that comes back is a recorded patch.** `ingest.patch_files` and the
+patch layer's own `files` say which paths were the other download's; they are read
+back from the snapshot after the base lands and placed onto its layout
+([§6](#base-first-then-patch--for-both-halves-of-a-mixed-folder)). A recorded file
+that was already gone is named, not restored: the user deleting it was an edit.
 
-It is not offered as a choice: a file the new version has no name for is exactly what "update this mod" means to remove,
-and the snapshot is the way back. Nothing is inferred from the folder's contents.
-
-Five things it refuses to touch, and each is a different reason:
+**A patch's own update is the exception, because it sits over a base that stays.**
+`UpdateApplier.applyPatchInto` cannot wipe — taking the base with it is the
+destruction the layer exists to avoid — so it writes file by file and then removes
+what the last patch version recorded and the new one does not place
+(`services/update_apply/dropped_files.dart`, a set difference against the record,
+never an inference). Where the old patch had written over one of the mod's own
+files, that file comes back from the store ([§5](#a-patchs-displaced-files-are-kept-separately-and-in-the-folder));
+what the patch had merely added is deleted. Four things it refuses to touch:
 
 | What | Why |
 |---|---|
-| a path **another** download in the folder records | the file there now is that download's, not the old version's — deleting it is the destruction overwrite exists to avoid |
-| a file **the new version's own `.ini` still names** and the archive did not carry | an author who replaced one component ships a fraction of what their `.ini` references, and removing it breaks a working mod on the update meant to improve it |
-| a recorded file that is **already gone** | the record says what the app wrote, so the user deleting one since is an edit rather than damage |
-| a file **nothing recorded writing**, where a record exists | there is no licence to delete it; a folder with no record at all is [§3](#3-a-mod-with-no-file-record) |
-| a **displaced original that was never kept** | deleting it would leave a hole where the file underneath used to be — see [§5](#a-patchs-displaced-files-are-kept-separately-and-in-the-folder) |
+| a path a download **above** this one records | the file there now is that download's |
+| a file **the new patch's own `.ini` still names** and the archive did not carry | removing it would break a working mod on the update meant to improve it |
+| a recorded file that is **already gone** | the user deleting it since is an edit rather than damage |
+| a **displaced original that was never kept** | deleting it would leave a hole where the mod's file used to be |
 
-**The role on a record is not the test, and getting that backwards would silently do
-nothing.** Every update overwrites the previous version's files, so the bottom
-layer's record is almost entirely `replaced` — and what it replaced was the version
-being got rid of. What decides a restore is whether an original is *on hand*, which
-only a layer that keeps what it displaces ever has.
-
-**Which layer is being written therefore decides between a delete and a restore.**
-The bottom layer deletes: there is nothing underneath it. A patch layer puts the
-mod's own file back from its store ([§5](#a-patchs-displaced-files-are-kept-separately-and-in-the-folder))
-wherever its new version has stopped writing over one, and deletes only what it had
-added. The stored copy is deliberately left where it is: the path is one the patch no
-longer touches, and if a later version reaches for it again `PatchStore.keep` finds an
-original already on hand — the mod's, which is the one that has to survive.
+The stored copy is deliberately left where it is after a restore: the path is one
+the patch no longer touches, and if a later version reaches for it again
+`PatchStore.keep` finds an original already on hand — the mod's, which is the one
+that has to survive.
 
 One caveat worth knowing rather than discovering:
 
 - Shaders are picked up by **filename convention**, from the single directory
   `override_directory` names in `d3dx.ini` — `ShaderFixes` at the game root, not
-  recursively and not per-mod. So a `ShaderFixes/` folder left inside a mod folder
-  is not loaded at all, and a mod that ships shaders of its own to be loaded from
-  its folder does it through `CustomShader` or `ShaderRegex`, which are
-  `.ini`-referenced and covered by the rules above. **The leftover that can still
-  be live is a shader the user copied to the game root**, which no mod folder
-  contains and nothing here records.
+  recursively and not per-mod. So a `ShaderFixes/` folder inside a mod folder is
+  not loaded at all, and the wipe takes it like anything else. **The leftover that
+  can still be live is a shader the user copied to the game root**, which no mod
+  folder contains and nothing here records.
 
 ### Comparison paths are normalised; filesystem paths are not
 
@@ -114,15 +112,12 @@ everything else.** `FolderContents.actualPaths` maps each normalised path back t
 name on disk, and anything that touches `File` or reaches a user goes through it.
 
 This is not a hypothetical. Mod authors ship `Ellen.ini`, `Miyabi.ini`,
-`MasterNico.ini`; all-lower-case is the rare spelling. Deleting an old `.ini` through
-the normalised path opened nothing on Linux — `exists()` answered false, the loop
-reported nothing removed, no error was raised anywhere, and the user was left with
-two live `.ini` files. The confirmation had the same fault cosmetically, naming `ellen.ini` for a
-file called `Ellen.ini`.
-
-**Every test in the suite wrote a lower-case filename**, which is why nothing caught
-it: the feature was only ever exercised on the one spelling that happened to work.
-`update_applier_test.dart` pins the mixed-case case.
+`MasterNico.ini`; all-lower-case is the rare spelling. A delete through the
+normalised path opens nothing on Linux — `exists()` answers false, nothing is
+removed, no error is raised — and a report naming `ellen.ini` names a file the user
+does not have. The patch layer's removal and every list of files shown or logged go
+through the real spelling, and `update_applier_test.dart` pins the mixed-case case
+because a suite of lower-case fixtures cannot see the difference.
 
 ### Excluded from the copy: `.zzz-mod-manager/`
 
@@ -275,8 +270,8 @@ It no longer carries the patch verdict — "brought no content" does that — bu
 not redundant:
 
 - It keeps `PatchAssessment.missing` honest, which is the count the warning quotes.
-- **The old-file removal depends on it** ([§1](#what-overwrite-leaves-behind-and-what-is-taken-away-instead)):
-  a file the new `.ini` still names is kept, so a dead declaration there keeps a file nothing loads.
+- **A patch's own update depends on it** ([§1](#what-goes-what-comes-back-and-the-patch-layers-own-update)):
+  a file the new patch `.ini` still names is kept, so a dead declaration there keeps a file nothing loads.
 
 ### The asset patch: an asset with no `.ini` is waiting for someone else's
 
@@ -285,7 +280,7 @@ a real pair: one is a 6.7 MB `.rar` containing **exactly one `.dds`**, and the m
 it patches ships 17 files including a `.dds` of that name, whose `.ini` references
 it. Drop the first into the second's folder and one texture is replaced, every
 reference still resolves, and the folder is indistinguishable from an ordinary
-mod — [§1](#1-the-mechanism-is-overwrite)'s mixed folder, arrived at without a
+mod — [§1](#1-the-mechanism-is-wipe-and-write)'s mixed folder, arrived at without a
 single `.ini` being involved.
 
 The rule is **intrinsic to the download**: nothing in the game reaches a `.dds`,
@@ -357,21 +352,14 @@ own update usually contains the same fix.
 
 ## 3. A mod with no file record
 
-Every mod installed before the app recorded file lists has nothing that says which files its last version wrote.
-On its first update through the app, **everything in the folder counts as the previous version**:
-the removal in [§1](#what-overwrite-leaves-behind-and-what-is-taken-away-instead) runs over the folder's own contents as if they were the record,
-with the same exceptions, so a file the new `.ini` still names stays and a recorded patch above the base is set aside first and put back afterwards.
-What is left is the new version, the patch, and the sidecar.
+A base update does not read the base's record, so a mod installed before the app recorded file lists updates exactly like one installed yesterday:
+the folder is emptied and the new version written. The record the update *does* read is the patch's, and that is where a missing one shows:
+a patch nothing recorded cannot be put back, so it goes with the old version. The confirmation says so before the write, since the folder looks complete either way afterwards,
+and the snapshot holds it.
 
-The confirmation says that nothing records the version on disk and names the files going, since this is the one case where the user may recognise one as their own,
-and asks nothing else. The update records the files it wrote, so the mod's next update works from a record like any other.
-
-**What this gives up.** A second mod merged into the same folder by hand in a file manager, with nothing recorded about it,
-goes with the old version on that first update. The app cannot tell it from the old version, and it does not guess.
-That folder is a state the user built outside the app, and the snapshot taken before the write still holds every file.
-
-Inferring which `.ini` files are the old version's from the resources they name, and asking before deleting them, is rejected.
-It asks on every unrecorded mod's first update, about files the user has never seen, and the answer is always the same.
+Inferring which files were the old version's — from a record, from the resources the `.ini` files name, from anything — is rejected.
+Every rule of that kind is a place a stale file survives, and the one update that breaks a mod because of a leftover costs more than every hand edit the wipe takes,
+because the snapshot has the edits and nothing has the fix.
 
 ---
 
@@ -574,13 +562,13 @@ snapshot is not a setting and not an opt-in. **If it cannot be taken, nothing is
 written** — proceeding would trade a recoverable failure for an unrecoverable one.
 
 The patch case is now the exception rather than the rule: with
-`ingest.patch_files` on record the patch is set aside and placed back over the new
-version ([§6](#base-first-then-patch--for-both-halves-of-a-mixed-folder)), and the
+`ingest.patch_files` on record the patch is placed back over the new version
+([§6](#base-first-then-patch--for-both-halves-of-a-mixed-folder)), and the
 snapshot is what that read-back comes *from* rather than what pays for a loss.
 
-It is also the only recovery from a copy that fails part-way. Overwrite has no
-aside-folder to fall back on the way a swap would, and a partly-copied folder holds
-some new files and some old.
+It is also the only recovery from a wipe or a copy that fails part-way: the folder
+is emptied in place with no aside-folder to fall back on, and a partly-written one
+holds some of the new files and nothing of the old.
 
 ### A patch's displaced files are kept separately, and in the folder
 
@@ -826,8 +814,8 @@ the next one refusable:
 1. **Download** to `<appData>/downloads`. Cancellable; nothing local has changed.
 2. **Extract to temp** and check it produced folders. A failed extraction keeps the
    archive and says where it is.
-3. **Preview** — layout, patch shape, the old files going. Every question that can
-   only be asked before the copy.
+3. **Preview** — layout and patch shape. Every question that can only be asked
+   before the wipe.
 4. **Ask.** Including the accepted keybind loss and the snapshot, stated rather than
    discovered. Those three sit together under *what this does to the folder*, with
    **the snapshot first within that section** — overwriting and reverting keybinds
@@ -835,7 +823,7 @@ the next one refusable:
    things it pays for. The patch warning is the only notice given the amber emphasis,
    because it is the only one that changes what the update will *do* rather than
    describing it.
-5. **Deactivate → snapshot → copy → remove the old version's files → reactivate.**
+5. **Deactivate → snapshot → wipe → copy → put the patch back → reactivate.**
 6. **Record** the new origin block, prune snapshots, rescan.
 
 The orchestration is at the widget layer because it is a *conversation*. Every
@@ -848,10 +836,10 @@ semantics.
 
 **"Reinstall this version…" is an update at the file id already recorded.**
 `screens/dialogs/reinstall_flow.dart` fetches the mod page, finds that one file and
-hands it to the same flow — so a repair inherits the snapshot, the patch set-aside,
-the old-file removal and the confirmation without any of them existing twice. Only
-the wording differs, and it has to: "Update Ellen?" in front of a reinstall reads as
-an offer of something newer.
+hands it to the same flow — so a repair inherits the snapshot, the wipe, the patch
+put back and the confirmation without any of them existing twice. Only the wording
+differs, and it has to: "Update Ellen?" in front of a reinstall reads as an offer of
+something newer.
 
 It needs its own surface because the update dialog appears when there is a *finding*,
 and a repair is wanted precisely when there is none — a mod broken by a game patch, a
@@ -859,9 +847,10 @@ file deleted by accident, an edit that went wrong.
 
 Two things it is not:
 
-- **Not a factory reset of the directory.** The record licenses removing what this
-  app wrote and nothing else, so a second mod merged in by hand, or a texture the
-  user swapped, stays exactly where it is. What comes back is the author's files.
+- **Not a merge.** The folder is emptied like any update empties it, so a second
+  mod merged in by hand, or a texture the user swapped, goes to the snapshot and
+  what the folder holds afterwards is the author's files plus a recorded patch.
+  That is what "put it back the way it came" means, and it is why the entry exists.
 - **Not a fallback to the newest file.** GameBanana deletes file ids, so a mod
   re-uploaded since the install has nothing to repair from — and the flow says so
   rather than substituting the current release, which would be an update wearing a
@@ -894,7 +883,7 @@ Three consequences of the file-by-file copy:
   a rootless archive cannot become a subfolder holding a second live `.ini` whose
   `filename` paths resolve beside itself.
 - **Nothing is removed on a fresh install**: there is no previous version of the patch to take away.
-  An update to the patch removes what its last version recorded and the new one does not ship, as [§1](#what-overwrite-leaves-behind-and-what-is-taken-away-instead) describes.
+  An update to the patch removes what its last version recorded and the new one does not ship, as [§1](#what-goes-what-comes-back-and-the-patch-layers-own-update) describes.
 - **Our own sidecar is skipped**, as on the update path. An archive can arrive
   carrying one, and copying it over would replace the target's description, gallery
   and origin block.
@@ -938,16 +927,15 @@ nothing. The same shape is why an update to the *patch* half must not replay the
 folder's layout: the archive's root-level file would land at the root, beside the
 one it should have replaced.
 
-**The snapshot is the aside.** `applyBaseThenPatch` takes the patch's files out of
-the folder, writes the base as any download is written, and copies them back from
-the snapshot onto the new layout. Nothing is copied to a second temporary place,
-because the snapshot §5 takes unconditionally is already a full copy — and with the
-patch out of the way, the base's write is an ordinary update: the patch's files count as neither side of it,
-so they are never removed as the old version's, whether or not the base has a record.
+**The snapshot is the aside.** `applyBaseThenPatch` notes which recorded patch files
+the folder holds and how they are spelled, wipes the folder and writes the base as
+any download is written, then copies those files back from the snapshot onto the new
+layout. Nothing is copied to a second temporary place, because the snapshot §5 takes
+unconditionally is already a full copy.
 
-Order inside it is load-bearing twice over. The placement is resolved **before anything is deleted** — against the folder the copy is about to produce,
-old files excluded — so a target that cannot be settled stops the operation while the patch is still in place.
-And the old files are removed **before the patch goes back**, or a patch placed onto a path the old version used would be put back and then deleted as the old version's.
+The placement is resolved **before anything is deleted** — against what the copy is
+about to lay down, which is all the folder will hold by then — so a target that cannot
+be settled stops the operation while the patch is still in place.
 
 ### Which files are the patch's
 
@@ -1112,16 +1100,14 @@ Stated because each one bounds what this feature currently promises.
   one place the original problem survives. Repairing several folders is also a
   different question from updating them, since nothing is newer and the only reason to
   do it in bulk is that they broke together.
-- **The precise file list an archive laid down is not recorded.** With it, an update
-  could remove exactly the paths the old version wrote before writing the new ones,
-  and an overwritten patch would be detectable. The data does not exist for a single
-  currently-installed mod, and re-downloading the old archive to reconstruct it is
-  both a second full transfer and unavailable exactly for the old mods most likely to
-  have been patched.
+- **A patch nothing recorded is lost to the next base update.** The wipe takes it
+  and only a record can put it back. Every mixed folder assembled by hand before the
+  app recorded patch files is in that state, the confirmation names it, and the
+  snapshot holds the files — but the app cannot rebuild the folder from them.
 - **A mixed folder is only watched in full once the user says what else is in it.**
   The origin block's own fields describe one download, and in the common ordering
   they name the *patch* — so a check against them alone never looks at the base mod.
-  Applying an update is **not** the broken part; overwrite does the right thing there.
+  Applying an update is **not** the broken part; the wipe and the patch put back do the right thing there.
   Two things close it, and the second needs a person:
   `ingest.patch_shaped` is recorded at install, which is enough to refuse the clean
   verdict ([`UpdateOutcome.tracksPatchOnly`]) but not to watch the other mod; naming
@@ -1131,7 +1117,7 @@ Stated because each one bounds what this feature currently promises.
   install**: once the base mod's files are dragged in around the patch, every
   reference resolves — and for an asset patch the two downloads have merged into
   one set of files — so no later scan can tell it apart
-  ([§1](#1-the-mechanism-is-overwrite)). That is also why **nothing can offer to fix
+  ([§1](#1-the-mechanism-is-wipe-and-write)). That is also why **nothing can offer to fix
   a folder that is already mixed** — the app has no way to know it should ask, and the
   resolve dialog is the only route in.
 - **There is no "install this into that mod's folder" operation.** Both install paths

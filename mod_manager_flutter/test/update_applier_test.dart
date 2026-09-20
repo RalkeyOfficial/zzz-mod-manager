@@ -12,9 +12,9 @@ import 'package:mod_manager_flutter/services/update_apply/update_applier.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_layout.dart';
 import 'package:path/path.dart' as p;
 
-/// Real directories, not mocks. The whole point of the overwrite mechanism is
-/// what it does to files on disk, and a fake filesystem would be asserting the
-/// fake's semantics rather than `File.copy`'s.
+/// Real directories, not mocks. The whole point of the update is what it does
+/// to files on disk, and a fake filesystem would be asserting the fake's
+/// semantics rather than `File.copy`'s and `Directory.delete`'s.
 void main() {
   late Directory tmp;
   late Directory mods;
@@ -72,8 +72,8 @@ void main() {
     );
   }
 
-  test('with no record, everything in the folder counts as the old version', () async {
-    // Nothing says what the last version wrote, so `hand_merged.dds` goes with it: the folder ends up holding the new version and nothing else.
+  test('everything in the folder goes with the old version', () async {
+    // The folder is wiped before the copy, so `hand_merged.dds` goes with the old version: the folder ends up holding the new version and nothing else.
     // The snapshot is the way back.
     final mod = modFolder('Ellen');
     write(mod, 'ellen.ini', 'filename = Body.dds');
@@ -147,17 +147,7 @@ void main() {
     write(source, 'ellen_v2.ini', 'filename = Body.dds');
     write(source, 'Body.dds', 'v2');
 
-    final preview = await applier.preview(
-      modFolder: mod,
-      incomingFolders: [source.path],
-    );
-    expect(preview.dropped.remove, ['ellen.ini']);
-
-    final result = await applier.apply(
-      modName: 'Ellen',
-      modFolder: mod,
-      preview: preview,
-    );
+    final result = await run('Ellen', mod, [source]);
     expect(result.droppedFiles, ['ellen.ini']);
     expect(read(mod, 'ellen.ini'), isNull);
     expect(read(mod, 'ellen_v2.ini'), isNotNull);
@@ -180,23 +170,6 @@ void main() {
         reason: 'reported under the name the user actually has');
     expect(read(mod, 'Ellen.ini'), isNull);
     expect(read(mod, 'Ellen_v2.ini'), isNotNull);
-  });
-
-  test('the preview names old files as they are spelled on disk', () async {
-    final mod = modFolder('Ellen');
-    write(mod, 'Ellen.ini', 'filename = Body.dds');
-    write(mod, 'Body.dds', 'v1');
-    final source = incoming('Ellen');
-    write(source, 'Ellen_v2.ini', 'filename = Body.dds');
-    write(source, 'Body.dds', 'v2');
-
-    final preview = await applier.preview(
-      modFolder: mod,
-      incomingFolders: [source.path],
-    );
-    // The confirmation quotes these, so they must name a file the user has.
-    expect(preview.dropped.remove, ['Ellen.ini']);
-    expect(preview.onDisk('ellen.ini'), 'Ellen.ini');
   });
 
   test('an incoming patch is reported before anything is written', () async {

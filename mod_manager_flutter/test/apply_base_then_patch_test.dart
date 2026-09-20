@@ -108,8 +108,7 @@ void main() {
   String modIni(String filename) =>
       '[TextureOverrideBody]\nps-t0 = R\n\n[R]\nfilename = $filename\n';
 
-  /// The whole operation: preview the base against the folder with the patch's
-  /// files discounted, then write base-then-patch.
+  /// The whole operation: preview the base, then write base-then-patch.
   Future<UpdateApplyResult> run(
     String modName,
     Directory folder,
@@ -121,7 +120,6 @@ void main() {
       modFolder: folder,
       incomingFolders: baseSources.map((d) => d.path).toList(),
       ingest: ingest,
-      excluding: patchFiles,
     );
     return applier.applyBaseThenPatch(
       modName: modName,
@@ -374,10 +372,11 @@ void main() {
     });
   });
 
-  group('the patch is not part of the base update', () {
-    test('the patch\'s own files are never removed as the old version\'s',
+  group('the patch survives the wipe', () {
+    test('the patch\'s own files come back after the base is written',
         () async {
-      // `fix.ini` and `Body.dds` belong to the other download, which is going back on top.
+      // `fix.ini` and `Body.dds` belong to the other download. The wipe takes
+      // them with everything else, and the snapshot is where they come back from.
       final mod = modFolder('Ellen Fix');
       write(mod, 'fix.ini', modIni('Body.dds'));
       write(mod, 'Body.dds', 'patched');
@@ -386,17 +385,18 @@ void main() {
       write(base, 'ellen.ini', modIni('Textures/Body.dds'));
       write(base, 'Textures/Body.dds', 'base');
 
-      final preview = await applier.preview(
-        modFolder: mod,
-        incomingFolders: [base.path],
-        excluding: ['fix.ini', 'Body.dds'],
-      );
+      final result = await run('Ellen Fix', mod, [base],
+          patchFiles: ['fix.ini', 'Body.dds']);
 
-      expect(preview.dropped.remove, isEmpty);
+      expect(result.success, isTrue);
+      expect(read(mod, 'fix.ini'), isNotNull);
+      expect(read(mod, 'Textures/Body.dds'), 'patched');
+      expect(result.droppedFiles, isEmpty,
+          reason: 'everything the folder held is back, so nothing was lost');
     });
 
     test('an old file of the base itself still goes', () async {
-      // The exclusion must not blind the removal to the base's own old files.
+      // Putting the patch back must not bring the base's old files with it.
       final mod = modFolder('Ellen Fix');
       write(mod, 'ellen.ini', modIni('Body.dds'));
       write(mod, 'Body.dds', 'base v1');
@@ -406,28 +406,13 @@ void main() {
       write(base, 'ellen_v2.ini', modIni('Body.dds'));
       write(base, 'Body.dds', 'base v2');
 
-      final preview = await applier.preview(
-        modFolder: mod,
-        incomingFolders: [base.path],
-        excluding: ['Patch.dds'],
-      );
+      final result =
+          await run('Ellen Fix', mod, [base], patchFiles: ['Patch.dds']);
 
-      expect(preview.dropped.remove, ['ellen.ini']);
-    });
-
-    test('the folder is judged as if the patch were not in it', () async {
-      // Every rule downstream compares `incoming` against `existing`, and the
-      // patch belongs to neither: it is going back on top afterwards.
-      final mod = modFolder('Ellen Fix');
-      write(mod, 'Body.dds', 'patched');
-
-      final preview = await applier.preview(
-        modFolder: mod,
-        incomingFolders: [incoming('Ellen').path],
-        excluding: ['Body.dds'],
-      );
-
-      expect(preview.existing.files, isEmpty);
+      expect(read(mod, 'ellen.ini'), isNull);
+      expect(read(mod, 'Body.dds'), 'base v2');
+      expect(read(mod, 'Patch.dds'), 'patched');
+      expect(result.droppedFiles, ['ellen.ini']);
     });
   });
 
