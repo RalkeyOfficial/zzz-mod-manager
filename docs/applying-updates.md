@@ -476,8 +476,9 @@ Neither is a refusal: the archive is already downloaded, so offering costs nothi
 and deliberately taking one variant across a whole group is exactly what this screen
 is for. A downgrade beats a dismissal where both apply, being the larger surprise.
 
-`dismissed` matters more than it looks, because `ModDownload.updatedTo` **clears**
-`updates_dismissed_until` — so writing a member the user had ignored would not merely
+`dismissed` matters more than it looks, because `ModDownload.updatedTo` **replaces**
+`updates_dismissed_until` with whatever the pick warrants, and for the newest file
+listed that is nothing — so writing a member the user had ignored would not merely
 override the instruction, it would erase it.
 
 **The comparison uses data already in hand**, with no extra request:
@@ -542,7 +543,14 @@ about the folder as it stands:
 
 - `baseline_remote_date` — a date-based guess sitting beside an exact file id.
 - `updates_dismissed_until` — the user waved an update away and has now taken it;
-  keeping it would silence the *next* release too.
+  keeping it would silence the *next* release too. **Unless the file taken sits
+  below others the dialog listed.** Those were seen and passed over, which is
+  exactly what a dismissal records, so the write lands one at the newest date
+  listed — the same value the Ignore button writes — and the next check stays
+  quiet about them instead of reporting the update the user just declined.
+  `dismissalAfterTaking` (`update_check.dart`) is the one place the rule lives,
+  and it clears whenever nothing can be shown to have been passed over: the
+  pick is the newest listed, the list is empty (a repair), or a date is missing.
 - `remote_missing` — we just fetched the page and a file off it.
 
 `tracking` survives untouched: it is the user's own statement about whether this mod

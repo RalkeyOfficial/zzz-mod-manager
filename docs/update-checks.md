@@ -388,6 +388,11 @@ Six rules:
   to cover it, it does not.
 - **It is dropped when the folder is rebound** to a different mod, like every
   other field that describes one mod page ([`origin-tracking.md`](origin-tracking.md#3-the-offline-backfill)).
+- **Taking a file below the newest listed writes one too.** The files above the
+  pick were seen and passed over, so the update's write lands a dismissal at the
+  newest date listed, by the same rule as the button; taking the newest listed
+  clears it instead. Without this the next check reported the file the user had
+  just declined. [`applying-updates.md` §4](applying-updates.md#after-a-successful-update).
 
 It is deliberately **not** `tracking: "off"`. That answer says the mod is not
 from GameBanana at all and silences it forever; this one keeps the mod tracked

@@ -62,6 +62,18 @@ void main() {
     expect(updated(before()).updatesDismissedUntil, isNull);
   });
 
+  test('a dismissal handed in with the write replaces the old one', () {
+    // A pick below the newest file listed passes the ones above it over, and
+    // the write records that as a fresh dismissal rather than keeping or
+    // clearing the old one — `dismissalAfterTaking` decides the value.
+    final after = before().withBase((download) => download.updatedTo(
+          modId: 700727,
+          fileId: 222,
+          updatesDismissedUntil: DateTime.utc(2026, 9),
+        ));
+    expect(after.updatesDismissedUntil, DateTime.utc(2026, 9));
+  });
+
   test('the date-only baseline is cleared once a file id is known', () {
     // A weaker, date-based answer sitting beside a stronger one.
     expect(updated(before()).baselineRemoteDate, isNull);

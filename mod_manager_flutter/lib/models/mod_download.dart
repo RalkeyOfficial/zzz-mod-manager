@@ -285,7 +285,9 @@ class ModDownload {
   ///   weaker answer sitting beside a stronger one.
   /// - **`updatesDismissedUntil`** — they waved an update away and have now
   ///   taken it. Stored as a date at or after this file's, keeping it silences
-  ///   the *next* release too.
+  ///   the *next* release too. Unless the caller hands in
+  ///   [updatesDismissedUntil]: a pick below the newest file listed passes the
+  ///   ones above it over, and `dismissalAfterTaking` says what that is worth.
   /// - **`remoteMissing`** — we just fetched the page and a file off it.
   ///
   /// Both confidences reach `exact` on the same grounds a marketplace install
@@ -298,6 +300,7 @@ class ModDownload {
     String? versionLabel,
     String? archiveMd5,
     List<InstalledFile>? files,
+    DateTime? updatesDismissedUntil,
   }) =>
       ModDownload(
         role: role,
@@ -308,6 +311,7 @@ class ModDownload {
         versionLabel: versionLabel,
         versionConfidence: OriginConfidence.exact,
         archiveMd5: archiveMd5 ?? this.archiveMd5,
+        updatesDismissedUntil: updatesDismissedUntil,
         // **Null keeps the old list.** A caller that cannot say what it wrote
         // knows less than the record does, and an empty list would claim this
         // layer put nothing in the folder.

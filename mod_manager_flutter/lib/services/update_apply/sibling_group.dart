@@ -85,9 +85,10 @@ enum SiblingCaution {
   ///
   /// `ModDownload.updatesDismissedUntil` means "I have seen what this mod
   /// published up to here and I don't want it". Pre-ticking against a standing
-  /// instruction is bad enough on its own; `ModDownload.updatedTo` then *clears*
-  /// the dismissal, so taking it would also erase the instruction with nothing
-  /// on screen saying so.
+  /// instruction is bad enough on its own; `ModDownload.updatedTo` then
+  /// *replaces* the dismissal with what the pick warrants, which for the newest
+  /// file listed is nothing, so taking it would also erase the instruction with
+  /// nothing on screen saying so.
   dismissed,
 }
 

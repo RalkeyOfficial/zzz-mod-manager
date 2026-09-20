@@ -655,6 +655,13 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     if (route.kind == UpdateWriteKind.none) return;
 
     setState(() => _writing = true);
+    // **What this check found newer than what this mod holds.** A pick below
+    // the newest of them records the rest as passed over, and the group needs
+    // it to tell a sibling that wants this file from one that has already gone
+    // past it — see `sibling_group.dart`. The section's own list, because a
+    // folder holding two downloads has one per layer.
+    final published =
+        (section?.check ?? _stored)?.newerFiles ?? const <GbFile>[];
     // **Base by layout, patch by placement**, and the folder decides which this
     // is rather than the button. See `update_write_route.dart`.
     final changed = route.kind == UpdateWriteKind.patch
@@ -665,6 +672,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
             remoteModId: modId,
             file: file,
             asCompanion: route.asCompanion,
+            published: published,
           )
         : await applyUpdateFlow(
             context,
@@ -676,13 +684,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
             patchModId: route.patchModId,
             asCompanion: route.asCompanion,
             flattensPatch: route.flattensPatch,
-            // **What this check found newer than what this mod holds.** The
-            // group needs it to tell a sibling that wants this file from one
-            // that has already gone past it — see `sibling_group.dart`. The
-            // section's own list, because a folder holding two downloads has
-            // one per layer.
-            published: (section?.check ?? _stored)?.newerFiles ??
-                const <GbFile>[],
+            published: published,
           );
     if (!mounted) return;
     setState(() {

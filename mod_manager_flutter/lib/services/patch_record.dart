@@ -97,6 +97,7 @@ ModOrigin? withDownloadUpdatedTo(
   String? versionLabel,
   String? archiveMd5,
   List<InstalledFile>? files,
+  DateTime? updatesDismissedUntil,
 }) {
   if (current == null) return null;
   return withRebuiltPatchFiles(current.withDownload(
@@ -108,6 +109,7 @@ ModOrigin? withDownloadUpdatedTo(
       versionLabel: versionLabel,
       archiveMd5: archiveMd5,
       files: files,
+      updatesDismissedUntil: updatesDismissedUntil,
     ),
   ));
 }

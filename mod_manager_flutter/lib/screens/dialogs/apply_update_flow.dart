@@ -11,12 +11,14 @@ import '../../models/gamebanana/gamebanana.dart';
 import '../../models/installed_file.dart';
 import '../../models/mod_ingest.dart';
 import '../../models/mod_origin.dart';
+import '../../models/mod_download.dart';
 import '../../models/origin_enums.dart';
 import '../../services/api_service.dart';
 import '../../services/archive_service.dart';
 import '../../services/backup/snapshot_service.dart';
 import '../../services/folder_contents.dart';
 import '../../services/mod_manager_service.dart';
+import '../../services/update_check.dart';
 import '../../services/log/confirmations.dart';
 import '../../services/log/logger.dart';
 import '../../services/patch_placement.dart';
@@ -357,6 +359,9 @@ Future<bool> applyUpdateFlow(
       applier: applier,
       snapshots: snapshots,
       mods: mods,
+      // Every member takes the same file off the same list, so a pick below
+      // the newest is the same passed-over release for each of them.
+      dismissUntil: dismissalAfterTaking(file, published),
       // Handed in as a callback so the write itself holds no provider handle.
       // The container rather than `ref` for the same reason as above: a
       // `WidgetRef` throws once its widget is disposed, and a throw between the
@@ -447,6 +452,10 @@ Future<bool> applyPatchUpdateFlow(
   required int remoteModId,
   required GbFile file,
   bool asCompanion = false,
+
+  /// Every file the check listed beside [file], so a pick below the newest
+  /// records the ones above it as passed over. Same field as [applyUpdateFlow]'s.
+  List<GbFile> published = const <GbFile>[],
 }) async {
   final loc = context.loc;
   final notify = context.notify;
@@ -592,6 +601,7 @@ Future<bool> applyPatchUpdateFlow(
         // This version's files, replacing the last one's — the paths move
         // whenever the two authors' layouts differ.
         files: result.writtenFiles,
+        updatesDismissedUntil: dismissalAfterTaking(file, published),
       );
       if (updated == null) return null;
       // The **folder's** facts only when what the folder *is* was written. A
@@ -789,6 +799,10 @@ Future<List<AppliedUpdate>> _writeAll({
   required SnapshotService snapshots,
   required ModManagerService mods,
 
+  /// What the dismissal becomes on every record written — see
+  /// `dismissalAfterTaking`.
+  required DateTime? dismissUntil,
+
   /// Called after a folder's snapshot exists, so the rollback menu can be
   /// re-read. A callback rather than a `ref` for the reason above.
   required void Function() onSnapshotTaken,
@@ -839,6 +853,7 @@ Future<List<AppliedUpdate>> _writeAll({
         mods: mods,
         mod: target.mod,
         remoteModId: remoteModId,
+        dismissUntil: dismissUntil,
         file: file,
         archiveMd5: archiveMd5,
         layout: target.preview.layout,
@@ -910,6 +925,7 @@ Future<void> _recordOrigin({
   required UpdateLayout layout,
   required bool asCompanion,
   required List<String>? patchFiles,
+  required DateTime? dismissUntil,
   List<InstalledFile>? files,
   List<InstalledFile>? placedPatchFiles,
 }) async {
@@ -921,30 +937,22 @@ Future<void> _recordOrigin({
     // **The layer that was written**, whether it is the bottom of the stack or
     // one above it. `updatedTo` owns the clearing rules; the stack is what makes
     // the two cases one line instead of two branches.
+    ModDownload record(ModDownload download) => download.updatedTo(
+          modId: remoteModId,
+          fileId: file.idRow,
+          version: file.version,
+          versionLabel: file.description,
+          archiveMd5: archiveMd5,
+          files: files,
+          updatesDismissedUntil: dismissUntil,
+        );
     final written = block.downloadOf(remoteModId);
     block = written == null
         // Not on record at all — a mod the app updated without ever having a
         // block for it, which is most of a library that predates origin
         // tracking. The layer it wrote is what the folder now is.
-        ? block.withBase((download) => download.updatedTo(
-              modId: remoteModId,
-              fileId: file.idRow,
-              version: file.version,
-              versionLabel: file.description,
-              archiveMd5: archiveMd5,
-              files: files,
-            ))
-        : block.withDownload(
-            remoteModId,
-            (download) => download.updatedTo(
-              modId: remoteModId,
-              fileId: file.idRow,
-              version: file.version,
-              versionLabel: file.description,
-              archiveMd5: archiveMd5,
-              files: files,
-            ),
-          );
+        ? block.withBase(record)
+        : block.withDownload(remoteModId, record);
 
     // The layers above moved onto the new base's layout, so their records are
     // rewritten too. One write, not two: they are layers of one stack.

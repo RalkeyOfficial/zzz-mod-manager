@@ -233,17 +233,6 @@ Two things are **refused rather than unbuilt**, both recorded in
 
 ### Open around applying an update (known, deliberately not built)
 
-- [ ] **Updating to a file that is not the newest one keeps reporting the newer one as an update.**
-  The update dialog lists every file published since the installed one, newest first, and the user picks the one below the latest,
-  usually because the files are variants and the latest is somebody else's variant.
-  The update goes through, and the next check says an update is available again: the same newer file they just passed over.
-  The cause is in what the write records. Installing a file rewrites the origin block with that file id and clears `updates_dismissed_until`
-  (`docs/applying-updates.md` §4 "After a successful update": the user took the update, so keeping a dismissal would silence the next release too).
-  That is right when the chosen file is the newest, and wrong when it is not: the files above it in the list were seen and passed over,
-  which is exactly what a dismissal records (`docs/update-checks.md` §4), and the check then finds them "newer at all" and speaks again.
-  The fix is to treat picking a lower file as dismissing the ones above it: set `updates_dismissed_until` to the date of the newest file the dialog listed,
-  the same rule the Ignore button uses, instead of clearing it. Clearing stays right when the chosen file is the newest listed.
-  The reinstall path is unaffected, since it writes the file already recorded.
 - **"Update all" is refused, not unbuilt.** The bulk check lists every mod with
   something newer and each one is then its own dialog, which is tedious for a
   library left alone for months — and it stays that way. One button that

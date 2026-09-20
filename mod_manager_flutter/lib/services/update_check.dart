@@ -634,6 +634,32 @@ UpdateCheck _judgeDownload({
   );
 }
 
+/// What `updates_dismissed_until` becomes once [taken] has been written over
+/// the folder, given the files the dialog [listed] beside it.
+///
+/// Null clears it: [taken] is the newest thing listed, so nothing was passed
+/// over and a kept dismissal would silence the next release. Otherwise the
+/// files above the pick were seen and passed over, which is exactly what a
+/// dismissal records, so it lands on the newest date listed — the same value
+/// the Ignore button writes ([UpdateCheck.dismissableUpTo]). Without it the
+/// next check finds those files "newer at all" and reports the update the user
+/// just declined.
+///
+/// A pick or a list with no date cannot be shown to have passed anything over,
+/// so it clears — erring toward flagging, as every dismissal rule does.
+DateTime? dismissalAfterTaking(GbFile taken, Iterable<GbFile> listed) {
+  final takenDate = taken.dateAdded;
+  if (takenDate == null) return null;
+  DateTime? newest;
+  for (final file in listed) {
+    final date = file.dateAdded;
+    if (date == null) continue;
+    if (newest == null || date.isAfter(newest)) newest = date;
+  }
+  if (newest == null || !newest.isAfter(takenDate)) return null;
+  return newest;
+}
+
 /// Marks a verdict the user has already waved away.
 ///
 /// Applied **after** the verdict is computed rather than as an early return,
