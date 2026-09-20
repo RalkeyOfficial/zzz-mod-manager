@@ -92,6 +92,38 @@ void main() {
     });
   });
 
+  group('gameBananaModIdFromText', () {
+    test('a bare id, with or without surrounding whitespace', () {
+      expect(gameBananaModIdFromText('531649'), 531649);
+      expect(gameBananaModIdFromText('  531649 '), 531649);
+    });
+
+    test('a mod page url, exactly as the url parser takes it', () {
+      expect(
+          gameBananaModIdFromText('https://gamebanana.com/mods/531649'), 531649);
+      expect(gameBananaModIdFromText('gamebanana.com/mods/531649/'), 531649);
+    });
+
+    test('anything else is a name to search for', () {
+      // A number inside other text is a title fragment ("Mk 2"), not an id, and
+      // a file link names a file, which cannot be turned into a mod.
+      for (final text in [
+        'ellen',
+        'Soldier 11',
+        '531649 glow',
+        '-5',
+        '0',
+        '',
+        '   ',
+        'https://gamebanana.com/dl/1770600',
+        'https://gamebanana.com/mods/cats/30305',
+      ]) {
+        expect(gameBananaModIdFromText(text), isNull, reason: '"$text"');
+      }
+      expect(gameBananaModIdFromText(null), isNull);
+    });
+  });
+
   group('gameBananaFileIdFromUrl', () {
     test('reads a download link', () {
       expect(gameBananaFileIdFromUrl('https://gamebanana.com/dl/1701141'),

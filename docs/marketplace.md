@@ -37,6 +37,13 @@ search endpoint was tried first and rejected: it matches any single word in any
 field, so the exact title of one mod returned 714 results where the site's own name
 lookup returns one ([`gamebanana-api.md`](gamebanana-api.md) §3).
 
+**A pasted mod link or a bare id shows that one mod.** `gameBananaModIdFromText`
+recognises both, the profile is fetched, and it is shown as a one-record page,
+ignoring the category and sort, since an id names a mod outright. A mod that is gone
+or belongs to another game comes back as an empty page rather than an error, so the
+grid offers the same "clear search" it offers a fruitless name. A file link
+(`/dl/…`) is not an id, so it is searched as a name and finds nothing.
+
 ## 3. The two views are an `IndexedStack`, not a conditional
 
 Swapping them meant disposing the browse view, and with it the scroll offset of a

@@ -74,7 +74,7 @@
   "marketplace": {
     "back": "Back",
     "reload": "Refresh",
-    "search_hint": "Search ZZZ mods by name",
+    "search_hint": "Search ZZZ mods by name, or paste a mod link or id",
     "download_title": "Download mod?",
     "download_message": "Do you want to download {filename}?",
     "unknown_file": "Unknown file",

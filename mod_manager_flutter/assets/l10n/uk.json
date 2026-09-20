@@ -76,7 +76,7 @@
   "marketplace": {
     "back": "Назад",
     "reload": "Оновити",
-    "search_hint": "Пошук ZZZ-модів за назвою",
+    "search_hint": "Пошук ZZZ-модів за назвою або вставте посилання чи id мода",
     "download_title": "Завантажити мод?",
     "download_message": "Завантажити {filename}?",
     "unknown_file": "Невідомий файл",

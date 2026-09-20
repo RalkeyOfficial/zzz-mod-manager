@@ -58,11 +58,16 @@ class GbMod {
     this.isTrashed = false,
     this.isWithheld = false,
     this.hasFiles,
+    this.gameId,
   });
 
   /// `_idRow` — the mod id, and the stable handle to re-query. Far more
   /// reliable than a stored url.
   final int idRow;
+
+  /// `_aGame._idRow` — which game the mod is for. Listings are scoped to one
+  /// game by the request, so this only matters for a mod reached by id.
+  final int? gameId;
 
   /// `_sName`.
   final String? name;
@@ -252,6 +257,10 @@ class GbMod {
       isTrashed: gbBool(json['_bIsTrashed']),
       isWithheld: gbBool(json['_bIsWithheld']),
       hasFiles: json.containsKey('_bHasFiles') ? gbBool(json['_bHasFiles']) : null,
+      gameId: switch (json['_aGame']) {
+        final Map<String, dynamic> game => gbInt(game['_idRow']),
+        _ => null,
+      },
     );
   }
 }

@@ -92,6 +92,73 @@ void main() {
           contains('Generic_Name%5D=contains%2Cellen'));
     });
 
+    group('a pasted mod link or id', () {
+      const profile = '{"_idRow":531649,"_sName":"Only Mod",'
+          '"_aGame":{"_idRow":19567}}';
+      const otherGame = '{"_idRow":7,"_sName":"Elsewhere",'
+          '"_aGame":{"_idRow":8552}}';
+
+      setUp(() {
+        client = GameBananaClient(transport: transport, gameId: 19567);
+      });
+
+      test('shows that one mod, whatever the category and sort', () async {
+        transport.stub(client.endpoints.modProfile(531649), body: profile);
+        const query = MarketplaceQuery(
+          text: 'https://gamebanana.com/mods/531649',
+          categoryId: 30341,
+          sort: GbModSort.mostLiked,
+        );
+
+        final page = await fetchMarketplaceResults(client, query);
+
+        expect(page.records.single.name, 'Only Mod');
+        expect(page.isComplete, isTrue);
+        expect(page.pageCount, 1);
+        expect(transport.requests.single.path, endsWith('/Mod/531649/ProfilePage'));
+      });
+
+      test('a bare id does the same', () async {
+        transport.stub(client.endpoints.modProfile(531649), body: profile);
+
+        final page =
+            await fetchMarketplaceResults(client, const MarketplaceQuery(text: '531649'));
+
+        expect(page.records.single.idRow, 531649);
+      });
+
+      test('an id nobody has is an empty page, not an error', () async {
+        transport.stub(client.endpoints.modProfile(1),
+            statusCode: 404,
+            body: '{"_sErrorCode":"NO_SUCH_RECORD"}');
+
+        final page =
+            await fetchMarketplaceResults(client, const MarketplaceQuery(text: '1'));
+
+        expect(page.records, isEmpty);
+        expect(page.isComplete, isTrue);
+      });
+
+      test("another game's mod is an empty page", () async {
+        transport.stub(client.endpoints.modProfile(7), body: otherGame);
+
+        final page =
+            await fetchMarketplaceResults(client, const MarketplaceQuery(text: '7'));
+
+        expect(page.records, isEmpty);
+      });
+
+      test('refresh: true asks again', () async {
+        transport.stub(client.endpoints.modProfile(531649), body: profile);
+        const query = MarketplaceQuery(text: '531649');
+
+        await fetchMarketplaceResults(client, query);
+        await fetchMarketplaceResults(client, query, refresh: true);
+
+        expect(transport.callCount, 2);
+      });
+    });
+
     test('honours the query it is given rather than a default', () async {
       const query = MarketplaceQuery(
         categoryId: 30305,

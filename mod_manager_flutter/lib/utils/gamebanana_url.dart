@@ -80,6 +80,21 @@ int? gameBananaModIdFromUrl(String? url) {
   return (id == null || id <= 0) ? null : id;
 }
 
+/// The mod id a search box was handed, when it was handed one rather than a
+/// name: a mod page url as [gameBananaModIdFromUrl] accepts it, or a bare
+/// positive number such as `531649`. Anything else, including a file link, a
+/// number with other text around it and a number with a sign, is null and is
+/// searched as a name.
+int? gameBananaModIdFromText(String? text) {
+  final trimmed = text?.trim();
+  if (trimmed == null || trimmed.isEmpty) return null;
+  if (RegExp(r'^\d+$').hasMatch(trimmed)) {
+    final id = int.tryParse(trimmed);
+    return (id == null || id <= 0) ? null : id;
+  }
+  return gameBananaModIdFromUrl(trimmed);
+}
+
 /// Extracts the **file** id from a GameBanana download link, or null.
 ///
 /// Accepted: `https://gamebanana.com/dl/1701141` and the mod-manager form

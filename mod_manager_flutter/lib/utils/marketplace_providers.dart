@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/gamebanana/gamebanana.dart';
 import '../services/gamebanana/gamebanana_client.dart';
+import 'gamebanana_url.dart';
 import 'state_providers.dart';
 
 /// Everything that identifies one page of results.
@@ -126,6 +127,9 @@ Future<GbPage<GbMod>> fetchMarketplaceResults(
   MarketplaceQuery query, {
   bool refresh = false,
 }) {
+  if (gameBananaModIdFromText(query.text) case final modId?) {
+    return _lookUpMod(client, modId, refresh: refresh);
+  }
   return client.browseMods(
     categoryId: query.categoryId,
     name: query.text,
@@ -133,6 +137,31 @@ Future<GbPage<GbMod>> fetchMarketplaceResults(
     page: query.page,
     refresh: refresh,
   );
+}
+
+/// A pasted mod link or id shows that one mod as the whole result set.
+///
+/// The category and sort are ignored for it: an id names a mod outright, and
+/// hiding it because a filter happens to be set would read as "not found".
+/// A mod that does not exist any more, or belongs to another game, comes back
+/// as an empty page rather than an error, so the grid shows "no mods found"
+/// with the same clear-search action a fruitless name search gets.
+Future<GbPage<GbMod>> _lookUpMod(
+  GameBananaClient client,
+  int modId, {
+  required bool refresh,
+}) async {
+  const nothing = GbPage<GbMod>(records: [], recordCount: 0, isComplete: true);
+  final GbMod mod;
+  try {
+    mod = await client.modProfile(modId, refresh: refresh);
+  } on GbApiException catch (e) {
+    if (e.isNotFound) return nothing;
+    rethrow;
+  }
+  final ours = client.endpoints.gameId;
+  if (ours != null && mod.gameId != null && mod.gameId != ours) return nothing;
+  return GbPage(records: [mod], recordCount: 1, perPage: 1, isComplete: true);
 }
 
 /// Forces a network re-fetch of the current query and swaps the result in.

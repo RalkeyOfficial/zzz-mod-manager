@@ -33,6 +33,11 @@ void main() {
       expect(mod.text, contains('<'));
     });
 
+    test('reads which game the mod is for', () {
+      expect(mod.gameId, 19567);
+      expect(GbMod.fromJson({'_idRow': 1})!.gameId, isNull);
+    });
+
     test('parses the submitter and category', () {
       expect(mod.submitter?.idRow, 2987570);
       expect(mod.submitter?.name, 'caverabbit');
