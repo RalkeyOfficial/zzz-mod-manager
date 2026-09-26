@@ -130,6 +130,9 @@ Future<PlannedPatchScan> scanPlannedMods(Iterable<PlannedMod> planned) async {
   final assetPatches = <String, AssetPatchAssessment>{};
   final incomplete = <String>{};
   for (final name in noIni) {
+    // Shader files are a complete mod on their own: they are switched on by
+    // copying them into ZZMI's shader folder, with no `.ini` involved.
+    if (contents[name]!.files.any((file) => file.startsWith('shaderfixes/'))) continue;
     final assessment =
         assessAssetPatch(files: contents[name]!.files, hasIni: false);
     if (assessment.looksLikePatch) {

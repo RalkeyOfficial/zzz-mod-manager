@@ -361,7 +361,10 @@
     "details": {
       "keybinds": "Keybinds",
       "no_description": "No description. Use Edit to add one.",
-      "no_images": "No images"
+      "no_images": "No images",
+      "shader_fixes": "Shader fixes",
+      "shader_fixes_files_single": "{count} file, copied into ZZMI's shader folder while this mod is on.",
+      "shader_fixes_files_plural": "{count} files, copied into ZZMI's shader folder while this mod is on."
     },
     "toolbar": {
       "search": "Search mods",
@@ -750,6 +753,16 @@
       "confirm_body": "“{mod}” will be put back to how it was on {date}. A copy of it as it is right now is saved first, so you can undo this.",
       "restored_title": "Previous version restored",
       "restore_failed_title": "Couldn't restore that version"
+    },
+    "shader_fixes": {
+      "restart_title": "Restart the game to apply shader changes",
+      "restart_body": "{mods}",
+      "no_folder_title": "Couldn't find ZZMI's shader folder",
+      "no_folder_body": "{mod} stays off: there is no d3dx.ini one folder above your links folder, so there is nowhere to put its shader files.",
+      "taken_title": "Shader files already in use",
+      "taken_body": "{mod} stays off: {owner} already placed {files}.",
+      "taken_unowned_title": "Shader files already in use",
+      "taken_unowned_body": "{mod} stays off: ZZMI's shader folder already has {files}, which this app didn't put there."
     }
   },
   "clipboard": {

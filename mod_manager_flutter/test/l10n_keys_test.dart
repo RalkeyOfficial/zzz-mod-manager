@@ -59,6 +59,7 @@ void main() {
     'marketplace.sort_',
     // Chosen at runtime by a `_single` / `_plural` suffix on the count.
     'mods.assume_current.title_',
+    'mods.details.shader_fixes_files_',
     'mods.assume_current.confirm_',
     'mods.assume_current.done_',
     'mods.bulk_resolve.apply_',

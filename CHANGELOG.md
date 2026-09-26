@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Mods that include shader fixes install with them: switching the mod on copies its shader files into ZZMI's ShaderFixes folder, and switching it off takes them back out. A mod whose shader file is already there from another mod, or from outside the app, stays off and says which.
 - Mod covers load faster: a card-sized copy is saved beside each newly imported cover, and the mod cards read that instead of decoding the full screenshot every time. Covers added by an older version keep loading as before until they are added again through the edit dialog.
 - The Marketplace is a built-in GameBanana browser on Linux and Windows: search by mod name or paste a mod link or id, browse, filter by category or character, sort, and open a mod for its screenshots, description and file list. A search keeps the category and sort you have set.
   - A carousel above the grid shows GameBanana's top mods across seven periods, from today to all time.
@@ -111,6 +112,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Zip archives whose paths were written with Windows separators now extract into their folders instead of as files with `\` in their names.
 - Enabled mods are no longer switched off when the mods folder is missing at launch, for example on a drive that is not mounted yet.
 - Mod images left in the app's own data folder by versions before 2.0.0 are cleared once they're inside the mod they belong to, instead of being kept twice forever. A library upgraded long ago can get hundreds of megabytes back.
 - The app shows its own icon and name in the taskbar and window switcher instead of a blank placeholder.

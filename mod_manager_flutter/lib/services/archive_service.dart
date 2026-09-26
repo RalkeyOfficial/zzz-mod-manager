@@ -5,6 +5,7 @@ import 'package:archive/archive_io.dart';
 import 'package:path/path.dart' as path;
 
 import '../utils/byte_format.dart';
+import '../utils/directory_copy.dart';
 import '../utils/process_probe.dart';
 import '../utils/seven_zip_listing.dart';
 import 'archive_activity.dart';
@@ -371,7 +372,12 @@ class ArchiveService {
 
       int extracted = 0;
       for (final file in archive) {
-        final sanitizedPath = _sanitizeArchivePath(destination.path, file.name);
+        // Some archivers write Windows separators into entry names. A Windows
+        // filename cannot contain one, so it is always a folder boundary.
+        final sanitizedPath = _sanitizeArchivePath(
+          destination.path,
+          file.name.replaceAll(r'\', '/'),
+        );
         if (sanitizedPath == null) {
           // An entry trying to escape the destination. A security event, not
           // a note — somebody built this archive deliberately.
@@ -386,6 +392,7 @@ class ArchiveService {
           final outFile = File(sanitizedPath);
           await outFile.create(recursive: true);
           await outFile.writeAsBytes(file.content as List<int>);
+          await _keepArchiveTime(outFile, file);
           extracted++;
         } else {
           final dir = Directory(sanitizedPath);
@@ -529,6 +536,17 @@ class ArchiveService {
     return null;
   }
 
+  /// Gives an extracted file the time its archive entry carries. ZZMI uses a
+  /// shipped shader `.bin` only when its time equals its `.txt`'s, so extracting
+  /// both at "now" would make it recompile every shader at runtime.
+  static Future<void> _keepArchiveTime(File file, ArchiveFile entry) async {
+    try {
+      await file.setLastModified(entry.lastModDateTime);
+    } on Object catch (error) {
+      _log.warning('entry time not kept', error: error, fields: {'entry': entry.name});
+    }
+  }
+
   static Future<List<String>> _prepareDirectoriesForImport(
     Directory extractDir,
     File archiveFile, {
@@ -573,7 +591,7 @@ class ArchiveService {
           path.basename(entity.path),
         );
         if (entity is File) {
-          await entity.copy(targetPath);
+          await copyKeepingTime(entity, targetPath);
           await entity.delete();
         } else if (entity is Directory) {
           await Directory(entity.path).rename(targetPath);
@@ -583,12 +601,82 @@ class ArchiveService {
       return directories;
     }
 
+    final baseName = path.basenameWithoutExtension(nameHint ?? archiveFile.path);
+    if (dirEntries.any((d) => _isZzmiFolder(d, 'mods') || _isZzmiFolder(d, 'shaderfixes'))) {
+      return _prepareZzmiRootLayout(extractDir, dirEntries, baseName);
+    }
+
     // Otherwise the root is a container of independent mod folders.
     for (final dir in dirEntries) {
       directories.add(dir.path);
     }
 
     return directories;
+  }
+
+  static bool _isZzmiFolder(Directory dir, String name) =>
+      path.basename(dir.path).toLowerCase() == name;
+
+  /// An archive laid out like ZZMI's own folder, to be merged into it by hand:
+  /// `Mods/` holding the mod and `ShaderFixes/` beside it (`docs/shader-fixes.md` §2).
+  ///
+  /// The mods are the folders inside `Mods/`, or `Mods/` itself when an `.ini`
+  /// sits directly in it. The shader files join the one mod when there is exactly
+  /// one, since that is who they belong to; beside several they become a mod of
+  /// their own, so each can be switched on and off and none is guessed at.
+  static Future<List<String>> _prepareZzmiRootLayout(
+    Directory extractDir,
+    List<Directory> dirEntries,
+    String baseName,
+  ) async {
+    final candidates = <String>[];
+    Directory? shaderDir;
+    for (final dir in dirEntries) {
+      if (_isZzmiFolder(dir, 'shaderfixes')) {
+        shaderDir = dir;
+      } else if (_isZzmiFolder(dir, 'mods')) {
+        final inside = dir.listSync();
+        final iniAtTop = inside.whereType<File>().any(
+          (f) => path.extension(f.path).toLowerCase() == '.ini',
+        );
+        if (iniAtTop) {
+          final named = _unusedPath(extractDir, baseName);
+          await dir.rename(named);
+          candidates.add(named);
+        } else {
+          candidates.addAll(inside.whereType<Directory>().map((d) => d.path));
+        }
+      } else {
+        candidates.add(dir.path);
+      }
+    }
+
+    if (shaderDir == null) return candidates;
+
+    if (candidates.length == 1) {
+      final mod = Directory(candidates.single);
+      final taken = mod.listSync().whereType<Directory>().any((d) => _isZzmiFolder(d, 'shaderfixes'));
+      if (!taken) {
+        await shaderDir.rename(path.join(mod.path, 'ShaderFixes'));
+        return candidates;
+      }
+    }
+
+    final wrapper = Directory(
+      _unusedPath(extractDir, candidates.isEmpty ? baseName : '$baseName ShaderFixes'),
+    );
+    await wrapper.create();
+    await shaderDir.rename(path.join(wrapper.path, 'ShaderFixes'));
+    return [...candidates, wrapper.path];
+  }
+
+  /// [name] inside [parent], numbered when something already has it.
+  static String _unusedPath(Directory parent, String name) {
+    var candidate = path.join(parent.path, name);
+    for (var n = 2; FileSystemEntity.typeSync(candidate) != FileSystemEntityType.notFound; n++) {
+      candidate = path.join(parent.path, '$name ($n)');
+    }
+    return candidate;
   }
 
   static String? _sanitizeArchivePath(String base, String relativePath) {

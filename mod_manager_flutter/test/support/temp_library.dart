@@ -9,6 +9,7 @@ import 'package:mod_manager_flutter/services/api_service.dart';
 import 'package:mod_manager_flutter/services/backup/snapshot_service.dart';
 import 'package:mod_manager_flutter/services/config_service.dart';
 import 'package:mod_manager_flutter/services/mod_manager_service.dart';
+import 'package:mod_manager_flutter/services/shader_fixes/shader_fixes_service.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -98,7 +99,10 @@ class TempLibrary {
       mods: mods,
       saveMods: saveMods,
       config: config,
-      service: ModManagerService(config),
+      service: ModManagerService(
+        config,
+        shaderFixes: ShaderFixesService(recordPath: p.join(root.path, 'shader_fixes.json')),
+      ),
       snapshots: SnapshotService(rootPath: p.join(root.path, 'backups')),
     );
 

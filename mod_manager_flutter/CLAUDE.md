@@ -18,6 +18,7 @@ This file is rules and pointers only. Every subject below has a doc in [`../docs
 | [`metadata-autofill.md`](../docs/metadata-autofill.md) | What an install copies from a mod page |
 | [`update-checks.md`](../docs/update-checks.md) | Whether a mod has a newer version |
 | [`applying-updates.md`](../docs/applying-updates.md) | How an update is written over an installed mod |
+| [`shader-fixes.md`](../docs/shader-fixes.md) | Mods that replace the game's shaders — how their `ShaderFixes/` is copied into ZZMI's shader folder while on, and taken back out |
 | [`patch-destinations.md`](../docs/patch-destinations.md) | Which mod folder a patch goes into — the signals and their measurements; ranked, never narrowed or preselected |
 | [`logging.md`](../docs/logging.md) | What the app records about itself — levels, tags, the rotating file, redaction |
 | [`mod-reload.md`](../docs/mod-reload.md) | Why the app does not press F10 for you — what was measured, and why the feature is removed rather than fixed |
@@ -66,6 +67,10 @@ The window — full reasoning in [`desktop-integration.md`](../docs/desktop-inte
 
 Text — full reasoning in [`app-architecture.md`](../docs/app-architecture.md) §1
 - Never write a `fontSize:` literal. Sizes are roles on `Theme.of(context).textTheme`, and `core/type_scale.dart` is the only place the scale is set. The exceptions are markdown's `MarkdownScale` and a badge sized to the icon it sits on.
+
+Shader fixes — full reasoning in [`shader-fixes.md`](../docs/shader-fixes.md)
+- Never overwrite or delete a file in ZZMI's shader folder that the app did not place. An enable whose target is taken is refused whole.
+- What the app placed is recorded in `<appData>/shader_fixes.json`, never in the sidecar.
 
 Characters
 - The `characterAliases` map is duplicated in `_detectCharacterFromName` and `_findCharacterInText` (`mod_manager_service.dart`) — update both copies when adding a character. The canonical roster is `utils/zzz_characters.dart`.
@@ -142,4 +147,4 @@ Press a handler that touches files with `tapWithIo`: a `testWidgets` body runs i
 ## App-data locations
 
 `PathHelper.getAppDataPath()`: Linux `~/.local/share/zzz-mod-manager`, Windows `%APPDATA%\zzz-mod-manager`.
-Holds `config.json`, `mod_images/`, `downloads/` and `backups/`.
+Holds `config.json`, `shader_fixes.json`, `mod_images/`, `downloads/` and `backups/`.

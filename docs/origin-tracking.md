@@ -185,12 +185,10 @@ bumped by an `.ini` edit, so they skew *later* than the true install and would h
 updates; the oldest contained file is the earliest defensible answer. Our own
 `.zzz-mod-manager/` is excluded — it was written by us, often long after the install,
 and a folder holding nothing else would otherwise report our own write time as an
-install date. How good the proxy is depends on how the mod got there: imported
-*through the app* it is good (`_extractZip` writes fresh files and `_copyDirectory`
-uses `File.copy`, neither carrying source timestamps over, so mtimes land near import
-time), but hand-placed in `modsPath` (`cp -p`, the user's own 7-Zip run, a synced
-folder) the author's build timestamps survive and it can read *years* early. That is
-what `installed_at_is_proxy` is for; anything comparing dates must read it.
+install date. Import keeps each file's archive time, so a shipped shader `.bin` stays
+valid ([`shader-fixes.md`](shader-fixes.md) §1), and so the proxy reads the author's
+build time for any folder without an origin block, however it arrived, which can be
+*years* early. That is what `installed_at_is_proxy` is for; anything comparing dates must read it.
 
 **Cost.** Measured on a real 23-mod / 748-file library: a first scan that backfills
 all 23 mods takes **30 ms** end to end, a subsequent scan **7 ms** with zero writes

@@ -8,15 +8,12 @@
 /// install and would hide updates; the oldest contained file is the earliest
 /// defensible answer.
 ///
-/// **How good the proxy is depends on how the mod got there**, and the two
-/// cases are far apart:
-///
-/// - Imported *through the app*: good. `_extractZip` writes fresh files and
-///   `_copyDirectory` copies via `File.copy`, neither of which carries the
-///   source timestamps over, so mtimes land at roughly import time.
-/// - Placed in `modsPath` *by hand* (`cp -p`, the user's own 7-Zip run, a synced
-///   folder): the author's build timestamps survive and the proxy can read
-///   *years* early.
+/// **The proxy reads the author's build time, not the install time.** Import
+/// keeps each file's archive time, so a shipped shader `.bin` stays valid
+/// (`docs/shader-fixes.md` §1), and so does a folder placed in `modsPath` by hand.
+/// Either way the oldest file can be *years* older than the install. Every import
+/// through the app writes an origin block, so the proxy is only ever read for a
+/// folder without one.
 ///
 /// That is why anything reading the date must also read
 /// `ModOrigin.installedAtIsProxy` rather than treating it as observed.

@@ -98,11 +98,10 @@ that has to survive.
 One caveat worth knowing rather than discovering:
 
 - Shaders are picked up by **filename convention**, from the single directory
-  `override_directory` names in `d3dx.ini` — `ShaderFixes` at the game root, not
-  recursively and not per-mod. So a `ShaderFixes/` folder inside a mod folder is
-  not loaded at all, and the wipe takes it like anything else. **The leftover that
-  can still be live is a shader the user copied to the game root**, which no mod
-  folder contains and nothing here records.
+  `override_directory` names in `d3dx.ini`, never from a mod folder. A mod's own
+  `ShaderFixes/` is copied there while the mod is on ([`shader-fixes.md`](shader-fixes.md)),
+  and the update switches the mod off before writing and on after, so the copies
+  follow the new version. Here it is an ordinary folder, and the wipe takes it like anything else.
 
 ### Comparison paths are normalised; filesystem paths are not
 

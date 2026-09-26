@@ -258,18 +258,16 @@ Two things are **refused rather than unbuilt**, both recorded in
   asked whether they would rather keep it. Noted in the code; revisit if
   reported.
 - [x] **The type scale is app-wide.** [`docs/app-architecture.md`](docs/app-architecture.md) §1 owns it.
-- [ ] **A shader copied to the game root is the one leftover class outside every
-  mod folder**, which is a smaller gap than a live stale shader and a harder one.
-  Shader overrides are read from the **single** directory `override_directory`
-  names (`ShaderFixes`, at the game root) — not recursively, and not per-mod — so
-  a `ShaderFixes/` folder inside a mod is not loaded from where the app puts it.
-  A standalone mod that wants its own shaders uses `CustomShader` or
-  `ShaderRegex`, which are `.ini`-referenced and therefore already covered by the
-  reference-based patch and stale rules. What escapes is a shader the user
-  hand-copied to the root: nothing records it, no mod folder contains it, and
-  removing the mod leaves it applied to the game. Recorded in
-  `docs/applying-updates.md` §1. Bounded rather than urgent — no mod in a
-  124-`.ini` library ships a `ShaderFixes/` subfolder at all.
+- [x] **Shader fixes are part of the mod.** A mod's `ShaderFixes/` is copied into ZZMI's shader folder while it is on.
+  [`docs/shader-fixes.md`](docs/shader-fixes.md) owns it.
+- [ ] **Shader files a user copied in by hand are never adopted.** They block a conflicting enable, and the message says no mod placed them,
+  but switching off the mod they came with cannot remove them. We change it to offer, from the refusal, to take a matching file over
+  when its bytes equal the mod's copy.
+- [ ] **Shader files in a folder with another name import as ordinary files.** Move Agents in Menu ships "PUT THESE IN SHADERFIXES",
+  so enabling it places nothing. We change it to offer at import to treat hash-named files that no `.ini` references as shader files.
+- [ ] **The XXMI Launcher renames some shader-folder `.ini` files on every launch** (`help.ini`, `mouse.ini`, `upscale.ini`,
+  `3dvision2sbs.ini` become `DISABLED_<name>`), so a mod shipping one leaves the renamed copy behind when switched off.
+  We change it to also remove `DISABLED_<name>` when the recorded file is gone and the renamed one still matches its md5.
 
 ### 4.1 How an update is actually applied
 

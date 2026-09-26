@@ -4,6 +4,7 @@ import 'package:path/path.dart' as path;
 
 import '../core/constants.dart';
 import 'log/logger.dart';
+import '../utils/directory_copy.dart';
 
 /// **The mod's own files that a patch wrote over**, kept so the patch can be
 /// taken back out.
@@ -146,7 +147,7 @@ class PatchStore {
     try {
       final target = _fileFor(modFolder, patchModId, relativePath);
       await target.parent.create(recursive: true);
-      await live.copy(target.path);
+      await copyKeepingTime(live, target.path);
       return true;
     } catch (e) {
       _log.warning('could not keep a displaced file',
@@ -179,7 +180,7 @@ class PatchStore {
       final live =
           File(path.joinAll([modFolder.path, ...relativePath.split('/')]));
       await live.parent.create(recursive: true);
-      await stored.copy(live.path);
+      await copyKeepingTime(stored, live.path);
       return true;
     } catch (e) {
       _log.warning('could not restore a displaced file',

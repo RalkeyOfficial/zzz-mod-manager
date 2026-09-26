@@ -5,6 +5,7 @@ import 'package:mod_manager_flutter/services/backup/snapshot_service.dart';
 import 'package:mod_manager_flutter/services/config_service.dart';
 import 'package:mod_manager_flutter/services/mod_manager_service.dart';
 import 'package:mod_manager_flutter/services/mod_uid.dart';
+import 'package:mod_manager_flutter/services/shader_fixes/shader_fixes_service.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -42,7 +43,12 @@ void main() {
       configFile: File(p.join(temp.path, 'config.json')),
     );
     await config.setPaths(mods.path, saveMods.path);
-    service = ModManagerService(config, snapshots: snapshots, uids: uids);
+    service = ModManagerService(
+      config,
+      snapshots: snapshots,
+      uids: uids,
+      shaderFixes: ShaderFixesService(recordPath: p.join(temp.path, 'shader_fixes.json')),
+    );
   });
 
   tearDown(() async {

@@ -12,6 +12,7 @@ import '../models/gamebanana/gb_enums.dart';
 import 'gamebanana/content_filter.dart';
 import 'mod_manager_service.dart';
 import 'platform_service_factory.dart';
+import 'shader_fixes/shader_fixes_service.dart';
 
 /// API сервіс для роботи з модами
 class ApiService {
@@ -147,9 +148,18 @@ class ApiService {
     try {
       await initialize();
       return await _modManager!.toggleMod(modId);
+    } on ShaderPlacementRefused {
+      rethrow;
     } catch (e) {
       throw Exception('Помилка переключення моду: $e');
     }
+  }
+
+  /// Throws [ShaderPlacementRefused] when enabling [modId] would be refused for
+  /// its shader files. Changes nothing.
+  static Future<void> checkActivation(String modId) async {
+    await initialize();
+    await _modManager!.checkActivation(modId);
   }
 
   /// Renames a mod's folder, migrating its active/favorite/category state and
@@ -224,6 +234,8 @@ class ApiService {
       
       // Активуємо новий скін
       return await _modManager!.activateMod(modId);
+    } on ShaderPlacementRefused {
+      rethrow;
     } catch (e) {
       throw Exception('Помилка переключення моду для персонажа: $e');
     }

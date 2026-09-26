@@ -59,10 +59,9 @@
 ///   carry a variable (`$\mymod\slot`) or a wildcard, and "we could not resolve
 ///   this" is not the same fact as "this file is absent". Unresolvable entries
 ///   are counted separately and never reported as missing.
-/// - **Shaders are picked up by filename convention** from `ShaderFixes/` rather
-///   than by reference, so they never appear here in the first place. Worth
-///   stating because it is the one file class where a *leftover* can still be
-///   live, which matters to the update path in the opposite direction.
+/// - **Shaders are picked up by filename convention** from ZZMI's shader folder
+///   rather than by reference, so they never appear here in the first place. A
+///   mod's own `ShaderFixes/` is copied there while it is on (`docs/shader-fixes.md`).
 ///
 /// Namespaces are read but do not affect a *path*. `namespace = …` renames
 /// *sections* so that two mods can define `[ResourceBody]` without colliding;

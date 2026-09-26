@@ -14,6 +14,7 @@ import '../../utils/markdown_editor.dart';
 import '../../utils/url_utils.dart';
 import '../../utils/zzz_characters.dart';
 import '../components/folder_downloads_summary.dart';
+import '../components/shader_part_summary.dart';
 
 /// Read-only dialog showing everything about a mod: gallery, character,
 /// description, tags, source link, and keybinds (VK_-stripped for readability).
@@ -327,6 +328,7 @@ void showModDetailsDialog(
                           ),
                           const SizedBox(height: 16),
                         ],
+                        ShaderPartSummary(folderName: mod.name),
                         // **What this folder holds.** A folder with a patch in
                         // it looked exactly like any other here, which made the
                         // app's own record of the second download invisible on

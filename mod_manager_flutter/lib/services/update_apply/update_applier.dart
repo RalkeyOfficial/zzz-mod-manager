@@ -293,7 +293,7 @@ class UpdateApplier {
       placement: placement,
       patchModId: patchModId,
     );
-    if (wasActive) await activation.activate(modName);
+    final reactivated = wasActive && await activation.activate(modName);
 
     // What the wipe took that nothing wrote again: a report, not a decision.
     // The patch's files count as kept under the path they *left*, since where
@@ -323,7 +323,7 @@ class UpdateApplier {
         before: keybindsBefore,
         after: await _keybindsIn(modFolder, modName),
       ),
-      reactivated: wasActive,
+      reactivated: reactivated,
     );
   }
 
@@ -409,8 +409,8 @@ class UpdateApplier {
           );
         }
         await destination.parent.create(recursive: true);
-        final copied =
-            await File(path.join(source.path, entry.value)).copy(
+        final copied = await copyKeepingTime(
+          File(path.join(source.path, entry.value)),
           destination.path,
         );
         placed.add(InstalledFile(
@@ -525,7 +525,8 @@ class UpdateApplier {
           );
         }
         await target.parent.create(recursive: true);
-        final copied = await File(path.join(source.path, from)).copy(
+        final copied = await copyKeepingTime(
+          File(path.join(source.path, from)),
           target.path,
         );
         placed.add(InstalledFile(
@@ -580,7 +581,7 @@ class UpdateApplier {
       spelling: existing,
     );
 
-    if (wasActive) await activation.activate(modName);
+    final reactivated = wasActive && await activation.activate(modName);
 
     return UpdateApplyResult(
       snapshot: snapshot,
@@ -595,7 +596,7 @@ class UpdateApplier {
         before: keybindsBefore,
         after: await _keybindsIn(modFolder, modName),
       ),
-      reactivated: wasActive,
+      reactivated: reactivated,
     );
   }
 
@@ -674,14 +675,14 @@ class UpdateApplier {
       await store.discard(modFolder: modFolder, patchModId: patchModId);
     }
 
-    if (wasActive) await activation.activate(modName);
+    final reactivated = wasActive && await activation.activate(modName);
 
     return PatchRemovalResult(
       snapshot: snapshot,
       restored: restored,
       deleted: deleted,
       failed: failed,
-      reactivated: wasActive,
+      reactivated: reactivated,
     );
   }
 
@@ -732,14 +733,14 @@ class UpdateApplier {
       spelling: current,
     );
 
-    if (wasActive) await activation.activate(modName);
+    final reactivated = wasActive && await activation.activate(modName);
 
     return UpdateApplyResult(
       snapshot: safety,
       filesWritten: restoring.files.length,
       droppedFiles: droppedFiles,
       keybindChanges: const [],
-      reactivated: wasActive,
+      reactivated: reactivated,
     );
   }
 

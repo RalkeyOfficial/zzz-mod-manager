@@ -15,6 +15,7 @@ import '../../models/mod_download.dart';
 import '../../models/origin_enums.dart';
 import '../../services/api_service.dart';
 import '../../services/archive_service.dart';
+import '../../services/shader_fixes/shader_fixes_service.dart';
 import '../../services/backup/snapshot_service.dart';
 import '../../services/folder_contents.dart';
 import '../../services/mod_manager_service.dart';
@@ -239,7 +240,8 @@ Future<bool> applyUpdateFlow(
           ImportFolderChoice(
             path: folder,
             name: path.basename(folder),
-            looksLikeMod: await ArchiveService.containsIniFile(folder),
+            looksLikeMod: await ArchiveService.containsIniFile(folder) ||
+            await ShaderFixesService.shaderPartOf(folder) != null,
           ),
       ];
       hold.release();

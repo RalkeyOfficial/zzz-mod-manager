@@ -92,8 +92,8 @@ void main() {
   }
 
   test('a file the new version no longer ships is gone', () async {
-    // `ShaderFixes/glow.hlsl` is referenced by no `.ini` in the folder, and
-    // left in place the loader would go on applying it.
+    // `ShaderFixes/glow.hlsl` is referenced by no `.ini` in the folder, and left
+    // in place it would be copied into ZZMI's shader folder on the next enable.
     final mod = modFolder('Ellen');
     write(mod, 'ellen.ini', modIni('Body.dds'));
     write(mod, 'Body.dds', 'v1');

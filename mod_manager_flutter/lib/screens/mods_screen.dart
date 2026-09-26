@@ -18,6 +18,7 @@ import '../services/log/logger.dart';
 import '../services/archive_service.dart';
 import '../services/import_result.dart';
 import '../services/ingest_origin_builder.dart';
+import '../services/shader_fixes/shader_fixes_service.dart';
 import '../services/update_apply/mod_activation_port.dart';
 import '../services/update_apply/update_applier.dart';
 import '../utils/notifications.dart';
@@ -35,6 +36,7 @@ import 'components/mods_empty_states.dart';
 import 'components/mods_grouped_view.dart';
 import 'components/own_scroll_controller.dart';
 import 'components/install_result_feedback.dart';
+import 'components/shader_fixes_notices.dart';
 import 'dialogs/rename_mod_dialog.dart';
 import 'dialogs/delete_mod_dialog.dart';
 import 'dialogs/duplicate_archive_dialog.dart';
@@ -439,9 +441,14 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     // Cancel any pending debounce
     _rebuildDebounce?.cancel();
 
+    var othersSwitchedOff = false;
     try {
       final wasActive = mod.isActive;
       final activationMode = ref.read(activationModeProvider);
+
+      // Asked before anything changes, so a refused enable in Single mode does
+      // not first switch off the skin the user still has on.
+      if (!wasActive) await ApiService.checkActivation(mod.id);
 
       // If activating a mod in single mode, deactivate other active mods for this character
       if (!wasActive && activationMode == ActivationMode.single) {
@@ -449,9 +456,15 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
           mod.characterId,
           excludeModId: mod.id,
         );
+        othersSwitchedOff = true;
       }
 
-      await ApiService.toggleMod(mod.id);
+      if (!await ApiService.toggleMod(mod.id)) {
+        // The cards would show the flip that did not happen; read the disk.
+        _isOperationInProgress = false;
+        await loadMods(showLoading: false);
+        return;
+      }
 
       // Flip the flags in the library rather than rescanning: the toggle is one
       // link, and in single mode the same set of mods the call just deactivated.
@@ -471,6 +484,14 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         ]);
       }
       _isOperationInProgress = false;
+    } on ShaderPlacementRefused catch (refusal) {
+      _isOperationInProgress = false;
+      if (mounted) {
+        notifyShaderRefusal(context, refusal, characterId: mod.characterId);
+        // The check passed and the enable was still refused, after Single mode
+        // had switched the other skins off: the cards must show that.
+        if (othersSwitchedOff) await loadMods(showLoading: false);
+      }
     } catch (e) {
       _isOperationInProgress = false;
       if (mounted) {

@@ -39,7 +39,7 @@ void main() {
   group('the set difference', () {
     test('a file the new version has no name for is removed', () {
       // The whole feature: the author dropped a shader, and no `.ini` in the
-      // folder references it — so nothing else in this app can see it at all.
+      // folder references it — so no reference check can see it at all.
       final result = plan(
         recorded: [added('ellen.ini'), added('ShaderFixes/glow.hlsl')],
         incoming: {'ellen.ini'},

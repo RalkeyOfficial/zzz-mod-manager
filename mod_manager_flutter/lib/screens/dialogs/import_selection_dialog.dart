@@ -3,6 +3,7 @@ import 'package:path/path.dart' as path;
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../services/archive_service.dart';
+import '../../services/shader_fixes/shader_fixes_service.dart';
 import '../../services/update_apply/update_layout.dart';
 
 /// One extracted/dropped top-level folder offered for import.
@@ -95,7 +96,8 @@ Future<ImportPlan?> resolveImportSelection(
       ImportFolderChoice(
         path: folder,
         name: path.basename(folder),
-        looksLikeMod: await ArchiveService.containsIniFile(folder),
+        looksLikeMod: await ArchiveService.containsIniFile(folder) ||
+            await ShaderFixesService.shaderPartOf(folder) != null,
       ),
     );
   }

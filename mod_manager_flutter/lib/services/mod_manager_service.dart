@@ -23,6 +23,7 @@ import 'mod_uid.dart';
 import 'origin_write.dart';
 import 'platform_service.dart';
 import 'platform_service_factory.dart';
+import 'shader_fixes/shader_fixes_service.dart';
 import 'ini_parser_service.dart';
 
 /// Головний сервіс для керування модами через symbolic links
@@ -53,6 +54,9 @@ class ModManagerService {
   final SnapshotService _snapshots;
   final ModUid _uids;
 
+  /// Copies a mod's `ShaderFixes/` into ZZMI's shader folder while it is enabled.
+  final ShaderFixesService _shaderFixes;
+
   /// Free space on the volume an import is about to write to. Injectable
   /// because the real one spawns a `df`, and a test about refusing an import
   /// cannot fill a disk to ask the question.
@@ -66,9 +70,11 @@ class ModManagerService {
     this._configService, {
     SnapshotService? snapshots,
     ModUid? uids,
+    ShaderFixesService? shaderFixes,
     Future<int?> Function(String path)? freeSpace,
   })  : _snapshots = snapshots ?? SnapshotService(),
         _uids = uids ?? ModUid(),
+        _shaderFixes = shaderFixes ?? ShaderFixesService(),
         _freeSpace =
             freeSpace ?? PlatformServiceFactory.getInstance().freeSpaceBytes,
         _platformService = PlatformServiceFactory.getInstance(),
@@ -282,18 +288,42 @@ class ModManagerService {
         await saveModsDir.create(recursive: true);
       }
 
+      // Shader files go in before the link, so a refusal leaves the mod off.
+      String? shaderUid;
+      var shaderFiles = 0;
+      if (await ShaderFixesService.shaderPartOf(srcPath) != null) {
+        shaderUid = await _uids.ensure(srcDir);
+        if (shaderUid == null) {
+          _log.error('could not activate, no identity for its shader files',
+              fields: {'mod': modName});
+          return false;
+        }
+        shaderFiles = await _shaderFixes.place(
+          modDir: srcPath,
+          uid: shaderUid,
+          mod: modName,
+          saveModsPath: saveModsPath!,
+        );
+      }
+
       // Використовуємо platformService для створення link
       final success = await _platformService.createModLink(srcPath, dstPath);
       if (!success) {
         // The platform service already logged why; this says which mod the
         // user was trying to switch on when it happened.
         _log.error('could not activate', fields: {'mod': modName});
+        if (shaderUid != null) {
+          await _shaderFixes.remove(uid: shaderUid, mod: modName, announce: false);
+        }
         return false;
       }
 
       await _configService.addActiveMod(modName);
+      if (shaderFiles > 0) ShaderFixesService.announce(modName);
 
       return true;
+    } on ShaderPlacementRefused {
+      rethrow;
     } catch (error, stack) {
       _log.error('could not activate',
           error: error, stack: stack, fields: {'mod': modName});
@@ -318,12 +348,41 @@ class ModManagerService {
 
       await _configService.removeActiveMod(modName);
 
+      await _removeShaderFiles(modName);
+
       return true;
     } catch (error, stack) {
       _log.error('could not deactivate',
           error: error, stack: stack, fields: {'mod': modName});
       return false;
     }
+  }
+
+  /// Takes out the shader files the mod placed. A mod whose folder is gone has
+  /// no readable identity, so its files stay until the folder returns.
+  Future<void> _removeShaderFiles(String modName) async {
+    final mods = modsPath;
+    if (mods == null) return;
+    final uid = await _uids.read(Directory(path.join(mods, modName)));
+    if (uid == null) return;
+    await _shaderFixes.remove(uid: uid, mod: modName);
+  }
+
+  /// Throws [ShaderPlacementRefused] when enabling [modName] would be refused for
+  /// its shader files, and changes nothing either way. Asked before a Single-mode
+  /// switch turns the character's other skins off.
+  Future<void> checkActivation(String modName) async {
+    final mods = modsPath;
+    final save = saveModsPath;
+    if (mods == null || save == null) return;
+    final modDir = path.join(mods, modName);
+    if (await ShaderFixesService.shaderPartOf(modDir) == null) return;
+    await _shaderFixes.check(
+      modDir: modDir,
+      uid: await _uids.read(Directory(modDir)),
+      mod: modName,
+      saveModsPath: save,
+    );
   }
 
   Future<bool> toggleMod(String modName) async {
@@ -409,6 +468,7 @@ class ModManagerService {
           path.join(saveModsPath!, modName),
         );
       }
+      if (uid != null) await _shaderFixes.remove(uid: uid, mod: modName);
 
       await modDir.delete(recursive: true);
 

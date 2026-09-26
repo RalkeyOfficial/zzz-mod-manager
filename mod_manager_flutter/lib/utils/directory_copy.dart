@@ -4,6 +4,17 @@ import 'package:path/path.dart' as path;
 
 import '../models/installed_file.dart';
 
+/// Copies [source] to [target] and gives the copy the source's modification time.
+///
+/// Every copy of a mod's files goes through this: ZZMI uses a shipped shader
+/// `.bin` only while its time equals its `.txt`'s, and a copy stamped "now"
+/// breaks the pair, so the shader is compiled at runtime instead.
+Future<File> copyKeepingTime(File source, String target) async {
+  final copied = await source.copy(target);
+  await copied.setLastModified(await source.lastModified());
+  return copied;
+}
+
 /// Recursive directory copy with **overwrite** semantics, shared by the import
 /// path and the update path.
 ///
@@ -74,7 +85,7 @@ Future<void> _copy(
           entity, Directory(target), sourceRoot, destinationRoot, skip, written);
     } else if (entity is File) {
       final existed = await File(target).exists();
-      final copied = await entity.copy(target);
+      final copied = await copyKeepingTime(entity, target);
       written.add(InstalledFile(
         // Relative to where it landed, not to where it came from: a combined
         // install renames its folders on the way in, so the source-relative
