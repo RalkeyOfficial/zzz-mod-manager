@@ -44,10 +44,7 @@ class AppearanceSettingsSection extends ConsumerWidget {
           for (final value in _order)
             ButtonSegment(
               value: value,
-              label: Text(
-                loc.t('settings.appearance.theme_${value.name}'),
-                style: const TextStyle(fontSize: 13),
-              ),
+              label: Text(loc.t('settings.appearance.theme_${value.name}')),
             ),
         ],
         selected: {mode},

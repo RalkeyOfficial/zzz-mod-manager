@@ -126,8 +126,7 @@ class _AssumeCurrentConfirmation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final loc = context.loc;
-    final muted = TextStyle(
-      fontSize: 12,
+    final muted = Theme.of(context).textTheme.bodySmall?.copyWith(
       color: Theme.of(context).colorScheme.onSurfaceVariant,
     );
 

@@ -96,8 +96,7 @@ class _StorageScreenState extends ConsumerState<StorageScreen> {
                 child: Text(
                   loc.t('storage.title'),
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: AppConstants.headerTextSize + 4,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
                 ),

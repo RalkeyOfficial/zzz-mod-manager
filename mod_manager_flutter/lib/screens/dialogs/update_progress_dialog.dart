@@ -63,7 +63,7 @@ class UpdateProgressDialog extends StatelessWidget {
                       'count': '${value.total}',
                     },
                   ),
-                  style: Theme.of(context).textTheme.bodyMedium,
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
             ),

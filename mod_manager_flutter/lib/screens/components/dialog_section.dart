@@ -1,17 +1,10 @@
 /// The building blocks the update flow's dialogs are made of.
 ///
-/// They exist because those dialogs were written as loose `Text` widgets with
-/// hardcoded 11/12/13px sizes, and both problems that produced are the same
-/// problem: **nothing said where one idea ended and the next began, and
-/// everything was too small to read.**
+/// Sizes come from the theme rather than from literals —
+/// `bodyMedium` (16) for anything the user is meant to read, `bodySmall` (14) for the line that explains it —
+/// and a block of facts always arrives under a heading that says what the block is for.
 ///
-/// So the sizes come from the theme rather than from literals —
-/// `bodyLarge` (16) for anything the user is meant to read, `bodyMedium` (14)
-/// for the line that explains it — and a block of facts always arrives under a
-/// heading that says what the block is for.
-///
-/// Kept out of any one dialog because three of them share it, and a fourth
-/// copy is how the sizes drifted in the first place.
+/// Kept out of any one dialog because three of them share it, and a copy per dialog lets the sizes drift apart.
 library;
 
 import 'package:flutter/material.dart';
@@ -45,7 +38,7 @@ class DialogSection extends StatelessWidget {
       children: [
         Text(
           title,
-          style: theme.textTheme.titleMedium?.copyWith(
+          style: theme.textTheme.titleSmall?.copyWith(
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -53,7 +46,7 @@ class DialogSection extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             text,
-            style: theme.textTheme.bodyMedium?.copyWith(
+            style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
@@ -102,7 +95,7 @@ class DialogFact extends StatelessWidget {
             width: 120,
             child: Text(
               label,
-              style: theme.textTheme.bodyMedium?.copyWith(
+              style: theme.textTheme.bodySmall?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
             ),
@@ -111,13 +104,13 @@ class DialogFact extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(value, style: theme.textTheme.bodyLarge),
+                Text(value, style: theme.textTheme.bodyMedium),
                 if (detail case final text?)
                   Text(
                     text,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium?.copyWith(
+                    style: theme.textTheme.bodySmall?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
                   ),
@@ -179,7 +172,7 @@ class DialogNotice extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: theme.textTheme.bodyMedium?.copyWith(
+              style: theme.textTheme.bodySmall?.copyWith(
                 color: emphasis ? scheme.onSurface : scheme.onSurfaceVariant,
               ),
             ),

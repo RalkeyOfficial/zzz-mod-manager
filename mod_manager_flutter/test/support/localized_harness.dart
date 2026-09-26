@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/core/type_scale.dart';
 import 'package:mod_manager_flutter/l10n/app_localizations.dart';
 import 'package:mod_manager_flutter/screens/components/notification_overlay.dart';
 
@@ -69,6 +70,8 @@ Future<void> pumpLocalized(
     locale: locale,
     localizationsDelegates: [_PreloadedLocalizations(loaded!)],
     supportedLocales: [locale],
+    // The app's type scale, so a layout test measures the text the app renders.
+    theme: withAppTypeScale(ThemeData()),
     // Exactly how `main.dart` mounts it, so a test that triggers a notification
     // renders one — `find.text` over a message is then the same assertion in a
     // test as it is on screen. Without it every `context.notify` call in a

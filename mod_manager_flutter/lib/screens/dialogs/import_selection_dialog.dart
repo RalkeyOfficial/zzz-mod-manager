@@ -216,7 +216,7 @@ Future<ImportSelection?> showImportSelectionDialog(
                 Expanded(
                   child: Text(
                     title ?? loc.t('mods.dialog.import_select_title'),
-                    style: const TextStyle(fontSize: 18),
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
               ],
@@ -285,8 +285,10 @@ Future<ImportSelection?> showImportSelectionDialog(
                                 choice.looksLikeMod
                                     ? loc.t('mods.dialog.import_select_mod')
                                     : loc.t('mods.dialog.import_select_aux'),
-                                style: TextStyle(
-                                  fontSize: 12,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
                                   color: choice.looksLikeMod
                                       ? Colors.green
                                       : Colors.grey,

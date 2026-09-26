@@ -117,8 +117,7 @@ class SidebarNavItem extends StatelessWidget {
                         padding: const EdgeInsets.only(left: 14),
                         child: AnimatedDefaultTextStyle(
                           duration: const Duration(milliseconds: 300),
-                          style: TextStyle(
-                            fontSize: 14,
+                          style: Theme.of(context).textTheme.bodyMedium!.copyWith(
                             fontWeight:
                                 isActive ? FontWeight.w600 : FontWeight.w500,
                             color: isActive ? Colors.white : Colors.grey[600],

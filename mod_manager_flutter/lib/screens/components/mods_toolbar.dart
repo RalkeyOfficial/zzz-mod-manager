@@ -274,7 +274,7 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
           children: [
             const Icon(Icons.sort, size: 18),
             const SizedBox(width: 6),
-            Text(_sortLabel(sortMode), style: const TextStyle(fontSize: 13)),
+            Text(_sortLabel(sortMode), style: Theme.of(context).textTheme.bodyMedium),
             const Icon(Icons.arrow_drop_down, size: 18),
           ],
         ),
@@ -336,7 +336,7 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
               children: [
                 const Icon(Icons.filter_list, size: 18),
                 const SizedBox(width: 6),
-                Text(loc.t('mods.toolbar.tags'), style: const TextStyle(fontSize: 13)),
+                Text(loc.t('mods.toolbar.tags'), style: Theme.of(context).textTheme.bodyMedium),
                 if (count > 0) ...[
                   const SizedBox(width: 6),
                   Container(
@@ -347,7 +347,7 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
                     ),
                     child: Text(
                       '$count',
-                      style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],
@@ -384,8 +384,7 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
                     children: [
                       Text(
                         loc.t('mods.toolbar.match'),
-                        style: const TextStyle(
-                          fontSize: 12,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -426,7 +425,7 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
                           controlAffinity: ListTileControlAffinity.leading,
                           visualDensity: VisualDensity.compact,
                           value: activeTags.contains(tag),
-                          title: Text(tag, style: const TextStyle(fontSize: 13)),
+                          title: Text(tag, style: Theme.of(context).textTheme.bodyMedium),
                           onChanged: (sel) {
                             final next = Set<String>.from(activeTags);
                             if (sel == true) {
@@ -479,7 +478,7 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
               ),
               if (count > 0) ...[
                 const SizedBox(width: 4),
-                Text('$count', style: const TextStyle(fontSize: 13)),
+                Text('$count', style: Theme.of(context).textTheme.bodyMedium),
               ],
             ],
           ),
@@ -516,7 +515,7 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
                 color: active ? ModStatusSlot.updateBlue : null,
               ),
               const SizedBox(width: 4),
-              Text('$found', style: const TextStyle(fontSize: 13)),
+              Text('$found', style: Theme.of(context).textTheme.bodyMedium),
             ],
           ),
         ),
@@ -592,7 +591,7 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
               const Icon(Icons.more_vert, size: 18),
             const SizedBox(width: 6),
             Text(loc.t('mods.toolbar.library'),
-                style: const TextStyle(fontSize: 13)),
+                style: Theme.of(context).textTheme.bodyMedium),
             if (pending > 0) ...[
               const SizedBox(width: 6),
               Container(
@@ -604,8 +603,7 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
                 ),
                 child: Text(
                   '$pending',
-                  style: const TextStyle(
-                    fontSize: 11,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
                   ),
@@ -635,11 +633,11 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
         children: [
           Icon(icon, size: 18),
           const SizedBox(width: 10),
-          Expanded(child: Text(label, style: const TextStyle(fontSize: 13))),
+          Expanded(child: Text(label)),
           const SizedBox(width: 12),
           Text(
             '$count',
-            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
           ),
         ],
       ),

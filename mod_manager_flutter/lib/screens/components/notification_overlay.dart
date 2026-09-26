@@ -62,7 +62,7 @@ class NotificationHost extends StatelessWidget {
 class NotificationOverlay extends ConsumerStatefulWidget {
   const NotificationOverlay({super.key});
 
-  /// Wide enough for a sentence and a half at 13px, narrow enough that four of
+  /// Wide enough for a sentence and a half of body text, narrow enough that four of
   /// them stacked don't read as a second panel.
   static const double width = 360;
 
@@ -159,16 +159,16 @@ IconData notificationIcon(NotificationSeverity severity) {
 /// text of a portrait card starting 22px right of the card above it. One
 /// footprint, two occupants, which is the rule `ModStatusSlot` already follows.
 ///
-/// [_diameter] is 40 for an arithmetic reason worth keeping: two lines of card
-/// text — a `titleSmall` headline (20px line box) plus 2 plus one `bodyMedium`
-/// line at this card's `height: 1.35` (19) — come to 41px. 40 is therefore the
+/// [_diameter] is 46 for an arithmetic reason worth keeping: two lines of card
+/// text — a `titleSmall` headline (23px line box) plus 2 plus one `bodyMedium`
+/// line at this card's `height: 1.35` (21.6) — come to 46.6px. 46 is therefore the
 /// largest slot that never makes a card taller than its own text already did.
 /// A larger avatar would grow every two-line card in the app.
 ///
 /// **Considered and rejected: a severity badge on the portrait's corner.** It
 /// sits over 60 different pieces of artwork, so it needs an opaque fill plus a
 /// card-coloured cut-out ring to stay readable — three new painted elements. At
-/// 40px outer, a badge legible at all is ≥14px, eating the chin or shoulder of
+/// 46px outer, a badge legible at all is ≥14px, eating the chin or shoulder of
 /// every portrait. And it duplicates [notificationIcon] into a second renderer
 /// at a second size, which is the drift `notificationColor` exists to prevent.
 class _NotificationLeading extends StatelessWidget {
@@ -188,7 +188,7 @@ class _NotificationLeading extends StatelessWidget {
   /// rather than three that can drift.
   final Color accent;
 
-  static const double _diameter = 40;
+  static const double _diameter = 46;
 
   @override
   Widget build(BuildContext context) {

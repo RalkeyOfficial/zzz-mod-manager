@@ -319,7 +319,7 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
                 padding: const EdgeInsets.only(left: 4, bottom: 4),
                 child: Text(
                   '• $folder',
-                  style: Theme.of(context).textTheme.bodyLarge,
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),
           ],
@@ -328,7 +328,7 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
       const SizedBox(height: 14),
       Text(
         loc.t('mods.update_apply.blocked_hint'),
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
       ),
@@ -500,11 +500,11 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
                 controlAffinity: ListTileControlAffinity.leading,
                 title: Text(
                   target.mod.name,
-                  style: Theme.of(context).textTheme.bodyLarge,
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 subtitle: Text(
                   _rowDetail(target),
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                 ),

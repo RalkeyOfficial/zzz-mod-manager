@@ -223,8 +223,7 @@ class _ModsGroupedViewState extends ConsumerState<ModsGroupedView> {
                 const SizedBox(width: 12),
                 Text(
                   label,
-                  style: TextStyle(
-                    fontSize: 15,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                     color: textColor,
                     letterSpacing: 0.3,
@@ -242,8 +241,7 @@ class _ModsGroupedViewState extends ConsumerState<ModsGroupedView> {
                   ),
                   child: Text(
                     '$count',
-                    style: TextStyle(
-                      fontSize: 12,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
                       fontWeight: FontWeight.w600,
                       color: textColor,
                     ),

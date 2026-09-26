@@ -23,6 +23,7 @@ class _KeybindsWidgetState extends State<KeybindsWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
     if (widget.keybinds == null || widget.keybinds!.keybinds.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -68,9 +69,8 @@ class _KeybindsWidgetState extends State<KeybindsWidget> {
                   SizedBox(width: 8 * widget.scaleFactor),
                   Text(
                     'Keybinds',
-                    style: TextStyle(
+                    style: _scaled(textTheme.titleSmall!).copyWith(
                       color: Colors.white.withValues(alpha: 0.9),
-                      fontSize: 13 * widget.scaleFactor,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -86,9 +86,8 @@ class _KeybindsWidgetState extends State<KeybindsWidget> {
                     ),
                     child: Text(
                       '${validKeybinds.length}',
-                      style: TextStyle(
+                      style: _scaled(textTheme.labelSmall!).copyWith(
                         color: const Color(0xFF6366F1),
-                        fontSize: 11 * widget.scaleFactor,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -122,6 +121,9 @@ class _KeybindsWidgetState extends State<KeybindsWidget> {
     );
   }
 
+  TextStyle _scaled(TextStyle role) =>
+      role.copyWith(fontSize: role.fontSize! * widget.scaleFactor);
+
   Widget _buildKeybindChip(KeybindInfo keybind) {
     return Container(
       padding: EdgeInsets.symmetric(
@@ -148,9 +150,8 @@ class _KeybindsWidgetState extends State<KeybindsWidget> {
         children: [
           Text(
             keybind.displayName,
-            style: TextStyle(
+            style: _scaled(Theme.of(context).textTheme.labelSmall!).copyWith(
               color: Colors.white.withValues(alpha: 0.8),
-              fontSize: 11 * widget.scaleFactor,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -170,9 +171,8 @@ class _KeybindsWidgetState extends State<KeybindsWidget> {
             ),
             child: Text(
               keybind.keyValue ?? '',
-              style: TextStyle(
+              style: _scaled(Theme.of(context).textTheme.labelSmall!).copyWith(
                 color: const Color(0xFFFBBF24),
-                fontSize: 11 * widget.scaleFactor,
                 fontWeight: FontWeight.bold,
                 fontFamily: 'monospace',
               ),
@@ -207,6 +207,7 @@ class KeybindsBadge extends StatelessWidget {
     final keybindCount = keybinds!.keybinds
         .where((kb) => kb.keyValue != null && kb.keyValue!.isNotEmpty)
         .length;
+    final label = Theme.of(context).textTheme.labelSmall!;
 
     return InkWell(
       onTap: onTap,
@@ -235,9 +236,9 @@ class KeybindsBadge extends StatelessWidget {
             SizedBox(width: 4 * scaleFactor),
             Text(
               '$keybindCount',
-              style: TextStyle(
+              style: label.copyWith(
                 color: const Color(0xFF6366F1),
-                fontSize: 12 * scaleFactor,
+                fontSize: label.fontSize! * scaleFactor,
                 fontWeight: FontWeight.bold,
               ),
             ),

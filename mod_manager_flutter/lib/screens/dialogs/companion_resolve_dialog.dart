@@ -130,7 +130,7 @@ Future<bool> showCompanionRemoveDialog(
               const SizedBox(height: 10),
               Text(
                 loc.t('mods.resolve.companion_remove_patch_uninstall'),
-                style: Theme.of(dialogContext).textTheme.bodyMedium?.copyWith(
+                style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
                       color: Theme.of(dialogContext).colorScheme.primary,
                     ),
               ),
@@ -416,17 +416,17 @@ class _CompanionResolveDialogState
       dense: true,
       contentPadding: EdgeInsets.zero,
       enabled: baseline != null,
+      titleTextStyle: Theme.of(context).textTheme.bodyMedium,
+      subtitleTextStyle: Theme.of(context).textTheme.bodySmall,
       leading: const Icon(Icons.help_outline, size: 20),
       title: Text(
         loc.t('mods.resolve.dont_know'),
-        style: const TextStyle(fontSize: 13),
       ),
       subtitle: Text(
         baseline == null
             ? loc.t('mods.resolve.dont_know_unavailable')
             : loc.t('mods.resolve.dont_know_hint',
                 params: {'date': formatResolveDate(baseline)}),
-        style: const TextStyle(fontSize: 11),
       ),
       selected: _selectedFile == null && _assumeLatest,
       onTap: baseline == null
@@ -441,14 +441,14 @@ class _CompanionResolveDialogState
   Widget _removeTile() => ListTile(
         dense: true,
         contentPadding: EdgeInsets.zero,
+        titleTextStyle: Theme.of(context).textTheme.bodyMedium,
+        subtitleTextStyle: Theme.of(context).textTheme.bodySmall,
         leading: const Icon(Icons.delete_outline, size: 20),
         title: Text(
           loc.t('mods.resolve.companion_remove'),
-          style: const TextStyle(fontSize: 13),
         ),
         subtitle: Text(
           loc.t('mods.resolve.companion_remove_hint'),
-          style: const TextStyle(fontSize: 11),
         ),
         onTap: () => Navigator.of(context).pop(const CompanionRemoved()),
       );

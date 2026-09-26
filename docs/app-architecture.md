@@ -27,6 +27,14 @@ doc. This file is the map; the rules that must never be missed are in the
   is declared here. Add new global state here, not ad-hoc.
 - **`core/constants.dart`** — `AppConstants`, including `appVersion`, the single
   source for everything that *says* the version (UI badge, GameBanana User-Agent).
+- **`core/type_scale.dart`** — the app's one type scale: Material's text roles raised by 2px, making body text 16.
+  Every `Text` takes its size from a role on the theme — `bodyMedium` to be read, `bodySmall` for the line explaining it,
+  `labelSmall` for a badge or counter — never a `fontSize:` literal, since a literal is invisible to the scale
+  and a screen written with them drifts smaller than the rest of the app.
+  Theme styles are `inherit: false` and carry the surface's text colour, so text inside a button or chip drops its style
+  and takes the widget's own role rather than overriding its colour.
+  The widget-test harness applies the same scale, so a layout test at 480px measures the text the app renders.
+  Markdown has its own scale in `MarkdownScale` (§2), built on the same 16px body.
 
 ## 2. Markdown rendering
 

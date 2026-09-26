@@ -89,6 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Text across the app is larger, and the same kind of text is the same size on every screen.
 - The "which mod is this?" search starts with the mod's name read as words, so `Ellen_Joe_Cheongsam` searches for "Ellen Joe Cheongsam".
 - Notifications are small cards in the bottom-right corner. Several can show at once, any can be closed, and hovering pauses their countdowns.
 - Every notification says what happened and what it happened to, led by the character's portrait.

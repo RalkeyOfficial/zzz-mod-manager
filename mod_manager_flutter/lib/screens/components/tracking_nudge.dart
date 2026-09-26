@@ -55,11 +55,11 @@ class TrackingNudge extends StatelessWidget {
                   children: [
                     Text(
                       loc.plural('mods.nudge.title', count, params: {'count': '$count'}),
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                     ),
                     Text(
                       loc.t('mods.nudge.hint'),
-                      style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
                     ),
                   ],
                 ),

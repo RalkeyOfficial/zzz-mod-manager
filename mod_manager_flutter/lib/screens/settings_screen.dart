@@ -133,8 +133,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
             children: [
               Text(
                 loc.t('settings.title'),
-                style: TextStyle(
-                  fontSize: AppConstants.headerTextSize + 4,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -184,8 +183,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
                             opacity: _loadingAnimation.value,
                             child: Text(
                               loc.t('settings.loading'),
-                              style: TextStyle(
-                                fontSize: 16,
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                 color: Colors.grey[600],
                                 fontWeight: FontWeight.w500,
                               ),
@@ -302,8 +300,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
                                 Expanded(
                                   child: Text(
                                     loc.t('settings.info.symlinks'),
-                                    style: TextStyle(
-                                      fontSize: 13,
+                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                       color: Colors.grey[600],
                                     ),
                                   ),
@@ -393,8 +390,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
-      style: const TextStyle(
-        fontSize: 14,
+      style: Theme.of(context).textTheme.titleSmall?.copyWith(
         fontWeight: FontWeight.w600,
         letterSpacing: 0.5,
       ),
@@ -414,8 +410,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
       children: [
         Text(
           label,
-          style: TextStyle(
-            fontSize: 13,
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
             fontWeight: FontWeight.w500,
             color: Colors.grey[600],
           ),
@@ -428,7 +423,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
                 controller: controller,
                 decoration: InputDecoration(
                   hintText: hint,
-                  hintStyle: TextStyle(fontSize: 13, color: Colors.grey[500]),
+                  hintStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[500]),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide(
@@ -448,7 +443,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                   isDense: true,
                 ),
-                style: const TextStyle(fontSize: 13),
+                style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
             const SizedBox(width: 8),
@@ -488,7 +483,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
         children: [
           Text(
             label,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w500),
           ),
           trailing,
         ],

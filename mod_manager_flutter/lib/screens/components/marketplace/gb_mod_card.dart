@@ -258,9 +258,8 @@ class _GbModCardState extends State<GbModCard> {
                   child: Text(
                     loc.t('marketplace.content_reveal'),
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
                       color: label,
-                      fontSize: 11,
                       fontWeight: FontWeight.w700,
                       shadows: shadows,
                     ),
@@ -276,7 +275,10 @@ class _GbModCardState extends State<GbModCard> {
 
   Widget _stats(BuildContext context, GbMod mod) {
     final scheme = Theme.of(context).colorScheme;
-    final style = TextStyle(fontSize: 11, color: scheme.onSurfaceVariant);
+    final style = Theme.of(context)
+        .textTheme
+        .bodySmall
+        ?.copyWith(color: scheme.onSurfaceVariant);
     // Each entry is omitted when the response didn't carry it, rather than
     // rendered as a zero.
     final entries = <(IconData, int)>[
@@ -332,8 +334,7 @@ class _GbModCardState extends State<GbModCard> {
         label,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: 10,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
           color: foreground,
           fontWeight: FontWeight.w600,
         ),
@@ -365,7 +366,10 @@ class _Dates extends StatelessWidget {
   Widget build(BuildContext context) {
     final loc = context.loc;
     final scheme = Theme.of(context).colorScheme;
-    final style = TextStyle(fontSize: 10, color: scheme.onSurfaceVariant);
+    final style = Theme.of(context)
+        .textTheme
+        .bodySmall!
+        .copyWith(color: scheme.onSurfaceVariant);
 
     final added = mod.dateAdded;
     // `_tsDateUpdated` is the *content* update, and it is null on a mod that has

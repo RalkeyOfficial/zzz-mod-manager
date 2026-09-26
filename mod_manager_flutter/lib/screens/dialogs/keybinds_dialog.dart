@@ -27,6 +27,7 @@ void showKeybindsDialog(
   if (validKeybinds.isEmpty) return;
 
   final loc = context.loc;
+  final textTheme = Theme.of(context).textTheme;
   showDialog(
     context: context,
     builder: (dialogContext) => AlertDialog(
@@ -37,7 +38,7 @@ void showKeybindsDialog(
           Expanded(
             child: Text(
               loc.t('mods.keybinds.title', params: {'name': mod.name}),
-              style: const TextStyle(fontSize: 18),
+              style: textTheme.titleLarge,
             ),
           ),
         ],
@@ -80,9 +81,8 @@ void showKeybindsDialog(
                     children: [
                       Text(
                         keybind.displayName,
-                        style: const TextStyle(
-                          color: Color(0xFFE2E8F0),
-                          fontSize: 13,
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: const Color(0xFFE2E8F0),
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -102,9 +102,8 @@ void showKeybindsDialog(
                         ),
                         child: Text(
                           keybind.keyValue ?? '',
-                          style: const TextStyle(
-                            color: Color(0xFFFBBF24),
-                            fontSize: 12,
+                          style: textTheme.bodySmall?.copyWith(
+                            color: const Color(0xFFFBBF24),
                             fontWeight: FontWeight.bold,
                             fontFamily: 'monospace',
                             letterSpacing: 0.5,
@@ -144,6 +143,7 @@ void showEditKeybindDialog(
   required VoidCallback onSaved,
 }) {
   final loc = context.loc;
+  final textTheme = Theme.of(context).textTheme;
   final keyController = TextEditingController(text: keybind.keyValue ?? '');
 
   showDialog(
@@ -159,7 +159,7 @@ void showEditKeybindDialog(
                 'mods.keybinds.edit_title',
                 params: {'name': keybind.displayName},
               ),
-              style: const TextStyle(fontSize: 18),
+              style: textTheme.titleLarge,
             ),
           ),
         ],
@@ -170,7 +170,9 @@ void showEditKeybindDialog(
         children: [
           Text(
             loc.t('mods.keybinds.edit_prompt'),
-            style: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
+            style: textTheme.bodyMedium?.copyWith(
+              color: const Color(0xFF94A3B8),
+            ),
           ),
           const SizedBox(height: 16),
           TextField(
@@ -213,18 +215,16 @@ void showEditKeybindDialog(
               children: [
                 Text(
                   loc.t('mods.keybinds.common_title'),
-                  style: const TextStyle(
-                    fontSize: 12,
+                  style: textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFFE2E8F0),
+                    color: const Color(0xFFE2E8F0),
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   loc.t('mods.keybinds.common_list'),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Color(0xFF94A3B8),
+                  style: textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFF94A3B8),
                   ),
                 ),
               ],

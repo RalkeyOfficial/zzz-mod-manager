@@ -294,6 +294,8 @@ void main() {
     testWidgets('"not from GameBanana" silences it without erasing identity',
         (tester) async {
       final gateway = await pumpDialog(tester, target: mod(origin: tracked()));
+      await tester.ensureVisible(find.text("Not from GameBanana, or it's my own"));
+      await tester.pumpAndSettle();
       await tester.tap(find.text("Not from GameBanana, or it's my own"));
       await tester.pumpAndSettle();
 
@@ -388,6 +390,8 @@ void main() {
         target: mod(origin: tracked()),
       );
       await tester.tap(find.byType(Checkbox));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text("Not from GameBanana, or it's my own"));
       await tester.pumpAndSettle();
       await tester.tap(find.text("Not from GameBanana, or it's my own"));
       await tester.pumpAndSettle();
@@ -1161,6 +1165,8 @@ void main() {
       await tester.tap(find.byIcon(Icons.edit_outlined));
       await tester.pumpAndSettle();
 
+      await tester.ensureVisible(find.text('This is just one mod after all'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('This is just one mod after all'));
       await tester.pumpAndSettle();
 

@@ -94,7 +94,7 @@ class _ModBackupsDialogState extends ConsumerState<ModBackupsDialog> {
                       children: [
                         Text(
                           loc.t('mods.backups.intro'),
-                          style: Theme.of(context).textTheme.bodyMedium
+                          style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(
                             color: Theme.of(context)
                                 .colorScheme
@@ -161,12 +161,12 @@ class _ModBackupsDialogState extends ConsumerState<ModBackupsDialog> {
                 children: [
                   Text(
                     _formatDate(snapshot.takenAt),
-                    style: Theme.of(context).textTheme.bodyLarge
+                    style: Theme.of(context).textTheme.bodyMedium
                         ?.copyWith(fontWeight: FontWeight.w700),
                   ),
                   Text(
                     subtitle,
-                    style: Theme.of(context).textTheme.bodyMedium
+                    style: Theme.of(context).textTheme.bodySmall
                         ?.copyWith(color: scheme.onSurfaceVariant),
                   ),
                 ],

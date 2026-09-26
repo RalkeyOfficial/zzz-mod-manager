@@ -63,7 +63,7 @@ Future<void> showDeleteModDialog(
             Expanded(
               child: Text(
                 loc.t('mods.dialog.delete_title'),
-                style: const TextStyle(fontSize: 18),
+                style: Theme.of(context).textTheme.titleLarge,
               ),
             ),
           ],

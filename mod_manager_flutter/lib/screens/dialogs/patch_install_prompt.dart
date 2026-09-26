@@ -277,7 +277,7 @@ class _PatchInstallPromptState extends ConsumerState<PatchInstallPrompt> {
           },
           params: {'mod': subject.modName},
         ),
-        style: const TextStyle(fontSize: 13),
+        style: Theme.of(context).textTheme.bodyMedium,
       ),
       const SizedBox(height: 8),
       _option(
@@ -314,7 +314,7 @@ class _PatchInstallPromptState extends ConsumerState<PatchInstallPrompt> {
             loc.t(widget.combined
                 ? 'mods.patch_install.destination_combined'
                 : 'mods.patch_install.destination_no_library'),
-            style: const TextStyle(fontSize: 11),
+            style: Theme.of(context).textTheme.bodySmall,
           ),
         ),
       if (wantsLibrary) _libraryList(subject),
@@ -347,8 +347,8 @@ class _PatchInstallPromptState extends ConsumerState<PatchInstallPrompt> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: const TextStyle(fontSize: 13)),
-                    Text(hint, style: const TextStyle(fontSize: 11)),
+                    Text(title, style: Theme.of(context).textTheme.bodyMedium),
+                    Text(hint, style: Theme.of(context).textTheme.bodySmall),
                   ],
                 ),
               ),
@@ -442,7 +442,7 @@ class _PatchInstallPromptState extends ConsumerState<PatchInstallPrompt> {
             hintText: loc.t('mods.patch_install.destination_search'),
             border: const OutlineInputBorder(),
           ),
-          style: const TextStyle(fontSize: 13),
+          style: Theme.of(context).textTheme.bodyMedium,
           onChanged: (value) =>
               setState(() => _queries[subject.modName] = value),
         ),
@@ -453,7 +453,7 @@ class _PatchInstallPromptState extends ConsumerState<PatchInstallPrompt> {
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Text(
               loc.t('mods.patch_install.destination_no_match'),
-              style: const TextStyle(fontSize: 11),
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           )
         else
@@ -471,8 +471,10 @@ class _PatchInstallPromptState extends ConsumerState<PatchInstallPrompt> {
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                   selected: mod.id == picked,
+                  titleTextStyle: Theme.of(context).textTheme.bodyMedium,
+                  subtitleTextStyle: Theme.of(context).textTheme.bodySmall,
                   leading: _thumbnail(mod, selected: mod.id == picked),
-                  title: Text(mod.name, style: const TextStyle(fontSize: 13)),
+                  title: Text(mod.name),
                   isThreeLine: label != null && reason != null,
                   subtitle: label == null && reason == null
                       ? null
@@ -480,8 +482,7 @@ class _PatchInstallPromptState extends ConsumerState<PatchInstallPrompt> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             if (label != null)
-                              Text(label,
-                                  style: const TextStyle(fontSize: 11)),
+                              Text(label),
                             if (reason != null) reason,
                           ],
                         ),
@@ -551,7 +552,7 @@ class _PatchInstallPromptState extends ConsumerState<PatchInstallPrompt> {
           );
     return Text(
       text,
-      style: TextStyle(fontSize: 11, color: color),
+      style: theme.textTheme.bodySmall?.copyWith(color: color),
     );
   }
 

@@ -265,16 +265,11 @@ class _BulkResolutionDialogState extends State<BulkResolutionDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            DialogNotice(
-              icon: Icons.help_outline,
-              message: loc.t('mods.bulk_resolve.intro'),
-            ),
-            if (widget.updatesFound > 0 || widget.unreachable > 0)
-              _checkSummary(loc, scheme),
-            const SizedBox(height: 8),
             // Bounded and scrolling inside itself so the action bar stays put:
             // a library can put fifty rows in here, and an AlertDialog that
-            // grows past the window takes its own buttons with it.
+            // grows past the window takes its own buttons with it. The intro
+            // scrolls with the rows, since on a small window it alone can
+            // outgrow the dialog.
             Flexible(
               child: ListView(
                 shrinkWrap: true,
@@ -282,6 +277,13 @@ class _BulkResolutionDialogState extends State<BulkResolutionDialog> {
                 // A library with one dead mod page and fifty to confirm should
                 // not open on the dead one.
                 children: [
+                  DialogNotice(
+                    icon: Icons.help_outline,
+                    message: loc.t('mods.bulk_resolve.intro'),
+                  ),
+                  if (widget.updatesFound > 0 || widget.unreachable > 0)
+                    _checkSummary(loc, scheme),
+                  const SizedBox(height: 8),
                   if (identityRows.isNotEmpty)
                     _section(
                       loc,
@@ -514,10 +516,10 @@ class _BulkResolutionDialogState extends State<BulkResolutionDialog> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: strong
-                ? theme.textTheme.bodyLarge?.copyWith(
+                ? theme.textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                   )
-                : theme.textTheme.bodyMedium
+                : theme.textTheme.bodySmall
                     ?.copyWith(color: scheme.onSurfaceVariant),
           ),
         ),
@@ -606,7 +608,7 @@ class _BulkResolutionDialogState extends State<BulkResolutionDialog> {
               isDense: true,
               hint: Text(
                 loc.t('mods.bulk_resolve.choose_file'),
-                style: theme.textTheme.bodyMedium,
+                style: theme.textTheme.bodySmall,
               ),
               items: [
                 for (final candidate in row.candidates)
@@ -616,7 +618,7 @@ class _BulkResolutionDialogState extends State<BulkResolutionDialog> {
                       _candidateLabel(candidate, loc),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium,
+                      style: theme.textTheme.bodySmall,
                     ),
                   ),
               ],
@@ -700,11 +702,11 @@ class _BulkResolutionDialogState extends State<BulkResolutionDialog> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: theme.textTheme.bodyMedium),
+                  Text(label, style: theme.textTheme.bodySmall),
                   if (subtitle != null)
                     Text(
                       subtitle,
-                      style: theme.textTheme.bodyMedium?.copyWith(
+                      style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),

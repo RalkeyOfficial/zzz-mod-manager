@@ -73,8 +73,7 @@ class _AutoTagSettingsSectionState
               const SizedBox(width: 12),
               Text(
                 loc.t('settings.auto_tag.title'),
-                style: TextStyle(
-                  fontSize: 16,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w600,
                   color: isDarkMode ? Colors.white : Colors.black87,
                 ),
@@ -84,8 +83,7 @@ class _AutoTagSettingsSectionState
           const SizedBox(height: 16),
           Text(
             loc.t('settings.auto_tag.description'),
-            style: TextStyle(
-              fontSize: 14,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: Colors.grey[600],
               height: 1.5,
             ),
@@ -117,7 +115,7 @@ class _AutoTagSettingsSectionState
                 Expanded(
                   child: Text(
                     loc.t('settings.auto_tag.example'),
-                    style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[700]),
                   ),
                 ),
               ],
@@ -160,8 +158,7 @@ class _AutoTagSettingsSectionState
           const SizedBox(height: 8),
           Text(
             loc.t('settings.auto_tag.note'),
-            style: TextStyle(
-              fontSize: 12,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Colors.grey[500],
               fontStyle: FontStyle.italic,
             ),
@@ -224,7 +221,7 @@ class _AutoTagSettingsSectionState
           children: [
             Text(
               summary,
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
             Container(
@@ -243,8 +240,7 @@ class _AutoTagSettingsSectionState
                       const SizedBox(width: 6),
                       Text(
                         loc.t('settings.auto_tag.list_title'),
-                        style: const TextStyle(
-                          fontSize: 13,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w600,
                           color: _accent,
                         ),
@@ -257,7 +253,7 @@ class _AutoTagSettingsSectionState
                           padding: const EdgeInsets.symmetric(vertical: 2),
                           child: Text(
                             '• ${entry.key} → ${getCharacterDisplayName(entry.value)}',
-                            style: const TextStyle(fontSize: 12),
+                            style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ),
                       ),
@@ -269,7 +265,7 @@ class _AutoTagSettingsSectionState
                           'mods.import.auto_tag_and_more',
                           params: {'count': '${tagged.length - 5}'},
                         ),
-                        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
                       ),
                     ),
                 ],
@@ -278,7 +274,7 @@ class _AutoTagSettingsSectionState
             const SizedBox(height: 12),
             Text(
               loc.t('settings.auto_tag.success_message'),
-              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
             ),
           ],
         ),
@@ -310,9 +306,8 @@ class _Requirement extends StatelessWidget {
           alignment: Alignment.center,
           child: Text(
             '✓',
-            style: TextStyle(
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
               color: color,
-              fontSize: 16,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -321,7 +316,7 @@ class _Requirement extends StatelessWidget {
         Expanded(
           child: Text(
             text,
-            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
           ),
         ),
       ],

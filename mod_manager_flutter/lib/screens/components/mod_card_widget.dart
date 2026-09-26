@@ -322,8 +322,7 @@ class _ModCardWidgetState extends State<ModCardWidget> {
         children: [
           Text(
             mod.name,
-            style: TextStyle(
-              fontSize: 14,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
               fontWeight: FontWeight.w600,
               letterSpacing: 0.2,
               color: mod.isActive
@@ -374,8 +373,7 @@ class _ModCardWidgetState extends State<ModCardWidget> {
       ),
       child: Text(
         label,
-        style: TextStyle(
-          fontSize: 10,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
           fontWeight: FontWeight.w500,
           color: widget.isDarkMode
               ? Colors.white.withValues(alpha: 0.85)

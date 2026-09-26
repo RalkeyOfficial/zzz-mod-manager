@@ -116,13 +116,6 @@ class AppConstants {
   static const double defaultMargin = 12;
   static const double smallMargin = 6;
 
-  // Text Sizes
-  static const double headerTextSize = 16;
-  static const double titleTextSize = 14;
-  static const double bodyTextSize = 13;
-  static const double captionTextSize = 12;
-  static const double smallCaptionTextSize = 10;
-
   // File Names
   static const List<String> imageFileNames = [
     'Preview.png',

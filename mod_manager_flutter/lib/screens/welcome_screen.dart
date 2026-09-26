@@ -201,8 +201,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
           const SizedBox(height: 24),
           Text(
             loc.t('welcome.title'),
-            style: TextStyle(
-              fontSize: 32,
+            style: Theme.of(context).textTheme.headlineLarge?.copyWith(
               fontWeight: FontWeight.bold,
               color: isDarkMode ? Colors.white : Colors.black87,
             ),
@@ -211,8 +210,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
           const SizedBox(height: 8),
           Text(
             loc.t('welcome.subtitle'),
-            style: TextStyle(
-              fontSize: 16,
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
               color: Colors.grey[600],
             ),
             textAlign: TextAlign.center,
@@ -295,8 +293,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
             const SizedBox(height: 32),
             Text(
               loc.t('welcome.language.title'),
-              style: TextStyle(
-                fontSize: 28,
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                 fontWeight: FontWeight.bold,
                 color: isDarkMode ? Colors.white : Colors.black87,
               ),
@@ -305,8 +302,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
             const SizedBox(height: 16),
             Text(
               loc.t('welcome.language.description'),
-              style: TextStyle(
-                fontSize: 16,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                 color: Colors.grey[600],
               ),
               textAlign: TextAlign.center,
@@ -373,8 +369,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
                               Expanded(
                                 child: Text(
                                   entry.value,
-                                  style: TextStyle(
-                                    fontSize: 18,
+                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                     fontWeight: FontWeight.w600,
                                     color: isSelected
                                         ? Colors.white
@@ -421,8 +416,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
               const SizedBox(height: 32),
               Text(
                 loc.t('welcome.directories.title'),
-                style: TextStyle(
-                  fontSize: 28,
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: isDarkMode ? Colors.white : Colors.black87,
                 ),
@@ -431,8 +425,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
               const SizedBox(height: 16),
               Text(
                 loc.t('welcome.directories.description'),
-                style: TextStyle(
-                  fontSize: 16,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                   color: Colors.grey[600],
                 ),
                 textAlign: TextAlign.center,
@@ -490,8 +483,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
             const SizedBox(height: 32),
             Text(
               loc.t('welcome.complete.title'),
-              style: TextStyle(
-                fontSize: 32,
+              style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                 fontWeight: FontWeight.bold,
                 color: isDarkMode ? Colors.white : Colors.black87,
               ),
@@ -500,8 +492,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
             const SizedBox(height: 16),
             Text(
               loc.t('welcome.complete.description'),
-              style: TextStyle(
-                fontSize: 18,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                 color: Colors.grey[600],
               ),
               textAlign: TextAlign.center,
@@ -536,8 +527,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
         children: [
           Text(
             label,
-            style: TextStyle(
-              fontSize: 16,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w600,
               color: isDarkMode ? Colors.white : Colors.black87,
             ),
@@ -550,7 +540,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
                   controller: controller,
                   decoration: InputDecoration(
                     hintText: hint,
-                    hintStyle: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                    hintStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[500]),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide(
@@ -574,7 +564,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                     isDense: true,
                   ),
-                  style: const TextStyle(fontSize: 14),
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),
               const SizedBox(width: 12),
@@ -634,8 +624,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
               'current': '${_currentStep + 1}',
               'total': '$_totalSteps',
             }),
-            style: TextStyle(
-              fontSize: 14,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: Colors.grey[600],
               fontWeight: FontWeight.w500,
             ),

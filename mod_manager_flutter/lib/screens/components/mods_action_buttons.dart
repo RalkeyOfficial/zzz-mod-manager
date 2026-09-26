@@ -70,9 +70,8 @@ class RefreshModsButton extends StatelessWidget {
                   const SizedBox(width: 6),
                   Text(
                     loc.t('mods.actions.refresh'),
-                    style: const TextStyle(
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Colors.white,
-                      fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
                   ),

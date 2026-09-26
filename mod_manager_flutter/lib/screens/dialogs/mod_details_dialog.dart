@@ -52,12 +52,13 @@ void showModDetailsDialog(
       // Leave room for the dialog's title, actions, and insets so the
       // fixed-height content can't overflow on a small window.
       final dialogHeight = (media.size.height * 0.7).clamp(300.0, 560.0);
+      final textTheme = Theme.of(dialogContext).textTheme;
 
       return AlertDialog(
         title: Row(
           children: [
             Expanded(
-              child: Text(mod.name, style: const TextStyle(fontSize: 18)),
+              child: Text(mod.name, style: textTheme.titleLarge),
             ),
             IconButton(
               icon: const Icon(Icons.edit_outlined, size: 20),
@@ -121,8 +122,7 @@ void showModDetailsDialog(
                               const SizedBox(width: 8),
                               Text(
                                 categoryDisplayName(mod.characterId, loc),
-                                style: const TextStyle(
-                                  fontSize: 14,
+                                style: textTheme.bodyMedium?.copyWith(
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
@@ -160,6 +160,7 @@ void showModDetailsDialog(
                                 Row(
                                   children: [
                                     _detailSectionLabel(
+                                      textTheme,
                                       loc.t('mods.dialog.description'),
                                     ),
                                     const Spacer(),
@@ -195,7 +196,7 @@ void showModDetailsDialog(
                                       minLines: 6,
                                       maxLines: 10,
                                       keyboardType: TextInputType.multiline,
-                                      style: const TextStyle(fontSize: 13),
+                                      style: textTheme.bodyMedium,
                                       decoration: InputDecoration(
                                         hintText: loc.t(
                                           'mods.dialog.description_hint',
@@ -249,8 +250,7 @@ void showModDetailsDialog(
                                 else
                                   Text(
                                     loc.t('mods.details.no_description'),
-                                    style: TextStyle(
-                                      fontSize: 13,
+                                    style: textTheme.bodyMedium?.copyWith(
                                       color: Colors.grey[500],
                                       fontStyle: FontStyle.italic,
                                     ),
@@ -261,7 +261,10 @@ void showModDetailsDialog(
                         ),
                         const SizedBox(height: 16),
                         if (mod.tags.isNotEmpty) ...[
-                          _detailSectionLabel(loc.t('mods.dialog.tags')),
+                          _detailSectionLabel(
+                            textTheme,
+                            loc.t('mods.dialog.tags'),
+                          ),
                           const SizedBox(height: 6),
                           Wrap(
                             spacing: 6,
@@ -281,6 +284,7 @@ void showModDetailsDialog(
                         ],
                         if (pageUrl != null) ...[
                           _detailSectionLabel(
+                            textTheme,
                             loc.t('mods.dialog.mod_page'),
                           ),
                           const SizedBox(height: 4),
@@ -297,9 +301,8 @@ void showModDetailsDialog(
                                 Expanded(
                                   child: Text(
                                     pageUrl,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: Color(0xFF6366F1),
+                                    style: textTheme.bodyMedium?.copyWith(
+                                      color: const Color(0xFF6366F1),
                                       decoration: TextDecoration.underline,
                                     ),
                                   ),
@@ -310,13 +313,16 @@ void showModDetailsDialog(
                           const SizedBox(height: 16),
                         ],
                         if (validKeybinds.isNotEmpty) ...[
-                          _detailSectionLabel(loc.t('mods.details.keybinds')),
+                          _detailSectionLabel(
+                            textTheme,
+                            loc.t('mods.details.keybinds'),
+                          ),
                           const SizedBox(height: 6),
                           Wrap(
                             spacing: 6,
                             runSpacing: 6,
                             children: validKeybinds
-                                .map(_detailKeybindChip)
+                                .map((k) => _detailKeybindChip(textTheme, k))
                                 .toList(),
                           ),
                           const SizedBox(height: 16),
@@ -387,7 +393,10 @@ Widget _detailGallery(
             const SizedBox(height: 8),
             Text(
               loc.t('mods.details.no_images'),
-              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: Colors.grey[500]),
             ),
           ],
         ),
@@ -547,11 +556,10 @@ Widget _detailImagePlaceholder(double height) {
   );
 }
 
-Widget _detailSectionLabel(String text) {
+Widget _detailSectionLabel(TextTheme textTheme, String text) {
   return Text(
     text,
-    style: TextStyle(
-      fontSize: 12,
+    style: textTheme.bodySmall?.copyWith(
       fontWeight: FontWeight.bold,
       color: Colors.grey[400],
       letterSpacing: 0.4,
@@ -559,7 +567,7 @@ Widget _detailSectionLabel(String text) {
   );
 }
 
-Widget _detailKeybindChip(KeybindInfo keybind) {
+Widget _detailKeybindChip(TextTheme textTheme, KeybindInfo keybind) {
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
     decoration: BoxDecoration(
@@ -579,18 +587,16 @@ Widget _detailKeybindChip(KeybindInfo keybind) {
       children: [
         Text(
           keybind.displayName,
-          style: const TextStyle(
-            color: Color(0xFFE2E8F0),
-            fontSize: 12,
+          style: textTheme.bodySmall?.copyWith(
+            color: const Color(0xFFE2E8F0),
             fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(width: 8),
         Text(
           keybind.displayKeyValue ?? '',
-          style: const TextStyle(
-            color: Color(0xFFFBBF24),
-            fontSize: 12,
+          style: textTheme.bodySmall?.copyWith(
+            color: const Color(0xFFFBBF24),
             fontWeight: FontWeight.bold,
             fontFamily: 'monospace',
           ),

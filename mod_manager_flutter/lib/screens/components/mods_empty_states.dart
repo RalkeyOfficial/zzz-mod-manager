@@ -21,7 +21,7 @@ class ModsNoResults extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             loc.t('mods.toolbar.no_results'),
-            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.grey[600]),
           ),
           const SizedBox(height: 12),
           TextButton.icon(
@@ -132,8 +132,7 @@ class AddModCard extends ConsumerWidget {
                   isDragging
                       ? loc.t('mods.empty.prompt')
                       : loc.t('mods.empty.cta'),
-                  style: TextStyle(
-                    fontSize: 16,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                     color: isDragging
                         ? const Color(0xFF0EA5E9)
@@ -150,8 +149,7 @@ class AddModCard extends ConsumerWidget {
                         ? loc.t('mods.empty.add_folders')
                         : loc.t('mods.empty.drag'),
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 12,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: isDarkMode
                           ? Colors.white.withValues(alpha: 0.5)
                           : Colors.black.withValues(alpha: 0.4),

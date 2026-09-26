@@ -36,7 +36,9 @@ Widget resolveNotice(
         Expanded(
           child: Text(
             message,
-            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
           ),
         ),
       ],
@@ -53,12 +55,13 @@ Widget resolveChip(String label, Color color, {Color? background}) => Container(
         color: background ?? color.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 10,
-          color: color,
-          fontWeight: FontWeight.w600,
+      child: Builder(
+        builder: (context) => Text(
+          label,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: color,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
     );

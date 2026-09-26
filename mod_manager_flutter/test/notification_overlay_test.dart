@@ -168,7 +168,7 @@ void main() {
 
     testWidgets('the slot is the same width whichever variant renders',
         (tester) async {
-      // The regression guard for the fixed 40px footprint. Without it, a future
+      // The regression guard for the fixed 46px footprint. Without it, a future
       // "the icon looks lonely, let's shrink the slot" reintroduces a ragged
       // left edge down the stack with no test failure.
       await pumpOverlay(tester);
@@ -183,8 +183,8 @@ void main() {
     });
 
     testWidgets('a portrait does not make the card taller', (tester) async {
-      // Pins the arithmetic the 40px slot was chosen for: two lines of card
-      // text come to 41px, so the avatar never drives the card's height.
+      // Pins the arithmetic the 46px slot was chosen for: two lines of card
+      // text come to 46.6px, so the avatar never drives the card's height.
       await pumpOverlay(tester);
       center().info('A headline', body: 'a subject');
       await tester.pumpAndSettle();
@@ -408,7 +408,7 @@ void main() {
   testWidgets('the stack stays inside a short window', (tester) async {
     // 800x600 is the app's minimum window size, and four cards of a paragraph
     // each is more than it has to give — so the column scrolls rather than
-    // overflowing into a debug stripe. The 40px leading slot narrows the text
+    // overflowing into a debug stripe. The 46px leading slot narrows the text
     // column, so this wraps harder than it looks.
     await pumpOverlay(tester, surfaceSize: const Size(800, 600));
     for (var i = 0; i < kMaxVisibleNotifications; i++) {

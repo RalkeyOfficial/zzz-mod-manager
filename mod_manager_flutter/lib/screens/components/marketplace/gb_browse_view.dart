@@ -222,8 +222,8 @@ List<Widget> _resultSlivers(
           // Fixing the height decouples the two: the text block always has the
           // same room and the cover (an Expanded in GbModCard) takes whatever is
           // left, so its aspect varies with width instead of the layout breaking.
-          // 240 gives a 16:9-ish cover at a typical ~245px tile.
-          mainAxisExtent: 240,
+          // The text block is ~141px, so 280 gives a 16:9-ish cover at a typical ~245px tile.
+          mainAxisExtent: 280,
         ),
         delegate: SliverChildBuilderDelegate(
           childCount: visible.length,

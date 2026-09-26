@@ -86,6 +86,7 @@ class DownloadsButton extends ConsumerWidget {
                       '$active',
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: theme.colorScheme.onPrimary,
+                        // Sized to the 14px icon it sits on, not to the type scale.
                         fontSize: 9,
                         height: 1.4,
                       ),

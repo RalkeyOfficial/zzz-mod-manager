@@ -257,17 +257,7 @@ Two things are **refused rather than unbuilt**, both recorded in
   tail reaches 1.24 GB — but it is a real cost on a slow connection and nobody has been
   asked whether they would rather keep it. Noted in the code; revisit if
   reported.
-- [ ] **The type scale is per-dialog, not app-wide.** The update flow's four
-  dialogs read their sizes from the theme (`bodyLarge` 16 / `bodyMedium` 14)
-  after a report that everything was too small; the rest of the app still uses
-  hardcoded 10–12px literals, so those now look smaller by comparison. **The
-  mechanism is the real problem rather than the scope:** `ThemeData` in
-  `main.dart` sets no `textTheme`, so Material's default `bodyMedium` of 14 is
-  the base and every widget written from here gets it again by default. If 16 is
-  genuinely the base it belongs in one `Typography(...).apply(fontSizeDelta: 2)`
-  on the theme — which touches every screen at once, so the fixed-height layouts
-  (`GbModCard`'s `mainAxisExtent`, the mods toolbar rows that have overflowed
-  twice) need measuring at 480px afterwards rather than assuming.
+- [x] **The type scale is app-wide.** [`docs/app-architecture.md`](docs/app-architecture.md) §1 owns it.
 - [ ] **A shader copied to the game root is the one leftover class outside every
   mod folder**, which is a smaller gap than a live stale shader and a harder one.
   Shader overrides are read from the **single** directory `override_directory`
@@ -697,8 +687,10 @@ Two limits, because they bound what may be built on it:
 
 Waiting on it:
 
-- [ ] A marketplace file row overflows at 2× text scale. The scan chip and
+- [ ] A marketplace file row overflows at 1.6× text scale. The scan chip and
   Download button can't shrink. Seen at 530px and 600px window widths.
+- [ ] Some elements read too large or too small at the app-wide 16px type scale, e.g. the Single/Multi toggle's label is too large for its box.
+  Pick the role per element during the redesign, never a `fontSize:` literal.
 
 Other todo's:
 

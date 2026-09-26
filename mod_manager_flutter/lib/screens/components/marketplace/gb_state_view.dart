@@ -60,7 +60,9 @@ class GbStateView extends StatelessWidget {
                 Text(
                   hint,
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ],
               if (action case final action?) ...[

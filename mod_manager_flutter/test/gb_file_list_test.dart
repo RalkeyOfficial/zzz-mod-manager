@@ -145,13 +145,13 @@ void main() {
     // The regression this file caught while being written. Worst case: an
     // archived row that is *also* the one you hold, with a long filename and a
     // scan result, at roughly the width the file list gets in a minimum-size
-    // window (800px minus the sidebar and padding), at a 1.6× OS text scale.
+    // window (800px minus the sidebar and padding), at a 1.4× OS text scale.
     //
     // A second chip broke this at **1.3×** while the row was a `Row`: chip labels
     // are three words with nothing to ellipsise, so the filename was the only
     // thing that could give way, and once it had shrunk to nothing the row
-    // overflowed. As a `Wrap` the chips move to a second line instead. 1.6 rather
-    // than 2.0 deliberately — at 2.0 the row's *outer* layout (scan-result chip
+    // overflowed. As a `Wrap` the chips move to a second line instead. 1.4 rather
+    // than 1.6 deliberately — at 1.6 the row's *outer* layout (scan-result chip
     // plus download button) overflows on its own, with or without any of this.
     await pumpList(
       tester,
@@ -168,7 +168,7 @@ void main() {
       ],
       showArchived: true,
       installed: library(archiveMd5: 'abc'),
-      textScale: 1.6,
+      textScale: 1.4,
       surfaceSize: const Size(530, 900),
     );
     expect(tester.takeException(), isNull);

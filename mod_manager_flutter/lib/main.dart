@@ -8,6 +8,7 @@ import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:window_manager/window_manager.dart';
 import 'dart:io';
 import 'core/constants.dart';
+import 'core/type_scale.dart';
 import 'screens/mods_screen.dart';
 import 'screens/components/download_queue_host.dart';
 import 'screens/components/downloads_button.dart';
@@ -196,7 +197,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
                 ? WelcomeScreen(onComplete: _onWelcomeComplete)
                 : const MainScreen()),
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
+      theme: withAppTypeScale(ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF0EA5E9),
           brightness: isDarkMode ? Brightness.dark : Brightness.light,
@@ -264,7 +265,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
             borderSide: const BorderSide(color: Color(0xFF0EA5E9), width: 2),
           ),
         ),
-      ),
+      )),
     );
   }
 }
@@ -502,10 +503,9 @@ class _MainScreenState extends ConsumerState<MainScreen>
                             shaderCallback: (bounds) => const LinearGradient(
                               colors: [Color(0xFF0EA5E9), Color(0xFF06B6D4)],
                             ).createShader(bounds),
-                            child: const Text(
+                            child: Text(
                               'ZZZ',
-                              style: TextStyle(
-                                fontSize: 28,
+                              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: -1,
                                 color: Colors.white,
@@ -515,8 +515,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
                           const SizedBox(height: 4),
                           Text(
                             loc.t('app.brand_subtitle'),
-                            style: TextStyle(
-                              fontSize: 12,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: Colors.grey[500],
                               fontWeight: FontWeight.w500,
                               letterSpacing: 1,
@@ -609,8 +608,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
                               ),
                               child: Text(
                                 'v${AppConstants.appVersion}',
-                                style: TextStyle(
-                                  fontSize: 11,
+                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                   color: Colors.grey[500],
                                   fontWeight: FontWeight.w500,
                                 ),

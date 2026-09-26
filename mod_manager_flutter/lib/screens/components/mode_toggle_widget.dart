@@ -200,6 +200,7 @@ class _ModeToggleContent extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               _buildModeButton(
+                context,
                 label: 'Single',
                 isActive: activationMode == ActivationMode.single,
                 onTap: () {
@@ -212,6 +213,7 @@ class _ModeToggleContent extends ConsumerWidget {
                 animationController: modeToggleAnimationController,
               ),
               _buildModeButton(
+                context,
                 label: 'Multi',
                 isActive: activationMode == ActivationMode.multi,
                 onTap: () {
@@ -231,7 +233,8 @@ class _ModeToggleContent extends ConsumerWidget {
     );
   }
 
-  Widget _buildModeButton({
+  Widget _buildModeButton(
+    BuildContext context, {
     required String label,
     required bool isActive,
     required VoidCallback onTap,
@@ -247,8 +250,7 @@ class _ModeToggleContent extends ConsumerWidget {
         child: AnimatedDefaultTextStyle(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOutCubic,
-          style: TextStyle(
-            fontSize: 13,
+          style: Theme.of(context).textTheme.titleSmall!.copyWith(
             fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
             color: isActive 
                 ? Colors.white

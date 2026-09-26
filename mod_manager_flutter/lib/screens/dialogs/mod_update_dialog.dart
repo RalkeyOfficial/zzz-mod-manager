@@ -942,7 +942,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
             section.name,
             style: Theme.of(context)
                 .textTheme
-                .titleMedium
+                .titleSmall
                 ?.copyWith(fontWeight: FontWeight.w700),
           ),
         ),
@@ -1163,7 +1163,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
         const SizedBox(height: 10),
         Text(
           loc.t('mods.update.guess_caveat'),
-          style: Theme.of(context).textTheme.bodyMedium
+          style: Theme.of(context).textTheme.bodySmall
               ?.copyWith(color: scheme.onSurfaceVariant),
         ),
       ],
@@ -1171,7 +1171,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
         const SizedBox(height: 10),
         Text(
           loc.t('mods.update.manual_note'),
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
         ),
       ],
       // The per-section controls. **Only where there are several sections** —
@@ -1250,12 +1250,12 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
         loc.t('mods.update.options_heading'),
         style: Theme.of(
           context,
-        ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+        ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
       ),
       const SizedBox(height: 2),
       Text(
         loc.t('mods.update.options_hint'),
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
       ),
       const SizedBox(height: 6),
       ConstrainedBox(
@@ -1368,7 +1368,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
                     Expanded(
                       child: Text(
                         loc.t('mods.update.notes_heading'),
-                        style: Theme.of(context).textTheme.titleMedium
+                        style: Theme.of(context).textTheme.titleSmall
                             ?.copyWith(fontWeight: FontWeight.w700),
                       ),
                     ),
@@ -1421,13 +1421,13 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
             children: [
               Text(
                 update.name ?? loc.t('mods.update.notes_untitled'),
-                style: theme.textTheme.bodyLarge
+                style: theme.textTheme.bodyMedium
                     ?.copyWith(fontWeight: FontWeight.w700),
               ),
               if (update.dateAdded case final date?)
                 Text(
                   _formatDate(date),
-                  style: theme.textTheme.bodyMedium
+                  style: theme.textTheme.bodySmall
                       ?.copyWith(color: scheme.onSurfaceVariant),
                 ),
             ],
@@ -1439,7 +1439,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
                 entry.category == null
                     ? '• ${entry.text}'
                     : '• ${entry.text} (${entry.category})',
-                style: theme.textTheme.bodyLarge,
+                style: theme.textTheme.bodyMedium,
               ),
             ),
           if (prose.isNotEmpty)
@@ -1507,7 +1507,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
                 children: [
                   Text(
                     fileDisplayName(file),
-                    style: Theme.of(context).textTheme.bodyLarge
+                    style: Theme.of(context).textTheme.bodyMedium
                         ?.copyWith(fontWeight: FontWeight.w700),
                   ),
                   if (isPick)
@@ -1525,12 +1525,12 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
                   detail,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
                 ),
               if (file.dateAdded case final date?)
                 Text(
                   _formatDate(date),
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
                 ),
             ],
           ),
@@ -1547,7 +1547,10 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     ),
     child: Text(
       label,
-      style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w600),
+      style: Theme.of(context)
+          .textTheme
+          .labelSmall
+          ?.copyWith(color: color, fontWeight: FontWeight.w600),
     ),
   );
 
@@ -1562,7 +1565,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
         Expanded(
           child: Text(
             loc.t(key),
-            style: Theme.of(context).textTheme.titleMedium
+            style: Theme.of(context).textTheme.titleSmall
                 ?.copyWith(fontWeight: FontWeight.w700),
           ),
         ),
@@ -1708,14 +1711,14 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
           width: 130,
           child: Text(
             label,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
           ),
         ),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(value, style: Theme.of(context).textTheme.bodyLarge),
+              Text(value, style: Theme.of(context).textTheme.bodyMedium),
               // The author's description, greyed and underneath, never standing
               // in for the filename above it.
               if (detail != null)
@@ -1723,7 +1726,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
                   detail,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
                 ),
             ],
           ),
@@ -1781,7 +1784,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
           Expanded(
             child: Text(
               message,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
             ),
           ),
         ],

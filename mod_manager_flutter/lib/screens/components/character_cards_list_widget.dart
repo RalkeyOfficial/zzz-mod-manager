@@ -61,7 +61,7 @@ class _CharacterCardsListWidgetState
       return Center(
         child: Text(
           loc.t('mods.characters.empty'),
-          style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
         ),
       );
     }
@@ -293,8 +293,7 @@ class _CharacterCardsListWidgetState
                             AnimatedDefaultTextStyle(
                               duration: const Duration(milliseconds: 250),
                               curve: Curves.easeOut,
-                              style: TextStyle(
-                                fontSize: AppConstants.smallCaptionTextSize,
+                              style: Theme.of(context).textTheme.labelSmall!.copyWith(
                                 fontWeight: FontWeight.w600,
                                 color: isHovering
                                     ? const Color(

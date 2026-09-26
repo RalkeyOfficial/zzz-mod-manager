@@ -5,10 +5,9 @@
 /// [buildMarkdownStyleSheet], so the reading experience is the same everywhere
 /// and a change here moves all of them at once.
 ///
-/// The defaults from `MarkdownStyleSheet.fromTheme` are a starting point, not a
-/// design: they inherit `bodyMedium` (14px) for body text and draw a horizontal
-/// rule as a **5px** slab, which reads as a bar rather than a separator. What
-/// follows replaces every element that a description actually uses.
+/// The defaults from `MarkdownStyleSheet.fromTheme` are a starting point, not a design:
+/// they take `bodyMedium`'s tight line height for running text and draw a horizontal rule as a **5px** slab,
+/// which reads as a bar rather than a separator. What follows replaces every element that a description actually uses.
 library;
 
 import 'package:flutter/material.dart';

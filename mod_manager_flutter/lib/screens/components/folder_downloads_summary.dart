@@ -198,7 +198,7 @@ class _FolderDownloadsSummaryState
       children: [
         Text(
           loc.t('mods.folder.heading'),
-          style: theme.textTheme.titleMedium?.copyWith(
+          style: theme.textTheme.titleSmall?.copyWith(
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -206,7 +206,7 @@ class _FolderDownloadsSummaryState
           const SizedBox(height: 2),
           Text(
             loc.t('mods.folder.hint'),
-            style: theme.textTheme.bodyMedium
+            style: theme.textTheme.bodySmall
                 ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
         ],
@@ -256,7 +256,7 @@ class _FolderDownloadsSummaryState
                     Expanded(
                       child: Text(
                         _nameOf(download),
-                        style: theme.textTheme.bodyLarge,
+                        style: theme.textTheme.bodyMedium,
                       ),
                     ),
                     const SizedBox(width: 6),
@@ -272,7 +272,7 @@ class _FolderDownloadsSummaryState
                   const SizedBox(height: 2),
                   Text(
                     detail,
-                    style: theme.textTheme.bodyMedium
+                    style: theme.textTheme.bodySmall
                         ?.copyWith(color: scheme.onSurfaceVariant),
                   ),
                 ],
@@ -283,7 +283,7 @@ class _FolderDownloadsSummaryState
                   const SizedBox(height: 2),
                   Text(
                     loc.t('mods.folder.remote_missing'),
-                    style: theme.textTheme.bodyMedium
+                    style: theme.textTheme.bodySmall
                         ?.copyWith(color: scheme.onSurfaceVariant),
                   ),
                 ],
@@ -291,7 +291,7 @@ class _FolderDownloadsSummaryState
                   const SizedBox(height: 2),
                   Text(
                     note,
-                    style: theme.textTheme.bodyMedium
+                    style: theme.textTheme.bodySmall
                         ?.copyWith(color: scheme.onSurfaceVariant),
                   ),
                 ],

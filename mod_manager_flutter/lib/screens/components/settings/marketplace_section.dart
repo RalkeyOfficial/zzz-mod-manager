@@ -48,7 +48,7 @@ class MarketplaceSettingsSection extends ConsumerWidget {
               value: value,
               child: Text(
                 loc.t('marketplace.content_filter_${value.wire}'),
-                style: const TextStyle(fontSize: 13),
+                style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
         ],

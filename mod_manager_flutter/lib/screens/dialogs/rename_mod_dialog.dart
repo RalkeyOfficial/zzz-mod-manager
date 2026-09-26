@@ -77,7 +77,7 @@ Future<void> showRenameModDialog(
                 Expanded(
                   child: Text(
                     loc.t('mods.dialog.rename_title'),
-                    style: const TextStyle(fontSize: 18),
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
               ],

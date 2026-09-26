@@ -166,13 +166,10 @@ displays is exactly what this rule exists to prevent. See
 
 ## 6. Dialogs
 
-- **`components/dialog_section.dart` is where these dialogs get their shape and
-  type sizes.** They were loose `Text` widgets at hardcoded 10–12px, and both
-  complaints that produced were the same: nothing marked where one idea ended and
-  the next began, and none of it was readable. Sizes now come from the theme —
-  `bodyLarge` (16) for anything meant to be read, `bodyMedium` (14) for the line
-  explaining it, `titleMedium` for a heading — and a group of facts always arrives
-  under a heading saying what the group is for. `DialogNotice(emphasis: true)` is
+- **`components/dialog_section.dart` is where these dialogs get their shape and type sizes.**
+  Sizes come from the theme — `bodyMedium` (16) for anything meant to be read, `bodySmall` (14) for the line explaining it,
+  `titleSmall` for a heading — and a group of facts always arrives under a heading saying what the group is for,
+  since text with no marked boundary between ideas reads as one undifferentiated block. `DialogNotice(emphasis: true)` is
   the one "read this" state and uses the same literal amber as the card's status
   slot; **at most one per view**, or it stops being emphasis.
 - **`bulk_resolution_dialog.dart`** groups rows by their *leading* question so a

@@ -278,8 +278,7 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
                 if (reasons.isNotEmpty)
                   Text(
                     reasons,
-                    style: TextStyle(
-                      fontSize: 11,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
                   ),
@@ -425,7 +424,10 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
 
   Widget _meta(BuildContext context, AppLocalizations loc, GbMod mod) {
     final scheme = Theme.of(context).colorScheme;
-    final style = TextStyle(fontSize: 12, color: scheme.onSurfaceVariant);
+    final style = Theme.of(context)
+        .textTheme
+        .bodySmall!
+        .copyWith(color: scheme.onSurfaceVariant);
 
     return Wrap(
       spacing: 16,
@@ -543,7 +545,9 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
             ),
             child: Text(
               tag,
-              style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
             ),
           ),
       ],
@@ -574,7 +578,9 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
         children: [
           Icon(Icons.info_outline, color: color, size: 18),
           const SizedBox(width: 10),
-          Expanded(child: Text(message, style: const TextStyle(fontSize: 12))),
+          Expanded(
+            child: Text(message, style: Theme.of(context).textTheme.bodySmall),
+          ),
         ],
       ),
     );

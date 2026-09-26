@@ -428,9 +428,8 @@ class _InstalledBadge extends StatelessWidget {
       ),
       child: Text(
         context.loc.t('marketplace.badge_installed'),
-        style: TextStyle(
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
           color: scheme.onPrimary,
-          fontSize: 11,
           fontWeight: FontWeight.w700,
           letterSpacing: 0.2,
         ),
@@ -460,9 +459,8 @@ class _PeriodBadge extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: const TextStyle(
-          color: Color(0xFFFFFFFF),
-          fontSize: 11,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: const Color(0xFFFFFFFF),
           fontWeight: FontWeight.w700,
           letterSpacing: 0.2,
         ),
@@ -488,9 +486,8 @@ class _Caption extends StatelessWidget {
           sub.name ?? context.loc.t('marketplace.untitled_mod'),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Color(0xFFFFFFFF),
-            fontSize: 19,
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            color: const Color(0xFFFFFFFF),
             fontWeight: FontWeight.w700,
             height: 1.15,
             shadows: _shadows,
@@ -505,9 +502,8 @@ class _Caption extends StatelessWidget {
                   author,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xE6FFFFFF),
-                    fontSize: 12,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: const Color(0xE6FFFFFF),
                     shadows: _shadows,
                   ),
                 ),
@@ -524,9 +520,8 @@ class _Caption extends StatelessWidget {
               const SizedBox(width: 4),
               Text(
                 _compact(likes),
-                style: const TextStyle(
-                  color: Color(0xE6FFFFFF),
-                  fontSize: 12,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: const Color(0xE6FFFFFF),
                   shadows: _shadows,
                 ),
               ),
@@ -538,9 +533,8 @@ class _Caption extends StatelessWidget {
                   category,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xB3FFFFFF),
-                    fontSize: 12,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: const Color(0xB3FFFFFF),
                     shadows: _shadows,
                   ),
                 ),
@@ -590,11 +584,12 @@ class _RevealOverlay extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 loc.t('marketplace.content_reveal'),
-                style: const TextStyle(
-                  color: Color(0xFFFFFFFF),
-                  fontSize: 12,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: const Color(0xFFFFFFFF),
                   fontWeight: FontWeight.w700,
-                  shadows: [Shadow(color: Color(0xCC000000), blurRadius: 4)],
+                  shadows: const [
+                    Shadow(color: Color(0xCC000000), blurRadius: 4),
+                  ],
                 ),
               ),
             ],
@@ -626,9 +621,8 @@ class _Counter extends StatelessWidget {
           'marketplace.carousel_position',
           params: {'index': '$index', 'total': '$total'},
         ),
-        style: const TextStyle(
-          color: Color(0xFFFFFFFF),
-          fontSize: 11,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: const Color(0xFFFFFFFF),
           fontWeight: FontWeight.w600,
         ),
       ),

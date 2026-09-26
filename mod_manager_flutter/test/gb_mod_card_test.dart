@@ -67,7 +67,7 @@ void main() {
       .whereType<String>();
 
   /// The grid's `mainAxisExtent`. Kept in sync with `gb_browse_view.dart`.
-  const gridTileHeight = 240.0;
+  const gridTileHeight = 280.0;
 
   Future<void> pumpCard(
     WidgetTester tester, {

@@ -64,6 +64,9 @@ The window — full reasoning in [`desktop-integration.md`](../docs/desktop-inte
 - The app draws no title bar. Never set `titleBarStyle: TitleBarStyle.hidden` or `gtk_window_set_decorated(window, FALSE)` — on Wayland it breaks edge resize without undecorating anything. Anything that wants to sit "in the title bar" goes in the sidebar.
 - The application id is one string in three places: `APPLICATION_ID` in `linux/CMakeLists.txt`, the `linux/packaging/<id>.desktop` filename, and the installed icon's filename. Keep all three in sync.
 
+Text — full reasoning in [`app-architecture.md`](../docs/app-architecture.md) §1
+- Never write a `fontSize:` literal. Sizes are roles on `Theme.of(context).textTheme`, and `core/type_scale.dart` is the only place the scale is set. The exceptions are markdown's `MarkdownScale` and a badge sized to the icon it sits on.
+
 Characters
 - The `characterAliases` map is duplicated in `_detectCharacterFromName` and `_findCharacterInText` (`mod_manager_service.dart`) — update both copies when adding a character. The canonical roster is `utils/zzz_characters.dart`.
 - `assets/characters/<name>.png` is spelled in exactly one place, `CharacterAvatar.assetPathFor`. It returns null when there is no portrait, and that check must run before an `Image` is built.

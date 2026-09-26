@@ -163,8 +163,7 @@ class _CategoryPickerDialogState extends State<_CategoryPickerDialog> {
     padding: const EdgeInsets.fromLTRB(2, 8, 2, 6),
     child: Text(
       text,
-      style: TextStyle(
-        fontSize: 12,
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
         fontWeight: FontWeight.w600,
         color: Colors.grey[600],
         letterSpacing: 0.3,
@@ -194,7 +193,7 @@ class _CategoryPickerDialogState extends State<_CategoryPickerDialog> {
             children: [
               Icon(cat.icon, size: 18, color: Colors.grey[700]),
               const SizedBox(width: 8),
-              Text(loc.t(cat.labelKey), style: const TextStyle(fontSize: 13)),
+              Text(loc.t(cat.labelKey), style: Theme.of(context).textTheme.bodyMedium),
             ],
           ),
         ),
@@ -247,8 +246,7 @@ class _CategoryPickerDialogState extends State<_CategoryPickerDialog> {
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 11,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   height: 1.1,
                   fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                   color: selected ? _accent : null,

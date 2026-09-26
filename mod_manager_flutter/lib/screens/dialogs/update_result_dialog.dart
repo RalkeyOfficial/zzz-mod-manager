@@ -162,7 +162,7 @@ class _UpdateResultDialog extends StatelessWidget {
               entry.mod.name,
               style: Theme.of(context)
                   .textTheme
-                  .bodyLarge
+                  .bodyMedium
                   ?.copyWith(fontWeight: FontWeight.w700),
             ),
           ),
@@ -302,13 +302,13 @@ class _UpdateResultDialog extends StatelessWidget {
                       children: [
                         Text(
                           change.displayName,
-                          style: Theme.of(context).textTheme.bodyLarge,
+                          style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         Text(
                           change.before,
                           style: Theme.of(context)
                               .textTheme
-                              .bodyLarge
+                              .bodyMedium
                               ?.copyWith(
                                 decoration: TextDecoration.lineThrough,
                                 color: scheme.onSurfaceVariant,
@@ -324,7 +324,7 @@ class _UpdateResultDialog extends StatelessWidget {
                               loc.t('mods.update_apply.keybind_gone'),
                           style: Theme.of(context)
                               .textTheme
-                              .bodyLarge
+                              .bodyMedium
                               ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                       ],

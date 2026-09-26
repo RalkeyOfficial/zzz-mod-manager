@@ -295,7 +295,7 @@ Widget _line(
             text,
             style: Theme.of(context)
                 .textTheme
-                .bodyMedium
+                .bodySmall
                 ?.copyWith(color: colour),
           ),
         ),

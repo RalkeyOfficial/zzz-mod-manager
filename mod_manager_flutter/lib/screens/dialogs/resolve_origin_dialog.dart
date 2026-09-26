@@ -536,7 +536,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
           onChanged: (v) => setState(() => _alsoFillMetadata = v ?? false),
           title: Text(
             loc.t('mods.resolve.also_fill_metadata'),
-            style: const TextStyle(fontSize: 13),
+            style: Theme.of(context).textTheme.bodyMedium,
           ),
         ),
         const Divider(),
@@ -666,14 +666,14 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
       dense: true,
       contentPadding: EdgeInsets.zero,
       enabled: !_saving,
+      titleTextStyle: Theme.of(context).textTheme.bodyMedium,
+      subtitleTextStyle: Theme.of(context).textTheme.bodySmall,
       leading: const Icon(Icons.call_split, size: 20),
       title: Text(
         loc.t('mods.resolve.companion_row_title'),
-        style: const TextStyle(fontSize: 13),
       ),
       subtitle: Text(
         loc.t('mods.resolve.companion_row_unnamed'),
-        style: const TextStyle(fontSize: 11),
       ),
       trailing: const Icon(Icons.chevron_right, size: 18),
       onTap: _nameTheBase,
@@ -773,8 +773,10 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
                       loc.t(summary.isEmpty
                           ? 'mods.resolve.identity_heading'
                           : 'mods.resolve.tracked_heading'),
-                      style: TextStyle(
-                          fontSize: 11, color: scheme.onSurfaceVariant),
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: scheme.onSurfaceVariant),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -851,7 +853,9 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
         children: [
           Icon(icon, size: 13, color: scheme.onSurfaceVariant),
           const SizedBox(width: 6),
-          Expanded(child: Text(text, style: const TextStyle(fontSize: 12))),
+          Expanded(
+            child: Text(text, style: Theme.of(context).textTheme.bodySmall),
+          ),
         ],
       ),
     );
@@ -893,17 +897,17 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
       dense: true,
       contentPadding: EdgeInsets.zero,
       enabled: !_saving && baseline != null,
+      titleTextStyle: Theme.of(context).textTheme.bodyMedium,
+      subtitleTextStyle: Theme.of(context).textTheme.bodySmall,
       leading: const Icon(Icons.help_outline, size: 20),
       title: Text(
         loc.t('mods.resolve.dont_know'),
-        style: const TextStyle(fontSize: 13),
       ),
       subtitle: Text(
         baseline == null
             ? loc.t('mods.resolve.dont_know_unavailable')
             : loc.t('mods.resolve.dont_know_hint',
                 params: {'date': _formatDate(baseline)}),
-        style: const TextStyle(fontSize: 11),
       ),
       onTap: baseline == null ? null : _assumeCurrent,
     );
@@ -914,14 +918,14 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
       dense: true,
       contentPadding: EdgeInsets.zero,
       enabled: !_saving,
+      titleTextStyle: Theme.of(context).textTheme.bodyMedium,
+      subtitleTextStyle: Theme.of(context).textTheme.bodySmall,
       leading: const Icon(Icons.notifications_off_outlined, size: 20),
       title: Text(
         loc.t('mods.resolve.not_gamebanana'),
-        style: const TextStyle(fontSize: 13),
       ),
       subtitle: Text(
         loc.t('mods.resolve.not_gamebanana_hint'),
-        style: const TextStyle(fontSize: 11),
       ),
       onTap: _stopTracking,
     );

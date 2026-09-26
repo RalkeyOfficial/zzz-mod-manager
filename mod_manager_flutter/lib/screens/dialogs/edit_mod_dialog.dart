@@ -27,6 +27,7 @@ Future<void> showEditModDialog(
 }) {
   final loc = context.loc;
   final notify = context.notify;
+  final textTheme = Theme.of(context).textTheme;
   // Read at open rather than at save: the save runs behind a modal barrier,
   // and a future taken now is good however long the dialog stays up.
   final service = ProviderScope.containerOf(context, listen: false)
@@ -103,15 +104,14 @@ Future<void> showEditModDialog(
             children: [
               Text(
                 mod.name,
-                style: const TextStyle(
-                  fontSize: 14,
+                style: textTheme.bodyMedium?.copyWith(
                   fontWeight: FontWeight.w500,
                 ),
               ),
               const SizedBox(height: 16),
               Text(
                 loc.t('mods.dialog.character_tag'),
-                style: const TextStyle(fontSize: 13),
+                style: textTheme.bodyMedium,
               ),
               const SizedBox(height: 8),
               ValueListenableBuilder<String>(
@@ -189,7 +189,7 @@ Future<void> showEditModDialog(
               const SizedBox(height: 16),
               Text(
                 loc.t('mods.dialog.description'),
-                style: const TextStyle(fontSize: 13),
+                style: textTheme.bodyMedium,
               ),
               const SizedBox(height: 8),
               markdownEditorField(
@@ -214,7 +214,7 @@ Future<void> showEditModDialog(
               const SizedBox(height: 16),
               Text(
                 loc.t('mods.dialog.tags'),
-                style: const TextStyle(fontSize: 13),
+                style: textTheme.bodyMedium,
               ),
               const SizedBox(height: 8),
               TextField(
@@ -267,7 +267,7 @@ Future<void> showEditModDialog(
               const SizedBox(height: 16),
               Text(
                 loc.t('mods.dialog.images'),
-                style: const TextStyle(fontSize: 13),
+                style: textTheme.bodyMedium,
               ),
               const SizedBox(height: 8),
               ValueListenableBuilder<List<EditImage>>(
@@ -276,7 +276,9 @@ Future<void> showEditModDialog(
                   if (value.isEmpty) {
                     return Text(
                       loc.t('mods.details.no_images'),
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      style: textTheme.bodySmall?.copyWith(
+                        color: Colors.grey[500],
+                      ),
                     );
                   }
                   return Wrap(
@@ -439,7 +441,10 @@ Widget _editImageThumb(
               ),
               child: Text(
                 loc.t('mods.dialog.image_cover'),
-                style: const TextStyle(fontSize: 9, color: Colors.white),
+                style: Theme.of(context)
+                    .textTheme
+                    .labelSmall
+                    ?.copyWith(color: Colors.white),
               ),
             ),
           ),

@@ -752,8 +752,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                   opacity: _loadingAnimation.value,
                   child: Text(
                     loc.t('mods.loading.title'),
-                    style: TextStyle(
-                      fontSize: 16,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       color: Colors.grey[600],
                       fontWeight: FontWeight.w500,
                     ),
@@ -775,12 +774,12 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
             const SizedBox(height: 16),
             Text(
               loc.t('mods.errors.load'),
-              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.grey[600]),
             ),
             const SizedBox(height: 8),
             Text(
               errorMessage!,
-              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
             ),
             const SizedBox(height: 24),
             TextButton.icon(
@@ -813,7 +812,9 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         children: [
           // Header з вибором персонажа
           Container(
-            height: 140,
+            // The strip below the title row needs 73px: a 50px portrait, 4px,
+            // and the selected character's `labelSmall` name (19).
+            height: 148,
             decoration: BoxDecoration(
               color: Theme.of(context).cardColor,
               border: Border(
@@ -833,8 +834,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                     children: [
                       Text(
                         loc.t('mods.headers.characters'),
-                        style: TextStyle(
-                          fontSize: AppConstants.headerTextSize,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -856,8 +856,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                           // Count only real characters — exclude the synthetic
                           // "ALL" entry and the built-in categories.
                           '${characters.where((c) => c.id != 'all' && !isBuiltInCategory(c.id)).length}',
-                          style: TextStyle(
-                            fontSize: AppConstants.captionTextSize,
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
                             color: const Color(
                               AppConstants.activeModBorderColor,
                             ),
@@ -922,8 +921,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                 children: [
                   Text(
                     loc.t('mods.headers.active_mods'),
-                    style: TextStyle(
-                      fontSize: AppConstants.titleTextSize,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w500,
                       color: Colors.grey[600],
                     ),
@@ -944,8 +942,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                     ),
                     child: Text(
                       '${currentSkins.where((mod) => mod.isActive).length}/${currentSkins.length}',
-                      style: TextStyle(
-                        fontSize: AppConstants.captionTextSize,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
                         color: const Color(AppConstants.activeModCountColor),
                         fontWeight: FontWeight.w600,
                       ),
@@ -1059,8 +1056,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                                       const SizedBox(height: 16),
                                       Text(
                                         loc.t('mods.empty.title'),
-                                        style: TextStyle(
-                                          fontSize: 16,
+                                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                           color: Colors.grey[600],
                                         ),
                                       ),
@@ -1261,8 +1257,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                 padding: const EdgeInsets.all(8),
                 child: Text(
                   mod.name,
-                  style: const TextStyle(
-                    fontSize: 11,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.w500,
                   ),
                   maxLines: 1,
@@ -1572,15 +1567,14 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                             : loc.t('mods.import.plural'),
                       },
                     ),
-                    style: const TextStyle(
-                      fontSize: 16,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     loc.t('mods.dialog.import_progress_hint'),
-                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
                   ),
                 ],
               ),
@@ -1801,8 +1795,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                     importedMods.length,
                     params: {'count': importedMods.length.toString()},
                   ),
-                  style: const TextStyle(
-                    fontSize: 15,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1822,8 +1815,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                       children: [
                         Text(
                           loc.t('mods.dialog.import_refused_heading'),
-                          style: const TextStyle(
-                            fontSize: 13,
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -1833,12 +1825,12 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                             padding:
                                 const EdgeInsets.symmetric(vertical: 2),
                             child: Text('• $line',
-                                style: const TextStyle(fontSize: 12)),
+                                style: Theme.of(context).textTheme.bodySmall),
                           ),
                         const SizedBox(height: 6),
                         Text(
                           loc.t('mods.dialog.import_refused_instead'),
-                          style: const TextStyle(fontSize: 12),
+                          style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ],
                     ),
@@ -1868,8 +1860,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                             const SizedBox(width: 6),
                             Text(
                               loc.t('mods.dialog.import_auto_tags'),
-                              style: const TextStyle(
-                                fontSize: 13,
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
                                 fontWeight: FontWeight.w600,
                                 color: Color(0xFF0EA5E9),
                               ),
@@ -1886,7 +1877,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                                 ),
                                 child: Text(
                                   '• ${entry.key} → ${getCharacterDisplayName(entry.value)}',
-                                  style: const TextStyle(fontSize: 12),
+                                  style: Theme.of(context).textTheme.bodySmall,
                                 ),
                               ),
                             ),
@@ -1900,8 +1891,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                                   'count': (autoTags.length - 5).toString(),
                                 },
                               ),
-                              style: TextStyle(
-                                fontSize: 11,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                 color: Colors.grey[600],
                               ),
                             ),
@@ -1917,7 +1907,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                   const SizedBox(height: 12),
                   Text(
                     loc.t('mods.dialog.import_ready'),
-                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
                   ),
                 ],
               ],
@@ -1977,7 +1967,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
           children: [
             Text(
               loc.t('mods.dialog.add_mods_description'),
-              style: const TextStyle(fontSize: 14),
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
             Container(
@@ -2000,8 +1990,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                   Expanded(
                     child: Text(
                       loc.t('mods.dialog.hint'),
-                      style: const TextStyle(
-                        fontSize: 12,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Color(0xFF0EA5E9),
                       ),
                     ),
