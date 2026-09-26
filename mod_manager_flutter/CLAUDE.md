@@ -28,7 +28,7 @@ This file is rules and pointers only. Every subject below has a doc in [`../docs
 ## How mods work
 
 Two configured paths drive everything: `modsPath` (where mod folders live — the library) and `saveModsPath` (the game's mods folder, where links go).
-Activating a mod creates a link `saveModsPath/<mod>` → `modsPath/<mod>`; deactivating removes it. `ModManagerService._cleanupInvalidLinks()` runs on scan to prune links whose source is gone.
+Activating a mod creates a link `saveModsPath/<mod>` → `modsPath/<mod>`; deactivating removes it. A link whose source is gone is never removed by the app: the folder may be on an unmounted drive, and the mod is active again once it returns.
 
 Single vs Multi mode (`activationModeProvider`): in Single mode, activating a skin auto-deactivates the character's other active skins — see `ApiService.toggleModForCharacter`.
 

@@ -36,7 +36,7 @@ A patch nothing recorded goes with the old version, and the confirmation says so
 Three properties fall out of rewriting in place, each of which a design that swapped the folder for a new one would need machinery for:
 
 - **The active link survives by construction.** Moving the folder would dangle
-  `saveModsPath/<name>`, which the next scan prunes — silently switching the mod off.
+  `saveModsPath/<name>`, silently switching the mod off.
   Nothing moves, so nothing dangles, and no deactivate → move → reactivate dance is
   needed for link integrity.
 - **The folder name never changes.** The new archive's root folder is frequently

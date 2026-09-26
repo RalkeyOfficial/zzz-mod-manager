@@ -139,7 +139,7 @@ was filed there:
 
 | Filed under the name | Cost of an outside rename |
 |---|---|
-| favourite star, active link, character tag | a star, a link the next scan prunes, a tag the sidecar already carries |
+| favourite star, active link, character tag | a star, a dangling link, a tag the sidecar already carries |
 | **saved versions** (`<appData>/backups`) | every rollback point for that mod, unreachable **and** exempt from pruning, because retention protects each name-group's newest entry forever |
 
 So saved versions key by `uid` and a rename becomes a non-event, inside the app

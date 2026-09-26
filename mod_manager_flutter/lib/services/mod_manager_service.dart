@@ -137,9 +137,8 @@ class ModManagerService {
       final modsInfo = <ModInfo>[];
       final favoriteSet = _configService.favoriteMods.toSet();
 
-      // Очищуємо символічні посилання на неіснуючі моди. Reuse the scan above
-      // instead of enumerating the mods dir a second time.
-      await _cleanupInvalidLinks(modNames);
+      // Links whose mod folder is missing are left alone: the folder may be on
+      // a drive that is not mounted, and the mod is active again once it returns.
 
       // Resolve every mod concurrently — each mod's work (link stat, sidecar
       // read, image existence checks) is independent I/O, so a serial loop
@@ -251,36 +250,6 @@ class ModManagerService {
       _metadata.installDateProxy(modName);
 
   ModMetadataService get metadataService => _metadata.service;
-
-  /// Видаляє символічні посилання на моди, які більше не існують
-  Future<void> _cleanupInvalidLinks(List<String> modNames) async {
-    try {
-      if (saveModsPath == null) return;
-
-      final saveModsDir = Directory(saveModsPath!);
-      if (!await saveModsDir.exists()) return;
-
-      final validModNames = Set<String>.from(modNames);
-
-      await for (final entity in saveModsDir.list()) {
-        if (entity is Link) {
-          final linkName = path.basename(entity.path);
-          
-          // Якщо мод більше не існує в папці модів - видаляємо символічне посилання
-          if (!validModNames.contains(linkName)) {
-            try {
-              await entity.delete();
-              await _configService.removeActiveMod(linkName);
-            } catch (e) {
-              // Ігноруємо помилки при видаленні
-            }
-          }
-        }
-      }
-    } catch (e) {
-      // Ігноруємо помилки
-    }
-  }
 
   Future<bool> isModActive(String modName) async {
     try {

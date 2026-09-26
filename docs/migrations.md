@@ -81,7 +81,6 @@ event this app can see.**
 |---|---|---|
 | Legacy images no mod can reach | `ModMetadataRepository.sweepLegacyImages` | after every scan |
 | `mod_character_tags` entries for mods that are gone | `ConfigService.cleanupInvalidTags` | after every scan |
-| Links in `saveModsPath` whose source is gone, and their `active_mods` entry | `ModManagerService._cleanupInvalidLinks` | after every scan |
 | A `.zzz-mod-manager/replaced/` store arriving inside an imported folder | `PatchStore.discardAll` | at ingest |
 
 Saved versions are **not** in this list, and that is the point of them being
