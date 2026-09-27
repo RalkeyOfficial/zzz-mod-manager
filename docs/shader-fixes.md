@@ -98,6 +98,10 @@ Zip entries written with `\` are split into folders, since a Windows filename ca
   after which it counts as unknown to the app.
 - **The `.bin` beside a deleted `.txt` goes too**, whatever its bytes, unless someone else holds it.
   ZZMI writes that cache itself, and a lone `.bin` keeps the shader applied after the mod is off.
+- **A placed `.ini` the XXMI Launcher renamed goes under its new name.** On every launch the Launcher walks the shader folder and renames `help.ini`, `mouse.ini`, `upscale.ini` and `3dvision2sbs.ini` to `DISABLED_<name>`, or `DISABLED_<stem>_<n>.ini` when that name is taken.
+  When a placed `.ini` is gone, one copy of that shape in the same folder with the placed md5 is deleted instead.
+  This covers any `.ini`, so it holds if the Launcher's list grows. Two identical copies mean ZZMI's own disabled file had the same bytes, so deleting either leaves the folder as it was before the mod; the highest counter goes.
+  A copy with other bytes stays, and ZZMI never loads a `DISABLED_` file, so deleting one raises no restart notice.
 - A file is forgotten only once its delete succeeded. One that could not be deleted, such as a file ZZMI holds open on Windows, stays in the record under this mod, so the next enable and disable takes it out.
   Deleting the mod forgets it anyway, since no mod is left to let go of it.
 - Folders the deleted files were in are removed once empty. The shader folder itself never is.
@@ -131,7 +135,5 @@ naming the mods. Changes arriving together, like an update's off-and-on, become 
 
 - **Shader files in a folder with another name** ("PUT THESE IN SHADERFIXES") are imported as ordinary mod files.
   Import could offer to treat hash-named files no `.ini` references as shader files.
-- **The XXMI Launcher renames some `.ini` files in the shader folder** on every launch (`help.ini`, `mouse.ini`, `upscale.ini`,
-  `3dvision2sbs.ini` become `DISABLED_<name>`). A mod shipping one of those names leaves the renamed copy behind when switched off.
 - Placed copies are not counted in the Storage tab; they live in the ZZMI folder, not the app's.
 - Not verified on Windows.

@@ -219,6 +219,68 @@ void main() {
       final plan = remove([entry(txt, [ours], md5: 'a')], {txt: 'edited', bin: 'cache'});
       expect(plan.delete, isEmpty);
     });
+
+    group('an .ini the XXMI Launcher renamed', () {
+      test('is deleted under its new name, and forgotten once it is gone', () {
+        final plan = remove([entry('help.ini', [ours], md5: 'a')], {'disabled_help.ini': 'a'});
+        expect(plan.delete, ['disabled_help.ini']);
+        expect(plan.launcherCopies, {'disabled_help.ini'});
+        expect(plan.forget, isEmpty);
+        expect(plan.forgetOnDelete['disabled_help.ini']?.path, 'help.ini');
+      });
+
+      test('is left when its bytes changed, and the entry forgotten', () {
+        final plan = remove([entry('help.ini', [ours], md5: 'a')], {'disabled_help.ini': 'stock'});
+        expect(plan.delete, isEmpty);
+        expect(plan.forget.map((e) => e.path), ['help.ini']);
+      });
+
+      test('with two identical copies, exactly one goes: the highest counter', () {
+        final plan = remove(
+          [entry('help.ini', [ours], md5: 'a')],
+          {'disabled_help.ini': 'a', 'disabled_help_0.ini': 'a', 'disabled_help_1.ini': 'other'},
+        );
+        expect(plan.delete, ['disabled_help_0.ini']);
+      });
+
+      test('is found in the same subfolder only', () {
+        final plan = remove(
+          [entry('sub/Help.INI', [ours], md5: 'a')],
+          {'disabled_help.ini': 'a', 'sub/disabled_help.ini': 'a'},
+        );
+        expect(plan.delete, ['sub/disabled_help.ini']);
+      });
+
+      test('stays while another mod holds the file', () {
+        final plan = remove([entry('help.ini', [ours, theirs], md5: 'a')], {'disabled_help.ini': 'a'});
+        expect(plan.delete, isEmpty);
+        expect(plan.update.single.holders.keys, [theirs]);
+      });
+
+      test('stays when the file was already there', () {
+        final plan = remove([entry('help.ini', [ours], md5: 'a', external: true)], {'disabled_help.ini': 'a'});
+        expect(plan.delete, isEmpty);
+      });
+
+      test('is not touched while the placed file is still there', () {
+        final plan = remove([entry('help.ini', [ours], md5: 'a')], {'help.ini': 'a', 'disabled_help.ini': 'a'});
+        expect(plan.delete, ['help.ini']);
+        expect(plan.launcherCopies, isEmpty);
+      });
+
+      test('is never looked for beside anything but an .ini', () {
+        final plan = remove([entry(txt, [ours], md5: 'a')], {'disabled_$txt': 'a'});
+        expect(plan.delete, isEmpty);
+      });
+
+      test('is never a file the record keeps track of itself', () {
+        final plan = remove(
+          [entry('help.ini', [ours], md5: 'a'), entry('DISABLED_help.ini', [theirs], md5: 'a')],
+          {'disabled_help.ini': 'a'},
+        );
+        expect(plan.delete, isEmpty);
+      });
+    });
   });
 
   test('the record survives a round trip and reads garbage as empty', () {

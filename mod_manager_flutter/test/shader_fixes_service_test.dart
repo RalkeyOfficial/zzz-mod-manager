@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/services/shader_fixes/shader_fixes_plan.dart';
 import 'package:mod_manager_flutter/services/shader_fixes/shader_fixes_service.dart';
 import 'package:mod_manager_flutter/services/update_apply/mod_activation_port.dart';
 import 'package:path/path.dart' as p;
@@ -207,6 +209,28 @@ void main() {
     expect(shader(hashA).existsSync(), isFalse);
     expect(Link(p.join(temp.saveMods.path, 'Jiggle')).existsSync(), isFalse);
   }, skip: Platform.isWindows ? 'chmod is POSIX-only' : false);
+
+  test("an .ini the XXMI Launcher renamed goes under its new name, with no restart notice, and ZZMI's own stays",
+      () async {
+    shader('DISABLED_help.ini').writeAsStringSync('stock help');
+    installShaderMod('Jiggle', {'help.ini': 'shipped help'});
+    await temp.service.activateMod('Jiggle');
+    // What the Launcher does on launch when the plain name is taken.
+    shader('help.ini').renameSync(shader('DISABLED_help_0.ini').path);
+    final restarts = <String>[];
+    final subscription = ShaderFixesService.changes.listen(restarts.add);
+    addTearDown(subscription.cancel);
+
+    await temp.service.deactivateMod('Jiggle');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(shader('DISABLED_help_0.ini').existsSync(), isFalse);
+    expect(shader('DISABLED_help.ini').readAsStringSync(), 'stock help');
+    expect(restarts, isEmpty);
+    final record = ShaderFixesRecord.fromJson(
+        jsonDecode(File(p.join(temp.root.path, 'shader_fixes.json')).readAsStringSync()));
+    expect(record.entries, isEmpty);
+  });
 
   test('a file that could not be deleted stays held, so a later disable takes it out', () async {
     installShaderMod('Jiggle', {hashA: 'shader a'});

@@ -259,10 +259,15 @@ class ShaderRemovalPlan {
     required this.update,
     required this.forget,
     required this.forgetOnDelete,
+    this.launcherCopies = const {},
   });
 
   /// Files to delete, relative to the folder, as keyed by [ShaderFixesRecord.keyOf].
   final List<String> delete;
+
+  /// The keys in [delete] that are placed `.ini` files the XXMI Launcher renamed.
+  /// ZZMI never loads them, so deleting one changes nothing the game sees.
+  final Set<String> launcherCopies;
 
   /// Files this mod placed that have been changed since, left on disk.
   final List<String> changed;
@@ -289,6 +294,11 @@ final RegExp _shaderSource = RegExp(r'^((?:.*/)?[0-9a-f]{16}-(vs|ps|cs|gs|hs|ds)
 /// still matches, so an edit the user made survives; a file already gone is
 /// simply forgotten.
 ///
+/// A placed `.ini` gone from disk may have been renamed by the XXMI Launcher,
+/// which disables some on every launch ([launcherCopiesOf]). One renamed copy
+/// with the same md5 is deleted in its place. More than one match means another
+/// copy had the same bytes before, so deleting any one leaves the folder as it was.
+///
 /// The `.bin` beside a deleted shader source goes too, whatever its bytes, unless
 /// someone else holds it: ZZMI writes that cache itself when `cache_shaders` is on,
 /// and it loads a `.bin` with no `.txt` beside it, so leaving one keeps the shader
@@ -305,6 +315,7 @@ ShaderRemovalPlan planShaderRemoval({
   final update = <ShaderEntry>[];
   final forget = <ShaderEntry>[];
   final forgetOnDelete = <String, ShaderEntry>{};
+  final launcherCopies = <String>{};
   for (final entry in held) {
     final others = Map<String, String>.of(entry.holders)..remove(uid);
     if (others.isNotEmpty) {
@@ -312,8 +323,19 @@ ShaderRemovalPlan planShaderRemoval({
       continue;
     }
     final key = ShaderFixesRecord.keyOf(entry.path);
-    if (entry.external || !onDisk.containsKey(key)) {
+    if (entry.external) {
       forget.add(entry);
+    } else if (!onDisk.containsKey(key)) {
+      final renamed = launcherCopiesOf(entry.path, onDisk.keys)
+          .where((copy) => onDisk[copy] == entry.md5 && record.at(folder, copy) == null)
+          .firstOrNull;
+      if (renamed == null) {
+        forget.add(entry);
+      } else {
+        delete.add(renamed);
+        launcherCopies.add(renamed);
+        forgetOnDelete[renamed] = entry;
+      }
     } else if (onDisk[key] == entry.md5) {
       delete.add(key);
       forgetOnDelete[key] = entry;
@@ -341,7 +363,27 @@ ShaderRemovalPlan planShaderRemoval({
     update: update,
     forget: forget,
     forgetOnDelete: forgetOnDelete,
+    launcherCopies: launcherCopies,
   );
+}
+
+/// The keys among [keys] the XXMI Launcher could have renamed the `.ini` at
+/// [relative] to, highest counter first, or none for anything but an `.ini`.
+///
+/// The Launcher renames `<dir>/<name>.ini` to `<dir>/DISABLED_<name>.ini`, or to
+/// `DISABLED_<name>_<n>.ini` when that name is taken.
+List<String> launcherCopiesOf(String relative, Iterable<String> keys) {
+  final key = ShaderFixesRecord.keyOf(relative);
+  if (!key.endsWith('.ini')) return const [];
+  final slash = key.lastIndexOf('/');
+  final dir = key.substring(0, slash + 1);
+  final stem = key.substring(slash + 1, key.length - '.ini'.length);
+  final pattern = RegExp('^${RegExp.escape('${dir}disabled_$stem')}(?:_(\\d+))?\\.ini\$');
+  final matches = <(String, int)>[
+    for (final candidate in keys)
+      if (pattern.firstMatch(candidate) case final match?) (candidate, int.tryParse(match.group(1) ?? '') ?? -1),
+  ]..sort((a, b) => b.$2.compareTo(a.$2));
+  return [for (final (candidate, _) in matches) candidate];
 }
 
 /// The key of the `.bin` a shader source's cache would be written to, or null for

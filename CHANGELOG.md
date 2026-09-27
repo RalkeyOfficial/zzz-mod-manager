@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Mods that include shader fixes install with them: switching the mod on copies its shader files into ZZMI's ShaderFixes folder, and switching it off takes them back out. A shader file already there with the same contents is used as it is and left in place if the app didn't put it there, while one with different contents keeps the mod off and says which. Mods in one archive that share a ShaderFixes folder each get a copy and can be on together.
+- Mods that include shader fixes install with them: switching the mod on copies its shader files into ZZMI's ShaderFixes folder, and switching it off takes them back out, including a copy the XXMI Launcher renamed to `DISABLED_…`. A shader file already there with the same contents is used as it is and left in place if the app didn't put it there, while one with different contents keeps the mod off and says which. Mods in one archive that share a ShaderFixes folder each get a copy and can be on together.
 - Mod covers load faster: a card-sized copy is saved beside each newly imported cover, and the mod cards read that instead of decoding the full screenshot every time. Covers added by an older version keep loading as before until they are added again through the edit dialog.
 - The Marketplace is a built-in GameBanana browser on Linux and Windows: search by mod name or paste a mod link or id, browse, filter by category or character, sort, and open a mod for its screenshots, description and file list. A search keeps the category and sort you have set.
   - A carousel above the grid shows GameBanana's top mods across seven periods, from today to all time.

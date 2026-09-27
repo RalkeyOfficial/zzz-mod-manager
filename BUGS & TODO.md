@@ -264,9 +264,7 @@ Two things are **refused rather than unbuilt**, both recorded in
   [`docs/shader-fixes.md`](docs/shader-fixes.md) §3–5 owns it.
 - [ ] **Shader files in a folder with another name import as ordinary files.** Move Agents in Menu ships "PUT THESE IN SHADERFIXES",
   so enabling it places nothing. We change it to offer at import to treat hash-named files that no `.ini` references as shader files.
-- [ ] **The XXMI Launcher renames some shader-folder `.ini` files on every launch** (`help.ini`, `mouse.ini`, `upscale.ini`,
-  `3dvision2sbs.ini` become `DISABLED_<name>`), so a mod shipping one leaves the renamed copy behind when switched off.
-  We change it to also remove `DISABLED_<name>` when the recorded file is gone and the renamed one still matches its md5.
+- [x] **A placed `.ini` the XXMI Launcher renamed is removed under its new name.** [`docs/shader-fixes.md`](docs/shader-fixes.md) §4 owns it.
 
 ### 4.1 How an update is actually applied
 

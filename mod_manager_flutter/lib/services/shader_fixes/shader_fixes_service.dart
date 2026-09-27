@@ -230,6 +230,11 @@ class ShaderFixesService {
                 onDisk[key] = await md5OfFile(File(p.join(folder, actual)));
               }
             }
+            if (!listing.containsKey(ShaderFixesRecord.keyOf(entry.path))) {
+              for (final copy in launcherCopiesOf(entry.path, listing.keys)) {
+                onDisk[copy] = await md5OfFile(File(p.join(folder, listing[copy]!)));
+              }
+            }
           }
 
           final plan = planShaderRemoval(uid: uid, folder: folder, record: record, onDisk: onDisk);
@@ -239,7 +244,7 @@ class ShaderFixesService {
             final file = File(p.join(folder, listing[key]!));
             try {
               await file.delete();
-              deletedAny = true;
+              if (!plan.launcherCopies.contains(key)) deletedAny = true;
               if (plan.forgetOnDelete[key] case final entry?) deleted.add(entry);
               _files.info('shader file removed', fields: {'mod': mod, 'file': file.path});
               emptied.add(file.parent.path);
