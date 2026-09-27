@@ -622,8 +622,10 @@ class ArchiveService {
   ///
   /// The mods are the folders inside `Mods/`, or `Mods/` itself when an `.ini`
   /// sits directly in it. The shader files join the one mod when there is exactly
-  /// one, since that is who they belong to; beside several they become a mod of
-  /// their own, so each can be switched on and off and none is guessed at.
+  /// one, since that is who they belong to. Beside several, each mod gets its own
+  /// copy: nothing says which of them needs the files, and identical files placed
+  /// by several mods stay until the last one is off. Only shader files no mod can
+  /// take become a mod of their own.
   static Future<List<String>> _prepareZzmiRootLayout(
     Directory extractDir,
     List<Directory> dirEntries,
@@ -653,13 +655,21 @@ class ArchiveService {
 
     if (shaderDir == null) return candidates;
 
-    if (candidates.length == 1) {
-      final mod = Directory(candidates.single);
-      final taken = mod.listSync().whereType<Directory>().any((d) => _isZzmiFolder(d, 'shaderfixes'));
-      if (!taken) {
-        await shaderDir.rename(path.join(mod.path, 'ShaderFixes'));
-        return candidates;
+    final free = [
+      for (final candidate in candidates)
+        if (!Directory(candidate).listSync().whereType<Directory>().any((d) => _isZzmiFolder(d, 'shaderfixes')))
+          candidate,
+    ];
+    if (free.length == 1) {
+      await shaderDir.rename(path.join(free.single, 'ShaderFixes'));
+      return candidates;
+    }
+    if (free.isNotEmpty) {
+      for (final mod in free) {
+        await copyDirectory(shaderDir, Directory(path.join(mod, 'ShaderFixes')));
       }
+      await shaderDir.delete(recursive: true);
+      return candidates;
     }
 
     final wrapper = Directory(

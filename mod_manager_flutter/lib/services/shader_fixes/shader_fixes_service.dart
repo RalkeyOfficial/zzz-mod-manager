@@ -65,6 +65,14 @@ class ShaderFixesService {
   /// Reports [refusal] on [unattendedRefusals].
   static void reportUnattended(ShaderPlacementRefused refusal) => _unattendedRefusals.add(refusal);
 
+  /// Mods that switched on using shader files already in the folder with the
+  /// same bytes, which stay there when the mod is off.
+  static Stream<ShaderAdoption> get adoptions => _adoptions.stream;
+  static final StreamController<ShaderAdoption> _adoptions = StreamController.broadcast();
+
+  /// Reports that [mod] adopted [count] files. Called once the mod is actually on.
+  static void announceAdopted(String mod, int count) => _adoptions.add(ShaderAdoption(mod, count));
+
   /// Operations run one at a time: each reads the record, changes the folder
   /// and writes the record back.
   Future<void> _queue = Future.value();
@@ -112,40 +120,39 @@ class ShaderFixesService {
   /// Copies the mod's shader files in. Does nothing for a mod without any.
   ///
   /// Throws [ShaderPlacementRefused] before copying anything when there is no
-  /// shader folder to copy to, or a target belongs to another mod or to nobody
-  /// the app knows. Returns how many files were copied; the caller [announce]s
-  /// them once the mod is on.
-  Future<int> place({
+  /// shader folder to copy to, or a target holds different bytes. Files already
+  /// there with the same bytes are held rather than copied. The caller
+  /// [announce]s the copies and [announceAdopted]s the adoptions once the mod is on.
+  Future<ShaderPlacementResult> place({
     required String modDir,
     required String uid,
     required String mod,
     required String saveModsPath,
   }) => _serialised(() async {
         final ready = await _prepare(modDir: modDir, uid: uid, mod: mod, saveModsPath: saveModsPath);
-        if (ready == null) return 0;
+        if (ready == null) return const ShaderPlacementResult(copied: 0, adopted: 0);
 
-        final placed = <ShaderPlacement>[];
+        final placed = <ShaderEntry>[];
         try {
-          for (final source in ready.plan.sources) {
-            final from = File(p.join(ready.part.path, source.path));
-            final to = File(p.join(ready.folder, source.path));
+          for (final copy in ready.plan.copy) {
+            final from = File(p.join(ready.part.path, copy.source.path));
+            final to = File(p.join(ready.folder, copy.source.path));
             await to.parent.create(recursive: true);
             await copyKeepingTime(from, to.path);
-            placed.add(ShaderPlacement(
-              folder: ready.folder,
-              path: source.path,
-              uid: uid,
-              mod: mod,
-              md5: source.md5,
-            ));
+            placed.add(copy.entry);
             _files.info('shader file placed', fields: {'mod': mod, 'file': to.path});
           }
         } finally {
-          // Recorded even when a copy failed partway, so what did land is owned
-          // and a disable takes it back out.
-          if (placed.isNotEmpty) await _writeRecord(ready.record.apply(added: placed));
+          // Recorded even when a copy failed partway, so what did land is held
+          // and the caller's undo takes it back out.
+          final added = [...ready.plan.held, ...placed];
+          if (added.isNotEmpty) await _writeRecord(ready.record.apply(added: added));
         }
-        return placed.length;
+        if (ready.plan.adopted > 0) {
+          _log.info('shader files already present, adopted',
+              fields: {'mod': mod, 'files': ready.plan.adopted});
+        }
+        return ShaderPlacementResult(copied: placed.length, adopted: ready.plan.adopted);
       });
 
   /// Everything [place] decides before copying, or null for a mod without shader
@@ -165,11 +172,20 @@ class ShaderFixesService {
     if (folder == null) throw ShaderPlacementRefused.noShaderFolder(mod);
 
     final record = await _readRecord();
+    final listing = await _listFolder(folder);
+    final onDisk = <String, String?>{};
+    for (final source in sources) {
+      final key = ShaderFixesRecord.keyOf(source.path);
+      if (listing[key] case final actual?) {
+        onDisk[key] = await md5OfFile(File(p.join(folder, actual)));
+      }
+    }
     final plan = planShaderPlacement(
       uid: uid,
+      mod: mod,
       folder: folder,
       sources: sources,
-      existing: (await _listFolder(folder)).keys.toSet(),
+      onDisk: onDisk,
       record: record,
     );
     if (plan is ShaderRefusedPlan) {
@@ -182,19 +198,22 @@ class ShaderFixesService {
     return _Prepared(part, folder, record, plan as ShaderCopyPlan);
   }
 
-  /// Removes the shader files the mod [uid] placed, from whichever shader folder
-  /// each went into. Returns the files left in place because they changed after
-  /// they were placed.
+  /// Lets go of the shader files the mod [uid] holds, in whichever shader folder
+  /// each is, deleting those nobody else holds. Returns the files left in place
+  /// because they changed after they were placed.
   ///
   /// [announce] is false when undoing a placement whose mod never came on, so the
-  /// restart notice does not name it.
+  /// restart notice does not name it. A file that could not be deleted stays held,
+  /// so the next disable retries it; [retryFailed] is false when the mod is being
+  /// deleted, since nothing could ever let go of it after that.
   Future<List<String>> remove({
     required String uid,
     required String mod,
     bool announce = true,
+    bool retryFailed = true,
   }) => _serialised(() async {
         var record = await _readRecord();
-        final folders = record.ownedBy(uid).map((placement) => placement.folder).toSet();
+        final folders = record.heldBy(uid).map((entry) => entry.folder).toSet();
         final changed = <String>[];
         var deletedAny = false;
 
@@ -205,8 +224,8 @@ class ShaderFixesService {
 
           final listing = await _listFolder(folder);
           final onDisk = <String, String?>{};
-          for (final placement in record.ownedBy(uid).where((placement) => placement.folder == folder)) {
-            for (final key in [ShaderFixesRecord.keyOf(placement.path), ?cacheBinFor(placement.path)]) {
+          for (final entry in record.heldBy(uid).where((entry) => entry.folder == folder)) {
+            for (final key in [ShaderFixesRecord.keyOf(entry.path), ?cacheBinFor(entry.path)]) {
               if (listing[key] case final actual?) {
                 onDisk[key] = await md5OfFile(File(p.join(folder, actual)));
               }
@@ -215,11 +234,13 @@ class ShaderFixesService {
 
           final plan = planShaderRemoval(uid: uid, folder: folder, record: record, onDisk: onDisk);
           final emptied = <String>{};
+          final deleted = <ShaderEntry>[];
           for (final key in plan.delete) {
             final file = File(p.join(folder, listing[key]!));
             try {
               await file.delete();
               deletedAny = true;
+              if (plan.forgetOnDelete[key] case final entry?) deleted.add(entry);
               _files.info('shader file removed', fields: {'mod': mod, 'file': file.path});
               emptied.add(file.parent.path);
             } on FileSystemException catch (error) {
@@ -232,7 +253,8 @@ class ShaderFixesService {
                 fields: {'mod': mod, 'file': p.join(folder, listing[key]!)});
             changed.add(listing[key]!);
           }
-          record = record.apply(removed: plan.forget);
+          final dropped = retryFailed ? deleted : plan.forgetOnDelete.values;
+          record = record.apply(removed: [...plan.forget, ...dropped], added: plan.update);
         }
 
         if (folders.isNotEmpty) await _writeRecord(record);
@@ -304,6 +326,21 @@ class ShaderFixesService {
     await temp.writeAsString(const JsonEncoder.withIndent('  ').convert(record.toJson()));
     await temp.rename(file.path);
   }
+}
+
+/// What [ShaderFixesService.place] did: files copied in, and files already there
+/// with the same bytes that the mod now uses and that stay when it is off.
+class ShaderPlacementResult {
+  const ShaderPlacementResult({required this.copied, required this.adopted});
+  final int copied;
+  final int adopted;
+}
+
+/// A mod that switched on using [count] files already in the shader folder.
+class ShaderAdoption {
+  const ShaderAdoption(this.mod, this.count);
+  final String mod;
+  final int count;
 }
 
 class _Prepared {

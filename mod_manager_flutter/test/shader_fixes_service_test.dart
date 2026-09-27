@@ -30,6 +30,23 @@ void main() {
 
   File shader(String relative) => File(p.join(shaders.path, relative));
 
+  /// Makes [dir] read-only for the rest of the test. False when that does not
+  /// stop writes, as when running as root, so the caller skips instead of
+  /// passing without testing anything.
+  Future<bool> makeReadOnly(Directory dir) async {
+    await Process.run('chmod', ['555', dir.path]);
+    addTearDown(() => Process.run('chmod', ['755', dir.path]));
+    try {
+      File(p.join(dir.path, '.probe'))
+        ..createSync()
+        ..deleteSync();
+      markTestSkipped('chmod does not stop writes for this user');
+      return false;
+    } on FileSystemException {
+      return true;
+    }
+  }
+
   void installShaderMod(String name, Map<String, String> shaderFiles) {
     temp.createMod(name);
     temp.write(name, '$name.ini', '[ShaderOverrideX]\nhash = 1f6ab42231416fdb\n');
@@ -100,7 +117,29 @@ void main() {
     expect(temp.config.activeMods, isNot(contains('Censor Remover')));
   });
 
-  test('a file copied in by hand refuses the enable with no owner', () async {
+  test('a file copied in by hand with the same bytes is used, announced, and left when the mod is off',
+      () async {
+    shader(hashA).writeAsStringSync('shader a');
+    installShaderMod('Jiggle', {hashA: 'shader a', hashB: 'shader b'});
+    final adopted = <ShaderAdoption>[];
+    final restarts = <String>[];
+    final adoptions = ShaderFixesService.adoptions.listen(adopted.add);
+    final changes = ShaderFixesService.changes.listen(restarts.add);
+    addTearDown(adoptions.cancel);
+    addTearDown(changes.cancel);
+
+    expect(await temp.service.activateMod('Jiggle'), isTrue);
+    await Future<void>.delayed(Duration.zero);
+    expect(adopted.single.mod, 'Jiggle');
+    expect(adopted.single.count, 1);
+    expect(restarts, ['Jiggle']);
+
+    await temp.service.deactivateMod('Jiggle');
+    expect(shader(hashA).readAsStringSync(), 'shader a');
+    expect(shader(hashB).existsSync(), isFalse);
+  });
+
+  test('a file copied in by hand with different bytes refuses the enable with no owner', () async {
     shader(hashA).writeAsStringSync('hand-copied');
     installShaderMod('Jiggle', {hashA: 'shader a'});
 
@@ -111,6 +150,93 @@ void main() {
     );
     expect(shader(hashA).readAsStringSync(), 'hand-copied');
   });
+
+  test('two mods shipping the same bytes are both on, and the file goes with the last one', () async {
+    installShaderMod('Anby Summer', {hashA: 'shared'});
+    installShaderMod('Nicole Summer', {hashA: 'shared'});
+
+    expect(await temp.service.activateMod('Anby Summer'), isTrue);
+    expect(await temp.service.activateMod('Nicole Summer'), isTrue);
+
+    await temp.service.deactivateMod('Anby Summer');
+    expect(shader(hashA).readAsStringSync(), 'shared');
+    await temp.service.deactivateMod('Nicole Summer');
+    expect(shader(hashA).existsSync(), isFalse);
+  });
+
+  test('a mod whose link fails lets go of a shared file, which stays with the mod still on', () async {
+    installShaderMod('Anby Summer', {hashA: 'shared'});
+    installShaderMod('Nicole Summer', {hashA: 'shared'});
+    await temp.service.activateMod('Anby Summer');
+    Directory(p.join(temp.saveMods.path, 'Nicole Summer')).createSync();
+
+    expect(await temp.service.activateMod('Nicole Summer'), isFalse);
+    expect(shader(hashA).readAsStringSync(), 'shared');
+
+    await temp.service.deactivateMod('Anby Summer');
+    expect(shader(hashA).existsSync(), isFalse);
+  });
+
+  test('a mod whose link fails lets go of a file it adopted, which stays and is adopted again next time',
+      () async {
+    shader(hashA).writeAsStringSync('shader a');
+    installShaderMod('Jiggle', {hashA: 'shader a'});
+    Directory(p.join(temp.saveMods.path, 'Jiggle')).createSync();
+    final adopted = <ShaderAdoption>[];
+    final subscription = ShaderFixesService.adoptions.listen(adopted.add);
+    addTearDown(subscription.cancel);
+
+    expect(await temp.service.activateMod('Jiggle'), isFalse);
+    expect(shader(hashA).readAsStringSync(), 'shader a');
+
+    Directory(p.join(temp.saveMods.path, 'Jiggle')).deleteSync();
+    expect(await temp.service.activateMod('Jiggle'), isTrue);
+    await Future<void>.delayed(Duration.zero);
+    expect(adopted.single.count, 1);
+
+    await temp.service.deactivateMod('Jiggle');
+    expect(shader(hashA).readAsStringSync(), 'shader a');
+  });
+
+  test('a copy that fails partway leaves the mod off and takes back what landed', () async {
+    installShaderMod('Jiggle', {hashA: 'shader a', 'Sub/motion.hlsl': 'include'});
+    if (!await makeReadOnly(Directory(p.join(shaders.path, 'Sub'))..createSync())) return;
+
+    expect(await temp.service.activateMod('Jiggle'), isFalse);
+
+    expect(shader(hashA).existsSync(), isFalse);
+    expect(Link(p.join(temp.saveMods.path, 'Jiggle')).existsSync(), isFalse);
+  }, skip: Platform.isWindows ? 'chmod is POSIX-only' : false);
+
+  test('a file that could not be deleted stays held, so a later disable takes it out', () async {
+    installShaderMod('Jiggle', {hashA: 'shader a'});
+    await temp.service.activateMod('Jiggle');
+    if (!await makeReadOnly(shaders)) return;
+
+    await temp.service.deactivateMod('Jiggle');
+    expect(shader(hashA).existsSync(), isTrue);
+
+    await Process.run('chmod', ['755', shaders.path]);
+    await temp.service.activateMod('Jiggle');
+    await temp.service.deactivateMod('Jiggle');
+    expect(shader(hashA).existsSync(), isFalse);
+  }, skip: Platform.isWindows ? 'chmod is POSIX-only' : false);
+
+  test('a file that could not be deleted with its mod is forgotten, not held by a mod that is gone', () async {
+    installShaderMod('Jiggle', {hashA: 'shader a'});
+    installShaderMod('Other', {hashA: 'other'});
+    await temp.service.activateMod('Jiggle');
+    if (!await makeReadOnly(shaders)) return;
+
+    await temp.service.deleteMod('Jiggle');
+    await Process.run('chmod', ['755', shaders.path]);
+
+    await expectLater(
+      temp.service.activateMod('Other'),
+      throwsA(isA<ShaderPlacementRefused>()
+          .having((r) => r.conflicts.single.owner, 'owner', isNull)),
+    );
+  }, skip: Platform.isWindows ? 'chmod is POSIX-only' : false);
 
   test('with no d3dx.ini beside the links folder, only a mod with shader files is refused', () async {
     File(p.join(temp.root.path, 'd3dx.ini')).deleteSync();

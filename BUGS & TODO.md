@@ -260,9 +260,8 @@ Two things are **refused rather than unbuilt**, both recorded in
 - [x] **The type scale is app-wide.** [`docs/app-architecture.md`](docs/app-architecture.md) §1 owns it.
 - [x] **Shader fixes are part of the mod.** A mod's `ShaderFixes/` is copied into ZZMI's shader folder while it is on.
   [`docs/shader-fixes.md`](docs/shader-fixes.md) owns it.
-- [ ] **Shader files a user copied in by hand are never adopted.** They block a conflicting enable, and the message says no mod placed them,
-  but switching off the mod they came with cannot remove them. We change it to offer, from the refusal, to take a matching file over
-  when its bytes equal the mod's copy.
+- [x] **A shader file can have several holders.** Identical files already in the folder are adopted and left in place, and mods sharing a set each hold a copy.
+  [`docs/shader-fixes.md`](docs/shader-fixes.md) §3–5 owns it.
 - [ ] **Shader files in a folder with another name import as ordinary files.** Move Agents in Menu ships "PUT THESE IN SHADERFIXES",
   so enabling it places nothing. We change it to offer at import to treat hash-named files that no `.ini` references as shader files.
 - [ ] **The XXMI Launcher renames some shader-folder `.ini` files on every launch** (`help.ini`, `mouse.ini`, `upscale.ini`,

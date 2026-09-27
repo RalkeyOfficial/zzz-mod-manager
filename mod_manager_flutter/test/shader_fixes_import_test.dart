@@ -105,10 +105,43 @@ void main() {
     expect(txt.year, 2025);
   });
 
-  test('several mods beside ShaderFixes/: the shader files become a mod of their own', () async {
+  test('several mods beside ShaderFixes/: each mod gets its own copy, keeping its time', () async {
     final dirs = await extract(zip('attack colors.zip', [
       'Mods/Ellen Colors/ellen.ini',
       'Mods/Miyabi Colors/miyabi.ini',
+      'ShaderFixes/9f848fa8163029bd-ps_replace.txt',
+    ]));
+
+    expect(dirs.map(p.basename).toList()..sort(), ['Ellen Colors', 'Miyabi Colors']);
+    for (final mod in dirs) {
+      expect(filesUnder(mod), contains('ShaderFixes/9f848fa8163029bd-ps_replace.txt'));
+      expect(File(p.join(mod, 'ShaderFixes/9f848fa8163029bd-ps_replace.txt')).lastModifiedSync().year, 2025);
+    }
+  });
+
+  test('several mods where some have their own ShaderFixes/: only the others get a copy', () async {
+    final dirs = await extract(zip('attack colors.zip', [
+      'Mods/Ellen Colors/ellen.ini',
+      'Mods/Ellen Colors/ShaderFixes/1111111111111111-ps_replace.txt',
+      'Mods/Miyabi Colors/miyabi.ini',
+      'Mods/Yanagi Colors/yanagi.ini',
+      'ShaderFixes/9f848fa8163029bd-ps_replace.txt',
+    ]));
+
+    expect(dirs.map(p.basename).toList()..sort(), ['Ellen Colors', 'Miyabi Colors', 'Yanagi Colors']);
+    final ellen = dirs.firstWhere((d) => d.endsWith('Ellen Colors'));
+    expect(filesUnder(ellen), ['ShaderFixes/1111111111111111-ps_replace.txt', 'ellen.ini']);
+    for (final mod in dirs.where((d) => d != ellen)) {
+      expect(filesUnder(mod), contains('ShaderFixes/9f848fa8163029bd-ps_replace.txt'));
+    }
+  });
+
+  test('several mods that all have their own ShaderFixes/: the shared one becomes a mod of its own', () async {
+    final dirs = await extract(zip('attack colors.zip', [
+      'Mods/Ellen Colors/ellen.ini',
+      'Mods/Ellen Colors/ShaderFixes/1111111111111111-ps_replace.txt',
+      'Mods/Miyabi Colors/miyabi.ini',
+      'Mods/Miyabi Colors/ShaderFixes/2222222222222222-ps_replace.txt',
       'ShaderFixes/9f848fa8163029bd-ps_replace.txt',
     ]));
 

@@ -290,7 +290,7 @@ class ModManagerService {
 
       // Shader files go in before the link, so a refusal leaves the mod off.
       String? shaderUid;
-      var shaderFiles = 0;
+      ShaderPlacementResult? shaderFiles;
       if (await ShaderFixesService.shaderPartOf(srcPath) != null) {
         shaderUid = await _uids.ensure(srcDir);
         if (shaderUid == null) {
@@ -298,12 +298,21 @@ class ModManagerService {
               fields: {'mod': modName});
           return false;
         }
-        shaderFiles = await _shaderFixes.place(
-          modDir: srcPath,
-          uid: shaderUid,
-          mod: modName,
-          saveModsPath: saveModsPath!,
-        );
+        try {
+          shaderFiles = await _shaderFixes.place(
+            modDir: srcPath,
+            uid: shaderUid,
+            mod: modName,
+            saveModsPath: saveModsPath!,
+          );
+        } on ShaderPlacementRefused {
+          rethrow;
+        } catch (_) {
+          // A copy failed partway. The mod stays off and no disable will come,
+          // so what it took hold of is let go of now.
+          await _shaderFixes.remove(uid: shaderUid, mod: modName, announce: false);
+          rethrow;
+        }
       }
 
       // Використовуємо platformService для створення link
@@ -319,7 +328,10 @@ class ModManagerService {
       }
 
       await _configService.addActiveMod(modName);
-      if (shaderFiles > 0) ShaderFixesService.announce(modName);
+      if (shaderFiles != null) {
+        if (shaderFiles.copied > 0) ShaderFixesService.announce(modName);
+        if (shaderFiles.adopted > 0) ShaderFixesService.announceAdopted(modName, shaderFiles.adopted);
+      }
 
       return true;
     } on ShaderPlacementRefused {
@@ -468,7 +480,7 @@ class ModManagerService {
           path.join(saveModsPath!, modName),
         );
       }
-      if (uid != null) await _shaderFixes.remove(uid: uid, mod: modName);
+      if (uid != null) await _shaderFixes.remove(uid: uid, mod: modName, retryFailed: false);
 
       await modDir.delete(recursive: true);
 

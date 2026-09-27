@@ -760,9 +760,12 @@
       "no_folder_title": "Couldn't find ZZMI's shader folder",
       "no_folder_body": "{mod} stays off: there is no d3dx.ini one folder above your links folder, so there is nowhere to put its shader files.",
       "taken_title": "Shader files already in use",
-      "taken_body": "{mod} stays off: {owner} already placed {files}.",
+      "taken_body": "{mod} stays off: {owner} already placed {files}, with contents that differ from this mod's copy.",
       "taken_unowned_title": "Shader files already in use",
-      "taken_unowned_body": "{mod} stays off: ZZMI's shader folder already has {files}, which this app didn't put there."
+      "taken_unowned_body": "{mod} stays off: ZZMI's shader folder already has {files}, with contents that differ from this mod's copy.",
+      "adopted_title": "Shader files already in place",
+      "adopted_body_single": "{mod} uses {count} file that was already in ZZMI's shader folder. It stays there when the mod is off.",
+      "adopted_body_plural": "{mod} uses {count} files that were already in ZZMI's shader folder. They stay there when the mod is off."
     }
   },
   "clipboard": {

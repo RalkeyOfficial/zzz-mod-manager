@@ -42,7 +42,8 @@ void notifyShaderRefusal(
 }
 
 /// Says once that shader changes need a game restart, whichever flow made them,
-/// and reports a mod an update left off because its shader files were refused.
+/// says when a mod used shader files that were already there, and reports a mod
+/// an update left off because its shader files were refused.
 ///
 /// Mounted above the tabs like `DownloadQueueHost`, since an update or a delete
 /// changes placed files as surely as a toggle does. Changes arriving together —
@@ -59,6 +60,7 @@ class ShaderRestartNoticeHost extends StatefulWidget {
 class _ShaderRestartNoticeHostState extends State<ShaderRestartNoticeHost> {
   late final StreamSubscription<String> _subscription;
   late final StreamSubscription<ShaderPlacementRefused> _refusals;
+  late final StreamSubscription<ShaderAdoption> _adoptions;
   final Set<String> _pending = {};
   Timer? _settle;
 
@@ -73,6 +75,7 @@ class _ShaderRestartNoticeHostState extends State<ShaderRestartNoticeHost> {
     _refusals = ShaderFixesService.unattendedRefusals.listen((refusal) {
       if (mounted) notifyShaderRefusal(context, refusal);
     });
+    _adoptions = ShaderFixesService.adoptions.listen(_announceAdoption);
   }
 
   void _announce() {
@@ -85,11 +88,22 @@ class _ShaderRestartNoticeHostState extends State<ShaderRestartNoticeHost> {
     _pending.clear();
   }
 
+  void _announceAdoption(ShaderAdoption adoption) {
+    if (!mounted) return;
+    final loc = context.loc;
+    context.notify.info(
+      loc.t('mods.shader_fixes.adopted_title'),
+      body: loc.plural('mods.shader_fixes.adopted_body', adoption.count,
+          params: {'mod': adoption.mod, 'count': '${adoption.count}'}),
+    );
+  }
+
   @override
   void dispose() {
     _settle?.cancel();
     _subscription.cancel();
     _refusals.cancel();
+    _adoptions.cancel();
     super.dispose();
   }
 
