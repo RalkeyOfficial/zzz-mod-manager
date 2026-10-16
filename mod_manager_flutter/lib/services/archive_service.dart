@@ -10,8 +10,11 @@ import '../utils/process_probe.dart';
 import '../utils/seven_zip_listing.dart';
 import 'archive_activity.dart';
 import 'archive_hash.dart';
+import 'folder_contents.dart';
+import 'ini_resources.dart';
 import 'log/logger.dart';
 import 'platform_service_factory.dart';
+import 'shader_fixes/zzmi_layout.dart';
 
 final Logger _log = Logger('archive');
 
@@ -63,6 +66,10 @@ class ArchiveExtractionResult {
   final int? requiredBytes;
   final int? availableBytes;
 
+  /// Each folder in [extractedFolders] whose `ShaderFixes/` import filled from a
+  /// folder of another name, mapped to that folder's name (`docs/shader-fixes.md` §2).
+  final Map<String, String> shaderSources;
+
   const ArchiveExtractionResult({
     required this.success,
     this.error,
@@ -71,16 +78,19 @@ class ArchiveExtractionResult {
     this.archiveMd5,
     this.requiredBytes,
     this.availableBytes,
+    this.shaderSources = const {},
   });
 
   factory ArchiveExtractionResult.successResult(
     List<String> folders, {
     String? archiveMd5,
+    Map<String, String> shaderSources = const {},
   }) =>
       ArchiveExtractionResult(
         success: true,
         extractedFolders: folders,
         archiveMd5: archiveMd5,
+        shaderSources: shaderSources,
       );
 
   /// Deliberately carries no md5: a failed extraction installs nothing, so
@@ -239,11 +249,14 @@ class ArchiveService {
       // Extraction only reads the file, so it is still intact and hashable.
       final md5 = knownMd5 ?? await md5OfFile(archiveFile);
 
+      final placedShaders = <String, String>{};
       final directories = await _prepareDirectoriesForImport(
         tempExtractDir,
         archiveFile,
         nameHint: nameHint,
+        placedShaders: placedShaders,
       );
+      final shaderSources = await _moveShaderFoldersIn(directories, placedShaders);
 
       if (directories.isEmpty) {
         _log.error('archive held no mod folders', fields: {
@@ -261,7 +274,11 @@ class ArchiveService {
         'folders': directories.length,
         'took': DateTime.now().difference(started),
       });
-      return ArchiveExtractionResult.successResult(directories, archiveMd5: md5);
+      return ArchiveExtractionResult.successResult(
+        directories,
+        archiveMd5: md5,
+        shaderSources: shaderSources,
+      );
     } catch (error, stack) {
       _log.error('extraction failed',
           error: error,
@@ -547,10 +564,13 @@ class ArchiveService {
     }
   }
 
+  /// [placedShaders] collects each shader folder of another name moved from the
+  /// root into a mod, by its new path, mapped to the name it has in the archive.
   static Future<List<String>> _prepareDirectoriesForImport(
     Directory extractDir,
     File archiveFile, {
     String? nameHint,
+    required Map<String, String> placedShaders,
   }) async {
     final entries = extractDir.listSync();
     final directories = <String>[];
@@ -602,8 +622,16 @@ class ArchiveService {
     }
 
     final baseName = path.basenameWithoutExtension(nameHint ?? archiveFile.path);
-    if (dirEntries.any((d) => _isZzmiFolder(d, 'mods') || _isZzmiFolder(d, 'shaderfixes'))) {
-      return _prepareZzmiRootLayout(extractDir, dirEntries, baseName);
+    final hasShaderFixes = dirEntries.any((d) => _isZzmiFolder(d, 'shaderfixes'));
+    final renamedShaders = hasShaderFixes ? null : await _rootShaderFolder(extractDir, dirEntries);
+    if (hasShaderFixes || renamedShaders != null || dirEntries.any((d) => _isZzmiFolder(d, 'mods'))) {
+      return _prepareZzmiRootLayout(
+        extractDir,
+        dirEntries,
+        baseName,
+        renamedShaders: renamedShaders,
+        placedShaders: placedShaders,
+      );
     }
 
     // Otherwise the root is a container of independent mod folders.
@@ -626,16 +654,33 @@ class ArchiveService {
   /// copy: nothing says which of them needs the files, and identical files placed
   /// by several mods stay until the last one is off. Only shader files no mod can
   /// take become a mod of their own.
+  ///
+  /// [renamedShaders] is a shader folder of another name at the root, found when
+  /// there is no `ShaderFixes/` there. It goes where a `ShaderFixes/` would, under
+  /// its own name, and [_moveShaderFoldersIn] then sorts its files. Each place it
+  /// lands is recorded in [placedShaders].
   static Future<List<String>> _prepareZzmiRootLayout(
     Directory extractDir,
     List<Directory> dirEntries,
-    String baseName,
-  ) async {
+    String baseName, {
+    Directory? renamedShaders,
+    required Map<String, String> placedShaders,
+  }) async {
+    final shaderDir = dirEntries.where((d) => _isZzmiFolder(d, 'shaderfixes')).lastOrNull;
+    final source = shaderDir ?? renamedShaders;
+    final placedAs = shaderDir != null ? 'ShaderFixes' : path.basename(source?.path ?? '');
+    // Out of the root before any mod is named after the archive, so the shader
+    // folder never holds the name a mod would take: `Shader Fix.zip` holding
+    // `Shader Fix/` is the mod `Shader Fix`, not `Shader Fix (2)`.
+    final shared = source == null ? null : await source.rename(_unusedPath(extractDir, '.zzz-shaders'));
+
     final candidates = <String>[];
-    Directory? shaderDir;
     for (final dir in dirEntries) {
-      if (_isZzmiFolder(dir, 'shaderfixes')) {
-        shaderDir = dir;
+      if (source != null && path.equals(dir.path, source.path)) {
+        continue;
+      } else if (_isZzmiFolder(dir, 'shaderfixes')) {
+        // A second spelling of `ShaderFixes/` on a case-sensitive disk is left out, as one set is used.
+        continue;
       } else if (_isZzmiFolder(dir, 'mods')) {
         final inside = dir.listSync();
         final iniAtTop = inside.whereType<File>().any(
@@ -653,22 +698,38 @@ class ArchiveService {
       }
     }
 
-    if (shaderDir == null) return candidates;
+    if (shared == null) return candidates;
 
-    final free = [
-      for (final candidate in candidates)
-        if (!Directory(candidate).listSync().whereType<Directory>().any((d) => _isZzmiFolder(d, 'shaderfixes')))
-          candidate,
-    ];
+    // Free means no shader files of its own: a mod with a `ShaderFixes/` or a
+    // shader folder that will become one, and a shader folder left at the root,
+    // take no copy, since two sets in one folder risk two files of one name.
+    final free = <String>[];
+    for (final candidate in candidates) {
+      final dir = Directory(candidate);
+      if (_looksLikeShaderFolder(dir)) continue;
+      if (dir.listSync().whereType<Directory>().any((d) => _isZzmiFolder(d, 'shaderfixes'))) continue;
+      if (await _shaderFolderIn(candidate) != null) continue;
+      free.add(candidate);
+    }
+
+    Future<void> place(String target, {required bool copy}) async {
+      if (copy) {
+        await copyDirectory(shared, Directory(target));
+      } else {
+        await shared.rename(target);
+      }
+      if (renamedShaders != null) placedShaders[target] = placedAs;
+    }
+
     if (free.length == 1) {
-      await shaderDir.rename(path.join(free.single, 'ShaderFixes'));
+      await place(_unusedPath(Directory(free.single), placedAs), copy: false);
       return candidates;
     }
     if (free.isNotEmpty) {
       for (final mod in free) {
-        await copyDirectory(shaderDir, Directory(path.join(mod, 'ShaderFixes')));
+        await place(_unusedPath(Directory(mod), placedAs), copy: true);
       }
-      await shaderDir.delete(recursive: true);
+      await shared.delete(recursive: true);
       return candidates;
     }
 
@@ -676,17 +737,122 @@ class ArchiveService {
       _unusedPath(extractDir, candidates.isEmpty ? baseName : '$baseName ShaderFixes'),
     );
     await wrapper.create();
-    await shaderDir.rename(path.join(wrapper.path, 'ShaderFixes'));
+    await place(path.join(wrapper.path, placedAs), copy: false);
     return [...candidates, wrapper.path];
   }
 
-  /// [name] inside [parent], numbered when something already has it.
-  static String _unusedPath(Directory parent, String name) {
-    var candidate = path.join(parent.path, name);
-    for (var n = 2; FileSystemEntity.typeSync(candidate) != FileSystemEntityType.notFound; n++) {
-      candidate = path.join(parent.path, '$name ($n)');
+  /// Whether [dir]'s name marks it as a possible shader folder under another name:
+  /// it contains "shader" and is not `ShaderFixes`, which is handled as itself.
+  static bool _hasShaderName(Directory dir) {
+    final name = path.basename(dir.path).toLowerCase();
+    return name.contains('shader') && name != 'shaderfixes';
+  }
+
+  /// Whether [dir] is a shader folder under another name before any `.ini`
+  /// reference is weighed: the name, a shader replacement file directly inside,
+  /// and no `.ini` directly inside, since a folder holding one is a mod.
+  static bool _looksLikeShaderFolder(Directory dir) {
+    if (!_hasShaderName(dir)) return false;
+    final names = [
+      for (final f in dir.listSync(followLinks: false).whereType<File>()) path.basename(f.path),
+    ];
+    return !names.any((n) => n.toLowerCase().endsWith('.ini')) && names.any(isShaderReplacementName);
+  }
+
+  /// Whether [dir] is a shader folder under another name (`docs/shader-fixes.md` §2).
+  ///
+  /// Beyond [_looksLikeShaderFolder], no `.ini` refers inside it: [referenced] is
+  /// every path the `.ini` files of the folder [dir] sits in point at, relative to
+  /// that folder, and a folder the mod loads from itself stays an ordinary part of the mod.
+  static bool _isShaderFolder(Directory dir, Set<String> referenced) {
+    if (!_looksLikeShaderFolder(dir)) return false;
+    final relative = normalizeIniPath(path.basename(dir.path));
+    return !referenced.any((p) => p == relative || p.startsWith('$relative/'));
+  }
+
+  /// The shader folder under another name directly in [mod] that becomes its
+  /// `ShaderFixes/`: the first by name, and none when [mod] already has a `ShaderFixes/`.
+  static Future<Directory?> _shaderFolderIn(String mod) async {
+    final children = Directory(mod).listSync(followLinks: false).whereType<Directory>().toList();
+    if (children.any((d) => _isZzmiFolder(d, 'shaderfixes'))) return null;
+    final named = children.where(_hasShaderName).toList()
+      ..sort((a, b) => path.basename(a.path).compareTo(path.basename(b.path)));
+    if (named.isEmpty) return null;
+    final referenced = (await readFolderContents(Directory(mod))).references.paths;
+    return named.where((d) => _isShaderFolder(d, referenced)).firstOrNull;
+  }
+
+  /// The first shader folder of another name directly at the archive root, by name.
+  static Future<Directory?> _rootShaderFolder(Directory extractDir, List<Directory> dirEntries) async {
+    final named = dirEntries.where(_hasShaderName).toList()
+      ..sort((a, b) => path.basename(a.path).compareTo(path.basename(b.path)));
+    if (named.isEmpty) return null;
+    final referenced = (await readFolderContents(extractDir)).references.paths;
+    for (final dir in named) {
+      if (_isShaderFolder(dir, referenced)) return dir;
     }
-    return candidate;
+    return null;
+  }
+
+  /// Moves the files of a shader folder under another name, directly inside each
+  /// of [mods], into that mod's `ShaderFixes/`, and returns each mod that got them
+  /// mapped to the folder's name in the archive, which [placedShaders] holds for a
+  /// folder moved in from the root.
+  ///
+  /// A mod that already has a `ShaderFixes/` keeps its folders as they are, since
+  /// two sets merged into one risk two files of one name. Of several shader folders
+  /// in one mod only the first by name moves, for the same reason.
+  ///
+  /// Shader replacement files and every subfolder move, since subfolders are `#include`
+  /// targets. Anything else stays in the mod under the folder's own name: ZZMI's
+  /// folder takes a file only when no other mod placed different bytes under its
+  /// name, so two mods each placing a `readme.txt` could never both be on. Files are
+  /// renamed, which keeps their times, so a shipped `.bin` stays paired with its `.txt`.
+  static Future<Map<String, String>> _moveShaderFoldersIn(
+    List<String> mods,
+    Map<String, String> placedShaders,
+  ) async {
+    final sources = <String, String>{};
+    for (final mod in mods) {
+      final folder = await _shaderFolderIn(mod);
+      if (folder == null) continue;
+
+      final target = Directory(path.join(mod, 'ShaderFixes'));
+      await target.create();
+      var moved = 0;
+      for (final entity in folder.listSync(followLinks: false)) {
+        final name = path.basename(entity.path);
+        if (entity is Directory || (entity is File && isShaderReplacementName(name))) {
+          await entity.rename(path.join(target.path, name));
+          moved++;
+        }
+      }
+      if (folder.listSync().isEmpty) await folder.delete();
+
+      final name = placedShaders[folder.path] ?? path.basename(folder.path);
+      sources[mod] = name;
+      _log.info('shader folder moved into ShaderFixes', fields: {
+        'mod': path.basename(mod),
+        'from': name,
+        'entries': moved,
+      });
+    }
+    return sources;
+  }
+
+  /// [name] inside [parent], numbered when something already has it.
+  ///
+  /// Names compare case-insensitively, as on Windows and under Wine, where ZZMI
+  /// reads `Shaders/` and `shaders/` as one folder.
+  static String _unusedPath(Directory parent, String name) {
+    final taken = parent.existsSync()
+        ? {for (final e in parent.listSync(followLinks: false)) path.basename(e.path).toLowerCase()}
+        : const <String>{};
+    var candidate = name;
+    for (var n = 2; taken.contains(candidate.toLowerCase()); n++) {
+      candidate = '$name ($n)';
+    }
+    return path.join(parent.path, candidate);
   }
 
   static String? _sanitizeArchivePath(String base, String relativePath) {

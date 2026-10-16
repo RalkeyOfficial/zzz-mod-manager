@@ -42,10 +42,27 @@ and a random 600 of the 4,993 Character Skins.
 **No shader fix ships without an `.ini`**, so a shader fix is part of a mod rather than a separate kind of thing:
 one library folder, one switch, one update, one snapshot. The mod's shader files live in `<mod>/ShaderFixes/`.
 
-Only a folder named `ShaderFixes` marks files for the shader folder. A hash-named file elsewhere in a mod,
-such as Custom Loading Screen's `ps/a9d9418078d93839-ps_replace.txt`, is loaded by the mod's own `.ini` and stays an ordinary file.
+A folder named `ShaderFixes` marks files for the shader folder, and so does a **shader folder under another name**, such as Move Agents in Menu's `PUT THESE IN SHADERFIXES`.
+A folder is one when all four hold:
 
-Where the folder sits in an archive varies, and import (`ArchiveService._prepareDirectoriesForImport`) handles each:
+- its name contains "shader", in any case;
+- it directly holds a shader replacement file, named as in §1: a 16-hex hash, the stage, an optional `_replace`, and `.txt` or `.bin` (`isShaderReplacementName`);
+- it directly holds no `.ini`, since a folder that does is a mod;
+- no `.ini` refers to a path inside it: one in the mod, or anywhere in the archive for a folder at its root. Paths compare case-insensitively.
+
+Measured 2026-10-16 from `_aArchiveFileTree` on 1,224 mods (1,892 files): 50 folders other than `ShaderFixes` hold shader replacement files.
+2 of them have "shader" in the name, both meant for ZZMI, and no `.ini` refers into either.
+The other 48 include folders the mod's own `.ini` loads, such as Custom Loading Screen's `ps/a9d9418078d93839-ps_replace.txt`, `vs/`, `other/vs`, `res/`, `Living/` and `LayeringSolution/`; none has "shader" in its name, so all stay ordinary files.
+ReShade folders named `Shaders` or `reshade-shaders` hold no replacement file and stay ordinary too.
+The name is what tells the two kinds apart, and the `.ini` check keeps a folder a mod loads from itself ordinary even when it is called "shaders".
+Nothing is asked. In the import picker, a mod whose shader files came this way names the folder they came from.
+
+Shader replacement files and every subfolder move to `<mod>/ShaderFixes/`, subfolders because they are `#include` targets, and renaming keeps each file's time.
+Any other file, such as a readme, stays in the mod under the folder's own name and never reaches `ShaderFixes/`: placement is all or nothing on differing bytes (§3), so two mods each placing a `readme.txt` there could never both be on.
+No readme was found inside any shader folder or `ShaderFixes/` in the measurement.
+A mod that already has a `ShaderFixes/` keeps the other folder as ordinary files, and of several such folders in one mod only the first by name moves, so two sets are never merged.
+
+Where the folder sits in an archive varies, and import (`ArchiveService._prepareDirectoriesForImport`, then `_moveShaderFoldersIn` over every mod it produced) handles each:
 
 | Archive layout | Seen in | Lands as |
 |---|---|---|
@@ -55,15 +72,26 @@ Where the folder sits in an archive varies, and import (`ArchiveService._prepare
 | an `.ini` directly in `Mods/`, and `ShaderFixes/` | No Outlines | one mod named after the archive |
 | `ShaderFixes/` and a readme | Censor Remover | one mod holding only `ShaderFixes/` |
 | several mods and one `ShaderFixes/` | multi-character effect packs | each mod, and each without a `ShaderFixes/` of its own gets a copy |
+| `<mod>/PUT THESE IN SHADERFIXES/` beside `<mod>/PICK ONE AND PUT IT IN MODS/<variant>/` and readmes | Move Agents in Menu | one mod with `ShaderFixes/`, its readmes and both variant folders |
+| a shader folder under another name at the root, beside mod folders | – | as a root `ShaderFixes/` would, in the rows above |
 
-Beside several mods, each mod with no `ShaderFixes/` of its own gets a copy, because nothing says which of them needs the files, and picking one would tie the others' shaders to its switch.
-A mod that already has one keeps it as it is, since merging a second set into it risks two files of one name.
+At the root, a shader folder under another name is used only when there is no root `ShaderFixes/`, and only the first by name; any other stays a folder of its own, as it would be without this rule, and takes no copy.
+Moved into a mod that already holds a folder of that name in any case, it is numbered (`Shaders (2)`), since ZZMI reads the two spellings as one folder; the import picker still names it as it is in the archive.
+
+Beside several mods, each mod with no shader files of its own gets a copy, because nothing says which of them needs the files, and picking one would tie the others' shaders to its switch.
+A mod that already has a `ShaderFixes/`, or a shader folder under another name that becomes one, keeps it as it is, since merging a second set into it risks two files of one name.
 The copies are identical, so the mods can be on together, and the files leave ZZMI's folder with the last of them (§4).
-Only a set no mod can take, because every mod already has its own `ShaderFixes/`, becomes a mod named `<archive> ShaderFixes`.
+Only a set no mod can take, because every mod already has shader files of its own, becomes a mod named `<archive> ShaderFixes`.
 A shader-only folder counts as a mod: the import picker preselects it, and it raises no "no `.ini`" warning.
 
 Import keeps each file's time from the archive, and copying into the library keeps it too, so a shipped `.bin` stays valid (§1).
 Zip entries written with `\` are split into folders, since a Windows filename cannot contain one.
+
+Updates, reinstalls and patch installs unpack through the same import, so a mod in the library gets its shader folder sorted on its next update.
+A mod whose install recorded a root shader folder as a mod of its own finds no folder of that name in the archive any more ([`applying-updates.md`](applying-updates.md) §4):
+
+- Beside several other mods, its update or reinstall reports a changed layout, and the user picks its folders once in the update's folder picker.
+- Beside exactly one other mod, that mod's folder reads as the shader folder renamed upstream. Updating or reinstalling the shader mod on its own then writes the other mod's files into it without asking; updated together with that other mod, both are refused, since they claim one folder of the archive.
 
 ## 3. Switching a mod on
 
@@ -133,7 +161,8 @@ naming the mods. Changes arriving together, like an update's off-and-on, become 
 
 ## 7. Known and not built
 
-- **Shader files in a folder with another name** ("PUT THESE IN SHADERFIXES") are imported as ordinary mod files.
-  Import could offer to treat hash-named files no `.ini` references as shader files.
+- **A shader folder inside a zip inside the archive** (Recolored Aegis addon) is not looked into: import unpacks one level, so the inner zip lands as an ordinary file and turning the mod on places nothing.
+- **A folder dragged in, rather than an archive,** is installed as it is; only an unpacked archive goes through the shader-folder rule.
+- **A "shader" folder the mod loads in any other way is moved.** Only an `.ini`'s `filename`, `include` and `include_recursive` lines hold a folder back, and a `filename` in a resource section nothing uses does not, so a folder loaded through `CustomShader`, `ShaderRegex` or any other key ends up in `ShaderFixes/` and the mod no longer finds it there; the measurement found no such folder.
 - Placed copies are not counted in the Storage tab; they live in the ZZMI folder, not the app's.
 - Not verified on Windows.

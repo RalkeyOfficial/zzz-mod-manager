@@ -262,8 +262,9 @@ Two things are **refused rather than unbuilt**, both recorded in
   [`docs/shader-fixes.md`](docs/shader-fixes.md) owns it.
 - [x] **A shader file can have several holders.** Identical files already in the folder are adopted and left in place, and mods sharing a set each hold a copy.
   [`docs/shader-fixes.md`](docs/shader-fixes.md) §3–5 owns it.
-- [ ] **Shader files in a folder with another name import as ordinary files.** Move Agents in Menu ships "PUT THESE IN SHADERFIXES",
-  so enabling it places nothing. We change it to offer at import to treat hash-named files that no `.ini` references as shader files.
+- [x] **A shader folder under another name lands in the mod's `ShaderFixes/`.** [`docs/shader-fixes.md`](docs/shader-fixes.md) §2 owns it.
+- [ ] **A shader folder inside a zip inside the archive imports as an ordinary file.** Recolored Aegis addon ships its shader folder in a zip within the download,
+  so the inner zip lands in the mod as one file and enabling the mod places nothing. Import unpacks one level only. We change it to unpack a nested archive at import and run the shader-folder rule over what comes out.
 - [x] **A placed `.ini` the XXMI Launcher renamed is removed under its new name.** [`docs/shader-fixes.md`](docs/shader-fixes.md) §4 owns it.
 
 ### 4.1 How an update is actually applied

@@ -18,10 +18,15 @@ class ImportFolderChoice {
   /// real mod rather than auxiliary content (previews/images).
   final bool looksLikeMod;
 
+  /// The folder of another name that import moved this folder's shader files
+  /// out of, into its `ShaderFixes/`; null when it did not.
+  final String? shaderSource;
+
   const ImportFolderChoice({
     required this.path,
     required this.name,
     required this.looksLikeMod,
+    this.shaderSource,
   });
 }
 
@@ -70,6 +75,9 @@ class ImportPlan {
 /// install and whether to combine. Returns null if the user cancelled — the
 /// caller is responsible for cleaning up any extracted temp dirs.
 ///
+/// [shaderSources] is the extraction's [ArchiveExtractionResult.shaderSources],
+/// shown under each folder it names.
+///
 /// Keeping this in one place is deliberate: the multi-folder branch was once
 /// added to the mods screen but forgotten in the marketplace, so both paths now
 /// share this resolver rather than each hand-rolling the choice building.
@@ -77,6 +85,7 @@ Future<ImportPlan?> resolveImportSelection(
   BuildContext context,
   List<String> folderPaths, {
   required String defaultCombinedName,
+  Map<String, String> shaderSources = const {},
 }) async {
   if (folderPaths.length <= 1) {
     // Return a copy, never the caller's own list: both call sites do
@@ -98,6 +107,7 @@ Future<ImportPlan?> resolveImportSelection(
         name: path.basename(folder),
         looksLikeMod: await ArchiveService.containsIniFile(folder) ||
             await ShaderFixesService.shaderPartOf(folder) != null,
+        shaderSource: shaderSources[folder],
       ),
     );
   }
@@ -283,18 +293,32 @@ Future<ImportSelection?> showImportSelectionDialog(
                               dense: true,
                               contentPadding: EdgeInsets.zero,
                               title: Text(choice.name),
-                              subtitle: Text(
-                                choice.looksLikeMod
-                                    ? loc.t('mods.dialog.import_select_mod')
-                                    : loc.t('mods.dialog.import_select_aux'),
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                  color: choice.looksLikeMod
-                                      ? Colors.green
-                                      : Colors.grey,
-                                ),
+                              subtitle: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    choice.looksLikeMod
+                                        ? loc.t('mods.dialog.import_select_mod')
+                                        : loc.t('mods.dialog.import_select_aux'),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                      color: choice.looksLikeMod
+                                          ? Colors.green
+                                          : Colors.grey,
+                                    ),
+                                  ),
+                                  if (choice.shaderSource case final source?)
+                                    Text(
+                                      loc.t(
+                                        'mods.dialog.import_select_shader_source',
+                                        params: {'folder': source},
+                                      ),
+                                      style: Theme.of(context).textTheme.bodySmall,
+                                    ),
+                                ],
                               ),
                             ),
                         ],

@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/screens/dialogs/import_selection_dialog.dart';
+import 'package:path/path.dart' as p;
 
 import 'support/localized_harness.dart';
 
@@ -142,5 +145,40 @@ void main() {
       await open(tester, surfaceSize: const Size(480, 900));
       expect(tester.takeException(), isNull);
     });
+  });
+
+  /// Import moves shader files out of a folder of another name without asking,
+  /// so the picker says which folder they came from.
+  testWidgets('names the folder a choice\'s shader fixes came from', (tester) async {
+    final root = Directory.systemTemp.createTempSync('zzz_import_picker_');
+    addTearDown(() => root.deleteSync(recursive: true));
+    final mover = Directory(p.join(root.path, 'CharacterMoverMod'))..createSync();
+    File(p.join(mover.path, 'mover.ini')).writeAsStringSync('');
+    Directory(p.join(mover.path, 'ShaderFixes')).createSync();
+    final previews = Directory(p.join(root.path, 'previews'))..createSync();
+
+    await pumpLocalized(
+      tester,
+      Builder(
+        builder: (context) => TextButton(
+          onPressed: () => resolveImportSelection(
+            context,
+            [mover.path, previews.path],
+            defaultCombinedName: 'CharacterMoverMod',
+            shaderSources: {mover.path: 'PUT THESE IN SHADERFIXES'},
+          ),
+          child: const Text('open'),
+        ),
+      ),
+    );
+    await tapWithIo(tester, find.text('open'));
+    expectBuilt(AlertDialog);
+
+    expect(find.text('Shader fixes from “PUT THESE IN SHADERFIXES”'), findsOneWidget);
+    final moverTile = find.ancestor(of: find.text('CharacterMoverMod'), matching: find.byType(CheckboxListTile));
+    expect(
+      find.descendant(of: moverTile, matching: find.textContaining('PUT THESE IN SHADERFIXES')),
+      findsOneWidget,
+    );
   });
 }

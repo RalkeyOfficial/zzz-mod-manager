@@ -26,6 +26,13 @@ Future<String?> findShaderFolder(String saveModsPath) async {
   return p.isAbsolute(folder) ? folder : p.normalize(p.join(root, folder));
 }
 
+final RegExp _replacementName =
+    RegExp(r'^[0-9a-f]{16}-(vs|ps|cs|gs|hs|ds)(_replace)?\.(txt|bin)$', caseSensitive: false);
+
+/// Whether [fileName] is a name 3DMigoto opens as a shader replacement: a 16-hex hash,
+/// the shader stage, an optional `_replace`, and `.txt` or `.bin` (`docs/shader-fixes.md` §1).
+bool isShaderReplacementName(String fileName) => _replacementName.hasMatch(fileName);
+
 /// The `override_directory` value in `[Rendering]`, or 3DMigoto's default.
 ///
 /// Backslashes become the platform separator, since ZZMI's own files are written

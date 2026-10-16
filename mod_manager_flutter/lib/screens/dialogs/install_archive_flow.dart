@@ -146,6 +146,7 @@ Future<InstallResult> installArchiveFlow(
       context,
       directoriesToImport,
       defaultCombinedName: archiveBaseName,
+      shaderSources: extractionResult.shaderSources,
     );
     if (plan == null) {
       // Cancelled — drop the extracted temp folders (the archive itself is

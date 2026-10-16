@@ -1369,6 +1369,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       // Same shape and the same reason: one drop can mix folders from several
       // archives with folders dragged in directly, so provenance is per-folder.
       final originSeeds = <String, ModOriginSeed>{};
+      // Extracted-folder path -> the folder its shader files came from, for the picker.
+      final shaderSources = <String, String>{};
       // Set when an archive was recognised as one already in the library and the
       // user chose not to install it again. Distinguishes "you declined" from
       // "there was nothing here" once the folder list comes out empty.
@@ -1424,6 +1426,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
               continue;
             }
             folderPaths.addAll(result.extractedFolders!);
+            shaderSources.addAll(result.shaderSources);
             successfullyExtractedArchives.add(archiveFile.path);
             final archiveBaseName = path.basenameWithoutExtension(
               archiveFile.path,
@@ -1498,6 +1501,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         context,
         folderPaths,
         defaultCombinedName: sharedHint ?? path.basename(folderPaths.first),
+        shaderSources: shaderSources,
       );
       if (plan == null) {
         await cleanupTempFolders();
