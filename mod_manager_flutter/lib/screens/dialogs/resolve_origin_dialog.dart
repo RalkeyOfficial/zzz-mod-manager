@@ -30,12 +30,46 @@ import 'remove_patch_flow.dart';
 ///
 /// Returns true when something was written, so the caller can rescan — the
 /// status slot is drawn from `ModInfo.origin`, which only a scan refreshes.
-Future<bool> showResolveOriginDialog(BuildContext context, ModInfo mod) async {
-  return await showDialog<bool>(
-        context: context,
-        builder: (_) => ResolveOriginDialog(mod: mod),
-      ) ??
-      false;
+///
+/// [gateway] is injected only by tests — see [ResolveOriginGateway].
+Future<bool> showResolveOriginDialog(
+  BuildContext context,
+  ModInfo mod, {
+  ResolveOriginGateway? gateway,
+}) async =>
+    await showResolveOriginDialogForResult(context, mod, gateway: gateway) !=
+    null;
+
+/// The same dialog, answering with what it saved: null when nothing was written.
+///
+/// [gateway] is injected only by tests — see [ResolveOriginGateway].
+Future<ResolveOriginResult?> showResolveOriginDialogForResult(
+  BuildContext context,
+  ModInfo mod, {
+  ResolveOriginGateway? gateway,
+}) =>
+    showDialog<ResolveOriginResult>(
+      context: context,
+      builder: (_) => ResolveOriginDialog(mod: mod, gateway: gateway),
+    );
+
+/// What a successful save in the resolve dialog did to the folder.
+class ResolveOriginResult {
+  const ResolveOriginResult({
+    this.modId,
+    this.pageName,
+    this.markedNotFromGameBanana = false,
+  });
+
+  /// The mod page the folder is now bound to.
+  /// Null for the answers that name none: "not from GameBanana", turning tracking back on, and the patch steps.
+  final int? modId;
+
+  /// That page's name, from the profile the dialog already fetched.
+  final String? pageName;
+
+  /// The user answered "not from GameBanana / it's my own", which writes `tracking: off`.
+  final bool markedNotFromGameBanana;
 }
 
 /// The local side of the dialog — everything it does that isn't a GameBanana
@@ -292,6 +326,10 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     return false;
   }
 
+  /// What Save and "I don't know which" answer: both write `mod_id`, so the caller learns the page.
+  ResolveOriginResult get _boundOutcome =>
+      ResolveOriginResult(modId: _modId, pageName: _profile?.name);
+
   Future<void> _save() async {
     final modId = _modId;
     if (modId == null) return;
@@ -300,7 +338,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     final identityNeedsWrite = _identityNeedsWrite;
     final installedAt = _installedAt;
 
-    await _write((current) {
+    await _write(outcome: _boundOutcome, (current) {
       var next = current;
       if (identityNeedsWrite) next = OriginResolution.bind(current, modId);
       // Recorded even when the user changed nothing about it, because a folder
@@ -329,7 +367,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     final createdAt = _profile?.dateAdded;
     final identityNeedsWrite = _identityNeedsWrite;
 
-    await _write((current) {
+    await _write(outcome: _boundOutcome, (current) {
       final bound =
           identityNeedsWrite ? OriginResolution.bind(current, modId) : current;
       return OriginResolution.assumeCurrent(
@@ -351,6 +389,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
   Future<void> _stopTracking() => _write(
         (current) => OriginResolution.stopTracking(current),
         fillMetadata: false,
+        outcome: const ResolveOriginResult(markedNotFromGameBanana: true),
       );
 
   Future<void> _resumeTracking() => _write(
@@ -364,11 +403,12 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
   /// The transform is applied to the sidecar **as it is on disk now**, not to
   /// the block this dialog was opened with — see
   /// `ModMetadataRepository.updateOrigin`.
-  /// [fillMetadata] gates the optional fill on top of the checkbox: only the
-  /// answers that *endorse* the mod page may pull data from it.
+  /// [fillMetadata] gates the optional fill on top of the checkbox: only the answers that *endorse* the mod page may pull data from it.
+  /// [outcome] is what the dialog answers its caller once the write lands.
   Future<void> _write(
     ModOrigin? Function(ModOrigin? current) update, {
     bool fillMetadata = true,
+    ResolveOriginResult outcome = const ResolveOriginResult(),
   }) async {
     setState(() => _saving = true);
     final result = await _gateway.writeOrigin(widget.mod.id, update);
@@ -416,7 +456,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
       );
       return;
     }
-    Navigator.of(context).pop(true);
+    Navigator.of(context).pop(outcome);
   }
 
   // ------------------------------------------------------------------- build
@@ -452,7 +492,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     final closing = _saving;
     return [
       TextButton(
-        onPressed: closing ? null : () => Navigator.of(context).pop(false),
+        onPressed: closing ? null : () => Navigator.of(context).pop(),
         child: Text(loc.t('mods.resolve.cancel')),
       ),
       if (_origin?.tracking == OriginTracking.off)
@@ -643,7 +683,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     // The block this dialog is holding has just been rewritten under it, and
     // every panel below reads that block. Closing is the honest answer: the
     // folder is not what it was when the dialog opened.
-    Navigator.of(context).pop(true);
+    Navigator.of(context).pop(const ResolveOriginResult());
   }
 
   /// The way into naming the mod a patch-shaped folder **applies to**, for the

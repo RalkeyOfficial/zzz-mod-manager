@@ -11,12 +11,11 @@
 /// Four rules govern every decision below, and three of them are inherited
 /// rather than invented here:
 ///
-/// - **Bulk acts only on precise handles.** A mod with no `mod_id` gets no row
-///   at all. Identifying one means fuzzy-matching a folder name
-///   (`Ellen final FIXED v2`, `bikini`, `mod`) against a search, and a wrong
-///   match rubber-stamped in bulk would later let an "update" overwrite a mod
-///   with an unrelated mod's files. That decision stays one-at-a-time and
-///   user-confirmed, in the per-mod resolve dialog, forever.
+/// - **Bulk acts only on precise handles.** A mod with no `mod_id` gets no question row and nothing Apply writes;
+///   it is listed in [BulkResolutionPlan.untracked], a button away from the per-mod resolve dialog.
+///   Identifying one means fuzzy-matching a folder name (`Ellen final FIXED v2`, `bikini`, `mod`) against a search,
+///   and a wrong match rubber-stamped in bulk would later let an "update" overwrite a mod with an unrelated mod's files.
+///   That decision stays one-at-a-time and user-confirmed, in the per-mod resolve dialog, forever.
 /// - **It never displaces a better answer.** Every transform re-checks its own
 ///   precondition against the block as freshly read from disk and abandons the
 ///   write when it no longer holds — the same guard the bulk "assume current"
@@ -25,13 +24,12 @@
 /// - **Guesses may inform, never drive.** A file this pass works out on its own
 ///   is recorded at `inferred`, not at `user`: the user consented to a plan,
 ///   they did not look at a file list and recognise their download.
-/// - **Nothing is written until the user presses Apply.** Writing the safe
-///   inferences immediately and offering an undo afterwards was considered and
-///   loses twice over. The control that runs this says "check for updates" and
-///   nothing about rewriting sidecars, and the placement rule the bulk "assume
-///   current" action already follows is that a bulk rewrite acts only on a set
-///   the user has *seen*. A pre-ticked row costs the user one glance and one
-///   press, where an undo costs them noticing a summary they did not ask for.
+/// - **Nothing this pass answers is written until the user presses Apply.**
+///   The untracked list is outside it: each of those mods goes through the per-mod dialog, which saves as it closes.
+///   Writing the safe inferences immediately and offering an undo afterwards was considered and loses twice over.
+///   The control that runs this says "check for updates" and nothing about rewriting sidecars,
+///   and the placement rule the bulk "assume current" action already follows is that a bulk rewrite acts only on a set the user has *seen*.
+///   A pre-ticked row costs the user one glance and one press, where an undo costs them noticing a summary they did not ask for.
 library;
 
 import '../models/character_info.dart';
@@ -128,21 +126,13 @@ class BulkResolutionPlan {
     required this.unreachable,
   });
 
-  static const BulkResolutionPlan empty = BulkResolutionPlan(
-    rows: <BulkResolutionRow>[],
-    untracked: <ModInfo>[],
-    settled: 0,
-    unreachable: 0,
-  );
-
   /// Mods with something to ask, in library order.
   final List<BulkResolutionRow> rows;
 
   /// Mods with no remote identity, which bulk may not touch.
   ///
-  /// Counted rather than dropped, because a screen that lists eleven mods out
-  /// of a library of fifty and says nothing about the other thirty-nine reads
-  /// as though it covered them.
+  /// Listed on the screen under their count, each a button away from the per-mod dialog,
+  /// because a screen that lists eleven mods out of a library of fifty and says nothing about the other thirty-nine reads as though it covered them.
   final List<ModInfo> untracked;
 
   /// Mods whose origin is as known as it needs to be. A number, not rows —
@@ -154,6 +144,10 @@ class BulkResolutionPlan {
   final int unreachable;
 
   bool get hasWork => rows.isNotEmpty;
+
+  /// Whether the screen has anything to show when the user asks for it: a question row or an untracked mod.
+  /// A check opens the screen by itself only on [hasWork], so mods that stay untracked do not raise a modal after every check.
+  bool get listsAnything => rows.isNotEmpty || untracked.isNotEmpty;
 
   /// The rows whose questions this pass can answer by itself.
   Iterable<BulkResolutionRow> get autoResolvable =>

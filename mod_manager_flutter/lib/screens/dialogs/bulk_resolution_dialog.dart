@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../models/character_info.dart';
 import '../../models/gamebanana/gb_file.dart';
+import '../../models/mod_origin.dart';
 import '../../models/origin_enums.dart';
 import '../../services/bulk_resolution.dart';
 import '../../services/gamebanana/file_selection.dart';
@@ -11,6 +13,14 @@ import '../../utils/gamebanana_url.dart';
 import '../../utils/notifications.dart';
 import '../../utils/url_utils.dart';
 import '../components/dialog_section.dart';
+import 'resolve_origin_dialog.dart';
+
+/// Opens the per-mod resolve dialog for one mod.
+/// A seam for tests; production passes [showResolveOriginDialogForResult].
+typedef ResolveOriginOpener = Future<ResolveOriginResult?> Function(
+  BuildContext context,
+  ModInfo mod,
+);
 
 /// The bulk check's **results screen**, which is also the bulk **resolution**
 /// screen.
@@ -24,13 +34,11 @@ import '../components/dialog_section.dart';
 ///
 /// Four things about this surface are decisions, not layout:
 ///
-/// - **Nothing is written until Apply.** The plan it was built from said to
-///   write the safe inferences immediately and offer an undo. The control that
-///   got the user here says "check for updates" and nothing about rewriting
-///   sidecars, and this codebase's own placement rule — the one the bulk
-///   "assume current" button follows — is that a bulk rewrite acts only on a
-///   set the user has seen. A pre-ticked row costs one glance and one press;
-///   an undo costs noticing a summary nobody asked for.
+/// - **Nothing ticked here is written until Apply.** Writing the safe inferences immediately and offering an undo loses:
+///   the control that got the user here says "check for updates" and nothing about rewriting sidecars,
+///   and this codebase's own placement rule — the one the bulk "assume current" button follows — is that a bulk rewrite acts only on a set the user has seen.
+///   A pre-ticked row costs one glance and one press; an undo costs noticing a summary nobody asked for.
+///   The untracked list is the one exception, and it is not a bulk write: each mod goes through the per-mod dialog, which saves as it closes.
 /// - **Identity starts unticked, everything else starts ticked.** The
 ///   asymmetry is the point. A file this pass inferred, and a page the API
 ///   itself says is gone, are statements the app is making and can defend. An
@@ -51,31 +59,44 @@ import '../components/dialog_section.dart';
 ///   to the mod page, and anything the list cannot settle stays a per-mod
 ///   resolve dialog away.
 ///
+/// Opens when the plan has a question row or an untracked mod to list.
+///
 /// Returns true when at least one sidecar was written, so the caller rescans —
 /// the status slot reads `ModInfo.origin`, which only a scan refreshes.
+/// That includes a mod saved through the per-mod dialog, which writes on its own whether or not Apply follows.
 Future<bool> showBulkResolutionDialog(
   BuildContext context,
   BulkResolutionPlan plan, {
   int updatesFound = 0,
   int unreachable = 0,
   required OriginWriter writer,
+  required OriginReader reader,
+  ResolveOriginOpener resolveOrigin = showResolveOriginDialogForResult,
 }) async {
-  if (!plan.hasWork) return false;
+  if (!plan.listsAnything) return false;
+  var resolvedAny = false;
   final answers = await showDialog<Map<String, BulkResolutionAnswer>>(
     context: context,
     builder: (_) => BulkResolutionDialog(
       plan: plan,
       updatesFound: updatesFound,
       unreachable: unreachable,
+      readOrigin: reader,
+      resolveOrigin: (context, mod) async {
+        final result = await resolveOrigin(context, mod);
+        if (result != null) resolvedAny = true;
+        return result;
+      },
     ),
   );
-  if (answers == null || answers.isEmpty) return false;
-  if (!context.mounted) return false;
+  if (answers == null || answers.isEmpty) return resolvedAny;
+  if (!context.mounted) return resolvedAny;
 
   final outcome = await _applyAnswers(answers, writer);
-  if (!context.mounted) return outcome.written > 0;
+  final wrote = outcome.written > 0 || resolvedAny;
+  if (!context.mounted) return wrote;
   _showOutcome(context, outcome);
-  return outcome.written > 0;
+  return wrote;
 }
 
 /// How the write loop ended.
@@ -165,6 +186,8 @@ class BulkResolutionDialog extends StatefulWidget {
     required this.plan,
     this.updatesFound = 0,
     this.unreachable = 0,
+    required this.readOrigin,
+    this.resolveOrigin = showResolveOriginDialogForResult,
   });
 
   final BulkResolutionPlan plan;
@@ -173,6 +196,12 @@ class BulkResolutionDialog extends StatefulWidget {
   /// instead of leaving the user to read it off the cards behind the dialog.
   final int updatesFound;
   final int unreachable;
+
+  /// What an untracked mod's "Resolve…" button opens.
+  final ResolveOriginOpener resolveOrigin;
+
+  /// Reads a mod's origin as saved now, so each Resolve opens on that rather than on the copy this screen was built with.
+  final OriginReader readOrigin;
 
   @override
   State<BulkResolutionDialog> createState() => _BulkResolutionDialogState();
@@ -187,6 +216,16 @@ class _BulkResolutionDialogState extends State<BulkResolutionDialog> {
 
   /// Mod folder ids whose `remote_missing` answer is ticked.
   final Set<String> _source = <String>{};
+
+  /// Untracked mod folder ids the per-mod dialog has since settled: bound to a page, or marked not from GameBanana.
+  /// Already saved, so they are never part of [_answers].
+  final Map<String, ResolveOriginResult> _resolved = {};
+
+  /// Whether a per-mod dialog has saved anything, which turns Cancel into Close: nothing is undone by leaving.
+  bool _savedAny = false;
+
+  /// Set while a per-mod dialog is open, so a double click opens one.
+  bool _resolving = false;
 
   @override
   void initState() {
@@ -277,10 +316,12 @@ class _BulkResolutionDialogState extends State<BulkResolutionDialog> {
                 // A library with one dead mod page and fifty to confirm should
                 // not open on the dead one.
                 children: [
-                  DialogNotice(
-                    icon: Icons.help_outline,
-                    message: loc.t('mods.bulk_resolve.intro'),
-                  ),
+                  // About the ticked boxes, so absent when there are none.
+                  if (widget.plan.hasWork)
+                    DialogNotice(
+                      icon: Icons.help_outline,
+                      message: loc.t('mods.bulk_resolve.intro'),
+                    ),
                   if (widget.updatesFound > 0 || widget.unreachable > 0)
                     _checkSummary(loc, scheme),
                   const SizedBox(height: 8),
@@ -319,6 +360,8 @@ class _BulkResolutionDialogState extends State<BulkResolutionDialog> {
                       why: 'mods.bulk_resolve.section_back_why',
                       rows: back,
                     ),
+                  if (widget.plan.untracked.isNotEmpty)
+                    _untracked(loc, scheme),
                   _excluded(loc),
                 ],
               ),
@@ -329,21 +372,24 @@ class _BulkResolutionDialogState extends State<BulkResolutionDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text(loc.t('mods.bulk_resolve.cancel')),
-        ),
-        FilledButton(
-          // Disabled rather than hidden when nothing is ticked: unticking
-          // everything is a legitimate way to leave, and a button that vanishes
-          // reads as a bug.
-          onPressed: answers.isEmpty
-              ? null
-              : () => Navigator.pop(context, Map.of(answers)),
-          child: Text(loc.plural(
-            'mods.bulk_resolve.apply',
-            answers.length,
-            params: {'count': '${answers.length}'},
+          child: Text(loc.t(
+            _savedAny ? 'mods.update.close' : 'mods.bulk_resolve.cancel',
           )),
         ),
+        // Absent with no question rows, since there is nothing it could ever save.
+        if (widget.plan.hasWork)
+          FilledButton(
+            // Disabled rather than hidden when nothing is ticked:
+            // unticking everything is a legitimate way to leave, and a button that vanishes reads as a bug.
+            onPressed: answers.isEmpty
+                ? null
+                : () => Navigator.pop(context, Map.of(answers)),
+            child: Text(loc.plural(
+              'mods.bulk_resolve.apply',
+              answers.length,
+              params: {'count': '${answers.length}'},
+            )),
+          ),
       ],
     );
   }
@@ -412,25 +458,156 @@ class _BulkResolutionDialogState extends State<BulkResolutionDialog> {
     );
   }
 
-  /// The two groups this screen is deliberately *not* acting on.
+  /// The mods with no mod page, folded under their count.
+  ///
+  /// Apply never covers them: identifying one means matching a folder name against a search,
+  /// so each goes through the per-mod dialog, one at a time, opened only by its own button.
+  /// That dialog saves as it closes, and nothing opens by itself afterwards.
+  Widget _untracked(AppLocalizations loc, ColorScheme scheme) {
+    final theme = Theme.of(context);
+    final mods = [...widget.plan.untracked]
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    final border = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(8),
+      side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: ExpansionTile(
+        shape: border,
+        collapsedShape: border,
+        leading: const Icon(Icons.link_off),
+        title: Text(
+          loc.plural('mods.bulk_resolve.excluded_untracked', mods.length,
+              params: {'count': '${mods.length}'}),
+          style: theme.textTheme.bodyMedium,
+        ),
+        subtitle: Text(
+          loc.t('mods.bulk_resolve.untracked_why'),
+          style: theme.textTheme.bodySmall
+              ?.copyWith(color: scheme.onSurfaceVariant),
+        ),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+        children: [for (final mod in mods) _untrackedRow(mod, scheme, loc)],
+      ),
+    );
+  }
+
+  Widget _untrackedRow(ModInfo mod, ColorScheme scheme, AppLocalizations loc) {
+    final resolved = _resolved[mod.id];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: scheme.outlineVariant.withValues(alpha: 0.4),
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _named(Icons.folder_outlined, mod.name, scheme, strong: true),
+                  if (resolved != null && resolved.modId != null) ...[
+                    const SizedBox(height: 2),
+                    _named(
+                      Icons.link,
+                      resolved.pageName ?? '#${resolved.modId}',
+                      scheme,
+                    ),
+                  ],
+                  if (resolved != null) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(Icons.check_circle,
+                            size: 16, color: scheme.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            loc.t(resolved.modId != null
+                                ? 'mods.bulk_resolve.untracked_resolved'
+                                : 'mods.bulk_resolve.untracked_marked_own'),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            // Gone once the row is settled: the question it stood for is answered.
+            if (resolved == null)
+              TextButton(
+                onPressed: _resolving ? null : () => _resolve(mod),
+                child: Text(loc.t('mods.bulk_resolve.untracked_resolve')),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// A row turns done when the dialog bound the mod to a page or marked it not from GameBanana.
+  /// A cancel, or any other answer, leaves it as it was.
+  ///
+  /// Nothing is fetched for it here: the check never looked this mod up,
+  /// so the row says to check again rather than showing a verdict.
+  ///
+  /// The dialog opens on the mod as saved now, read fresh:
+  /// a step that saves without settling the row, such as naming what a patch applies to, leaves the copy this screen was built with out of date.
+  Future<void> _resolve(ModInfo mod) async {
+    if (_resolving) return;
+    setState(() => _resolving = true);
+    final ResolveOriginResult? result;
+    try {
+      final current = await widget.readOrigin(mod.id);
+      if (!mounted) return;
+      result = await widget.resolveOrigin(context, _withOrigin(mod, current));
+    } finally {
+      if (mounted) setState(() => _resolving = false);
+    }
+    if (!mounted || result == null) return;
+    final saved = result;
+    final settled = saved.modId != null || saved.markedNotFromGameBanana;
+    setState(() {
+      _savedAny = true;
+      if (settled) _resolved[mod.id] = saved;
+    });
+  }
+
+  /// [mod] carrying [origin] in place of its own, including none: `copyWith` cannot clear the block.
+  ModInfo _withOrigin(ModInfo mod, ModOrigin? origin) => ModInfo(
+        id: mod.id,
+        name: mod.name,
+        characterId: mod.characterId,
+        isActive: mod.isActive,
+        imagePath: mod.imagePath,
+        description: mod.description,
+        tags: mod.tags,
+        images: mod.images,
+        isFavorite: mod.isFavorite,
+        keybinds: mod.keybinds,
+        origin: origin,
+        uid: mod.uid,
+      );
+
+  /// The mods this screen has nothing to ask about.
   ///
   /// Named for the same reason the "assume current" confirmation names its
   /// exclusions: "eleven mods" out of a library of fifty reads as though it
   /// covered the library unless the other thirty-nine are accounted for.
   Widget _excluded(AppLocalizations loc) {
-    String plural(String key, int count) =>
-        loc.plural(key, count, params: {'count': '$count'});
-    final lines = <String>[
-      if (widget.plan.untracked.isNotEmpty)
-        plural('mods.bulk_resolve.excluded_untracked',
-            widget.plan.untracked.length),
-      if (widget.plan.settled > 0)
-        plural('mods.bulk_resolve.already_known', widget.plan.settled),
-    ];
-    if (lines.isEmpty) return const SizedBox.shrink();
+    if (widget.plan.settled == 0) return const SizedBox.shrink();
     return DialogNotice(
       icon: Icons.playlist_remove,
-      message: lines.join('\n'),
+      message: loc.plural('mods.bulk_resolve.already_known', widget.plan.settled,
+          params: {'count': '${widget.plan.settled}'}),
     );
   }
 

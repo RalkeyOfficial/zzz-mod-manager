@@ -250,6 +250,10 @@ class ModManagerService {
   ) =>
       _metadata.updateOrigin(modName, update);
 
+  /// A mod's origin block as it is on disk now, rather than as the last scan found it.
+  Future<ModOrigin?> readModOrigin(String modName) =>
+      _metadata.readOrigin(modName);
+
   /// The oldest file mtime inside a mod folder, as an install-date proxy for a
   /// mod that has no recorded install date. See [ModMetadataRepository].
   Future<DateTime?> installDateProxy(String modName) =>

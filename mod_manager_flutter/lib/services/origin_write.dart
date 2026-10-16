@@ -20,3 +20,7 @@ typedef OriginWriter = Future<OriginWriteResult> Function(
   String modName,
   ModOrigin? Function(ModOrigin? current) update,
 );
+
+/// Reads one mod's origin block as it is on disk now.
+/// Production is the library service's `readModOrigin`; tests inject one for the same reason as [OriginWriter].
+typedef OriginReader = Future<ModOrigin?> Function(String modName);

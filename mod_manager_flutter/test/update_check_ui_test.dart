@@ -11,6 +11,7 @@ import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/origin_write.dart';
 import 'package:mod_manager_flutter/screens/components/mods_toolbar.dart';
+import 'package:mod_manager_flutter/screens/components/tracking_nudge.dart';
 import 'package:mod_manager_flutter/screens/dialogs/bulk_resolution_dialog.dart';
 import 'package:mod_manager_flutter/screens/dialogs/mod_update_dialog.dart';
 import 'package:mod_manager_flutter/services/bulk_update_check.dart';
@@ -281,6 +282,90 @@ void main() {
       await runAction(tester, 'Sort out mod tracking…');
       expect(runs, 1);
       expect(find.byType(BulkResolutionDialog), findsOneWidget);
+    });
+
+    testWidgets('the menu lists untracked mods when no page was ever fetched',
+        (tester) async {
+      // Nothing is tracked, so there is nothing to check and no record to wait for; the untracked rows need none.
+      await pumpToolbar(tester, [
+        CharacterInfo(id: 'all', name: 'All', skins: [
+          mod('handmade'),
+          mod('my own thing'),
+        ]),
+      ]);
+
+      await runAction(tester, 'Sort out mod tracking…');
+      expect(find.byType(BulkResolutionDialog), findsOneWidget);
+      expect(find.textContaining("2 mods aren't linked to a GameBanana page"),
+          findsOneWidget);
+      // Nothing was looked up, so nothing is reported as unreached.
+      expect(find.textContaining("couldn't be checked"), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(BulkResolutionDialog),
+          matching: find.byType(FilledButton),
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a check does not open the screen for untracked mods alone',
+        (tester) async {
+      // Mods that stay untracked would otherwise raise a modal after every check; the menu still reaches them.
+      final fetch = ModRecordFetcherStub((ids) async => [record(1)]);
+      await pumpToolbar(
+        tester,
+        [
+          CharacterInfo(id: 'all', name: 'All', skins: [
+            mod('done', origin: origin(modId: 1, fileId: 10)),
+            mod('handmade'),
+          ]),
+        ],
+        fetch: fetch,
+      );
+
+      await runAction(tester, 'Check for updates');
+      expect(find.byType(BulkResolutionDialog), findsNothing);
+      expect(find.text('No updates found'), findsOneWidget);
+
+      await runAction(tester, 'Sort out mod tracking…');
+      expect(find.byType(BulkResolutionDialog), findsOneWidget);
+      expect(find.textContaining("1 mod isn't linked to a GameBanana page"),
+          findsOneWidget);
+    });
+
+    testWidgets('the reminder checks first, then lists the untracked mods',
+        (tester) async {
+      // Nothing in hand and a tracked mod to look up, so it runs the check; with no question rows that check alone would end in a notification.
+      var runs = 0;
+      final fetch = ModRecordFetcherStub((ids) async {
+        runs++;
+        return [record(1)];
+      });
+      await pumpToolbar(
+        tester,
+        [
+          CharacterInfo(id: 'all', name: 'All', skins: [
+            mod('done', origin: origin(modId: 1, fileId: 10)),
+            mod('handmade'),
+          ]),
+        ],
+        fetch: fetch,
+      );
+      container.read(trackingNudgeDismissedProvider.notifier).state = false;
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.descendant(
+        of: find.byType(TrackingNudge),
+        matching: find.byType(TextButton),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(runs, 1);
+      expect(find.byType(BulkResolutionDialog), findsOneWidget);
+      expect(find.textContaining("1 mod isn't linked to a GameBanana page"),
+          findsOneWidget);
+      expect(find.text('No updates found'), findsNothing);
     });
 
     testWidgets('re-checking is one press, whatever the filters are doing',

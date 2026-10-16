@@ -1,16 +1,53 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
+import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
+import 'package:mod_manager_flutter/services/gamebanana/gamebanana_client.dart';
+import 'package:mod_manager_flutter/services/gamebanana/remote_mod_metadata.dart';
 import 'package:mod_manager_flutter/services/origin_write.dart';
 import 'package:mod_manager_flutter/screens/dialogs/bulk_resolution_dialog.dart';
+import 'package:mod_manager_flutter/screens/dialogs/resolve_origin_dialog.dart';
 import 'package:mod_manager_flutter/services/bulk_resolution.dart';
+import 'package:mod_manager_flutter/utils/state_providers.dart';
 
+import 'support/fake_http_transport.dart';
+import 'support/fixtures.dart';
 import 'support/localized_harness.dart';
 import 'support/origin_shorthand.dart';
+
+/// The per-mod dialog's local side, keeping each mod's origin "on disk" in [onDisk] and touching no library.
+class _FakeGateway implements ResolveOriginGateway {
+  _FakeGateway([Map<String, ModOrigin?>? onDisk]) : onDisk = onDisk ?? {};
+
+  final Map<String, ModOrigin?> onDisk;
+  int writes = 0;
+
+  /// What the bulk screen's reader sees: the same blocks this gateway writes.
+  Future<ModOrigin?> read(String modId) async => onDisk[modId];
+
+  @override
+  Future<DateTime?> installDateProxy(String modId) async => null;
+
+  @override
+  Future<OriginWriteResult> writeOrigin(
+    String modId,
+    ModOrigin? Function(ModOrigin? current) update,
+  ) async {
+    writes++;
+    final next = update(onDisk[modId]);
+    if (next == null) return OriginWriteResult.declined;
+    onDisk[modId] = next;
+    return OriginWriteResult.written;
+  }
+
+  @override
+  Future<void> fillMetadata(String modId, RemoteModMetadata remote) async {}
+}
 
 /// The bulk results/resolution screen.
 ///
@@ -72,6 +109,14 @@ void main() {
     Map<String, ModOrigin?> onDisk = const {},
     Set<String> failFor = const {},
     Size surfaceSize = const Size(1200, 800),
+    ResolveOriginOpener? resolveOrigin,
+    List<Override> overrides = const [],
+
+    /// What a Resolve press reads as saved; by default the block each untracked mod arrived with.
+    OriginReader? readOrigin,
+
+    /// Collects what the screen answers its caller when it closes.
+    List<bool>? returned,
   }) async {
     final written = <String>[];
     final results = <String, ModOrigin?>{};
@@ -80,28 +125,37 @@ void main() {
       tester,
       Builder(
         builder: (context) => ElevatedButton(
-          onPressed: () => showBulkResolutionDialog(
-            context,
-            plan,
-            writer: (name, update) async {
-              if (failFor.contains(name)) return OriginWriteResult.writeFailed;
-              // Mirrors `updateOrigin`: the transform sees the block as it is
-              // **on disk**, which `onDisk` can make differ from the one the
-              // plan was built from.
-              final current = onDisk.containsKey(name)
-                  ? onDisk[name]
-                  : plan.rows.firstWhere((r) => r.mod.id == name).mod.origin;
-              final next = update(current);
-              if (next == null) return OriginWriteResult.declined;
-              written.add(name);
-              results[name] = next;
-              return OriginWriteResult.written;
-            },
-          ),
+          onPressed: () async {
+            final wrote = await showBulkResolutionDialog(
+              context,
+              plan,
+              resolveOrigin: resolveOrigin ?? showResolveOriginDialogForResult,
+              reader: readOrigin ??
+                  (name) async =>
+                      plan.untracked.firstWhere((m) => m.id == name).origin,
+              writer: (name, update) async {
+                if (failFor.contains(name)) {
+                  return OriginWriteResult.writeFailed;
+                }
+                // Mirrors `updateOrigin`:
+                // the transform sees the block as it is **on disk**, which `onDisk` can make differ from the one the plan was built from.
+                final current = onDisk.containsKey(name)
+                    ? onDisk[name]
+                    : plan.rows.firstWhere((r) => r.mod.id == name).mod.origin;
+                final next = update(current);
+                if (next == null) return OriginWriteResult.declined;
+                written.add(name);
+                results[name] = next;
+                return OriginWriteResult.written;
+              },
+            );
+            returned?.add(wrote);
+          },
           child: const Text('run'),
         ),
       ),
       surfaceSize: surfaceSize,
+      overrides: overrides,
     );
     await tester.tap(find.text('run'));
     await tester.pumpAndSettle();
@@ -136,7 +190,9 @@ void main() {
     await runFlow(tester, plan, surfaceSize: const Size(1100, 900));
 
     // What the screen is for, before any of the questions.
-    expect(find.textContaining('Nothing is saved until you press Save'),
+    expect(
+        find.textContaining(
+            'Nothing you tick here is saved until you press Save'),
         findsOneWidget);
     // One heading per kind of question, each carrying its own count and its own
     // reason for existing.
@@ -444,5 +500,394 @@ void main() {
     await runFlow(tester, plan, surfaceSize: const Size(480, 600));
     expectBuilt(BulkResolutionDialog);
     expect(find.textContaining('Save '), findsOneWidget);
+  });
+
+  group('mods with no mod page', () {
+    const resolveLabel = 'Resolve…';
+    const resolvedLine =
+        'Resolved and saved now — check again to see its updates.';
+    const pageName = 'ZZMI RabbitFX - Glow FX + Censor Remover';
+
+    /// One tracked row with a gone page, pre-ticked, so the screen opens and Apply reads "Save 1 mod" — plus the untracked mods named.
+    BulkResolutionPlan withUntracked(List<String> names) => planBulkResolution(
+          mods: [
+            mod('vanished',
+                origin: origin(modIdConfidence: OriginConfidence.user)),
+            for (final name in names) mod(name),
+          ],
+          records: {1: remote(name: 'Gone page', trashed: true)},
+        );
+
+    /// The real per-mod dialog, over a scripted GameBanana and a recording gateway.
+    ({
+      ResolveOriginOpener open,
+      List<Override> overrides,
+      List<String> opened,
+      _FakeGateway gateway,
+    }) realDialog() {
+      final gateway = _FakeGateway();
+      final opened = <String>[];
+      final transport = FakeHttpTransport()
+        ..stub(
+          Uri.parse(
+            'https://gamebanana.com/apiv13/Util/Search/Results'
+            '?_sModelName=Mod&_sSearchString=Ellen+Swimsuit&_idGameRow=19567&_nPage=1',
+          ),
+          body: loadGbFixture('search_ellen'),
+        )
+        ..stub(
+          Uri.parse('https://gamebanana.com/apiv13/Mod/531649/ProfilePage'),
+          body: loadGbFixture('mod_profile_531649'),
+        )
+        // For the patch-shaped folder: its name seeds the search for what it patches, and that mod's page.
+        ..stub(
+          Uri.parse(
+            'https://gamebanana.com/apiv13/Util/Search/Results'
+            '?_sModelName=Mod&_sSearchString=RabbitFX&_idGameRow=19567&_nPage=1',
+          ),
+          body: loadGbFixture('search_ellen'),
+        )
+        ..stub(
+          Uri.parse('https://gamebanana.com/apiv13/Mod/527697/ProfilePage'),
+          body: loadGbFixture('mod_profile_rated'),
+        );
+      return (
+        open: (context, mod) {
+          opened.add(mod.id);
+          return showResolveOriginDialogForResult(context, mod,
+              gateway: gateway);
+        },
+        overrides: [
+          gameBananaClientProvider.overrideWithValue(
+            GameBananaClient(transport: transport, maxRetries: 0),
+          ),
+        ],
+        opened: opened,
+        gateway: gateway,
+      );
+    }
+
+    Future<void> expand(WidgetTester tester) async {
+      await tester.tap(find.byType(ExpansionTile));
+      await tester.pumpAndSettle();
+    }
+
+    Finder inResolveDialog(Finder finder) =>
+        find.descendant(of: find.byType(ResolveOriginDialog), matching: finder);
+
+    /// Opens the first row's dialog and binds it to a page by pasting its url.
+    Future<void> resolveFirst(WidgetTester tester) async {
+      await tester.tap(find.widgetWithText(TextButton, resolveLabel).first);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        inResolveDialog(find.byType(TextField)),
+        'https://gamebanana.com/mods/531649',
+      );
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      await tester.tap(inResolveDialog(find.text('Save')));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('are folded under their count, and expand into rows',
+        (tester) async {
+      await runFlow(tester, withUntracked(['handmade', 'my own thing']));
+
+      expect(find.textContaining("2 mods aren't linked to a GameBanana page"),
+          findsOneWidget);
+      expect(find.text('handmade'), findsNothing);
+      expect(find.text(resolveLabel), findsNothing);
+
+      await expand(tester);
+      expect(find.text('handmade'), findsOneWidget);
+      expect(find.text('my own thing'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, resolveLabel), findsNWidgets(2));
+    });
+
+    testWidgets('are sorted by name, ignoring case', (tester) async {
+      // A case-sensitive sort would put "Charlie" first.
+      await runFlow(tester, withUntracked(['beta', 'Charlie', 'alpha']));
+      await expand(tester);
+
+      double top(String name) => tester.getTopLeft(find.text(name)).dy;
+      expect(top('alpha'), lessThan(top('beta')));
+      expect(top('beta'), lessThan(top('Charlie')));
+    });
+
+    testWidgets('Resolve opens the per-mod dialog over the screen',
+        (tester) async {
+      final dialog = realDialog();
+      await runFlow(
+        tester,
+        withUntracked(['Ellen Swimsuit']),
+        resolveOrigin: dialog.open,
+        overrides: dialog.overrides,
+      );
+      await expand(tester);
+      await tester.tap(find.widgetWithText(TextButton, resolveLabel));
+      await tester.pumpAndSettle();
+
+      expectBuilt(ResolveOriginDialog);
+      expect(find.text('Which mod is this?'), findsOneWidget);
+      expect(find.byType(BulkResolutionDialog), findsOneWidget);
+      expect(dialog.opened, ['Ellen Swimsuit']);
+    });
+
+    testWidgets('a resolved row shows it is done, and the page it went to',
+        (tester) async {
+      final dialog = realDialog();
+      final returned = <bool>[];
+      await runFlow(
+        tester,
+        withUntracked(['Ellen Swimsuit']),
+        resolveOrigin: dialog.open,
+        overrides: dialog.overrides,
+        returned: returned,
+      );
+      await expand(tester);
+      await resolveFirst(tester);
+
+      expect(dialog.gateway.writes, 1);
+      expect(find.byType(ResolveOriginDialog), findsNothing);
+      expect(find.text('Ellen Swimsuit'), findsOneWidget);
+      expect(find.text(pageName), findsOneWidget);
+      expect(find.text(resolvedLine), findsOneWidget);
+      expect(find.byIcon(Icons.check_circle), findsOneWidget);
+      expect(find.text(resolveLabel), findsNothing);
+
+      // Saved by the per-mod dialog already, so closing without Apply still tells the caller to rescan.
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+      expect(returned, [true]);
+    });
+
+    testWidgets('folding and unfolding keeps a resolved row', (tester) async {
+      final dialog = realDialog();
+      await runFlow(
+        tester,
+        withUntracked(['Ellen Swimsuit']),
+        resolveOrigin: dialog.open,
+        overrides: dialog.overrides,
+      );
+      await expand(tester);
+      await resolveFirst(tester);
+
+      await expand(tester);
+      expect(find.text(resolvedLine), findsNothing);
+      await expand(tester);
+      expect(find.text(pageName), findsOneWidget);
+      expect(find.text(resolvedLine), findsOneWidget);
+      expect(find.text(resolveLabel), findsNothing);
+    });
+
+    testWidgets('a double click opens one dialog', (tester) async {
+      final dialog = realDialog();
+      await runFlow(
+        tester,
+        withUntracked(['Ellen Swimsuit']),
+        resolveOrigin: dialog.open,
+        overrides: dialog.overrides,
+      );
+      await expand(tester);
+      final button = find.widgetWithText(TextButton, resolveLabel);
+      await tester.tap(button);
+      await tester.tap(button, warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      expect(dialog.opened, ['Ellen Swimsuit']);
+      expect(find.byType(ResolveOriginDialog), findsOneWidget);
+    });
+
+    testWidgets('Cancel reads Close once the per-mod dialog has saved',
+        (tester) async {
+      // Leaving undoes nothing at that point, so "Cancel" would claim more than it does.
+      final dialog = realDialog();
+      await runFlow(
+        tester,
+        withUntracked(['Ellen Swimsuit']),
+        resolveOrigin: dialog.open,
+        overrides: dialog.overrides,
+      );
+      expect(find.widgetWithText(TextButton, 'Cancel'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, 'Close'), findsNothing);
+
+      await expand(tester);
+      await resolveFirst(tester);
+      expect(find.widgetWithText(TextButton, 'Cancel'), findsNothing);
+      expect(find.widgetWithText(TextButton, 'Close'), findsOneWidget);
+    });
+
+    testWidgets('with no question rows there is no intro and no Save button',
+        (tester) async {
+      await runFlow(
+        tester,
+        planBulkResolution(
+          mods: [mod('handmade'), mod('my own thing')],
+          records: const {},
+        ),
+      );
+
+      expectBuilt(BulkResolutionDialog);
+      expect(find.textContaining("2 mods aren't linked to a GameBanana page"),
+          findsOneWidget);
+      expect(find.textContaining('Nothing you tick here'), findsNothing);
+      expect(find.byType(FilledButton), findsNothing);
+      expect(find.widgetWithText(TextButton, 'Cancel'), findsOneWidget);
+    });
+
+    testWidgets('cancelling the per-mod dialog leaves the row as it was',
+        (tester) async {
+      final dialog = realDialog();
+      final returned = <bool>[];
+      await runFlow(
+        tester,
+        withUntracked(['Ellen Swimsuit']),
+        resolveOrigin: dialog.open,
+        overrides: dialog.overrides,
+        returned: returned,
+      );
+      await expand(tester);
+      await tester.tap(find.widgetWithText(TextButton, resolveLabel));
+      await tester.pumpAndSettle();
+      await tester.tap(inResolveDialog(find.text('Cancel')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ResolveOriginDialog), findsNothing);
+      expect(find.widgetWithText(TextButton, resolveLabel), findsOneWidget);
+      expect(find.text(resolvedLine), findsNothing);
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(returned, [false]);
+    });
+
+    testWidgets('"not from GameBanana" settles the row, with no button left',
+        (tester) async {
+      // A button left behind would reopen the dialog on the mod as it was before the save,
+      // whose page search can bind a page while the folder stays marked as the user's own.
+      final dialog = realDialog();
+      final returned = <bool>[];
+      await runFlow(
+        tester,
+        withUntracked(['Ellen Swimsuit']),
+        resolveOrigin: dialog.open,
+        overrides: dialog.overrides,
+        returned: returned,
+      );
+      await expand(tester);
+      await tester.tap(find.widgetWithText(TextButton, resolveLabel));
+      await tester.pumpAndSettle();
+      await tester.tap(
+          inResolveDialog(find.text("Not from GameBanana, or it's my own")));
+      await tester.pumpAndSettle();
+
+      expect(dialog.gateway.writes, 1);
+      expect(find.byType(ResolveOriginDialog), findsNothing);
+      expect(find.text('Marked as not from GameBanana — saved now.'),
+          findsOneWidget);
+      expect(find.byIcon(Icons.check_circle), findsOneWidget);
+      expect(find.text(resolveLabel), findsNothing);
+      expect(find.text(resolvedLine), findsNothing);
+
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+      expect(returned, [true]);
+    });
+
+    testWidgets('closing the per-mod dialog opens nothing else',
+        (tester) async {
+      // No chaining: the user picks the next mod, or stops.
+      final dialog = realDialog();
+      await runFlow(
+        tester,
+        withUntracked(['zeta', 'Ellen Swimsuit']),
+        resolveOrigin: dialog.open,
+        overrides: dialog.overrides,
+      );
+      await expand(tester);
+      await resolveFirst(tester);
+
+      expect(dialog.opened, ['Ellen Swimsuit']);
+      expect(find.byType(ResolveOriginDialog), findsNothing);
+      expect(find.byType(BulkResolutionDialog), findsOneWidget);
+      expect(find.widgetWithText(TextButton, resolveLabel), findsOneWidget);
+    });
+
+    testWidgets('Apply counts and writes only its own rows', (tester) async {
+      final dialog = realDialog();
+      final plan = withUntracked(['Ellen Swimsuit']);
+      final result = await runFlow(
+        tester,
+        plan,
+        resolveOrigin: dialog.open,
+        overrides: dialog.overrides,
+      );
+      expect(find.text('Save 1 mod'), findsOneWidget);
+
+      await expand(tester);
+      await resolveFirst(tester);
+      expect(find.text(resolvedLine), findsOneWidget);
+      expect(find.text('Save 1 mod'), findsOneWidget);
+
+      await apply(tester);
+      expect(result.mods, ['vanished']);
+    });
+
+    testWidgets('Resolve opens on the mod as saved, not as the screen found it',
+        (tester) async {
+      // Naming what a patch applies to saves without settling the row, so the screen's own copy goes out of date.
+      const patchOrigin = ModOrigin(
+        provenance: OriginProvenance.importedFolder,
+        ingest: ModIngest(patchShaped: true),
+      );
+      final dialog = realDialog();
+      dialog.gateway.onDisk['RabbitFX'] = patchOrigin;
+      await runFlow(
+        tester,
+        planBulkResolution(
+          mods: [
+            mod('vanished',
+                origin: origin(modIdConfidence: OriginConfidence.user)),
+            mod('RabbitFX', origin: patchOrigin),
+          ],
+          records: {1: remote(name: 'Gone page', trashed: true)},
+        ),
+        resolveOrigin: dialog.open,
+        overrides: dialog.overrides,
+        readOrigin: dialog.gateway.read,
+      );
+      await expand(tester);
+      await tester.tap(find.widgetWithText(TextButton, resolveLabel));
+      await tester.pumpAndSettle();
+      expect(find.text('Which mod is this?'), findsOneWidget);
+
+      await tester.enterText(
+        inResolveDialog(find.byType(TextField)),
+        'https://gamebanana.com/mods/531649',
+      );
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      final nameBase = find.text('Name the mod it patches');
+      await tester.ensureVisible(nameBase);
+      await tester.tap(nameBase);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ellen joe cheongsam').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ResolveOriginDialog), findsNothing);
+      expect(dialog.gateway.onDisk['RabbitFX']!.base!.modId, 527697);
+      // Saved, but not a settled row: the button stays.
+      final resolve = find.widgetWithText(TextButton, resolveLabel);
+      expect(resolve, findsOneWidget);
+
+      await tester.tap(resolve);
+      await tester.pumpAndSettle();
+      expect(find.byType(ResolveOriginDialog), findsOneWidget);
+      // The folder now has a base on record, so the dialog opens on it rather than on the page search.
+      expect(find.text('Which mod is this?'), findsNothing);
+      expect(find.textContaining('Megalodon Maid Ellen'), findsWidgets);
+    });
   });
 }

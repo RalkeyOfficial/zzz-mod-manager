@@ -495,6 +495,13 @@ again: cancelling it, or closing it by accident, meant waiting for the next chec
 Keeping the records (`modUpdateRecordsProvider`, never persisted, exactly like the
 verdicts beside them) is what makes reopening free.
 
+**Untracked mods open the screen only on demand.** A check opens it by itself only for a question row (`BulkResolutionPlan.hasWork`):
+a library that keeps a few mods untracked on purpose would otherwise get a modal after every check, asking nothing.
+The on-demand doors — the menu entry, and the reminder above the toolbar that offers to link mods to their GameBanana pages — open it for a question row *or* an untracked mod (`listsAnything`).
+The untracked list needs no mod page, so the plan is built with no records in hand too, and a library with nothing tracked opens straight onto that list with no check at all.
+When those doors run a check first, an untracked mod is still enough to open the screen afterwards, so the reminder never ends in a notification that leaves those mods out of reach.
+With no records in hand nothing was looked up, so that door reports nothing as unreached.
+
 **Both doors must say the same thing**, which took fixing twice over. The update
 count is read library-wide (`libraryUpdateCountProvider`) rather than from whichever
 door opened the screen: the check's own tally is library-wide while the toolbar's
@@ -552,15 +559,35 @@ still `inferred` when its page reappears.
 | The page is gone | the record says private/trashed/withheld and the block does not | `remote_missing: true` |
 | The page is back | the block says gone and the record answered normally | `remote_missing: false` |
 
-A mod with **no `mod_id` gets no row at all**, and the screen says how many were
-excluded for that reason. This is the same rule the bulk "assume current" action
-follows and it is the oldest one here: identifying an untracked mod means
-fuzzy-matching a folder name (`Ellen final FIXED v2`, `bikini`, `mod`) against a
-search, and a wrong match rubber-stamped in bulk would later let an "update"
-overwrite a mod with an unrelated mod's files. That decision stays one-at-a-time and
-user-confirmed, in the per-mod dialog, forever.
+A mod with **no `mod_id` gets no question row**, and nothing Apply does reaches it.
+This is the same rule the bulk "assume current" action follows and it is the oldest one here: identifying an untracked mod means fuzzy-matching a folder name (`Ellen final FIXED v2`, `bikini`, `mod`) against a search,
+and a wrong match rubber-stamped in bulk would later let an "update" overwrite a mod with an unrelated mod's files.
+That decision stays one-at-a-time and user-confirmed, in the per-mod dialog, forever.
 
-### Nothing is written until Apply
+**Untracked mods are listed instead, folded under their count.** The count is a header that expands into the mods, sorted by name ignoring case, each with a *Resolve…* button.
+The button opens the per-mod resolve dialog ([§5](#5-the-resolve-dialog)) on top of this screen, and that is all this screen does for them:
+
+- **One at a time, chosen by the user.** Nothing opens by itself when the dialog closes — no chaining, no "save and next" — and there is no "resolve all" or select-all.
+  A queue that walks from one mod to the next turns a run of individual confirmations back into a bulk pass with extra clicks; the user picks which mods to identify, in any order, and stops whenever they like.
+- **Saved now, not on Apply.** The per-mod dialog writes as it closes, exactly as it does from the library card.
+  So a resolved row is already on disk: Apply does not touch it and its "Save N mods" count does not include it, closing the screen without Apply keeps it, and the screen tells its caller something was written so the library rescans.
+  The row says it is saved now, so it cannot be read as waiting for Apply, and once anything is saved the screen's Cancel reads *Close*, since leaving undoes nothing.
+  With no question rows at all there is nothing for Apply to save, so the Save button and the intro about ticked boxes are left out.
+- **A resolved row stays in the list, and is not checked on the spot.** It shows a done mark, the name of the mod page it was bound to, and "check again to see its updates".
+  The name comes from the profile the dialog already fetched to offer its file list, so the row costs no request.
+  The check had no `mod_id` to look this mod up with, so the screen holds no verdict for it, and producing one here is the same undecided question as refreshing the verdict of any mod resolved on this screen:
+  re-folding the records in hand is free but skips the release feeds the check fetches only for mods that flagged, so it could show the variant-shaped false positive the check exists to remove, and the alternative is a request nobody asked for.
+  Until that is settled, the next check covers it.
+- **"Not from GameBanana" settles a row too.** It shows a done mark and "Marked as not from GameBanana — saved now", with no page name, since there is none.
+  A cancelled dialog, or any other answer, leaves the row as it was.
+- **Each Resolve opens on the mod as saved now.** The screen's own copy of each mod is from when it opened, and a step that saves without settling the row — naming what a patch applies to — leaves that copy out of date.
+  So every press reads the mod's origin block from disk first (`readModOrigin`) and opens the dialog on that, never on the copy.
+- **A settled row has no button.** Its question is answered, and a page bound after "not from GameBanana" would leave the folder marked as the user's own while the row says to check again.
+  The button is also disabled while a dialog is open, so a double click opens one.
+
+### Nothing ticked is written until Apply
+
+This covers every tick on the screen. The untracked list is not a bulk write and is not covered: each of its mods goes through the per-mod dialog, which saves as it closes.
 
 Writing the safe inferences immediately and offering an undo afterwards was
 considered and loses on two counts. The control that gets the user here says

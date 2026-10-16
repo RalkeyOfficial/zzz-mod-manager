@@ -263,8 +263,6 @@ Two things are **refused rather than unbuilt**, both recorded in
 - [x] **A shader file can have several holders.** Identical files already in the folder are adopted and left in place, and mods sharing a set each hold a copy.
   [`docs/shader-fixes.md`](docs/shader-fixes.md) §3–5 owns it.
 - [x] **A shader folder under another name lands in the mod's `ShaderFixes/`.** [`docs/shader-fixes.md`](docs/shader-fixes.md) §2 owns it.
-- [ ] **A shader folder inside a zip inside the archive imports as an ordinary file.** Recolored Aegis addon ships its shader folder in a zip within the download,
-  so the inner zip lands in the mod as one file and enabling the mod places nothing. Import unpacks one level only. We change it to unpack a nested archive at import and run the shader-folder rule over what comes out.
 - [x] **A placed `.ini` the XXMI Launcher renamed is removed under its new name.** [`docs/shader-fixes.md`](docs/shader-fixes.md) §4 owns it.
 
 ### 4.1 How an update is actually applied
@@ -494,10 +492,9 @@ One screen, two jobs, and nothing that goes stale once libraries are migrated.
   fuzzy name-match that a user rubber-stamps can bind a folder to an unrelated
   mod — and then an "update" overwrites their mod with a different mod's files.
   Folder names in the wild (`Ellen final FIXED v2`, `bikini`, `mod`) are exactly
-  where fuzzy matching is least reliable. **Untracked mods therefore get no bulk
-  feature at all** — they get no row, and the screen says how many were excluded
-  for that reason, because "eleven mods" out of a library of fifty reads as though
-  it covered the library unless the rest are accounted for.
+  where fuzzy matching is least reliable.
+  **Untracked mods therefore get no bulk feature at all** — no question row and nothing Apply writes.
+  The screen lists them folded under their count, each with a button into the per-mod dialog, one at a time, because "eleven mods" out of a library of fifty reads as though it covered the library unless the rest are accounted for.
 
 #### Open around the bulk resolution pass (known, deliberately not built)
 
@@ -512,11 +509,7 @@ One screen, two jobs, and nothing that goes stale once libraries are migrated.
   the pass had already learned to remove. The honest options are a second full
   check (a request nobody asked for) or fetching one feed per newly-flagged mod;
   both are decisions about the check, not about this screen.
-- [ ] **Untracked mods are listed as a count and nothing more.** The bulk rule
-  forbids acting on them, which is right, but the screen could still offer to
-  open the per-mod dialog for each in turn rather than leaving the user to find
-  them through the "needs attention" filter afterwards. Small, and it is the one
-  place the two surfaces could hand off to each other.
+- [x] **Untracked mods on the bulk screen are listed and resolvable one at a time.** [`docs/origin-tracking.md`](docs/origin-tracking.md) §7 owns it.
 - **There is no "I don't know which" per row.** The ambiguous rows get a
   picker or nothing; the `assumed_latest` escape hatch exists per mod (§7.5) and
   in bulk, but not *here*, where the user is already looking at the list. It
@@ -580,11 +573,9 @@ Two limits, because they bound what may be built on it:
 - **Localization is a per-screen tax.** Every user-facing surface needs keys in
   **both** `assets/l10n/en.json` and `uk.json`, and it is the most repetitive cost
   in the plan — budget it per milestone rather than discovering it at the end.
-  The load-bearing half is always the *caveat* copy: "possibly outdated", "a best
-  guess, not a guarantee — GameBanana publishes no comparable version numbers",
-  "nothing is saved until you press Apply", why untracked mods are excluded. Those
-  sentences *are* the feature, which is why they are translated rather than
-  interpolated into English.
+  The load-bearing half is always the *caveat* copy:
+  "possibly outdated", "a best guess, not a guarantee — GameBanana publishes no comparable version numbers", "nothing you tick here is saved until you press Save", why untracked mods are identified one at a time.
+  Those sentences *are* the feature, which is why they are translated rather than interpolated into English.
   The check worth reusing: extract every `loc.t('…')` literal from `lib/` and diff
   it against both JSON files in each direction. It catches a missing translation
   **and** a key left behind by deleted UI.

@@ -565,7 +565,10 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
           // itself in that case, which is the request it would have taken
           // anyway. Refusing until a check had run would make the menu's most
           // useful item the one that is greyed out on launch.
-          enabled: pending > 0 || checkPlan.hasWork,
+          // An untracked mod is enough on its own, since its row needs no mod page.
+          enabled: pending > 0 ||
+              checkPlan.hasWork ||
+              resolution.untracked.isNotEmpty,
         ),
         _menuItem(
           value: _LibraryAction.assumeCurrent,
@@ -644,7 +647,11 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
     );
   }
 
-  Future<void> _runUpdateCheck(BulkUpdateCheckPlan plan) async {
+  /// [onDemand] is the "sort out" doors running the check first: the screen then opens for untracked mods too, since the user asked for it.
+  Future<void> _runUpdateCheck(
+    BulkUpdateCheckPlan plan, {
+    bool onDemand = false,
+  }) async {
     setState(() => _checkingUpdates = true);
     final BulkUpdateCheckOutcome outcome;
     try {
@@ -673,8 +680,9 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
     // otherwise a modal stands between the user and the badges they pressed
     // for. It states the summary itself when it does open, so a notification is
     // never raised behind it.
+    // Untracked mods alone do not count as something to ask here, or a library that keeps some would get a modal after every check.
     final resolution = ref.read(bulkResolutionPlanProvider);
-    if (!resolution.hasWork) {
+    if (!(onDemand ? resolution.listsAnything : resolution.hasWork)) {
       showUpdateCheckOutcome(context, outcome);
       return;
     }
@@ -699,16 +707,27 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
   /// Runs a check first when there is nothing in hand, which is the request it
   /// would have taken anyway; `_runUpdateCheck` then opens the screen itself,
   /// so this returns without doing it twice.
+  ///
+  /// Untracked mods open the screen on their own, with no check at all when nothing is tracked:
+  /// their rows need no mod page, and the nudge that leads here must never end in a notification that leaves them out of reach.
   Future<void> _openResolution(BulkUpdateCheckPlan checkPlan) async {
     final resolution = ref.read(bulkResolutionPlanProvider);
-    if (!resolution.hasWork) {
-      await _runUpdateCheck(checkPlan);
+    final inHand = ref.read(modUpdateRecordsProvider).isNotEmpty;
+    final showable =
+        resolution.hasWork || (inHand && resolution.untracked.isNotEmpty);
+    if (!showable && checkPlan.hasWork) {
+      await _runUpdateCheck(checkPlan, onDemand: true);
       return;
     }
+    if (!resolution.listsAnything) return;
     // Not zero, which is what this used to pass: a mod with no record in hand
     // is one this screen cannot cover, and dropping it makes the dialog
     // under-report on the very door the rebuild exists to provide.
-    await _showResolution(resolution, unreachable: resolution.unreachable);
+    // With no records at all nothing was looked up, so there is nothing to report as unreached.
+    await _showResolution(
+      resolution,
+      unreachable: inHand ? resolution.unreachable : 0,
+    );
   }
 
   /// The update count is read **library-wide** rather than taken from whichever
@@ -728,6 +747,9 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
       unreachable: unreachable,
       writer: widget.originWriter ??
           originWriterFor(ref.read(modManagerServiceProvider.future)),
+      // Reached only on a Resolve press, which happens while this toolbar sits under the screen.
+      reader: (modName) =>
+          originReaderFor(ref.read(modManagerServiceProvider.future))(modName),
     );
     // Only on a write: the plan is derived from the records and the library, so
     // a run that changed nothing leaves nothing stale behind.

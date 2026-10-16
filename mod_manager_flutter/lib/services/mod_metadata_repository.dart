@@ -103,6 +103,13 @@ class ModMetadataRepository {
   /// Reads a mod's sidecar, or null when it has none / can't be parsed.
   Future<ModMetadata?> read(String modFolder) => _service.read(modFolder);
 
+  /// A mod's origin block as it is on disk now, or null when it has none or no library is configured.
+  Future<ModOrigin?> readOrigin(String modName) async {
+    final modFolder = _folderOf(modName);
+    if (modFolder == null) return null;
+    return (await _service.read(modFolder))?.origin;
+  }
+
   /// Absolute path of a mod folder, or null when no library is configured.
   String? _folderOf(String modName) {
     final root = _modsPath();

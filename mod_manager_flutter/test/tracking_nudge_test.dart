@@ -7,6 +7,7 @@ import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/origin_write.dart';
 import 'package:mod_manager_flutter/screens/components/mods_toolbar.dart';
 import 'package:mod_manager_flutter/screens/components/tracking_nudge.dart';
+import 'package:mod_manager_flutter/screens/dialogs/bulk_resolution_dialog.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
 import 'support/library_override.dart';
@@ -95,6 +96,22 @@ void main() {
     await pumpToolbar(tester, [mod('bare')], dismissed: true);
 
     expect(find.byType(TrackingNudge), findsNothing);
+  });
+
+  testWidgets('its button lists the untracked mods with nothing to check',
+      (tester) async {
+    // It must never end in a notification that leaves those mods out of reach.
+    await pumpToolbar(tester, [mod('bare'), mod('also bare')]);
+
+    await tester.tap(find.descendant(
+      of: find.byType(TrackingNudge),
+      matching: find.byType(TextButton),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BulkResolutionDialog), findsOneWidget);
+    expect(find.textContaining("2 mods aren't linked to a GameBanana page"),
+        findsOneWidget);
   });
 
   testWidgets('closing it hides it now and writes the dismissal', (tester) async {

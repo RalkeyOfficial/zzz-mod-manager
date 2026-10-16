@@ -1228,4 +1228,59 @@ void main() {
       );
     });
   });
+
+  group('what the dialog answers its caller', () {
+    /// Opens the dialog through [showResolveOriginDialog], the library card's door, and collects its answer.
+    Future<List<bool>> pumpDoor(WidgetTester tester, _FakeGateway gateway) async {
+      final answers = <bool>[];
+      await pumpLocalized(
+        tester,
+        Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () async => answers.add(await showResolveOriginDialog(
+              context,
+              mod(origin: tracked(archiveMd5: '18b741db96df8c640d7c897681c5e478')),
+              gateway: gateway,
+            )),
+            child: const Text('open'),
+          ),
+        ),
+        overrides: [
+          gameBananaClientProvider.overrideWithValue(
+            GameBananaClient(
+              transport: FakeHttpTransport()
+                ..stub(profileUrl, body: loadGbFixture('mod_profile_531649')),
+              maxRetries: 0,
+            ),
+          ),
+        ],
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expectBuilt(ResolveOriginDialog);
+      return answers;
+    }
+
+    testWidgets('the library card\'s door answers true after a save',
+        (tester) async {
+      final gateway = _FakeGateway(current: tracked());
+      final answers = await pumpDoor(tester, gateway);
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(gateway.writes, 1);
+      expect(answers, [true]);
+    });
+
+    testWidgets('the library card\'s door answers false on cancel',
+        (tester) async {
+      final gateway = _FakeGateway(current: tracked());
+      final answers = await pumpDoor(tester, gateway);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(gateway.writes, 0);
+      expect(answers, [false]);
+    });
+  });
 }

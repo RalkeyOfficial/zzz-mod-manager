@@ -47,6 +47,10 @@ final modManagerServiceProvider = FutureProvider<ModManagerService>((ref) async 
 OriginWriter originWriterFor(Future<ModManagerService> service) =>
     (modId, update) async => (await service).updateModOrigin(modId, update);
 
+/// The production [OriginReader], built the same way as [originWriterFor].
+OriginReader originReaderFor(Future<ModManagerService> service) =>
+    (modName) async => (await service).readModOrigin(modName);
+
 /// The GameBanana API client (browse / search / mod detail).
 ///
 /// Deliberately **not** hung off `ApiService`, despite that being the usual
@@ -572,10 +576,14 @@ final modUpdateRecordsProvider =
 /// Derived rather than stored, so it tracks the library as a rescan changes it:
 /// resolving a mod through the per-mod dialog removes its row here without the
 /// records being re-fetched.
+///
+/// Planned with no records in hand as well, because the untracked list needs no mod page.
+/// Its `unreachable` then counts every tracked mod, which is "not looked up yet" rather than a failure.
 final bulkResolutionPlanProvider = Provider<BulkResolutionPlan>((ref) {
-  final records = ref.watch(modUpdateRecordsProvider);
-  if (records.isEmpty) return BulkResolutionPlan.empty;
-  return planBulkResolution(mods: ref.watch(modsProvider), records: records);
+  return planBulkResolution(
+    mods: ref.watch(modsProvider),
+    records: ref.watch(modUpdateRecordsProvider),
+  );
 });
 
 /// What a "check all" would look up.
