@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 /// The accent picked in Settings › Appearance, stored by [name] under `config.json`'s `accent` key.
 enum AccentChoice {
   violet,
+
+  /// Paper-white fills the primary button and a selected chip; everything else the accent marks stays violet, since
+  /// paper beside paper-white text would mark nothing.
   paper,
   lime,
   teal;
@@ -37,7 +40,7 @@ class TonePair {
 /// needs a colour Material has no slot for reads it here through [ZenithPalette.of], never from a literal.
 ///
 /// Two grounds, dark ink and light paper, each with four accents. [accent] marks what is on or selected, and links.
-/// [primary] fills the primary button: the accent itself on ink, ink on paper.
+/// [primary] fills the primary button: the accent on ink, or paper-white with the Paper accent; always ink on paper.
 @immutable
 class ZenithPalette extends ThemeExtension<ZenithPalette> {
   const ZenithPalette({
@@ -47,11 +50,20 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     required this.card,
     required this.raised,
     required this.hover,
+    required this.rowHover,
     required this.field,
+    required this.dialog,
+    required this.menu,
+    required this.chip,
+    required this.track,
     required this.divider,
+    required this.rowDivider,
     required this.outline,
     required this.line,
     required this.control,
+    required this.edge,
+    required this.check,
+    required this.menuBorder,
     required this.fieldBorder,
     required this.text,
     required this.textProse,
@@ -61,6 +73,8 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     required this.onAccent,
     required this.primary,
     required this.onPrimary,
+    required this.link,
+    required this.selected,
     required this.amber,
     required this.red,
     required this.onRed,
@@ -91,11 +105,28 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
   /// A raised surface under the pointer.
   final Color hover;
 
+  /// A row, a menu item or a sidebar entry under the pointer.
+  final Color rowHover;
+
   /// Inputs and grouped settings rows.
   final Color field;
 
-  /// Between the chrome and the page, and between rows of a group.
+  final Color dialog;
+
+  /// Menus and dropdowns.
+  final Color menu;
+
+  /// An unselected chip.
+  final Color chip;
+
+  /// The track of a switch that is off.
+  final Color track;
+
+  /// Between the chrome and the page.
   final Color divider;
+
+  /// Between the rows of a group.
+  final Color rowDivider;
 
   /// Around cards, groups and dialogs.
   final Color outline;
@@ -103,9 +134,16 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
   /// Chips, badges and separators inside a surface.
   final Color line;
 
-  /// Around buttons, switches and keycaps.
+  /// Around buttons and fields.
   final Color control;
 
+  /// Around a switch and a keycap, and a card under the pointer.
+  final Color edge;
+
+  /// Around a checkbox or a radio button that is off.
+  final Color check;
+
+  final Color menuBorder;
   final Color fieldBorder;
 
   /// Headings and anything the eye lands on first.
@@ -124,6 +162,12 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
   final Color onAccent;
   final Color primary;
   final Color onPrimary;
+
+  /// Link text, the accent darkened a step on paper.
+  final Color link;
+
+  /// A selected chip or option.
+  final TonePair selected;
 
   /// Updates.
   final Color amber;
@@ -149,14 +193,8 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
   /// Portrait tiles, one per [ElementTone].
   final Map<ElementTone, TonePair> elements;
 
-  /// A selected chip or segment: the accent washed into the card.
+  /// The accent washed into the card, behind something focused.
   Color get accentWash => Color.lerp(card, accent, 0.14)!;
-
-  /// The border of a selected chip or option.
-  Color get accentEdge => Color.lerp(card, accent, 0.5)!;
-
-  /// Text on [accentWash].
-  Color get accentText => Color.lerp(accent, text, 0.3)!;
 
   TonePair get badgeOn => TonePair(accent, onAccent);
 
@@ -170,25 +208,38 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       brightness == Brightness.dark ? ZenithPalette.dark(accent) : ZenithPalette.light(accent);
 
   factory ZenithPalette.dark(AccentChoice accent) {
+    const violet = Color(0xFFA98BFF);
+    const paper = Color(0xFFF3EFEB);
+    const ink = Color(0xFF15161C);
+    const card = Color(0xFF121316);
     final accentColor = switch (accent) {
-      AccentChoice.violet => const Color(0xFFA98BFF),
-      AccentChoice.paper => const Color(0xFFF3EFEB),
+      AccentChoice.violet || AccentChoice.paper => violet,
       AccentChoice.lime => const Color(0xFFC8F031),
       AccentChoice.teal => const Color(0xFF5FE1D9),
     };
     const onAccent = Color(0xFF0B0C0E);
+    final isPaper = accent == AccentChoice.paper;
     return ZenithPalette(
       brightness: Brightness.dark,
       chrome: const Color(0xFF0A0B0D),
       ground: const Color(0xFF0B0C0E),
-      card: const Color(0xFF121316),
+      card: card,
       raised: const Color(0xFF1A1C20),
       hover: const Color(0xFF24272C),
+      rowHover: const Color(0xFF17191D),
       field: const Color(0xFF101114),
+      dialog: const Color(0xFF0F1012),
+      menu: const Color(0xFF17191D),
+      chip: const Color(0xFF15171A),
+      track: const Color(0xFF22252A),
       divider: const Color(0xFF1E2024),
+      rowDivider: const Color(0xFF1A1C20),
       outline: const Color(0xFF23262B),
       line: const Color(0xFF2A2D33),
       control: const Color(0xFF363A42),
+      edge: const Color(0xFF3A3E46),
+      check: const Color(0xFF4A4E57),
+      menuBorder: const Color(0xFF33363D),
       fieldBorder: const Color(0xFF2F3239),
       text: const Color(0xFFECEDEE),
       textProse: const Color(0xFFC9CCD2),
@@ -196,8 +247,16 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       text3: const Color(0xFF80858F),
       accent: accentColor,
       onAccent: onAccent,
-      primary: accentColor,
-      onPrimary: onAccent,
+      primary: isPaper ? paper : accentColor,
+      onPrimary: isPaper ? ink : onAccent,
+      link: accentColor,
+      selected: isPaper
+          ? const TonePair(paper, ink, paper)
+          : TonePair(
+              Color.lerp(card, accentColor, 0.14)!,
+              Color.lerp(accentColor, Colors.white, 0.3)!,
+              Color.lerp(card, accentColor, 0.45),
+            ),
       amber: const Color(0xFFFFB547),
       red: const Color(0xFFFF6B5B),
       onRed: const Color(0xFF160605),
@@ -219,36 +278,61 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     );
   }
 
-  /// The paper theme. The accents are darkened to read on paper; the paper accent, which would vanish, becomes ink.
+  /// The paper theme. The accents are darkened to read on paper, and the primary button is ink whatever the accent.
   factory ZenithPalette.light(AccentChoice accent) {
-    final accentColor = switch (accent) {
-      AccentChoice.violet => const Color(0xFF6B45D9),
-      AccentChoice.paper => const Color(0xFF15161C),
-      AccentChoice.lime => const Color(0xFF4D6A00),
-      AccentChoice.teal => const Color(0xFF00736D),
+    const ink = Color(0xFF15161C);
+    const paper = Color(0xFFF3EFEB);
+    final (accentColor, link, selected) = switch (accent) {
+      AccentChoice.violet || AccentChoice.paper => (
+        const Color(0xFF6B45D9),
+        const Color(0xFF5A35C8),
+        accent == AccentChoice.paper
+            ? const TonePair(ink, paper, ink)
+            : const TonePair(Color(0xFFE6DEFB), Color(0xFF3D2496), Color(0xFFB9A6F0)),
+      ),
+      AccentChoice.lime => (
+        const Color(0xFF4D6A00),
+        const Color(0xFF415A00),
+        const TonePair(Color(0xFFE1E6D4), Color(0xFF2E4000), Color(0xFFAEBC8C)),
+      ),
+      AccentChoice.teal => (
+        const Color(0xFF00736D),
+        const Color(0xFF00625D),
+        const TonePair(Color(0xFFD4E7E6), Color(0xFF00453F), Color(0xFF8CC0BD)),
+      ),
     };
-    final onAccent = accent == AccentChoice.paper ? const Color(0xFFF3EFEB) : const Color(0xFFFFFFFF);
     return ZenithPalette(
       brightness: Brightness.light,
       chrome: const Color(0xFFE8E2DB),
       ground: const Color(0xFFEFEAE4),
       card: const Color(0xFFF8F5F1),
-      raised: const Color(0xFFFDFBF8),
+      raised: const Color(0xFFF8F5F1),
       hover: const Color(0xFFE9E3DC),
+      rowHover: const Color(0xFFF2EDE7),
       field: const Color(0xFFFBF9F6),
-      divider: const Color(0xFFE0D9D1),
+      dialog: const Color(0xFFF4F0EB),
+      menu: const Color(0xFFFDFBF8),
+      chip: const Color(0xFFF8F5F1),
+      track: const Color(0xFFE2DBD3),
+      divider: const Color(0xFFDCD5CD),
+      rowDivider: const Color(0xFFE9E3DC),
       outline: const Color(0xFFDCD5CD),
       line: const Color(0xFFD3CBC2),
       control: const Color(0xFFCBC3BA),
+      edge: const Color(0xFFBDB4AA),
+      check: const Color(0xFF9C948B),
+      menuBorder: const Color(0xFFD3CBC2),
       fieldBorder: const Color(0xFFD3CBC2),
-      text: const Color(0xFF15161C),
+      text: ink,
       textProse: const Color(0xFF2E2D33),
       text2: const Color(0xFF55525A),
       text3: const Color(0xFF67636B),
       accent: accentColor,
-      onAccent: onAccent,
-      primary: const Color(0xFF15161C),
-      onPrimary: const Color(0xFFF3EFEB),
+      onAccent: const Color(0xFFFFFFFF),
+      primary: ink,
+      onPrimary: paper,
+      link: link,
+      selected: selected,
       amber: const Color(0xFF9A5B00),
       red: const Color(0xFFC2361F),
       onRed: const Color(0xFFFFFFFF),
@@ -278,11 +362,20 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     card: card,
     raised: raised,
     hover: hover,
+    rowHover: rowHover,
     field: field,
+    dialog: dialog,
+    menu: menu,
+    chip: chip,
+    track: track,
     divider: divider,
+    rowDivider: rowDivider,
     outline: outline,
     line: line,
     control: control,
+    edge: edge,
+    check: check,
+    menuBorder: menuBorder,
     fieldBorder: fieldBorder,
     text: text,
     textProse: textProse,
@@ -292,6 +385,8 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     onAccent: onAccent ?? this.onAccent,
     primary: primary ?? this.primary,
     onPrimary: onPrimary ?? this.onPrimary,
+    link: link,
+    selected: selected,
     amber: amber,
     red: red,
     onRed: onRed,
@@ -316,11 +411,20 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       card: c(card, other.card),
       raised: c(raised, other.raised),
       hover: c(hover, other.hover),
+      rowHover: c(rowHover, other.rowHover),
       field: c(field, other.field),
+      dialog: c(dialog, other.dialog),
+      menu: c(menu, other.menu),
+      chip: c(chip, other.chip),
+      track: c(track, other.track),
       divider: c(divider, other.divider),
+      rowDivider: c(rowDivider, other.rowDivider),
       outline: c(outline, other.outline),
       line: c(line, other.line),
       control: c(control, other.control),
+      edge: c(edge, other.edge),
+      check: c(check, other.check),
+      menuBorder: c(menuBorder, other.menuBorder),
       fieldBorder: c(fieldBorder, other.fieldBorder),
       text: c(text, other.text),
       textProse: c(textProse, other.textProse),
@@ -330,6 +434,8 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       onAccent: c(onAccent, other.onAccent),
       primary: c(primary, other.primary),
       onPrimary: c(onPrimary, other.onPrimary),
+      link: c(link, other.link),
+      selected: TonePair.lerp(selected, other.selected, t),
       amber: c(amber, other.amber),
       red: c(red, other.red),
       onRed: c(onRed, other.onRed),

@@ -9,6 +9,7 @@ import '../../../services/log/logger.dart';
 import '../../../services/platform_service_factory.dart';
 import '../../../utils/notifications.dart';
 import '../../../utils/state_providers.dart';
+import '../zenith_switch.dart';
 import 'settings_row.dart';
 
 /// Persists the log-file setting. Production is [ApiService].
@@ -59,8 +60,9 @@ class DiagnosticsSettingsSection extends ConsumerWidget {
         SettingsRow(
           label: loc.t('settings.diagnostics.write_log'),
           description: loc.t('settings.diagnostics.write_log_hint'),
-          trailing: Switch(
+          trailing: ZenithSwitch(
             value: enabled,
+            semanticLabel: loc.t('settings.diagnostics.write_log'),
             onChanged: (value) {
               // The provider first so the switch moves this frame, then the
               // write — the same order and the same reason as every other

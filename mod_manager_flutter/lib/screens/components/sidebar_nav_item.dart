@@ -39,9 +39,7 @@ class _SidebarNavItemState extends State<SidebarNavItem> {
     final palette = ZenithPalette.of(context);
     final text = Theme.of(context).textTheme;
     final selected = widget.selected;
-    final background = selected
-        ? palette.raised
-        : (_hovered ? Color.lerp(palette.chrome, palette.raised, 0.6)! : Colors.transparent);
+    final background = selected ? palette.raised : (_hovered ? palette.rowHover : Colors.transparent);
     final foreground = selected || _hovered ? palette.text : palette.text2;
 
     return Semantics(
@@ -91,7 +89,7 @@ class _Count extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = ZenithPalette.of(context);
-    final style = ZenithType.of(context).monoSmall;
+    final style = ZenithType.of(context).monoSmall.copyWith(fontWeight: FontWeight.w500);
     if (!hot) return Text('$count', style: style.copyWith(color: palette.text3));
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

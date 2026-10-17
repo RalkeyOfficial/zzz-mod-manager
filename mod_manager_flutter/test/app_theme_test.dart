@@ -26,10 +26,34 @@ void main() {
       expect(palette.elements.keys, unorderedEquals(ElementTone.values));
     });
 
-    test('the paper accent becomes ink on the paper theme, where paper would vanish', () {
-      final palette = ZenithPalette.light(AccentChoice.paper);
-      expect(palette.accent, const Color(0xFF15161C));
-      expect(palette.onAccent, isNot(palette.accent));
+    test('the paper accent fills the primary button and a selected chip, and leaves links and on-states violet', () {
+      final dark = ZenithPalette.dark(AccentChoice.paper);
+      expect(dark.primary, const Color(0xFFF3EFEB));
+      expect(dark.selected.background, const Color(0xFFF3EFEB));
+      expect(dark.accent, ZenithPalette.dark(AccentChoice.violet).accent);
+      expect(dark.link, ZenithPalette.dark(AccentChoice.violet).link);
+
+      final light = ZenithPalette.light(AccentChoice.paper);
+      expect(light.selected.background, const Color(0xFF15161C));
+      expect(light.accent, ZenithPalette.light(AccentChoice.violet).accent);
+      expect(light.link, const Color(0xFF5A35C8));
+    });
+
+    test('the primary button changes under the pointer for every accent on both grounds', () {
+      for (final brightness in Brightness.values) {
+        for (final accent in AccentChoice.values) {
+          final theme = buildAppTheme(brightness: brightness, accent: accent);
+          final style = theme.filledButtonTheme.style!.backgroundColor!;
+          final idle = style.resolve({})!;
+          final hovered = style.resolve({WidgetState.hovered})!;
+          final shift = [
+            (idle.r - hovered.r).abs(),
+            (idle.g - hovered.g).abs(),
+            (idle.b - hovered.b).abs(),
+          ].reduce((a, b) => a > b ? a : b);
+          expect(shift, greaterThan(8 / 255), reason: '$brightness $accent');
+        }
+      }
     });
 
     test('an unknown stored accent falls back to violet', () {
@@ -61,6 +85,41 @@ void main() {
       expect(text.headlineSmall!.fontFamily, kDisplayFont);
       expect(text.displayMedium!.fontWeight, FontWeight.w800);
       expect(ZenithType.of(tester.element(find.byType(SizedBox))).mono.fontFamily, kMonoFont);
+    });
+  });
+
+  group('controls', () {
+    testWidgets('a text field is 36px tall, as the design draws it, with or without icons', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(brightness: Brightness.dark, accent: AccentChoice.violet),
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 240,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const TextField(),
+                    Builder(
+                      builder: (context) => TextField(style: Theme.of(context).textTheme.bodyMedium),
+                    ),
+                    const TextField(
+                      decoration: InputDecoration(
+                        prefixIcon: Icon(Icons.search, size: 18),
+                        suffixIcon: IconButton(onPressed: null, icon: Icon(Icons.close)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      for (final field in find.byType(TextField).evaluate()) {
+        expect(tester.getSize(find.byWidget(field.widget)).height, 36);
+      }
     });
   });
 }

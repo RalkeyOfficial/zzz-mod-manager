@@ -77,8 +77,7 @@ MarkdownStyleSheet buildMarkdownStyleSheet(BuildContext context) {
   final theme = Theme.of(context);
   final scheme = theme.colorScheme;
   final palette = ZenithPalette.of(context);
-  // Links take the accent, the colour that marks everything you can act on.
-  final link = palette.accent;
+  final link = palette.link;
 
   final body = (theme.textTheme.bodyMedium ?? const TextStyle()).copyWith(
     fontSize: MarkdownScale.body,

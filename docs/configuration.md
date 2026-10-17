@@ -197,10 +197,9 @@ Everything that paints its own colours watches `isDarkModeProvider`, and
 `themeMode`, so the hand-rolled palettes and the Material one cannot disagree
 about which brightness is on screen.
 
-The accent is a separate setting, `accentProvider`, written live from the same
-**Appearance** section. `buildAppTheme` takes both, so a change to either rebuilds
-one theme. Each swatch is painted in the colour it gives the current brightness,
-which on paper is the darkened accent, and ink for *Paper*.
+The accent is a separate setting, `accentProvider`, written live from the same **Appearance** section. `buildAppTheme` takes both, so a change to either rebuilds one theme.
+Each swatch is painted in the colour it gives the current brightness: on paper that is the darkened accent.
+*Paper* is the one accent that is not a single colour. Paper-white beside paper-white text would mark nothing, so *Paper* fills only the primary button and a selected chip (ink on the paper theme), and links, switches, badges and every other on-state stay violet. Its swatch shows the primary button's colour.
 
 ### Progress belongs on the control, not over the page
 

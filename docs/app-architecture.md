@@ -39,7 +39,7 @@ doc. This file is the map; the rules that must never be missed are in the
   and a screen written with them drifts from the rest of the app.
   Theme styles are `inherit: false` and carry the surface's text colour, so text inside a button or chip drops its style
   and takes the widget's own role rather than overriding its colour.
-  The widget-test harness applies the same scale, so a layout test at 480px measures the text the app renders.
+  The widget-test harness mounts the app's own theme (`buildAppTheme`, dark, violet), so a layout test at 480px measures the text and the controls the app renders.
   Markdown has its own scale in `MarkdownScale` (§2), built on the same 13px body.
   The fonts are bundled as static weights in `assets/fonts/`, with their OFL licences registered by `core/font_licenses.dart`:
   a variable font's weight axis does not follow `FontWeight`, and the app never fetches a font at runtime.
@@ -47,8 +47,9 @@ doc. This file is the map; the rules that must never be missed are in the
   `ZenithPalette` holds the dark ink and light paper grounds, the four accents, amber for updates, red for missing and
   destructive, blue for information, the badge pairs and one portrait tile per element. It is a `ThemeExtension`, so a widget
   needing a colour Material has no slot for reads `ZenithPalette.of(context)` rather than writing a literal.
-  `buildAppTheme` maps it onto the Material colour scheme and sets the component themes (buttons, fields, switches,
-  chips, dialogs, menus) to the design's sizes; on paper the primary button is ink and the accent is darkened to read.
+  `buildAppTheme` maps it onto the Material colour scheme and sets the component themes (buttons, fields, chips, checkboxes, dialogs, menus) to the design's sizes; on paper the primary button is ink and the accent is darkened to read.
+  The *Paper* accent fills only the primary button and a selected chip, and keeps violet for everything else the accent marks (configuration.md, Appearance).
+  The switch is `ZenithSwitch` (`screens/components/zenith_switch.dart`), because Material's switch track is a fixed 52×32 and the design's is 38×22.
 
 ## 2. Markdown rendering
 

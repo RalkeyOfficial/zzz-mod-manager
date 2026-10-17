@@ -38,6 +38,7 @@ The memory note `v3-canvas-vs-docs-decisions` holds these. In short:
 - **Combine choice:** the combine-or-separate option stays when a download's files look like a base mod plus a patch.
 - **Mod page:** no file-tree preview anywhere. "In the folder" keeps its note and the Stored at / Linked as / Tracking facts.
 - **Rename to Zenith:** application id, window title and app-data folder, as the last phase with a migration. The UI already says Zenith.
+- **Paper accent:** the canvas's option B. Paper fills the primary button and a selected chip; links, switches, badges and other on-states stay violet.
 
 ## Status
 
@@ -46,6 +47,7 @@ The memory note `v3-canvas-vs-docs-decisions` holds these. In short:
   - `core/app_theme.dart` (`buildAppTheme`);
   - `core/type_scale.dart` (canvas roles, plus `ZenithType` for caps, mono, monoSmall, wordmark and watermark);
   - the bundled fonts with their OFL licences, the accent setting and the new icons.
+  - Follow-up (uncommitted): component values matched to the canvas, with new palette tokens (`rowHover`, `rowDivider`, `dialog`, `menu`, `menuBorder`, `chip`, `track`, `edge`, `check`, `link`, `selected`), 36px fields, 16px icons, `ZenithSwitch`, the primary hover on every accent, and the test harness on `buildAppTheme`. Canvas colours still without a token (toast `#1E2125`/`#353941`, panel `#0D0E10`, danger hover `#FF7F70`, the 30px small button, Unbounded 30/22/18, the outlined slanted watermark) get one when a screen needs them.
 - **Phase 2, title bar and shell:** done and committed, the commit after `3b4cc66`.
   - The user has confirmed edge resize works on KDE Wayland and accepted the slight resize lag.
   - Not yet reported back on: the title bar's drag, double-click and right-click window menu, the window buttons, Super+arrow tiling, Launch game.

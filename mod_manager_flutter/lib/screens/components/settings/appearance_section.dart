@@ -87,7 +87,8 @@ class AppearanceSettingsSection extends ConsumerWidget {
   }
 }
 
-/// One swatch per accent, each painted in the colour it gives the current theme.
+/// One swatch per accent, each painted in the colour it gives the current theme. Paper's colour is its primary
+/// button, since its accent stays violet.
 class _AccentPicker extends StatelessWidget {
   const _AccentPicker({required this.selected, required this.onPicked});
 
@@ -104,7 +105,7 @@ class _AccentPicker extends StatelessWidget {
         for (final accent in AccentChoice.values)
           _Swatch(
             label: context.loc.t('settings.appearance.accent_${accent.name}'),
-            color: ZenithPalette.forBrightness(palette.brightness, accent).accent,
+            color: _swatchColor(ZenithPalette.forBrightness(palette.brightness, accent), accent),
             ring: palette.text,
             gap: palette.card,
             outline: palette.control,
@@ -114,6 +115,9 @@ class _AccentPicker extends StatelessWidget {
       ],
     );
   }
+
+  static Color _swatchColor(ZenithPalette palette, AccentChoice accent) =>
+      accent == AccentChoice.paper ? palette.primary : palette.accent;
 }
 
 class _Swatch extends StatelessWidget {
@@ -159,7 +163,6 @@ class _Swatch extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: color,
-                // Keeps the paper swatch visible on a light card.
                 border: Border.all(color: selected ? gap : outline),
               ),
             ),

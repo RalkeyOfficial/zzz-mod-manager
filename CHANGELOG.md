@@ -87,7 +87,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Mods toolbar is search plus a **Library** menu, with the filters on their own row.
 - The Mods tab sorts by **Recently added** by default.
 - Settings has an **Updates** section for the startup check, and a **Marketplace** section for the adult-content filter.
-- Settings › Appearance has an **Accent** choice: violet, paper, lime or teal.
+- Settings › Appearance has an **Accent** choice: violet, paper, lime or teal. Paper colours the main button and selected chips and keeps violet for links and switches.
 - **Launch game** in the sidebar starts the game through a file you pick once: the XXMI Launcher, its shortcut or a script. Settings › Launch game with changes it.
 - The sidebar shows whether ZZMI is where Settings says, how many mods are on, and a reminder to press F10 in game after changes.
 - RAR and 7z mods install with no setup: 7-Zip ships with the app, and the Arch package installs it.

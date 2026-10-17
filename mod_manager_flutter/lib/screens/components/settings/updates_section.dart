@@ -5,6 +5,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../services/api_service.dart';
 import '../../../utils/state_providers.dart';
 import '../tracking_nudge.dart';
+import '../zenith_switch.dart';
 import 'settings_row.dart';
 
 /// Persists the startup-check setting. Production is [ApiService].
@@ -45,8 +46,9 @@ class UpdatesSettingsSection extends ConsumerWidget {
         SettingsRow(
           label: loc.t('settings.updates.check_on_launch'),
           description: loc.t('settings.updates.check_on_launch_hint'),
-          trailing: Switch(
+          trailing: ZenithSwitch(
             value: enabled,
+            semanticLabel: loc.t('settings.updates.check_on_launch'),
             onChanged: (value) {
               // The provider first so the switch moves this frame, then the write
               // so the choice survives a restart — the same order and the same
@@ -60,8 +62,9 @@ class UpdatesSettingsSection extends ConsumerWidget {
         SettingsRow(
           label: loc.t('settings.updates.tracking_nudge'),
           description: loc.t('settings.updates.tracking_nudge_hint'),
-          trailing: Switch(
+          trailing: ZenithSwitch(
             value: !nudgeDismissed,
+            semanticLabel: loc.t('settings.updates.tracking_nudge'),
             onChanged: (value) {
               ref.read(trackingNudgeDismissedProvider.notifier).state = !value;
               (nudgeWriter ?? ApiService.setTrackingNudgeDismissed)(!value);

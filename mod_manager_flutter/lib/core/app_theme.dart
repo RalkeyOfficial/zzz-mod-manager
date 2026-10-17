@@ -16,12 +16,12 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
     brightness: brightness,
     primary: p.primary,
     onPrimary: p.onPrimary,
-    primaryContainer: p.accentWash,
-    onPrimaryContainer: p.accentText,
+    primaryContainer: p.selected.background,
+    onPrimaryContainer: p.selected.foreground,
     secondary: p.accent,
     onSecondary: p.onAccent,
     secondaryContainer: p.accentWash,
-    onSecondaryContainer: p.accentText,
+    onSecondaryContainer: Color.lerp(p.accent, p.text, 0.3),
     tertiary: p.blue,
     onTertiary: p.ground,
     error: p.red,
@@ -51,10 +51,11 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
     side: side == null ? BorderSide.none : BorderSide(color: side),
   );
 
-  // Buttons: 36px tall, 8px corners. The secondary button is the default shape; primary fills with the accent,
-  // ghost drops the fill and the border, danger fills red.
+  // Buttons: 36px tall, 8px corners, 16px icons. The secondary button is the default shape; primary fills with
+  // p.primary, ghost drops the fill and the border, danger fills red.
   const buttonPadding = EdgeInsets.symmetric(horizontal: 14);
   const buttonSize = Size(36, 36);
+  const iconSize = WidgetStatePropertyAll(16.0);
   final buttonText = WidgetStatePropertyAll(text.labelLarge);
 
   WidgetStateProperty<Color?> onHover(Color idle, Color hovered) =>
@@ -66,6 +67,7 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
     minimumSize: const WidgetStatePropertyAll(buttonSize),
     padding: const WidgetStatePropertyAll(buttonPadding),
     textStyle: buttonText,
+    iconSize: iconSize,
     shape: WidgetStatePropertyAll(rounded(8)),
     side: WidgetStatePropertyAll(BorderSide(color: p.control)),
     backgroundColor: onHover(p.raised, p.hover),
@@ -78,13 +80,15 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
     minimumSize: const WidgetStatePropertyAll(buttonSize),
     padding: const WidgetStatePropertyAll(buttonPadding),
     textStyle: WidgetStatePropertyAll(text.labelLarge!.copyWith(fontWeight: FontWeight.w600)),
+    iconSize: iconSize,
     shape: WidgetStatePropertyAll(rounded(8)),
+    // Disabled is the whole button at 45%, as the design fades it.
     backgroundColor: WidgetStateProperty.resolveWith((states) {
-      if (states.contains(WidgetState.disabled)) return p.raised;
-      if (states.contains(WidgetState.hovered)) return Color.lerp(p.primary, p.text, 0.08);
+      if (states.contains(WidgetState.disabled)) return p.primary.withValues(alpha: 0.45);
+      if (states.contains(WidgetState.hovered)) return primaryHover(p);
       return p.primary;
     }),
-    foregroundColor: disabledOr(p.onPrimary, p.text3),
+    foregroundColor: disabledOr(p.onPrimary, p.onPrimary.withValues(alpha: 0.45)),
     overlayColor: const WidgetStatePropertyAll(Colors.transparent),
     elevation: const WidgetStatePropertyAll(0),
   );
@@ -93,6 +97,7 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
     minimumSize: const WidgetStatePropertyAll(buttonSize),
     padding: const WidgetStatePropertyAll(buttonPadding),
     textStyle: buttonText,
+    iconSize: iconSize,
     shape: WidgetStatePropertyAll(rounded(8)),
     backgroundColor: onHover(Colors.transparent, p.raised),
     foregroundColor: WidgetStateProperty.resolveWith((states) {
@@ -106,6 +111,13 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
   OutlineInputBorder fieldBorder(Color color) =>
       OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: color));
 
+  // Fields are 36px tall. A TextField sets its text in bodyLarge, so the padding is what is left of 36 around one
+  // line of it; the minimum height keeps a field with smaller text at 36 too, and the icon boxes are cut from
+  // Material's 48 to the same height.
+  const fieldHeight = 36.0;
+  final fieldLine = text.bodyLarge!.fontSize! * text.bodyLarge!.height!;
+  final fieldPadding = EdgeInsets.symmetric(horizontal: 12, vertical: (fieldHeight - fieldLine) / 2);
+
   final base = ThemeData(
     useMaterial3: true,
     brightness: brightness,
@@ -115,7 +127,7 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
     canvasColor: p.ground,
     cardColor: p.card,
     dividerColor: p.line,
-    hoverColor: p.raised,
+    hoverColor: p.rowHover,
     focusColor: p.accentWash,
     splashFactory: NoSplash.splashFactory,
     highlightColor: Colors.transparent,
@@ -137,6 +149,7 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
     iconButtonTheme: IconButtonThemeData(
       style: ButtonStyle(
         minimumSize: const WidgetStatePropertyAll(buttonSize),
+        iconSize: iconSize,
         shape: WidgetStatePropertyAll(rounded(8)),
         backgroundColor: onHover(Colors.transparent, p.raised),
         foregroundColor: WidgetStateProperty.resolveWith((states) {
@@ -148,12 +161,15 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
         overlayColor: const WidgetStatePropertyAll(Colors.transparent),
       ),
     ),
-    iconTheme: IconThemeData(color: p.text2, size: 18),
+    iconTheme: IconThemeData(color: p.text2, size: 16),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: p.field,
       isDense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      contentPadding: fieldPadding,
+      constraints: const BoxConstraints(minHeight: fieldHeight),
+      prefixIconConstraints: const BoxConstraints(minWidth: fieldHeight, minHeight: fieldHeight),
+      suffixIconConstraints: const BoxConstraints(minWidth: fieldHeight, minHeight: fieldHeight),
       hintStyle: text.bodyMedium!.copyWith(color: p.text3),
       labelStyle: text.bodyMedium!.copyWith(color: p.text2),
       helperStyle: text.bodySmall!.copyWith(color: p.text3),
@@ -171,21 +187,23 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
       selectionColor: p.accent.withValues(alpha: 0.3),
       selectionHandleColor: p.accent,
     ),
+    // The app's switches are `ZenithSwitch`, drawn at the design's 38×22, which Material's switch cannot be. These
+    // colours only keep a stray Material one from looking foreign.
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith(
         (states) => states.contains(WidgetState.selected) ? p.onAccent : p.text3,
       ),
       trackColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected) ? p.accent : p.raised,
+        (states) => states.contains(WidgetState.selected) ? p.accent : p.track,
       ),
       trackOutlineColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected) ? p.accent : p.control,
+        (states) => states.contains(WidgetState.selected) ? p.accent : p.edge,
       ),
       overlayColor: const WidgetStatePropertyAll(Colors.transparent),
     ),
     checkboxTheme: CheckboxThemeData(
       shape: rounded(5),
-      side: BorderSide(color: p.text3, width: 1.5),
+      side: BorderSide(color: p.check, width: 1.5),
       fillColor: WidgetStateProperty.resolveWith(
         (states) => states.contains(WidgetState.selected) ? p.accent : Colors.transparent,
       ),
@@ -194,23 +212,23 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
     ),
     radioTheme: RadioThemeData(
       fillColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected) ? p.accent : p.text3,
+        (states) => states.contains(WidgetState.selected) ? p.accent : p.check,
       ),
       overlayColor: const WidgetStatePropertyAll(Colors.transparent),
     ),
     chipTheme: ChipThemeData(
-      backgroundColor: p.card,
-      selectedColor: p.accentWash,
-      disabledColor: p.card,
+      backgroundColor: p.chip,
+      selectedColor: p.selected.background,
+      disabledColor: p.chip,
       side: WidgetStateBorderSide.resolveWith(
-        (states) => BorderSide(color: states.contains(WidgetState.selected) ? p.accentEdge : p.line),
+        (states) => BorderSide(color: states.contains(WidgetState.selected) ? p.selected.border! : p.line),
       ),
       shape: const StadiumBorder(),
       labelStyle: text.labelMedium!.copyWith(color: p.text2),
-      secondaryLabelStyle: text.labelMedium!.copyWith(color: p.accentText),
+      secondaryLabelStyle: text.labelMedium!.copyWith(color: p.selected.foreground),
       padding: const EdgeInsets.symmetric(horizontal: 6),
       showCheckmark: false,
-      checkmarkColor: p.accentText,
+      checkmarkColor: p.selected.foreground,
       iconTheme: IconThemeData(color: p.text2, size: 14),
     ),
     segmentedButtonTheme: SegmentedButtonThemeData(
@@ -240,7 +258,7 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
       overlayColor: const WidgetStatePropertyAll(Colors.transparent),
     ),
     dialogTheme: DialogThemeData(
-      backgroundColor: p.field,
+      backgroundColor: p.dialog,
       surfaceTintColor: Colors.transparent,
       elevation: 24,
       shadowColor: Colors.black.withValues(alpha: 0.6),
@@ -250,20 +268,20 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
       contentTextStyle: text.bodyMedium!.copyWith(color: p.text2),
     ),
     popupMenuTheme: PopupMenuThemeData(
-      color: p.raised,
+      color: p.menu,
       surfaceTintColor: Colors.transparent,
       elevation: 12,
-      shape: rounded(12, p.control),
+      shape: rounded(12, p.menuBorder),
       textStyle: text.bodyMedium!.copyWith(color: p.text),
       labelTextStyle: WidgetStatePropertyAll(text.bodyMedium!.copyWith(color: p.text)),
     ),
     menuTheme: MenuThemeData(
       style: MenuStyle(
-        backgroundColor: WidgetStatePropertyAll(p.raised),
+        backgroundColor: WidgetStatePropertyAll(p.menu),
         surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
         elevation: const WidgetStatePropertyAll(12),
         padding: const WidgetStatePropertyAll(EdgeInsets.all(6)),
-        shape: WidgetStatePropertyAll(rounded(12, p.control)),
+        shape: WidgetStatePropertyAll(rounded(12, p.menuBorder)),
       ),
     ),
     tooltipTheme: TooltipThemeData(
@@ -304,4 +322,12 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
   );
 
   return withAppTypeScale(base);
+}
+
+/// The primary button under the pointer: the design's `brightness(1.08)`. Scaling ink's channels leaves it ink, so
+/// on paper the button is lifted toward white instead.
+Color primaryHover(ZenithPalette p) {
+  if (p.brightness == Brightness.light) return Color.lerp(p.primary, Colors.white, 0.14)!;
+  double up(double channel) => (channel * 1.08).clamp(0.0, 1.0);
+  return Color.from(alpha: p.primary.a, red: up(p.primary.r), green: up(p.primary.g), blue: up(p.primary.b));
 }

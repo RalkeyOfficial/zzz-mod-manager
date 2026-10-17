@@ -9,6 +9,7 @@ import 'package:mod_manager_flutter/screens/components/settings/auto_tag_section
 import 'package:mod_manager_flutter/screens/components/settings/diagnostics_section.dart';
 import 'package:mod_manager_flutter/screens/components/settings/marketplace_section.dart';
 import 'package:mod_manager_flutter/screens/components/settings/updates_section.dart';
+import 'package:mod_manager_flutter/screens/components/zenith_switch.dart';
 import 'package:mod_manager_flutter/services/gamebanana/content_filter.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
@@ -144,12 +145,12 @@ void main() {
       );
 
       expect(
-        tester.widget<Switch>(find.byType(Switch).first).value,
+        tester.widget<ZenithSwitch>(find.byType(ZenithSwitch).first).value,
         isFalse,
         reason: 'no launch contacts the network unless the user asked',
       );
 
-      await tester.tap(find.byType(Switch).first);
+      await tester.tap(find.byType(ZenithSwitch).first);
       await tester.pumpAndSettle();
 
       // Both halves: the provider so the check reads it this session, and the
@@ -167,7 +168,7 @@ void main() {
         container: container,
       );
 
-      expect(tester.widget<Switch>(find.byType(Switch).first).value, isTrue);
+      expect(tester.widget<ZenithSwitch>(find.byType(ZenithSwitch).first).value, isTrue);
     });
 
     testWidgets('the reminder switch is on until dismissed, and switching it writes the dismissal',
@@ -182,8 +183,8 @@ void main() {
         container: container,
       );
 
-      final reminder = find.byType(Switch).last;
-      expect(tester.widget<Switch>(reminder).value, isTrue);
+      final reminder = find.byType(ZenithSwitch).last;
+      expect(tester.widget<ZenithSwitch>(reminder).value, isTrue);
 
       await tester.tap(reminder);
       await tester.pumpAndSettle();
@@ -406,7 +407,7 @@ void main() {
         container: container,
       );
 
-      expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+      expect(tester.widget<ZenithSwitch>(find.byType(ZenithSwitch)).value, isTrue);
     });
 
     testWidgets('turning it off moves the switch and writes the setting',
@@ -418,7 +419,7 @@ void main() {
         container: container,
       );
 
-      await tester.tap(find.byType(Switch));
+      await tester.tap(find.byType(ZenithSwitch));
       await tester.pumpAndSettle();
 
       expect(container.read(fileLoggingProvider), isFalse);
