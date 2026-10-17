@@ -1,9 +1,9 @@
 /// Binding one library folder to one remote mod and file — the decisions, with
 /// no dialog, no network and no filesystem around them.
 ///
-/// The resolve dialog is mostly plumbing: fetch a profile, show a list, write
-/// what came back. What is actually easy to get wrong is *what each answer is
-/// allowed to claim*, and that is all here so it can be tested against real
+/// The resolve dialog is mostly plumbing: fetch the mod's record, show a list,
+/// write what came back. What is actually easy to get wrong is *what each answer
+/// is allowed to claim*, and that is all here so it can be tested against real
 /// captured profiles instead of clicked through.
 ///
 /// Two locked rules govern every function below
@@ -93,23 +93,23 @@ class FileResolution {
 
 /// Ranks a mod's published files against what is known about the local folder.
 ///
-/// [files] and [archivedFiles] are `_aFiles` and `_aArchivedFiles`; **both are
-/// searched**, and that is not a nicety — an old local install matches a
-/// superseded file far more often than the current one, so ignoring the
-/// archived list throws away the best chance of identifying what the user
-/// actually has.
+/// [files] is every published file, **current and archived alike** — a
+/// `GbMod.allFiles`, which reads the same off a `Mod/Multi` record and a
+/// profile. `GbFile.isArchived` tells the two kinds apart. Searching the
+/// archived ones is not a nicety: an old local install matches a superseded
+/// file far more often than the current one, so leaving them out throws away
+/// the best chance of identifying what the user actually has.
 ///
-/// Null for either list means "the response never carried it", which is
-/// different from `[]` ("none published"); both are simply treated as nothing to
-/// rank here, since neither yields a candidate.
+/// Null means "the response never carried a file list", which is different
+/// from `[]` ("none published"); both are simply treated as nothing to rank
+/// here, since neither yields a candidate.
 FileResolution rankResolveCandidates({
   required List<GbFile>? files,
-  required List<GbFile>? archivedFiles,
   required String folderName,
   DateTime? installedAt,
   String? archiveMd5,
 }) {
-  final all = <GbFile>[...?files, ...?archivedFiles];
+  final all = files ?? const <GbFile>[];
   if (all.isEmpty) return FileResolution.empty;
 
   final reasons = <int, FileMatchReason>{};

@@ -35,7 +35,6 @@ void main() {
     test('no files at all resolves to nothing', () {
       final resolution = rankResolveCandidates(
         files: null,
-        archivedFiles: null,
         folderName: 'Ellen',
       );
       expect(resolution.isEmpty, isTrue);
@@ -44,12 +43,11 @@ void main() {
     });
 
     test('a banked hash pins an archived file and settles the question', () {
-      // The whole point of matching `_aArchivedFiles` too: an old install
-      // matches a superseded file far more often than the current one.
+      // The whole point of ranking archived files too: an old install matches
+      // a superseded file far more often than the current one.
       final mod = profile('mod_profile_531649');
       final resolution = rankResolveCandidates(
-        files: mod.files,
-        archivedFiles: mod.archivedFiles,
+        files: mod.allFiles,
         folderName: 'RabbitFX',
         // v7.3, archived.
         archiveMd5: '18b741db96df8c640d7c897681c5e478',
@@ -62,13 +60,27 @@ void main() {
       expect(resolution.candidates, hasLength(14));
     });
 
+    test('a Mod/Multi record ranks the same as a profile', () {
+      // The resolve dialogs read `Mod/Multi`, which folds archived files into
+      // `_aFiles` and flags them, where a profile splits the two lists.
+      final record =
+          parseBareList(gbMultiRecordFixture(531649), GbMod.fromJson).single;
+      final resolution = rankResolveCandidates(
+        files: record.allFiles,
+        folderName: 'RabbitFX',
+        archiveMd5: '18b741db96df8c640d7c897681c5e478',
+      );
+      expect(resolution.preselected!.file.idRow, 1695165);
+      expect(resolution.preselected!.file.isArchived, isTrue);
+      expect(resolution.candidates, hasLength(14));
+    });
+
     test('a hash is matched case- and whitespace-insensitively', () {
       // A sidecar is a public interchange format and can arrive hand-edited; a
       // case mismatch would look exactly like "no match" and never be noticed.
       final mod = profile('mod_profile_531649');
       final resolution = rankResolveCandidates(
-        files: mod.files,
-        archivedFiles: mod.archivedFiles,
+        files: mod.allFiles,
         folderName: 'RabbitFX',
         archiveMd5: '  362BB10D2EBE1BB78AFE99911C307E98 ',
       );
@@ -80,8 +92,7 @@ void main() {
       // the common case for a re-zipped archive.
       final mod = profile('mod_profile_531649');
       final resolution = rankResolveCandidates(
-        files: mod.files,
-        archivedFiles: mod.archivedFiles,
+        files: mod.allFiles,
         folderName: 'RabbitFX',
         archiveMd5: '00000000000000000000000000000000',
         installedAt: DateTime.utc(2026, 3, 1),
@@ -93,8 +104,7 @@ void main() {
     test('the folder name matches an archive name across separators', () {
       final mod = profile('mod_profile_tagged');
       final resolution = rankResolveCandidates(
-        files: mod.files,
-        archivedFiles: mod.archivedFiles,
+        files: mod.allFiles,
         folderName: 'Jane Swimsuit - Hazeker Redux',
       );
       final top = resolution.candidates.first;
@@ -119,8 +129,7 @@ void main() {
       // here too: it picks v7.7, the current main file.
       final mod = profile('mod_profile_531649');
       final resolution = rankResolveCandidates(
-        files: mod.files,
-        archivedFiles: mod.archivedFiles,
+        files: mod.allFiles,
         folderName: 'no match at all',
         installedAt: DateTime.utc(2026, 5, 8, 15),
       );
@@ -134,8 +143,7 @@ void main() {
       // Saying nothing is the honest outcome; the picker still lists everything.
       final mod = profile('mod_profile_531649');
       final resolution = rankResolveCandidates(
-        files: mod.files,
-        archivedFiles: mod.archivedFiles,
+        files: mod.allFiles,
         folderName: 'no match at all',
         installedAt: DateTime.utc(2019),
       );
@@ -150,7 +158,6 @@ void main() {
       final only = GbFile(idRow: 42, file: 'thing.zip', version: '2');
       final resolution = rankResolveCandidates(
         files: [only],
-        archivedFiles: null,
         folderName: 'unrelated',
       );
       expect(resolution.preselected!.reason, FileMatchReason.onlyFile);
@@ -172,7 +179,6 @@ void main() {
 
       final byName = rankResolveCandidates(
         files: [only],
-        archivedFiles: null,
         folderName: 'thing',
       );
       expect(byName.candidates.single.reason, FileMatchReason.folderName);
@@ -180,7 +186,6 @@ void main() {
 
       final byDate = rankResolveCandidates(
         files: [only],
-        archivedFiles: null,
         folderName: 'nothing like it',
         installedAt: DateTime.utc(2025, 6),
       );
@@ -194,8 +199,7 @@ void main() {
     test('unsuggested rows list current files before superseded ones', () {
       final mod = profile('mod_profile_tagged');
       final resolution = rankResolveCandidates(
-        files: mod.files,
-        archivedFiles: mod.archivedFiles,
+        files: mod.allFiles,
         folderName: 'nothing matches this',
       );
       final archivedFrom =
@@ -213,8 +217,7 @@ void main() {
       final mod = profile('mod_profile_rated');
       expect(mod.files!.every((f) => f.version == null), isTrue);
       final resolution = rankResolveCandidates(
-        files: mod.files,
-        archivedFiles: mod.archivedFiles,
+        files: mod.allFiles,
         folderName: 'Megalodon Maid Ellen',
         installedAt: DateTime.utc(2024, 9, 1),
       );

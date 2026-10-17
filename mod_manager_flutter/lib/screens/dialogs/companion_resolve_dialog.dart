@@ -6,6 +6,7 @@ import '../../models/gamebanana/gamebanana.dart';
 import '../../models/mod_download.dart';
 import '../../models/origin_enums.dart';
 import '../../services/origin_resolution.dart';
+import '../../services/update_check_run.dart';
 import '../../utils/state_providers.dart';
 import '../components/resolve/file_choice_panel.dart';
 import '../components/resolve/identity_search_panel.dart';
@@ -26,7 +27,7 @@ class CompanionNamed extends CompanionOutcome {
 
   final ModDownload companion;
 
-  /// The mod page's own name, when this step had the profile in hand.
+  /// The mod page's own name, when this step had the record in hand.
   ///
   /// Carried so a caller can say *which* mod was recorded rather than printing
   /// an id. Not stored on the companion: a name is the remote's to change, and
@@ -37,7 +38,7 @@ class CompanionNamed extends CompanionOutcome {
   ///
   /// The companion carries its id, which is enough to *describe* it and not
   /// enough to fetch it — a download needs the row itself. Carried so a caller
-  /// that is about to install this mod does not have to re-fetch the profile to
+  /// that is about to install this mod does not have to re-fetch the record to
   /// find the file the user was just looking at.
   ///
   /// **Null means they answered "I don't know which file"**, and that is the
@@ -185,15 +186,15 @@ class CompanionResolveDialog extends ConsumerStatefulWidget {
 class _CompanionResolveDialogState
     extends ConsumerState<CompanionResolveDialog> {
   int? _modId;
-  GbMod? _profile;
-  Object? _profileError;
+  GbMod? _record;
+  Object? _recordError;
   bool _loading = false;
 
   GbFile? _selectedFile;
 
   /// "I don't know which file" — the **answer**, not the date it resolves to.
   ///
-  /// The date is read from the profile at write time rather than stored,
+  /// The date is read from the record at write time rather than stored,
   /// because a stored one outlives the identity it came from: answered for one
   /// mod and then changed to another, it records the first mod's creation date
   /// as the second's baseline. A baseline later than the mod it describes hides
@@ -204,7 +205,7 @@ class _CompanionResolveDialogState
   void initState() {
     super.initState();
     _modId = widget.existing?.modId;
-    if (_modId case final id?) _loadProfile(id);
+    if (_modId case final id?) _loadRecord(id);
   }
 
   AppLocalizations get loc => context.loc;
@@ -212,38 +213,38 @@ class _CompanionResolveDialogState
   bool get _isSelf =>
       widget.primaryModId != null && _modId == widget.primaryModId;
 
-  Future<void> _loadProfile(int modId) async {
+  Future<void> _loadRecord(int modId) async {
     setState(() {
       _loading = true;
-      _profileError = null;
-      _profile = null;
+      _recordError = null;
+      _record = null;
       // A new identity has not been answered for yet — neither answer carries
       // across, because both are about the mod that was picked before it.
       _selectedFile = null;
       _assumeLatest = false;
     });
     try {
-      final profile = await ref.read(gameBananaClientProvider).modProfile(modId);
+      final record =
+          await fetchModRecord(ref.read(gameBananaClientProvider), modId);
       if (!mounted) return;
       setState(() {
-        _profile = profile;
+        _record = record;
         _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _profileError = e;
+        _recordError = e;
         _loading = false;
       });
     }
   }
 
   FileResolution get _resolution {
-    final profile = _profile;
-    if (profile == null) return FileResolution.empty;
+    final record = _record;
+    if (record == null) return FileResolution.empty;
     return rankResolveCandidates(
-      files: profile.files,
-      archivedFiles: profile.archivedFiles,
+      files: record.allFiles,
       // All three signals describe the download this folder was installed
       // from, not the one being named here. The folder name is the *patch's*,
       // so ranking the base mod's files by it can only mislead.
@@ -260,7 +261,7 @@ class _CompanionResolveDialogState
     // Read here rather than when the tile was tapped, so it can only ever be
     // the date of the mod being written.
     final baseline =
-        file == null && _assumeLatest ? _profile?.dateAdded : null;
+        file == null && _assumeLatest ? _record?.dateAdded : null;
     Navigator.of(context).pop(
       CompanionNamed(
         ModDownload(
@@ -279,7 +280,7 @@ class _CompanionResolveDialogState
                   : OriginConfidence.unknown,
           baselineRemoteDate: baseline,
         ),
-        modName: _profile?.name,
+        modName: _record?.name,
         file: file,
       ),
     );
@@ -302,7 +303,7 @@ class _CompanionResolveDialogState
                   heading: loc.t('mods.resolve.companion_heading'),
                   onPicked: (id) {
                     setState(() => _modId = id);
-                    if (id != widget.primaryModId) _loadProfile(id);
+                    if (id != widget.primaryModId) _loadRecord(id);
                   },
                 )
               else
@@ -341,7 +342,7 @@ class _CompanionResolveDialogState
           padding: EdgeInsets.symmetric(vertical: 24),
           child: Center(child: CircularProgressIndicator()),
         )
-      else if (_profileError != null)
+      else if (_recordError != null)
         resolveNotice(
             context, loc.t('mods.resolve.load_failed'), Icons.cloud_off)
       else ...[
@@ -385,7 +386,7 @@ class _CompanionResolveDialogState
         children: [
           Expanded(
             child: Text(
-              _profile?.name ?? '#$modId',
+              _record?.name ?? '#$modId',
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontWeight: FontWeight.w700),
@@ -394,8 +395,8 @@ class _CompanionResolveDialogState
           TextButton(
             onPressed: () => setState(() {
               _modId = null;
-              _profile = null;
-              _profileError = null;
+              _record = null;
+              _recordError = null;
               _selectedFile = null;
               _assumeLatest = false;
             }),
@@ -411,7 +412,7 @@ class _CompanionResolveDialogState
   /// than an install date: the folder has one install date and it belongs to
   /// the download we performed, not to this one.
   Widget _dontKnowTile() {
-    final baseline = _profile?.dateAdded;
+    final baseline = _record?.dateAdded;
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,

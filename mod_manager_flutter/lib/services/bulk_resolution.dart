@@ -202,12 +202,9 @@ BulkResolutionPlan planBulkResolution({
     if (base.versionConfidence == OriginConfidence.unknown) {
       // `Mod/Multi` folds archived files into `_aFiles` and flags them with
       // `_bIsArchived`, where a profile splits them across two keys. Passing
-      // `allFiles` and nothing else is what makes one ranking serve both shapes
-      // — and matching archived files is not a nicety: an old install matches a
-      // superseded file far more often than the current one.
+      // `allFiles` is what makes one ranking serve both shapes.
       final resolution = rankResolveCandidates(
         files: remote.allFiles,
-        archivedFiles: null,
         folderName: mod.name,
         installedAt: origin.installedAt,
         archiveMd5: base.archiveMd5,

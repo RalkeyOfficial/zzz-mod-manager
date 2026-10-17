@@ -4,6 +4,7 @@ import 'package:mod_manager_flutter/core/constants.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/dialogs/patch_install_prompt.dart';
+import 'package:mod_manager_flutter/services/bulk_update_check.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_client.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_endpoints.dart';
 import 'package:mod_manager_flutter/services/patch_destination_ranking.dart';
@@ -35,11 +36,16 @@ void main() {
   // a space in it, and how a space is encoded is the endpoints' business.
   final endpoints = GameBananaEndpoints(gameId: 19567);
   final searchUrl = endpoints.search('Ellen Patch');
-  final profileUrl = endpoints.modProfile(527697);
+  // The search's only result, and a mod `mod_multi_files` holds a record for.
+  const baseModId = 528481;
+  const baseModName = 'Megalodon Maid Ellen';
 
   FakeHttpTransport transport() => FakeHttpTransport()
-    ..stub(searchUrl, body: loadGbFixture('search_ellen'))
-    ..stub(profileUrl, body: loadGbFixture('mod_profile_rated'));
+    ..stub(searchUrl, body: gbSearchOfMultiRecords(const [baseModId]))
+    ..stub(
+      endpoints.modsMulti(const [baseModId], updateCheckProperties),
+      body: gbMultiRecordFixture(baseModId),
+    );
 
   PatchInstallSubject assetPatch({String name = 'Ellen Patch'}) =>
       PatchInstallSubject(
@@ -504,7 +510,7 @@ void main() {
       final answer = await open(tester);
       await tester.tap(find.text('Say what it patches'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('ellen joe cheongsam').first);
+      await tester.tap(find.text(baseModName).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Add'));
       await tester.pumpAndSettle();
@@ -514,7 +520,7 @@ void main() {
       final destination = answer.value!['Ellen Patch']!;
       expect(destination, isA<InstallAsNewMod>());
       final base = (destination as InstallAsNewMod).base!;
-      expect(base.modId, 527697);
+      expect(base.modId, baseModId);
       expect(base.modIdConfidence, OriginConfidence.user);
     });
 
@@ -536,10 +542,10 @@ void main() {
       // The pushed step asks for a file as well, and a row reporting only the
       // mod leaves a recorded file indistinguishable from "I don't know" —
       // states that are checked differently, one of which marks the card.
-      await open(tester);
+      final answer = await open(tester);
       await tester.tap(find.text('Say what it patches'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('ellen joe cheongsam').first);
+      await tester.tap(find.text(baseModName).first);
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('v3.4').first);
       await tester.pumpAndSettle();
@@ -552,7 +558,14 @@ void main() {
         findsOneWidget,
         reason: 'the same wording the resolve dialog uses for the same fact',
       );
-      expect(find.textContaining('#527697'), findsNothing);
+      expect(find.textContaining('#$baseModId'), findsNothing);
+
+      // The picked row goes out whole, because installing it needs its url.
+      await tester.tap(find.text('Install'));
+      await tester.pumpAndSettle();
+      final destination = answer.value!['Ellen Patch']! as InstallAsNewMod;
+      expect(destination.baseFile!.idRow, 1462303);
+      expect(destination.baseFile!.downloadUrl, isNotNull);
     });
 
     testWidgets('"I don\'t know which file" says so, with its cutoff',
@@ -560,7 +573,7 @@ void main() {
       await open(tester);
       await tester.tap(find.text('Say what it patches'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('ellen joe cheongsam').first);
+      await tester.tap(find.text(baseModName).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('I don\'t know which file').last);
       await tester.pumpAndSettle();
@@ -577,16 +590,16 @@ void main() {
         subjects: const [
           PatchInstallSubject(
             modName: 'Ellen Patch',
-            // The id the search's first result carries, so picking it is
-            // picking the patch itself.
-            patchModId: 527697,
+            // The id the search's result carries, so picking it is picking
+            // the patch itself.
+            patchModId: baseModId,
             kind: PatchKind.assets,
           ),
         ],
       );
       await tester.tap(find.text('Say what it patches'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('ellen joe cheongsam').first);
+      await tester.tap(find.text(baseModName).first);
       await tester.pumpAndSettle();
 
       expect(find.text('That is this mod, not another one'), findsOneWidget);
@@ -606,7 +619,7 @@ void main() {
 
       expect(find.text('Ellen Patch'), findsOneWidget,
           reason: 'the box shows words, not the filename');
-      expect(find.text('ellen joe cheongsam'), findsWidgets,
+      expect(find.text(baseModName), findsWidgets,
           reason: 'and the search that ran is the one that finds something');
     });
 
@@ -627,7 +640,7 @@ void main() {
       );
       await tester.tap(find.text('Say what it patches'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('ellen joe cheongsam').first);
+      await tester.tap(find.text(baseModName).first);
       await tester.pumpAndSettle();
 
       expect(find.text('That is this mod, not another one'), findsNothing);

@@ -719,6 +719,9 @@ against 48 KB for one with a long description — because a profile carries a
 gallery, HTML prose, credits, licence text and requirements that no comparator can
 use.
 
+The two resolve dialogs read the mod through the same `fetchModRecord`, so they make this request too and share its cache entry: opening the resolve dialog and then this one, or the other way round, within ten minutes fetches the record once.
+What they need from it is the name, the creation date and the file list, which the record carries whole ([`origin-tracking.md` §5](origin-tracking.md#5-the-resolve-dialog)).
+
 **`Mod/<id>/DownloadPage` is cheaper on paper and cannot serve this**, which is worth stating because it is the obvious choice.
 It returns the two file lists plus `_bIsTrashed` / `_bIsWithheld` and nothing else, so four of the six fields are missing or partial: without `_tsDateAdded` and `_tsDateUpdated` a date-only verdict ([§3](#when-only-a-date-is-known)) loses both its sanity floor and its last fallback, which makes it *wrong* rather than quieter; `_bIsObsolete` silently leaves every verdict; and `_bIsPrivate` is one of the three flags `sourceGone` is read from.
 `Mod/Multi` is smaller than it anyway — 7.7 KB against 8.1 KB — since it sends no licence or submitter instructions.

@@ -62,3 +62,24 @@ String gbMultiRecordFixture(int modId) {
   );
   return jsonEncode([record]);
 }
+
+/// A one-page search whose results are the `mod_multi_files` mods [modIds].
+///
+/// For a test that picks a search result and goes on to fetch that mod's record:
+/// the captured `search_ellen` lists mods this batch holds no record for, and
+/// `fetchModRecord` refuses a record carrying another mod's id. Only the id and
+/// the captured name are carried over, which is all a result row needs to be
+/// shown and picked; the search parser itself is tested against `search_ellen`.
+String gbSearchOfMultiRecords(List<int> modIds) {
+  final records = [
+    for (final id in modIds)
+      jsonDecode(gbMultiRecordFixture(id)).single as Map<String, dynamic>,
+  ];
+  return jsonEncode({
+    '_aMetadata': {'_nRecordCount': records.length, '_bIsComplete': true},
+    '_aRecords': [
+      for (final record in records)
+        {'_idRow': record['_idRow'], '_sName': record['_sName']},
+    ],
+  });
+}

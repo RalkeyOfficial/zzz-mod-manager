@@ -350,9 +350,11 @@ Rules worth knowing before changing any of it:
   is indistinguishable from a ranking with a wrong one. Only two things start out
   selected: a hash match (which is exact) and a mod that publishes exactly one file
   (where there is nothing to guess between).
-- **Both `_aFiles` and `_aArchivedFiles` are ranked.** An old install matches a
-  superseded file far more often than the current one, and they arrive in the same
-  response.
+- **Every published file is ranked, current and archived alike.** An old install matches a superseded file far more often than the current one.
+  Both kinds arrive in the mod's `Mod/Multi` record (`fetchModRecord`), folded into one `_aFiles` and told apart by `_bIsArchived`, so `rankResolveCandidates` takes that one combined list.
+- **The dialog reads the record the update check reads, not the mod page.** It is the per-mod check's request and its ten-minute cache entry, shared with the update dialog and the folder's name lookups, so opening one of them right after another costs no request; it is also a quarter of `ProfilePage`'s bytes ([`update-checks.md` §6](update-checks.md#6-where-a-result-lives-and-what-it-looks-like)).
+  The full mod page is fetched only on Save with "Also fill in the description, images and tags this mod is missing" ticked, because the description, tags, category and gallery that fill copies are not what `Mod/Multi` is asked for, and the description is most of a profile's size.
+  A fetch that fails there skips the fill and still saves the answer.
 - **The date candidate is the newest file that already existed**, not the nearest in
   absolute terms: a file uploaded *after* the install cannot be the installed one.
 - **The "assume current" baseline is clamped to the mod's own creation date.**
@@ -531,7 +533,7 @@ The button opens the per-mod resolve dialog ([§5](#5-the-resolve-dialog)) on to
   The row says it is saved now, so it cannot be read as waiting for Apply, and once anything is saved the screen's Cancel reads *Close*, since leaving undoes nothing.
   With no question rows at all there is nothing for Apply to save, so the Save button and the intro about ticked boxes are left out.
 - **A resolved row stays in the list, and is not checked on the spot.** It shows a done mark, the name of the mod page it was bound to, and "check again to see its updates".
-  The name comes from the profile the dialog already fetched to offer its file list, so the row costs no request.
+  The name comes from the record the dialog already fetched to offer its file list, so the row costs no request.
   The check had no `mod_id` to look this mod up with, so the screen holds no verdict for it, and no mod resolved on this screen is checked again by itself:
   a user who picks an older file knows it is out of date, and pressing *Check for updates* again gives the answer an automatic re-check would, so one adds nothing.
   Re-folding the records in hand would also skip the release feeds the check fetches only for mods that flagged, so it could show the variant-shaped false positive the check exists to remove.
@@ -929,7 +931,7 @@ What it may write is narrower than the identity step:
 | "This folder is one mod after all" | Removes the bottom layer and clears `patch_shaped`. What is left is one download that patches nothing, which is an ordinary mod. A wrong answer has to be undoable, or naming one is a trap. |
 
 Changing the identity clears whatever was answered about the previous one, and the
-baseline is read from the profile **when the answer is written** rather than held
+baseline is read from the record **when the answer is written** rather than held
 from when the tile was tapped. A held date outlives the mod it describes: recorded
 against a mod created earlier it sits in that mod's future, and a baseline later
 than its subject hides every file published before it — silently, which is the one

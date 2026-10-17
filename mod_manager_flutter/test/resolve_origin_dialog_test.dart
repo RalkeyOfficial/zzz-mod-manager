@@ -9,7 +9,9 @@ import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/origin_write.dart';
 import 'package:mod_manager_flutter/screens/dialogs/resolve_origin_dialog.dart';
+import 'package:mod_manager_flutter/services/bulk_update_check.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_client.dart';
+import 'package:mod_manager_flutter/services/gamebanana/gamebanana_endpoints.dart';
 import 'package:mod_manager_flutter/services/gamebanana/remote_mod_metadata.dart';
 import 'package:mod_manager_flutter/services/update_check.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
@@ -48,6 +50,7 @@ class _FakeGateway implements ResolveOriginGateway {
   ModOrigin? written;
   bool abandoned = false;
   final List<String> filled = [];
+  final List<RemoteModMetadata> fills = [];
 
   @override
   Future<DateTime?> installDateProxy(String modId) async {
@@ -69,6 +72,7 @@ class _FakeGateway implements ResolveOriginGateway {
   @override
   Future<void> fillMetadata(String modId, RemoteModMetadata remote) async {
     filled.add(modId);
+    fills.add(remote);
   }
 }
 
@@ -79,8 +83,14 @@ class _TransportFailure implements Exception {
 }
 
 void main() {
-  final profileUrl =
-      Uri.parse('https://gamebanana.com/apiv13/Mod/531649/ProfilePage');
+  const endpoints = GameBananaEndpoints();
+
+  /// The single-id `Mod/Multi` request both resolve steps make for a mod.
+  Uri recordUrlOf(int modId) =>
+      endpoints.modsMulti([modId], updateCheckProperties);
+  final recordUrl = recordUrlOf(531649);
+  // Asked for only by the optional metadata fill.
+  final profileUrl = endpoints.modProfile(531649);
   final searchUrl = Uri.parse(
     'https://gamebanana.com/apiv13/Util/Search/Results'
     '?_sModelName=Mod&_sSearchString=Ellen%20Swimsuit&_idGameRow=19567&_nPage=1',
@@ -140,6 +150,7 @@ void main() {
     // caller-supplied transport too.
     final http = transport ??
         (FakeHttpTransport()
+          ..stub(recordUrl, body: gbMultiRecordFixture(531649))
           ..stub(profileUrl, body: loadGbFixture('mod_profile_531649')));
     // Unless a test is standing in for a sidecar rewritten mid-dialog, what the
     // write path reads back off disk is what the mod already carried.
@@ -335,7 +346,7 @@ void main() {
       // baseline is clamped against the mod's creation date, which is exactly
       // the field that just failed to arrive.
       final transport = FakeHttpTransport()
-        ..enqueueError(profileUrl, const _TransportFailure());
+        ..enqueueError(recordUrl, const _TransportFailure());
       final gateway = await pumpDialog(
         tester,
         target: mod(origin: tracked()),
@@ -355,7 +366,7 @@ void main() {
       // Not an empty box with the folder name already typed into it — that
       // reads as a control that did nothing.
       final transport = FakeHttpTransport()
-        ..stub(profileUrl, body: loadGbFixture('mod_profile_531649'))
+        ..stub(recordUrl, body: gbMultiRecordFixture(531649))
         ..stub(
           Uri.parse(
             'https://gamebanana.com/apiv13/Util/Search/Results'
@@ -425,29 +436,71 @@ void main() {
       expect(gateway.writes, 1);
     });
 
+    // The dialog reads the mod's `Mod/Multi` record, which carries no
+    // description, tags or gallery, so the fill is the one step that asks for
+    // the full mod page — and only once Save is pressed with the box ticked.
+    FakeHttpTransport recordAndProfile() => FakeHttpTransport()
+      ..stub(recordUrl, body: gbMultiRecordFixture(531649))
+      ..stub(profileUrl, body: loadGbFixture('mod_profile_531649'));
+
     testWidgets('the metadata fill stays off unless it is asked for',
         (tester) async {
+      final transport = recordAndProfile();
       final gateway = await pumpDialog(
         tester,
         target:
             mod(origin: tracked(archiveMd5: '18b741db96df8c640d7c897681c5e478')),
+        transport: transport,
       );
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
       expect(gateway.filled, isEmpty);
+      expect(transport.requests, isNot(contains(profileUrl)));
     });
 
     testWidgets('ticking the box fills what the mod is missing', (tester) async {
+      final transport = recordAndProfile();
       final gateway = await pumpDialog(
         tester,
         target:
             mod(origin: tracked(archiveMd5: '18b741db96df8c640d7c897681c5e478')),
+        transport: transport,
+      );
+      await tester.tap(find.byType(Checkbox));
+      await tester.pumpAndSettle();
+      expect(transport.requests, isNot(contains(profileUrl)),
+          reason: 'ticking the box is not yet an answer');
+
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(gateway.filled, ['RabbitFX']);
+      expect(transport.requests.where((u) => u == profileUrl), hasLength(1));
+      // Only the profile carries a description; the `Mod/Multi` record has none.
+      expect(gateway.fills.single.description, isNotNull);
+    });
+
+    testWidgets('a mod page that will not load still saves the origin',
+        (tester) async {
+      // The tracking data is what the user came to set; the fill is extra.
+      final transport = FakeHttpTransport()
+        ..stub(recordUrl, body: gbMultiRecordFixture(531649))
+        ..enqueueError(profileUrl, const _TransportFailure());
+      final gateway = await pumpDialog(
+        tester,
+        target:
+            mod(origin: tracked(archiveMd5: '18b741db96df8c640d7c897681c5e478')),
+        transport: transport,
       );
       await tester.tap(find.byType(Checkbox));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
-      expect(gateway.filled, ['RabbitFX']);
+
+      expect(gateway.writes, 1);
+      expect(gateway.written!.fileId, 1695165);
+      expect(gateway.filled, isEmpty);
+      expect(find.byType(ResolveOriginDialog), findsNothing,
+          reason: 'it closes as any successful save does');
     });
   });
 
@@ -623,7 +676,7 @@ void main() {
         (tester) async {
       final transport = FakeHttpTransport()
         ..stub(searchUrl, body: loadGbFixture('search_ellen'))
-        ..stub(profileUrl, body: loadGbFixture('mod_profile_531649'));
+        ..stub(recordUrl, body: gbMultiRecordFixture(531649));
       final gateway = _FakeGateway(probe: DateTime.utc(2025, 1, 1));
 
       await pumpDialog(
@@ -662,7 +715,7 @@ void main() {
     testWidgets('a pasted mod page resolves without searching', (tester) async {
       final transport = FakeHttpTransport()
         ..stub(searchUrl, body: loadGbFixture('search_ellen'))
-        ..stub(profileUrl, body: loadGbFixture('mod_profile_531649'));
+        ..stub(recordUrl, body: gbMultiRecordFixture(531649));
 
       await pumpDialog(
         tester,
@@ -677,7 +730,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Which file do you have?'), findsOneWidget);
-      // The url went to the profile endpoint, not into the search box's query —
+      // The url went to the mod's record, not into the search box's query —
       // searching for a url as if it were a mod name finds nothing.
       expect(
         transport.requests.where((u) => '$u'.contains('gamebanana.com%2Fmods')),
@@ -715,7 +768,7 @@ void main() {
       // any of it, so the request would be a round trip for nothing. The probe
       // is a folder walk for the same nothing.
       final transport = FakeHttpTransport()
-        ..stub(profileUrl, body: loadGbFixture('mod_profile_531649'));
+        ..stub(recordUrl, body: gbMultiRecordFixture(531649));
       final gateway = await pumpDialog(
         tester,
         target: mod(origin: tracked(tracking: OriginTracking.off)),
@@ -731,21 +784,26 @@ void main() {
     // The second identity can only come from the user: they assembled the
     // folder by hand, possibly from a source the app never saw. This is the
     // only route by which one is ever recorded.
-    // `ellen joe cheongsam`, the first record in the captured search.
-    const otherModId = 527697;
-    final companionProfileUrl = Uri.parse(
-        'https://gamebanana.com/apiv13/Mod/$otherModId/ProfilePage');
+    // Any captured record with a file list will do for the *other* mod; this
+    // one publishes ten, which is what makes the picker worth testing.
+    const otherModId = 528481;
+    const otherModName = 'Megalodon Maid Ellen';
+    // The search's second result, for a test that picks one mod and then
+    // another.
+    const thirdModId = 541825;
+    const thirdModName = 'Jane Doe +Skin - H Redux (Bottom Heavy | Vanilla)';
     final companionSearchUrl = Uri.parse(
       'https://gamebanana.com/apiv13/Util/Search/Results'
       '?_sModelName=Mod&_sSearchString=RabbitFX&_idGameRow=19567&_nPage=1',
     );
 
     FakeHttpTransport bothPages() => FakeHttpTransport()
-      ..stub(profileUrl, body: loadGbFixture('mod_profile_531649'))
-      // Any captured page with a file list will do for the *other* mod; this
-      // one publishes ten, which is what makes the picker worth testing.
-      ..stub(companionProfileUrl, body: loadGbFixture('mod_profile_rated'))
-      ..stub(companionSearchUrl, body: loadGbFixture('search_ellen'));
+      ..stub(recordUrl, body: gbMultiRecordFixture(531649))
+      ..stub(recordUrlOf(otherModId), body: gbMultiRecordFixture(otherModId))
+      ..stub(
+        companionSearchUrl,
+        body: gbSearchOfMultiRecords(const [otherModId, thirdModId]),
+      );
 
     /// A folder that **is** a patch, with nothing recorded under it.
     ModOrigin patchShaped() => tracked(
@@ -797,16 +855,8 @@ void main() {
     /// The folder's own page, plus the name lookup the peer list does for the
     /// companion.
     FakeHttpTransport namedPatch() => FakeHttpTransport()
-      ..stub(profileUrl, body: loadGbFixture('mod_profile_531649'))
-      ..stub(
-        Uri.parse(
-          'https://gamebanana.com/apiv13/Mod/Multi'
-          '?_csvRowIds=$otherModId&_csvProperties=_idRow%2C_sName%2C_sVersion'
-          '%2C_tsDateAdded%2C_tsDateUpdated%2C_bIsObsolete%2C_bIsPrivate'
-          '%2C_bIsTrashed%2C_bIsWithheld%2C_aFiles',
-        ),
-        body: '[{"_idRow":$otherModId,"_sName":"Ellen Joe Cheongsam"}]',
-      );
+      ..stub(recordUrl, body: gbMultiRecordFixture(531649))
+      ..stub(recordUrlOf(otherModId), body: gbMultiRecordFixture(otherModId));
 
     testWidgets('a patch installed into this folder is a peer that can be '
         'declared gone', (tester) async {
@@ -826,7 +876,7 @@ void main() {
       expect(find.text('This folder holds two downloads'), findsOneWidget);
       // Named, because this dialog is already talking to GameBanana and an id
       // is not something a person can act on.
-      expect(find.text('Ellen Joe Cheongsam'), findsOneWidget);
+      expect(find.text(otherModName), findsOneWidget);
       // Both roles labelled, and the folder's own entry is the mod here — this
       // folder holds the mod and had a patch put into it.
       expect(find.text('Mod'), findsOneWidget);
@@ -935,7 +985,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // The search is seeded with the folder name and has already run.
-      await tester.tap(find.text('ellen joe cheongsam').first);
+      await tester.tap(find.text(otherModName).first);
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Add'));
@@ -968,7 +1018,7 @@ void main() {
 
       await tester.tap(find.text('Name the mod it patches'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('ellen joe cheongsam').first);
+      await tester.tap(find.text(otherModName).first);
       await tester.pumpAndSettle();
 
       // v3.4, the newest file the other mod publishes.
@@ -997,7 +1047,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Name the mod it patches'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('ellen joe cheongsam').first);
+      await tester.tap(find.text(otherModName).first);
       await tester.pumpAndSettle();
 
       for (final chip in const [
@@ -1025,7 +1075,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Name the mod it patches'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('ellen joe cheongsam').first);
+      await tester.tap(find.text(otherModName).first);
       await tester.pumpAndSettle();
 
       // `.last`: the dialog underneath still has its own copy of this hatch,
@@ -1048,14 +1098,11 @@ void main() {
       // was never about. It fails silently in the worst direction: a baseline
       // later than the mod it describes hides every file published before it,
       // which is the false clean this whole feature exists to remove.
-      const firstPick = 640237;
       final transport = bothPages()
-        // Created a year *after* the mod picked second, so a leaked baseline
-        // lands in that mod's future rather than being clamped harmlessly back.
-        ..stub(
-          Uri.parse('https://gamebanana.com/apiv13/Mod/$firstPick/ProfilePage'),
-          body: loadGbFixture('mod_profile_asset_patch'),
-        );
+        // Created two months *after* the mod picked second, so a leaked
+        // baseline lands in that mod's future rather than being clamped
+        // harmlessly back.
+        ..stub(recordUrlOf(thirdModId), body: gbMultiRecordFixture(thirdModId));
       final gateway = await pumpDialog(
         tester,
         target: mod(origin: patchShaped()),
@@ -1065,7 +1112,7 @@ void main() {
       await tester.tap(find.text('Name the mod it patches'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Perfect Ellen Joe').first);
+      await tester.tap(find.text(thirdModName).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('I don\'t know which file').last);
       await tester.pumpAndSettle();
@@ -1073,7 +1120,7 @@ void main() {
       // `.last` again: the dialog underneath has its own identity card.
       await tester.tap(find.text('Change').last);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('ellen joe cheongsam').first);
+      await tester.tap(find.text(otherModName).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Add'));
       await tester.pumpAndSettle();
@@ -1121,7 +1168,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Name the mod it patches'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('ellen joe cheongsam').first);
+      await tester.tap(find.text(otherModName).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Add'));
       await tester.pumpAndSettle();
@@ -1201,7 +1248,7 @@ void main() {
       // legitimately returns it — the folder *is* that mod — so the refusal
       // has to be here rather than in the results.
       final transport = FakeHttpTransport()
-        ..stub(profileUrl, body: loadGbFixture('mod_profile_531649'))
+        ..stub(recordUrl, body: gbMultiRecordFixture(531649))
         ..stub(
           companionSearchUrl,
           body: '{"_aMetadata":{"_nRecordCount":1},"_aRecords":'
@@ -1249,7 +1296,7 @@ void main() {
           gameBananaClientProvider.overrideWithValue(
             GameBananaClient(
               transport: FakeHttpTransport()
-                ..stub(profileUrl, body: loadGbFixture('mod_profile_531649')),
+                ..stub(recordUrl, body: gbMultiRecordFixture(531649)),
               maxRetries: 0,
             ),
           ),

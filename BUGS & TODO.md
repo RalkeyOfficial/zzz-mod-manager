@@ -457,12 +457,7 @@ and what survives a rebind. Entry points: the status slot and the mod context me
   seeing them is enough; at 80 it may not be, and the natural home is a second
   row on the `!` toggle rather than a sixth toolbar control. Filed rather than
   built, to see whether it is actually wanted.
-- [ ] **The two resolve dialogs still fetch a whole `ProfilePage`.** They read
-  four fields off it — name, dates, files, archived files — where the update
-  check now asks `Mod/Multi` for one id at a quarter of the bytes. Not a
-  drop-in: both read `profile.files` / `profile.archivedFiles` directly, and
-  `Mod/Multi` returns the union under one key, so they have to move to
-  `currentFiles` / `allFiles` first.
+- [x] **The two resolve dialogs read the mod through `Mod/Multi`.** [`docs/origin-tracking.md`](docs/origin-tracking.md) §5 owns it.
 - [ ] **`CharacterInfo.keybinds` is never written, and one widget renders it.**
   `enrichCharactersWithKeybinds` sets keybinds on each `ModInfo` and carries the
   group through with `character.copyWith(skins: …)`, so the group-level field

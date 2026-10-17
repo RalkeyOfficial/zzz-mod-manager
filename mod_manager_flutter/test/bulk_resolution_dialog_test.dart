@@ -7,7 +7,9 @@ import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
+import 'package:mod_manager_flutter/services/bulk_update_check.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_client.dart';
+import 'package:mod_manager_flutter/services/gamebanana/gamebanana_endpoints.dart';
 import 'package:mod_manager_flutter/services/gamebanana/remote_mod_metadata.dart';
 import 'package:mod_manager_flutter/services/origin_write.dart';
 import 'package:mod_manager_flutter/screens/dialogs/bulk_resolution_dialog.dart';
@@ -561,20 +563,22 @@ void main() {
           body: loadGbFixture('search_ellen'),
         )
         ..stub(
-          Uri.parse('https://gamebanana.com/apiv13/Mod/531649/ProfilePage'),
-          body: loadGbFixture('mod_profile_531649'),
+          const GameBananaEndpoints()
+              .modsMulti(const [531649], updateCheckProperties),
+          body: gbMultiRecordFixture(531649),
         )
-        // For the patch-shaped folder: its name seeds the search for what it patches, and that mod's page.
+        // For the patch-shaped folder: its name seeds the search for what it patches, and that mod's record.
         ..stub(
           Uri.parse(
             'https://gamebanana.com/apiv13/Util/Search/Results'
             '?_sModelName=Mod&_sSearchString=RabbitFX&_idGameRow=19567&_nPage=1',
           ),
-          body: loadGbFixture('search_ellen'),
+          body: gbSearchOfMultiRecords(const [528481]),
         )
         ..stub(
-          Uri.parse('https://gamebanana.com/apiv13/Mod/527697/ProfilePage'),
-          body: loadGbFixture('mod_profile_rated'),
+          const GameBananaEndpoints()
+              .modsMulti(const [528481], updateCheckProperties),
+          body: gbMultiRecordFixture(528481),
         );
       return (
         open: (context, mod) {
@@ -898,13 +902,13 @@ void main() {
       await tester.ensureVisible(nameBase);
       await tester.tap(nameBase);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('ellen joe cheongsam').first);
+      await tester.tap(find.text('Megalodon Maid Ellen').first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Add'));
       await tester.pumpAndSettle();
 
       expect(find.byType(ResolveOriginDialog), findsNothing);
-      expect(dialog.gateway.onDisk['RabbitFX']!.base!.modId, 527697);
+      expect(dialog.gateway.onDisk['RabbitFX']!.base!.modId, 528481);
       // Saved, but not a settled row: the button stays.
       final resolve = find.widgetWithText(TextButton, resolveLabel);
       expect(resolve, findsOneWidget);

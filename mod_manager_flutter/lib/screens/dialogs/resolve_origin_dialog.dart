@@ -16,6 +16,7 @@ import '../../services/log/logger.dart';
 import '../../services/origin_resolution.dart';
 import '../../services/origin_summary.dart';
 import '../../services/patch_record.dart';
+import '../../services/update_check_run.dart';
 import '../../utils/gamebanana_url.dart';
 import '../../utils/state_providers.dart';
 import '../../utils/url_utils.dart';
@@ -65,7 +66,7 @@ class ResolveOriginResult {
   /// Null for the answers that name none: "not from GameBanana", turning tracking back on, and the patch steps.
   final int? modId;
 
-  /// That page's name, from the profile the dialog already fetched.
+  /// That page's name, from the record the dialog already fetched.
   final String? pageName;
 
   /// The user answered "not from GameBanana / it's my own", which writes `tracking: off`.
@@ -154,9 +155,11 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
   /// `source_url` was never walked by the offline backfill.
   DateTime? _installedAt;
 
-  GbMod? _profile;
-  Object? _profileError;
-  bool _loadingProfile = false;
+  /// The mod's `Mod/Multi` record (`fetchModRecord`) — the request and cache
+  /// entry the update dialog uses too.
+  GbMod? _record;
+  Object? _recordError;
+  bool _loadingRecord = false;
 
   GbFile? _selectedFile;
   bool _selectionIsExact = false;
@@ -177,7 +180,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     // `build` shows nothing a mod page could fill in — so fetching one is a
     // round trip whose result can never be displayed.
     if (_origin?.tracking == OriginTracking.off) return;
-    if (_modId case final id?) _loadProfile(id);
+    if (_modId case final id?) _loadRecord(id);
     if (_installedAt == null) _probeInstallDate();
   }
 
@@ -185,10 +188,10 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
 
   /// Fills in the install date for a mod whose sidecar has none.
   ///
-  /// Runs **concurrently with the profile fetch**, so it can land on either side
+  /// Runs **concurrently with the record fetch**, so it can land on either side
   /// of it — and the ranking it feeds is recomputed on every build, so the list
   /// itself always catches up. What does not catch up on its own is the *default
-  /// selection*, which runs once when the profile arrives. Nothing that
+  /// selection*, which runs once when the record arrives. Nothing that
   /// preselects depends on the date today (a hash match and a single-file mod
   /// are both date-independent), so re-running it is insurance rather than a
   /// fix — but it costs a line, and the alternative is a rule whose correctness
@@ -203,26 +206,27 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     if (_selectedFile == null) _applyDefaultSelection();
   }
 
-  Future<void> _loadProfile(int modId) async {
+  Future<void> _loadRecord(int modId) async {
     setState(() {
-      _loadingProfile = true;
-      _profileError = null;
-      _profile = null;
+      _loadingRecord = true;
+      _recordError = null;
+      _record = null;
       _selectedFile = null;
     });
     try {
-      final profile = await ref.read(gameBananaClientProvider).modProfile(modId);
+      final record =
+          await fetchModRecord(ref.read(gameBananaClientProvider), modId);
       if (!mounted) return;
       setState(() {
-        _profile = profile;
-        _loadingProfile = false;
+        _record = record;
+        _loadingRecord = false;
       });
       _applyDefaultSelection();
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _profileError = e;
-        _loadingProfile = false;
+        _recordError = e;
+        _loadingRecord = false;
       });
     }
   }
@@ -265,11 +269,10 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
   }
 
   FileResolution get _resolution {
-    final profile = _profile;
-    if (profile == null) return FileResolution.empty;
+    final record = _record;
+    if (record == null) return FileResolution.empty;
     return rankResolveCandidates(
-      files: profile.files,
-      archivedFiles: profile.archivedFiles,
+      files: record.allFiles,
       folderName: widget.mod.name,
       installedAt: _installedAt,
       archiveMd5: _origin?.base?.archiveMd5,
@@ -328,7 +331,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
 
   /// What Save and "I don't know which" answer: both write `mod_id`, so the caller learns the page.
   ResolveOriginResult get _boundOutcome =>
-      ResolveOriginResult(modId: _modId, pageName: _profile?.name);
+      ResolveOriginResult(modId: _modId, pageName: _record?.name);
 
   Future<void> _save() async {
     final modId = _modId;
@@ -364,7 +367,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     final modId = _modId;
     if (modId == null) return;
     final installedAt = _installedAt;
-    final createdAt = _profile?.dateAdded;
+    final createdAt = _record?.dateAdded;
     final identityNeedsWrite = _identityNeedsWrite;
 
     await _write(outcome: _boundOutcome, (current) {
@@ -414,15 +417,22 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     final result = await _gateway.writeOrigin(widget.mod.id, update);
     final ok = result.ok;
 
-    if (ok && fillMetadata && _alsoFillMetadata && _profile != null) {
+    if (ok && fillMetadata && _alsoFillMetadata && _record != null) {
       // Best-effort and deliberately not gating the result: the tracking data is
       // what the user came here to set, and a failed gallery fetch must not read
       // as a failed resolve. The fill rule is "fill absence, never displace", so
       // it cannot damage what the mod already had either.
+      //
+      // The one step that fetches the full mod page: the description, tags,
+      // category and gallery are not what `Mod/Multi` is asked for, and the
+      // description is most of a profile's size.
       try {
+        final profile = await ref
+            .read(gameBananaClientProvider)
+            .modProfile(_record!.idRow);
         await _gateway.fillMetadata(
           widget.mod.id,
-          RemoteModMetadata.fromMod(_profile!),
+          RemoteModMetadata.fromMod(profile),
         );
       } catch (e) {
         Logger('metadata').warning('could not fill from the mod page',
@@ -506,7 +516,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
           // already confirmed and no file has been picked. Enabled, it would
           // write the block back byte-for-byte, close, and trigger a rescan,
           // which reads as though it did something.
-          onPressed: closing || _profile == null || !_hasSomethingToSave
+          onPressed: closing || _record == null || !_hasSomethingToSave
               ? null
               : _save,
           child: Text(loc.t('mods.resolve.save')),
@@ -531,7 +541,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
           heading: loc.t('mods.resolve.identity_heading'),
           onPicked: (modId) {
             setState(() => _modId = modId);
-            _loadProfile(modId);
+            _loadRecord(modId);
           },
         ),
         const SizedBox(height: 8),
@@ -547,12 +557,12 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     return [
       _identityCard(),
       const SizedBox(height: 12),
-      if (_loadingProfile)
+      if (_loadingRecord)
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 24),
           child: Center(child: CircularProgressIndicator()),
         )
-      else if (_profileError != null) ...[
+      else if (_recordError != null) ...[
         _notice(loc.t('mods.resolve.load_failed'), Icons.cloud_off),
         // Still shown with the mod page unreachable: what the folder holds is
         // read out of the sidecar, so a failed fetch costs the companion's
@@ -565,7 +575,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
         // clamped against the mod's own creation date, and that is the field we
         // just failed to fetch.
         _stopTrackingTile(),
-      ] else if (_profile != null) ...[
+      ] else if (_record != null) ...[
         _fileSection(),
         const SizedBox(height: 8),
         CheckboxListTile(
@@ -628,7 +638,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
         // This dialog has the base's page in hand already.
         knownNames: {
           if (origin.base?.modId case final id?)
-            if (_profile?.name case final name?) id: name,
+            if (_record?.name case final name?) id: name,
         },
         lookUpNames: true,
         rowActions: {
@@ -783,7 +793,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
   /// and it reads better anyway — the mod's name and how we came to believe it
   /// are one fact, not two.
   Widget _identityCard() {
-    final profile = _profile;
+    final record = _record;
     final modId = _modId!;
     final scheme = Theme.of(context).colorScheme;
     // Only describe what is on disk while the dialog is still pointed at it.
@@ -820,7 +830,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      profile?.name ?? '#$modId',
+                      record?.name ?? '#$modId',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontWeight: FontWeight.w700),
@@ -842,8 +852,8 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
                 // nothing.
                 onPressed: () => setState(() {
                   _modId = null;
-                  _profile = null;
-                  _profileError = null;
+                  _record = null;
+                  _recordError = null;
                   _selectedFile = null;
                 }),
                 child: Text(loc.t('mods.resolve.identity_change')),
@@ -932,7 +942,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     // legitimately differ — `assumeCurrent` clamps against the mod's creation
     // date, so a stored baseline is often *later* than the install date — and
     // quoting the derived one would promise a cutoff that is not in force.
-    final baseline = _summary.baseline ?? _installedAt ?? _profile?.dateAdded;
+    final baseline = _summary.baseline ?? _installedAt ?? _record?.dateAdded;
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
