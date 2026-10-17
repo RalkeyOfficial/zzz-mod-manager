@@ -13,6 +13,7 @@ import 'package:mod_manager_flutter/services/origin_write.dart';
 import 'package:mod_manager_flutter/screens/dialogs/bulk_resolution_dialog.dart';
 import 'package:mod_manager_flutter/screens/dialogs/resolve_origin_dialog.dart';
 import 'package:mod_manager_flutter/services/bulk_resolution.dart';
+import 'package:mod_manager_flutter/services/update_check.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
 import 'support/fake_http_transport.dart';
@@ -112,6 +113,9 @@ void main() {
     ResolveOriginOpener? resolveOrigin,
     List<Override> overrides = const [],
 
+    /// For a test that reads provider state afterwards; replaces [overrides].
+    ProviderContainer? container,
+
     /// What a Resolve press reads as saved; by default the block each untracked mod arrived with.
     OriginReader? readOrigin,
 
@@ -155,7 +159,8 @@ void main() {
         ),
       ),
       surfaceSize: surfaceSize,
-      overrides: overrides,
+      overrides: container == null ? overrides : null,
+      container: container,
     );
     await tester.tap(find.text('run'));
     await tester.pumpAndSettle();
@@ -454,6 +459,67 @@ void main() {
     await runFlow(tester, plan, failFor: {'Ellen'});
     await apply(tester);
     expect(find.textContaining('read-only'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Apply clears the verdict of each mod it writes, unless it found an update',
+      (tester) async {
+    // The update dialog skips its check while a verdict is stored, so a written mod must not keep one about its old block.
+    // A found update stays: this screen never rebinds a folder, so that verdict is still about the right page.
+    ModInfo ticked(String name, int modId) => mod(name,
+        origin: origin(modId: modId, modIdConfidence: OriginConfidence.user));
+    final plan = planBulkResolution(
+      mods: [
+        ticked('written', 1),
+        ticked('update', 2),
+        ticked('dismissed', 3),
+        ticked('declined', 4),
+        ticked('failed', 5),
+        mod('unticked', origin: origin(modId: 6)),
+      ],
+      records: {
+        for (var id = 1; id <= 5; id++)
+          id: remote(modId: id, files: [file(900 + id)]),
+        6: remote(modId: 6),
+      },
+    );
+    const unknown = UpdateCheck(outcome: UpdateOutcome.versionUnknown);
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    container.read(modUpdateChecksProvider.notifier).state = {
+      'written': unknown,
+      'update': const UpdateCheck(outcome: UpdateOutcome.possiblyOutdated),
+      'dismissed': const UpdateCheck(
+        outcome: UpdateOutcome.updateAvailable,
+        dismissed: true,
+      ),
+      'declined': unknown,
+      'failed': unknown,
+      'unticked': unknown,
+    };
+
+    final run = await runFlow(
+      tester,
+      plan,
+      container: container,
+      failFor: {'failed'},
+      // Resolved by something else while the screen was open, so its write is declined.
+      onDisk: {
+        'declined': origin(
+          modId: 4,
+          modIdConfidence: OriginConfidence.exact,
+          versionConfidence: OriginConfidence.exact,
+        ),
+      },
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save 5 mods'));
+    await tester.pumpAndSettle();
+
+    expect(run.mods, unorderedEquals(['written', 'update', 'dismissed']));
+    expect(
+      container.read(modUpdateChecksProvider).keys,
+      unorderedEquals(['update', 'dismissed', 'declined', 'failed', 'unticked']),
+    );
   });
 
   testWidgets('it names the mods it is not acting on', (tester) async {

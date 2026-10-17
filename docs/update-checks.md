@@ -708,6 +708,9 @@ which arrives with nothing on record, and the card's blue badge, which arrives
 with a verdict from the last pass. The only difference is whether a request is
 made on open, so they are not two dialogs.
 
+A save in the resolve dialog drops that mod's stored verdict, so its dialog arrives with nothing on record and checks on open rather than answering about the origin block as it was.
+The bulk resolution screen's Apply does the same for each mod it writes, except a verdict that found an update: that screen never rebinds a folder, so the update is still about the right page ([`origin-tracking.md` §7](origin-tracking.md#7-the-bulk-resolution-pass)).
+
 **A per-mod check asks `Mod/Multi` for one id, not `Mod/<id>/ProfilePage`** —
 `fetchModRecord` in `update_check_run.dart`, with the same `updateCheckProperties`
 the whole-library pass sends. That the two paths share one property list is the

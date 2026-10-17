@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
@@ -9,8 +10,10 @@ import '../../services/bulk_resolution.dart';
 import '../../services/gamebanana/file_selection.dart';
 import '../../services/origin_resolution.dart';
 import '../../services/origin_write.dart';
+import '../../services/update_check.dart';
 import '../../utils/gamebanana_url.dart';
 import '../../utils/notifications.dart';
+import '../../utils/state_providers.dart';
 import '../../utils/url_utils.dart';
 import '../components/dialog_section.dart';
 import 'resolve_origin_dialog.dart';
@@ -64,6 +67,8 @@ typedef ResolveOriginOpener = Future<ResolveOriginResult?> Function(
 /// Returns true when at least one sidecar was written, so the caller rescans —
 /// the status slot reads `ModInfo.origin`, which only a scan refreshes.
 /// That includes a mod saved through the per-mod dialog, which writes on its own whether or not Apply follows.
+///
+/// Apply clears the stored update verdict of each mod it writes, unless that verdict found an update. No mod is checked again.
 Future<bool> showBulkResolutionDialog(
   BuildContext context,
   BulkResolutionPlan plan, {
@@ -74,6 +79,8 @@ Future<bool> showBulkResolutionDialog(
   ResolveOriginOpener resolveOrigin = showResolveOriginDialogForResult,
 }) async {
   if (!plan.listsAnything) return false;
+  // The app's container, so the verdicts below are cleared even if the caller is gone by the time Apply's writes land.
+  final container = ProviderScope.containerOf(context, listen: false);
   var resolvedAny = false;
   final answers = await showDialog<Map<String, BulkResolutionAnswer>>(
     context: context,
@@ -93,11 +100,25 @@ Future<bool> showBulkResolutionDialog(
   if (!context.mounted) return resolvedAny;
 
   final outcome = await _applyAnswers(answers, writer);
+  if (outcome.writtenIds.isNotEmpty) {
+    // The update dialog skips its check while a verdict is stored, so a written mod's verdict is cleared.
+    // A found update is kept, dismissed or not: this screen never rebinds a folder, so it is still about the right page.
+    final checks = container.read(modUpdateChecksProvider.notifier);
+    checks.state = {...checks.state}..removeWhere(
+        (modId, check) =>
+            outcome.writtenIds.contains(modId) && !_foundUpdate(check),
+      );
+  }
   final wrote = outcome.written > 0 || resolvedAny;
   if (!context.mounted) return wrote;
   _showOutcome(context, outcome);
   return wrote;
 }
+
+/// Whether [check] reports something newer, including one the user dismissed.
+bool _foundUpdate(UpdateCheck check) =>
+    check.outcome == UpdateOutcome.updateAvailable ||
+    check.outcome == UpdateOutcome.possiblyOutdated;
 
 /// How the write loop ended.
 ///
@@ -105,21 +126,24 @@ Future<bool> showBulkResolutionDialog(
 /// between building this list and pressing Apply. It is counted apart from a failure.
 class BulkResolutionOutcome {
   const BulkResolutionOutcome({
-    required this.written,
+    required this.writtenIds,
     required this.skipped,
     required this.failed,
   });
 
-  final int written;
+  /// Mod folder ids whose sidecar was written.
+  final Set<String> writtenIds;
   final int skipped;
   final int failed;
+
+  int get written => writtenIds.length;
 }
 
 Future<BulkResolutionOutcome> _applyAnswers(
   Map<String, BulkResolutionAnswer> answers,
   OriginWriter writer,
 ) async {
-  var written = 0;
+  final written = <String>{};
   var skipped = 0;
   var failed = 0;
   for (final entry in answers.entries) {
@@ -132,7 +156,7 @@ Future<BulkResolutionOutcome> _applyAnswers(
     );
     switch (result) {
       case OriginWriteResult.written:
-        written++;
+        written.add(entry.key);
       case OriginWriteResult.declined:
         skipped++;
       case OriginWriteResult.folderMissing:
@@ -141,7 +165,7 @@ Future<BulkResolutionOutcome> _applyAnswers(
     }
   }
   return BulkResolutionOutcome(
-    written: written,
+    writtenIds: written,
     skipped: skipped,
     failed: failed,
   );

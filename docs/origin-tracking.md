@@ -575,9 +575,10 @@ The button opens the per-mod resolve dialog ([§5](#5-the-resolve-dialog)) on to
   With no question rows at all there is nothing for Apply to save, so the Save button and the intro about ticked boxes are left out.
 - **A resolved row stays in the list, and is not checked on the spot.** It shows a done mark, the name of the mod page it was bound to, and "check again to see its updates".
   The name comes from the profile the dialog already fetched to offer its file list, so the row costs no request.
-  The check had no `mod_id` to look this mod up with, so the screen holds no verdict for it, and producing one here is the same undecided question as refreshing the verdict of any mod resolved on this screen:
-  re-folding the records in hand is free but skips the release feeds the check fetches only for mods that flagged, so it could show the variant-shaped false positive the check exists to remove, and the alternative is a request nobody asked for.
-  Until that is settled, the next check covers it.
+  The check had no `mod_id` to look this mod up with, so the screen holds no verdict for it, and no mod resolved on this screen is checked again by itself:
+  a user who picks an older file knows it is out of date, and pressing *Check for updates* again gives the answer an automatic re-check would, so one adds nothing.
+  Re-folding the records in hand would also skip the release feeds the check fetches only for mods that flagged, so it could show the variant-shaped false positive the check exists to remove.
+  The next check covers it.
 - **"Not from GameBanana" settles a row too.** It shows a done mark and "Marked as not from GameBanana — saved now", with no page name, since there is none.
   A cancelled dialog, or any other answer, leaves the row as it was.
 - **Each Resolve opens on the mod as saved now.** The screen's own copy of each mod is from when it opened, and a step that saves without settling the row — naming what a patch applies to — leaves that copy out of date.
@@ -605,6 +606,12 @@ pasted — so pre-ticking it would turn the glance test into a rubber stamp. A
 *confirm all* shortcut sits at the head of that section for a user who has read it,
 and the intro at the top of the screen states the asymmetry rather than leaving it
 to be inferred from which boxes happen to be ticked.
+
+**Apply clears the stored update verdict of each mod it writes, unless that verdict found an update.** A declined or failed write keeps its verdict.
+The update dialog skips its check while a verdict is stored, so a mod whose file was just recorded would otherwise show an answer about the block as it was, such as "no installed version on record". Cleared, its dialog checks for real when opened. Apply itself fetches nothing.
+A verdict that found an update is kept, dismissed or not, because this screen never rebinds a folder to another mod page: it confirms an identity, records a file, or marks the page gone or back.
+So that verdict is still about the right page and at worst understates its confidence, while clearing it would drop a real badge from the card, the update count and the updates-only filter. The verdict a write makes wrong is "version unknown", which never reports an update.
+The per-mod resolve dialog can rebind a folder, so a save there clears the verdict whatever it says.
 
 ### What the pass may answer by itself
 

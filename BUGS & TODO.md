@@ -498,17 +498,11 @@ One screen, two jobs, and nothing that goes stale once libraries are migrated.
 
 #### Open around the bulk resolution pass (known, deliberately not built)
 
-- [ ] **Resolving a mod does not refresh its verdict.** The screen writes a
-  `file_id` for a mod the check had answered `versionUnknown`, and that verdict
-  stays in session state until the next press — so a user who sorts out 24 mods
-  learns nothing about *their* updates without checking again. Re-folding is
-  free (the records are still in hand and `checkForUpdate` is pure), and it was
-  still not taken: phase two's release feeds were fetched only for the mods that
-  flagged, so a freshly-resolved mod re-folded now would miss the
-  `ReleaseGroups` suppression and could show the variant-shaped false positive
-  the pass had already learned to remove. The honest options are a second full
-  check (a request nobody asked for) or fetching one feed per newly-flagged mod;
-  both are decisions about the check, not about this screen.
+- **Resolving a mod on this screen does not check it again.** A mod Apply writes loses the verdict it had, unless that verdict found an update, and gets a new one from the next Check for updates.
+  That is the decision, not a gap: a user who picks an older file knows it is out of date, and pressing Check for updates again gives the answer an automatic re-check would, so one adds nothing.
+  Re-folding from the records in hand is not free either, since the release feeds were fetched only for the mods that flagged, and a re-fold without them could show the variant-shaped false positive the check removes.
+  What Apply does do is clear each written mod's stored verdict, so its update dialog checks for real when opened instead of answering about the block as it was.
+  A verdict that found an update is kept, dismissed or not: this screen never rebinds a folder to another mod page, so that verdict is still about the right page, and clearing it would drop a real badge from the card, the update count and the updates-only filter.
 - [x] **Untracked mods on the bulk screen are listed and resolvable one at a time.** [`docs/origin-tracking.md`](docs/origin-tracking.md) §7 owns it.
 - **There is no "I don't know which" per row.** The ambiguous rows get a
   picker or nothing; the `assumed_latest` escape hatch exists per mod (§7.5) and
