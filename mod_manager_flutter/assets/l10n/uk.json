@@ -1,15 +1,48 @@
 {
   "app": {
     "title": "ZZZ Менеджер модів",
-    "brand_subtitle": "Менеджер модів"
+    "wordmark": "ZENITH"
   },
   "navigation": {
-    "mods": "Моди",
-    "marketplace": "Маркетплейс",
+    "library": "Бібліотека",
+    "characters": "Персонажі",
+    "updates": "Оновлення",
+    "gamebanana": "GameBanana",
+    "browse": "Огляд",
+    "downloads": "Завантаження",
     "storage": "Сховище",
-    "settings": "Налаштування",
-    "expand": "Розгорнути",
-    "collapse": "Згорнути"
+    "settings": "Налаштування"
+  },
+  "shell": {
+    "window": {
+      "minimize": "Згорнути",
+      "maximize": "Розгорнути",
+      "restore": "Відновити",
+      "close": "Закрити"
+    },
+    "zzmi": {
+      "connected": "ZZMI під'єднано",
+      "missing": "ZZMI не знайдено",
+      "missing_hint": "Вкажіть теку ZZMI в налаштуваннях.",
+      "active_single": "{count} мод увімкнено",
+      "active_few": "{count} моди увімкнено",
+      "active_plural": "{count} модів увімкнено",
+      "press_key": "після змін натисніть {key} у грі"
+    },
+    "launch": {
+      "button": "Запустити гру",
+      "choose": "Виберіть, що запускає кнопка «Запустити гру»",
+      "not_found_title": "Програму запуску гри не знайдено",
+      "unsupported_title": "Цей файл не вдається запустити",
+      "unsupported_body": "{file}: виберіть натомість його ярлик .desktop або скрипт у налаштуваннях.",
+      "failed_title": "Не вдалося запустити гру"
+    },
+    "status": {
+      "zzmi": "ZZMI · {path}",
+      "links_single": "{count} посилання активне",
+      "links_few": "{count} посилання активні",
+      "links_plural": "{count} посилань активних"
+    }
   },
   "storage": {
     "title": "Сховище",
@@ -878,6 +911,11 @@
       "accent_lime": "Лаймовий",
       "accent_teal": "Бірюзовий"
     },
+    "launch": {
+      "label": "Запускати гру через",
+      "hint": "Що запускає кнопка «Запустити гру»: XXMI Launcher, його ярлик або скрипт.",
+      "choose": "Вибрати…"
+    },
     "auto_tag": {
       "title": "Автоматичне тегування",
       "description": "Система автоматично визначає персонажів з назв папок модів і встановлює відповідні теги.",
@@ -952,7 +990,6 @@
   },
   "downloads": {
     "title": "Завантаження",
-    "tooltip": "Завантаження",
     "empty": "Нічого не завантажується.",
     "clear_finished": "Очистити завершені",
     "queued": "Очікує вільного слота",

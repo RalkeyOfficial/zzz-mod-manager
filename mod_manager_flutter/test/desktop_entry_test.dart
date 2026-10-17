@@ -95,14 +95,14 @@ void main() {
     expect(workflow.readAsStringSync(), contains('$id.desktop'));
   });
 
-  test('the window keeps the decoration its desktop draws', () {
-    // An undecorated window cannot be resized with the mouse — neither GTK nor
-    // the compositor offers an edge to grab — and on Wayland GTK announces
-    // client-side decoration only when it draws some, so the compositor adds a
-    // title bar of its own above the app's. Both are silent at build time.
-    expect(File('lib/main.dart').readAsStringSync(),
-        isNot(contains('TitleBarStyle.hidden')));
-    expect(File('linux/runner/my_application.cc').readAsStringSync(),
-        isNot(contains('gtk_window_set_decorated(window, FALSE)')));
+  test('the window stays decorated behind the drawn title bar', () {
+    // The app hides a GTK header bar rather than the decoration. An undecorated
+    // window has no shadow and no edge to resize by, and on KDE Wayland KWin
+    // adds a title bar of its own above the app's. Without the header bar,
+    // window_manager's hidden style falls back to undecorating the window.
+    // All of it is silent at build time.
+    final runner = File('linux/runner/my_application.cc').readAsStringSync();
+    expect(runner, contains('gtk_window_set_titlebar(window, header_bar)'));
+    expect(runner, isNot(contains('gtk_window_set_decorated(window, FALSE)')));
   });
 }

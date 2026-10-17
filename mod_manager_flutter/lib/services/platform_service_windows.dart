@@ -223,6 +223,26 @@ class WindowsPlatformService implements PlatformService {
     }
   }
 
+  @override
+  Future<LaunchOutcome> launchGame(String target) async {
+    try {
+      if (!await File(target).exists()) return LaunchOutcome.notFound;
+      // `start` does what a double-click does, so an .exe, a .lnk shortcut and a .bat all work. The empty argument
+      // is the window title `start` takes first when the path is quoted.
+      await Process.start(
+        'cmd',
+        ['/c', 'start', '', target],
+        workingDirectory: path.dirname(target),
+        mode: ProcessStartMode.detached,
+      );
+      _log.info('game launched', fields: {'target': target});
+      return LaunchOutcome.started;
+    } catch (error, stack) {
+      _log.warning('could not launch game', error: error, stack: stack, fields: {'target': target});
+      return LaunchOutcome.failed;
+    }
+  }
+
   /// **`7z.exe`, which needs `7z.dll` beside it** — deliberately not `7za.exe`.
   /// 7-Zip's own readme calls that one "reduced formats support", and the
   /// formats it drops include RAR, which is the whole reason for bundling

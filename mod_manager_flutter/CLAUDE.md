@@ -22,7 +22,8 @@ This file is rules and pointers only. Every subject below has a doc in [`../docs
 | [`patch-destinations.md`](../docs/patch-destinations.md) | Which mod folder a patch goes into — the signals and their measurements; ranked, never narrowed or preselected |
 | [`logging.md`](../docs/logging.md) | What the app records about itself — levels, tags, the rotating file, redaction |
 | [`mod-reload.md`](../docs/mod-reload.md) | Why the app does not press F10 for you — what was measured, and why the feature is removed rather than fixed |
-| [`desktop-integration.md`](../docs/desktop-integration.md) | The window itself — the application id, the desktop entry and the icon that depends on it, and why the title bar is the window manager's |
+| [`desktop-integration.md`](../docs/desktop-integration.md) | The window itself — the application id, the desktop entry and the icon that depends on it, and the drawn title bar and what keeps the window resizable |
+| [`launch-game.md`](../docs/launch-game.md) | The sidebar's Launch game button — what it starts on each platform, and what it refuses |
 | [`disk-usage.md`](../docs/disk-usage.md) | What the app is keeping on disk — the Storage tab's categories, apparent size vs free space, the shared directory walk, and what the reclaim may delete |
 | [`configuration.md`](../docs/configuration.md) | The app's own settings |
 
@@ -62,7 +63,7 @@ Platform
 - Never branch on `Platform.isX` for platform-specific behaviour in business logic. Add a method to `PlatformService` and implement it in both `LinuxPlatformService` and `WindowsPlatformService`.
 
 The window — full reasoning in [`desktop-integration.md`](../docs/desktop-integration.md)
-- The app draws no title bar. Never set `titleBarStyle: TitleBarStyle.hidden` or `gtk_window_set_decorated(window, FALSE)` — on Wayland it breaks edge resize without undecorating anything. Anything that wants to sit "in the title bar" goes in the sidebar.
+- The app draws its own title bar, `ZenithTitleBar`, above every page. On Wayland, hiding the system bar the wrong way breaks edge resize: never call `gtk_window_set_decorated(window, FALSE)` and never remove the runner's hidden `GtkHeaderBar`, which is what keeps the window decorated while `TitleBarStyle.hidden` is set. Without the header bar, `window_manager` falls back to undecorating the window.
 - The application id is one string in three places: `APPLICATION_ID` in `linux/CMakeLists.txt`, the `linux/packaging/<id>.desktop` filename, and the installed icon's filename. Keep all three in sync.
 
 Text — full reasoning in [`app-architecture.md`](../docs/app-architecture.md) §1
@@ -114,7 +115,7 @@ A flow that outlives its widget reads it through the app's `ProviderContainer`, 
 The library is `libraryProvider` and belongs to no screen. It owns the scan; `modsProvider` is its plain-list view, `installedModsIndexProvider` derives from it, and the Mods tab builds `charactersProvider`'s localized groups from it.
 So: whoever changes a mod folder invalidates `libraryProvider`, never only something derived from it — invalidating the index alone rebuilds it from the same cached scan.
 One walk of the folder at a time: a `rescan()` during a running scan takes that answer, and a scan never overwrites an edit published while it was walking.
-The four tabs are keyed `AnimatedSwitcher` children with no keep-alive, so the inactive tab's `State` is disposed and nothing a tab owns may be the only copy of something another surface needs.
+The sidebar's pages (`AppDestination`) are keyed `AnimatedSwitcher` children with no keep-alive, so the inactive page's `State` is disposed and nothing a page owns may be the only copy of something another surface needs.
 A provider in the root container is not disposed with it, which is how the Storage tab's scan survives a tab switch without a host widget.
 A question asked mid-install reads the disk instead — nothing has invalidated anything yet (`test/modal_freshness_test.dart`).
 

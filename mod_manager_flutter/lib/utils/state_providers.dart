@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import '../core/palette.dart';
 import '../models/character_info.dart';
 import '../services/api_service.dart';
@@ -228,8 +230,12 @@ final installedModsIndexProvider =
 // Zoom scale provider
 final zoomScaleProvider = StateProvider<double>((ref) => 1.0);
 
-// Tab index provider
-final tabIndexProvider = StateProvider<int>((ref) => 0);
+/// The pages the sidebar switches between.
+enum AppDestination { characters, browse, storage, settings }
+
+/// The page the main area shows. Its pages are keyed `AnimatedSwitcher` children
+/// with no keep-alive, so the page left behind is disposed.
+final destinationProvider = StateProvider<AppDestination>((ref) => AppDestination.characters);
 
 /// The sidebar's groups: "ALL", the built-in categories, then every character
 /// that has a mod.
@@ -329,6 +335,20 @@ final isDarkModeProvider = Provider<bool>((ref) {
 
 // Settings providers
 final modsPathProvider = StateProvider<String>((ref) => '');
+
+/// The configured ZZMI folder, the one holding `d3dx.ini`. Hydrated in `ApiService.initialize` and updated when
+/// Settings saves the paths.
+final zzmiPathProvider = StateProvider<String>((ref) => '');
+
+/// Whether [zzmiPathProvider] names a ZZMI install: it holds `d3dx.ini`.
+final zzmiFoundProvider = FutureProvider<bool>((ref) async {
+  final path = ref.watch(zzmiPathProvider);
+  if (path.isEmpty) return false;
+  return File(p.join(path, 'd3dx.ini')).exists();
+});
+
+/// What the sidebar's Launch game button starts, empty until chosen. See `docs/launch-game.md`.
+final launchTargetProvider = StateProvider<String>((ref) => '');
 final autoRefreshProvider = StateProvider<bool>((ref) => false);
 
 /// How the marketplace presents mods GameBanana flags as adult.
@@ -390,9 +410,6 @@ final localeProvider = StateProvider<Locale>((ref) => const Locale('en'));
 enum ActivationMode { single, multi }
 
 final activationModeProvider = StateProvider<ActivationMode>((ref) => ActivationMode.single);
-
-// Sidebar collapsed state
-final sidebarCollapsedProvider = StateProvider<bool>((ref) => false);
 
 // ── Mods toolbar: search / sort / tag filter / favorites ────────────────────
 // Held here (not as ad-hoc widget state) so the toolbar and the mods grid each

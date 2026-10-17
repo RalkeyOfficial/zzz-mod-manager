@@ -1,143 +1,105 @@
 import 'package:flutter/material.dart';
 
-/// One row of the sidebar's tab list — an icon, and a label when the sidebar is
-/// open.
+import '../../core/palette.dart';
+import '../../core/type_scale.dart';
+
+/// One row of the sidebar: an icon, a label and an optional count.
 ///
-/// **Nothing here may overflow at any width between the two resting points**,
-/// and that is the whole design. The sidebar animates its width between
-/// [collapsedWidth] and [expandedWidth] over 300ms, while [collapsed] flips in a
-/// single frame — so on *expand* the label is inserted immediately, into a row
-/// still only as wide as the collapsed sidebar. That threw `RenderFlex
-/// overflowed by 28 pixels` on every open.
-///
-/// Two things make it impossible rather than unlikely:
-///
-/// - **The horizontal padding is constant.** It used to widen from 12 to 16 on
-///   expand, in the same frame as the label appeared, leaving `80 - 32 - 32 =
-///   16` for a 22px icon — so at the first frame the *icon alone* did not fit
-///   and no amount of shrinking the label would have helped. At a constant 12
-///   the narrowest the row ever gets is `80 - 32 - 24 = 24`, which the icon
-///   always fits inside.
-/// - **The label and the gap before it are one [Flexible] unit**, ellipsising
-///   together. A rigid `SizedBox` gap cannot give way, so `22 + 14` exceeds the
-///   24 available before the text is even measured. Flexed, the pair collapses
-///   to nothing mid-animation and grows to its natural size once there is room.
-///
-/// The icon fitting the narrowest row is therefore the single invariant the
-/// whole widget rests on, and it holds with 2px to spare.
-///
-/// **A `LayoutBuilder` deciding all this from the live width was tried first and
-/// cannot be used here.** The sidebar is inside an `IntrinsicHeight`, which asks
-/// its children for intrinsic dimensions, and `LayoutBuilder` refuses to answer
-/// that — it threw on every frame and the app never finished rendering. Any
-/// future fix in this subtree is under the same constraint.
-class SidebarNavItem extends StatelessWidget {
+/// The current row is raised and outlined, with its icon in the accent. A [hot] count is an amber pill, for the
+/// one count that asks for attention (updates).
+class SidebarNavItem extends StatefulWidget {
   const SidebarNavItem({
     super.key,
     required this.icon,
     required this.label,
-    required this.isActive,
-    required this.collapsed,
     required this.onTap,
+    this.selected = false,
+    this.count,
+    this.hot = false,
   });
+
+  static const double height = 38;
 
   final IconData icon;
   final String label;
-  final bool isActive;
-
-  /// Whether the sidebar is collapsed. Flips a frame before the width finishes
-  /// animating — see the class doc for why that is survivable here.
-  final bool collapsed;
-
   final VoidCallback onTap;
+  final bool selected;
+  final int? count;
+  final bool hot;
 
-  /// The two widths the sidebar animates between.
-  static const double collapsedWidth = 80;
-  static const double expandedWidth = 220;
+  @override
+  State<SidebarNavItem> createState() => _SidebarNavItemState();
+}
 
-  /// Constant, and load-bearing. See the class doc.
-  static const double _horizontalPadding = 12;
+class _SidebarNavItemState extends State<SidebarNavItem> {
+  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Tooltip(
-        message: collapsed ? label : '',
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(12),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              padding: const EdgeInsets.symmetric(
-                horizontal: _horizontalPadding,
-                vertical: 14,
-              ),
-              decoration: BoxDecoration(
-                gradient: isActive
-                    ? const LinearGradient(
-                        colors: [Color(0xFF0EA5E9), Color(0xFF06B6D4)],
-                      )
-                    : null,
-                color: isActive ? null : Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: isActive
-                    ? [
-                        BoxShadow(
-                          color: const Color(0xFF0EA5E9).withValues(alpha: 0.4),
-                          blurRadius: 12,
-                          spreadRadius: 1,
-                          offset: const Offset(0, 4),
-                        ),
-                      ]
-                    : null,
-              ),
-              child: Row(
-                mainAxisAlignment: collapsed
-                    ? MainAxisAlignment.center
-                    : MainAxisAlignment.start,
-                children: [
-                  AnimatedScale(
-                    scale: isActive ? 1.1 : 1.0,
-                    duration: const Duration(milliseconds: 200),
-                    child: Icon(
-                      icon,
-                      size: 22,
-                      color: isActive ? Colors.white : Colors.grey[600],
-                    ),
+    final palette = ZenithPalette.of(context);
+    final text = Theme.of(context).textTheme;
+    final selected = widget.selected;
+    final background = selected
+        ? palette.raised
+        : (_hovered ? Color.lerp(palette.chrome, palette.raised, 0.6)! : Colors.transparent);
+    final foreground = selected || _hovered ? palette.text : palette.text2;
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: Container(
+            height: SidebarNavItem.height,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: background,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: selected ? palette.line : Colors.transparent),
+            ),
+            child: Row(
+              spacing: 12,
+              children: [
+                Icon(widget.icon, size: 16, color: selected ? palette.accent : foreground),
+                Expanded(
+                  child: Text(
+                    widget.label,
+                    overflow: TextOverflow.ellipsis,
+                    style: text.labelLarge?.copyWith(color: foreground),
                   ),
-                  if (!collapsed)
-                    // Gap and label together, so the pair shrinks as one. A
-                    // rigid gap outside the Flexible would overflow on its own
-                    // before the text was ever measured.
-                    Flexible(
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: AnimatedDefaultTextStyle(
-                          duration: const Duration(milliseconds: 300),
-                          style: Theme.of(context).textTheme.bodyMedium!.copyWith(
-                            fontWeight:
-                                isActive ? FontWeight.w600 : FontWeight.w500,
-                            color: isActive ? Colors.white : Colors.grey[600],
-                            letterSpacing: 0.3,
-                          ),
-                          child: Text(
-                            label,
-                            maxLines: 1,
-                            softWrap: false,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
+                ),
+                if (widget.count != null) _Count(count: widget.count!, hot: widget.hot),
+              ],
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _Count extends StatelessWidget {
+  const _Count({required this.count, required this.hot});
+
+  final int count;
+  final bool hot;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ZenithPalette.of(context);
+    final style = ZenithType.of(context).monoSmall;
+    if (!hot) return Text('$count', style: style.copyWith(color: palette.text3));
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: palette.badgeUpdate.background,
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Text('$count', style: style.copyWith(color: palette.badgeUpdate.foreground)),
     );
   }
 }

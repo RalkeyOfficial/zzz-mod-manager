@@ -125,15 +125,15 @@ static void my_application_activate(GApplication *application)
   GtkWindow *window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
-  // **The window keeps the decoration its window manager draws.** An
-  // undecorated window cannot be resized with the mouse — neither GTK nor the
-  // compositor offers an edge to grab, measured on both backends — and it
-  // reimplements minimise, maximise and close worse than the desktop does,
-  // without the window menu, the double-click-to-maximise or the button order
-  // the user chose. On Wayland it is worse than that: GTK announces client-side
-  // decoration only when it actually draws some, so `set_decorated(FALSE)` here
-  // leaves the compositor adding a 28px title bar of its own *above* the app's,
-  // which is two title bars on one window.
+  // The app draws its own title bar, and GTK keeps the window frame. Setting a
+  // header bar as the titlebar makes the window client-decorated, so GTK draws
+  // the shadow and the resize border around it; the bar itself stays hidden and
+  // Flutter paints the whole visible area. Never `set_decorated(FALSE)`: that
+  // drops the shadow and the resize border, and on KDE Wayland it makes KWin
+  // draw a title bar of its own above the app's.
+  GtkWidget *header_bar = gtk_header_bar_new();
+  gtk_window_set_titlebar(window, header_bar);
+  gtk_widget_hide(header_bar);
   gtk_window_set_title(window, "ZZZ Mod Manager");
   set_window_icon(window);
 

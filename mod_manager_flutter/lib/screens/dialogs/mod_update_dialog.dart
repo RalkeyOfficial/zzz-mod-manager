@@ -709,7 +709,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// and it is the only place in the app that can actually fetch a file.
   void _openInMarketplace(int modId) {
     ref.read(marketplaceOpenModProvider.notifier).state = modId;
-    ref.read(tabIndexProvider.notifier).state = 1;
+    ref.read(destinationProvider.notifier).state = AppDestination.browse;
     Navigator.of(context).pop(_wrote);
   }
 

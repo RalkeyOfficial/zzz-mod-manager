@@ -35,6 +35,7 @@ App-data locations are `~/.local/share/zzz-mod-manager` (Linux) and
   "favorite_mods": ["Ellen Swimsuit"],
   "theme": "system",
   "accent": "violet",
+  "launch_target": "/home/user/.local/share/applications/xxmi-launcher.desktop",
   "language": "en",
   "sort_mode": "added",
   "content_filter": "blur",
@@ -60,6 +61,7 @@ App-data locations are `~/.local/share/zzz-mod-manager` (Linux) and
 | `favorite_mods` | `favorite_mods` | String list of mod folder names |
 | `theme` | `theme` | The theme, as a `ThemeMode` Dart name (`light` \| `system` \| `dark`). Empty until chosen ([§3](#3-parsing-a-stored-value)), and parsed by `parseThemeMode`, which **degrades anything unrecognised to `system`** — the key is older than the setting and holds a palette name (`dark-blue`) in any config an earlier build wrote, so the tolerance is what an upgrade lands on |
 | `accent` | `accent` | The accent, as an `AccentChoice` Dart name (`violet` \| `paper` \| `lime` \| `teal`). Empty until chosen, and parsed by `AccentChoice.parse`, which degrades anything unrecognised to `violet` |
+| `launch_target` | `launch_target` | The file the sidebar's Launch game button starts, empty until chosen. Set by the button's first press or by **Launch game with**, both saving at once. See [`launch-game.md`](launch-game.md) |
 | `language` | `language` | Locale code (`en`, `uk`) |
 | `sort_mode` | `sort_mode` | The **mods library** sort. Parsed into `ModSort`; falls back to `added` |
 | `content_filter` | `content_filter` | Marketplace adult-content treatment: `blur` (default) \| `show` \| `hide`. Stored as a raw string and parsed by `ContentFilterMode.parse`, which **degrades anything unrecognised to `blur`** — the only value that is wrong in neither direction ([§3](#3-parsing-a-stored-value)) |
@@ -160,9 +162,11 @@ page and category.
 ## 5. Where a setting is surfaced
 
 The Settings tab (`screens/settings_screen.dart`) renders section by section:
-**Mod directories**, **Language**, **Updates**, **Marketplace**, **Automatic
-tagging**, **Appearance**, **Diagnostics**. Only the paths are applied by the
-*Save configuration* button; everything else writes as it is changed.
+**Mod directories** (with **Launch game with** under the two paths),
+**Language**, **Updates**, **Marketplace**, **Automatic tagging**,
+**Appearance**, **Diagnostics**. Only the paths are applied by the *Save
+configuration* button; everything else, the launch target included, writes as it
+is changed.
 
 Anything with a description of its own lives in `screens/components/settings/` as
 its own widget rather than inside the screen, which is already over a thousand

@@ -1,10 +1,8 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:window_manager/window_manager.dart';
 import 'dart:io';
 import 'core/app_theme.dart';
@@ -12,12 +10,13 @@ import 'core/constants.dart';
 import 'core/font_licenses.dart';
 import 'screens/mods_screen.dart';
 import 'screens/components/download_queue_host.dart';
-import 'screens/components/downloads_button.dart';
 import 'screens/components/launch_update_check_host.dart';
 import 'screens/components/shader_fixes_notices.dart';
 import 'screens/components/notification_overlay.dart';
-import 'screens/components/sidebar_nav_item.dart';
 import 'screens/settings_screen.dart';
+import 'screens/shell/app_sidebar.dart';
+import 'screens/shell/status_bar.dart';
+import 'screens/shell/title_bar.dart';
 import 'screens/storage_screen.dart';
 import 'screens/welcome_screen.dart';
 import 'screens/marketplace_screen.dart';
@@ -78,9 +77,11 @@ Future<void> _startUp() async {
     center: true,
     backgroundColor: Colors.transparent,
     skipTaskbar: false,
-    // No `titleBarStyle: hidden`. The window keeps the title bar its desktop
-    // draws, which is the only one that can be resized by its edges and the
-    // only one that obeys the user's own button order and window menu.
+    // The app draws its own title bar (`ZenithTitleBar`). On Linux this hides
+    // the runner's header bar and keeps the GTK frame that resizes the window;
+    // on Windows it drops the caption and keeps the border. See
+    // `docs/desktop-integration.md` §4.
+    titleBarStyle: TitleBarStyle.hidden,
   );
 
   windowManager.waitUntilReadyToShow(windowOptions, () async {
@@ -189,12 +190,20 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         GlobalCupertinoLocalizations.delegate,
       ],
       onGenerateTitle: (context) => context.loc.t('app.title'),
+      // The title bar sits above every page, the first-run screen and the
+      // loading spinner included, since nothing else can move the window.
+      //
       // Notifications are hosted **above the navigator**, so they are visible
       // over a modal dialog. A large share of them are raised from one (rename,
       // delete, keybinds, the whole update flow), and the `ScaffoldMessenger`
       // bars they replaced were drawn inside the `Scaffold` — behind the
       // barrier, where the user never saw them.
-      builder: (context, child) => NotificationHost(child: child!),
+      builder: (context, child) => Column(
+        children: [
+          const ZenithTitleBar(),
+          Expanded(child: NotificationHost(child: child!)),
+        ],
+      ),
       home: _isLoading
           ? const Scaffold(body: Center(child: CircularProgressIndicator()))
           : (_isFirstRun
@@ -209,6 +218,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   }
 }
 
+/// The app once it is set up: the sidebar, the page it picked, and the status bar.
 class MainScreen extends ConsumerStatefulWidget {
   const MainScreen({super.key});
 
@@ -216,58 +226,16 @@ class MainScreen extends ConsumerStatefulWidget {
   ConsumerState<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends ConsumerState<MainScreen>
-    with TickerProviderStateMixin, WindowListener {
-  late AnimationController _logoAnimationController;
-  late AnimationController _sidebarAnimationController;
-  late Animation<double> _logoScaleAnimation;
-  late Animation<double> _logoRotationAnimation;
-  late Animation<double> _sidebarSlideAnimation;
-
+class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
   @override
   void initState() {
     super.initState();
     windowManager.addListener(this);
-
-    _logoAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 2000),
-      vsync: this,
-    );
-    _sidebarAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 300),
-      vsync: this,
-    );
-
-    _logoScaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _logoAnimationController,
-        curve: Curves.elasticOut,
-      ),
-    );
-
-    _logoRotationAnimation = Tween<double>(begin: 0.0, end: 0.1).animate(
-      CurvedAnimation(
-        parent: _logoAnimationController,
-        curve: Curves.easeInOut,
-      ),
-    );
-
-    _sidebarSlideAnimation = Tween<double>(begin: -1.0, end: 0.0).animate(
-      CurvedAnimation(
-        parent: _sidebarAnimationController,
-        curve: Curves.easeOutCubic,
-      ),
-    );
-
-    _logoAnimationController.forward();
-    _sidebarAnimationController.forward();
   }
 
   @override
   void dispose() {
     windowManager.removeListener(this);
-    _logoAnimationController.dispose();
-    _sidebarAnimationController.dispose();
     super.dispose();
   }
 
@@ -294,16 +262,13 @@ class _MainScreenState extends ConsumerState<MainScreen>
 
   @override
   Widget build(BuildContext context) {
-    final currentTab = ref.watch(tabIndexProvider);
-    final isDarkMode = ref.watch(isDarkModeProvider);
-    final isSidebarCollapsed = ref.watch(sidebarCollapsedProvider);
-    final loc = context.loc;
+    final destination = ref.watch(destinationProvider);
 
     // `DownloadQueueHost` wraps the whole screen, and **below** the `Navigator`
     // rather than beside it like `NotificationHost`: it finishes a background
     // download by installing it, which can raise a dialog, and `showDialog`
-    // needs a `Navigator` ancestor. Here rather than inside a tab because the
-    // tabs are disposed as the user moves between them — see the host itself.
+    // needs a `Navigator` ancestor. Here rather than inside a page because the
+    // pages are disposed as the user moves between them — see the host itself.
     // `LaunchUpdateCheckHost` wraps the screen for the same reason, and needs
     // it more: nobody pressed anything to start its pass, so there is no screen
     // it belongs to. It raises no dialog, so its position relative to the
@@ -312,294 +277,33 @@ class _MainScreenState extends ConsumerState<MainScreen>
     return DownloadQueueHost(
       child: LaunchUpdateCheckHost(
         child: ShaderRestartNoticeHost(
-        child: Scaffold(
-      body: Row(
+          child: Scaffold(
+            body: Column(
               children: [
-                // Sidebar
-                SlideTransition(
-                  position:
-                      Tween<Offset>(
-                        begin: const Offset(-1, 0),
-                        end: Offset.zero,
-                      ).animate(
-                        CurvedAnimation(
-                          parent: _sidebarAnimationController,
-                          curve: Curves.easeOutCubic,
-                        ),
-                      ),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeInOut,
-                    width: isSidebarCollapsed ? 80 : 220,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: isDarkMode
-                            ? [const Color(0xFF1A1A1A), const Color(0xFF0F0F0F)]
-                            : [Colors.white, const Color(0xFFFAFAFA)],
-                      ),
-                      border: Border(
-                        right: BorderSide(
-                          color: isDarkMode
-                              ? Colors.white.withValues(alpha: 0.05)
-                              : Colors.black.withValues(alpha: 0.03),
-                          width: 1,
-                        ),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: isDarkMode
-                              ? Colors.black.withValues(alpha: 0.3)
-                              : Colors.black.withValues(alpha: 0.05),
-                          blurRadius: 15,
-                          offset: const Offset(2, 0),
-                        ),
-                      ],
-                    ),
-                    // Scrollable so the sidebar can't overflow on a very short
-                    // window (e.g. the brief first frame before the window is
-                    // sized); the footer still pins to the bottom at normal
-                    // heights via the min-height + IntrinsicHeight pairing.
-                    child: LayoutBuilder(
-                      builder: (context, constraints) => SingleChildScrollView(
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            minHeight: constraints.maxHeight,
-                          ),
-                          child: IntrinsicHeight(
-                            child: Column(
-                              children: [
-                        const SizedBox(height: 24),
-                        // Toggle button
-                        Align(
-                          alignment: isSidebarCollapsed
-                              ? Alignment.center
-                              : Alignment.centerRight,
-                          child: Padding(
-                            padding: EdgeInsets.only(
-                              right: isSidebarCollapsed ? 0 : 16,
-                            ),
-                            child: IconButton(
-                              icon: Icon(
-                                isSidebarCollapsed
-                                    ? Icons.menu
-                                    : Icons.menu_open,
-                                color: Colors.grey[600],
-                              ),
-                              onPressed: () {
-                                ref
-                                        .read(sidebarCollapsedProvider.notifier)
-                                        .state =
-                                    !isSidebarCollapsed;
-                              },
-                              tooltip: isSidebarCollapsed
-                                  ? loc.t('navigation.expand')
-                                  : loc.t('navigation.collapse'),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        // Logo/Title with gradient
-                        if (!isSidebarCollapsed) ...[
-                          AnimatedBuilder(
-                            animation: _logoScaleAnimation,
-                            builder: (context, child) {
-                              return Transform.scale(
-                                scale: _logoScaleAnimation.value,
-                                child: Transform.rotate(
-                                  angle: _logoRotationAnimation.value,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      gradient: const LinearGradient(
-                                        colors: [
-                                          Color(0xFF0EA5E9),
-                                          Color(0xFF06B6D4),
-                                        ],
-                                      ),
-                                      borderRadius: BorderRadius.circular(16),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: const Color(
-                                            0xFF0EA5E9,
-                                          ).withValues(alpha: 0.3),
-                                          blurRadius: 15,
-                                          spreadRadius: 2,
-                                        ),
-                                      ],
-                                    ),
-                                    child: const Icon(
-                                      Icons.games,
-                                      color: Colors.white,
-                                      size: 32,
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          ShaderMask(
-                            shaderCallback: (bounds) => const LinearGradient(
-                              colors: [Color(0xFF0EA5E9), Color(0xFF06B6D4)],
-                            ).createShader(bounds),
-                            child: Text(
-                              'ZZZ',
-                              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -1,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            loc.t('app.brand_subtitle'),
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Colors.grey[500],
-                              fontWeight: FontWeight.w500,
-                              letterSpacing: 1,
-                            ),
-                          ),
-                          const SizedBox(height: 40),
-                        ] else ...[
-                          const SizedBox(height: 20),
-                        ],
-                        // Navigation
-                        AnimationLimiter(
-                          child: Column(
-                            children: AnimationConfiguration.toStaggeredList(
-                              duration: const Duration(milliseconds: 375),
-                              childAnimationBuilder: (widget) => SlideAnimation(
-                                horizontalOffset: 50.0,
-                                child: FadeInAnimation(child: widget),
-                              ),
-                              children: [
-                                SidebarNavItem(
-                                  icon: Icons.dashboard_rounded,
-                                  label: loc.t('navigation.mods'),
-                                  isActive: currentTab == 0,
-                                  collapsed: isSidebarCollapsed,
-                                  onTap: () => ref
-                                      .read(tabIndexProvider.notifier)
-                                      .state = 0,
-                                ),
-                                const SizedBox(height: 8),
-                                SidebarNavItem(
-                                  icon: Icons.store_mall_directory_rounded,
-                                  label: loc.t('navigation.marketplace'),
-                                  isActive: currentTab == 1,
-                                  collapsed: isSidebarCollapsed,
-                                  onTap: () => ref
-                                      .read(tabIndexProvider.notifier)
-                                      .state = 1,
-                                ),
-                                const SizedBox(height: 8),
-                                SidebarNavItem(
-                                  icon: Icons.pie_chart_outline_rounded,
-                                  label: loc.t('navigation.storage'),
-                                  isActive: currentTab == 2,
-                                  collapsed: isSidebarCollapsed,
-                                  onTap: () => ref
-                                      .read(tabIndexProvider.notifier)
-                                      .state = 2,
-                                ),
-                                const SizedBox(height: 8),
-                                SidebarNavItem(
-                                  icon: Icons.settings_rounded,
-                                  label: loc.t('navigation.settings'),
-                                  isActive: currentTab == 3,
-                                  collapsed: isSidebarCollapsed,
-                                  onTap: () => ref
-                                      .read(tabIndexProvider.notifier)
-                                      .state = 3,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const Spacer(),
-                        // Downloads. In the sidebar rather than a tab because a
-                        // transfer outlives the screen that started it, and
-                        // absent until there is one to report — see
-                        // `DownloadsButton`. Above the version badge so it sits
-                        // at the same end of the sidebar whether or not the
-                        // badge is showing.
-                        const DownloadsButton(),
-                        // Footer with version badge
-                        if (!isSidebarCollapsed)
-                          Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isDarkMode
-                                    ? Colors.white.withValues(alpha: 0.05)
-                                    : Colors.black.withValues(alpha: 0.03),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: isDarkMode
-                                      ? Colors.white.withValues(alpha: 0.1)
-                                      : Colors.black.withValues(alpha: 0.05),
-                                ),
-                              ),
-                              child: Text(
-                                'v${AppConstants.appVersion}',
-                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                  color: Colors.grey[500],
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                // Content
                 Expanded(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    transitionBuilder:
-                        (Widget child, Animation<double> animation) {
-                          return SlideTransition(
-                            position:
-                                Tween<Offset>(
-                                  begin: const Offset(1.0, 0.0),
-                                  end: Offset.zero,
-                                ).animate(
-                                  CurvedAnimation(
-                                    parent: animation,
-                                    curve: Curves.easeInOut,
-                                  ),
-                                ),
-                            child: child,
-                          );
-                        },
-                    child: switch (currentTab) {
-                      0 => const ModsScreen(key: ValueKey('mods')),
-                      1 => const MarketplaceScreen(
-                        key: ValueKey('marketplace'),
+                  child: Row(
+                    children: [
+                      const AppSidebar(),
+                      Expanded(
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 180),
+                          child: switch (destination) {
+                            AppDestination.characters => const ModsScreen(key: ValueKey('mods')),
+                            AppDestination.browse => const MarketplaceScreen(key: ValueKey('marketplace')),
+                            AppDestination.storage => const StorageScreen(key: ValueKey('storage')),
+                            AppDestination.settings => const SettingsScreen(key: ValueKey('settings')),
+                          },
+                        ),
                       ),
-                      2 => const StorageScreen(key: ValueKey('storage')),
-                      _ => const SettingsScreen(key: ValueKey('settings')),
-                    },
+                    ],
                   ),
                 ),
+                const AppStatusBar(),
               ],
-      ),
-      ),
-      ),
+            ),
+          ),
+        ),
       ),
     );
   }
-
 }

@@ -74,6 +74,10 @@ class ApiService {
           _configService!.fileLogging;
       _container!.read(modsPathProvider.notifier).state =
           _configService!.modsPath ?? '';
+      _container!.read(zzmiPathProvider.notifier).state =
+          _configService!.zzmiPath ?? '';
+      _container!.read(launchTargetProvider.notifier).state =
+          _configService!.launchTarget;
     }
 
     _modManager ??= ModManagerService(_configService!);
@@ -315,6 +319,13 @@ class ApiService {
     _container?.read(themeModeProvider.notifier).state = mode;
   }
 
+  /// Persists what the Launch game button starts.
+  static Future<void> setLaunchTarget(String target) async {
+    await initialize();
+    await _configService!.setLaunchTarget(target);
+    _container?.read(launchTargetProvider.notifier).state = target;
+  }
+
   /// Persists the accent and applies it immediately.
   static Future<void> setAccent(AccentChoice accent) async {
     await initialize();
@@ -360,6 +371,7 @@ class ApiService {
       // Repointing the library has to reach the providers that derive from it,
       // or the Storage tab keeps measuring the folder that was set at launch.
       _container?.read(modsPathProvider.notifier).state = modsPath;
+      _container?.read(zzmiPathProvider.notifier).state = zzmiPath;
       return 'Конфігурацію збережено';
     } catch (e) {
       throw Exception('Помилка оновлення конфігурації: $e');

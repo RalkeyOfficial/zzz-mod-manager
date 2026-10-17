@@ -1,6 +1,20 @@
 import '../utils/process_probe.dart';
 import 'log/system_report.dart';
 
+/// What happened when the app tried to start the game.
+enum LaunchOutcome {
+  started,
+
+  /// The chosen file is gone.
+  notFound,
+
+  /// This platform cannot start that kind of file, such as a Windows `.exe` on Linux.
+  unsupported,
+
+  /// Starting it threw.
+  failed,
+}
+
 /// Абстрактний клас для платформно-специфічних операцій
 ///
 /// **There is deliberately nothing here for reloading mods in the running
@@ -34,6 +48,12 @@ abstract class PlatformService {
 
   /// Відкриває вказану папку у файловому менеджері системи
   Future<bool> openFolderInFileManager(String folderPath);
+
+  /// Starts [target], the file the Launch game button was pointed at, and returns without waiting for it.
+  ///
+  /// What counts as startable differs: Linux runs an executable or a `.desktop` shortcut and cannot run a Windows
+  /// program directly, Windows starts whatever the shell would on a double-click. See `docs/launch-game.md`.
+  Future<LaunchOutcome> launchGame(String target);
 
   /// Reads rich-text HTML from the system clipboard, or null when the
   /// clipboard holds no HTML (or the platform tool needed to read it is

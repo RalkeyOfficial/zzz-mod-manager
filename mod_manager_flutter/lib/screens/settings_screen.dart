@@ -11,6 +11,7 @@ import 'components/zzmi_folder_field.dart';
 import 'components/settings/appearance_section.dart';
 import 'components/settings/auto_tag_section.dart';
 import 'components/settings/diagnostics_section.dart';
+import 'components/settings/launch_section.dart';
 import 'components/settings/marketplace_section.dart';
 import 'components/settings/updates_section.dart';
 
@@ -230,6 +231,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
                               footer: status,
                             ),
                           ),
+                          const SizedBox(height: 16),
+                          const LaunchSettingsSection(),
                           const SizedBox(height: 32),
                           // Language Section
                           _buildSectionTitle(loc.t('settings.sections.language')),

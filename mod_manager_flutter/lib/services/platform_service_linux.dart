@@ -209,6 +209,38 @@ class LinuxPlatformService implements PlatformService {
     }
   }
 
+  @override
+  Future<LaunchOutcome> launchGame(String target) async {
+    try {
+      final file = File(target);
+      if (!await file.exists()) return LaunchOutcome.notFound;
+
+      final ext = path.extension(target).toLowerCase();
+      final ProcessStartMode mode = ProcessStartMode.detached;
+      if (ext == '.desktop') {
+        // The way a launcher shortcut from Steam, Lutris or Heroic is meant to be started.
+        await Process.start('gio', ['launch', target], mode: mode);
+      } else if (await _isExecutable(file)) {
+        await Process.start(target, const [], workingDirectory: path.dirname(target), mode: mode);
+      } else {
+        // A Windows program, or a file without the execute bit, needs a runner the app can't guess.
+        _log.warning('game target not startable', fields: {'target': target});
+        return LaunchOutcome.unsupported;
+      }
+      _log.info('game launched', fields: {'target': target});
+      return LaunchOutcome.started;
+    } catch (error, stack) {
+      _log.warning('could not launch game', error: error, stack: stack, fields: {'target': target});
+      return LaunchOutcome.failed;
+    }
+  }
+
+  static Future<bool> _isExecutable(File file) async {
+    final mode = (await file.stat()).mode;
+    // Any of the owner, group or other execute bits.
+    return mode & 0x49 != 0;
+  }
+
   /// Channel backed by the GTK clipboard reader in the Linux runner
   /// (`linux/runner/my_application.cc`).
   static const MethodChannel _clipboardChannel =

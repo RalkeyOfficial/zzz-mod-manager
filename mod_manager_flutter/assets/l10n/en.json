@@ -1,15 +1,46 @@
 {
   "app": {
     "title": "ZZZ Mod Manager",
-    "brand_subtitle": "Mod Manager"
+    "wordmark": "ZENITH"
   },
   "navigation": {
-    "mods": "Mods",
-    "marketplace": "Marketplace",
+    "library": "Library",
+    "characters": "Characters",
+    "updates": "Updates",
+    "gamebanana": "GameBanana",
+    "browse": "Browse",
+    "downloads": "Downloads",
     "storage": "Storage",
-    "settings": "Settings",
-    "expand": "Expand",
-    "collapse": "Collapse"
+    "settings": "Settings"
+  },
+  "shell": {
+    "window": {
+      "minimize": "Minimize",
+      "maximize": "Maximize",
+      "restore": "Restore",
+      "close": "Close"
+    },
+    "zzmi": {
+      "connected": "ZZMI connected",
+      "missing": "ZZMI not found",
+      "missing_hint": "Set the ZZMI folder in Settings.",
+      "active_single": "{count} mod active",
+      "active_plural": "{count} mods active",
+      "press_key": "press {key} in game after changes"
+    },
+    "launch": {
+      "button": "Launch game",
+      "choose": "Choose what Launch game starts",
+      "not_found_title": "The game launcher is gone",
+      "unsupported_title": "Can't start this file",
+      "unsupported_body": "{file}: choose its .desktop shortcut or a script in Settings instead.",
+      "failed_title": "Couldn't start the game"
+    },
+    "status": {
+      "zzmi": "ZZMI · {path}",
+      "links_single": "{count} link active",
+      "links_plural": "{count} links active"
+    }
   },
   "storage": {
     "title": "Storage",
@@ -848,6 +879,11 @@
       "accent_lime": "Lime",
       "accent_teal": "Teal"
     },
+    "launch": {
+      "label": "Launch game with",
+      "hint": "What the Launch game button starts: the XXMI Launcher, its shortcut, or a script.",
+      "choose": "Choose…"
+    },
     "auto_tag": {
       "title": "Automatic tagging",
       "description": "The system detects characters from mod folder names and sets tags automatically.",
@@ -921,7 +957,6 @@
   },
   "downloads": {
     "title": "Downloads",
-    "tooltip": "Downloads",
     "empty": "Nothing is downloading.",
     "clear_finished": "Clear finished",
     "queued": "Waiting for a free slot",

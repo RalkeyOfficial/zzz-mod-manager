@@ -123,51 +123,79 @@ Under `flutter run` the app is deliberately left unregistered — installing a
 desktop entry as a side effect of a debug launch would put a development build in
 the user's application menu.
 
-## 4. The title bar is the window manager's
+## 4. The app draws its own title bar
 
-**The app draws no title bar and no window controls.** It keeps whatever its
-desktop draws, on all three platforms.
+**`ZenithTitleBar` (`lib/screens/shell/title_bar.dart`) is the window's only
+title bar**: the logo, the ZENITH wordmark, and minimise, maximise and close. It
+is mounted in `MaterialApp.builder`, above every page, because the first-run
+screen and the loading spinner need it as much as the main screen does. Dragging
+it moves the window, a double-click maximises or restores, and a right-click
+opens the desktop's window menu.
 
-A drawn title bar was tried, and the two ways of hiding the real one each fail,
-measured on KDE/KWin 6 with GTK 3.24. They fail *differently*, which is the part
-worth keeping:
+### The hazard: hiding a title bar on Wayland can take the resize edge with it
+
+GTK draws a window's shadow and its resize border only while the window is
+*decorated*, and on Wayland it tells the compositor who decorates through the
+KDE server-decoration protocol: client-side only when it draws some. Two ways of
+hiding the system bar were measured on KDE/KWin 6 with GTK 3.24, and each fails:
 
 | GTK configuration | Decoration the compositor adds | Resizable by an edge |
 |---|---|---|
-| `set_decorated(FALSE)` | **28px** | yes — that decoration is the grab edge |
+| `set_decorated(FALSE)` | **28px** | yes, by that decoration |
 | `set_titlebar(empty widget)` then `set_decorated(FALSE)` | 0px | **no** |
-| decorated (what the app does) | 28px | yes |
+| `set_titlebar(header bar)`, bar hidden, still decorated (what the app does) | 0px | yes, by GTK's border |
 
-- **`set_decorated(FALSE)` does not undecorate a Wayland window.** GTK announces
-  client-side decoration only when it actually draws some, so the compositor adds
-  a title bar of its own *above* the app's. Two bars on one window. On X11 the
-  same call sets `_MOTIF_WM_HINTS` decorations=0, which is honoured — so the two
-  backends disagree about what the window even is.
-- **Actually undecorating it removes resize.** The `set_titlebar` row is a real
-  one-line fix for the double bar, and it is a trap: neither GTK nor the
-  compositor offers an edge to grab once the decoration is gone. A corner drag
-  left such a window at exactly its starting size. Resize would have to be
-  rebuilt in the app — eight invisible grab strips calling `startResizing` — to
-  get back what the decoration was giving for free.
+- **`set_decorated(FALSE)` does not undecorate a Wayland window on KDE.** GTK
+  announces server-side decoration, so KWin adds a title bar of its own above the
+  app's: two bars on one window. GNOME's mutter has no server-side decorations at
+  all, so the same call leaves a bare window with no shadow and no edge. On X11
+  the call sets `_MOTIF_WM_HINTS` decorations=0, which is honoured.
+- **Undecorating removes resize.** With the decoration gone, neither GTK nor the
+  compositor offers an edge to grab. A corner drag left such a window at exactly
+  its starting size.
 
-So the double bar and the resize edge came from the same 28px: the bug was also
-the only reason the window could be resized on Wayland. Fixing one by hand would
-have cost the other.
+The runner (`linux/runner/my_application.cc`) does neither. It sets a
+`GtkHeaderBar` as the window's titlebar and hides it, and never undecorates the
+window. A titlebar widget makes the window client-decorated whether or not the
+widget is visible, so GTK keeps drawing the shadow and the resize border outside
+the visible frame and tells KWin it decorates itself; Flutter paints the whole
+visible area. `TitleBarStyle.hidden` in `WindowOptions` is safe on Linux *only
+because the header bar exists*: `window_manager` then hides the bar, and without
+one it falls back to `set_decorated(FALSE)`. `test/desktop_entry_test.dart` pins
+both halves.
 
-What the system title bar gives that a drawn one would each have to reimplement:
-resize by any edge, double-click to maximise, the right-click window menu, the
-user's chosen button order and side, and their decoration theme. It is also
-shorter than the drawn one was — 28px against 45px — so the app gained content
-height by dropping it.
+On Windows, `TitleBarStyle.hidden` removes the caption and keeps the native
+border on the left, right and bottom, but not the top. The title bar covers the
+top edge with a 4px strip that calls `startResizing`.
+
+### What still differs from a system title bar
+
+Measured on KDE/KWin 6 Wayland:
+
+- **A resize trails the cursor slightly.** GTK draws the frame, so the frame and
+  the content move together at Flutter's pace, where KWin used to move its own
+  frame and leave only the content behind. A release or profile build lags a
+  little and was accepted. A debug build (`flutter run`) lags far more, so judge
+  resize smoothness on a profile build.
+
+Not yet measured:
+
+- **The button order and side are the app's**, not the desktop's
+  (`gtk-decoration-layout` is not read), and GNOME's own default of a close button
+  only is not followed.
+- **KDE draws GTK's shadow rather than Breeze's**, and KWin's border size setting
+  does not apply.
+- **The top corners are square** where the desktop rounds its own windows.
+- **Windows 11's Snap Layouts flyout does not open** on hovering maximise. That
+  needs the runner to answer `WM_NCHITTEST` with `HTMAXBUTTON` over the button;
+  Win+Z still opens it. Windows 10 shows a 1px light line along the top.
+- **X11 without a compositor** gets a thin frame inside the window and no shadow.
+- Not yet run on Windows at all.
 
 **Consequences for anyone changing this:**
 
-- Do not set `titleBarStyle: TitleBarStyle.hidden` in `WindowOptions`
-  (`lib/main.dart`), and do not call `gtk_window_set_decorated(window, FALSE)`.
-  Either one reintroduces the unresizable window.
-- Anything that wants to live "in the title bar" has nowhere to go and belongs in
-  the sidebar instead. `DownloadsButton` sits above the version badge for exactly
-  this reason: a transfer outlives the tab that started it, so it cannot belong to
-  one, and the sidebar is the only chrome the app still owns.
-- `window_manager` is still a dependency and still used — window size, position,
-  minimum size and the close hook. Only the decoration is no longer its business.
+- Never call `gtk_window_set_decorated(window, FALSE)`, and never remove the
+  runner's header bar. Either one brings back the double bar on KDE and the
+  unresizable window everywhere.
+- `window_manager` drives the window from Dart: size, position, minimum size,
+  dragging, maximise, the window menu and the close hook.

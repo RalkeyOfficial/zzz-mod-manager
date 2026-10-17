@@ -12,15 +12,18 @@ doc. This file is the map; the rules that must never be missed are in the
 
 ## 1. Layers
 
-- **`main.dart`** — app entry. Initializes `window_manager` (custom hidden title
-  bar — the app draws its own window chrome) and wraps the app in a Riverpod
-  `ProviderScope`. `MainScreen` is a sidebar + `AnimatedSwitcher` over four tabs:
-  Mods (0), Marketplace (1), Storage (2), Settings (3), selected via
-  `tabIndexProvider`.
-  **The tabs are keyed children with no keep-alive**, so the inactive tab's
-  `State` is *disposed* — which is why nothing a tab owns may be the only copy of
+- **`main.dart`** — app entry. Initializes `window_manager` with a hidden title
+  bar and wraps the app in a Riverpod `ProviderScope`. `MaterialApp.builder` puts
+  `ZenithTitleBar` (`screens/shell/`) above every page, the first-run screen
+  included, since nothing else can move the window. `MainScreen` is
+  `AppSidebar` + `AnimatedSwitcher` + `AppStatusBar`; the switcher shows one page
+  per `AppDestination` (characters, browse, storage, settings), selected via
+  `destinationProvider`. The sidebar's Updates row is the characters page with
+  the updates filter on, not a page of its own.
+  **The pages are keyed children with no keep-alive**, so the inactive page's
+  `State` is *disposed* — which is why nothing a page owns may be the only copy of
   something another surface needs. The library is the case that decided the rule:
-  it belongs to `libraryProvider` (§3), not to the Mods tab.
+  it belongs to `libraryProvider` (§3), not to the characters page.
 - **`services/`** — all business logic.
 - **`utils/state_providers.dart`** — the **central Riverpod provider registry**.
   All app state (current tab, characters, mods, theme, locale, activation mode)

@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Downloads resume where they left off and survive the app closing.
   - A download that won't fit is refused before it starts, saying how much is needed and how much is free.
   - Downloads can be cancelled while running.
-  - A sidebar button opens the list of downloads, where a failed one can be retried and finished ones cleared.
+  - Downloads in the sidebar opens the list of downloads, where a failed one can be retried and finished ones cleared.
   - One notification shows overall download progress until the last one finishes.
   - A download that has landed says it's unpacking, rather than going quiet between finishing and asking where the mod goes.
 - An archive that won't fit when unpacked is refused before unpacking, saying how much is needed and how much is free. The archive is kept, so clearing space and installing again is all it takes.
@@ -88,6 +88,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Mods tab sorts by **Recently added** by default.
 - Settings has an **Updates** section for the startup check, and a **Marketplace** section for the adult-content filter.
 - Settings › Appearance has an **Accent** choice: violet, paper, lime or teal.
+- **Launch game** in the sidebar starts the game through a file you pick once: the XXMI Launcher, its shortcut or a script. Settings › Launch game with changes it.
+- The sidebar shows whether ZZMI is where Settings says, how many mods are on, and a reminder to press F10 in game after changes.
 - RAR and 7z mods install with no setup: 7-Zip ships with the app, and the Arch package installs it.
 - The Arch package pulls in what "open mod page" and "open mod folder" need, and lists xdotool and ydotool as optional.
 - Claret, Phoenix, Roxy and Severian are in the character list, with portraits, and mods named after them are sorted to them on import.
@@ -105,7 +107,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mod descriptions are better spaced, and consistently styled everywhere they're shown.
 - Descriptions keep the paragraph spacing their author gave them.
 - Downloaded archives land in the app's own downloads folder and are deleted once installed. Anything left over is cleared when you next start the app.
-- The window uses your desktop's own title bar, so its buttons sit where the rest of your system puts them and it has the window menu, keyboard shortcuts and decoration theme every other window has.
+- The title bar shows the Zenith logo and its own window buttons. Dragging it moves the window, a double-click maximises it, and a right-click opens the window menu.
+- The sidebar is laid out in Library and GameBanana sections. Characters shows how many characters have mods, and Updates opens every mod with an update.
+- A status bar along the bottom shows the ZZMI folder, how many links are active, and the version.
 - Settings offers Light, System or Dark in place of the dark-mode switch. System is what the app starts on, and it follows your desktop's own light or dark setting for as long as you leave it there.
 - A mod's ↗ button, its right-click "Open source page" and its details row all open the page it's tracked against, so a mod you linked through "Update tracking…" has them without you typing a link.
 - Settings and first-run setup ask for the ZZMI folder instead of the links folder, and show where links and shader fixes go.
@@ -117,6 +121,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The embedded webview (Windows) and the Downloads-folder watcher (Linux), replaced by the built-in browser.
 - F10 auto-reload — the F10 button, the auto-reload toggle and the "Automatic mod reload" settings section — because a keypress the app sends never reaches a game running under Proton, so it only ever claimed to work. Press F10 in the game; xdotool is no longer needed.
 - The Source link box in a mod's Edit dialog. Which mod page a mod belongs to is set by "Update tracking…" now, which is also what decides where updates are checked.
+- Collapsing the sidebar.
 
 ### Fixed
 
@@ -135,7 +140,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Importing or deleting a mod no longer replays the "switched character" animation across the grid.
 - Turning a mod on or off no longer rebuilds its card, so it keeps its hover lift.
 - "Detect tags for all mods" no longer blanks the Settings page behind a blocking dialog.
-- Collapsing the sidebar no longer throws an exception across the navigation buttons.
 - Cover images are decoded at the size they're shown, cutting the app's image memory.
 - Certificate validation is no longer disabled when downloading mods.
 - Installing a mod no longer risks deleting the folder its archive was sitting in.

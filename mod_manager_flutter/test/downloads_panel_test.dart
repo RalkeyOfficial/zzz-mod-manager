@@ -191,24 +191,25 @@ void main() {
     });
   });
 
-  group('the title-bar button', () {
-    testWidgets('is absent until there is something to report', (t) async {
+  group('the sidebar row', () {
+    testWidgets('is there with nothing to count when the queue is empty', (t) async {
       final container = seeded(const []);
-      await pumpLocalized(t, const DownloadsButton(), container: container);
+      await pumpLocalized(t, const DownloadsNavItem(), container: container);
+      expectBuilt(DownloadsNavItem);
 
-      expect(find.byType(IconButton), findsNothing);
+      expect(find.text('Downloads'), findsOneWidget);
+      expect(find.text('0'), findsNothing);
     });
 
-    testWidgets('counts the active jobs once there is more than one',
-        (t) async {
+    testWidgets('counts the active jobs', (t) async {
       final container = seeded([
         job(),
         job(),
         job(state: DownloadJobState.done),
       ]);
-      await pumpLocalized(t, const DownloadsButton(),
+      await pumpLocalized(t, const DownloadsNavItem(),
           container: container, settle: false);
-      expectBuilt(DownloadsButton);
+      expectBuilt(DownloadsNavItem);
 
       // Two, not three: a finished row is history, and a badge that keeps
       // counting it says the app is still busy when it is not.
@@ -222,10 +223,10 @@ void main() {
       // first time it is opened, and every test that mounts the panel *directly*
       // passes anyway.
       final container = seeded([job(state: DownloadJobState.done)]);
-      await pumpLocalized(t, const DownloadsButton(), container: container);
-      expectBuilt(DownloadsButton);
+      await pumpLocalized(t, const DownloadsNavItem(), container: container);
+      expectBuilt(DownloadsNavItem);
 
-      await t.tap(find.byType(IconButton));
+      await t.tap(find.text('Downloads'));
       await t.pumpAndSettle();
 
       expect(t.takeException(), isNull);
@@ -240,24 +241,23 @@ void main() {
           error: const DownloadNetworkException('offline'),
         ),
       ]);
-      await pumpLocalized(t, const DownloadsButton(), container: container);
-      expectBuilt(DownloadsButton);
+      await pumpLocalized(t, const DownloadsNavItem(), container: container);
+      expectBuilt(DownloadsNavItem);
 
       expect(find.byIcon(Icons.error_outline_rounded), findsOneWidget);
     });
 
-    testWidgets('a cancelled download does not turn the title bar red',
-        (t) async {
+    testWidgets('a cancelled download is not shown as a failure', (t) async {
       // A cancel is the user getting what they asked for. Reading `error` here
-      // rather than the state made the button claim the app had broken when it
+      // rather than the state made the row claim the app had broken when it
       // did as it was told — and only for a transfer that had started, since the
       // queued-cancel path never recorded one.
       final container = seeded([job(state: DownloadJobState.cancelled)]);
-      await pumpLocalized(t, const DownloadsButton(), container: container);
-      expectBuilt(DownloadsButton);
+      await pumpLocalized(t, const DownloadsNavItem(), container: container);
+      expectBuilt(DownloadsNavItem);
 
       expect(find.byIcon(Icons.error_outline_rounded), findsNothing);
-      expect(find.byIcon(Icons.download_done_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.download_rounded), findsOneWidget);
     });
   });
 }

@@ -64,6 +64,7 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     required this.amber,
     required this.red,
     required this.onRed,
+    required this.windowClose,
     required this.blue,
     required this.overlay,
     required this.badgeUpdate,
@@ -131,6 +132,9 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
   final Color red;
   final Color onRed;
 
+  /// The title bar's close button under the pointer, with white on it.
+  final Color windowClose;
+
   /// Where a mod came from, and other plain information.
   final Color blue;
 
@@ -197,6 +201,7 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       amber: const Color(0xFFFFB547),
       red: const Color(0xFFFF6B5B),
       onRed: const Color(0xFF160605),
+      windowClose: const Color(0xFFC4352B),
       blue: const Color(0xFF6CB6FF),
       overlay: const Color(0xB3060708),
       badgeUpdate: const TonePair(Color(0xFF3A2A0C), Color(0xFFFFC870), Color(0xFF6A4C14)),
@@ -247,6 +252,7 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       amber: const Color(0xFF9A5B00),
       red: const Color(0xFFC2361F),
       onRed: const Color(0xFFFFFFFF),
+      windowClose: const Color(0xFFC4352B),
       blue: const Color(0xFF1D63B8),
       overlay: const Color(0x6615161C),
       badgeUpdate: const TonePair(Color(0xFFF8E6C4), Color(0xFF7A4600), Color(0xFFE8C98E)),
@@ -289,6 +295,7 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     amber: amber,
     red: red,
     onRed: onRed,
+    windowClose: windowClose,
     blue: blue,
     overlay: overlay,
     badgeUpdate: badgeUpdate,
@@ -326,6 +333,7 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       amber: c(amber, other.amber),
       red: c(red, other.red),
       onRed: c(onRed, other.onRed),
+      windowClose: c(windowClose, other.windowClose),
       blue: c(blue, other.blue),
       overlay: c(overlay, other.overlay),
       badgeUpdate: TonePair.lerp(badgeUpdate, other.badgeUpdate, t),

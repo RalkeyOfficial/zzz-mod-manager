@@ -295,7 +295,7 @@ three things happens:
 | `callerHandles` | the caller awaiting `completionOf`, i.e. `applyUpdateFlow` |
 
 **Where the host is mounted is the whole design.** It wraps the tab switcher in
-`main.dart`: the four tabs are keyed `AnimatedSwitcher` children with no
+`main.dart`: the sidebar's pages are keyed `AnimatedSwitcher` children with no
 keep-alive and are *disposed* as the user moves between them, so an install owned
 by `MarketplaceScreen` dies on the first tab switch with the archive already on
 disk. Owning it there is safe only behind a modal dialog that makes walking away
@@ -436,12 +436,14 @@ tracking. See `notifications.md` §7.
 
 ### The panel
 
-`DownloadsButton` in the sidebar, opening `DownloadsPanel`. Both are **absent
-until there is something to report**: a control that is empty on every launch is
-one nobody learns. In the sidebar rather than a tab because a transfer outlives
-the screen that started it, so it cannot belong to one — and the sidebar is the
-only chrome the app draws, the title bar being the window manager's
-([`desktop-integration.md`](desktop-integration.md) §4).
+`DownloadsNavItem`, the sidebar's **Downloads** row, opening `DownloadsPanel` in
+a `MenuAnchor` beside the sidebar. The row is always there, under Browse. Its
+count is the jobs still running or waiting, never a finished one, and with no
+job in flight a failure turns its icon into a warning so the failure can be
+found and read. A cancel does not, since it is what the user asked for. Overall
+progress is the pinned notification's job, not the row's. In the sidebar rather
+than on a page because a transfer outlives the page that started it, so it
+cannot belong to one.
 
 - **Finished rows stay until they are cleared.** A row that vanished on its own
   would take the only record of a failure with it.
