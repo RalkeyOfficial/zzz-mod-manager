@@ -277,6 +277,9 @@ so the worst case is one over the cap and only while a dialog is open.
 launch. The partials in `<appData>/downloads` are already the durable half: an
 interrupted job is resumed by asking for it again.
 
+Not verified against the live API: two large archives arriving while the user browses, and an install running while a second transfer is still coming in.
+Not verified on Windows, for the queue or the transfer beneath it.
+
 ## 8. Where a download ends, and who finishes it
 
 The queue moves bytes and stops. Unpacking, importing and reporting need

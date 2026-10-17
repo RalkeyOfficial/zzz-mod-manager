@@ -52,7 +52,7 @@ Mod metadata/scan logic lives in services held as singletons via `ApiService`; c
 
 `flutter doctor`: only Flutter and Linux toolchain matter here; the Android toolchain and Chrome/web ✗ marks are expected.
 
-System dependencies (Linux dev): the C++ toolchain (`clang`, `cmake`, `ninja`, `pkg-config`) + `gtk3` for building; and `7z`/`7za`/`7zr` (Arch: `7zip`, not the older `p7zip` port) for archive imports.
+System dependencies (Linux dev): the C++ toolchain (`clang`, `cmake`, `ninja`, `pkg-config`) + `gtk3` for building; and `7z` (Arch: `7zip`, not the older `p7zip` port) for archive imports. `7za` and `7zr` are found as a fallback but cannot read `.rar`.
 
 Clipboard HTML (paste-as-markdown) is read natively: Linux via the GTK clipboard in the runner (`linux/runner/my_application.cc`, channel `mod_manager/clipboard`), Windows via `pasteboard`. No external CLI tool.
 
@@ -127,6 +127,9 @@ Custom JSON i18n (not ARB/gen-l10n). Strings live in `assets/l10n/en.json` and `
 
 A missing key renders as the raw dotted path, with no exception. Both files must stay at exact parity — `test/l10n_keys_test.dart` enforces that, plus `_single`/`_plural` and `_title`/`_body` sibling pairs.
 Keys built by interpolation or a ternary are invisible to that test's regex; register their prefix in `interpolatedKeyPrefixes`.
+The test checks code against the JSON files, never the reverse: a key left behind by deleted UI passes. When removing UI, diff the files' keys against the `loc.t('…')` literals in `lib/` too.
+
+Caveat copy ("possibly outdated", "a best guess, not a guarantee") is the feature, so it is a translated key, never English interpolated into a sentence.
 
 A counted string goes through `loc.plural(base, count)`, never a hand-written `count == 1 ? _single : _plural` — English has two plural forms and Ukrainian three. `l10n/plural_rules.dart` owns the rule.
 - `_few` is optional and exists only in `pluralFewLocales`; a locale without one falls back to `_plural`.
@@ -141,6 +144,9 @@ it returns once no frames are scheduled, long before a bundle read finishes, so 
 The harness preloads via `runAsync`; call `expectBuilt(...)` after pumping so that failure can never be silent. The same trap applies to `Image.asset`: assert about the `AssetImage`'s `assetName`, never about pixels.
 
 Dialogs that write must take a seam. `ApiService` is static and lazily builds a `ConfigService` against the developer's real `<appData>/config.json`; `test/flutter_test_config.dart` makes that throw, and `test/support/temp_library.dart` installs a real library in a temp directory instead — these flows are the file writes.
+
+Build a rule on a real captured API response, never a hand-written mock: real profiles carry the null `_sVersion`s and contradictory fields that change a design, and a tidy fixture makes a wrong rule look right.
+Pin a surprising upstream fact as a canary test (every live character category maps to a roster id; listings carry `_sInitialVisibility`), so its disappearance fails a test rather than the UI.
 
 Press a handler that touches files with `tapWithIo`: a `testWidgets` body runs in a fake-async zone that never turns the real event loop, so the handler never resumes and its dialog is never built. Only `runAsync` turns it.
 

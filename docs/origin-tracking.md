@@ -42,7 +42,7 @@ Confidence tiers, strongest first:
 
 Provenance values are `downloaded`, `imported_archive` and `imported_folder`.
 
-Three rules follow from the split, and they govern everything below:
+Four rules follow from the split, and they govern everything below:
 
 - **Only `exact` names a file with certainty** — and on *both* axes, since knowing
   the mod but not the file is not enough to know what to replace it with. Anything
@@ -65,6 +65,9 @@ Three rules follow from the split, and they govern everything below:
   legitimately untracked. That is why the model gives it a first-class tier, the
   library card gives it a visible status ([§4](#4-the-status-slot-and-the-needs-attention-filter)),
   and resolution lives in the UI rather than in a one-time wizard.
+- **It heals itself, so the guessing can stay conservative.** A mod whose identity is known becomes `exact` on both axes the first time it updates through the app,
+  since the update writes the block a download writes ([§2](#2-where-an-origin-comes-from)). An unknown version is a one-time speed bump per mod,
+  so the heuristics only need to get identity right, and that is why they guess little and the UI stays light rather than becoming a migration wizard.
 
 ---
 
@@ -279,6 +282,9 @@ and the badge deliberately come apart:
 Everything the backfill cannot recover — and everything a manual import will keep
 producing forever — is resolved *by the user*, through the per-mod resolve dialog
 (`screens/dialogs/resolve_origin_dialog.dart`).
+
+**It stays per-mod.** Two folders from one mod page are common (two in a measured 23-mod library), and each needs its own trip through the dialog although the identity answer is the same.
+That case belongs to the bulk pass ([§7](#7-the-bulk-resolution-pass)), not to a dialog grown to handle several folders.
 
 ### What it says is already recorded
 
@@ -747,6 +753,10 @@ the folder is and everything above it is written over what is below.
 
 That is the whole model, and everything in this section follows from it: position
 is the role, so there is nothing to derive and nothing that can disagree.
+
+**The stack has no height limit.** One layer is the common case, two is a mod and a patch, three is a mod and two patches (`ModOrigin.patches` is everything above index 0), and nothing refuses another.
+**What a folder never holds is two independent mods.** They would share one on/off state, one snapshot and one set of `.ini` files, so turning on, updating or rolling back either acts on both,
+and two downloads that do not overwrite each other have no order to be layers in.
 
 ### What the stack replaced
 

@@ -78,9 +78,27 @@ markdown would otherwise flatten `<br>`×6 to the same break as `<br>`×2.
   [`configuration.md`](configuration.md).
 - **`IniParserService`** — parses mod `.ini` files into keybinds.
 - **`ArchiveService`** — extracts `.zip` in-process (`archive` package) and
-  `.rar`/`.7z` by shelling out to `7z`/`7za`/`7zr`, which must be installed.
+  `.rar`/`.7z` by shelling out to 7-Zip: the copy bundled with the app first (below), then a system one.
+  The system lookup is `where 7z` and the Program Files `7-Zip\7z.exe` on Windows, and `7z`, `7za`, `7zr` on PATH, in that order, on Linux.
+  Only the full `7z` reads `.rar`; `7za` and `7zr` are reduced builds that handle `.7z` but not RAR, including the ones Arch's `7zip` package installs.
 Nothing here reloads mods in the running game. That is deliberate and
 [`mod-reload.md`](mod-reload.md) is why.
+
+### The bundled 7-Zip
+
+The portable builds ship their own 7-Zip, because without one the `.rar` and `.7z` mods that make up most of GameBanana cannot be installed, and nothing behind a portable build can supply it.
+`ArchiveService._locateBundled7Zip` looks beside `Platform.resolvedExecutable` and in a `tools/` beside it, for each name on `PlatformService.bundledSevenZipNames` (`7zzs`, `7zz` on Linux; `7z.exe`, `7zz.exe` on Windows), before any system copy.
+The AUR package bundles nothing and declares `7zip`, so pacman keeps it current.
+No pub package covers this: `archive` has the 7z codec but not the container and no RAR, `rar` skips Linux and Windows entirely, and `unrar` is RAR-only.
+
+- **Never bundle `7za`.** 7-Zip's own readme calls it "reduced formats support", and RAR is among what it drops, so it would be found, run, and decline the one format the bundle exists for.
+  Windows ships the `7z.exe` + `7z.dll` pair from `7z<ver>-x64.exe`, not `7za.exe` from "7-Zip Extra".
+- **Linux ships `7zzs`, the statically linked build.** A portable tarball runs against a libstdc++ it cannot know, which a dynamic binary cannot promise. It is 3.6 MB against `7zz`'s 2.9 MB.
+- **The version is pinned in both workflows** (`build-linux.yml`, `build-windows.yml`), because 7-zip.org serves each build at its own `/a/` URL with no "latest" alias, so a bump is a deliberate act.
+  Both fail the build if the binary cannot report `Rar5`, so the packaging cannot silently regress to shipping an extractor that cannot open a `.rar`.
+- 7-Zip's `License.txt` ships beside it as `tools/7-Zip-License.txt`; it is LGPL.
+
+Not verified from a built artifact. The Linux fetch has been run by hand and the binary lists `Rar5`; the Windows step and the installer's `[Files]` entries for `tools/` have not run.
 
 ### The platform abstraction
 

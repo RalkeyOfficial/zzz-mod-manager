@@ -20,8 +20,14 @@ file appearing*, so a mod installed that way had no remote identity at all;
 guess about someone else's browser; and anything downloaded for unrelated reasons
 was a false positive.
 
+The two webview packages that would also give one implementation lose on their own terms: `desktop_webview_window` opens the page in a separate popup window and intercepts downloads poorly,
+and `webview_cef` embeds properly but ships ~150 MB+ of Chromium with the app.
+
 **Two screens only** — results grid and mod detail. Everything else GameBanana
 hosts (comments, threads, member pages) is reached through "open in browser".
+
+Not verified on Windows. Browsing, downloading and installing have run end to end against the live API on Linux only;
+nothing here branches on the platform, since links and opening a URL go through `PlatformService`.
 
 ## 2. State
 
@@ -36,6 +42,11 @@ sort, so all three combine and the carousel hides for any of them. The site-wide
 search endpoint was tried first and rejected: it matches any single word in any
 field, so the exact title of one mod returned 714 results where the site's own name
 lookup returns one ([`gamebanana-api.md`](gamebanana-api.md) §3).
+
+**The sort starts on newest submissions (`Generic_Newest`), by request, against the API doc's advice.** [`gamebanana-api.md`](gamebanana-api.md) §4 recommends `Generic_LatestModified`,
+because `Generic_Newest` orders by first publication and an actively updated mod sinks: one sat 3rd on the site and more than 420 mods deep here.
+The default is safe because the chosen sort persists (`kDefaultMarketplaceSort`, `marketplace_sort` in [`configuration.md`](configuration.md)), so it only decides a fresh install,
+and "Recently updated" is one click away and remembered from then on. Neither order matches the site's own default, a "ripe" ranking no API exposes (same §4).
 
 **A pasted mod link or a bare id shows that one mod.** `gameBananaModIdFromText`
 recognises both, the profile is fetched, and it is shown as a one-record page,

@@ -734,8 +734,7 @@ into several folders prunes between them rather than once at the end
 ([§4](#one-archive-several-mods-one-download)), and that a rollback's own safety copy
 is pruned on the same terms as any other.
 
-The numbers are **not user-configurable**; add a setting only if it is actually asked
-for.
+The numbers are **not user-configurable**; add a setting only if it is actually asked for. A setting like this is easy to add and hard to remove, and if one is ever exposed the screen has to keep the age floor beating the count cap, never show them as two independent numbers that invite the configuration this section argues against.
 
 ### Rollback
 
@@ -1073,6 +1072,14 @@ Consequently no code gates on "`exact` on both axes": nothing acts unattended, s
 The rule is stated in prose in [`origin-tracking.md` §1](origin-tracking.md#1-two-axes-confidence-and-provenance),
 and what the code does draw on is the weaker `OriginConfidence.isConfirmed` line, which caps the update verdict.
 
+### "Update all" — considered and refused
+
+The bulk check lists every mod with something newer, and each one is then its own update dialog. For a library left alone for months that is tedious, and it stays that way.
+One button that downloads and overwrites many mod folders is the most destructive gesture in the app, and running the applies back-to-back removes no question:
+every apply still needs its confirmation, its folder choice where a patch is involved and its stale-`.ini` answer.
+What the user would get is the same dialogs in a row with no visible end, after already pressing the button that agreed to all of them.
+The surfaces also carry different weight on purpose: the bulk screen only ever rewrites sidecars.
+
 ### Known gaps
 
 Stated because each one bounds what this feature currently promises.
@@ -1124,3 +1131,7 @@ Stated because each one bounds what this feature currently promises.
   `utils/directory_copy.dart`, with one behavioural difference: it follows links,
   where the shared one does not. Unifying them changes the *import* path's behaviour,
   so it was left alone rather than fixed as a drive-by.
+- **Cancelling at the confirmation costs a full re-download.** `archiveConsumed` is set once extraction succeeds and the dialog comes after it, so backing out deletes the archive.
+  That is deliberate: the alternative is keeping every declined archive in a folder the user does not manage, and archives reach 1.24 GB. It is a real cost on a slow connection.
+- **Not verified on Windows.** That includes the deactivation for open file handles in [§1](#1-the-mechanism-is-wipe-and-write):
+  it exists because the game's loader holds handles there, and no update has yet run against a held file.

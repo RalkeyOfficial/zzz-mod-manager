@@ -71,6 +71,10 @@ The category providers are **not `autoDispose`**, and that is what makes the tab
 
 Six targets: completed archives, abandoned partials, temp extractions, legacy images, old logs, and saved-versions groups no mod claims. **The library and the sidecars are absent from the enum**, so no future edit here can reach them. `<appData>/backups` is reachable through the one target, and only for a group whose uid no mod in the library carries.
 
+**The game's mods folder is absent too, and a dead link there is never removed or offered for removal, by this or anything else in the app.** A link whose target is missing is not garbage:
+the library may be on a drive that is not mounted, restored from a backup or moved back, and the link works again the moment the folder returns.
+Removing it would silently lose the fact that the mod was on, and nothing would ever put it back.
+
 ### The gate
 
 `DownloadPaths.sweepCompleted` is documented safe at launch and nowhere else, because a completed archive is indistinguishable from one an install is about to consume. On demand the question is whether anything is in flight at all:
@@ -96,7 +100,7 @@ An hour, measured from **the newest write anywhere inside**, never from the dire
 
 ### The risk budget
 
-What licenses accepting a millisecond race instead of building a lock: the sweep never touches `modsPath`, never deletes a file it does not recognise, and for everything but an unclaimed saved-versions group its worst outcome is a re-download.
+What licenses accepting a millisecond race instead of building a lock: the sweep never touches `modsPath` or the game's mods folder, never deletes a file it does not recognise, and for everything but an unclaimed saved-versions group its worst outcome is a re-download.
 
 ## 9. Unclaimed saved versions go with the button, and only with the button
 
