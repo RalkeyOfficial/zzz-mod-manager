@@ -87,20 +87,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Mods toolbar is search plus a **Library** menu, with the filters on their own row.
 - The Mods tab sorts by **Recently added** by default.
 - Settings has an **Updates** section for the startup check, and a **Marketplace** section for the adult-content filter.
+- Settings › Appearance has an **Accent** choice: violet, paper, lime or teal.
 - RAR and 7z mods install with no setup: 7-Zip ships with the app, and the Arch package installs it.
 - The Arch package pulls in what "open mod page" and "open mod folder" need, and lists xdotool and ydotool as optional.
 - Claret, Phoenix, Roxy and Severian are in the character list, with portraits, and mods named after them are sorted to them on import.
 
 ### Changed
 
-- Text across the app is larger, and the same kind of text is the same size on every screen.
+- The app has a new look: a dark ink background with a violet accent, or a light paper theme, set in the Geist and Unbounded typefaces, with a new app and window icon.
+- The same kind of text is the same size on every screen.
 - The "which mod is this?" search starts with the mod's name read as words, so `Ellen_Joe_Cheongsam` searches for "Ellen Joe Cheongsam".
 - Notifications are small cards in the bottom-right corner. Several can show at once, any can be closed, and hovering pauses their countdowns.
 - Every notification says what happened and what it happened to, led by the character's portrait.
 - Enabling, favouriting, renaming, retagging, refreshing and deleting report only when they fail.
 - Notifications are drawn above dialogs instead of behind them.
 - Install confirmations name the mod that arrived, and anything you need to act on comes as its own warning beside it.
-- Mod descriptions are larger, better spaced, and consistently styled everywhere they're shown.
+- Mod descriptions are better spaced, and consistently styled everywhere they're shown.
 - Descriptions keep the paragraph spacing their author gave them.
 - Downloaded archives land in the app's own downloads folder and are deleted once installed. Anything left over is cleared when you next start the app.
 - The window uses your desktop's own title bar, so its buttons sit where the rest of your system puts them and it has the window menu, keyboard shortcuts and decoration theme every other window has.

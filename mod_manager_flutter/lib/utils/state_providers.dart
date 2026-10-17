@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/palette.dart';
 import '../models/character_info.dart';
 import '../services/api_service.dart';
 import '../services/bulk_resolution.dart';
@@ -296,6 +297,11 @@ final currentCharacterSkinsProvider = Provider<List<ModInfo>>((ref) {
 /// **Defaults to [ThemeMode.system]**, so until somebody says otherwise the app
 /// is the colour the rest of their desktop already is.
 final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
+
+/// The accent colour: what marks a mod as on, the primary button, links.
+///
+/// Hydrated from `config.json`'s `accent` key in `ApiService.initialize` and written through `ApiService.setAccent`.
+final accentProvider = StateProvider<AccentChoice>((ref) => AccentChoice.violet);
 
 /// What the desktop itself is set to, kept current by `MyApp`'s observer.
 ///

@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart' show ThemeMode;
+import 'package:mod_manager_flutter/core/palette.dart' show AccentChoice;
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 import 'package:mod_manager_flutter/utils/theme_setting.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -63,6 +64,8 @@ class ApiService {
       // older build wrote.
       _container!.read(themeModeProvider.notifier).state =
           parseThemeMode(_configService!.theme);
+      _container!.read(accentProvider.notifier).state =
+          AccentChoice.parse(_configService!.accent);
       _container!.read(updateCheckOnLaunchProvider.notifier).state =
           _configService!.updateCheckOnLaunch;
       _container!.read(trackingNudgeDismissedProvider.notifier).state =
@@ -310,6 +313,13 @@ class ApiService {
     await initialize();
     await _configService!.setTheme(mode.name);
     _container?.read(themeModeProvider.notifier).state = mode;
+  }
+
+  /// Persists the accent and applies it immediately.
+  static Future<void> setAccent(AccentChoice accent) async {
+    await initialize();
+    await _configService!.setAccent(accent.name);
+    _container?.read(accentProvider.notifier).state = accent;
   }
 
   /// Persists whether the update check runs on its own at startup.

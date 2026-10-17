@@ -76,6 +76,8 @@ void main() {
     // Each category's one-line explanation is its label key plus `_hint`.
     'storage.categories.',
     'storage.free.',
+    // One name per `AccentChoice`, keyed by its enum name.
+    'settings.appearance.accent_',
     // Chosen at runtime by a ternary *inside* `t(...)`, so the call-site regex
     // above sees `t(cond ? …` and matches nothing at all.
     'mods.backups.restored_',

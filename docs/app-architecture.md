@@ -27,14 +27,25 @@ doc. This file is the map; the rules that must never be missed are in the
   is declared here. Add new global state here, not ad-hoc.
 - **`core/constants.dart`** — `AppConstants`, including `appVersion`, the single
   source for everything that *says* the version (UI badge, GameBanana User-Agent).
-- **`core/type_scale.dart`** — the app's one type scale: Material's text roles raised by 2px, making body text 16.
+- **`core/type_scale.dart`** — the app's one type scale, from the v3 design. Unbounded for display and headline roles
+  (40/34/28 at 800, 26/24/20 at 700), Geist for the rest (titles 17/15/14 at 600, body 14/13/12, labels 13/12, and 11/600
+  for a badge or counter), with `bodyMedium` at 13 as running text. `ZenithType` carries what Material has no role for:
+  the tracked-out caps label, Geist Mono for paths and file names, the keycap size, the wordmark and the watermark initials.
   Every `Text` takes its size from a role on the theme — `bodyMedium` to be read, `bodySmall` for the line explaining it,
   `labelSmall` for a badge or counter — never a `fontSize:` literal, since a literal is invisible to the scale
-  and a screen written with them drifts smaller than the rest of the app.
+  and a screen written with them drifts from the rest of the app.
   Theme styles are `inherit: false` and carry the surface's text colour, so text inside a button or chip drops its style
   and takes the widget's own role rather than overriding its colour.
   The widget-test harness applies the same scale, so a layout test at 480px measures the text the app renders.
-  Markdown has its own scale in `MarkdownScale` (§2), built on the same 16px body.
+  Markdown has its own scale in `MarkdownScale` (§2), built on the same 13px body.
+  The fonts are bundled as static weights in `assets/fonts/`, with their OFL licences registered by `core/font_licenses.dart`:
+  a variable font's weight axis does not follow `FontWeight`, and the app never fetches a font at runtime.
+- **`core/palette.dart`** and **`core/app_theme.dart`** — every colour the app paints with, and the theme built from it.
+  `ZenithPalette` holds the dark ink and light paper grounds, the four accents, amber for updates, red for missing and
+  destructive, blue for information, the badge pairs and one portrait tile per element. It is a `ThemeExtension`, so a widget
+  needing a colour Material has no slot for reads `ZenithPalette.of(context)` rather than writing a literal.
+  `buildAppTheme` maps it onto the Material colour scheme and sets the component themes (buttons, fields, switches,
+  chips, dialogs, menus) to the design's sizes; on paper the primary button is ink and the accent is darkened to read.
 
 ## 2. Markdown rendering
 

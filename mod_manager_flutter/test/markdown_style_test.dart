@@ -120,11 +120,11 @@ void main() {
 
     testWidgets('a paragraph break is one blank line tall', (tester) async {
       // GameBanana writes a paragraph break as `<br><br>`, which the browser
-      // renders as one empty line. Block spacing alone (8px) reads as a hard
-      // wrap instead, which is what made converted descriptions look cramped.
+      // renders as one empty line. Block spacing alone reads as a hard wrap
+      // instead, which is what made converted descriptions look cramped.
       expect(
         await gapBetweenParagraphs(tester, 'AAA\n\nBBB'),
-        MarkdownScale.blankLine,
+        _px(MarkdownScale.blankLine),
       );
     });
 
@@ -137,7 +137,7 @@ void main() {
             tester,
             'AAA${'\n' * (blankLines + 1)}BBB',
           ),
-          MarkdownScale.blankLine * blankLines,
+          _px(MarkdownScale.blankLine * blankLines),
           reason: '$blankLines blank lines',
         );
       }
@@ -149,7 +149,7 @@ void main() {
       final capped = await gapBetweenParagraphs(tester, 'AAA${'\n' * 40}BBB');
       expect(
         capped,
-        MarkdownScale.blankLine * (MarkdownScale.maxBlankLines + 1),
+        _px(MarkdownScale.blankLine * (MarkdownScale.maxBlankLines + 1)),
         reason: 'a dozen <br> in a row must not push the text off screen',
       );
     });
@@ -166,7 +166,7 @@ void main() {
             tester,
             htmlToMarkdown('AAA${'<br>' * brCount}BBB'),
           ),
-          MarkdownScale.blankLine * (brCount - 1),
+          _px(MarkdownScale.blankLine * (brCount - 1)),
           reason: '$brCount <br>',
         );
       }
@@ -182,14 +182,17 @@ void main() {
           MarkdownScale.gap + (MarkdownScale.blankLine - MarkdownScale.gap) / 2;
       expect(
         await gapBetweenParagraphs(tester, 'AAA\n\n---\n\nBBB'),
-        air * 2 + rule,
+        _px(air * 2 + rule),
       );
     });
 
     testWidgets('list items stay tight', (tester) async {
       // The paragraph rhythm must not leak into `li`, or every bullet list
       // turns into a stack of loose paragraphs.
-      expect(await gapBetweenParagraphs(tester, '- AAA\n- BBB'), 8);
+      expect(
+        await gapBetweenParagraphs(tester, '- AAA\n- BBB'),
+        _px(MarkdownScale.gap),
+      );
     });
   });
 
@@ -252,3 +255,6 @@ fenced code block
     expect(find.text('Warning'), findsOneWidget);
   });
 }
+
+/// A laid-out distance, which carries floating-point noise: 13 × 1.65 is not exact in binary.
+Matcher _px(double expected) => closeTo(expected, 0.01);

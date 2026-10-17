@@ -74,6 +74,12 @@ rewrites only that line and takes everything else from the shipped entry so ther
 is one description of the app rather than two. It writes under `$HOME`, needs no
 root, and reverses with `--uninstall`.
 
+An installed icon is a copy, so a new `assets/icon.png` reaches no machine that
+already has the entry. Because the runner prefers the icon theme over the bundled
+file, even `flutter run` keeps showing the installed one. Run the script again
+after changing the icon. KWin also holds a window's icon in memory by name for as
+long as it runs, so on KDE the new one appears only after logging in again.
+
 **The portable entry is written `NoDisplay=true`**, so it does not appear in the
 application launcher. Being *found by app id* and being *listed in a menu* are
 separate things, and only the first is needed for an icon:

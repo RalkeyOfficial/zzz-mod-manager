@@ -13,15 +13,17 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
-/// Sizes and colours the markdown look is built from.
+import '../core/palette.dart';
+
+/// Sizes the markdown look is built from. Its colours come from the theme's `ZenithPalette`.
 ///
 /// Everything is derived from [body], so that one number rescales the whole
 /// document. Sizes are logical pixels, not `em` — Flutter's `TextStyle` has no
 /// relative unit — but they are chosen as multiples of [body] so the
 /// relationships survive a change to it.
 abstract final class MarkdownScale {
-  /// Body text. The paragraph size a description is actually read at.
-  static const double body = 16;
+  /// Body text. The paragraph size a description is actually read at, the same as the app's `bodyMedium`.
+  static const double body = 13;
 
   /// One step of vertical rhythm: 0.5em at [body]. Used as the gap between
   /// blocks, which is also what puts air above and below a horizontal rule —
@@ -31,20 +33,20 @@ abstract final class MarkdownScale {
   /// Heading sizes. Descriptions are read inside a dialog, so this scale is
   /// deliberately tighter than a web document's: past `h3` the headings stop
   /// growing and separate themselves by weight and colour instead.
-  static const double h1 = 24;
-  static const double h2 = 20;
-  static const double h3 = 18;
+  static const double h1 = 20;
+  static const double h2 = 17;
+  static const double h3 = 15;
   static const double h4 = body;
-  static const double h5 = 15;
-  static const double h6 = 14;
+  static const double h5 = 12.5;
+  static const double h6 = 12;
 
   /// Monospace reads optically larger than the body face at an equal size, so
   /// code is set a step down to sit level with the text around it.
-  static const double code = 14;
+  static const double code = 12;
 
   /// Line height for running text. Descriptions are wide and often dense;
-  /// 1.5 is what keeps long paragraphs scannable.
-  static const double lineHeight = 1.5;
+  /// 1.65 is what keeps long paragraphs scannable at a 13px body.
+  static const double lineHeight = 1.65;
 
   /// The height of one empty line of body text.
   ///
@@ -60,10 +62,6 @@ abstract final class MarkdownScale {
   /// viewport. Four blank lines is already an unmistakable break.
   static const int maxBlankLines = 4;
 
-  /// Link colour, fixed rather than themed so a link is recognisable as one in
-  /// both light and dark mode.
-  static const Color link = Color(0xFF6366F1);
-
   /// Widest a column of description text should get before it stops being
   /// comfortable to read — the eye loses the start of the next line on a long
   /// measure, and a maximised desktop window is very long indeed. Also what a
@@ -78,10 +76,14 @@ abstract final class MarkdownScale {
 MarkdownStyleSheet buildMarkdownStyleSheet(BuildContext context) {
   final theme = Theme.of(context);
   final scheme = theme.colorScheme;
+  final palette = ZenithPalette.of(context);
+  // Links take the accent, the colour that marks everything you can act on.
+  final link = palette.accent;
 
   final body = (theme.textTheme.bodyMedium ?? const TextStyle()).copyWith(
     fontSize: MarkdownScale.body,
     height: MarkdownScale.lineHeight,
+    color: palette.textProse,
   );
   final heading = body.copyWith(height: 1.25);
 
@@ -98,17 +100,17 @@ MarkdownStyleSheet buildMarkdownStyleSheet(BuildContext context) {
     // Paragraphs top up `blockSpacing` so that two of them end up exactly one
     // blank line apart. `blockSpacing` alone is too tight for a paragraph
     // break: on GameBanana a break arrives as `<br><br>`, which the browser
-    // renders as a full empty line, and at 8px it reads as a hard wrap
-    // instead. Splitting the top-up across top and bottom (rather than putting
+    // renders as a full empty line, and block spacing alone reads as a hard
+    // wrap instead. Splitting the top-up across top and bottom (rather than putting
     // it all below) keeps every *other* block symmetrically spaced — notably a
     // horizontal rule with a paragraph on either side.
     pPadding: const EdgeInsets.symmetric(
       vertical: (MarkdownScale.blankLine - MarkdownScale.gap) / 2,
     ),
     a: body.copyWith(
-      color: MarkdownScale.link,
+      color: link,
       decoration: TextDecoration.underline,
-      decorationColor: MarkdownScale.link.withValues(alpha: 0.5),
+      decorationColor: link.withValues(alpha: 0.5),
     ),
     em: const TextStyle(fontStyle: FontStyle.italic),
     strong: const TextStyle(fontWeight: FontWeight.w700),
@@ -163,8 +165,8 @@ MarkdownStyleSheet buildMarkdownStyleSheet(BuildContext context) {
     blockquoteDecoration: BoxDecoration(
       color: scheme.onSurface.withValues(alpha: 0.05),
       borderRadius: BorderRadius.circular(4),
-      border: const Border(
-        left: BorderSide(color: MarkdownScale.link, width: 3),
+      border: Border(
+        left: BorderSide(color: link, width: 3),
       ),
     ),
 

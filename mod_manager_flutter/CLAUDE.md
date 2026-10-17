@@ -67,6 +67,7 @@ The window — full reasoning in [`desktop-integration.md`](../docs/desktop-inte
 
 Text — full reasoning in [`app-architecture.md`](../docs/app-architecture.md) §1
 - Never write a `fontSize:` literal. Sizes are roles on `Theme.of(context).textTheme`, and `core/type_scale.dart` is the only place the scale is set. The exceptions are markdown's `MarkdownScale` and a badge sized to the icon it sits on.
+- Never write a `Color(0x…)` literal in new code. Colours come from `ZenithPalette.of(context)` or the theme's colour scheme, and `core/palette.dart` is the only place one is defined. Screens not yet rebuilt for v3 still hold literals; they go when the screen is rebuilt.
 
 Shader fixes — full reasoning in [`shader-fixes.md`](../docs/shader-fixes.md)
 - Never overwrite or delete a file in ZZMI's shader folder that the app did not place. An enable whose target is taken is refused whole.

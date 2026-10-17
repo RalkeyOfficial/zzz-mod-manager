@@ -20,6 +20,7 @@ class ConfigService implements ModCharacterTagStore {
   static const String _keySaveModsPath = 'save_mods_path';
   static const String _keyActiveMods = 'active_mods';
   static const String _keyTheme = 'theme';
+  static const String _keyAccent = 'accent';
   static const String _keyLanguage = 'language';
   static const String _keyModCharacterTags = 'mod_character_tags';
   static const String _keyFavoriteMods = 'favorite_mods';
@@ -123,6 +124,9 @@ class ConfigService implements ModCharacterTagStore {
   /// unrecognised to `system`; that tolerance is what lets the key hold the
   /// palette name older builds wrote under it.
   String get theme => _prefs.getString(_keyTheme) ?? '';
+
+  /// The accent, as an `AccentChoice` **name**. Empty when never chosen; `AccentChoice.parse` applies the default.
+  String get accent => _prefs.getString(_keyAccent) ?? '';
   String get language => _prefs.getString(_keyLanguage) ?? 'en';
   String get sortMode => _prefs.getString(_keySortMode) ?? 'added';
   bool get isFirstRun => _prefs.getBool(_keyFirstRun) ?? true;
@@ -356,6 +360,16 @@ class ConfigService implements ModCharacterTagStore {
     }
   }
 
+  Future<bool> setAccent(String accent) async {
+    try {
+      await _prefs.setString(_keyAccent, accent);
+      await _saveToFile();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<bool> setLanguage(String language) async {
     try {
       await _prefs.setString(_keyLanguage, language);
@@ -463,6 +477,9 @@ class ConfigService implements ModCharacterTagStore {
       if (config.containsKey('theme')) {
         await _prefs.setString(_keyTheme, config['theme']);
       }
+      if (config.containsKey('accent')) {
+        await _prefs.setString(_keyAccent, config['accent']);
+      }
       if (config.containsKey('language')) {
         await _prefs.setString(_keyLanguage, config['language']);
       }
@@ -518,6 +535,7 @@ class ConfigService implements ModCharacterTagStore {
         'active_mods': activeMods,
         'favorite_mods': favoriteMods,
         'theme': theme,
+        'accent': accent,
         'language': language,
         'sort_mode': sortMode,
         'content_filter': contentFilter,

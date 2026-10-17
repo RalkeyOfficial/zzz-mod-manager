@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/core/palette.dart';
 import 'package:mod_manager_flutter/screens/components/settings/appearance_section.dart';
 import 'package:mod_manager_flutter/screens/components/settings/auto_tag_section.dart';
 import 'package:mod_manager_flutter/screens/components/settings/diagnostics_section.dart';
@@ -88,6 +89,26 @@ void main() {
         find.byType(SegmentedButton<ThemeMode>),
       );
       expect(button.selected, {ThemeMode.dark});
+    });
+
+    testWidgets('picking an accent writes through', (tester) async {
+      AccentChoice? written;
+      await pumpLocalized(
+        tester,
+        AppearanceSettingsSection(
+          writer: (_) async {},
+          accentWriter: (accent) async => written = accent,
+        ),
+        container: container,
+      );
+      expectBuilt(AppearanceSettingsSection);
+      expect(container.read(accentProvider), AccentChoice.violet);
+
+      await tester.tap(find.bySemanticsLabel('Teal'));
+      await tester.pumpAndSettle();
+
+      expect(container.read(accentProvider), AccentChoice.teal);
+      expect(written, AccentChoice.teal);
     });
   });
 

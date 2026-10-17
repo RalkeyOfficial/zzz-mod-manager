@@ -242,6 +242,7 @@ void main() {
     final service = await build();
     await service.setPaths('/mods', '/game');
     await service.setTheme('light');
+    await service.setAccent('teal');
     await service.setLanguage('uk');
     await service.setSortMode('nameAsc');
     await service.setContentFilter('hide');
@@ -261,6 +262,7 @@ void main() {
       'zzmi_path': next.zzmiPath,
       'save_mods_path': next.saveModsPath,
       'theme': next.theme,
+      'accent': next.accent,
       'language': next.language,
       'sort_mode': next.sortMode,
       'content_filter': next.contentFilter,

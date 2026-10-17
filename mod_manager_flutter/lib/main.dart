@@ -7,8 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:window_manager/window_manager.dart';
 import 'dart:io';
+import 'core/app_theme.dart';
 import 'core/constants.dart';
-import 'core/type_scale.dart';
+import 'core/font_licenses.dart';
 import 'screens/mods_screen.dart';
 import 'screens/components/download_queue_host.dart';
 import 'screens/components/downloads_button.dart';
@@ -87,6 +88,7 @@ Future<void> _startUp() async {
     await windowManager.focus();
   });
 
+  registerFontLicenses();
   runApp(const ProviderScope(child: MyApp()));
 }
 
@@ -174,6 +176,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = ref.watch(isDarkModeProvider);
+    final accent = ref.watch(accentProvider);
     final locale = ref.watch(localeProvider);
 
     return MaterialApp(
@@ -198,75 +201,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
                 ? WelcomeScreen(onComplete: _onWelcomeComplete)
                 : const MainScreen()),
       debugShowCheckedModeBanner: false,
-      theme: withAppTypeScale(ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF0EA5E9),
-          brightness: isDarkMode ? Brightness.dark : Brightness.light,
-        ),
-        useMaterial3: true,
-        scaffoldBackgroundColor: isDarkMode
-            ? const Color(0xFF0F0F0F)
-            : const Color(0xFFF5F5F5),
-        cardColor: isDarkMode ? const Color(0xFF1A1A1A) : Colors.white,
-        // Покращена кольорова схема
-        primarySwatch: MaterialColor(0xFF0EA5E9, <int, Color>{
-          50: const Color(0xFFE0F7FA),
-          100: const Color(0xFFB3ECF2),
-          200: const Color(0xFF80E0EA),
-          300: const Color(0xFF4DD4E2),
-          400: const Color(0xFF26C9DA),
-          500: const Color(0xFF0EA5E9),
-          600: const Color(0xFF0C94D1),
-          700: const Color(0xFF0A82B9),
-          800: const Color(0xFF0870A1),
-          900: const Color(0xFF064E89),
-        }),
-        // Покращені кольори для темної теми
+      theme: buildAppTheme(
         brightness: isDarkMode ? Brightness.dark : Brightness.light,
-        // Покращені кольори для карток
-        cardTheme: CardThemeData(
-          elevation: isDarkMode ? 8 : 4,
-          shadowColor: isDarkMode
-              ? Colors.black.withValues(alpha: 0.3)
-              : Colors.black.withValues(alpha: 0.1),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-        // Покращені кольори для кнопок
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            elevation: 4,
-            shadowColor: const Color(0xFF0EA5E9).withValues(alpha: 0.3),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        ),
-        // Покращені кольори для полів вводу
-        inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(
-              color: isDarkMode
-                  ? Colors.white.withValues(alpha: 0.1)
-                  : Colors.black.withValues(alpha: 0.1),
-            ),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(
-              color: isDarkMode
-                  ? Colors.white.withValues(alpha: 0.1)
-                  : Colors.black.withValues(alpha: 0.1),
-            ),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: Color(0xFF0EA5E9), width: 2),
-          ),
-        ),
-      )),
+        accent: accent,
+      ),
     );
   }
 }

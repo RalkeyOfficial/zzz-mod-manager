@@ -34,6 +34,7 @@ App-data locations are `~/.local/share/zzz-mod-manager` (Linux) and
   "active_mods": ["Ellen Swimsuit"],
   "favorite_mods": ["Ellen Swimsuit"],
   "theme": "system",
+  "accent": "violet",
   "language": "en",
   "sort_mode": "added",
   "content_filter": "blur",
@@ -58,6 +59,7 @@ App-data locations are `~/.local/share/zzz-mod-manager` (Linux) and
 | `active_mods` | `active_mods` | String list of mod folder names |
 | `favorite_mods` | `favorite_mods` | String list of mod folder names |
 | `theme` | `theme` | The theme, as a `ThemeMode` Dart name (`light` \| `system` \| `dark`). Empty until chosen ([§3](#3-parsing-a-stored-value)), and parsed by `parseThemeMode`, which **degrades anything unrecognised to `system`** — the key is older than the setting and holds a palette name (`dark-blue`) in any config an earlier build wrote, so the tolerance is what an upgrade lands on |
+| `accent` | `accent` | The accent, as an `AccentChoice` Dart name (`violet` \| `paper` \| `lime` \| `teal`). Empty until chosen, and parsed by `AccentChoice.parse`, which degrades anything unrecognised to `violet` |
 | `language` | `language` | Locale code (`en`, `uk`) |
 | `sort_mode` | `sort_mode` | The **mods library** sort. Parsed into `ModSort`; falls back to `added` |
 | `content_filter` | `content_filter` | Marketplace adult-content treatment: `blur` (default) \| `show` \| `hide`. Stored as a raw string and parsed by `ContentFilterMode.parse`, which **degrades anything unrecognised to `blur`** — the only value that is wrong in neither direction ([§3](#3-parsing-a-stored-value)) |
@@ -191,6 +193,11 @@ Everything that paints its own colours watches `isDarkModeProvider`, and
 `themeMode`, so the hand-rolled palettes and the Material one cannot disagree
 about which brightness is on screen.
 
+The accent is a separate setting, `accentProvider`, written live from the same
+**Appearance** section. `buildAppTheme` takes both, so a change to either rebuilds
+one theme. Each swatch is painted in the colour it gives the current brightness,
+which on paper is the darkened accent, and ink for *Paper*.
+
 ### Progress belongs on the control, not over the page
 
 The screen's `_loaded` flag swaps the **entire body** for a spinner until the first
@@ -234,8 +241,3 @@ Recorded so each is not mistaken for an oversight:
 | Backup retention (30 days / 3 per mod / 5 GB) | Deliberately fixed, and [`applying-updates.md` §5](applying-updates.md#retention) argues why: the age floor has to beat the count cap, and a screen presenting them as two independent numbers invites exactly the configuration that breaks it. Add it only if it is actually asked for. |
 | The remote response cache TTL | The client's ten-minute cache is in memory and per session; there is no persisted cache to configure. |
 | Automatic updating | Refused, not unbuilt — [`applying-updates.md` §7](applying-updates.md#automatic-updating--considered-and-refused). The **Updates** section's one switch is about *checking*, and its wording keeps that distinction visible. |
-
-**A palette picker** is the one appearance choice not offered. *Light / System /
-Dark* is the brightness, and the accent (`0xFF0EA5E9`) is fixed in `ThemeData`
-and repeated in the hand-painted gradients, so a second colour would have to be
-threaded through those before it could be a setting.
