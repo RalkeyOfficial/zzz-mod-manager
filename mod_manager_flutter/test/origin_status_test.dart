@@ -17,7 +17,6 @@ ModOrigin origin({
   int? modId,
   OriginConfidence versionConfidence = OriginConfidence.unknown,
   OriginTracking tracking = OriginTracking.auto,
-  bool remoteMissing = false,
   bool patchShaped = false,
   List<ModDownload> patches = const [],
 }) =>
@@ -29,7 +28,6 @@ ModOrigin origin({
       versionConfidence: versionConfidence,
       provenance: OriginProvenance.importedFolder,
       tracking: tracking,
-      remoteMissing: remoteMissing,
       ingest: patchShaped ? const ModIngest(patchShaped: true) : null,
       patches: patches,
     );
@@ -107,38 +105,6 @@ void main() {
       );
     });
 
-    test('remote_missing gets its own state, not amber and not silence', () {
-      // Amber promises "click to set the version", which means reading a mod
-      // page that is private, trashed or withheld — so it must not be amber.
-      // It must not be silence either: the bulk resolution pass writes this
-      // flag now, and a mod that quietly stops being watched with no wording
-      // anywhere is the hole that would open.
-      expect(
-        modOriginStatus(origin(modId: 123, remoteMissing: true)),
-        ModOriginStatus.sourceGone,
-      );
-    });
-
-    test('a gone source is not counted as needing attention', () {
-      // The filter's promise is that everything in it can be dealt with, and a
-      // private, trashed or withheld page cannot. Counting it would leave a
-      // number that never reaches zero however much work the user does.
-      expect(modNeedsAttention(origin(modId: 123, remoteMissing: true)), isFalse);
-    });
-
-    test('tracking off still beats a gone source', () {
-      // "Not from GameBanana / it's my own" promises permanent silence, and a
-      // stale remote id must not talk the user out of a decision they made.
-      expect(
-        modOriginStatus(origin(
-          modId: 123,
-          remoteMissing: true,
-          tracking: OriginTracking.off,
-        )),
-        ModOriginStatus.none,
-      );
-    });
-
     test('a patch-shaped folder with no base named is its own state', () {
       // The version here is as known as it gets — we downloaded the patch and
       // recorded its file id — so nothing else on the card would say a word.
@@ -155,7 +121,7 @@ void main() {
 
     test('naming the base mod clears it', () {
       // The property the "needs attention" filter depends on: this state can be
-      // reached zero by doing work, which is what disqualifies `sourceGone`.
+      // reached zero by doing work.
       //
       // Naming the base inserts it underneath, so the stack is two deep and
       // there is nothing missing below any more — the flag cannot outlive it.
@@ -177,16 +143,14 @@ void main() {
       );
     });
 
-    test('tracking off and a gone source still win over it', () {
-      // Both are promises about the slot going quiet, and a folder being two
-      // things is not a reason to break either one.
-      for (final quiet in [
-        origin(modId: 222, patchShaped: true, tracking: OriginTracking.off),
-        origin(modId: 222, patchShaped: true, remoteMissing: true),
-      ]) {
-        expect(modOriginStatus(quiet),
-            isNot(ModOriginStatus.secondIdentityUnknown));
-      }
+    test('tracking off still wins over it', () {
+      // A promise about the slot going quiet, and a folder being two things is
+      // not a reason to break it.
+      expect(
+        modOriginStatus(
+            origin(modId: 222, patchShaped: true, tracking: OriginTracking.off)),
+        ModOriginStatus.none,
+      );
     });
 
     test('an untracked folder is untracked before it is anything else', () {
@@ -282,8 +246,8 @@ void main() {
     });
 
     test('an unnamed second identity is outstanding work', () {
-      // It belongs in the filter for the reason `sourceGone` does not: the user
-      // can finish it, and finishing it moves the count.
+      // It belongs in the filter because the user can finish it, and finishing
+      // it moves the count.
       final unnamed = origin(
         modId: 222,
         versionConfidence: OriginConfidence.exact,
@@ -334,7 +298,6 @@ void main() {
         origin(modId: 1, versionConfidence: OriginConfidence.assumedLatest),
         origin(modId: 1, versionConfidence: OriginConfidence.inferred),
         origin(modId: 1, tracking: OriginTracking.off),
-        origin(modId: 1, remoteMissing: true),
         origin(modId: 1, patchShaped: true),
         origin(
           modId: 1,

@@ -521,12 +521,9 @@ needs its mark more than before.
 
 ### After a successful update
 
-`ModOrigin.updatedTo` rewrites the block. Both confidences reach `exact` on the same
-grounds a marketplace install does — the user picked this row of this mod's file list
-and we wrote exactly that file id — and `provenance` becomes `downloaded` even for a
-folder originally imported by hand, because the bytes in it now came from an archive
-this app fetched. Three fields are **cleared**, and each would otherwise be a lie
-about the folder as it stands:
+`ModOrigin.updatedTo` rewrites the block.
+Both confidences reach `exact` on the same grounds a marketplace install does — the user picked this row of this mod's file list and we wrote exactly that file id — and `provenance` becomes `downloaded` even for a folder originally imported by hand, because the bytes in it now came from an archive this app fetched.
+Two fields are **cleared**, and each would otherwise be a lie about the folder as it stands:
 
 - `baseline_remote_date` — a date-based guess sitting beside an exact file id.
 - `updates_dismissed_until` — the user waved an update away and has now taken it;
@@ -538,7 +535,6 @@ about the folder as it stands:
   `dismissalAfterTaking` (`update_check.dart`) is the one place the rule lives,
   and it clears whenever nothing can be shown to have been passed over: the
   pick is the newest listed, the list is empty (a repair), or a date is missing.
-- `remote_missing` — we just fetched the page and a file off it.
 
 `tracking` survives untouched: it is the user's own statement about whether this mod
 should be watched at all.

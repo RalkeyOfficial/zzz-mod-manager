@@ -57,12 +57,8 @@ class BulkUpdateCheckOutcome {
 
   /// Remote mod id -> the record the pass fetched for it.
   ///
-  /// Handed back rather than discarded because **the results screen is also the
-  /// bulk *resolution* screen**, and every question it asks — which file of this
-  /// mod do you have, is this really your mod, is the page gone — is answered by
-  /// the same response the verdicts came from. Re-fetching it would spend a
-  /// second round of requests to learn what is already in hand, and would let
-  /// the two halves of one screen describe different states of the mod page.
+  /// Handed back rather than discarded because **the results screen is also the bulk *resolution* screen**, and every question it asks — which file of this mod do you have, is this really your mod — is answered by the same response the verdicts came from.
+  /// Re-fetching it would spend a second round of requests to learn what is already in hand, and would let the two halves of one screen describe different states of the mod page.
   ///
   /// Absent for any id the pass never reached, which is why the screen builds
   /// rows from this map rather than from the plan.

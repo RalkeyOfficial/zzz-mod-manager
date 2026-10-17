@@ -79,9 +79,8 @@ enum CompanionRole {
 ///   installed-mods index depends on there being exactly one.
 ///
 /// What is left is a remote identity plus what is known about which file of it,
-/// and the three per-identity facts that genuinely differ between the two
-/// downloads: a baseline date, whether that page has gone, and whether the user
-/// has waved its releases away.
+/// and the two per-identity facts that genuinely differ between the two
+/// downloads: a baseline date, and whether the user has waved its releases away.
 class ModCompanion {
   const ModCompanion({
     required this.role,
@@ -93,7 +92,6 @@ class ModCompanion {
     this.versionConfidence = OriginConfidence.unknown,
     this.archiveMd5,
     this.baselineRemoteDate,
-    this.remoteMissing = false,
     this.updatesDismissedUntil,
     this.files = const [],
   });
@@ -123,8 +121,6 @@ class ModCompanion {
   /// "I don't know which file of this one either." Per identity, because the
   /// two downloads arrived at different times.
   final DateTime? baselineRemoteDate;
-
-  final bool remoteMissing;
 
   /// Per identity, and that is the point: waving away the patch's release must
   /// not silence the base mod's, which is the whole failure this feature
@@ -164,7 +160,6 @@ class ModCompanion {
         if (archiveMd5 != null) 'archive_md5': archiveMd5,
         if (baselineRemoteDate != null)
           'baseline_remote_date': baselineRemoteDate!.toUtc().toIso8601String(),
-        if (remoteMissing) 'remote_missing': true,
         if (updatesDismissedUntil != null)
           'updates_dismissed_until':
               updatesDismissedUntil!.toUtc().toIso8601String(),
@@ -198,7 +193,6 @@ class ModCompanion {
       versionConfidence: OriginConfidence.parse(raw['version_confidence']),
       archiveMd5: _string(raw['archive_md5']),
       baselineRemoteDate: _date(raw['baseline_remote_date']),
-      remoteMissing: raw['remote_missing'] == true,
       updatesDismissedUntil: _date(raw['updates_dismissed_until']),
       files: InstalledFile.parseList(raw['files']),
     );
@@ -214,7 +208,6 @@ class ModCompanion {
     OriginConfidence? versionConfidence,
     String? archiveMd5,
     DateTime? baselineRemoteDate,
-    bool? remoteMissing,
     DateTime? updatesDismissedUntil,
     List<InstalledFile>? files,
   }) =>
@@ -228,7 +221,6 @@ class ModCompanion {
         versionConfidence: versionConfidence ?? this.versionConfidence,
         archiveMd5: archiveMd5 ?? this.archiveMd5,
         baselineRemoteDate: baselineRemoteDate ?? this.baselineRemoteDate,
-        remoteMissing: remoteMissing ?? this.remoteMissing,
         updatesDismissedUntil:
             updatesDismissedUntil ?? this.updatesDismissedUntil,
         files: files ?? this.files,
@@ -245,7 +237,6 @@ class ModCompanion {
         versionConfidence: versionConfidence,
         archiveMd5: archiveMd5,
         baselineRemoteDate: baselineRemoteDate,
-        remoteMissing: remoteMissing,
         files: files,
       );
 
@@ -265,7 +256,6 @@ class ModCompanion {
       other.versionConfidence == versionConfidence &&
       other.archiveMd5 == archiveMd5 &&
       other.baselineRemoteDate == baselineRemoteDate &&
-      other.remoteMissing == remoteMissing &&
       other.updatesDismissedUntil == updatesDismissedUntil &&
       _sameFiles(other.files, files);
 
@@ -288,7 +278,6 @@ class ModCompanion {
         versionConfidence,
         archiveMd5,
         baselineRemoteDate,
-        remoteMissing,
         updatesDismissedUntil,
         Object.hashAll(files),
       );

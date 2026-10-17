@@ -220,7 +220,6 @@ lives on an entry in `downloads`.
 | `version` / `version_label` | `version` is a version string; `version_label` is the author's free-text *variant* marker ("white hair ver"). **Never conflate them** — that makes two variants of one release look like two releases. |
 | `archive_md5` | md5 of the archive **this layer** came from. |
 | `baseline_remote_date` | For `assumed_latest`: only flag remote files newer than this. Per layer, because the downloads arrived at different times. |
-| `remote_missing` | Gone upstream — read from the remote's explicit private/trashed/withheld flags, not inferred from a 404. |
 | `updates_dismissed_until` | "I have seen what this mod published up to here and I don't want it." A **date rather than a file id**, so it expires by itself the moment something newer appears; cleared when that layer is rebound. Per layer, and that is the point: waving away the patch's release must not silence the mod it patches. Not the same as `tracking: "off"`, which silences the folder forever. See [`update-checks.md`](update-checks.md#4-dismissing-an-update). |
 | `files` | Which files this layer laid down (below). |
 

@@ -438,8 +438,7 @@
       "untracked_tooltip": "Not tracked for updates — click to link it to a mod page",
       "version_guessed_tooltip": "Tracked by date only — no file recorded. Click to say which file you have.",
       "update_available_tooltip": "An update is published — click for details",
-      "possibly_outdated_tooltip": "Possibly outdated — click for details",
-      "source_gone_tooltip": "Its GameBanana page is no longer available — nothing more can be checked"
+      "possibly_outdated_tooltip": "Possibly outdated — click for details"
     },
     "folder": {
       "heading": "This folder holds two downloads",
@@ -447,7 +446,6 @@
       "role_mod": "Mod",
       "role_patch": "Patch",
       "unnamed": "GameBanana mod #{id}",
-      "remote_missing": "Its mod page is no longer available.",
       "open_page": "Open this mod's page",
       "change": "Change which mod this is",
       "remove": "This patch is no longer here"
@@ -565,16 +563,10 @@
       "section_identity_why": "These folders were linked to a page by reading a link somebody pasted, and nobody has checked it since. Compare the folder name with the page name — an update is only ever offered once you have confirmed it.",
       "section_version": "Which file do you have? ({count})",
       "section_version_why": "Knowing the mod isn't enough: a page usually offers several files, and without knowing yours the app can't tell a newer version from a different variant.",
-      "section_gone": "No longer on GameBanana ({count})",
-      "section_gone_why": "GameBanana reports these pages as private, deleted or withheld, so there is nothing left to check against. Recording it stops the app asking and marks the mod's card so you know why it went quiet.",
-      "section_back": "Available again ({count})",
-      "section_back_why": "These were recorded as gone, and GameBanana answered normally this time. Clearing the mark puts them back under normal update checks.",
       "confirm_all": "Confirm all {count}",
       "confirm_none": "Untick all {count}",
       "confirm_identity": "Yes, this is the right mod page",
       "record_file": "You have {file}",
-      "record_source_gone": "Record that this page is gone",
-      "record_source_back": "Clear the mark on this mod",
       "choose_file": "Pick the file you installed…",
       "clear_choice": "Clear this choice",
       "excluded_untracked_single": "1 mod isn't linked to a GameBanana page",

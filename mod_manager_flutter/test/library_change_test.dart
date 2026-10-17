@@ -153,7 +153,6 @@ void main() {
         versionConfidence: OriginConfidence.assumedLatest,
       ),
       'was declared local': untracked.copyWith(tracking: OriginTracking.off),
-      'went missing upstream': untracked.copyBase(remoteMissing: true),
       // The stack itself is an axis now: a folder that gained a patch reads
       // differently, and the guard compares the whole block.
       'gained a patch': untracked.copyWith(
@@ -347,7 +346,6 @@ void main() {
         base.copyBase(versionConfidence: OriginConfidence.user),
         base.copyBase(baselineRemoteDate: DateTime.utc(2026)),
         base.copyBase(archiveMd5: 'abc'),
-        base.copyBase(remoteMissing: true),
         base.copyBase(updatesDismissedUntil: DateTime.utc(2026)),
         base.copyBase(files: const [InstalledFile(path: 'a.ini')]),
       ];
@@ -357,7 +355,7 @@ void main() {
       // One per field across both halves, so a field added to either model
       // without being added to `==` shows up here as a count mismatch rather
       // than as a silent hole.
-      expect(variants, hasLength(18));
+      expect(variants, hasLength(17));
     });
 
     test('ingest is compared by value, not by identity', () {

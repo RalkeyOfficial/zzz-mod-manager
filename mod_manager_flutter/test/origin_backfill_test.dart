@@ -214,7 +214,6 @@ void main() {
           versionLabel: 'white hair ver',
           versionConfidence: OriginConfidence.inferred,
           baselineRemoteDate: DateTime.utc(2025, 1, 1),
-          remoteMissing: true,
           archiveMd5: 'abc123',
         ),
         modId: 222,
@@ -229,8 +228,6 @@ void main() {
       expect(origin.versionLabel, isNull);
       expect(origin.versionConfidence, OriginConfidence.unknown);
       expect(origin.baselineRemoteDate, isNull);
-      expect(origin.remoteMissing, isFalse,
-          reason: 'that was a fact about the mod we are no longer pointing at');
 
       // The hash survives: it describes the archive we extracted, not which
       // remote mod we currently believe it to be, so it can still be matched

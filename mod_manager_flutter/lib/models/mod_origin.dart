@@ -415,7 +415,6 @@ class ModOrigin {
       versionConfidence: OriginConfidence.parse(raw['version_confidence']),
       archiveMd5: _string(raw['archive_md5']),
       baselineRemoteDate: _date(raw['baseline_remote_date']),
-      remoteMissing: raw['remote_missing'] == true,
       updatesDismissedUntil: _date(raw['updates_dismissed_until']),
       // The folder's own download's files lived on `ingest`; they belong to the
       // layer that wrote them. Read out of the raw map rather than through
@@ -446,7 +445,6 @@ class ModOrigin {
           versionConfidence: companion.versionConfidence,
           archiveMd5: companion.archiveMd5,
           baselineRemoteDate: companion.baselineRemoteDate,
-          remoteMissing: companion.remoteMissing,
           updatesDismissedUntil: companion.updatesDismissedUntil,
           files: companion.files,
         );

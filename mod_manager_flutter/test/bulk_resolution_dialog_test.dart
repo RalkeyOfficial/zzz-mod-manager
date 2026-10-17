@@ -63,7 +63,6 @@ void main() {
     int modId = 1,
     OriginConfidence modIdConfidence = OriginConfidence.inferred,
     OriginConfidence versionConfidence = OriginConfidence.unknown,
-    bool remoteMissing = false,
   }) =>
       originFixture(
         source: 'gamebanana',
@@ -72,7 +71,6 @@ void main() {
         versionConfidence: versionConfidence,
         provenance: OriginProvenance.importedFolder,
         installedAt: installedAt,
-        remoteMissing: remoteMissing,
       );
 
   ModInfo mod(String name, {ModOrigin? origin}) => ModInfo(
@@ -203,38 +201,10 @@ void main() {
     // reason for existing.
     expect(find.text('Is this the right mod page? (1)'), findsOneWidget);
     expect(find.text('Which file do you have? (1)'), findsOneWidget);
-    expect(find.text('No longer on GameBanana (1)'), findsOneWidget);
     expect(find.textContaining('an update is only ever offered once you have'),
         findsOneWidget);
-  });
-
-  testWidgets('a page that came back, on a mod nobody confirmed, is listed once',
-      (tester) async {
-    // The overlap that got through: `back` did not exclude `needsIdentity`, so
-    // this mod appeared under two headings with the same two checkboxes. State
-    // is shared, so nothing was written twice — but "Save 1 mod" under two
-    // visible rows reads as a bug. Ordinary rather than exotic: writing
-    // `remote_missing` never touches `mod_id_confidence`, so a withheld page
-    // that comes back lands here with its identity still `inferred`.
-    final plan = planBulkResolution(
-      mods: [
-        mod('Ellen',
-            origin: origin(
-              modIdConfidence: OriginConfidence.inferred,
-              versionConfidence: OriginConfidence.user,
-              remoteMissing: true,
-            )),
-      ],
-      records: {1: remote()},
-    );
-    await runFlow(tester, plan);
-
-    expect(find.text('Ellen'), findsOneWidget);
-    expect(find.text('Yes, this is the right mod page'), findsOneWidget);
-    expect(find.text('Clear the mark on this mod'), findsOneWidget);
-    // Filed under the heavier question, and only there.
-    expect(find.text('Is this the right mod page? (1)'), findsOneWidget);
-    expect(find.textContaining('Available again'), findsNothing);
+    // A page GameBanana reports gone has nothing to ask about, so no row.
+    expect(find.text('vanished'), findsNothing);
   });
 
   testWidgets('a mod asking two questions is listed once, not twice',
@@ -386,19 +356,6 @@ void main() {
     // Reading the list and choosing a row is exactly what `user` means.
     expect(run.results['Ellen']!.fileId, 901);
     expect(run.results['Ellen']!.versionConfidence, OriginConfidence.user);
-  });
-
-  testWidgets('a gone page is offered pre-ticked and writes the flag',
-      (tester) async {
-    final plan = planBulkResolution(
-      mods: [mod('Ellen', origin: origin())],
-      records: {1: remote(trashed: true)},
-    );
-    final run = await runFlow(tester, plan);
-
-    expect(find.text('Record that this page is gone'), findsOneWidget);
-    await apply(tester);
-    expect(run.results['Ellen']!.remoteMissing, isTrue);
   });
 
   testWidgets('cancelling writes nothing', (tester) async {
@@ -574,14 +531,16 @@ void main() {
         'Resolved and saved now — check again to see its updates.';
     const pageName = 'ZZMI RabbitFX - Glow FX + Censor Remover';
 
-    /// One tracked row with a gone page, pre-ticked, so the screen opens and Apply reads "Save 1 mod" — plus the untracked mods named.
+    /// One tracked row with a single-file inference, pre-ticked, so the screen opens and Apply reads "Save 1 mod" — plus the untracked mods named.
     BulkResolutionPlan withUntracked(List<String> names) => planBulkResolution(
           mods: [
-            mod('vanished',
+            mod('tracked',
                 origin: origin(modIdConfidence: OriginConfidence.user)),
             for (final name in names) mod(name),
           ],
-          records: {1: remote(name: 'Gone page', trashed: true)},
+          records: {
+            1: remote(name: 'One file page', files: [file(900)]),
+          },
         );
 
     /// The real per-mod dialog, over a scripted GameBanana and a recording gateway.
@@ -896,7 +855,7 @@ void main() {
       expect(find.text('Save 1 mod'), findsOneWidget);
 
       await apply(tester);
-      expect(result.mods, ['vanished']);
+      expect(result.mods, ['tracked']);
     });
 
     testWidgets('Resolve opens on the mod as saved, not as the screen found it',
@@ -912,11 +871,13 @@ void main() {
         tester,
         planBulkResolution(
           mods: [
-            mod('vanished',
+            mod('tracked',
                 origin: origin(modIdConfidence: OriginConfidence.user)),
             mod('RabbitFX', origin: patchOrigin),
           ],
-          records: {1: remote(name: 'Gone page', trashed: true)},
+          records: {
+            1: remote(name: 'One file page', files: [file(900)]),
+          },
         ),
         resolveOrigin: dialog.open,
         overrides: dialog.overrides,

@@ -143,7 +143,6 @@ void main() {
           versionConfidence: OriginConfidence.exact,
           archiveMd5: '9e107d9d372bb6826bd81d3542a419d6',
           baselineRemoteDate: null,
-          remoteMissing: true,
           updatesDismissedUntil: null,
           files: [InstalledFile(path: 'Ellen.ini', bytes: 12)],
         ),
@@ -570,7 +569,8 @@ void main() {
       expect(base.versionLabel, 'Main file');
       expect(base.versionConfidence, OriginConfidence.exact);
       expect(base.archiveMd5, 'abc');
-      expect(base.remoteMissing, isTrue);
+      expect(base.toJson().containsKey('remote_missing'), isFalse,
+          reason: 'a key this build does not read is not carried into the stack');
       // The folder's own facts stay on the folder.
       expect(origin.installedAt, DateTime.utc(2026));
       expect(origin.source, 'gamebanana');

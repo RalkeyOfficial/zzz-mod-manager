@@ -78,31 +78,21 @@ the card paints its palette over *artwork*, so a themed colour would be the only
 thing on it that moved. Passing no `onResolveOrigin` hides it, which is what the
 drag-feedback copy of the card wants.
 
-**The muted states are told apart by shape, not colour** — a dot for untracked, a
-clock for a version recorded only as a guess, a broken link for a page that is gone.
-Three muted colours at 9–15px are indistinguishable, and stay so for anyone
-colourblind.
+**The muted states are told apart by shape, not colour** — a dot for untracked and a clock for a version recorded only as a guess.
+Two muted colours at 9–15px are indistinguishable, and stay so for anyone colourblind.
+A mod whose page is gone has no mark of its own: it shows whichever state its block earns.
 
 **Two states share one treatment and differ only in wording.**
-`secondIdentityUnknown` — the folder holds a patch and nobody has said what it
-patches — renders the same amber pill and glyph as `versionUnknown`, with its own
-tooltip. It is not folded into that state because the sentence would be false: a
-patch downloaded by this app knows its file exactly, and the unknown is the *other*
-mod in the folder. A shared treatment with a different sentence is the pattern the
-slot already uses for `updateAvailable` versus `possiblyOutdated`. Adding a sixth
-*visual* is what the card has no room for; adding a state that reuses one costs a
-precedence decision and nothing else.
+`secondIdentityUnknown` — the folder holds a patch and nobody has said what it patches — renders the same amber pill and glyph as `versionUnknown`, with its own tooltip.
+It is not folded into that state because the sentence would be false: a patch downloaded by this app knows its file exactly, and the unknown is the *other* mod in the folder.
+A shared treatment with a different sentence is the pattern the slot already uses for `updateAvailable` versus `possiblyOutdated`.
+Adding another *visual* is what the card has no room for; adding a state that reuses one costs a precedence decision and nothing else.
 
-**`modSlotStatus()` is where the one slot is decided**, folding the origin block
-together with the session verdict, so precedence between "you have not sorted this
-mod out" and "this mod has an update" is one decision in one place. The
-short-circuit that silences the slot is narrowly `tracking: "off"` and
-`remote_missing`, **not** every route to `none`: a mod recorded at `exact` also
-folds to `none` and is precisely the mod best placed to have a *confirmed* update.
+**`modSlotStatus()` is where the one slot is decided**, folding the origin block together with the session verdict, so precedence between "you have not sorted this mod out" and "this mod has an update" is one decision in one place.
+The short-circuit that silences the slot is narrowly `tracking: "off"`, **not** every route to `none`: a mod recorded at `exact` also folds to `none` and is precisely the mod best placed to have a *confirmed* update.
 
-**The "needs attention" filter counts `secondIdentityUnknown`**, for the reason it
-excludes `sourceGone`: the user can finish it — naming the base mod clears it — and
-finishing it moves the count. A filter whose number can never reach zero is noise.
+**The "needs attention" filter counts `secondIdentityUnknown`**, because the user can finish it — naming the base mod clears it — and finishing it moves the count.
+A filter whose number can never reach zero is noise.
 Note the bulk "assume current" pass does **not** read the badge for its own
 eligibility: this state outranks `versionUnknown` there, and reading it would quietly
 stop that pass dating mods it used to date.

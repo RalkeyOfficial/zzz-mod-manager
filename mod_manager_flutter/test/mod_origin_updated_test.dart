@@ -35,7 +35,6 @@ void main() {
         baselineRemoteDate: DateTime.utc(2025, 1, 1),
         archiveMd5: 'aaaa',
         tracking: tracking,
-        remoteMissing: true,
         updatesDismissedUntil: DateTime.utc(2026, 8, 8),
       );
 
@@ -77,10 +76,6 @@ void main() {
   test('the date-only baseline is cleared once a file id is known', () {
     // A weaker, date-based answer sitting beside a stronger one.
     expect(updated(before()).baselineRemoteDate, isNull);
-  });
-
-  test('remote_missing is cleared — we just fetched the page', () {
-    expect(updated(before()).remoteMissing, isFalse);
   });
 
   test('the install date is observed, not proxied', () {

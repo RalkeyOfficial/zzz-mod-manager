@@ -3,10 +3,10 @@
 ///
 /// There is deliberately no separate migration screen. The bulk check already
 /// fetches every tracked mod's record in one or two requests, and that response
-/// carries exactly what resolution needs: the mod's name, its full file list
-/// (current *and* archived, folded together by `Mod/Multi`) and the explicit
-/// upstream-gone flags. So the results list doubles as the resolution list, one
-/// screen with two jobs, and nothing here costs a request.
+/// carries exactly what resolution needs: the mod's name and its full file list
+/// (current *and* archived, folded together by `Mod/Multi`). So the results
+/// list doubles as the resolution list, one screen with two jobs, and nothing
+/// here costs a request.
 ///
 /// Four rules govern every decision below, and three of them are inherited
 /// rather than invented here:
@@ -51,13 +51,6 @@ enum BulkResolutionQuestion {
 
   /// No version at all, and the mod page publishes files that could name one.
   version,
-
-  /// The mod page is private, trashed or withheld, and the block does not say
-  /// so yet.
-  sourceGone,
-
-  /// The block says the page is gone and the page just answered normally.
-  sourceBack,
 }
 
 /// One local mod, the record the check fetched for it, and what can be asked.
@@ -109,10 +102,6 @@ class BulkResolutionRow {
 
   bool get needsVersion => questions.contains(BulkResolutionQuestion.version);
 
-  bool get sourceGone => questions.contains(BulkResolutionQuestion.sourceGone);
-
-  bool get sourceBack => questions.contains(BulkResolutionQuestion.sourceBack);
-
   /// The name to show on the remote side of the glance test.
   String get remoteName => remote.name ?? '#${remote.idRow}';
 }
@@ -124,6 +113,7 @@ class BulkResolutionPlan {
     required this.untracked,
     required this.settled,
     required this.unreachable,
+    this.goneIds = const <String>{},
   });
 
   /// Mods with something to ask, in library order.
@@ -139,9 +129,14 @@ class BulkResolutionPlan {
   /// there is nothing to do to them.
   final int settled;
 
-  /// Mods the pass could not reach at all. Distinct from [settled] in exactly
-  /// the way "no updates" and "no updates among the mods we could reach" are.
+  /// Mods there is nothing to check against: never reached, or on a page the record reports private, trashed or withheld.
+  /// Distinct from [settled] in exactly the way "no updates" and "no updates among the mods we could reach" are.
   final int unreachable;
+
+  /// Folder ids of the mods in [unreachable] whose page the record reports gone.
+  ///
+  /// The check counts a gone page as answered rather than failed, so its own tally leaves these out; the screen adds them back.
+  final Set<String> goneIds;
 
   bool get hasWork => rows.isNotEmpty;
 
@@ -160,6 +155,7 @@ class BulkResolutionPlan {
 /// actually got back. A mod whose id is missing from it was never reached, and
 /// is counted as [BulkResolutionPlan.unreachable] rather than given a row —
 /// there is nothing to confirm against.
+/// So is a mod whose record says the page is gone, and nothing is stored about it: the next check reads the page afresh, and a page that comes back is resolved like any other.
 BulkResolutionPlan planBulkResolution({
   required Iterable<ModInfo> mods,
   required Map<int, GbMod> records,
@@ -168,6 +164,7 @@ BulkResolutionPlan planBulkResolution({
   final untracked = <ModInfo>[];
   var settled = 0;
   var unreachable = 0;
+  final goneIds = <String>{};
 
   for (final mod in mods) {
     final origin = mod.origin;
@@ -188,33 +185,14 @@ BulkResolutionPlan planBulkResolution({
       continue;
     }
     final remote = records[base!.modId];
-    if (remote == null) {
+    // Nothing may be asked about a page nobody can read: its file list is empty and an identity confirmed against it would be confirmed against a blank.
+    if (remote == null || remote.isRemoteMissing) {
       unreachable++;
+      if (remote != null) goneIds.add(mod.id);
       continue;
     }
 
     final questions = <BulkResolutionQuestion>{};
-    if (remote.isRemoteMissing) {
-      // Nothing else may be asked about a page nobody can read: a file list
-      // fetched from it would be empty and an identity confirmed against it
-      // would be confirmed against a blank. One question, and it is the only
-      // one with an answer.
-      if (!base.remoteMissing) {
-        questions.add(BulkResolutionQuestion.sourceGone);
-      }
-      if (questions.isEmpty) {
-        settled++;
-      } else {
-        rows.add(BulkResolutionRow(
-          mod: mod,
-          remote: remote,
-          questions: questions,
-          candidates: const <ResolveCandidate>[],
-        ));
-      }
-      continue;
-    }
-    if (base.remoteMissing) questions.add(BulkResolutionQuestion.sourceBack);
     if (!base.modIdConfidence.isConfirmed) {
       questions.add(BulkResolutionQuestion.identity);
     }
@@ -259,6 +237,7 @@ BulkResolutionPlan planBulkResolution({
     untracked: untracked,
     settled: settled,
     unreachable: unreachable,
+    goneIds: goneIds,
   );
 }
 
@@ -297,7 +276,6 @@ class BulkResolutionAnswer {
     this.confirmIdentity = false,
     this.file,
     this.fileConfidence = OriginConfidence.inferred,
-    this.remoteMissing,
   });
 
   /// The mod the answers are about. The transform abandons the write if the
@@ -316,11 +294,7 @@ class BulkResolutionAnswer {
   /// the list themselves, `inferred` for the pass's own single-file inference.
   final OriginConfidence fileConfidence;
 
-  /// Set `remote_missing`, or clear it. Null leaves it alone.
-  final bool? remoteMissing;
-
-  bool get isEmpty =>
-      !confirmIdentity && file == null && remoteMissing == null;
+  bool get isEmpty => !confirmIdentity && file == null;
 }
 
 /// The transform one row is written through.
@@ -352,15 +326,6 @@ ModOrigin? applyBulkResolution(
 ) {
   if (current == null || current.base?.modId != answer.modId) return null;
   var next = current;
-
-  if (answer.remoteMissing case final gone?) {
-    next = OriginResolution.setRemoteMissing(
-          next,
-          modId: answer.modId,
-          gone: gone,
-        ) ??
-        next;
-  }
 
   final confirmsIdentity = answer.confirmIdentity ||
       (answer.file != null && answer.fileConfidence.isConfirmed);

@@ -28,12 +28,8 @@ typedef ResolveOriginOpener = Future<ResolveOriginResult?> Function(
 /// The bulk check's **results screen**, which is also the bulk **resolution**
 /// screen.
 ///
-/// One screen, two jobs, and folding them together is the decision rather than
-/// a convenience: the check already fetched every tracked mod's record, and
-/// that one response carries the mod's name, its whole file list and the
-/// upstream-gone flags — everything resolution needs. A separate migration
-/// screen would re-fetch the same library to ask questions about it, and would
-/// go stale the day the last legacy mod was resolved.
+/// One screen, two jobs, and folding them together is the decision rather than a convenience: the check already fetched every tracked mod's record, and that one response carries the mod's name and its whole file list — everything resolution needs.
+/// A separate migration screen would re-fetch the same library to ask questions about it, and would go stale the day the last legacy mod was resolved.
 ///
 /// Four things about this surface are decisions, not layout:
 ///
@@ -42,13 +38,9 @@ typedef ResolveOriginOpener = Future<ResolveOriginResult?> Function(
 ///   and this codebase's own placement rule — the one the bulk "assume current" button follows — is that a bulk rewrite acts only on a set the user has seen.
 ///   A pre-ticked row costs one glance and one press; an undo costs noticing a summary nobody asked for.
 ///   The untracked list is the one exception, and it is not a bulk write: each mod goes through the per-mod dialog, which saves as it closes.
-/// - **Identity starts unticked, everything else starts ticked.** The
-///   asymmetry is the point. A file this pass inferred, and a page the API
-///   itself says is gone, are statements the app is making and can defend. An
-///   identity is the one thing only the user can settle: `mod_id` came from a
-///   free-form url somebody pasted, and pre-ticking it would turn the glance
-///   test into a rubber stamp — the exact failure the "bulk acts only on
-///   precise handles" rule exists to prevent.
+/// - **Identity starts unticked, everything else starts ticked.** The asymmetry is the point.
+///   A file this pass inferred is a statement the app is making and can defend.
+///   An identity is the one thing only the user can settle: `mod_id` came from a free-form url somebody pasted, and pre-ticking it would turn the glance test into a rubber stamp — the exact failure the "bulk acts only on precise handles" rule exists to prevent.
 /// - **The comparison is name to name, and there is no remote thumbnail.** The
 ///   plan asked for one; `Mod/Multi` cannot supply the content-filter hint
 ///   (`_sInitialVisibility` is rejected as an unknown property there), and the
@@ -238,9 +230,6 @@ class _BulkResolutionDialogState extends State<BulkResolutionDialog> {
   /// Mod folder id -> the file to record and the tier it may claim.
   final Map<String, ({GbFile file, OriginConfidence tier})> _files = {};
 
-  /// Mod folder ids whose `remote_missing` answer is ticked.
-  final Set<String> _source = <String>{};
-
   /// Untracked mod folder ids the per-mod dialog has since settled: bound to a page, or marked not from GameBanana.
   /// Already saved, so they are never part of [_answers].
   final Map<String, ResolveOriginResult> _resolved = {};
@@ -257,7 +246,6 @@ class _BulkResolutionDialogState extends State<BulkResolutionDialog> {
     for (final row in widget.plan.rows) {
       // Pre-ticked: the app's own statements, each defensible from the response
       // in hand. Identity is deliberately absent from this loop.
-      if (row.sourceGone || row.sourceBack) _source.add(row.mod.id);
       if (row.suggestion case final candidate?) {
         _files[row.mod.id] = (
           file: candidate.file,
@@ -280,9 +268,6 @@ class _BulkResolutionDialogState extends State<BulkResolutionDialog> {
         confirmIdentity: _identity.contains(row.mod.id),
         file: choice?.file,
         fileConfidence: choice?.tier ?? OriginConfidence.inferred,
-        remoteMissing: _source.contains(row.mod.id)
-            ? (row.sourceGone ? true : (row.sourceBack ? false : null))
-            : null,
       );
       if (!answer.isEmpty) out[row.mod.id] = answer;
     }
@@ -299,26 +284,12 @@ class _BulkResolutionDialogState extends State<BulkResolutionDialog> {
     // and the screen read as a wall of checkboxes. Splitting by question and
     // duplicating a mod across sections was the other option and is worse: on a
     // legacy library nearly every row asks both, so the same names would appear
-    // twice throughout.
-    //
-    // **A cascade, not four independent filters**, which is the correction: a
-    // mod recorded as gone whose page came back *and* whose identity was never
-    // confirmed carries both questions, and with `back` unguarded it was listed
-    // under two headings with the same two checkboxes. Nothing was written
-    // twice — both copies key off the same mod id — but "Save 1 mod" under two
-    // visible rows reads as a bug, and it contradicted the one invariant this
-    // layout is built on. `gone` needs no guard: `planBulkResolution` returns
-    // early for a missing record, so such a row can never carry another
-    // question.
+    // twice throughout. A row that asks about identity is filed there whatever
+    // else it asks.
     final identityRows =
         widget.plan.rows.where((r) => r.needsIdentity).toList();
-    final gone = widget.plan.rows.where((r) => r.sourceGone).toList();
-    final back = widget.plan.rows
-        .where((r) => r.sourceBack && !r.needsIdentity)
-        .toList();
-    final versionOnly = widget.plan.rows
-        .where((r) => !r.needsIdentity && !r.sourceGone && !r.sourceBack)
-        .toList();
+    final versionOnly =
+        widget.plan.rows.where((r) => !r.needsIdentity).toList();
 
     return AlertDialog(
       title: Text(loc.t('mods.bulk_resolve.title')),
@@ -336,9 +307,6 @@ class _BulkResolutionDialogState extends State<BulkResolutionDialog> {
             Flexible(
               child: ListView(
                 shrinkWrap: true,
-                // The main work first, the two rare factual sections after it.
-                // A library with one dead mod page and fifty to confirm should
-                // not open on the dead one.
                 children: [
                   // About the ticked boxes, so absent when there are none.
                   if (widget.plan.hasWork)
@@ -367,22 +335,6 @@ class _BulkResolutionDialogState extends State<BulkResolutionDialog> {
                       title: 'mods.bulk_resolve.section_version',
                       why: 'mods.bulk_resolve.section_version_why',
                       rows: versionOnly,
-                    ),
-                  if (gone.isNotEmpty)
-                    _section(
-                      loc,
-                      scheme,
-                      title: 'mods.bulk_resolve.section_gone',
-                      why: 'mods.bulk_resolve.section_gone_why',
-                      rows: gone,
-                    ),
-                  if (back.isNotEmpty)
-                    _section(
-                      loc,
-                      scheme,
-                      title: 'mods.bulk_resolve.section_back',
-                      why: 'mods.bulk_resolve.section_back_why',
-                      rows: back,
                     ),
                   if (widget.plan.untracked.isNotEmpty)
                     _untracked(loc, scheme),
@@ -685,13 +637,9 @@ class _BulkResolutionDialogState extends State<BulkResolutionDialog> {
                 ),
               ],
             ),
-            if (row.needsIdentity ||
-                row.needsVersion ||
-                row.sourceGone ||
-                row.sourceBack)
+            if (row.needsIdentity || row.needsVersion)
               const SizedBox(height: 6),
             if (row.needsIdentity) _identityTick(row, loc),
-            if (row.sourceGone || row.sourceBack) _sourceTick(row, loc),
             if (row.needsVersion) _versionControl(row, scheme, loc),
           ],
         ),
@@ -737,18 +685,6 @@ class _BulkResolutionDialogState extends State<BulkResolutionDialog> {
       label: loc.t('mods.bulk_resolve.confirm_identity'),
       onChanged: (on) => setState(() {
         on ? _identity.add(row.mod.id) : _identity.remove(row.mod.id);
-      }),
-    );
-  }
-
-  Widget _sourceTick(BulkResolutionRow row, AppLocalizations loc) {
-    return _tick(
-      value: _source.contains(row.mod.id),
-      label: loc.t(row.sourceGone
-          ? 'mods.bulk_resolve.record_source_gone'
-          : 'mods.bulk_resolve.record_source_back'),
-      onChanged: (on) => setState(() {
-        on ? _source.add(row.mod.id) : _source.remove(row.mod.id);
       }),
     );
   }

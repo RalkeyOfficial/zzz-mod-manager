@@ -81,7 +81,6 @@ class ModDownload {
     this.versionConfidence = OriginConfidence.unknown,
     this.archiveMd5,
     this.baselineRemoteDate,
-    this.remoteMissing = false,
     this.updatesDismissedUntil,
     this.files = const <InstalledFile>[],
   });
@@ -121,10 +120,6 @@ class ModDownload {
   /// this. Per layer, because the two downloads arrived at different times.
   final DateTime? baselineRemoteDate;
 
-  /// This layer's page is gone upstream. Read from the remote's explicit flags,
-  /// never inferred from a 404.
-  final bool remoteMissing;
-
   /// "I have seen what this mod published up to here and I don't want it."
   ///
   /// Per layer, and that is the point: waving away the patch's release must not
@@ -161,7 +156,6 @@ class ModDownload {
         if (archiveMd5 != null) 'archive_md5': archiveMd5,
         if (baselineRemoteDate != null)
           'baseline_remote_date': baselineRemoteDate!.toUtc().toIso8601String(),
-        if (remoteMissing) 'remote_missing': true,
         if (updatesDismissedUntil != null)
           'updates_dismissed_until':
               updatesDismissedUntil!.toUtc().toIso8601String(),
@@ -200,7 +194,6 @@ class ModDownload {
       versionConfidence: OriginConfidence.parse(raw['version_confidence']),
       archiveMd5: _string(raw['archive_md5']),
       baselineRemoteDate: _date(raw['baseline_remote_date']),
-      remoteMissing: raw['remote_missing'] == true,
       updatesDismissedUntil: _date(raw['updates_dismissed_until']),
       files: InstalledFile.parseList(raw['files']),
     );
@@ -216,7 +209,6 @@ class ModDownload {
     OriginConfidence? versionConfidence,
     String? archiveMd5,
     DateTime? baselineRemoteDate,
-    bool? remoteMissing,
     DateTime? updatesDismissedUntil,
     List<InstalledFile>? files,
   }) =>
@@ -230,7 +222,6 @@ class ModDownload {
         versionConfidence: versionConfidence ?? this.versionConfidence,
         archiveMd5: archiveMd5 ?? this.archiveMd5,
         baselineRemoteDate: baselineRemoteDate ?? this.baselineRemoteDate,
-        remoteMissing: remoteMissing ?? this.remoteMissing,
         updatesDismissedUntil:
             updatesDismissedUntil ?? this.updatesDismissedUntil,
         files: files ?? this.files,
@@ -242,8 +233,8 @@ class ModDownload {
   /// **The clearing is the rule and this is its one copy.** A file id, a
   /// version, a label and a baseline are meaningful only relative to one mod
   /// page; carried across a rebind they leave a record asserting that mod B
-  /// ships file 555 of mod A. `remote_missing` was a fact about the old mod, and
-  /// a dismissal is a statement about the old mod's releases.
+  /// ships file 555 of mod A. A dismissal is a statement about the old mod's
+  /// releases.
   ///
   /// [archiveMd5] survives on purpose: the hash is a fact about the archive we
   /// extracted, not about which mod we currently believe it to be — which is
@@ -268,7 +259,6 @@ class ModDownload {
           rebinding ? OriginConfidence.unknown : versionConfidence,
       archiveMd5: archiveMd5,
       baselineRemoteDate: rebinding ? null : baselineRemoteDate,
-      remoteMissing: rebinding ? false : remoteMissing,
       updatesDismissedUntil: rebinding ? null : updatesDismissedUntil,
       files: files,
     );
@@ -277,7 +267,7 @@ class ModDownload {
   /// This layer after the app downloaded and wrote a file over it.
   ///
   /// Longhand rather than [copyWith] because the interesting half is what gets
-  /// **cleared**, which `copyWith` cannot express. Three fields go and each
+  /// **cleared**, which `copyWith` cannot express. Two fields go and each
   /// would otherwise be a lie about the folder as it now stands:
   ///
   /// - **`baselineRemoteDate`** — "I don't know which file, I got it around
@@ -288,7 +278,6 @@ class ModDownload {
   ///   the *next* release too. Unless the caller hands in
   ///   [updatesDismissedUntil]: a pick below the newest file listed passes the
   ///   ones above it over, and `dismissalAfterTaking` says what that is worth.
-  /// - **`remoteMissing`** — we just fetched the page and a file off it.
   ///
   /// Both confidences reach `exact` on the same grounds a marketplace install
   /// does: the user picked this row of this mod's file list and we wrote exactly
@@ -329,7 +318,6 @@ class ModDownload {
         versionConfidence: versionConfidence,
         archiveMd5: archiveMd5,
         baselineRemoteDate: baselineRemoteDate,
-        remoteMissing: remoteMissing,
         files: files,
       );
 
@@ -351,7 +339,6 @@ class ModDownload {
       other.versionConfidence == versionConfidence &&
       other.archiveMd5 == archiveMd5 &&
       other.baselineRemoteDate == baselineRemoteDate &&
-      other.remoteMissing == remoteMissing &&
       other.updatesDismissedUntil == updatesDismissedUntil &&
       _sameFiles(other.files, files);
 
@@ -374,7 +361,6 @@ class ModDownload {
         versionConfidence,
         archiveMd5,
         baselineRemoteDate,
-        remoteMissing,
         updatesDismissedUntil,
         Object.hashAll(files),
       );

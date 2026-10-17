@@ -334,30 +334,6 @@ class OriginResolution {
     );
   }
 
-  /// Records that the mod page this folder is bound to is gone upstream.
-  ///
-  /// Read from the remote's own `_bIsPrivate` / `_bIsTrashed` / `_bIsWithheld`
-  /// rather than inferred from a status code, and stored so the app stops asking
-  /// questions about a page it cannot read. [gone] false is the same statement
-  /// in reverse — the page answered normally, so a flag left over from a
-  /// previous pass is now wrong and clearing it is what puts the mod back under
-  /// normal watch.
-  ///
-  /// Null when nothing would change, or when the folder has since been rebound.
-  static ModOrigin? setRemoteMissing(
-    ModOrigin? existing, {
-    required int modId,
-    required bool gone,
-  }) {
-    final layer = _layer(existing, modId);
-    if (layer == null) return null;
-    if (layer.remoteMissing == gone) return null;
-    return existing!.withDownload(
-      modId,
-      (download) => download.copyWith(remoteMissing: gone),
-    );
-  }
-
   /// "I don't know which file — I got it around then."
   ///
   /// Records no file and no version, only a date to compare against, so the mod

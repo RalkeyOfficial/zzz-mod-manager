@@ -98,17 +98,11 @@ would write over it. The user-facing fields are kept, since those travelling is 
 whole point of a sidecar. This is enforced by construction rather than by a branch;
 see [`metadata-schema.md`](metadata-schema.md#the-origin-block) for how.
 
-**An applied update rewrites the block rather than amending it**, through
-`ModOrigin.updatedTo`. It reaches `exact` on the same grounds a download does — the
-user picked this row of this mod's file list and the app wrote exactly that file id —
-and `provenance` becomes `downloaded` even for a folder originally imported by hand,
-since the bytes in it now came from an archive this app fetched and extracted. Three
-fields are **cleared**, each of which would otherwise be a lie about the folder as it
-now stands: `baseline_remote_date` (a date-based guess beside an exact file id),
-`updates_dismissed_until` (the update was taken, and keeping it would silence the next
-release too) and `remote_missing`. `tracking` survives untouched — it is the user's
-own statement about whether the mod should be watched at all. `ingest` is refreshed
-from the layout the update actually used, which is how a pre-`ingest` mod gains one.
+**An applied update rewrites the block rather than amending it**, through `ModOrigin.updatedTo`.
+It reaches `exact` on the same grounds a download does — the user picked this row of this mod's file list and the app wrote exactly that file id — and `provenance` becomes `downloaded` even for a folder originally imported by hand, since the bytes in it now came from an archive this app fetched and extracted.
+Two fields are **cleared**, each of which would otherwise be a lie about the folder as it now stands: `baseline_remote_date` (a date-based guess beside an exact file id) and `updates_dismissed_until` (the update was taken, and keeping it would silence the next release too).
+`tracking` survives untouched — it is the user's own statement about whether the mod should be watched at all.
+`ingest` is refreshed from the layout the update actually used, which is how a pre-`ingest` mod gains one.
 
 **`mod_id` is the only record of which mod a folder is, and every link is built
 from it.** `modPageUrl` (`utils/url_utils.dart`) is what each surface offering a
@@ -156,13 +150,9 @@ Two rules govern every decision:
   likely to be right about. A `tracking: off` mod is skipped entirely — "not from
   GameBanana / it's my own" is a decision the user made, and an id worked out from a
   link that was wrong is exactly why they might have made it.
-- **Re-pointing at a different mod clears what described the old one.** `file_id`,
-  `version`, `version_label` and `baseline_remote_date` mean something only relative
-  to one mod page, so carrying them across a rebind would leave a block asserting
-  that mod B ships file 555 of mod A. `remote_missing` resets for the same reason.
-  `archive_md5` **survives**: it is a fact about the archive we extracted, not about
-  which remote mod we currently believe it to be, so it can still be matched against
-  the new mod's published checksums.
+- **Re-pointing at a different mod clears what described the old one.**
+  `file_id`, `version`, `version_label` and `baseline_remote_date` mean something only relative to one mod page, so carrying them across a rebind would leave a block asserting that mod B ships file 555 of mod A.
+  `archive_md5` **survives**: it is a fact about the archive we extracted, not about which remote mod we currently believe it to be, so it can still be matched against the new mod's published checksums.
 - **Nothing derivable means nothing written.** No empty sidecar, no "already swept"
   marker. Re-sniffing on the next scan costs one string parse, and it keeps the
   don't-litter rule ([`metadata-schema.md`](metadata-schema.md#dont-litter-empty-sidecars))
@@ -237,12 +227,10 @@ disagree about which mods are which.
 | **`versionUnknown`** | `mod_id` known, `version_confidence` is `unknown` | Amber, actionable. We can query the file list but can't judge what comes back, and one pass through the dialog fixes it. |
 | **`versionGuessed`** | `mod_id` known, version at `assumed_latest` or `inferred` | A muted **clock**. A version is on record but it is a guess. |
 | **`untracked`** | no `origin` block, or no `mod_id` | A muted **dot**. **Informational, never alarming** — most of a pre-origin library looks like this, and badging all of it loudly trains the user to stop seeing the slot. |
-| **`sourceGone`** | `remote_missing` | A muted **broken link**. The mod page is private, trashed or withheld, and nothing more can be checked. |
 | **`none`** | version at `user` or `exact`, or `tracking: "off"` | Nothing at all. |
 
-The rule the five states follow, in one line: **the slot speaks whenever tracking is
-less than complete, and how loudly depends on how cheaply the user can act.** Amber
-is the one that asks for something; the three muted states are statements of fact.
+The rule the four states follow, in one line: **the slot speaks whenever tracking is less than complete, and how loudly depends on how cheaply the user can act.**
+Amber is the one that asks for something; the two muted states are statements of fact.
 
 `versionGuessed` exists because `assumed_latest` and `user` used to render
 identically, so a mod waved through by the bulk action was indistinguishable from one
@@ -253,23 +241,17 @@ but opening every dialog in turn. Two things about it:
   was considered and rejected: those marks grow to cover every card as the library is
   resolved and then are permanent noise, where these *shrink as the user does the
   work*.
-- **The three muted states differ by shape, not colour.** Three muted colours at
-  9–15px are indistinguishable, and stay so for anyone colourblind — so it is a dot,
-  a clock face and a broken link.
+- **The two muted states differ by shape, not colour.**
+  Two muted colours at 9–15px are indistinguishable, and stay so for anyone colourblind — so it is a dot and a clock face.
 
-Three of those rows are decisions rather than mechanics:
+Three things here are decisions rather than mechanics:
 
-- **`tracking: "off"` silences the slot; `remote_missing` gets a state of its own.**
-  The first is the user's explicit "not from GameBanana / it's my own", and the
-  promise attached to it is permanence — it wins over everything, including a gone
-  page, because an id worked out from a link that was wrong is exactly why somebody
-  might have set it. The
-  second is not amber, for the reason amber cannot be honoured here: that state's
-  entire offer is *click to set the version*, which means reading a mod page that is
-  private, trashed or withheld. It is not silence either: silence is defensible only
-  while nothing writes the flag, and the bulk resolution pass
-  ([§7](#7-the-bulk-resolution-pass)) writes it — so a mod that quietly stops being
-  watched with no wording anywhere is a hole rather than a tidy default.
+- **`tracking: "off"` silences the slot.**
+  It is the user's explicit "not from GameBanana / it's my own", and the promise attached to it is permanence — it wins over everything, because an id worked out from a link that was wrong is exactly why somebody might have set it.
+- **A page that is gone has no state of its own, and nothing about it is stored.**
+  GameBanana reports a private, trashed or withheld page on every request, and the update check says so in its verdict each time it asks.
+  A stored mark adds nothing to that and goes stale: a privated page that comes back would keep it.
+  So the card shows whatever mark the block earns, the filter counts the mod by that same state, and a page that comes back is checked as if nothing happened.
 - **Only `unknown` is actionable.** `assumed_latest` is the user having already
   answered "I don't know which, I got it around then", and `inferred` is a guess we
   recorded and label as one. Re-ambering either would make the dialog impossible to
@@ -289,12 +271,6 @@ and the badge deliberately come apart:
   guessed ones, and the count dropping is the entire visible proof that it worked.
   Were guessed mods still counted, the number would sit unchanged while the marks
   merely changed shape, which reads as a button that did nothing.
-- **`sourceGone` is out too, for a different reason again.** The filter's promise is
-  that everything in it can be dealt with, and a private, trashed or withheld page
-  cannot be. Counting it would leave a number that never reaches zero however much
-  work the user does, which is the one thing that turns a count into noise. The mark
-  on the card still says what happened, and the resolve dialog still rebinds the
-  folder for anyone whose mod was reuploaded elsewhere.
 
 ---
 
@@ -348,7 +324,7 @@ claim*.
 
 | Answer | Writes |
 |---|---|
-| Confirm / pick a mod page | `mod_id` at **`user`**. Rebinding to a *different* mod clears `file_id`, `version`, `version_label`, `baseline_remote_date` and `remote_missing`, and keeps `archive_md5`. |
+| Confirm / pick a mod page | `mod_id` at **`user`**. Rebinding to a *different* mod clears `file_id`, `version`, `version_label` and `baseline_remote_date`, and keeps `archive_md5`. |
 | Pick a file | `file_id`, `version` (`_sVersion`), `version_label` (`_sDescription`) at **`user`** — or at **`exact`** when the row was matched by a banked `archive_md5`, **or when the row picked is the one already recorded at `exact`**. |
 | "I don't know which" | `version_confidence: assumed_latest` and `baseline_remote_date`. No file, no version. |
 | "Not from GameBanana / it's my own" | `tracking: "off"`. Identity is left in place, so turning it back on is an undo. |
@@ -502,26 +478,17 @@ The untracked list needs no mod page, so the plan is built with no records in ha
 When those doors run a check first, an untracked mod is still enough to open the screen afterwards, so the reminder never ends in a notification that leaves those mods out of reach.
 With no records in hand nothing was looked up, so that door reports nothing as unreached.
 
-**Both doors must say the same thing**, which took fixing twice over. The update
-count is read library-wide (`libraryUpdateCountProvider`) rather than from whichever
-door opened the screen: the check's own tally is library-wide while the toolbar's
-count is view-scoped, so one sentence in one dialog would otherwise mean "in your
-library" or "on this character tab" depending on where the user was standing. And
-the "couldn't be checked" line is real on the menu door too — it was hardcoded to
-zero there, which dropped the accounting the whole screen is careful about, on the
-door the rebuild exists to provide. The two numbers come from different fields on
-purpose: the check door quotes what the pass failed to reach, the menu door quotes
-`BulkResolutionPlan.unreachable` — every tracked mod with no record in hand — and
-they differ where a batch *answered* a mod as `sourceGone`, since that answer
-arrives without a record.
+**Both doors must say the same thing.**
+The update count is read library-wide (`libraryUpdateCountProvider`) rather than from whichever door opened the screen: the check's own tally is library-wide while the toolbar's count is view-scoped, so one sentence in one dialog would otherwise mean "in your library" or "on this character tab" depending on where the user was standing.
+The "couldn't be checked" line is real on both doors, since a zero on either drops the accounting the whole screen is careful about.
+Its two numbers come from different fields on purpose.
+The menu door quotes `BulkResolutionPlan.unreachable`: every tracked mod with no record in hand, and every page the record reports gone.
+The check door quotes the folders the pass failed to reach together with `BulkResolutionPlan.goneIds`, as a union of folder ids so a folder counted by both is counted once.
+The pass itself counts a gone page as answered rather than failed, and without `goneIds` such a mod would appear nowhere on the screen.
 
-**There is deliberately no separate migration screen.** The check already fetches
-every tracked mod's record in one or two requests
-([`update-checks.md` §5](update-checks.md#5-checking-the-whole-library)), and that
-response carries exactly what resolution needs: the mod's name, its whole file list
-— current *and* archived, which `Mod/Multi` folds into one key — and the explicit
-upstream-gone flags. So this costs no request at all, and there is no screen left
-behind to go stale the day the last legacy mod is resolved.
+**There is deliberately no separate migration screen.**
+The check already fetches every tracked mod's record in one or two requests ([`update-checks.md` §5](update-checks.md#5-checking-the-whole-library)), and that response carries exactly what resolution needs: the mod's name and its whole file list — current *and* archived, which `Mod/Multi` folds into one key.
+So this costs no request at all, and there is no screen left behind to go stale the day the last legacy mod is resolved.
 
 ### What each row may be asked
 
@@ -536,28 +503,18 @@ screen took minutes to understand: ungrouped, a row asking *is this the right mo
 looked identical to one asking *which file?*, nothing said what the screen was for,
 and the type was the 11–13px the rest of the app had already moved away from.
 
-The grouping is by **leading** question rather than by question, and a mod appears
-once. A section per question with mods appearing in two of them reads better on
-paper and is worse in practice: on a legacy library nearly every row asks both, so
-every name would be listed twice. Order is identity → file → gone → back, main work
-first, so a library with one dead page and fifty to confirm does not open on the
-dead one.
-
-That is a **cascade, not four independent filters**, and the first version was not:
-a mod recorded as gone whose page has come back *and* whose identity nobody
-confirmed carries both questions, and it was listed under two headings with the
-same two checkboxes. Nothing was written twice — both copies key off one mod id —
-but "Save 1 mod" under two visible rows contradicts the invariant this layout is
-built on. It is a reachable state rather than a contrived one: writing
-`remote_missing` never touches `mod_id_confidence`, so a legacy mod's identity is
-still `inferred` when its page reappears.
+The grouping is by **leading** question rather than by question, and a mod appears once.
+A section per question with mods appearing in two of them reads better on paper and is worse in practice: on a legacy library nearly every row asks both, so every name would be listed twice.
+Order is identity → file: a row that asks about its identity is filed there whatever else it asks.
 
 | Question | When | What ticking it writes |
 |---|---|---|
 | Confirm the identity | `mod_id_confidence` is weaker than `user` | `mod_id_confidence: user` |
 | Record the file | `version_confidence` is `unknown` and the page publishes files | `file_id`, `version`, `version_label`, at the tier below |
-| The page is gone | the record says private/trashed/withheld and the block does not | `remote_missing: true` |
-| The page is back | the block says gone and the record answered normally | `remote_missing: false` |
+
+A mod whose record says the page is **private, trashed or withheld gets no row**, and nothing is asked: its file list is empty, and an identity confirmed against it would be confirmed against a blank.
+It is counted on the "couldn't be checked" line, and not in `settled`, whose line tells the user the mod is already sorted out.
+Nothing is written about it either, so the next check reads the page afresh and a page that comes back is resolved like any other.
 
 A mod with **no `mod_id` gets no question row**, and nothing Apply does reaches it.
 This is the same rule the bulk "assume current" action follows and it is the oldest one here: identifying an untracked mod means fuzzy-matching a folder name (`Ellen final FIXED v2`, `bikini`, `mod`) against a search,
@@ -598,18 +555,14 @@ this codebase already follows
 has seen. A pre-ticked row costs one glance and one press, where an undo costs
 noticing a summary nobody asked for.
 
-**Identity starts unticked; everything else starts ticked**, and the asymmetry is the
-point. A file the pass inferred, and a page the API itself reports as gone, are
-statements the app is making and can defend from the response in hand. An identity is
-the one thing only the user can settle — `mod_id` came from a free-form url somebody
-pasted — so pre-ticking it would turn the glance test into a rubber stamp. A
-*confirm all* shortcut sits at the head of that section for a user who has read it,
-and the intro at the top of the screen states the asymmetry rather than leaving it
-to be inferred from which boxes happen to be ticked.
+**Identity starts unticked; everything else starts ticked**, and the asymmetry is the point.
+A file the pass inferred is a statement the app is making and can defend from the response in hand.
+An identity is the one thing only the user can settle — `mod_id` came from a free-form url somebody pasted — so pre-ticking it would turn the glance test into a rubber stamp.
+A *confirm all* shortcut sits at the head of that section for a user who has read it, and the intro at the top of the screen states the asymmetry rather than leaving it to be inferred from which boxes happen to be ticked.
 
 **Apply clears the stored update verdict of each mod it writes, unless that verdict found an update.** A declined or failed write keeps its verdict.
 The update dialog skips its check while a verdict is stored, so a mod whose file was just recorded would otherwise show an answer about the block as it was, such as "no installed version on record". Cleared, its dialog checks for real when opened. Apply itself fetches nothing.
-A verdict that found an update is kept, dismissed or not, because this screen never rebinds a folder to another mod page: it confirms an identity, records a file, or marks the page gone or back.
+A verdict that found an update is kept, dismissed or not, because this screen never rebinds a folder to another mod page: it confirms an identity or records a file.
 So that verdict is still about the right page and at worst understates its confidence, while clearing it would drop a real badge from the card, the update count and the updates-only filter. The verdict a write makes wrong is "version unknown", which never reports an update.
 The per-mod resolve dialog can rebind a folder, so a save there clears the verdict whatever it says.
 

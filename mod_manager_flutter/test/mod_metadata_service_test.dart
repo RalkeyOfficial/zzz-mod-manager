@@ -53,7 +53,6 @@ const _fullyPopulatedJson = <String, dynamic>{
     'baseline_remote_date': '2026-07-01T00:00:00.000Z',
     'archive_md5': '9e107d9d372bb6826bd81d3542a419d6',
     'tracking': 'off',
-    'remote_missing': true,
   },
 };
 

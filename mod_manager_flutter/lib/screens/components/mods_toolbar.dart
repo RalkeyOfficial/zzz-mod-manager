@@ -688,11 +688,9 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
     }
     await _showResolution(
       resolution,
-      // The pass's own tally of what it could not reach. More precise than the
-      // plan's, which counts any tracked mod with no record in hand — including
-      // one the batch *answered* as `sourceGone`, since that answer arrives
-      // without a record.
-      unreachable: outcome.failed.length,
+      // The pass's own tally of what it could not reach, plus the pages it found gone. More precise than the plan's count, which takes in any tracked mod with no record in hand.
+      // A union of folder ids, so a folder whose base page is gone and whose patch was not reached counts once.
+      unreachable: {...outcome.failed, ...resolution.goneIds}.length,
     );
   }
 
@@ -720,9 +718,7 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
       return;
     }
     if (!resolution.listsAnything) return;
-    // Not zero, which is what this used to pass: a mod with no record in hand
-    // is one this screen cannot cover, and dropping it makes the dialog
-    // under-report on the very door the rebuild exists to provide.
+    // Not zero: a mod with no record in hand is one this screen cannot cover, and dropping it makes the dialog under-report on the door that exists to reopen it.
     // With no records at all nothing was looked up, so there is nothing to report as unreached.
     await _showResolution(
       resolution,

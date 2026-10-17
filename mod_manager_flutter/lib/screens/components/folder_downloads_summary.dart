@@ -276,17 +276,6 @@ class _FolderDownloadsSummaryState
                         ?.copyWith(color: scheme.onSurfaceVariant),
                   ),
                 ],
-                // Its page has gone. Its own line rather than folded into the
-                // one above, which is about a file: "the mod page is no longer
-                // available" is a fact about the mod.
-                if (download.remoteMissing) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    loc.t('mods.folder.remote_missing'),
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: scheme.onSurfaceVariant),
-                  ),
-                ],
                 if (note != null) ...[
                   const SizedBox(height: 2),
                   Text(

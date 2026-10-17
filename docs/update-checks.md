@@ -495,14 +495,9 @@ the distinction the two outcomes exist to make. Four mods flagged before the
 release-group and same-version suppressions and two after, which is the whole
 argument for phase two.
 
-**The records it fetched come back with the verdicts**, in
-`BulkUpdateCheckOutcome.records`, and that is what lets the results screen double as
-the bulk **resolution** screen
-([`origin-tracking.md` §7](origin-tracking.md#7-the-bulk-resolution-pass)). Every
-question resolution asks — which file of this mod do you have, is this really your
-mod, is the page gone — is answered by the same response the verdicts came from. So
-folding the two together costs no request, and the two halves of one screen cannot
-describe different states of the same mod page.
+**The records it fetched come back with the verdicts**, in `BulkUpdateCheckOutcome.records`, and that is what lets the results screen double as the bulk **resolution** screen ([`origin-tracking.md` §7](origin-tracking.md#7-the-bulk-resolution-pass)).
+Every question resolution asks — which file of this mod do you have, is this really your mod — is answered by the same response the verdicts came from.
+So folding the two together costs no request, and the two halves of one screen cannot describe different states of the same mod page.
 
 **Scope: the whole library, not the current view.** This is a deliberate
 departure from where the bulk "assume current" action gets its list
@@ -615,9 +610,11 @@ not the mark: a card has one badge, and splitting it into "definitely" and
 "probably" would spend the library's whole visual budget on a distinction a
 sentence can make.
 
-`tracking: "off"` and `remote_missing` still silence the slot. The check cannot
-produce a verdict for either, so this is belt and braces — but the promise
-attached to "not from GameBanana / it's my own" is permanence.
+`tracking: "off"` still silences the slot.
+The check cannot produce a verdict for it, so this is belt and braces — but the promise attached to "not from GameBanana / it's my own" is permanence.
+
+A `sourceGone` verdict is not written to the mod's sidecar.
+The page's own flags are read on every check, so a page that comes back is checked as if it had never gone.
 
 The "needs attention" filter deliberately does **not** count updates. It answers
 "what have I not dealt with", which is a property of the sidecar; folding in a
@@ -722,15 +719,9 @@ against 48 KB for one with a long description — because a profile carries a
 gallery, HTML prose, credits, licence text and requirements that no comparator can
 use.
 
-**`Mod/<id>/DownloadPage` is cheaper on paper and cannot serve this**, which is
-worth stating because it is the obvious choice. It returns the two file lists plus
-`_bIsTrashed` / `_bIsWithheld` and nothing else, so four of the six fields are
-missing or partial: without `_tsDateAdded` and `_tsDateUpdated` a date-only
-verdict ([§3](#when-only-a-date-is-known)) loses both its sanity floor and its last
-fallback, which makes it *wrong* rather than quieter; `_bIsObsolete` silently
-leaves every verdict; and `_bIsPrivate` is one of the three flags `remote_missing`
-reads. `Mod/Multi` is smaller than it anyway — 7.7 KB against 8.1 KB — since it
-sends no licence or submitter instructions.
+**`Mod/<id>/DownloadPage` is cheaper on paper and cannot serve this**, which is worth stating because it is the obvious choice.
+It returns the two file lists plus `_bIsTrashed` / `_bIsWithheld` and nothing else, so four of the six fields are missing or partial: without `_tsDateAdded` and `_tsDateUpdated` a date-only verdict ([§3](#when-only-a-date-is-known)) loses both its sanity floor and its last fallback, which makes it *wrong* rather than quieter; `_bIsObsolete` silently leaves every verdict; and `_bIsPrivate` is one of the three flags `sourceGone` is read from.
+`Mod/Multi` is smaller than it anyway — 7.7 KB against 8.1 KB — since it sends no licence or submitter instructions.
 
 **A folder holding two downloads gets a full report each.** Not a verdict plus a
 summary of the other one: a check is about *the mods in a folder*, both are in scope,

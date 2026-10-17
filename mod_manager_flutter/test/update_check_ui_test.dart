@@ -522,6 +522,44 @@ void main() {
       expect(written, ['Ellen']);
     });
 
+    testWidgets('a page found gone is counted as one that could not be checked',
+        (tester) async {
+      // The check counts a gone page as answered, and the screen lists no row
+      // for it, so without this line the mod would appear nowhere on it.
+      final fetch = ModRecordFetcherStub(
+        (ids) async => [
+          GbMod(
+            idRow: 1,
+            name: 'Ellen Swimsuit',
+            files: [
+              GbFile(
+                idRow: 10,
+                file: 'ellen.zip',
+                dateAdded: DateTime.utc(2025),
+              ),
+            ],
+          ),
+          const GbMod(idRow: 2, name: 'Gone', isTrashed: true),
+        ],
+      );
+      await pumpToolbar(
+        tester,
+        [
+          CharacterInfo(id: 'all', name: 'All', skins: [
+            mod('Ellen',
+                origin: origin(modId: 1, installedAt: DateTime.utc(2026))),
+            mod('Vanished', origin: origin(modId: 2, fileId: 20)),
+          ]),
+        ],
+        fetch: fetch,
+      );
+      await runAction(tester, 'Check for updates');
+
+      expect(find.byType(BulkResolutionDialog), findsOneWidget);
+      expect(find.text('Vanished'), findsNothing);
+      expect(find.textContaining("1 mod couldn't be checked"), findsOneWidget);
+    });
+
     testWidgets('switches itself off when the last update is dealt with',
         (tester) async {
       // Ignoring the last flagged mod would otherwise leave the grid filtered

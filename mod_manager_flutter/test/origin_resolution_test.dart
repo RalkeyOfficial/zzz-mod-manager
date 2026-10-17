@@ -236,7 +236,6 @@ void main() {
         versionLabel: 'white hair ver',
         versionConfidence: OriginConfidence.user,
         archiveMd5: 'abc',
-        remoteMissing: true,
         files: [InstalledFile(path: 'ellen.ini')],
       );
 
@@ -251,7 +250,6 @@ void main() {
       expect(result.versionLabel, 'white hair ver');
       expect(result.versionConfidence, OriginConfidence.user);
       expect(result.archiveMd5, 'abc');
-      expect(result.remoteMissing, isTrue);
       expect(result.files, existing.files,
           reason: 'the record names what is on disk, and disk did not change');
     });
@@ -265,7 +263,6 @@ void main() {
         versionLabel: 'white hair ver',
         versionConfidence: OriginConfidence.user,
         archiveMd5: 'abc',
-        remoteMissing: true,
       );
 
       final result = existing.boundTo(
@@ -277,7 +274,6 @@ void main() {
       expect(result.version, isNull);
       expect(result.versionLabel, isNull);
       expect(result.versionConfidence, OriginConfidence.unknown);
-      expect(result.remoteMissing, isFalse);
       // A fact about the archive we extracted, not about which mod we now
       // think it is — which is what lets it be matched against the new mod's
       // published checksums.
@@ -325,7 +321,6 @@ void main() {
         versionLabel: 'white hair ver',
         versionConfidence: OriginConfidence.exact,
         baselineRemoteDate: DateTime.utc(2025),
-        remoteMissing: true,
       );
       final origin = OriginResolution.bind(existing, 777);
       expect(origin.modId, 777);
@@ -334,7 +329,6 @@ void main() {
       expect(origin.versionLabel, isNull);
       expect(origin.versionConfidence, OriginConfidence.unknown);
       expect(origin.baselineRemoteDate, isNull);
-      expect(origin.remoteMissing, isFalse);
       // The hash describes the archive, not which mod we think it is — so it
       // survives, and can be matched against the new mod's checksums.
       expect(origin.archiveMd5, 'abc');

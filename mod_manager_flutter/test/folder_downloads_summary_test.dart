@@ -23,7 +23,6 @@ void main() {
     String? version,
     String? versionLabel,
     OriginConfidence versionConfidence = OriginConfidence.exact,
-    bool remoteMissing = false,
   }) =>
       patchFixture(
         modId: modId,
@@ -32,7 +31,6 @@ void main() {
         version: version,
         versionLabel: versionLabel,
         versionConfidence: versionConfidence,
-        remoteMissing: remoteMissing,
       );
 
   ModOrigin origin({
@@ -185,12 +183,6 @@ void main() {
     );
 
     expect(find.text('No version recorded yet.'), findsOneWidget);
-  });
-
-  testWidgets('a page that has gone says that on its own row', (tester) async {
-    await pump(tester, origin(patches: [patch(remoteMissing: true)]));
-
-    expect(find.text('Its mod page is no longer available.'), findsOneWidget);
   });
 
   testWidgets('every row links to its page', (tester) async {

@@ -41,7 +41,6 @@ void main() {
         versionLabel: 'Main file',
         versionConfidence: OriginConfidence.user,
         archiveMd5: '9e107d9d372bb6826bd81d3542a419d6',
-        remoteMissing: true,
       );
 
       final back = ModCompanion.fromJson(companion.toJson())!;
@@ -54,7 +53,6 @@ void main() {
       expect(back.versionLabel, 'Main file');
       expect(back.versionConfidence, OriginConfidence.user);
       expect(back.archiveMd5, '9e107d9d372bb6826bd81d3542a419d6');
-      expect(back.remoteMissing, isTrue);
     });
 
     test('the dates round-trip as ISO-8601 UTC', () {
@@ -124,7 +122,6 @@ void main() {
         'version': 42,
         'archive_md5': <String>[],
         'baseline_remote_date': 'not a date',
-        'remote_missing': 'yes',
       })!;
 
       expect(companion.modId, 222);
@@ -132,8 +129,6 @@ void main() {
       expect(companion.version, isNull);
       expect(companion.archiveMd5, isNull);
       expect(companion.baselineRemoteDate, isNull);
-      expect(companion.remoteMissing, isFalse,
-          reason: 'anything but true is false, as it is on the primary block');
     });
 
     test('an unrecognised confidence degrades to unknown, never upward', () {
@@ -207,11 +202,6 @@ void main() {
         base,
         isNot(const ModCompanion(
             role: CompanionRole.base, modId: 111, archiveMd5: 'a')),
-      );
-      expect(
-        base,
-        isNot(const ModCompanion(
-            role: CompanionRole.base, modId: 111, remoteMissing: true)),
       );
       expect(
         base,

@@ -40,7 +40,6 @@ void main() {
     DateTime? installedAt,
     String? archiveMd5,
     OriginTracking tracking = OriginTracking.auto,
-    bool remoteMissing = false,
   }) =>
       originFixture(
         source: 'gamebanana',
@@ -52,7 +51,6 @@ void main() {
         installedAt: installedAt,
         archiveMd5: archiveMd5,
         tracking: tracking,
-        remoteMissing: remoteMissing,
       );
 
   ModInfo mod(String name, {ModOrigin? origin}) => ModInfo(
@@ -177,9 +175,10 @@ void main() {
               'matches a superseded file');
     });
 
-    test('a gone page is asked one question and only that one', () {
-      // Nothing else has an answer: a file list read off a private page is
-      // empty, and an identity confirmed against a blank confirms nothing.
+    test('a gone page gets no row, and is counted as unreachable', () {
+      // Nothing has an answer: a file list read off a private page is empty,
+      // and an identity confirmed against a blank confirms nothing. Not
+      // settled either, since nothing about the mod is sorted out.
       final plan = planBulkResolution(
         mods: [
           mod('vanished',
@@ -190,36 +189,11 @@ void main() {
         ],
         records: {42: gone(42)},
       );
-      final row = plan.rows.single;
-      expect(row.sourceGone, isTrue);
-      expect(row.needsIdentity, isFalse);
-      expect(row.needsVersion, isFalse);
-    });
-
-    test('a page that came back offers to clear the flag', () {
-      final plan = planBulkResolution(
-        mods: [
-          mod('back',
-              origin: origin(
-                fileId: mainV74,
-                versionConfidence: OriginConfidence.user,
-                remoteMissing: true,
-              )),
-        ],
-        records: {531649: rabbitFx},
-      );
-      expect(plan.rows.single.sourceBack, isTrue);
-    });
-
-    test('a gone page already recorded as gone asks nothing', () {
-      final plan = planBulkResolution(
-        mods: [
-          mod('vanished', origin: origin(modId: 42, remoteMissing: true)),
-        ],
-        records: {42: gone(42)},
-      );
       expect(plan.rows, isEmpty);
-      expect(plan.settled, 1);
+      expect(plan.hasWork, isFalse);
+      expect(plan.unreachable, 1);
+      expect(plan.goneIds, {'vanished'});
+      expect(plan.settled, 0);
     });
   });
 
@@ -310,14 +284,12 @@ void main() {
       bool confirmIdentity = false,
       GbFile? file,
       OriginConfidence tier = OriginConfidence.inferred,
-      bool? remoteMissing,
     }) =>
         BulkResolutionAnswer(
           modId: modId,
           confirmIdentity: confirmIdentity,
           file: file,
           fileConfidence: tier,
-          remoteMissing: remoteMissing,
         );
 
     GbFile fileV74() =>
@@ -432,16 +404,6 @@ void main() {
 
     test('an untracked folder is abandoned rather than created', () {
       expect(applyBulkResolution(null, answer(confirmIdentity: true)), isNull);
-    });
-
-    test('remote_missing is written and cleared by the same answer', () {
-      final marked = applyBulkResolution(origin(), answer(remoteMissing: true));
-      expect(marked!.remoteMissing, isTrue);
-      final cleared = applyBulkResolution(
-        origin(remoteMissing: true),
-        answer(remoteMissing: false),
-      );
-      expect(cleared!.remoteMissing, isFalse);
     });
 
     test('an answer that changes nothing writes nothing', () {

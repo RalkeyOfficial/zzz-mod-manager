@@ -28,7 +28,6 @@ extension OriginShorthand on ModOrigin {
   OriginConfidence get versionConfidence => _base.versionConfidence;
   String? get archiveMd5 => _base.archiveMd5;
   DateTime? get baselineRemoteDate => _base.baselineRemoteDate;
-  bool get remoteMissing => _base.remoteMissing;
   DateTime? get updatesDismissedUntil => _base.updatesDismissedUntil;
   List<InstalledFile> get files => _base.files;
 
@@ -43,7 +42,6 @@ extension OriginShorthand on ModOrigin {
     OriginConfidence? versionConfidence,
     String? archiveMd5,
     DateTime? baselineRemoteDate,
-    bool? remoteMissing,
     DateTime? updatesDismissedUntil,
     List<InstalledFile>? files,
   }) =>
@@ -56,7 +54,6 @@ extension OriginShorthand on ModOrigin {
             versionConfidence: versionConfidence,
             archiveMd5: archiveMd5,
             baselineRemoteDate: baselineRemoteDate,
-            remoteMissing: remoteMissing,
             updatesDismissedUntil: updatesDismissedUntil,
             files: files,
           ));
@@ -93,7 +90,6 @@ ModOrigin originFixture({
   DateTime? baselineRemoteDate,
   String? archiveMd5,
   OriginTracking tracking = OriginTracking.auto,
-  bool remoteMissing = false,
   DateTime? updatesDismissedUntil,
   List<InstalledFile> files = const <InstalledFile>[],
   List<ModDownload> patches = const <ModDownload>[],
@@ -115,7 +111,6 @@ ModOrigin originFixture({
           versionConfidence: versionConfidence,
           archiveMd5: archiveMd5,
           baselineRemoteDate: baselineRemoteDate,
-          remoteMissing: remoteMissing,
           updatesDismissedUntil: updatesDismissedUntil,
           files: files,
         ),
@@ -134,7 +129,6 @@ ModDownload patchFixture({
   OriginConfidence versionConfidence = OriginConfidence.unknown,
   String? archiveMd5,
   DateTime? baselineRemoteDate,
-  bool remoteMissing = false,
   DateTime? updatesDismissedUntil,
   List<InstalledFile> files = const <InstalledFile>[],
 }) =>
@@ -148,7 +142,6 @@ ModDownload patchFixture({
       versionConfidence: versionConfidence,
       archiveMd5: archiveMd5,
       baselineRemoteDate: baselineRemoteDate,
-      remoteMissing: remoteMissing,
       updatesDismissedUntil: updatesDismissedUntil,
       files: files,
     );

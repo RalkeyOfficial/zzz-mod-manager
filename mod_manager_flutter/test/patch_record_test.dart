@@ -357,12 +357,6 @@ void main() {
       expect(updated(start)!.downloadOf(7100)!.updatesDismissedUntil, isNull);
     });
 
-    test('a page recorded as gone is not gone — we just read it', () {
-      final start =
-          folder().withDownload(7100, (d) => d.copyWith(remoteMissing: true));
-      expect(updated(start)!.downloadOf(7100)!.remoteMissing, isFalse);
-    });
-
     test('the file list survives when the caller cannot report one', () {
       // Null is "I do not know", and an empty list would claim this layer put
       // nothing in the folder.

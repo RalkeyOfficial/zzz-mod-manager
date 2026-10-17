@@ -20,7 +20,6 @@ void main() {
     int? modId = 1,
     OriginConfidence versionConfidence = OriginConfidence.unknown,
     OriginTracking tracking = OriginTracking.auto,
-    bool remoteMissing = false,
     DateTime? at,
     bool undated = false,
     bool proxy = true,
@@ -33,7 +32,6 @@ void main() {
         versionConfidence: versionConfidence,
         provenance: OriginProvenance.importedFolder,
         tracking: tracking,
-        remoteMissing: remoteMissing,
         installedAt: undated ? null : (at ?? installedAt),
         installedAtIsProxy: proxy,
       );
@@ -58,7 +56,6 @@ void main() {
         mod('already assumed',
             origin: origin(versionConfidence: OriginConfidence.assumedLatest)),
         mod('my own', origin: origin(tracking: OriginTracking.off)),
-        mod('gone upstream', origin: origin(remoteMissing: true)),
       ]);
 
       expect(plan.eligible.map((m) => m.name), ['tracked, versionless']);
@@ -134,9 +131,8 @@ void main() {
       expect(bulkAssumeCurrent(null), isNull);
     });
 
-    test('abandons a mod the user declared their own, or one gone upstream', () {
+    test('abandons a mod the user declared their own', () {
       expect(bulkAssumeCurrent(origin(tracking: OriginTracking.off)), isNull);
-      expect(bulkAssumeCurrent(origin(remoteMissing: true)), isNull);
     });
 
     test('reads its baseline from the block it is given, not from the plan', () {

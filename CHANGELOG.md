@@ -40,7 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - "Update tracking…" in a mod's right-click menu links it to its GameBanana page and records which file you have.
   - That dialog can settle for the install date instead, or stop asking if the mod isn't from GameBanana.
   - "Mark all as current" settles every tracked mod with no known version, using each mod's install date.
-  - "Sort out mod tracking…" turns a library check into one pass for confirming mod pages, filling in versions and recording dead links.
+  - "Sort out mod tracking…" turns a library check into one pass for confirming mod pages and filling in versions.
 - Mods can be checked for updates, one at a time or the whole library, and only when you press it. A blue mark shows what has something newer.
   - Update checks say whether they are sure or guessing.
   - The library check reports mods it couldn't reach separately from mods with nothing new.

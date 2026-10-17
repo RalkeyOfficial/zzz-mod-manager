@@ -53,22 +53,9 @@ enum ModOriginStatus {
   /// patch we downloaded and recorded at `exact`; the unknown is the *other*
   /// mod.
   ///
-  /// Like [versionUnknown] and unlike [sourceGone], it can be cleared by doing
-  /// work — naming the base mod — which is what earns it a place in the "needs
-  /// attention" filter.
+  /// Like [versionUnknown], it can be cleared by doing work — naming the base
+  /// mod — which is what earns it a place in the "needs attention" filter.
   secondIdentityUnknown,
-
-  /// The mod page this folder is bound to is private, trashed or withheld, and
-  /// the bulk resolution pass recorded that.
-  ///
-  /// **Its own state rather than silence**, which is the correction the flag's
-  /// first writer forced. While nothing wrote `remote_missing` the slot could
-  /// treat it like `tracking: "off"` and render nothing; the moment something
-  /// does, that becomes a mod which silently stopped being watched with no
-  /// wording anywhere explaining why. It is deliberately *not* amber: the amber
-  /// state's whole offer is "click to set the version", and there is no page
-  /// left to read one off. It is a statement of fact, like [untracked].
-  sourceGone,
 
   /// The last update check found something newer published.
   ///
@@ -89,14 +76,6 @@ enum ModOriginStatus {
 ///   GameBanana / it's my own", and the promise attached to it is that the slot
 ///   goes quiet permanently. An id worked out from a link that was wrong is
 ///   exactly why they might have said it, so it must not talk them out of it.
-/// - **`remote_missing` gets its own state**, and does not borrow amber's. The
-///   amber state's whole offer is "click to set the version", and that means
-///   reading a mod page that is private, trashed or withheld — offering an
-///   action that cannot complete is worse than saying what happened. It used to
-///   fold to [ModOriginStatus.none], which was correct only while nothing wrote
-///   the flag; the bulk resolution pass writes it now, and a mod that quietly
-///   stops being watched with no wording anywhere is the silent hole that
-///   arrangement would have opened.
 /// - **Identity before version.** Without a mod id there is nothing to check a
 ///   version against, so "untracked" is the truthful answer even though the
 ///   version is also unknown. Reporting the version instead would promise an
@@ -114,7 +93,6 @@ ModOriginStatus modOriginStatus(ModOrigin? origin) {
   if (origin.tracking == OriginTracking.off) return ModOriginStatus.none;
   final base = origin.base;
   if (base == null) return ModOriginStatus.untracked;
-  if (base.remoteMissing) return ModOriginStatus.sourceGone;
   if (!base.hasIdentity) return ModOriginStatus.untracked;
   // Above the version switch: "which file of the patch is installed" is an
   // ambiguous question while the bottom of the stack is missing. The ordering is
@@ -147,8 +125,8 @@ ModOriginStatus modOriginStatus(ModOrigin? origin) {
     OriginConfidence.inferred =>
       ModOriginStatus.versionGuessed,
     OriginConfidence.user || OriginConfidence.exact => ModOriginStatus.none,
-    // Not reachable: `updateAvailable` and `sourceGone` are not version
-    // confidences. The card's fold is [modSlotStatus].
+    // Not reachable: `updateAvailable` is not a version confidence. The card's
+    // fold is [modSlotStatus].
   };
 }
 
@@ -157,12 +135,10 @@ ModOriginStatus modOriginStatus(ModOrigin? origin) {
 ///
 /// Precedence, and the reasons rather than the order:
 ///
-/// - **The origin block still wins first for the two "don't ask" states.**
-///   `tracking: "off"` renders nothing and `remote_missing` renders its own
-///   quiet mark, and an update verdict must not talk over either. In practice a
-///   check on such a mod cannot produce one — `checkForUpdate` short-circuits on
-///   `tracking: "off"` and answers `sourceGone` for a missing page — so this is
-///   belt and braces rather than a live branch.
+/// - **The origin block still wins first for `tracking: "off"`.** It renders
+///   nothing, and an update verdict must not talk over it. In practice a check
+///   on such a mod cannot produce one — `checkForUpdate` short-circuits on
+///   `tracking: "off"` — so this is belt and braces rather than a live branch.
 /// - **An update beats every origin state.** The two overlap in exactly the
 ///   cases worth thinking about: a mod tracked by date only can be flagged as
 ///   *possibly* outdated, and a mod whose version was never recorded can still
@@ -174,14 +150,12 @@ ModOriginStatus modOriginStatus(ModOrigin? origin) {
 ///   "definitely" and "probably" would spend the library's whole visual budget
 ///   on a distinction the tooltip can make in a sentence.
 ModOriginStatus modSlotStatus(ModOrigin? origin, UpdateCheck? update) {
-  // Narrowly the two silencing flags, **not** every route to
-  // [ModOriginStatus.none]: a mod whose file is recorded at `user` or `exact`
-  // also folds to `none`, and that is precisely the mod best placed to have a
-  // confirmed update. Short-circuiting on the state rather than on its cause
-  // would hide the strongest verdict this feature can produce.
-  if (origin != null &&
-      (origin.tracking == OriginTracking.off ||
-          (origin.base?.remoteMissing ?? false))) {
+  // Narrowly the silencing flag, **not** every route to [ModOriginStatus.none]:
+  // a mod whose file is recorded at `user` or `exact` also folds to `none`, and
+  // that is precisely the mod best placed to have a confirmed update.
+  // Short-circuiting on the state rather than on its cause would hide the
+  // strongest verdict this feature can produce.
+  if (origin != null && origin.tracking == OriginTracking.off) {
     return modOriginStatus(origin);
   }
   if (update?.hasUpdate ?? false) return ModOriginStatus.updateAvailable;
@@ -214,21 +188,14 @@ ModOriginStatus modSlotStatus(ModOrigin? origin, UpdateCheck? update) {
 /// "Which mods have updates" is a different question with a different control,
 /// and folding it into this filter would make the count change whenever a check
 /// ran — a filter whose meaning depends on what the network last said.
-/// [ModOriginStatus.sourceGone] is out for a fourth reason: the filter's promise
-/// is that everything in it can be dealt with, and a private, trashed or
-/// withheld mod page cannot. Counting it would leave a number that never reaches
-/// zero however much work the user does — the one thing that turns a count into
-/// noise. The mark on the card still says what happened, and the resolve dialog
-/// still rebinds the folder for anyone whose mod was reuploaded elsewhere.
 bool modNeedsAttention(ModOrigin? origin) => switch (modOriginStatus(origin)) {
       ModOriginStatus.untracked ||
       ModOriginStatus.versionUnknown ||
-      // In, for the same reason `sourceGone` is out: the user can finish it,
-      // and finishing it moves the count. Naming the base mod is the work.
+      // In: the user can finish it, and finishing it moves the count. Naming
+      // the base mod is the work.
       ModOriginStatus.secondIdentityUnknown =>
         true,
       ModOriginStatus.versionGuessed ||
-      ModOriginStatus.sourceGone ||
       ModOriginStatus.updateAvailable ||
       ModOriginStatus.none =>
         false,
