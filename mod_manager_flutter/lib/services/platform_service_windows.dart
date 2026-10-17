@@ -225,21 +225,34 @@ class WindowsPlatformService implements PlatformService {
 
   @override
   Future<LaunchOutcome> launchGame(String target) async {
+    Pointer<Utf16>? file;
+    Pointer<Utf16>? directory;
     try {
       if (!await File(target).exists()) return LaunchOutcome.notFound;
-      // `start` does what a double-click does, so an .exe, a .lnk shortcut and a .bat all work. The empty argument
-      // is the window title `start` takes first when the path is quoted.
-      await Process.start(
-        'cmd',
-        ['/c', 'start', '', target],
-        workingDirectory: path.dirname(target),
-        mode: ProcessStartMode.detached,
-      );
+      // ShellExecute is what a double-click does, so an .exe with its UAC prompt, a .lnk shortcut and a .bat all
+      // work. The path is handed over as it is, with no command line to read `&` or `%` in it.
+      final shell32 = DynamicLibrary.open('shell32.dll');
+      final shellExecuteW = shell32.lookupFunction<
+          IntPtr Function(IntPtr, Pointer<Utf16>, Pointer<Utf16>, Pointer<Utf16>, Pointer<Utf16>, Int32),
+          int Function(int, Pointer<Utf16>, Pointer<Utf16>, Pointer<Utf16>, Pointer<Utf16>, int)>('ShellExecuteW');
+
+      file = target.toNativeUtf16();
+      directory = path.dirname(target).toNativeUtf16();
+      const showNormal = 1;
+      // A null verb is the file's default action. Anything at or below 32 is an error code.
+      final result = shellExecuteW(0, nullptr, file, nullptr, directory, showNormal);
+      if (result <= 32) {
+        _log.warning('could not launch game', fields: {'target': target, 'code': result});
+        return LaunchOutcome.failed;
+      }
       _log.info('game launched', fields: {'target': target});
       return LaunchOutcome.started;
     } catch (error, stack) {
       _log.warning('could not launch game', error: error, stack: stack, fields: {'target': target});
       return LaunchOutcome.failed;
+    } finally {
+      if (file != null) malloc.free(file);
+      if (directory != null) malloc.free(directory);
     }
   }
 

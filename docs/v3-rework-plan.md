@@ -47,8 +47,9 @@ The memory note `v3-canvas-vs-docs-decisions` holds these. In short:
   - `core/app_theme.dart` (`buildAppTheme`);
   - `core/type_scale.dart` (canvas roles, plus `ZenithType` for caps, mono, monoSmall, wordmark and watermark);
   - the bundled fonts with their OFL licences, the accent setting and the new icons.
-  - Follow-up (uncommitted): component values matched to the canvas, with new palette tokens (`rowHover`, `rowDivider`, `dialog`, `menu`, `menuBorder`, `chip`, `track`, `edge`, `check`, `link`, `selected`), 36px fields, 16px icons, `ZenithSwitch`, the primary hover on every accent, and the test harness on `buildAppTheme`. Canvas colours still without a token (toast `#1E2125`/`#353941`, panel `#0D0E10`, danger hover `#FF7F70`, the 30px small button, Unbounded 30/22/18, the outlined slanted watermark) get one when a screen needs them.
-- **Phase 2, title bar and shell:** done and committed, the commit after `3b4cc66`.
+  - Follow-up, commit `6c5d5ac`: component values matched to the canvas, with new palette tokens (`rowHover`, `rowDivider`, `dialog`, `menu`, `menuBorder`, `chip`, `track`, `edge`, `check`, `link`, `selected`), 36px fields, 16px icons, `ZenithSwitch`, the primary hover on every accent, and the test harness on `buildAppTheme`. Canvas colours still without a token (toast `#1E2125`/`#353941`, panel `#0D0E10`, danger hover `#FF7F70`, the 30px small button, Unbounded 30/22/18, the outlined slanted watermark) get one when a screen needs them.
+- **Phase 2, title bar and shell:** done, commit `5e531d2`.
+  - Follow-up, the commit after it: Linux refuses a Windows file by its extension whatever its mode; Windows launches through `ShellExecuteW`; Tab reaches the sidebar rows; the status bar shortens only a path inside home; saving Settings re-checks ZZMI; the window buttons are the canvas's line drawings; the selected row takes `rowSelected`; the top resize strip stops at the window buttons; the Downloads panel opens against the sidebar's edge.
   - The user has confirmed edge resize works on KDE Wayland and accepted the slight resize lag.
   - Not yet reported back on: the title bar's drag, double-click and right-click window menu, the window buttons, Super+arrow tiling, Launch game.
   - What it added:
@@ -68,6 +69,7 @@ Each is reviewable on its own and ends with tests green, docs and changelog upda
 3. **Library character view and details sidebar** (artboard `Main`).
    - Add element, faction and specialty to the roster in `utils/zzz_characters.dart`; 64 entries for the user to verify.
    - Character list: element tiles, transparent portraits through `CharacterAvatar.assetPathFor`, initials as the fallback, update and active dots.
+   - The list holds every agent, dimmed with "No mods yet" when it has none, as the canvas draws it. The sidebar's Characters count then counts every agent too; it follows the list, which today holds only agents with a mod.
    - Hero header and mod cards, with every update-check verdict mapped onto canvas badges: Active, Newer file (amber), Local, plus the tracking states in blue.
    - Favourites: these exist in `config.json` as `favorite_mods`.
    - Per-character "One at a time": today `activationModeProvider` is global and not persisted. Write a design note first.
@@ -90,7 +92,7 @@ Each is reviewable on its own and ends with tests green, docs and changelog upda
    - The downloads side panel, Pause, and archive passwords.
 7. **Settings, Storage, About** (artboards `Settings`, `Storage`, `About`).
    - Section nav, and Game & folders including Move library… (design note first).
-   - Mods: One active per character, Snapshots to keep, Check for mod updates, Remind me to press F10.
+   - Mods: One active per character, Snapshots to keep, Check for mod updates, Remind me to press F10. The reminder's "while the game runs" reads `PlatformService.findGameProcesses`.
    - GameBanana mature content, Appearance, Language.
    - Storage: the bar meter, per-category actions and Largest mods. Storage then leaves the sidebar.
    - About: version, an app update check (GitHub releases, a new network call), links, and app data / logs / system info.

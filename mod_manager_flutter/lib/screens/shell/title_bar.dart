@@ -81,17 +81,17 @@ class _ZenithTitleBarState extends State<ZenithTitleBar> with WindowListener {
               ),
               _WindowButton(
                 label: loc.t('shell.window.minimize'),
-                icon: Icons.remove_rounded,
+                glyph: _Glyph.minimize,
                 onPressed: () => windowManager.minimize(),
               ),
               _WindowButton(
                 label: loc.t(_maximized ? 'shell.window.restore' : 'shell.window.maximize'),
-                icon: _maximized ? Icons.filter_none_rounded : Icons.crop_square_rounded,
+                glyph: _maximized ? _Glyph.restore : _Glyph.maximize,
                 onPressed: _toggleMaximize,
               ),
               _WindowButton(
                 label: loc.t('shell.window.close'),
-                icon: Icons.close_rounded,
+                glyph: _Glyph.close,
                 onPressed: () => windowManager.close(),
                 isClose: true,
               ),
@@ -132,13 +132,15 @@ class _Wordmark extends StatelessWidget {
 class _WindowButton extends StatefulWidget {
   const _WindowButton({
     required this.label,
-    required this.icon,
+    required this.glyph,
     required this.onPressed,
     this.isClose = false,
   });
 
+  static const double width = 46;
+
   final String label;
-  final IconData icon;
+  final _Glyph glyph;
   final VoidCallback onPressed;
   final bool isClose;
 
@@ -167,11 +169,11 @@ class _WindowButtonState extends State<_WindowButton> {
         child: GestureDetector(
           onTap: widget.onPressed,
           child: Container(
-            width: 46,
+            width: _WindowButton.width,
             height: ZenithTitleBar.height,
             color: background,
             alignment: Alignment.center,
-            child: Icon(widget.icon, size: 16, color: foreground),
+            child: CustomPaint(size: const Size.square(16), painter: _GlyphPainter(widget.glyph, foreground)),
           ),
         ),
       ),
@@ -179,8 +181,63 @@ class _WindowButtonState extends State<_WindowButton> {
   }
 }
 
+enum _Glyph { minimize, maximize, restore, close }
+
+/// The window buttons' line drawings, on the design's 24-unit icon grid with its 1.8 stroke. Material's icons are
+/// filled shapes and read heavier.
+class _GlyphPainter extends CustomPainter {
+  const _GlyphPainter(this.glyph, this.color);
+
+  final _Glyph glyph;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.scale(size.width / 24);
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    RRect box(double left, double top, double side) =>
+        RRect.fromLTRBR(left, top, left + side, top + side, const Radius.circular(1.5));
+
+    switch (glyph) {
+      case _Glyph.minimize:
+        canvas.drawLine(const Offset(6, 12), const Offset(18, 12), paint);
+      case _Glyph.maximize:
+        canvas.drawRRect(box(6, 6, 12), paint);
+      case _Glyph.restore:
+        // A smaller square in front, and the corner of the one behind it.
+        canvas.drawRRect(box(6, 9, 9), paint);
+        canvas.drawPath(
+          Path()
+            ..moveTo(9, 9)
+            ..lineTo(9, 7.5)
+            ..arcToPoint(const Offset(10.5, 6), radius: const Radius.circular(1.5))
+            ..lineTo(16.5, 6)
+            ..arcToPoint(const Offset(18, 7.5), radius: const Radius.circular(1.5))
+            ..lineTo(18, 13.5)
+            ..arcToPoint(const Offset(16.5, 15), radius: const Radius.circular(1.5))
+            ..lineTo(15, 15),
+          paint,
+        );
+      case _Glyph.close:
+        canvas.drawLine(const Offset(7, 7), const Offset(17, 17), paint);
+        canvas.drawLine(const Offset(17, 7), const Offset(7, 17), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_GlyphPainter old) => old.glyph != glyph || old.color != color;
+}
+
 /// A strip along the top edge that resizes the window. Windows keeps no native resize border above a hidden title
 /// bar; on Linux GTK's border sits outside the window and this one just adds to it.
+///
+/// It stops at the window buttons, so the top pixels of Close close the window. The top-right corner is left to
+/// the native border on the right.
 class _TopResizeEdge extends StatelessWidget {
   const _TopResizeEdge();
 
@@ -199,14 +256,13 @@ class _TopResizeEdge extends StatelessWidget {
 
     return Positioned(
       left: 0,
-      right: 0,
+      right: 3 * _WindowButton.width,
       top: 0,
       height: _thickness,
       child: Row(
         children: [
           SizedBox(width: _corner, child: edge(ResizeEdge.topLeft, SystemMouseCursors.resizeUpLeft)),
           Expanded(child: edge(ResizeEdge.top, SystemMouseCursors.resizeUp)),
-          SizedBox(width: _corner, child: edge(ResizeEdge.topRight, SystemMouseCursors.resizeUpRight)),
         ],
       ),
     );

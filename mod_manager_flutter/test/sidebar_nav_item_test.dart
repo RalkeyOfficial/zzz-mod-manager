@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/screens/components/sidebar_nav_item.dart';
 
@@ -48,6 +49,17 @@ void main() {
     expect(pressed, 1);
   });
 
+  testWidgets('Tab reaches the row and Enter or Space presses it', (tester) async {
+    var pressed = 0;
+    await pumpItem(tester, onTap: () => pressed++);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    expect(pressed, 2);
+  });
+
   testWidgets('the current row says so to a screen reader', (tester) async {
     final handle = tester.ensureSemantics();
     await pumpItem(tester, selected: true);
@@ -60,6 +72,8 @@ void main() {
         isSelected: true,
         hasSelectedState: true,
         hasTapAction: true,
+        isFocusable: true,
+        hasFocusAction: true,
       ),
     );
     handle.dispose();

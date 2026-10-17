@@ -9,6 +9,7 @@ import 'package:mod_manager_flutter/screens/shell/launch_game.dart';
 import 'package:mod_manager_flutter/screens/shell/status_bar.dart';
 import 'package:mod_manager_flutter/utils/notifications.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
+import 'package:path/path.dart' as p;
 
 import 'support/library_override.dart';
 import 'support/localized_harness.dart';
@@ -122,6 +123,19 @@ void main() {
 
     expect(find.text('ZZMI · /games/ZZMI'), findsOneWidget);
     expect(find.text('2 links active'), findsOneWidget);
+  });
+
+  test('the status bar shortens only a path inside the home folder', () {
+    String short(String path, {String? home = '/home/al'}) => AppStatusBar.homeRelative(path, home: home, style: p.posix);
+    expect(short('/home/al/Games/ZZMI'), '~/Games/ZZMI');
+    expect(short('/home/al'), '~');
+    expect(short('/home/alice/ZZMI'), '/home/alice/ZZMI');
+    expect(short('/games/ZZMI'), '/games/ZZMI');
+    expect(short('/home/al/ZZMI', home: null), '/home/al/ZZMI');
+    expect(
+      AppStatusBar.homeRelative(r'c:\users\AL\Games\ZZMI', home: r'C:\Users\al', style: p.windows),
+      r'~\Games\ZZMI',
+    );
   });
 
   group('Launch game', () {

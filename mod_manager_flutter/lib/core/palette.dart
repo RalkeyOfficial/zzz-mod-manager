@@ -51,6 +51,7 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     required this.raised,
     required this.hover,
     required this.rowHover,
+    required this.rowSelected,
     required this.field,
     required this.dialog,
     required this.menu,
@@ -107,6 +108,9 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
 
   /// A row, a menu item or a sidebar entry under the pointer.
   final Color rowHover;
+
+  /// The current sidebar entry.
+  final Color rowSelected;
 
   /// Inputs and grouped settings rows.
   final Color field;
@@ -227,6 +231,7 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       raised: const Color(0xFF1A1C20),
       hover: const Color(0xFF24272C),
       rowHover: const Color(0xFF17191D),
+      rowSelected: const Color(0xFF1C1F24),
       field: const Color(0xFF101114),
       dialog: const Color(0xFF0F1012),
       menu: const Color(0xFF17191D),
@@ -309,6 +314,7 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       raised: const Color(0xFFF8F5F1),
       hover: const Color(0xFFE9E3DC),
       rowHover: const Color(0xFFF2EDE7),
+      rowSelected: const Color(0xFFF8F5F1),
       field: const Color(0xFFFBF9F6),
       dialog: const Color(0xFFF4F0EB),
       menu: const Color(0xFFFDFBF8),
@@ -363,6 +369,7 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     raised: raised,
     hover: hover,
     rowHover: rowHover,
+    rowSelected: rowSelected,
     field: field,
     dialog: dialog,
     menu: menu,
@@ -412,6 +419,7 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       raised: c(raised, other.raised),
       hover: c(hover, other.hover),
       rowHover: c(rowHover, other.rowHover),
+      rowSelected: c(rowSelected, other.rowSelected),
       field: c(field, other.field),
       dialog: c(dialog, other.dialog),
       menu: c(menu, other.menu),

@@ -22,19 +22,20 @@ is its own feedback ([`notifications.md`](notifications.md)).
 
 | Platform | Starts | Refuses |
 |---|---|---|
-| Linux | a `.desktop` shortcut, through `gio launch`; any file with an execute bit, run from its own folder | anything else, such as a Windows `.exe` or a script without the execute bit, as `unsupported` |
-| Windows | anything a double-click would, through `cmd /c start`: an `.exe`, a `.lnk` shortcut, a `.bat` | nothing by type |
+| Linux | a `.desktop` shortcut, through `gio launch`; any other file with an execute bit, run from its own folder | a Windows file (`.exe`, `.bat`, `.cmd`, `.lnk`, `.msi`) whatever its mode, and a file without the execute bit, as `unsupported` |
+| Windows | anything a double-click would, through `ShellExecuteW` with the file's own folder as the working directory: an `.exe` with its UAC prompt, a `.lnk` shortcut, a `.bat` | nothing by type |
 
-A Linux `.exe` is refused rather than handed to Wine. Which Wine prefix, runner and environment the game needs is
-exactly what the user's own launcher already knows, and a guess would start the launcher in the wrong prefix with
-no error to show for it. The refusal names the file and says to choose its `.desktop` shortcut or a script instead.
+A Linux `.exe` is refused rather than handed to Wine. Which Wine prefix, runner and environment the game needs is exactly what the user's own launcher already knows, and a guess would start the launcher in the wrong prefix with no error to show for it.
+The refusal names the file and says to choose its `.desktop` shortcut or a script instead.
+A Windows file is refused by its extension before its mode is read: an NTFS or exFAT mount, which a dual-booting player is likely to have, marks every file executable, and with Wine registered through binfmt an `.exe` would run in Wine's default prefix.
+
+On Windows the path goes to `ShellExecuteW` as it is. A command line through `cmd /c start` would read `&`, `^` and `%` in a folder name such as `R&D`, and starting an `.exe` with `Process.start` fails outright on a launcher whose manifest asks for administrator rights.
 
 The process is started detached and never waited on: the app has no business holding the game's lifetime, and closing
 the app must not take the game with it.
 
 ## Not done
 
-- Detecting whether the game is already running before starting it again. `PlatformService.findGameProcesses` can
-  answer that, and the F10 reminder that shows only while the game runs will use it.
+- Detecting whether the game is already running before starting it again. `PlatformService.findGameProcesses` can answer that.
 - Starting through a `steam://` URL. A Steam shortcut's `.desktop` file covers the same case through `gio launch`.
 - Not yet run on Windows.

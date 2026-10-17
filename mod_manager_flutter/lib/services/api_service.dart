@@ -372,6 +372,8 @@ class ApiService {
       // or the Storage tab keeps measuring the folder that was set at launch.
       _container?.read(modsPathProvider.notifier).state = modsPath;
       _container?.read(zzmiPathProvider.notifier).state = zzmiPath;
+      // An unchanged path doesn't rebuild the check, and ZZMI may have been installed into it since.
+      _container?.invalidate(zzmiFoundProvider);
       return 'Конфігурацію збережено';
     } catch (e) {
       throw Exception('Помилка оновлення конфігурації: $e');

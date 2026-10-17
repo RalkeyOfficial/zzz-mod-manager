@@ -20,6 +20,9 @@ class AppSidebar extends ConsumerWidget {
 
   static const double width = 216;
 
+  /// Between the sidebar's edges and its rows.
+  static const double inset = 10;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = ZenithPalette.of(context);
@@ -47,7 +50,7 @@ class AppSidebar extends ConsumerWidget {
           SliverFillRemaining(
             hasScrollBody: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(10, 14, 10, 14),
+              padding: const EdgeInsets.fromLTRB(inset, 14, inset, 14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 spacing: 2,

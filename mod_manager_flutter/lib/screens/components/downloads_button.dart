@@ -5,6 +5,7 @@ import '../../l10n/app_localizations.dart';
 import '../../services/download/download_job.dart';
 import '../../services/download/download_queue.dart';
 import '../../services/download/queue_policy.dart';
+import '../shell/app_sidebar.dart';
 import 'downloads_panel.dart';
 import 'sidebar_nav_item.dart';
 
@@ -25,8 +26,9 @@ class DownloadsNavItem extends ConsumerWidget {
     final failed = jobs.any((j) => j.state == DownloadJobState.failed);
 
     return MenuAnchor(
-      // The panel opens beside the sidebar, level with the row.
-      alignmentOffset: const Offset(216, -SidebarNavItem.height),
+      // The panel opens against the sidebar's right edge, level with the row. The offset runs from the row's left
+      // edge, which sits [AppSidebar.inset] inside the sidebar.
+      alignmentOffset: const Offset(AppSidebar.width - AppSidebar.inset, -SidebarNavItem.height),
       menuChildren: const [DownloadsPanel()],
       builder: (context, controller, _) => SidebarNavItem(
         icon: failed && active == 0 ? Icons.error_outline_rounded : Icons.download_rounded,

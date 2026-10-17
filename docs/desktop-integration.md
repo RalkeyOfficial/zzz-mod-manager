@@ -164,19 +164,15 @@ because the header bar exists*: `window_manager` then hides the bar, and without
 one it falls back to `set_decorated(FALSE)`. `test/desktop_entry_test.dart` pins
 both halves.
 
-On Windows, `TitleBarStyle.hidden` removes the caption and keeps the native
-border on the left, right and bottom, but not the top. The title bar covers the
-top edge with a 4px strip that calls `startResizing`.
+On Windows, `TitleBarStyle.hidden` removes the caption and keeps the native border on the left, right and bottom, but not the top.
+The title bar covers the top edge with a 4px strip that calls `startResizing`. The strip stops at the window buttons, so the top pixels of Close close the window, and the top-right corner is left to the native right border.
 
 ### What still differs from a system title bar
 
 Measured on KDE/KWin 6 Wayland:
 
-- **A resize trails the cursor slightly.** GTK draws the frame, so the frame and
-  the content move together at Flutter's pace, where KWin used to move its own
-  frame and leave only the content behind. A release or profile build lags a
-  little and was accepted. A debug build (`flutter run`) lags far more, so judge
-  resize smoothness on a profile build.
+- **A resize trails the cursor slightly.** GTK draws the frame, so the frame and the content move together at Flutter's pace. A system title bar's frame moves with KWin and leaves only the content behind.
+  A release or profile build lags a little and was accepted. A debug build (`flutter run`) lags far more, so judge resize smoothness on a profile build.
 
 Not yet measured:
 

@@ -217,15 +217,17 @@ class LinuxPlatformService implements PlatformService {
 
       final ext = path.extension(target).toLowerCase();
       final ProcessStartMode mode = ProcessStartMode.detached;
+      // A Windows file needs a runner the app can't guess. It is refused by name, since NTFS and exFAT mounts mark
+      // every file executable and binfmt would hand an .exe to Wine's default prefix.
+      if (_windowsTypes.contains(ext) || !(ext == '.desktop' || await _isExecutable(file))) {
+        _log.warning('game target not startable', fields: {'target': target});
+        return LaunchOutcome.unsupported;
+      }
       if (ext == '.desktop') {
         // The way a launcher shortcut from Steam, Lutris or Heroic is meant to be started.
         await Process.start('gio', ['launch', target], mode: mode);
-      } else if (await _isExecutable(file)) {
-        await Process.start(target, const [], workingDirectory: path.dirname(target), mode: mode);
       } else {
-        // A Windows program, or a file without the execute bit, needs a runner the app can't guess.
-        _log.warning('game target not startable', fields: {'target': target});
-        return LaunchOutcome.unsupported;
+        await Process.start(target, const [], workingDirectory: path.dirname(target), mode: mode);
       }
       _log.info('game launched', fields: {'target': target});
       return LaunchOutcome.started;
@@ -234,6 +236,8 @@ class LinuxPlatformService implements PlatformService {
       return LaunchOutcome.failed;
     }
   }
+
+  static const Set<String> _windowsTypes = {'.exe', '.bat', '.cmd', '.lnk', '.msi'};
 
   static Future<bool> _isExecutable(File file) async {
     final mode = (await file.stat()).mode;

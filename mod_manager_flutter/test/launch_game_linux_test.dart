@@ -27,6 +27,15 @@ void main() {
     expect(await LinuxPlatformService().launchGame(exe.path), LaunchOutcome.unsupported);
   });
 
+  test('a Windows program is refused even with an execute bit, as every file on an NTFS mount has', () async {
+    for (final name in ['XXMI Launcher.exe', 'start.BAT', 'Game.lnk']) {
+      final file = File(p.join(dir.path, name))..writeAsStringSync('MZ');
+      await Process.run('chmod', ['+x', file.path]);
+      expect((await file.stat()).mode & 0x49, isNot(0), reason: '$name has its execute bit');
+      expect(await LinuxPlatformService().launchGame(file.path), LaunchOutcome.unsupported, reason: name);
+    }
+  });
+
   test('a script without the execute bit is refused rather than guessed at', () async {
     final script = File(p.join(dir.path, 'start.sh'))..writeAsStringSync('#!/bin/sh\n');
     expect(await LinuxPlatformService().launchGame(script.path), LaunchOutcome.unsupported);
