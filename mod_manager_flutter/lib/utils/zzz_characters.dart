@@ -76,6 +76,7 @@ const List<CharacterData> zzzCharactersData = [
   CharacterData(id: 'burnice', realName: 'Burnice White', briefName: 'Burnice'),
   CharacterData(id: 'caesar', realName: 'Caesar King', briefName: 'Caesar'),
   CharacterData(id: 'cissia', briefName: 'Cissia'),
+  CharacterData(id: 'claret', realName: 'Claret Flint', briefName: 'Claret'),
   CharacterData(id: 'corin', realName: 'Corin Wickes', briefName: 'Corin'),
   CharacterData(id: 'dialyn', briefName: 'Dialyn'),
   CharacterData(id: 'ellen', realName: 'Ellen Joe', briefName: 'Ellen'),
@@ -129,6 +130,11 @@ const List<CharacterData> zzzCharactersData = [
     aliases: ['orphie', 'orphie magus', 'orphiemagus', 'magus'],
   ),
   CharacterData(id: 'panyinhu', briefName: 'Pan Yinhu', aliases: ['panyinhu']),
+  CharacterData(
+    id: 'phoenix',
+    realName: 'Phoenix Reffaella',
+    briefName: 'Phoenix',
+  ),
   CharacterData(id: 'piper', realName: 'Piper Wheel', briefName: 'Piper'),
   CharacterData(id: 'promeia', briefName: 'Promeia'),
   CharacterData(
@@ -153,8 +159,14 @@ const List<CharacterData> zzzCharactersData = [
     briefName: 'Rina',
     aliases: ['alexandrina'],
   ),
+  CharacterData(id: 'roxy', realName: 'Roxy Ifrita Pryce', briefName: 'Roxy'),
   CharacterData(id: 'seed', realName: 'Flora', briefName: 'Seed'),
   CharacterData(id: 'seth', realName: 'Seth Lowell', briefName: 'Seth'),
+  CharacterData(
+    id: 'severian',
+    realName: 'Severian Lowell',
+    briefName: 'Severian',
+  ),
   CharacterData(
     id: 'sigrid',
     realName: "Sigrid de L'Azur",

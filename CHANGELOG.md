@@ -89,6 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Settings has an **Updates** section for the startup check, and a **Marketplace** section for the adult-content filter.
 - RAR and 7z mods install with no setup: 7-Zip ships with the app, and the Arch package installs it.
 - The Arch package pulls in what "open mod page" and "open mod folder" need, and lists xdotool and ydotool as optional.
+- Claret, Phoenix, Roxy and Severian are in the character list, with portraits, and mods named after them are sorted to them on import.
 
 ### Changed
 
