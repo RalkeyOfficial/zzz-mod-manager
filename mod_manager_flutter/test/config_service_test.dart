@@ -221,13 +221,14 @@ void main() {
     // `_saveToFile` rewrites the whole document every time, so a partial map would
     // silently erase unrelated settings.
     final service = await build();
-    await service.setPaths('/mods', '/game/Mods');
+    await service.setPaths('/mods', '/game');
     await service.setTheme('dark-blue');
     await service.setContentFilter('show');
     await service.setMarketplaceSort('oldest');
 
     final json = await readFile();
     expect(json['mods_path'], '/mods');
+    expect(json['zzmi_path'], '/game');
     expect(json['save_mods_path'], '/game/Mods');
     expect(json['theme'], 'dark-blue');
     expect(json['content_filter'], 'show');
@@ -239,7 +240,7 @@ void main() {
     // emits must have a matching branch in `loadFromFile`, or it works all session
     // and vanishes on restart.
     final service = await build();
-    await service.setPaths('/mods', '/game/Mods');
+    await service.setPaths('/mods', '/game');
     await service.setTheme('light');
     await service.setLanguage('uk');
     await service.setSortMode('nameAsc');
@@ -257,6 +258,7 @@ void main() {
     await next.loadFromFile();
     final restored = <String, Object?>{
       'mods_path': next.modsPath,
+      'zzmi_path': next.zzmiPath,
       'save_mods_path': next.saveModsPath,
       'theme': next.theme,
       'language': next.language,
@@ -285,5 +287,88 @@ void main() {
     }
     expect(next.updateCheckOnLaunch, isTrue,
         reason: 'update_check_on_launch did not survive the restart');
+  });
+
+  group('the ZZMI folder', () {
+    late String zzmi;
+
+    setUp(() {
+      zzmi = '${temp.path}/ZZMI';
+      Directory(zzmi).createSync();
+    });
+
+    Future<ConfigService> loadFrom(Map<String, Object?> json) async {
+      await configFile().writeAsString(jsonEncode(json));
+      final service = await build();
+      await service.loadFromFile();
+      return service;
+    }
+
+    test('a config with only save_mods_path reads its parent as the ZZMI folder', () async {
+      Directory('$zzmi/Mods').createSync();
+      final service = await loadFrom({'save_mods_path': '$zzmi/Mods'});
+
+      expect(service.zzmiPath, zzmi);
+      expect(service.saveModsPath, '$zzmi/Mods');
+    });
+
+    test('a lowercase mods folder is kept as the links folder', () async {
+      Directory('$zzmi/mods').createSync();
+      final service = await loadFrom({'save_mods_path': '$zzmi/mods'});
+
+      expect(service.zzmiPath, zzmi);
+      expect(service.saveModsPath, '$zzmi/mods');
+    });
+
+    test('a links folder not named Mods migrates to its parent', () async {
+      Directory('$zzmi/Links').createSync();
+      final service = await loadFrom({'save_mods_path': '$zzmi/Links'});
+
+      expect(service.zzmiPath, zzmi);
+      expect(service.saveModsPath, '$zzmi/Mods');
+    });
+
+    test('the next save writes both keys', () async {
+      Directory('$zzmi/Mods').createSync();
+      final service = await loadFrom({'save_mods_path': '$zzmi/Mods'});
+      await service.setTheme('light');
+
+      final json = await readFile();
+      expect(json['zzmi_path'], zzmi);
+      expect(json['save_mods_path'], '$zzmi/Mods');
+    });
+
+    test('zzmi_path wins over save_mods_path', () async {
+      final service = await loadFrom({
+        'zzmi_path': zzmi,
+        'save_mods_path': '/elsewhere/Mods',
+      });
+
+      expect(service.zzmiPath, zzmi);
+      expect(service.saveModsPath, '$zzmi/Mods');
+    });
+
+    test('a file without zzmi_path is not overridden by a stale one in memory', () async {
+      // A downgrade writes the file without the key, so its links folder is newer.
+      final service = await build();
+      await service.setPaths('/mods', '/old');
+      final other = '${temp.path}/Other';
+      await configFile().writeAsString(jsonEncode({'save_mods_path': '$other/Mods'}));
+      await service.loadFromFile();
+
+      expect(service.zzmiPath, other);
+      expect(service.saveModsPath, '$other/Mods');
+    });
+
+    test('setPaths writes zzmi_path and the links folder worked out from it', () async {
+      Directory('$zzmi/mods').createSync();
+      final service = await build();
+      await service.setPaths('/mods', zzmi);
+
+      final json = await readFile();
+      expect(json['zzmi_path'], zzmi);
+      expect(json['save_mods_path'], '$zzmi/mods');
+      expect(service.saveModsPath, '$zzmi/mods');
+    });
   });
 }

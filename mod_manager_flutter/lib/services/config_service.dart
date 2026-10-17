@@ -4,11 +4,19 @@ import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
 import '../utils/path_helper.dart';
+import 'log/logger.dart';
 import 'mod_metadata_repository.dart';
+import 'shader_fixes/zzmi_layout.dart';
+
+final Logger _log = Logger('config');
 
 /// Сервіс для роботи з конфігурацією додатку
 class ConfigService implements ModCharacterTagStore {
   static const String _keyModsPath = 'mods_path';
+  static const String _keyZzmiPath = 'zzmi_path';
+
+  /// The links folder as older builds stored it. Written for a downgrade, and read
+  /// only when [_keyZzmiPath] is absent.
   static const String _keySaveModsPath = 'save_mods_path';
   static const String _keyActiveMods = 'active_mods';
   static const String _keyTheme = 'theme';
@@ -67,7 +75,43 @@ class ConfigService implements ModCharacterTagStore {
   }
 
   String? get modsPath => _prefs.getString(_keyModsPath);
-  String? get saveModsPath => _prefs.getString(_keySaveModsPath);
+
+  /// The ZZMI folder, the one holding `d3dx.ini`.
+  ///
+  /// A config without one reads it as the parent of the legacy `save_mods_path`,
+  /// which is the migration: it runs on every read and is written by the next save
+  /// (`docs/migrations.md`).
+  String? get zzmiPath {
+    final stored = _prefs.getString(_keyZzmiPath);
+    if (stored != null) return stored;
+    final legacy = _prefs.getString(_keySaveModsPath);
+    if (legacy == null || legacy.isEmpty) return legacy;
+    return path.dirname(path.normalize(legacy));
+  }
+
+  String? _linksRoot;
+  String? _links;
+
+  /// The links folder, worked out from [zzmiPath] by `linksFolderIn` and cached
+  /// until the ZZMI folder is set or loaded again.
+  String? get saveModsPath {
+    final root = zzmiPath;
+    if (root == null || root.isEmpty) return root;
+    if (root != _linksRoot) {
+      _links = linksFolderIn(root);
+      _linksRoot = root;
+      final legacy = _prefs.getString(_keyZzmiPath) == null
+          ? _prefs.getString(_keySaveModsPath)
+          : null;
+      if (legacy != null && !path.equals(legacy, _links!)) {
+        _log.info('legacy links folder replaced by the ZZMI folder\'s Mods', fields: {
+          'from': legacy,
+          'to': _links,
+        });
+      }
+    }
+    return _links;
+  }
   List<String> get activeMods => _prefs.getStringList(_keyActiveMods) ?? [];
   List<String> get favoriteMods => _prefs.getStringList(_keyFavoriteMods) ?? [];
   /// The theme the user picked, as a `ThemeMode` **name** (`light` | `system` |
@@ -146,9 +190,10 @@ class ConfigService implements ModCharacterTagStore {
     }
   }
 
-  Future<bool> setSaveModsPath(String path) async {
+  Future<bool> setZzmiPath(String path) async {
     try {
-      await _prefs.setString(_keySaveModsPath, path);
+      await _prefs.setString(_keyZzmiPath, path);
+      _linksRoot = null;
       await _saveToFile();
       return true;
     } catch (e) {
@@ -156,10 +201,11 @@ class ConfigService implements ModCharacterTagStore {
     }
   }
 
-  Future<bool> setPaths(String modsPath, String saveModsPath) async {
+  Future<bool> setPaths(String modsPath, String zzmiPath) async {
     try {
       await _prefs.setString(_keyModsPath, modsPath);
-      await _prefs.setString(_keySaveModsPath, saveModsPath);
+      await _prefs.setString(_keyZzmiPath, zzmiPath);
+      _linksRoot = null;
       await _saveToFile();
       return true;
     } catch (e) {
@@ -400,9 +446,16 @@ class ConfigService implements ModCharacterTagStore {
       if (config.containsKey('mods_path')) {
         await _prefs.setString(_keyModsPath, config['mods_path']);
       }
+      if (config.containsKey('zzmi_path')) {
+        await _prefs.setString(_keyZzmiPath, config['zzmi_path']);
+      } else if (config.containsKey('save_mods_path')) {
+        // An older build wrote this file, so its links folder is the newer answer.
+        await _prefs.remove(_keyZzmiPath);
+      }
       if (config.containsKey('save_mods_path')) {
         await _prefs.setString(_keySaveModsPath, config['save_mods_path']);
       }
+      _linksRoot = null;
       if (config.containsKey('active_mods')) {
         final List<String> mods = List<String>.from(config['active_mods']);
         await _prefs.setStringList(_keyActiveMods, mods);
@@ -460,6 +513,7 @@ class ConfigService implements ModCharacterTagStore {
 
       final config = {
         'mods_path': modsPath ?? '',
+        'zzmi_path': zzmiPath ?? '',
         'save_mods_path': saveModsPath ?? '',
         'active_mods': activeMods,
         'favorite_mods': favoriteMods,

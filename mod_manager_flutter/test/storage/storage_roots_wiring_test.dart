@@ -53,7 +53,7 @@ void main() {
 
     await ApiService.updateConfig(
       modsPath: moved.path,
-      saveModsPath: library.saveMods.path,
+      zzmiPath: library.root.path,
     );
 
     expect(container.read(storageRootsProvider).modsLibrary?.path, moved.path);

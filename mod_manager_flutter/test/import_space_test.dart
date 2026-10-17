@@ -26,15 +26,14 @@ void main() {
     temp = await Directory.systemTemp.createTemp('zzz_import_space_test_');
     modsDir = await Directory(path.join(temp.path, 'mods')).create();
     sourceDir = await Directory(path.join(temp.path, 'src')).create();
-    final saveModsDir =
-        await Directory(path.join(temp.path, 'saveMods')).create();
+    final zzmiDir = await Directory(path.join(temp.path, 'zzmi')).create();
 
     SharedPreferences.setMockInitialValues({});
     config = ConfigService(
       await SharedPreferences.getInstance(),
       configFile: File(path.join(temp.path, 'config.json')),
     );
-    await config.setPaths(modsDir.path, saveModsDir.path);
+    await config.setPaths(modsDir.path, zzmiDir.path);
   });
 
   tearDown(() async {

@@ -34,7 +34,7 @@ void main() {
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('zzz_delete_mod_');
     mods = await Directory(p.join(temp.path, 'mods')).create();
-    final saveMods = await Directory(p.join(temp.path, 'saveMods')).create();
+    final zzmi = await Directory(p.join(temp.path, 'zzmi')).create();
     snapshots = SnapshotService(rootPath: p.join(temp.path, 'backups'));
 
     SharedPreferences.setMockInitialValues({});
@@ -42,7 +42,7 @@ void main() {
       await SharedPreferences.getInstance(),
       configFile: File(p.join(temp.path, 'config.json')),
     );
-    await config.setPaths(mods.path, saveMods.path);
+    await config.setPaths(mods.path, zzmi.path);
     service = ModManagerService(
       config,
       snapshots: snapshots,

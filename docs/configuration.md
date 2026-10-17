@@ -29,6 +29,7 @@ App-data locations are `~/.local/share/zzz-mod-manager` (Linux) and
 ```json
 {
   "mods_path": "/home/user/mods",
+  "zzmi_path": "/path/to/ZZMI",
   "save_mods_path": "/path/to/ZZMI/Mods",
   "active_mods": ["Ellen Swimsuit"],
   "favorite_mods": ["Ellen Swimsuit"],
@@ -52,7 +53,8 @@ App-data locations are `~/.local/share/zzz-mod-manager` (Linux) and
 | Key | SharedPreferences key | Notes |
 |---|---|---|
 | `mods_path` | `mods_path` | The library — where mod folders live |
-| `save_mods_path` | `save_mods_path` | The game's mods folder, where links are created |
+| `zzmi_path` | `zzmi_path` | The ZZMI folder, the one holding `d3dx.ini`. The links folder and the shader folder are both worked out from it. Absent in a config an older build wrote, and then read as the parent of `save_mods_path` ([`migrations.md`](migrations.md#the-migrations)) |
+| `save_mods_path` | `save_mods_path` | The links folder, where links are created. Derived from `zzmi_path` and written for older builds; read only when `zzmi_path` is absent |
 | `active_mods` | `active_mods` | String list of mod folder names |
 | `favorite_mods` | `favorite_mods` | String list of mod folder names |
 | `theme` | `theme` | The theme, as a `ThemeMode` Dart name (`light` \| `system` \| `dark`). Empty until chosen ([§3](#3-parsing-a-stored-value)), and parsed by `parseThemeMode`, which **degrades anything unrecognised to `system`** — the key is older than the setting and holds a palette name (`dark-blue`) in any config an earlier build wrote, so the tolerance is what an upgrade lands on |
@@ -71,10 +73,13 @@ orders the local mods library, `marketplace_sort` orders GameBanana browse resul
 
 ### Naming note
 
-`mods_path` is the **library** and `save_mods_path` is the **game folder**, which
-reads backwards from how the UI labels them ("SaveMods folder" is presented to
-users as their library). Don't rename these keys casually — they're on disk in
-every existing install — but do expect the confusion when reading the code.
+`mods_path` is the **library**, labelled "Mod library" in the UI. `zzmi_path` is labelled "ZZMI folder". The links folder has no field of its own: it is the ZZMI folder's `Mods/`, and in code it is called `saveModsPath`. Don't rename `mods_path` or `save_mods_path` casually, since they're on disk in every existing install.
+
+### Picking the ZZMI folder
+
+A picked folder that holds `d3dx.ini` is the ZZMI folder. A folder named `mods` in any case with `d3dx.ini` beside it is the links folder itself, and the field takes its parent. One that has a `ZZMI/` child holding `d3dx.ini` is the XXMI Launcher's folder, and the field takes that child instead. Anything else is kept as picked, and a warning under the field says shader fixes can't be installed; it does not block saving, since mods without shader files work without `d3dx.ini`.
+
+The links folder is the ZZMI folder's existing child named `mods` in any case, because ZZMI under Wine sees a case-insensitive disk while Linux does not. An exact `Mods` wins when both spellings exist, and with no such child it is `<ZZMI>/Mods`. `ConfigService` works it out when the ZZMI folder is set or loaded and caches it.
 
 ---
 

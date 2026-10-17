@@ -6,6 +6,7 @@ import '../services/api_service.dart';
 import '../utils/notifications.dart';
 import '../utils/state_providers.dart';
 import '../l10n/app_localizations.dart';
+import 'components/zzmi_folder_field.dart';
 
 class WelcomeScreen extends ConsumerStatefulWidget {
   final VoidCallback onComplete;
@@ -22,8 +23,8 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
   
   String _selectedLanguage = 'en';
   final _modsPathController = TextEditingController();
-  final _saveModsPathController = TextEditingController();
-  
+  final _zzmiController = TextEditingController();
+
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
   late AnimationController _slideController;
@@ -60,7 +61,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
     _fadeController.dispose();
     _slideController.dispose();
     _modsPathController.dispose();
-    _saveModsPathController.dispose();
+    _zzmiController.dispose();
     super.dispose();
   }
 
@@ -93,7 +94,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
   Future<void> _completeSetup() async {
     final loc = context.loc;
     
-    if (_modsPathController.text.isEmpty || _saveModsPathController.text.isEmpty) {
+    if (_modsPathController.text.isEmpty || _zzmiController.text.isEmpty) {
       context.notify.warning(
         loc.t('welcome.directories.validation_error_title'),
         body: loc.t('welcome.directories.validation_error_body'),
@@ -105,7 +106,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
       await ApiService.setLanguage(_selectedLanguage);
       await ApiService.updateConfig(
         modsPath: _modsPathController.text,
-        saveModsPath: _saveModsPathController.text,
+        zzmiPath: _zzmiController.text,
       );
       
       widget.onComplete();
@@ -123,13 +124,6 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
     final result = await FilePicker.platform.getDirectoryPath();
     if (result != null) {
       setState(() => _modsPathController.text = result);
-    }
-  }
-
-  Future<void> _pickSaveModsPath() async {
-    final result = await FilePicker.platform.getDirectoryPath();
-    if (result != null) {
-      setState(() => _saveModsPathController.text = result);
     }
   }
 
@@ -440,13 +434,17 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
                 loc: loc,
               ),
               const SizedBox(height: 24),
-              _buildPathField(
-                label: loc.t('welcome.directories.save_mods_label'),
-                hint: loc.t('welcome.directories.save_mods_hint'),
-                controller: _saveModsPathController,
-                onBrowse: _pickSaveModsPath,
-                isDarkMode: isDarkMode,
-                loc: loc,
+              ZzmiFolderField(
+                controller: _zzmiController,
+                builder: (onBrowse, status) => _buildPathField(
+                  label: loc.t('welcome.directories.zzmi_label'),
+                  hint: loc.t('welcome.directories.zzmi_hint'),
+                  controller: _zzmiController,
+                  onBrowse: onBrowse,
+                  isDarkMode: isDarkMode,
+                  loc: loc,
+                  footer: status,
+                ),
               ),
             ],
           ),
@@ -510,6 +508,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
     required VoidCallback onBrowse,
     required bool isDarkMode,
     required AppLocalizations loc,
+    Widget? footer,
   }) {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -583,6 +582,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
               ),
             ],
           ),
+          if (footer != null) footer,
         ],
       ),
     );

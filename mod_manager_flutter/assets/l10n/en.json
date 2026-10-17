@@ -755,7 +755,7 @@
       "restart_title": "Restart the game to apply shader changes",
       "restart_body": "{mods}",
       "no_folder_title": "Couldn't find ZZMI's shader folder",
-      "no_folder_body": "{mod} stays off: there is no d3dx.ini one folder above your links folder, so there is nowhere to put its shader files.",
+      "no_folder_body": "{mod} stays off: there is no d3dx.ini in your ZZMI folder, so there is nowhere to put its shader files.",
       "taken_title": "Shader files already in use",
       "taken_body": "{mod} stays off: {owner} already placed {files}, with contents that differ from this mod's copy.",
       "taken_unowned_title": "Shader files already in use",
@@ -814,10 +814,12 @@
       "content_filter_hint": "How mods GameBanana flags as adult appear while you browse. The same setting as the one in the Marketplace toolbar."
     },
     "paths": {
-      "mods": "Mods folder",
-      "mods_hint": "Path where original mods are stored",
-      "save_mods": "Links folder",
-      "save_mods_hint": "Path where symlinks will be created",
+      "mods": "Mod library",
+      "mods_hint": "Where the mods you've installed are kept",
+      "zzmi": "ZZMI folder",
+      "zzmi_hint": "The folder with d3dx.ini in it. Mods are linked into its Mods folder.",
+      "zzmi_status_found": "Links go in {links} · Shader fixes go in {shaders}",
+      "zzmi_status_missing": "No d3dx.ini in this folder, so it doesn't look like ZZMI. Shader fixes can't be installed.",
       "browse": "Browse"
     },
     "language": {
@@ -891,14 +893,14 @@
     },
     "directories": {
       "title": "Configure mod directories",
-      "description": "Specify where your mods are stored and where symlinks will be created",
-      "mods_label": "Mods folder",
-      "mods_hint": "Path where original mods are stored",
-      "save_mods_label": "Links folder",
-      "save_mods_hint": "Path where symlinks will be created",
+      "description": "Choose where your mods are kept and the ZZMI folder they are linked into",
+      "mods_label": "Mod library",
+      "mods_hint": "Where the mods you've installed are kept",
+      "zzmi_label": "ZZMI folder",
+      "zzmi_hint": "The folder with d3dx.ini in it. Mods are linked into its Mods folder.",
       "browse": "Browse",
       "validation_error_title": "Both folders are required",
-      "validation_error_body": "Choose where your mods live and where the links go."
+      "validation_error_body": "Choose your mod library and your ZZMI folder."
     },
     "complete": {
       "title": "All set!",

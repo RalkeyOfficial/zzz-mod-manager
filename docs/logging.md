@@ -98,6 +98,7 @@ than which file noticed it.
 | `metadata` | Sidecars, origins, autofill |
 | `mods` | Library-level actions |
 | `ini` | Parsing |
+| `config` | The app's own settings and reading an older build's `config.json` |
 | `platform` | Symlinks, browser, folders, the system description |
 | `fileops` | **Every mutation of the filesystem**, whoever made it |
 | `ui.notify` | Every notification raised |

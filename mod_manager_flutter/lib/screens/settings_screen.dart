@@ -7,6 +7,7 @@ import '../services/api_service.dart';
 import '../utils/notifications.dart';
 import '../utils/state_providers.dart';
 import '../l10n/app_localizations.dart';
+import 'components/zzmi_folder_field.dart';
 import 'components/settings/appearance_section.dart';
 import 'components/settings/auto_tag_section.dart';
 import 'components/settings/diagnostics_section.dart';
@@ -22,7 +23,9 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProviderStateMixin {
   final _modsPathController = TextEditingController();
-  final _saveModsPathController = TextEditingController();
+  final _zzmiController = TextEditingController();
+  String? _storedZzmiPath;
+  String? _storedLinksFolder;
   /// Whether the first read of the config has landed. Flipped once, and never
   /// back: while it is false the whole page body is the loading spinner, and
   /// swapping the body disposes the [AnimationLimiter] below, so anything that
@@ -55,7 +58,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
   void dispose() {
     _loadingAnimationController.dispose();
     _modsPathController.dispose();
-    _saveModsPathController.dispose();
+    _zzmiController.dispose();
     super.dispose();
   }
 
@@ -65,7 +68,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
       if (!mounted) return;
       setState(() {
         _modsPathController.text = config['mods_path'] ?? '';
-        _saveModsPathController.text = config['save_mods_path'] ?? '';
+        _zzmiController.text = config['zzmi_path'] ?? '';
+        _storedZzmiPath = config['zzmi_path'];
+        _storedLinksFolder = config['save_mods_path'];
         _selectedLanguage = config['language'] ?? 'en';
         _loaded = true;
       });
@@ -81,19 +86,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
     }
   }
 
-  Future<void> pickSaveModsPath() async {
-    final result = await FilePicker.platform.getDirectoryPath();
-    if (result != null) {
-      setState(() => _saveModsPathController.text = result);
-    }
-  }
-
   Future<void> saveConfig() async {
     final loc = context.loc;
     try {
       await ApiService.updateConfig(
         modsPath: _modsPathController.text,
-        saveModsPath: _saveModsPathController.text,
+        zzmiPath: _zzmiController.text,
       );
       if (mounted) {
         context.notify.success(
@@ -218,13 +216,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
                             loc: loc,
                           ),
                           const SizedBox(height: 16),
-                          _buildPathField(
-                            label: loc.t('settings.paths.save_mods'),
-                            hint: loc.t('settings.paths.save_mods_hint'),
-                            controller: _saveModsPathController,
-                            onBrowse: pickSaveModsPath,
-                            isDarkMode: isDarkMode,
-                            loc: loc,
+                          ZzmiFolderField(
+                            controller: _zzmiController,
+                            storedZzmiPath: _storedZzmiPath,
+                            storedLinksFolder: _storedLinksFolder,
+                            builder: (onBrowse, status) => _buildPathField(
+                              label: loc.t('settings.paths.zzmi'),
+                              hint: loc.t('settings.paths.zzmi_hint'),
+                              controller: _zzmiController,
+                              onBrowse: onBrowse,
+                              isDarkMode: isDarkMode,
+                              loc: loc,
+                              footer: status,
+                            ),
                           ),
                           const SizedBox(height: 32),
                           // Language Section
@@ -404,6 +408,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
     required VoidCallback onBrowse,
     required bool isDarkMode,
     required AppLocalizations loc,
+    Widget? footer,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -460,6 +465,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
             ),
           ],
         ),
+        if (footer != null) footer,
       ],
     );
   }

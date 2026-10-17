@@ -151,15 +151,15 @@ When you launch the application for the first time, you'll see a **Welcome Scree
 #### Step 2: Configure Directories
 You need to configure two directories:
 
-**1. Mods Folder (Link/Target Directory)**
-- This is where 3DMigoto/XXMI loads mods **FROM**
-- Usually located at: `XXMI-Launcher/ZZMI/Mods` or similar
+**1. ZZMI folder**
+- The folder of your ZZMI install, the one with `d3dx.ini` in it
+- Usually located at: `XXMI-Launcher/ZZMI`. Picking the `XXMI-Launcher` folder itself also works
 - Example paths:
-  - `/mnt/games/HoYoPlay/games/XXMI-Launcher/ZZMI/Mods`
-  - `C:\Games\XXMI-Launcher\ZZMI\Mods` (Windows)
-- **What happens here**: Active mod symbolic links are created in this folder
+  - `/mnt/games/HoYoPlay/games/XXMI-Launcher/ZZMI`
+  - `C:\Games\XXMI-Launcher\ZZMI` (Windows)
+- **What happens here**: Active mod symbolic links are created in its `Mods` folder, which is where 3DMigoto/XXMI loads mods **FROM**. The line under the field shows where links and shader fixes go
 
-**2. SaveMods Folder (Storage/Library Directory)**
+**2. Mod library**
 - This is where you **STORE** your downloaded mods collection
 - Can be anywhere on your system
 - Example paths:
@@ -169,15 +169,15 @@ You need to configure two directories:
 
 **💡 How it works:**
 ```
-SaveMods Folder (Your Library)     →     Mods Folder (Active Mods)
+Mod library                        →     ZZMI folder/Mods (Active Mods)
 ├── Ellen_BeachOutfit/             →     [symlink] → Ellen_BeachOutfit/
 ├── Miyabi_Kimono/                        (inactive, no link)
 ├── Burnice_Casual/                →     [symlink] → Burnice_Casual/
 └── Jane_SchoolGirl/                      (inactive, no link)
 ```
-- Activating a mod = Creating a symbolic link from Mods folder → SaveMods folder
+- Activating a mod = Creating a symbolic link in the ZZMI folder's Mods → the mod in your library
 - Deactivating a mod = Removing the symbolic link
-- Your original files in SaveMods stay untouched! ✅
+- Your original files in the mod library stay untouched! ✅
 
 #### Step 3: Ready!
 - Click **Finish** to complete setup
@@ -186,14 +186,14 @@ SaveMods Folder (Your Library)     →     Mods Folder (Active Mods)
 ### After Initial Setup
 
 1. **Import mods**:
-   - Use Drag & Drop to add mod folders to your SaveMods directory
+   - Use Drag & Drop to add mod folders to your mod library
    - Or press Ctrl+V to paste paths
    - Or click the "+" card to use file picker
    - The app will automatically detect character names from folder names
 
 2. **Activate mods**:
    - Click on a mod card to enable/disable it
-   - Enabled mods get a symbolic link created in your Mods folder
+   - Enabled mods get a symbolic link created in your ZZMI folder's Mods
    - Use Single/Multi toggle to choose activation mode
    - Press F10 in game to load the change
 
@@ -204,7 +204,7 @@ SaveMods Folder (Your Library)     →     Mods Folder (Active Mods)
 
 ### Understanding the Two Folders
 
-#### 📁 SaveMods Folder (Your Library)
+#### 📁 Mod library
 - **Purpose**: Permanent storage for ALL your mods
 - **Location**: Anywhere you want (external drive, separate partition, etc.)
 - **Contents**: All downloaded mods, organized as you like
@@ -223,7 +223,7 @@ SaveMods Folder (Your Library)     →     Mods Folder (Active Mods)
       └── ...
   ```
 
-#### 🔗 Mods Folder (Active Mods - Links Only)
+#### 🔗 ZZMI folder's Mods (Active Mods - Links Only)
 - **Purpose**: Where 3DMigoto loads mods FROM during gameplay
 - **Location**: Inside your XXMI/3DMigoto installation
 - **Contents**: Symbolic links ONLY (no actual files)
@@ -241,7 +241,7 @@ SaveMods Folder (Your Library)     →     Mods Folder (Active Mods)
 - ✅ Instant enable/disable - just create/remove links
 - ✅ Safe - original files never modified
 - ✅ Organized - keep your library separate from active mods
-- ✅ Flexible - move your SaveMods folder anywhere without breaking anything
+- ✅ Flexible - keep your mod library anywhere you like
 
 ## ⚡ Reloading Mods In Game
 
@@ -325,8 +325,8 @@ Configuration is stored in: `~/.local/share/zzz-mod-manager/config.json`
 
 Access via the ⚙️ button:
 
-- **Mods Path**: Where active mods are loaded from
-- **SaveMods Path**: Where your mod library is stored
+- **Mod library**: Where your mod library is stored
+- **ZZMI folder**: Your ZZMI install; active mods are linked into its `Mods` folder
 - **Theme**: Dark/Light/Auto
 - **Language**: English/Ukrainian
 - **Auto-tagging**: Enable/disable automatic character detection
@@ -337,8 +337,9 @@ You can manually edit `config.json`:
 
 ```json
 {
-  "mods_path": "/path/to/3DMigoto/Mods",
-  "save_mods_path": "/path/to/3DMigoto/SaveMods",
+  "mods_path": "/path/to/MyZZZMods",
+  "zzmi_path": "/path/to/XXMI-Launcher/ZZMI",
+  "save_mods_path": "/path/to/XXMI-Launcher/ZZMI/Mods",
   "active_mods": ["mod1", "mod2"],
   "theme": "dark-blue",
   "language": "en",
@@ -397,8 +398,8 @@ makepkg -si
 ### Mods Not Showing Up
 
 1. **Check paths in Settings**:
-   - Verify Mods Path points to the correct directory
-   - Verify SaveMods Path contains your mods
+   - Verify the ZZMI folder points to your ZZMI install
+   - Verify the Mod library contains your mods
 
 2. **Check folder structure**:
    - Mods should be in individual folders
@@ -444,8 +445,8 @@ makepkg -si
 
 ```bash
 # Ensure you have write permissions to mod directories
-chmod -R u+w /path/to/Mods
-chmod -R u+w /path/to/SaveMods
+chmod -R u+w /path/to/ZZMI/Mods
+chmod -R u+w /path/to/MyZZZMods
 ```
 
 ## 🤝 Contributing

@@ -106,6 +106,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The window uses your desktop's own title bar, so its buttons sit where the rest of your system puts them and it has the window menu, keyboard shortcuts and decoration theme every other window has.
 - Settings offers Light, System or Dark in place of the dark-mode switch. System is what the app starts on, and it follows your desktop's own light or dark setting for as long as you leave it there.
 - A mod's ↗ button, its right-click "Open source page" and its details row all open the page it's tracked against, so a mod you linked through "Update tracking…" has them without you typing a link.
+- Settings and first-run setup ask for the ZZMI folder instead of the links folder, and show where links and shader fixes go.
+- The "Mods folder" setting is called "Mod library".
+- A links folder that isn't ZZMI's Mods folder gives way to the Mods folder beside it, so mods linked there show as off until they are switched on again.
 
 ### Removed
 

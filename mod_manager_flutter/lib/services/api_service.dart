@@ -265,6 +265,7 @@ class ApiService {
       await initialize();
       return {
         'mods_path': _configService!.modsPath ?? '',
+        'zzmi_path': _configService!.zzmiPath ?? '',
         'save_mods_path': _configService!.saveModsPath ?? '',
         'language': _configService!.language,
       };
@@ -341,11 +342,11 @@ class ApiService {
 
   static Future<String> updateConfig({
     required String modsPath,
-    required String saveModsPath,
+    required String zzmiPath,
   }) async {
     try {
       await initialize();
-      await _configService!.setPaths(modsPath, saveModsPath);
+      await _configService!.setPaths(modsPath, zzmiPath);
       // Repointing the library has to reach the providers that derive from it,
       // or the Storage tab keeps measuring the folder that was set at launch.
       _container?.read(modsPathProvider.notifier).state = modsPath;

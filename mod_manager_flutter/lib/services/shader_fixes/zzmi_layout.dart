@@ -12,8 +12,13 @@ import 'package:path/path.dart' as p;
 ///
 /// Returns null when there is no `d3dx.ini` beside the links folder: the folder is
 /// then not a ZZMI `Mods/`, and there is nowhere trustworthy to put a shader file.
-Future<String?> findShaderFolder(String saveModsPath) async {
-  final root = p.dirname(p.normalize(saveModsPath));
+Future<String?> findShaderFolder(String saveModsPath) =>
+    shaderFolderIn(p.dirname(p.normalize(saveModsPath)));
+
+/// The shader folder named by the `d3dx.ini` in [zzmiRoot], or null when the root
+/// holds no readable `d3dx.ini` (`docs/shader-fixes.md` §1).
+Future<String?> shaderFolderIn(String zzmiRoot) async {
+  final root = p.normalize(zzmiRoot);
   final ini = File(p.join(root, 'd3dx.ini'));
   if (!await ini.exists()) return null;
   final String contents;
@@ -24,6 +29,46 @@ Future<String?> findShaderFolder(String saveModsPath) async {
   }
   final folder = overrideDirectoryFrom(contents);
   return p.isAbsolute(folder) ? folder : p.normalize(p.join(root, folder));
+}
+
+/// The ZZMI folder a picked folder stands for: [picked] itself when it holds
+/// `d3dx.ini`, its parent when [picked] is a `mods` folder beside one (the links
+/// folder itself), its `ZZMI/` child when that holds one (the XXMI Launcher's
+/// folder), and null otherwise.
+Future<String?> resolveZzmiFolder(String picked) async {
+  final root = p.normalize(picked);
+  if (await File(p.join(root, 'd3dx.ini')).exists()) return root;
+  final parent = p.dirname(root);
+  if (p.basename(root).toLowerCase() == 'mods' &&
+      await File(p.join(parent, 'd3dx.ini')).exists()) {
+    return parent;
+  }
+  final nested = p.join(root, 'ZZMI');
+  if (await File(p.join(nested, 'd3dx.ini')).exists()) return nested;
+  return null;
+}
+
+/// The links folder inside [zzmiRoot]: its existing child named `mods` in any
+/// case, or `<root>/Mods` when there is none.
+///
+/// Case is ignored because ZZMI under Wine sees a case-insensitive disk while
+/// Linux does not. An exact `Mods` wins when both spellings exist. Synchronous,
+/// since `ConfigService` works it out while loading (`docs/shader-fixes.md` §1).
+String linksFolderIn(String zzmiRoot) {
+  final root = p.normalize(zzmiRoot);
+  final exact = p.join(root, 'Mods');
+  try {
+    String? other;
+    for (final entity in Directory(root).listSync(followLinks: false)) {
+      if (entity is! Directory) continue;
+      final name = p.basename(entity.path);
+      if (name == 'Mods') return exact;
+      if (name.toLowerCase() == 'mods') other ??= entity.path;
+    }
+    return other ?? exact;
+  } on FileSystemException {
+    return exact;
+  }
 }
 
 final RegExp _replacementName =

@@ -68,10 +68,11 @@ class TempLibrary {
   /// The temp directory holding everything below. Deleted on tear-down.
   final Directory root;
 
-  /// `<root>/mods` — the library. A mod is a folder directly inside it.
+  /// `<root>/library` — the library. A mod is a folder directly inside it. Not
+  /// `mods`: on a case-insensitive disk that is the links folder.
   final Directory mods;
 
-  /// `<root>/saveMods` — where activation puts its links.
+  /// `<root>/Mods` — where activation puts its links. [root] is the ZZMI folder.
   final Directory saveMods;
 
   final ConfigService config;
@@ -84,15 +85,15 @@ class TempLibrary {
   /// inside a [WidgetTester.runAsync].
   static Future<TempLibrary> create({String prefix = 'zzz_library_'}) async {
     final root = Directory.systemTemp.createTempSync(prefix);
-    final mods = Directory(p.join(root.path, 'mods'))..createSync();
-    final saveMods = Directory(p.join(root.path, 'saveMods'))..createSync();
+    final mods = Directory(p.join(root.path, 'library'))..createSync();
+    final saveMods = Directory(p.join(root.path, 'Mods'))..createSync();
 
     SharedPreferences.setMockInitialValues({});
     final config = ConfigService(
       await SharedPreferences.getInstance(),
       configFile: File(p.join(root.path, 'config.json')),
     );
-    await config.setPaths(mods.path, saveMods.path);
+    await config.setPaths(mods.path, root.path);
 
     final library = TempLibrary._(
       root: root,

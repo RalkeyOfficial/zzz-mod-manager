@@ -363,7 +363,8 @@ void main() {
     final secondShaders = Directory(p.join(second.path, 'ShaderFixes'))..createSync();
     File(p.join(secondShaders.path, hashA)).writeAsStringSync('already here');
     final secondMods = Directory(p.join(second.path, 'Mods'))..createSync();
-    await temp.config.setPaths(temp.mods.path, secondMods.path);
+    await temp.config.setPaths(temp.mods.path, second.path);
+    expect(temp.config.saveModsPath, secondMods.path);
 
     await expectLater(
       temp.service.activateMod('Jiggle'),

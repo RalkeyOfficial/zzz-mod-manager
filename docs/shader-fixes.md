@@ -25,7 +25,7 @@ the `override_directory` named in `[Rendering]` of `d3dx.ini`, relative to the Z
   and shader dumping writes `.txt` files. So not every file in the folder was put there by a person.
 - **One file per hash.** Two mods replacing the same shader collide on one filename, and the last one copied wins.
 - **A new replacement needs a game restart.** F10 reloads replacements that changed, but it picks up a newly added one only while hunting is on.
-- **The ZZMI root is the parent of the links folder.** The links folder is ZZMI's `Mods/`, with `d3dx.ini` beside it.
+- **The user picks the ZZMI root.** Settings ask for the ZZMI folder, the one holding `d3dx.ini`, and the links folder is its `Mods/` ([`configuration.md`](configuration.md#picking-the-zzmi-folder)).
 
 ## 2. What mods ship, and how an install lays it out
 
@@ -112,7 +112,7 @@ A mod whose install recorded a root shader folder as a mod of its own finds no f
 - A record naming another mod for a file that is no longer there is stale and does not block. When that mod needed the same bytes, it keeps its hold on the copy put back, since the copy restores its shader too.
 - A copy that fails partway leaves the mod off, and whatever it had copied or taken hold of is let go of again, as when its link cannot be made.
 - Only targets that already exist are hashed, so an enable into an empty folder reads nothing but the mod's own files.
-- With no `d3dx.ini` beside the links folder there is nowhere trustworthy to copy to, so a mod with shader files is refused.
+- With no `d3dx.ini` in the ZZMI folder there is nowhere trustworthy to copy to, so a mod with shader files is refused. Settings warn about this when the folder is picked, but do not block it.
   Mods without any are unaffected.
 - Copies, not links: a Windows file symlink needs Developer Mode, and ZZMI's `.bin` caches would be written through a link into the library.
 
