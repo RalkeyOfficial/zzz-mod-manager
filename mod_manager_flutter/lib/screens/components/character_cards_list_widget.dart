@@ -8,7 +8,6 @@ import '../../core/constants.dart';
 import '../../models/character_info.dart';
 import '../../l10n/app_localizations.dart';
 import '../../utils/notifications.dart';
-import 'keybinds_widget.dart';
 
 class CharacterCardsListWidget extends ConsumerStatefulWidget {
   final List<CharacterInfo> characters;
@@ -270,17 +269,6 @@ class _CharacterCardsListWidgetState
                           ),
                       ),
                     ),
-                    // Бейдж з кількістю keybinds
-                    if (character.keybinds != null &&
-                        character.keybinds!.keybinds.isNotEmpty)
-                      Positioned(
-                        bottom: -4,
-                        right: -4,
-                        child: KeybindsBadge(
-                          keybinds: character.keybinds,
-                          scaleFactor: 0.8,
-                        ),
-                      ),
                   ],
                 ),
                 AnimatedSize(

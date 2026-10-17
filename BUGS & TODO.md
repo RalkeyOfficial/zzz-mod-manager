@@ -458,16 +458,7 @@ and what survives a rebind. Entry points: the status slot and the mod context me
   row on the `!` toggle rather than a sixth toolbar control. Filed rather than
   built, to see whether it is actually wanted.
 - [x] **The two resolve dialogs read the mod through `Mod/Multi`.** [`docs/origin-tracking.md`](docs/origin-tracking.md) §5 owns it.
-- [ ] **`CharacterInfo.keybinds` is never written, and one widget renders it.**
-  `enrichCharactersWithKeybinds` sets keybinds on each `ModInfo` and carries the
-  group through with `character.copyWith(skins: …)`, so the group-level field
-  keeps whatever it had — and nothing anywhere constructs a `CharacterInfo` with
-  one. It is therefore permanently null, which makes
-  `components/character_cards_list_widget.dart`'s `if (character.keybinds !=
-  null && …)` branch unreachable. Either the group level was meant to carry the
-  union of its mods' bindings and never got wired, or the field is left over
-  from before they moved to the mod — whoever looks has to decide which, so it
-  is filed rather than deleted.
+- [x] **`CharacterInfo.keybinds` is deleted.** Keybinds belong to a mod, never to a character, so the field, the character card's keybind badge and the unused character-level keybind helpers are gone.
 - **The dialog is per-mod only, by design, and that leaves the two-variant
   case tedious.** Two folders from one mod page are common (measured: two in a
   23-mod library), and each needs its own trip through the dialog even though the

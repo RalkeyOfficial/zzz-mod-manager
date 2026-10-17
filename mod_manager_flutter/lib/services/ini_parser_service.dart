@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:path/path.dart' as path;
 import '../models/keybind_info.dart';
 import 'log/logger.dart';
 
@@ -166,45 +165,6 @@ class IniParserService {
       _log.warning('could not scan a folder for .ini files',
           error: e, fields: {'folder': directoryPath});
       return null;
-    }
-  }
-
-  /// Парсить INI файли для всіх персонажів в savemods
-  /// Повертає мапу characterId -> CharacterKeybinds
-  Future<Map<String, CharacterKeybinds>> parseAllCharacters(
-    String saveModsPath,
-  ) async {
-    try {
-      final saveModsDir = Directory(saveModsPath);
-      if (!await saveModsDir.exists()) {
-        return {};
-      }
-
-      final characterKeybinds = <String, CharacterKeybinds>{};
-
-      await for (final entity in saveModsDir.list()) {
-        if (entity is Directory) {
-          final characterId = path.basename(entity.path);
-
-          // Пропускаємо системні папки
-          if (characterId.startsWith('.') || characterId.startsWith('__')) {
-            continue;
-          }
-
-          final keybinds = await parseCharacterDirectory(
-            characterId,
-            entity.path,
-          );
-
-          if (keybinds != null) {
-            characterKeybinds[characterId] = keybinds;
-          }
-        }
-      }
-
-      return characterKeybinds;
-    } catch (e) {
-      return {};
     }
   }
 }

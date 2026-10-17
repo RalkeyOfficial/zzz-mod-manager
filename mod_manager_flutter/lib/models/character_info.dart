@@ -11,7 +11,6 @@ class CharacterInfo {
   final String? iconPath;
   final IconData? icon; // Material icon for built-in (non-character) categories.
   final List<ModInfo> skins;
-  final CharacterKeybinds? keybinds;
 
   CharacterInfo({
     required this.id,
@@ -19,7 +18,6 @@ class CharacterInfo {
     this.iconPath,
     this.icon,
     this.skins = const [],
-    this.keybinds,
   });
 
   CharacterInfo copyWith({
@@ -28,7 +26,6 @@ class CharacterInfo {
     String? iconPath,
     IconData? icon,
     List<ModInfo>? skins,
-    CharacterKeybinds? keybinds,
   }) {
     return CharacterInfo(
       id: id ?? this.id,
@@ -36,7 +33,6 @@ class CharacterInfo {
       iconPath: iconPath ?? this.iconPath,
       icon: icon ?? this.icon,
       skins: skins ?? this.skins,
-      keybinds: keybinds ?? this.keybinds,
     );
   }
 }

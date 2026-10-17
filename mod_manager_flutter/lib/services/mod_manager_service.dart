@@ -916,39 +916,6 @@ class ModManagerService {
     }
   }
 
-  /// Рекурсивно копіює директорію
-  /// Зчитує keybinds для конкретного персонажа (моду)
-  /// characterId - назва папки персонажа в modsPath
-  Future<CharacterKeybinds?> getCharacterKeybinds(String characterId) async {
-    try {
-      if (modsPath == null) return null;
-
-      final characterPath = path.join(modsPath!, characterId);
-      final characterDir = Directory(characterPath);
-      
-      if (!await characterDir.exists()) return null;
-
-      return await _iniParser.parseCharacterDirectory(characterId, characterPath);
-    } catch (e) {
-      _log.warning('could not read keybinds',
-          error: e, fields: {'character': characterId});
-      return null;
-    }
-  }
-
-  /// Зчитує keybinds для всіх персонажів в modsPath
-  /// Повертає мапу characterId -> CharacterKeybinds
-  Future<Map<String, CharacterKeybinds>> getAllCharactersKeybinds() async {
-    try {
-      if (modsPath == null) return {};
-      
-      return await _iniParser.parseAllCharacters(modsPath!);
-    } catch (e) {
-      _log.warning('could not read keybinds for the library', error: e);
-      return {};
-    }
-  }
-
   /// Завантажує keybinds для конкретного моду
   /// modId - назва папки моду в modsPath
   Future<List<KeybindInfo>?> getModKeybinds(String modId) async {
