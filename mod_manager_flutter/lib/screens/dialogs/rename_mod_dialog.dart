@@ -21,8 +21,7 @@ Future<void> showRenameModDialog(
   // Existing mod names (lowercased) for a live collision check; the service
   // re-checks authoritatively.
   final existingLower = <String>{
-    for (final c in ref.read(charactersProvider))
-      for (final m in c.skins) m.id.toLowerCase(),
+    for (final m in ref.read(modsProvider)) m.id.toLowerCase(),
   }..remove(mod.id.toLowerCase());
   final notify = context.notify;
 

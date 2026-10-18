@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,6 +9,9 @@ import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_update.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/components/launch_update_check_host.dart';
+import 'package:mod_manager_flutter/screens/components/library_actions_host.dart';
+import 'package:mod_manager_flutter/screens/components/mods_toolbar.dart';
+import 'package:mod_manager_flutter/services/origin_write.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
 import 'support/library_override.dart';
@@ -86,6 +91,7 @@ void main() {
     List<ModInfo> mods = const [],
     GbMod Function(int modId)? page,
     Future<List<GbMod>> Function(List<int>)? fetch,
+    Widget child = const SizedBox.shrink(),
   }) async {
     container.read(updateCheckOnLaunchProvider.notifier).state = enabled;
     libraryLands(mods);
@@ -99,7 +105,7 @@ void main() {
               return [for (final id in ids) (page ?? superseded)(id)];
             },
         updatesFetcher: (_) async => const <GbUpdate>[],
-        child: const SizedBox.shrink(),
+        child: child,
       ),
       container: container,
     );
@@ -212,6 +218,51 @@ void main() {
     expect(fetchCalls, 1);
     expect(find.textContaining('has an update'), findsNothing);
     expect(find.textContaining("couldn't be checked"), findsNothing);
+  });
+
+  group('shares the running flag with the library menu', () {
+    testWidgets('a check the user started stands in for it', (tester) async {
+      container.read(libraryCheckRunningProvider.notifier).state = true;
+      await mount(tester, enabled: true);
+      await scanLands(tester, [mod('Ellen', modId: 1, fileId: 10)]);
+
+      expect(fetchCalls, 0, reason: 'two passes would race their results into one map');
+      expect(container.read(libraryCheckRunningProvider), isTrue, reason: "the user's check is still running");
+    });
+
+    testWidgets('while it runs, the library menu cannot start another', (tester) async {
+      final reply = Completer<List<GbMod>>();
+      await mount(
+        tester,
+        enabled: true,
+        fetch: (_) {
+          fetchCalls++;
+          return reply.future;
+        },
+        child: LibraryActionsHost(
+          updateFetcher: (_) async => throw StateError('no fetch expected'),
+          originWriter: (_, _) async => OriginWriteResult.writeFailed,
+          child: const ModsToolbar(),
+        ),
+      );
+      IconButton libraryMenu() =>
+          tester.widget<IconButton>(find.ancestor(of: find.byTooltip('Library'), matching: find.byType(IconButton)));
+      expect(libraryMenu().onPressed, isNotNull);
+
+      // Pumped, not settled: the menu's spinner turns while the pass runs.
+      libraryLands([mod('Ellen', modId: 1, fileId: 10)]);
+      await tester.pump();
+
+      expect(fetchCalls, 1);
+      expect(container.read(libraryCheckRunningProvider), isTrue);
+      expect(libraryMenu().onPressed, isNull);
+
+      reply.complete([superseded(1)]);
+      await tester.pumpAndSettle();
+
+      expect(container.read(libraryCheckRunningProvider), isFalse);
+      expect(libraryMenu().onPressed, isNotNull);
+    });
   });
 }
 

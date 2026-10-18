@@ -25,6 +25,8 @@ import '../services/platform_service.dart';
 import '../services/platform_service_factory.dart';
 import '../services/shader_fixes/zzmi_layout.dart';
 import '../services/update_check.dart';
+import 'categories.dart';
+import 'directory_size.dart';
 import 'mod_sorting.dart';
 import 'zzz_characters.dart';
 
@@ -84,13 +86,12 @@ final gameBananaClientProvider = Provider<GameBananaClient>((ref) {
 /// The library: every mod, once each, flat.
 ///
 /// **The root everything else about the library derives from, and it belongs to
-/// no screen.** The four tabs are keyed children of an `AnimatedSwitcher` with
-/// no keep-alive, so the Mods tab's `State` is *disposed* the moment the user
-/// looks at the marketplace. A library owned by that screen is therefore as old
-/// as the last visit to it for as long as the user is anywhere else — and the
-/// mods missing from it are exactly the ones just installed, which is when a
-/// question about the library is most likely to be asked. The patch destination
-/// prompt asked one and was handed every folder except the mod it was for.
+/// no screen.** The pages are keyed children of an `AnimatedSwitcher` with no
+/// keep-alive, so the Library page's `State` is *disposed* the moment the user
+/// looks at the marketplace. A library owned by that page would be as old as
+/// the last visit to it for as long as the user is anywhere else — and the mods
+/// missing from it would be exactly the ones just installed, which is when a
+/// question about the library is most likely to be asked.
 ///
 /// So the scan lives here. Anything that needs the library reads this: cached
 /// while it is good, awaited when it is cold, and refreshed by whoever changes
@@ -98,9 +99,8 @@ final gameBananaClientProvider = Provider<GameBananaClient>((ref) {
 /// library is **4 ms warm, 12 ms cold**, so a refresh is not something to design
 /// around.
 ///
-/// The groups the sidebar draws ([charactersProvider]) are built *from* this and
-/// carry localized names, which is why they stay presentation state written by
-/// the screen rather than a provider derived here.
+/// The Library's character list is derived from this ([libraryGroupCountsProvider],
+/// [currentCharacterSkinsProvider]), so it follows a change made on any page.
 final libraryProvider =
     AsyncNotifierProvider<LibraryNotifier, List<ModInfo>>(LibraryNotifier.new);
 
@@ -109,8 +109,8 @@ class LibraryNotifier extends AsyncNotifier<List<ModInfo>> {
   /// The scan currently walking the folder, if any.
   ///
   /// **One walk at a time, whoever asked for it.** The first read of this
-  /// provider starts a scan, and at launch that read comes from above the tabs
-  /// — the bulk update check's plan reads the library — while the Mods tab
+  /// provider starts a scan, and at launch that read comes from above the pages
+  /// — the bulk update check's plan reads the library — while the Library page
   /// mounts a moment later and asks for one of its own. Two walks of the same
   /// folder at the same moment produce one answer between them, and the second
   /// publish tears the grid down to rebuild it identically.
@@ -188,27 +188,13 @@ class LibraryNotifier extends AsyncNotifier<List<ModInfo>> {
     final configService = await ApiService.getConfigService();
     final favourites = configService.favoriteMods.toSet();
 
-    final mods = <ModInfo>[];
-    for (final mod in scanned) {
-      // characterId is resolved by the service (in-folder metadata, then the
-      // legacy config tag). Fall back to name-based auto-detection — using the
-      // shared detector (brief/real names + aliases, word-boundary aware) so
-      // names whose id differs from the spoken form (e.g. "Zhu Yuan" vs the id
-      // "zhuyuan") still resolve instead of dropping into Unknown.
-      var characterId = mod.characterId;
-      if (isUnassignedCharacterId(characterId)) {
-        characterId = detectCharacterId(mod.name) ?? characterId;
-      }
-
-      // Preserve all service-resolved metadata (image, description, url, tags,
-      // images, keybinds); only override the per-install bits here.
-      mods.add(
-        mod.copyWith(
-          characterId: characterId,
-          isFavorite: favourites.contains(mod.id),
-        ),
-      );
-    }
+    // The character is what the service resolved (in-folder metadata, then the
+    // legacy config tag), never a guess from the name: "Zhao Nicole" reads as
+    // Nicole, and a mod the user filed under Unassigned must stay there. An
+    // import detects and saves a character once, where the user sees it.
+    final mods = [
+      for (final mod in scanned) mod.copyWith(isFavorite: favourites.contains(mod.id)),
+    ];
 
     await configService.cleanupInvalidTags([for (final mod in mods) mod.id]);
 
@@ -221,7 +207,7 @@ class LibraryNotifier extends AsyncNotifier<List<ModInfo>> {
 ///
 /// Derived from [libraryProvider], so a mod installed from the marketplace is
 /// badged as installed on the surface the user is looking at rather than after
-/// their next visit to the Mods tab — the one moment they cannot see the badge.
+/// their next visit to the Library — the one moment they cannot see the badge.
 /// Building the index over an already-scanned list is **under 1 ms**.
 ///
 /// Read it as `valueOrNull ?? InstalledModsIndex.empty`: while it loads, "nothing
@@ -231,28 +217,12 @@ final installedModsIndexProvider =
   return InstalledModsIndex.fromMods(await ref.watch(libraryProvider.future));
 });
 
-// Zoom scale provider
-final zoomScaleProvider = StateProvider<double>((ref) => 1.0);
-
 /// The pages the sidebar switches between.
 enum AppDestination { characters, browse, storage, settings }
 
 /// The page the main area shows. Its pages are keyed `AnimatedSwitcher` children
 /// with no keep-alive, so the page left behind is disposed.
 final destinationProvider = StateProvider<AppDestination>((ref) => AppDestination.characters);
-
-/// The sidebar's groups: "ALL", the built-in categories, then every character
-/// that has a mod.
-///
-/// **Presentation state, built from [libraryProvider] by `ModsScreen`.** It is
-/// written rather than derived because the names in it are localized, and
-/// `AppLocalizations` is reached through a `BuildContext`. Nothing that asks a
-/// question *about the library* should read this — it is one screen's view of
-/// the answer, and that screen is disposed while the user is on another tab.
-final charactersProvider = StateProvider<List<CharacterInfo>>((ref) => []);
-
-// Selected character index
-final selectedCharacterIndexProvider = StateProvider<int>((ref) => 0);
 
 /// Every mod in the library, once each — as far as a synchronous reader is
 /// concerned.
@@ -269,36 +239,124 @@ final modsProvider = Provider<List<ModInfo>>((ref) {
   return ref.watch(libraryProvider).valueOrNull ?? const <ModInfo>[];
 });
 
-// Search query provider
-final searchQueryProvider = StateProvider<String>((ref) => '');
+/// How many mods one row of the Library's character list holds, how many are on, and how many the last check
+/// flagged.
+@immutable
+class LibraryGroupCounts {
+  const LibraryGroupCounts({this.mods = 0, this.active = 0, this.updates = 0});
 
-// Filtered characters based on search - optimized with select
-final filteredCharactersProvider = Provider<List<CharacterInfo>>((ref) {
-  final characters = ref.watch(charactersProvider);
-  final query = ref.watch(searchQueryProvider);
+  final int mods;
+  final int active;
+  final int updates;
 
-  if (query.isEmpty) {
-    return characters;
+  static const LibraryGroupCounts empty = LibraryGroupCounts();
+}
+
+/// Every row of the character list's counts, keyed by [libraryGroupOf]. A row with no mods is absent.
+final libraryGroupCountsProvider = Provider<Map<String, LibraryGroupCounts>>((ref) {
+  final checks = ref.watch(modUpdateChecksProvider);
+  final counts = <String, ({int mods, int active, int updates})>{};
+  for (final mod in ref.watch(modsProvider)) {
+    final group = libraryGroupOf(mod.characterId);
+    final c = counts[group] ?? (mods: 0, active: 0, updates: 0);
+    counts[group] = (
+      mods: c.mods + 1,
+      active: c.active + (mod.isActive ? 1 : 0),
+      updates: c.updates + ((checks[mod.id]?.hasUpdate ?? false) ? 1 : 0),
+    );
   }
-
-  final lowerQuery = query.toLowerCase();
-  return characters.where((character) {
-    return character.name.toLowerCase().contains(lowerQuery) ||
-        character.id.toLowerCase().contains(lowerQuery);
-  }).toList();
+  return {
+    for (final e in counts.entries)
+      e.key: LibraryGroupCounts(mods: e.value.mods, active: e.value.active, updates: e.value.updates),
+  };
 });
 
-// Skins for selected character - optimized
+/// The row of the character list the user picked, or null before they have picked one.
+final selectedCharacterIdProvider = StateProvider<String?>((ref) => null);
+
+/// Whether [selectedCharacterIdProvider] holds the user's own click on a row, rather than a character the app chose
+/// for them (the sidebar's Updates button). A drop or paste is filed under a character only when it does
+/// (`docs/library-screen.md` §3).
+final characterPickedByUserProvider = StateProvider<bool>((ref) => false);
+
+/// The character list row on screen: the one picked, or else the first agent with a mod, the first category with
+/// one, Unassigned if it has one, and the first agent when the library is empty.
+///
+/// Held by id and above the page, so it survives a page switch and a group gaining or losing its last mod.
+final currentCharacterIdProvider = Provider<String>((ref) {
+  final picked = ref.watch(selectedCharacterIdProvider);
+  if (picked != null) return picked;
+  final counts = ref.watch(libraryGroupCountsProvider);
+  return libraryGroupIds.firstWhere((id) => counts.containsKey(id), orElse: () => zzzCharacterIds.first);
+});
+
+/// The mods filed under the character list row on screen.
 final currentCharacterSkinsProvider = Provider<List<ModInfo>>((ref) {
-  final characters = ref.watch(charactersProvider);
-  final selectedIndex = ref.watch(selectedCharacterIndexProvider);
-
-  if (characters.isEmpty || selectedIndex < 0 || selectedIndex >= characters.length) {
-    return const [];
-  }
-
-  return characters[selectedIndex].skins;
+  final current = ref.watch(currentCharacterIdProvider);
+  return [
+    for (final mod in ref.watch(modsProvider))
+      if (libraryGroupOf(mod.characterId) == current) mod,
+  ];
 });
+
+/// How much a mod's own files take, its sidecar left out as the Storage page leaves it out of Mods
+/// (`docs/disk-usage.md`). Null while there is no library to look in.
+///
+/// Measured on demand for the mods on screen, off the UI isolate, and again when the mod changes; a walk is
+/// about half a millisecond per mod. Apparent size, like every other number the app shows.
+final modSizeProvider = FutureProvider.autoDispose.family<DirSize?, String>((ref, modId) async {
+  // Watched so an update or a restore, which reach the library as a changed mod, measure it again.
+  ref.watch(modsProvider.select((mods) => mods.where((m) => m.id == modId).firstOrNull));
+  final library = ref.watch(modsPathProvider);
+  if (library.isEmpty) return null;
+  final folder = p.join(library, modId);
+  return measureDirectory(folder, excludePaths: {p.join(folder, AppConstants.modMetadataDirName)});
+});
+
+/// Which rows the character list shows.
+enum CharacterListFilter { all, hasMods, active, updates }
+
+final characterListFilterProvider = StateProvider<CharacterListFilter>((ref) => CharacterListFilter.all);
+
+/// Which of the character's mods the grid shows. One at a time, like the chips that set it.
+///
+/// [needsAttention] has no chip of its own unless something needs attention: it is what the library menu's "assume
+/// current" turns on, so the grid shows the set before it is rewritten (`docs/library-screen.md` §9).
+enum ModGridFilter { all, active, updates, favorites, needsAttention }
+
+final modGridFilterProvider = StateProvider<ModGridFilter>((ref) => ModGridFilter.all);
+
+/// The mod the details panel shows, by folder id. Null closes the panel.
+final selectedModIdProvider = StateProvider<String?>((ref) => null);
+
+/// The user's note on each mod, by folder id. Hydrated in `ApiService.initialize`, written through
+/// `ApiService.setModNote` (`docs/library-screen.md` §11).
+final modNotesProvider = StateProvider<Map<String, String>>((ref) => const {});
+
+/// Whether turning one of a group's mods on turns the others off, for the groups the user has switched. Hydrated in
+/// `ApiService.initialize`, written through `ApiService.setOneAtATime`. Read through [isOneAtATime].
+final oneAtATimeProvider = StateProvider<Map<String, bool>>((ref) => const {});
+
+/// Whether [groupId] has a One at a time switch at all: unassigned mods belong to no one character, so there are no
+/// "others" to turn off (`docs/library-screen.md` §10).
+bool hasOneAtATime(String groupId) => groupId != unknownCharacterId;
+
+/// The switch's state for [groupId]: the user's choice, or the default, on for agents and off for categories.
+bool isOneAtATime(Map<String, bool> choices, String groupId) {
+  if (!hasOneAtATime(groupId)) return false;
+  return choices[groupId] ?? !isBuiltInCategory(groupId);
+}
+
+/// The mods turning [mod] on turns off: with its group's One at a time on, every other mod of the group that is on.
+/// Empty when [mod] is on already, since the press turns it off.
+Set<String> modsToSwitchOff(List<ModInfo> library, ModInfo mod, Map<String, bool> oneAtATime) {
+  final group = libraryGroupOf(mod.characterId);
+  if (mod.isActive || !isOneAtATime(oneAtATime, group)) return const {};
+  return {
+    for (final other in library)
+      if (other.isActive && other.id != mod.id && libraryGroupOf(other.characterId) == group) other.id,
+  };
+}
 
 /// The user's theme choice: light, dark, or whatever the desktop is set to.
 ///
@@ -463,66 +521,19 @@ final fileLoggingProvider = StateProvider<bool>((ref) => true);
 /// run, since the choice is persisted from then on.
 const GbModSort kDefaultMarketplaceSort = GbModSort.newest;
 
-// View mode: grid or carousel
-final isGridViewProvider = StateProvider<bool>((ref) => true);
-
 // Locale provider for localization
 final localeProvider = StateProvider<Locale>((ref) => const Locale('en'));
-
-// Activation mode: single (один скін) або multi (кілька скінів)
-enum ActivationMode { single, multi }
-
-final activationModeProvider = StateProvider<ActivationMode>((ref) => ActivationMode.single);
-
-// ── Mods toolbar: search / sort / tag filter / favorites ────────────────────
-// Held here (not as ad-hoc widget state) so the toolbar and the mods grid each
-// rebuild only on the slice they watch, instead of rebuilding the whole screen.
 
 /// Sort options for the mods list.
 enum ModSort { added, nameAsc, nameDesc }
 
 final modSortProvider = StateProvider<ModSort>((ref) => ModSort.added);
-final modSearchQueryProvider = StateProvider<String>((ref) => '');
-final modTagFiltersProvider = StateProvider<Set<String>>((ref) => <String>{});
-// false = match ANY selected tag, true = match ALL.
-final modTagMatchAllProvider = StateProvider<bool>((ref) => false);
-final modFavoritesOnlyProvider = StateProvider<bool>((ref) => false);
-
-/// Show only mods whose origin isn't fully known — the "needs attention" filter.
-///
-/// A status dot on a card is *spatial*: to act on 80 mods you first have to be
-/// able to enumerate them. This is that, and it deliberately covers both
-/// non-empty states of the slot rather than only the amber one — see
-/// [modNeedsAttention] for why the badge and the filter answer different
-/// questions.
-final modNeedsAttentionOnlyProvider = StateProvider<bool>((ref) => false);
-
-/// Whether any filter (search / tags / favorites / needs-attention) is
-/// currently narrowing the list. Sort mode is not a filter.
-final modFiltersActiveProvider = Provider<bool>((ref) {
-  return ref.watch(modSearchQueryProvider).isNotEmpty ||
-      ref.watch(modTagFiltersProvider).isNotEmpty ||
-      ref.watch(modFavoritesOnlyProvider) ||
-      ref.watch(modNeedsAttentionOnlyProvider) ||
-      ref.watch(modUpdatesOnlyProvider);
-});
-
-/// Resets the mods search / tag / favorites / needs-attention filters (leaves
-/// the sort mode).
-void clearModFilters(WidgetRef ref) {
-  ref.read(modSearchQueryProvider.notifier).state = '';
-  ref.read(modTagFiltersProvider.notifier).state = <String>{};
-  ref.read(modFavoritesOnlyProvider.notifier).state = false;
-  ref.read(modNeedsAttentionOnlyProvider.notifier).state = false;
-  ref.read(modUpdatesOnlyProvider.notifier).state = false;
-}
 
 /// How many mods in the current view would survive the needs-attention filter.
 ///
-/// Shown on the toggle so pressing it is a decision rather than a guess: a zero
-/// says "nothing here to resolve" without the user having to press and land on
-/// an empty grid. Counted over the same list [visibleModsProvider] starts from,
-/// so it can't claim mods the view doesn't contain.
+/// Shown on its chip so pressing it is a decision rather than a guess, and the
+/// chip hides at zero. Counted over the same list [visibleModsProvider] starts
+/// from, so it can't claim mods the view doesn't contain.
 final modsNeedingAttentionCountProvider = Provider<int>((ref) {
   return ref
       .watch(currentCharacterSkinsProvider)
@@ -530,7 +541,7 @@ final modsNeedingAttentionCountProvider = Provider<int>((ref) {
       .length;
 });
 
-/// How many mods in the whole library need attention, for the reminder above the toolbar.
+/// How many mods in the whole library need attention, for the reminder above the grid.
 final untrackedModsCountProvider = Provider<int>((ref) {
   return ref.watch(modsProvider).where(modInfoNeedsAttention).length;
 });
@@ -539,53 +550,26 @@ final untrackedModsCountProvider = Provider<int>((ref) {
 /// Hydrated from `config.json` in `ApiService.initialize`, written through `ApiService.setTrackingNudgeDismissed`.
 final trackingNudgeDismissedProvider = StateProvider<bool>((ref) => false);
 
-/// Distinct tags present in the current view's mods (sorted), for the
-/// tag-filter dropdown.
-final availableModTagsProvider = Provider<List<String>>((ref) {
-  final tags = <String>{};
-  for (final m in ref.watch(currentCharacterSkinsProvider)) {
-    tags.addAll(m.tags);
-  }
-  return tags.toList()
-    ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-});
-
-/// The current view's mods after applying search, favorites, tag filters and
-/// sort. Tag filters are intersected with the tags actually present in the view
-/// so a tag selected elsewhere (e.g. before switching tabs) can't silently
-/// empty the list.
+/// The current view's mods after the grid's filter and sort.
 final visibleModsProvider = Provider<List<ModInfo>>((ref) {
-  final query = ref.watch(modSearchQueryProvider).toLowerCase();
-  final favoritesOnly = ref.watch(modFavoritesOnlyProvider);
-  final needsAttentionOnly = ref.watch(modNeedsAttentionOnlyProvider);
-  final tagFilters = ref.watch(modTagFiltersProvider);
-  final matchAll = ref.watch(modTagMatchAllProvider);
   final sort = ref.watch(modSortProvider);
 
   Iterable<ModInfo> result = ref.watch(currentCharacterSkinsProvider);
 
-  if (query.isNotEmpty) {
-    result = result.where((m) => m.name.toLowerCase().contains(query));
-  }
-  if (favoritesOnly) {
-    result = result.where((m) => m.isFavorite);
-  }
-  if (needsAttentionOnly) {
-    result = result.where(modInfoNeedsAttention);
-  }
-  if (ref.watch(modUpdatesOnlyProvider)) {
-    // Ignored updates fall out here without a second rule: `hasUpdate` is
-    // already false once a dismissal covers the finding.
-    final checks = ref.watch(modUpdateChecksProvider);
-    result = result.where((m) => checks[m.id]?.hasUpdate ?? false);
-  }
-  final activeTags = tagFilters.isEmpty
-      ? const <String>{}
-      : tagFilters.intersection(ref.watch(availableModTagsProvider).toSet());
-  if (activeTags.isNotEmpty) {
-    result = result.where((m) => matchAll
-        ? activeTags.every(m.tags.contains)
-        : m.tags.any(activeTags.contains));
+  switch (ref.watch(modGridFilterProvider)) {
+    case ModGridFilter.all:
+      break;
+    case ModGridFilter.active:
+      result = result.where((m) => m.isActive);
+    case ModGridFilter.updates:
+      // Ignored updates fall out here without a second rule: `hasUpdate` is
+      // already false once a dismissal covers the finding.
+      final checks = ref.watch(modUpdateChecksProvider);
+      result = result.where((m) => checks[m.id]?.hasUpdate ?? false);
+    case ModGridFilter.favorites:
+      result = result.where((m) => m.isFavorite);
+    case ModGridFilter.needsAttention:
+      result = result.where(modInfoNeedsAttention);
   }
 
   var list = result.toList();
@@ -608,22 +592,26 @@ final visibleModsProvider = Provider<List<ModInfo>>((ref) {
 /// Built from [visibleModsProvider] — **the list the grid actually renders** —
 /// and not from the wider list [modsNeedingAttentionCountProvider] counts. The
 /// action rewrites every mod it covers, so the one property it cannot give up
-/// is that its number describes what is on screen. Sourcing it from the
-/// unfiltered view breaks that the moment two filters combine: search `ellen`
-/// with the needs-attention filter on and the grid shows three mods while the
-/// button offers to rewrite twelve.
-///
-/// The consequence to know: the button's count and the toolbar's `!` count are
-/// then allowed to differ, because they answer different questions — the toggle
-/// counts what the view *could* show, the button counts what it *is* showing.
-/// They agree whenever the needs-attention filter is the only one active, which
-/// is the case the button was designed around.
+/// is that its number describes what is on screen.
 ///
 /// The eligible / untracked / undatable split is [planBulkAssumeCurrent]'s, and
 /// the confirmation names all three.
 final bulkAssumeCurrentPlanProvider = Provider<BulkAssumeCurrentPlan>((ref) {
   return planBulkAssumeCurrent(ref.watch(visibleModsProvider));
 });
+
+/// How many mods "mark all as current" would write for the character on screen, whichever filter is on.
+///
+/// The menu's number, and not [bulkAssumeCurrentPlanProvider]'s: the action turns the Needs attention filter on
+/// before it plans, so the count has to be taken over that set, not over whatever the grid shows at the press.
+/// Every mod the plan can date needs attention, so planning over the character's mods gives the same set.
+final characterAssumeCurrentCountProvider = Provider<int>((ref) {
+  return planBulkAssumeCurrent(ref.watch(currentCharacterSkinsProvider)).eligible.length;
+});
+
+/// Whether a whole-library update check the user started is running. Read by every control that would start
+/// another, since two passes would race their results into one map. Set by `LibraryActionsHost`.
+final libraryCheckRunningProvider = StateProvider<bool>((ref) => false);
 
 // ── Update checks ───────────────────────────────────────────────────────────
 
@@ -697,8 +685,6 @@ final bulkUpdateCheckPlanProvider = Provider<BulkUpdateCheckPlan>((ref) {
 /// Note the asymmetry with [bulkUpdateCheckPlanProvider], which is deliberate:
 /// the **check** covers the whole library because its badges are drawn on every
 /// tab, while the **filter** covers this tab because that is all it can narrow.
-/// One control now does both, so the two numbers answer different halves of it —
-/// see the toolbar button for how that reads.
 ///
 /// Counted over the mods rather than over the results map so a mod deleted since
 /// the check can't keep contributing to the number, and ignored updates fall out
@@ -729,26 +715,13 @@ final libraryUpdateCountProvider = Provider<int>((ref) {
       .length;
 });
 
-/// Whether any of them do. Drives the update filter switching *itself* off once
-/// there is nothing left to show — on the view-scoped count that would fire
-/// merely because the user clicked a character tab with no updates of its own,
+/// Whether any of them do. Drives the Updates filters switching *themselves* off
+/// once there is nothing left to show — on the view-scoped count that would fire
+/// merely because the user picked a character with no updates of its own,
 /// giving a filter that vanishes when you look somewhere else.
 final libraryHasUpdatesProvider = Provider<bool>((ref) {
   return ref.watch(libraryUpdateCountProvider) > 0;
 });
-
-/// Show only mods the last check flagged.
-///
-/// No control of its own: the toolbar's update-check button carries it, acting
-/// as a filter toggle once a check has found something and as the check action
-/// before that. Session state like the results it reads, so it cannot outlive
-/// them.
-///
-/// **Switches itself off when the library runs out of updates** — see the
-/// toolbar, which owns that. Ignoring the last flagged mod otherwise leaves the
-/// grid filtered to nothing, which is the same "the reward for pressing the
-/// button is an empty grid" the bulk "assume current" action already avoids.
-final modUpdatesOnlyProvider = StateProvider<bool>((ref) => false);
 
 /// Pre-update snapshots, in `<appData>/backups`.
 ///

@@ -256,6 +256,8 @@ void main() {
     await service.addActiveMod('SomeMod');
     await service.addFavoriteMod('SomeMod');
     await service.setModCharacterTag('SomeMod', 'ellen');
+    await service.setModNote('SomeMod', 'use with the white hairpin');
+    await service.setOneAtATime('cat_ui', true);
 
     final written = (await readFile()).keys.toSet();
 
@@ -283,6 +285,8 @@ void main() {
       'active_mods': next.activeMods,
       'favorite_mods': next.favoriteMods,
       'mod_character_tags': next.modCharacterTags,
+      'mod_notes': next.modNotes,
+      'one_at_a_time': next.oneAtATime,
       // `first_run` is always serialised as false and has no round-trip value.
       'first_run': false,
     };
@@ -416,6 +420,29 @@ void main() {
       expect(json['zzmi_path'], zzmi);
       expect(json['save_mods_path'], '$zzmi/mods');
       expect(service.saveModsPath, '$zzmi/mods');
+    });
+  });
+
+  group('the per-mod writes say when config.json was not written', () {
+    test('true when it was', () async {
+      final service = await build();
+      expect(await service.setModNote('Winter Maid', 'the blue one'), isTrue);
+      expect(await service.setOneAtATime('ellen', true), isTrue);
+      expect(await service.addFavoriteMod('Winter Maid'), isTrue);
+      expect(await service.removeFavoriteMod('Winter Maid'), isTrue);
+      expect(await service.migrateModName('Winter Maid', 'Winter Maid 2'), isTrue);
+    });
+
+    test('false when it could not be', () async {
+      // A folder where the file should be, so the write throws.
+      Directory(configFile().path).createSync();
+      final service = await build();
+
+      expect(await service.setModNote('Winter Maid', 'the blue one'), isFalse);
+      expect(await service.setOneAtATime('ellen', true), isFalse);
+      expect(await service.addFavoriteMod('Winter Maid'), isFalse);
+      expect(await service.removeFavoriteMod('Winter Maid'), isFalse);
+      expect(await service.migrateModName('Winter Maid', 'Winter Maid 2'), isFalse);
     });
   });
 }

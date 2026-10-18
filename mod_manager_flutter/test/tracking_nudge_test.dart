@@ -5,6 +5,7 @@ import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/origin_write.dart';
+import 'package:mod_manager_flutter/screens/components/library_actions_host.dart';
 import 'package:mod_manager_flutter/screens/components/mods_toolbar.dart';
 import 'package:mod_manager_flutter/screens/components/tracking_nudge.dart';
 import 'package:mod_manager_flutter/screens/dialogs/bulk_resolution_dialog.dart';
@@ -27,10 +28,10 @@ void main() {
         provenance: OriginProvenance.downloaded,
       );
 
-  ModInfo mod(String name, {ModOrigin? origin}) => ModInfo(
+  ModInfo mod(String name, {ModOrigin? origin, String characterId = 'ellen'}) => ModInfo(
         id: name,
         name: name,
-        characterId: 'ellen',
+        characterId: characterId,
         isActive: false,
         origin: origin,
       );
@@ -44,16 +45,19 @@ void main() {
   }) async {
     container = ProviderContainer(overrides: [libraryOf(mods)]);
     addTearDown(container.dispose);
-    container.read(charactersProvider.notifier).state = [
-      CharacterInfo(id: 'all', name: 'All', skins: mods),
-    ];
+    container.read(selectedCharacterIdProvider.notifier).state = 'ellen';
     container.read(trackingNudgeDismissedProvider.notifier).state = dismissed;
 
     await pumpLocalized(
       tester,
-      ModsToolbar(
+      LibraryActionsHost(
+        updateFetcher: (_) async => throw StateError('no fetch expected'),
+        updatesFetcher: (_) async => throw StateError('no fetch expected'),
         originWriter: (_, __) async => OriginWriteResult.writeFailed,
-        nudgeWriter: (value) async => written?.add(value),
+        child: ModsToolbar(
+          originWriter: (_, __) async => OriginWriteResult.writeFailed,
+          nudgeWriter: (value) async => written?.add(value),
+        ),
       ),
       container: container,
       surfaceSize: surfaceSize,
@@ -61,11 +65,12 @@ void main() {
     expectBuilt(ModsToolbar);
   }
 
-  testWidgets('holds together at a narrow window', (tester) async {
+  testWidgets('holds together at the minimum window', (tester) async {
+    // 800px less the sidebar and the character list.
     await pumpToolbar(
       tester,
       [for (var i = 0; i < 120; i++) mod('mod $i')],
-      surfaceSize: const Size(480, 400),
+      surfaceSize: const Size(304, 600),
     );
 
     expect(find.byType(TrackingNudge), findsOneWidget);
@@ -73,9 +78,10 @@ void main() {
   });
 
   testWidgets('counts the whole library, not the view', (tester) async {
+    // Ellen is on screen; the second untracked mod is Miyabi's.
     await pumpToolbar(tester, [
       mod('bare'),
-      mod('also bare'),
+      mod('also bare', characterId: 'miyabi'),
       mod('fine', origin: tracked()),
     ]);
 
@@ -105,7 +111,7 @@ void main() {
 
     await tester.tap(find.descendant(
       of: find.byType(TrackingNudge),
-      matching: find.byType(TextButton),
+      matching: find.byType(OutlinedButton),
     ));
     await tester.pumpAndSettle();
 

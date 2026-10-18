@@ -12,9 +12,9 @@ import 'update_check.dart';
 /// are which.
 ///
 /// The one-slot rule is the point. A card that can stack three badges shows
-/// none of them, and badging every unversioned mod ambers an entire legacy
-/// library — which trains the user to ignore the slot altogether. So the states
-/// are ordered by how *actionable* they are and the first match wins.
+/// none of them, and a loud badge on every unversioned mod covers an entire
+/// legacy library — which trains the user to ignore the badge altogether. So the
+/// states are ordered by how *actionable* they are and the first match wins.
 enum ModOriginStatus {
   /// Nothing to show. Either the origin is as known as it needs to be, or the
   /// user has opted this mod out.
@@ -26,10 +26,11 @@ enum ModOriginStatus {
   untracked,
 
   /// Identity known and a version *recorded*, but only as a guess — the user
-  /// answered "I don't know which file, I got it around then", or a future bulk
-  /// pass inferred one.
+  /// answered "I don't know which file, I got it around then" (`assumed_latest`,
+  /// shown as "Dated only"), or the bulk resolution pass worked a file out
+  /// (`inferred`, shown as "Guessed file").
   ///
-  /// **Informational, like [untracked], and deliberately not amber.** Nothing is
+  /// **Informational, like [untracked], and grey like it.** Nothing is
   /// wrong here and nothing is owed: settling for a date is a legitimate answer,
   /// and the bulk action exists to make it the answer for a whole library at
   /// once. What the user loses without this state is the ability to tell a mod
@@ -45,10 +46,8 @@ enum ModOriginStatus {
   /// The folder is recorded as holding a **patch** and nobody has said what it
   /// patches, so the app can only ask about one of the two mods in it.
   ///
-  /// **A new state, deliberately not a new visual.** It renders as the same
-  /// amber pill and the same glyph as [versionUnknown] and differs only in its
-  /// tooltip — the pattern the slot already uses for `updateAvailable` versus
-  /// `possiblyOutdated`. Folding it into [versionUnknown] outright would make
+  /// **A state of its own in the same blue as [versionUnknown]**, with its own
+  /// words. Folding it into [versionUnknown] outright would make
   /// the card say "we don't know which file you have", which is false for a
   /// patch we downloaded and recorded at `exact`; the unknown is the *other*
   /// mod.
@@ -73,9 +72,10 @@ enum ModOriginStatus {
 /// The order of these checks is the whole design:
 ///
 /// - **`tracking: off` wins over everything.** It is the user saying "not from
-///   GameBanana / it's my own", and the promise attached to it is that the slot
-///   goes quiet permanently. An id worked out from a link that was wrong is
-///   exactly why they might have said it, so it must not talk them out of it.
+///   GameBanana / it's my own", and the promise attached to it is that the card
+///   asks for nothing about it again; the card shows it back as "Local". An id
+///   worked out from a link that was wrong is exactly why they might have said
+///   it, so it must not talk them out of it.
 /// - **Identity before version.** Without a mod id there is nothing to check a
 ///   version against, so "untracked" is the truthful answer even though the
 ///   version is also unknown. Reporting the version instead would promise an
@@ -83,11 +83,11 @@ enum ModOriginStatus {
 /// - **Only `unknown` is actionable.** `assumed_latest` is the user having
 ///   already answered "I don't know which, I got it around then", and
 ///   `inferred` is a guess we recorded and label as one. Both are resolved
-///   states; re-ambering them would mean the dialog can never be finished.
-///   They are not *silent*, though — see [ModOriginStatus.versionGuessed]. A
-///   resolved guess and a known file used to render identically, which left the
-///   user unable to tell which of their mods they had actually sorted out. The
-///   fix is a quieter state, not a louder one.
+///   states; asking about them again would mean the dialog can never be
+///   finished. They are not *silent*, though — see
+///   [ModOriginStatus.versionGuessed]: rendered like a known file, they would
+///   leave the user unable to tell which of their mods they had actually sorted
+///   out. So they get a quieter state, not a louder one.
 ModOriginStatus modOriginStatus(ModOrigin? origin) {
   if (origin == null) return ModOriginStatus.untracked;
   if (origin.tracking == OriginTracking.off) return ModOriginStatus.none;
@@ -100,16 +100,15 @@ ModOriginStatus modOriginStatus(ModOrigin? origin) {
   // decided here rather than left to chance.
   if (origin.needsBase) return ModOriginStatus.secondIdentityUnknown;
   // **A folder is only as resolved as its least-resolved layer.** Naming the
-  // base clears `needsBase`, and without this the slot then reads the bottom
+  // base clears `needsBase`, and without this the badge would read the bottom
   // layer's version confidence alone — `exact` for something we downloaded — so
-  // a folder whose upper half we cannot judge rendered nothing at all. Not
-  // amber, and not blue either: the check answers `versionUnknown` for that
-  // layer rather than finding an update, so there was no verdict to show and no
-  // mark to explain it.
+  // a folder whose upper half we cannot judge would show nothing at all. The
+  // check answers `versionUnknown` for that layer rather than finding an update,
+  // so there is no verdict to show either.
   //
   // A layer with no identity is skipped: nothing can be known about which file
-  // of an unnamed download is installed, and an amber mark demanding the user
-  // resolve something the app cannot ask about is a mark with nowhere to go.
+  // of an unnamed download is installed, and a badge asking the user to resolve
+  // something the app cannot ask about is a badge with nowhere to go.
   for (final patch in origin.patches) {
     if (patch.hasIdentity &&
         patch.versionConfidence == OriginConfidence.unknown) {
@@ -118,9 +117,9 @@ ModOriginStatus modOriginStatus(ModOrigin? origin) {
   }
   return switch (base.versionConfidence) {
     OriginConfidence.unknown => ModOriginStatus.versionUnknown,
-    // A recorded guess. `inferred` is included even though nothing writes it
-    // yet — the bulk resolution pass will, and a guess that renders as
-    // fully-known is precisely the gap this state exists to close.
+    // A recorded guess: a date with no file, or a file the bulk resolution
+    // pass worked out. A guess that renders as fully known is precisely the gap
+    // this state exists to close.
     OriginConfidence.assumedLatest ||
     OriginConfidence.inferred =>
       ModOriginStatus.versionGuessed,
@@ -135,8 +134,8 @@ ModOriginStatus modOriginStatus(ModOrigin? origin) {
 ///
 /// Precedence, and the reasons rather than the order:
 ///
-/// - **The origin block still wins first for `tracking: "off"`.** It renders
-///   nothing, and an update verdict must not talk over it. In practice a check
+/// - **The origin block still wins first for `tracking: "off"`.** The card shows
+///   "Local" and asks for nothing, and an update verdict must not talk over it. In practice a check
 ///   on such a mod cannot produce one — `checkForUpdate` short-circuits on
 ///   `tracking: "off"` — so this is belt and braces rather than a live branch.
 /// - **An update beats every origin state.** The two overlap in exactly the
@@ -175,7 +174,7 @@ ModOriginStatus modSlotStatus(ModOrigin? origin, UpdateCheck? update) {
 ///
 /// A recorded guess does **not** belong in it, and this is the one place the
 /// two rules had to come apart rather than share a single "is the slot empty?"
-/// test. The bulk "assume current" action turns amber mods into guessed ones,
+/// test. The bulk "assume current" action turns "Which file?" mods into dated ones,
 /// and the count dropping is the entire visible proof that it worked. Were
 /// guessed mods still counted, the number would sit unchanged while the marks
 /// merely changed shape, which reads as a button that did nothing.

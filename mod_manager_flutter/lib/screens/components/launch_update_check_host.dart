@@ -21,11 +21,14 @@ import 'update_check_feedback.dart';
 ///
 /// **Where it is mounted is part of the design.** The check is started by
 /// nobody and outlives whatever the user does next, so it cannot be owned by a
-/// tab: the three tabs are keyed `AnimatedSwitcher` children with no
-/// keep-alive, so `ModsToolbar` — which owns the *manual* check — is disposed
-/// the moment the user looks at the marketplace, taking a pass in flight with
-/// it. This wraps the switcher instead, like `DownloadQueueHost`. Unlike that
-/// host it raises no dialog, so it does not need to sit below the `Navigator`.
+/// page: the pages are keyed `AnimatedSwitcher` children with no keep-alive.
+/// This wraps the switcher instead, like `DownloadQueueHost` and
+/// `LibraryActionsHost`, which runs the *manual* check. Unlike those it raises
+/// no dialog, so it does not need to sit below the `Navigator`.
+///
+/// **It shares [libraryCheckRunningProvider] with the manual check**: whichever
+/// is running, the other does not start, since two passes would race their
+/// results into one map.
 ///
 /// **It never opens the bulk resolution screen.** The manual check does, when
 /// the pass turned up mods whose tracking could be sorted out — but that screen
@@ -53,8 +56,8 @@ class LaunchUpdateCheckHost extends ConsumerStatefulWidget {
   final Widget child;
 
   /// Injected only by tests. Defaults to the shared GameBanana client, which a
-  /// widget test must not be allowed to reach — the same seam `ModsToolbar`
-  /// carries for the manual check.
+  /// widget test must not be allowed to reach — the same seam
+  /// `LibraryActionsHost` carries for the manual check.
   final ModRecordFetcher? updateFetcher;
 
   /// Injected only by tests, for the same reason: the second phase, asking each
@@ -113,8 +116,12 @@ class _LaunchUpdateCheckHostState extends ConsumerState<LaunchUpdateCheckHost> {
     if (action == LaunchCheckAction.wait) return;
     _windowClosed = true;
     if (action == LaunchCheckAction.close) return;
+    // A check the user started already answers the same question.
+    final running = ref.read(libraryCheckRunningProvider.notifier);
+    if (running.state) return;
 
     final BulkUpdateCheckOutcome outcome;
+    running.state = true;
     try {
       outcome = await runLibraryUpdateCheck(
         plan: plan,
@@ -127,9 +134,12 @@ class _LaunchUpdateCheckHostState extends ConsumerState<LaunchUpdateCheckHost> {
       // not something the user has to act on — and the commonest cause by far
       // is starting the app offline. A card saying "couldn't check for updates"
       // on every offline launch is what gets the setting switched off. The
-      // toolbar's check is the one that reports, and it is one click away.
+      // library menu's check is the one that reports, and it is one click away.
       Logger('update.check').warning('startup check failed', error: e);
       return;
+    } finally {
+      // Unconditional: the controller outlives this host, and a flag left set would disable every check.
+      running.state = false;
     }
 
     if (!mounted) return;

@@ -70,6 +70,8 @@ class ApiService {
           _configService!.updateCheckOnLaunch;
       _container!.read(trackingNudgeDismissedProvider.notifier).state =
           _configService!.trackingNudgeDismissed;
+      _container!.read(modNotesProvider.notifier).state = _configService!.modNotes;
+      _container!.read(oneAtATimeProvider.notifier).state = _configService!.oneAtATime;
       _container!.read(fileLoggingProvider.notifier).state =
           _configService!.fileLogging;
       _container!.read(modsPathProvider.notifier).state =
@@ -107,12 +109,16 @@ class ApiService {
   /// Always paired with [resetForTests] in a tear-down: the fields are static,
   /// so a library left installed outlives the test that made it and the next
   /// test writes into a directory that has been deleted.
+  ///
+  /// [service] is the caller's own manager, whose shader-fixes record is in its
+  /// temp folder. Required: the facade's own default would use the developer's
+  /// real `<appData>/shader_fixes.json`.
   @visibleForTesting
-  static void useLibraryForTests(ConfigService config) {
+  static void useLibraryForTests(ConfigService config, {required ModManagerService service}) {
     _configService = config;
-    // Dropped rather than kept: a manager built over the previous test's config
-    // still holds that test's temp paths, and `??=` below would keep it.
-    _modManager = null;
+    // Replaced rather than kept: a manager built over the previous test's config
+    // still holds that test's temp paths, and `??=` in [initialize] would keep it.
+    _modManager = service;
     _container = null;
   }
 
@@ -155,30 +161,15 @@ class ApiService {
     }
   }
 
-  static Future<bool> toggleMod(String modId) async {
-    try {
-      await initialize();
-      return await _modManager!.toggleMod(modId);
-    } on ShaderPlacementRefused {
-      rethrow;
-    } catch (e) {
-      throw Exception('Помилка переключення моду: $e');
-    }
-  }
-
-  /// Throws [ShaderPlacementRefused] when enabling [modId] would be refused for
-  /// its shader files. Changes nothing.
-  static Future<void> checkActivation(String modId) async {
-    await initialize();
-    await _modManager!.checkActivation(modId);
-  }
-
-  /// Renames a mod's folder, migrating its active/favorite/category state and
+  /// Renames a mod's folder, migrating its active/favorite/note/category state and
   /// the active link. Returns false on collision or failure.
   static Future<bool> renameMod(String oldName, String newName) async {
     try {
       await initialize();
-      return await _modManager!.renameMod(oldName, newName);
+      final renamed = await _modManager!.renameMod(oldName, newName);
+      // The note moved with the rename; the provider still has it under the old name.
+      if (renamed) _container?.read(modNotesProvider.notifier).state = _configService!.modNotes;
+      return renamed;
     } catch (e) {
       throw Exception('Помилка перейменування моду: $e');
     }
@@ -189,7 +180,9 @@ class ApiService {
   static Future<bool> deleteMod(String modId) async {
     try {
       await initialize();
-      return await _modManager!.deleteMod(modId);
+      final deleted = await _modManager!.deleteMod(modId);
+      if (deleted) _container?.read(modNotesProvider.notifier).state = _configService!.modNotes;
+      return deleted;
     } catch (e) {
       throw Exception('Помилка видалення моду: $e');
     }
@@ -215,41 +208,53 @@ class ApiService {
     }
   }
 
-  /// Активує скін для персонажа, автоматично деактивуючи інші скіни цього персонажа
-  static Future<bool> toggleModForCharacter(
-    String modId, 
-    String characterId, 
-    List<ModInfo> characterSkins, 
-    {bool multiMode = false}
-  ) async {
+  /// Turns [modId] on, after turning every mod in [switchOff] off: the enable a character's One at a time switch
+  /// asks for (`docs/library-screen.md` §10).
+  ///
+  /// The dry run comes first, so a refused enable throws [ShaderPlacementRefused] before anything changes. A mod in
+  /// [switchOff] that will not turn off stops the enable, rather than leaving two on under a switch that says one.
+  ///
+  /// False means the enable failed: a link could not be made or removed. Mods in [switchOff] may be off by then, so
+  /// the caller reports the failure and reads the disk again.
+  static Future<bool> enableMod(String modId, {Iterable<String> switchOff = const []}) async {
     try {
       await initialize();
-      
-      // Знаходимо поточний мод
-      final currentMod = characterSkins.firstWhere((mod) => mod.id == modId);
-      
-      // Якщо мод вже активний, просто деактивуємо його
-      if (currentMod.isActive) {
-        return await _modManager!.deactivateMod(modId);
+      await _modManager!.checkActivation(modId);
+      for (final other in switchOff) {
+        if (!await _modManager!.deactivateMod(other)) return false;
       }
-      
-      // У режимі Single - деактивуємо всі інші активні скіни
-      if (!multiMode) {
-        for (final skin in characterSkins) {
-          if (skin.isActive && skin.id != modId) {
-            await _modManager!.deactivateMod(skin.id);
-          }
-        }
-      }
-      // У режимі Multi - просто додаємо до активних
-      
-      // Активуємо новий скін
       return await _modManager!.activateMod(modId);
     } on ShaderPlacementRefused {
       rethrow;
     } catch (e) {
-      throw Exception('Помилка переключення моду для персонажа: $e');
+      throw Exception('Could not turn the mod on: $e');
     }
+  }
+
+  /// False when the link could not be removed.
+  static Future<bool> disableMod(String modId) async {
+    try {
+      await initialize();
+      return await _modManager!.deactivateMod(modId);
+    } catch (e) {
+      throw Exception('Could not turn the mod off: $e');
+    }
+  }
+
+  /// Saves the note the user wrote on [modId], and publishes it. Empty text removes it.
+  static Future<bool> setModNote(String modId, String note) async {
+    await initialize();
+    final saved = await _configService!.setModNote(modId, note);
+    if (saved) _container?.read(modNotesProvider.notifier).state = _configService!.modNotes;
+    return saved;
+  }
+
+  /// Saves whether turning one of [groupId]'s mods on turns the others off, and publishes it.
+  static Future<bool> setOneAtATime(String groupId, bool on) async {
+    await initialize();
+    final saved = await _configService!.setOneAtATime(groupId, on);
+    if (saved) _container?.read(oneAtATimeProvider.notifier).state = _configService!.oneAtATime;
+    return saved;
   }
 
   static Future<String> clearAll() async {

@@ -47,4 +47,11 @@ void main() {
     final mods = await ApiService.getModManagerService();
     expect(mods.modsPath, library.mods.path);
   });
+
+  test("a mounted library's own manager is the facade's, with its temp shader record", () async {
+    // A manager the facade built for itself would record shader fixes in the developer's real
+    // `<appData>/shader_fixes.json`.
+    final library = await TempLibrary.create(prefix: 'zzz_guard_');
+    expect(identical(await ApiService.getModManagerService(), library.service), isTrue);
+  });
 }

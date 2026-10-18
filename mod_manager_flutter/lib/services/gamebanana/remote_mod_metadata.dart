@@ -98,7 +98,7 @@ class RemoteModMetadata {
           // Full size rather than a ladder rung. Measured: 112 of 132 captured
           // gallery images publish only `_sFile` and `_sFile100`, so
           // negotiating a size would shrink nothing but the *cover* — the one
-          // image most likely to be opened full-screen in the details dialog.
+          // image most likely to be opened full-screen from the details panel.
           if (_httpUri(image.fullUrl) case final url?) url,
       ],
     );

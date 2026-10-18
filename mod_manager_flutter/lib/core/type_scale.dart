@@ -66,6 +66,8 @@ class ZenithType extends ThemeExtension<ZenithType> {
     required this.monoSmall,
     required this.wordmark,
     required this.watermark,
+    required this.watermarkLarge,
+    required this.initials,
   });
 
   /// A section label such as LIBRARY or IN-GAME KEYS. The widget upper-cases the text; the style only tracks it out.
@@ -80,8 +82,14 @@ class ZenithType extends ThemeExtension<ZenithType> {
   /// ZENITH in the title bar.
   final TextStyle wordmark;
 
-  /// The large initials drawn faintly behind a hero or an empty preview.
+  /// The large initials drawn faintly behind an empty cover.
   final TextStyle watermark;
+
+  /// The same, behind a character's header.
+  final TextStyle watermarkLarge;
+
+  /// A character's initials on a small tile with no portrait.
+  final TextStyle initials;
 
   static final ZenithType standard = ZenithType(
     caps: const TextStyle(
@@ -107,6 +115,14 @@ class ZenithType extends ThemeExtension<ZenithType> {
       height: 1,
       letterSpacing: 56 * -0.01,
     ),
+    watermarkLarge: const TextStyle(
+      fontFamily: kDisplayFont,
+      fontSize: 168,
+      fontWeight: FontWeight.w800,
+      height: 1,
+      letterSpacing: 168 * -0.01,
+    ),
+    initials: const TextStyle(fontFamily: kDisplayFont, fontSize: 11, fontWeight: FontWeight.w700, height: 1),
   );
 
   static ZenithType of(BuildContext context) => Theme.of(context).extension<ZenithType>() ?? standard;
@@ -118,12 +134,16 @@ class ZenithType extends ThemeExtension<ZenithType> {
     TextStyle? monoSmall,
     TextStyle? wordmark,
     TextStyle? watermark,
+    TextStyle? watermarkLarge,
+    TextStyle? initials,
   }) => ZenithType(
     caps: caps ?? this.caps,
     mono: mono ?? this.mono,
     monoSmall: monoSmall ?? this.monoSmall,
     wordmark: wordmark ?? this.wordmark,
     watermark: watermark ?? this.watermark,
+    watermarkLarge: watermarkLarge ?? this.watermarkLarge,
+    initials: initials ?? this.initials,
   );
 
   @override

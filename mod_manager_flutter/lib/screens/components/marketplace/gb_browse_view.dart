@@ -563,7 +563,7 @@ Widget _noResultsEmptyState(
 /// Every record on this page was dropped by the content filter.
 ///
 /// The action degrades `hide` to **`blur`**, never to `show` — the same rule
-/// the resolve dialog follows (`docs/library-screen.md` §7). `blur` is the mode
+/// the resolve dialog follows (`docs/library-screen.md` §14). `blur` is the mode
 /// where the cards are on screen and each one can still be clicked through
 /// individually, so it answers the complaint without turning a deliberate
 /// choice into its opposite. Only `hide` can produce this state — `blur` leaves

@@ -27,7 +27,7 @@ import '../../utils/markdown_description.dart';
 import '../../utils/marketplace_providers.dart';
 import '../../utils/state_providers.dart';
 import '../../utils/url_utils.dart';
-import '../components/mod_status_slot.dart';
+import '../../core/palette.dart';
 import 'apply_update_flow.dart';
 import 'remove_patch_flow.dart';
 
@@ -1487,11 +1487,11 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: isPick
-                  ? ModStatusSlot.updateBlue.withValues(alpha: 0.7)
+                  ? ZenithPalette.of(context).amber.withValues(alpha: 0.7)
                   : scheme.outlineVariant.withValues(alpha: 0.4),
             ),
             color: isPick
-                ? ModStatusSlot.updateBlue.withValues(alpha: 0.06)
+                ? ZenithPalette.of(context).amber.withValues(alpha: 0.06)
                 : null,
           ),
           child: Column(
@@ -1514,7 +1514,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
                     _chip(
                       loc.t(pickLabelKey),
                       scheme.onPrimary,
-                      background: ModStatusSlot.updateBlue,
+                      background: ZenithPalette.of(context).amber,
                     ),
                   if (_releaseName(section, file) case final release?)
                     _chip(release, scheme.primary),
@@ -1584,12 +1584,12 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       UpdateOutcome.updateAvailable => (
         'mods.update.verdict_update',
         Icons.arrow_circle_up,
-        ModStatusSlot.updateBlue,
+        ZenithPalette.of(context).amber,
       ),
       UpdateOutcome.possiblyOutdated => (
         'mods.update.verdict_possibly',
         Icons.arrow_circle_up,
-        ModStatusSlot.updateBlue,
+        ZenithPalette.of(context).amber,
       ),
       UpdateOutcome.upToDate => (
         'mods.update.verdict_current',
@@ -1601,12 +1601,12 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       UpdateOutcome.tracksPatchOnly => (
         'mods.update.verdict_patch_only',
         Icons.call_split,
-        ModStatusSlot.amber,
+        ZenithPalette.of(context).blue,
       ),
       UpdateOutcome.versionUnknown => (
         'mods.update.verdict_version_unknown',
         Icons.priority_high,
-        ModStatusSlot.amber,
+        ZenithPalette.of(context).blue,
       ),
       UpdateOutcome.untracked => (
         'mods.update.verdict_untracked',
@@ -1621,7 +1621,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       UpdateOutcome.sourceGone => (
         'mods.update.verdict_source_gone',
         Icons.link_off,
-        ModStatusSlot.amber,
+        ZenithPalette.of(context).blue,
       ),
       UpdateOutcome.indeterminate => (
         'mods.update.verdict_indeterminate',
@@ -1779,7 +1779,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       ),
       child: Row(
         children: [
-          Icon(icon, size: 20, color: ModStatusSlot.amber),
+          Icon(icon, size: 20, color: ZenithPalette.of(context).blue),
           const SizedBox(width: 8),
           Expanded(
             child: Text(

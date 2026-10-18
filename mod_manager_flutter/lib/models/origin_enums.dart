@@ -123,7 +123,7 @@ enum OriginTracking {
   auto('auto'),
 
   /// The user declared this mod local ("not from GameBanana / it's my own").
-  /// The status slot goes quiet permanently.
+  /// The card shows "Local" and asks for nothing about it, permanently.
   off('off');
 
   const OriginTracking(this.wire);

@@ -52,10 +52,9 @@ void main() {
         height: 260,
         child: ModCardWidget(
           mod: mod,
-          isDarkMode: true,
+          onSelect: () {},
+          onToggle: () {},
           onFavoriteToggle: () {},
-          onShowDetails: () {},
-          onOpenLink: () {},
         ),
       ),
     );

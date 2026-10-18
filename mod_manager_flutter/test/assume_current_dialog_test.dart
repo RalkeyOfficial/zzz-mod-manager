@@ -5,11 +5,13 @@ import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/origin_write.dart';
+import 'package:mod_manager_flutter/screens/components/library_actions_host.dart';
 import 'package:mod_manager_flutter/screens/components/mods_toolbar.dart';
 import 'package:mod_manager_flutter/screens/dialogs/assume_current_dialog.dart';
 import 'package:mod_manager_flutter/services/bulk_assume_current.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
+import 'support/library_override.dart';
 import 'support/localized_harness.dart';
 import 'support/origin_shorthand.dart';
 
@@ -260,23 +262,27 @@ void main() {
       Size surfaceSize = const Size(1200, 800),
       VoidCallback? onLibraryChanged,
     }) async {
-      container = ProviderContainer();
+      // Every mod is Ellen's, so she is the character on screen.
+      container = ProviderContainer(overrides: [libraryOf(mods)]);
       addTearDown(container.dispose);
-      container.read(charactersProvider.notifier).state = [
-        CharacterInfo(id: 'all', name: 'All', skins: mods),
-      ];
+      // Out of the way: it repeats the menu's "sort out" label, and it has its own test.
+      container.read(trackingNudgeDismissedProvider.notifier).state = true;
       written = <String>[];
 
       await pumpLocalized(
         tester,
-        ModsToolbar(
-          onLibraryChanged: onLibraryChanged,
-          originWriter: (name, update) async {
-            written.add(name);
-            return update(mods.firstWhere((m) => m.id == name).origin) == null
-                ? OriginWriteResult.declined
-                : OriginWriteResult.written;
-          },
+        LibraryActionsHost(
+          updateFetcher: (_) async => throw StateError('no fetch expected'),
+          updatesFetcher: (_) async => throw StateError('no fetch expected'),
+          child: ModsToolbar(
+            onLibraryChanged: onLibraryChanged,
+            originWriter: (name, update) async {
+              written.add(name);
+              return update(mods.firstWhere((m) => m.id == name).origin) == null
+                  ? OriginWriteResult.declined
+                  : OriginWriteResult.written;
+            },
+          ),
         ),
         container: container,
         surfaceSize: surfaceSize,
@@ -285,7 +291,7 @@ void main() {
     }
 
     Future<void> openMenu(WidgetTester tester) async {
-      await tester.tap(find.text('Library'));
+      await tester.tap(find.byTooltip('Library'));
       await tester.pumpAndSettle();
     }
 
@@ -299,13 +305,13 @@ void main() {
         mod('b', origin: origin()),
         mod('resolved', origin: origin(versionConfidence: OriginConfidence.exact)),
       ]);
-      expect(container.read(modNeedsAttentionOnlyProvider), isFalse);
+      expect(container.read(modGridFilterProvider), ModGridFilter.all);
 
       await openMenu(tester);
       await tester.tap(find.text('Mark all as current'));
       await tester.pumpAndSettle();
 
-      expect(container.read(modNeedsAttentionOnlyProvider), isTrue);
+      expect(container.read(modGridFilterProvider), ModGridFilter.needsAttention);
       expect(container.read(visibleModsProvider).map((m) => m.id), ['a', 'b']);
       expect(find.text('Assume 2 mods are up to date?'), findsOneWidget);
     });
@@ -322,7 +328,13 @@ void main() {
         mod('resolved', origin: origin(versionConfidence: OriginConfidence.exact)),
       ]);
       await openMenu(tester);
-      expect(find.text('2'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.widgetWithText(MenuItemButton, 'Mark all as current'),
+          matching: find.text('2'),
+        ),
+        findsOneWidget,
+      );
 
       await tester.tap(find.text('Mark all as current'));
       await tester.pumpAndSettle();
@@ -330,6 +342,46 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(written, ['a', 'b']);
+    });
+
+    group('counts the set it will turn the filter to, not the grid at the press', () {
+      // The action turns Needs attention on before it plans, so a count over a narrower grid would promise less
+      // than it then offers, and a count of zero would disable an entry that has work to do.
+      final ellens = [
+        mod('a', origin: origin()).copyWith(isFavorite: true),
+        mod('b', origin: origin()),
+        mod('c', origin: origin()),
+      ];
+
+      Finder entry() => find.widgetWithText(MenuItemButton, 'Mark all as current');
+
+      Future<void> expectEntry(WidgetTester tester) async {
+        await openMenu(tester);
+        expect(find.descendant(of: entry(), matching: find.text('3')), findsOneWidget);
+        expect(tester.widget<MenuItemButton>(entry()).onPressed, isNotNull);
+      }
+
+      testWidgets('with Favorites on', (tester) async {
+        await pumpToolbar(tester, ellens);
+        container.read(modGridFilterProvider.notifier).state = ModGridFilter.favorites;
+        await tester.pumpAndSettle();
+        expect(container.read(visibleModsProvider), hasLength(1));
+
+        await expectEntry(tester);
+      });
+
+      testWidgets('with Active on and nothing active', (tester) async {
+        await pumpToolbar(tester, ellens);
+        container.read(modGridFilterProvider.notifier).state = ModGridFilter.active;
+        await tester.pumpAndSettle();
+        expect(container.read(visibleModsProvider), isEmpty);
+
+        await expectEntry(tester);
+
+        await tester.tap(entry());
+        await tester.pumpAndSettle();
+        expect(find.text('Assume 3 mods are up to date?'), findsOneWidget);
+      });
     });
 
     testWidgets('cancelling puts the filter back the way it was',
@@ -340,25 +392,25 @@ void main() {
       // Under the old placement the filter was a precondition, so declining
       // changed nothing.
       await pumpToolbar(tester, [mod('a', origin: origin())]);
-      expect(container.read(modNeedsAttentionOnlyProvider), isFalse);
+      expect(container.read(modGridFilterProvider), ModGridFilter.all);
 
       await openMenu(tester);
       await tester.tap(find.text('Mark all as current'));
       await tester.pumpAndSettle();
-      expect(container.read(modNeedsAttentionOnlyProvider), isTrue,
+      expect(container.read(modGridFilterProvider), ModGridFilter.needsAttention,
           reason: 'the grid shows the set while the confirmation is up');
 
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
 
       expect(written, isEmpty);
-      expect(container.read(modNeedsAttentionOnlyProvider), isFalse);
+      expect(container.read(modGridFilterProvider), ModGridFilter.all);
     });
 
     testWidgets('cancelling leaves a filter the user had already set alone',
         (tester) async {
       await pumpToolbar(tester, [mod('a', origin: origin())]);
-      container.read(modNeedsAttentionOnlyProvider.notifier).state = true;
+      container.read(modGridFilterProvider.notifier).state = ModGridFilter.needsAttention;
       await tester.pumpAndSettle();
 
       await openMenu(tester);
@@ -367,7 +419,7 @@ void main() {
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
 
-      expect(container.read(modNeedsAttentionOnlyProvider), isTrue,
+      expect(container.read(modGridFilterProvider), ModGridFilter.needsAttention,
           reason: 'restoring means restoring, not switching off');
     });
 
@@ -380,7 +432,7 @@ void main() {
       await tester.tap(find.text('Mark all as current'));
       await tester.pumpAndSettle();
       expect(find.textContaining('are up to date?'), findsNothing);
-      expect(container.read(modNeedsAttentionOnlyProvider), isFalse,
+      expect(container.read(modGridFilterProvider), ModGridFilter.all,
           reason: 'a disabled entry must not flip a filter on the way to '
               'doing nothing');
     });
@@ -410,7 +462,7 @@ void main() {
       expect(rescans, 1);
       // An untracked mod is still on the list, so the filter has something left
       // to show and stays on.
-      expect(container.read(modNeedsAttentionOnlyProvider), isTrue);
+      expect(container.read(modGridFilterProvider), ModGridFilter.needsAttention);
     });
 
     testWidgets('turns the filter off again when it leaves nothing behind',
@@ -424,24 +476,26 @@ void main() {
       await tester.tap(find.text('Mark 1 mod'));
       await tester.pumpAndSettle();
 
-      expect(container.read(modNeedsAttentionOnlyProvider), isFalse);
+      expect(container.read(modGridFilterProvider), ModGridFilter.all);
     });
 
-    testWidgets('the filter row survives a three-digit count at 480px',
+    testWidgets('the toolbar survives a three-digit count at the minimum window',
         (tester) async {
       // The narrowest the toolbar can get: an 800px minimum window, less the
-      // nav rail and the character panel beside it. Nothing in that row can
-      // ellipsise, so a Row that doesn't fit overflows rather than degrading.
+      // sidebar (216) and the character list (280) beside it. Nothing in that
+      // row can ellipsise, so a Row that doesn't fit overflows rather than
+      // degrading.
       await pumpToolbar(
         tester,
         [for (var i = 0; i < 120; i++) mod('mod $i', origin: origin())],
-        surfaceSize: const Size(480, 400),
+        surfaceSize: const Size(304, 600),
       );
-      container.read(modNeedsAttentionOnlyProvider.notifier).state = true;
+      container.read(modGridFilterProvider.notifier).state = ModGridFilter.needsAttention;
       await tester.pumpAndSettle();
 
-      expect(find.text('120'), findsOneWidget);
-      expect(find.text('Clear filters'), findsOneWidget);
+      // All and Needs attention both count the 120.
+      expect(find.text('120'), findsNWidgets(2));
+      expect(find.byTooltip('Library'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });

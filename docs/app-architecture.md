@@ -26,8 +26,8 @@ doc. This file is the map; the rules that must never be missed are in the
   it belongs to `libraryProvider` (§3), not to the characters page.
 - **`services/`** — all business logic.
 - **`utils/state_providers.dart`** — the **central Riverpod provider registry**.
-  All app state (current tab, characters, mods, theme, locale, activation mode)
-  is declared here. Add new global state here, not ad-hoc.
+  All app state (current page, the character on screen, mods, theme, locale, One at a time) is declared here.
+  Add new global state here, not ad-hoc.
 - **`core/constants.dart`** — `AppConstants`, including `appVersion`, the single
   source for everything that *says* the version (UI badge, GameBanana User-Agent).
 - **`core/type_scale.dart`** — the app's one type scale, from the v3 design. Unbounded for display and headline roles
@@ -146,47 +146,25 @@ that owns its reasoning:
 
 ### The library is a provider, and the root of everything about it
 
-`libraryProvider` (an `AsyncNotifier` in `state_providers.dart`) owns the scan and
-holds its result: every mod, once each, flat. **Everything else about the library
-is derived from it** — `modsProvider` is the plain-list view for readers that
-cannot await, `installedModsIndexProvider` builds `InstalledModsIndex` over the
-same read, and the Mods tab's `charactersProvider` groups are built from it for
-the sidebar (localized names, which is why they are written by the screen rather
-than derived here).
+`libraryProvider` (an `AsyncNotifier` in `state_providers.dart`) owns the scan and holds its result: every mod, once each, flat.
+**Everything else about the library is derived from it** — `modsProvider` is the plain-list view for readers that cannot await, `installedModsIndexProvider` builds `InstalledModsIndex` over the same read, and the Library's character list (`libraryGroupCountsProvider`, `currentCharacterSkinsProvider`) is derived from it, so it follows a change made on any page.
 
-Three rules follow, and each of them is a bug that has happened:
+Three rules follow, and breaking any of them produces a wrong answer rather than an error:
 
-- **A screen may not own the library.** The Mods tab is disposed while the user is
-  anywhere else (§1), so a library kept in its `State` is unrefreshable exactly
-  when installs are happening. The patch destination prompt asked such a list
-  which folders existed and was told: every one except the mod installed a minute
-  earlier.
-- **Whoever changes the folder invalidates the library**, and never just something
-  derived from it. `ref.invalidate(installedModsIndexProvider)` alone rebuilds the
-  index from the same cached scan, which answers for the library as it was.
-- **A question asked mid-install reads the disk**, not the provider — the archive
-  is being unpacked, so nothing has invalidated anything yet. That is the rule
-  `test/modal_freshness_test.dart` pins, and the two readers of it are the patch
-  destination prompt and the sibling preview.
+- **A screen may not own the library.** The Library page is disposed while the user is anywhere else (§1), so a library kept in its `State` is unrefreshable exactly when installs are happening.
+  A patch destination prompt asking such a list which folders exist is told every one except the mod installed a minute earlier.
+- **Whoever changes the folder invalidates the library**, and never just something derived from it. `ref.invalidate(installedModsIndexProvider)` alone rebuilds the index from the same cached scan, which answers for the library as it was.
+- **A question asked mid-install reads the disk**, not the provider — the archive is being unpacked, so nothing has invalidated anything yet.
+  That is the rule `test/modal_freshness_test.dart` pins, and the two readers of it are the patch destination prompt and the sibling preview.
 
-A scan is **4 ms warm, 12 ms cold** over a mirror of a real 23-mod / 748-file
-library, and building the index over it is **under 1 ms**, so a refresh is not
-something to design around.
+A scan is **4 ms warm, 12 ms cold** over a mirror of a real 23-mod / 748-file library, and building the index over it is **under 1 ms**, so a refresh is not something to design around.
 
-**An unchanged rescan publishes nothing.** `rescan()` compares what it read with
-what it holds (`listEquals` over `ModInfo`'s value equality) and keeps the old
-list when they match, which is what stops the grid rebuilding after every toggle,
-rename and import. `library-screen.md` §1 is what that guard costs when a field
-escapes it.
+**An unchanged rescan publishes nothing.** `rescan()` compares what it read with what it holds (`listEquals` over `ModInfo`'s value equality) and keeps the old list when they match, which is what stops the grid rebuilding after every toggle, rename and import.
+`library-screen.md` §4 is what that guard costs when a field escapes it.
 
-Two more rules keep that promise true at launch, where the provider is read from
-two places within a frame of each other — the bulk update check's plan reads it
-from above the tabs, then the Mods tab mounts and asks for a scan of its own:
+Two more rules keep that promise true at launch, where the provider is read from two places within a frame of each other — the bulk update check's plan reads it from above the pages, then the Library page mounts and asks for a scan of its own:
 
-- **One walk at a time.** A `rescan()` that finds a scan already running takes
-  *that* answer rather than starting a second walk of the same folder, and waits
-  until it is published — the caller's next act is to read the library, and a
-  rescan that returned early would hand the grid an empty list to draw.
+- **One walk at a time.** A `rescan()` that finds a scan already running takes *that* answer rather than starting a second walk of the same folder, and waits until it is published — the caller's next act is to read the library, and a rescan that returned early would hand the grid an empty list to draw.
 - **A scan never overwrites an edit made while it was walking.** A rename or a
   delete publishes what it already knows; a scan that started before it is the
   older answer however late it lands, so it defers to what is there.

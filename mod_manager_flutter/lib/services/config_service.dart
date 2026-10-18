@@ -29,6 +29,8 @@ class ConfigService implements ModCharacterTagStore {
   static const String _keyLanguage = 'language';
   static const String _keyModCharacterTags = 'mod_character_tags';
   static const String _keyFavoriteMods = 'favorite_mods';
+  static const String _keyModNotes = 'mod_notes';
+  static const String _keyOneAtATime = 'one_at_a_time';
   static const String _keyFirstRun = 'first_run';
   static const String _keySortMode = 'sort_mode';
   static const String _keyContentFilter = 'content_filter';
@@ -195,6 +197,31 @@ class ConfigService implements ModCharacterTagStore {
   bool get fileLogging => _prefs.getBool(_keyFileLogging) ?? true;
 
 
+  /// The user's note on each mod, by folder name. Per install, never in the sidecar (`docs/library-screen.md` §11).
+  Map<String, String> get modNotes => _readMap(_keyModNotes, (v) => v is String && v.isNotEmpty ? v : null);
+
+  /// Whether turning one of a character's mods on turns the others off, for the groups the user has switched. Groups
+  /// absent here take their default (`docs/library-screen.md` §10).
+  Map<String, bool> get oneAtATime => _readMap(_keyOneAtATime, (v) => v is bool ? v : null);
+
+  /// A map stored as a JSON string, keeping each entry [parse] accepts and dropping the rest, so one bad value in a
+  /// hand-edited file costs that entry rather than the whole map.
+  Map<String, T> _readMap<T>(String key, T? Function(Object?) parse) {
+    final json = _prefs.getString(key);
+    if (json == null) return {};
+    try {
+      final decoded = jsonDecode(json);
+      if (decoded is! Map) return {};
+      return {
+        for (final entry in decoded.entries)
+          if (entry.key is String)
+            if (parse(entry.value) case final T value) entry.key as String: value,
+      };
+    } catch (_) {
+      return {};
+    }
+  }
+
   @override
   Map<String, String> get modCharacterTags {
     final json = _prefs.getString(_keyModCharacterTags);
@@ -253,28 +280,59 @@ class ConfigService implements ModCharacterTagStore {
     }
   }
 
+  /// False when `config.json` could not be written, so the star would be gone after a restart.
   Future<bool> addFavoriteMod(String modId) async {
     try {
       final mods = favoriteMods;
-      if (!mods.contains(modId)) {
-        mods.add(modId);
-        await _prefs.setStringList(_keyFavoriteMods, mods);
-        await _saveToFile();
-      }
-      return true;
+      if (mods.contains(modId)) return true;
+      mods.add(modId);
+      await _prefs.setStringList(_keyFavoriteMods, mods);
+      return await _saveToFile();
     } catch (e) {
+      _log.warning('favourite not stored', error: e, fields: {'mod': modId});
       return false;
     }
   }
 
+  /// False when `config.json` could not be written, so the star would be back after a restart.
   Future<bool> removeFavoriteMod(String modId) async {
     try {
       final mods = favoriteMods;
       mods.remove(modId);
       await _prefs.setStringList(_keyFavoriteMods, mods);
-      await _saveToFile();
-      return true;
+      return await _saveToFile();
     } catch (e) {
+      _log.warning('favourite not stored', error: e, fields: {'mod': modId});
+      return false;
+    }
+  }
+
+  /// Text that is empty once trimmed removes the note. False when `config.json` could not be written, so the note
+  /// would be gone after a restart.
+  Future<bool> setModNote(String modId, String note) async {
+    try {
+      final notes = modNotes;
+      if (note.trim().isEmpty) {
+        if (notes.remove(modId) == null) return true;
+      } else {
+        notes[modId] = note;
+      }
+      await _prefs.setString(_keyModNotes, jsonEncode(notes));
+      return await _saveToFile();
+    } catch (e) {
+      _log.warning('note not stored', error: e, fields: {'mod': modId});
+      return false;
+    }
+  }
+
+  /// False when `config.json` could not be written, so the choice would be gone after a restart.
+  Future<bool> setOneAtATime(String groupId, bool on) async {
+    try {
+      final groups = oneAtATime..[groupId] = on;
+      await _prefs.setString(_keyOneAtATime, jsonEncode(groups));
+      return await _saveToFile();
+    } catch (e) {
+      _log.warning('one at a time not saved', error: e, fields: {'group': groupId});
       return false;
     }
   }
@@ -318,8 +376,8 @@ class ConfigService implements ModCharacterTagStore {
   }
 
   /// Migrates all per-mod config keyed by folder name when a mod is renamed
-  /// (active_mods, favorite_mods, mod_character_tags). Preserves state so a
-  /// renamed mod stays active/favorited/tagged.
+  /// (active_mods, favorite_mods, mod_notes, mod_character_tags). Preserves state so a
+  /// renamed mod stays active/favorited/noted/tagged.
   Future<bool> migrateModName(String oldId, String newId) async {
     try {
       final active = activeMods;
@@ -334,15 +392,21 @@ class ConfigService implements ModCharacterTagStore {
         await _prefs.setStringList(_keyFavoriteMods, favorites);
       }
 
+      final notes = modNotes;
+      if (notes.containsKey(oldId)) {
+        notes[newId] = notes.remove(oldId)!;
+        await _prefs.setString(_keyModNotes, jsonEncode(notes));
+      }
+
       final tags = modCharacterTags;
       if (tags.containsKey(oldId)) {
         tags[newId] = tags.remove(oldId)!;
         await _prefs.setString(_keyModCharacterTags, jsonEncode(tags));
       }
 
-      await _saveToFile();
-      return true;
+      return await _saveToFile();
     } catch (e) {
+      _log.warning('renamed mod state not stored', error: e, fields: {'from': oldId, 'to': newId});
       return false;
     }
   }
@@ -591,6 +655,13 @@ class ConfigService implements ModCharacterTagStore {
         final List<String> mods = List<String>.from(config['favorite_mods']);
         await _prefs.setStringList(_keyFavoriteMods, mods);
       }
+      // Stored as the object they are; the getters drop any entry that is not the right type.
+      if (config['mod_notes'] is Map) {
+        await _prefs.setString(_keyModNotes, jsonEncode(config['mod_notes']));
+      }
+      if (config['one_at_a_time'] is Map) {
+        await _prefs.setString(_keyOneAtATime, jsonEncode(config['one_at_a_time']));
+      }
       if (config.containsKey('update_check_on_launch')) {
         await _prefs.setBool(
           _keyUpdateCheckOnLaunch,
@@ -626,6 +697,8 @@ class ConfigService implements ModCharacterTagStore {
         'save_mods_path': saveModsPath ?? '',
         'active_mods': activeMods,
         'favorite_mods': favoriteMods,
+        'mod_notes': modNotes,
+        'one_at_a_time': oneAtATime,
         'theme': theme,
         'accent': accent,
         'launch_target': launchTarget,
@@ -650,6 +723,7 @@ class ConfigService implements ModCharacterTagStore {
 
       return true;
     } catch (e) {
+      _log.warning('config file not written', error: e, fields: {'path': _configFile?.path});
       return false;
     }
   }

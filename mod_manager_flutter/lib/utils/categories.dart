@@ -57,6 +57,23 @@ CategoryData? builtInCategoryById(String id) {
 /// ids (those render a portrait asset instead).
 IconData? categoryIcon(String id) => builtInCategoryById(id)?.icon;
 
+/// The row of the Library's character list a mod belongs under: its roster id, its built-in category, or
+/// [unknownCharacterId] for an unassigned mod and for an id neither knows (one left behind by a roster rename).
+String libraryGroupOf(String characterId) {
+  final character = characterById(characterId);
+  if (character != null) return character.id;
+  if (isBuiltInCategory(characterId)) return characterId;
+  return unknownCharacterId;
+}
+
+/// Every row of the character list, in the order the fallback page is looked for: the agents, the built-in
+/// categories, then unassigned mods. The list itself shows the categories and Unassigned first.
+List<String> get libraryGroupIds => [
+  ...zzzCharacterIds,
+  for (final c in builtInCategories) c.id,
+  unknownCharacterId,
+];
+
 /// Display name for any category id — a built-in category's localized label, or
 /// a character's roster display name (falling back to the id itself).
 String categoryDisplayName(String id, AppLocalizations loc) {

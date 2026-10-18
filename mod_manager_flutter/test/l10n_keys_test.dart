@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/l10n/plural_rules.dart';
+import 'package:mod_manager_flutter/utils/zzz_characters.dart';
 
 /// Keeps the two locale files honest against the code.
 ///
@@ -80,6 +81,9 @@ void main() {
     'storage.free.',
     // One name per `AccentChoice`, keyed by its enum name.
     'settings.appearance.accent_',
+    // One per `AgentAttribute` and `AgentSpecialty`, keyed by the enum name.
+    'library.attribute.',
+    'library.specialty.',
     // Chosen at runtime by a ternary *inside* `t(...)`, so the call-site regex
     // above sees `t(cond ? …` and matches nothing at all.
     'mods.backups.restored_',
@@ -181,12 +185,79 @@ void main() {
     }
   });
 
+  /// Every dotted string literal in lib/ under a locale namespace, with the file it is in.
+  ///
+  /// The call-site regex sees only `t('literal')`. A key chosen by a ternary inside `t(...)`
+  /// (`t(on ? 'library.grid.one_at_a_time_on' : '…_off')`), or held in a record and looked up later (the status
+  /// badge's `('library.card.dated', tone, tooltip)`), is a quoted literal somewhere else in the file.
+  Map<String, String> keyLiterals() {
+    final namespaces = en.keys.map((k) => k.split('.').first).toSet();
+    final literal = RegExp(r"'([a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+)'");
+    final directive = RegExp(r'^\s*(import|export|part)\b');
+    final found = <String, String>{};
+    for (final entity in Directory('lib').listSync(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+      for (final line in entity.readAsLinesSync()) {
+        if (directive.hasMatch(line)) continue;
+        for (final match in literal.allMatches(line)) {
+          final key = match.group(1)!;
+          if (namespaces.contains(key.split('.').first)) found[key] = entity.path;
+        }
+      }
+    }
+    return found;
+  }
+
+  test('the key-literal scan sees keys chosen by a ternary or held in a record', () {
+    final found = keyLiterals();
+    for (final key in [
+      'library.grid.one_at_a_time_on',
+      'library.grid.one_at_a_time_off',
+      'library.details.active_title',
+      'library.details.off_title',
+      'library.card.dated',
+      'library.card.guessed_tooltip',
+    ]) {
+      expect(found, contains(key));
+      expect(referenced, isNot(contains(key)), reason: 'the call-site regex alone cannot see $key');
+    }
+  });
+
+  test('every key-shaped string in lib/ names a key, a plural base or a title/body pair', () {
+    // A base resolves when some key extends it with `_` or `.`: `mods.import.success` is
+    // `_single`/`_plural`, `mods.import_failed.copy` is `_title`/`_body`.
+    final found = keyLiterals();
+    expect(found.length, greaterThan(300), reason: 'the scan found too little to mean anything');
+    final unresolved = <String>[];
+    for (final MapEntry(key: key, value: file) in found.entries) {
+      for (final locale in {'en': en, 'uk': uk}.entries) {
+        final keys = locale.value;
+        final resolves =
+            keys.containsKey(key) || keys.keys.any((k) => k.startsWith('${key}_') || k.startsWith('$key.'));
+        if (!resolves) unresolved.add('${locale.key}: $key ($file)');
+      }
+    }
+    expect(unresolved, isEmpty, reason: 'key-shaped strings in lib/ with nothing behind them');
+  });
+
   test('interpolated key groups are still populated', () {
     for (final prefix in interpolatedKeyPrefixes) {
       expect(en.keys.any((k) => k.startsWith(prefix)), isTrue,
           reason: 'no en.json keys under "$prefix"');
       expect(uk.keys.any((k) => k.startsWith(prefix)), isTrue,
           reason: 'no uk.json keys under "$prefix"');
+    }
+  });
+
+  test('every agent attribute and specialty has a name', () {
+    // The hero builds these keys from the enum, so a value added to the roster
+    // without a translation would render as a dotted path.
+    for (final key in [
+      for (final a in AgentAttribute.values) 'library.attribute.${a.name}',
+      for (final s in AgentSpecialty.values) 'library.specialty.${s.name}',
+    ]) {
+      expect(en.containsKey(key), isTrue, reason: 'en.json has no $key');
+      expect(uk.containsKey(key), isTrue, reason: 'uk.json has no $key');
     }
   });
 

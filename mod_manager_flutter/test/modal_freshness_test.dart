@@ -139,7 +139,7 @@ void main() {
     });
 
     testWidgets('offers a mod nothing has ever scanned', (tester) async {
-      // The stronger version, and the one a launch hits: the Mods tab has never
+      // The stronger version, and the one a launch hits: the Library has never
       // been opened, so the cached list is not merely old but empty — and the
       // prompt would not have offered a destination at all.
       installedSinceTheLastScan('Ellen Bikini');

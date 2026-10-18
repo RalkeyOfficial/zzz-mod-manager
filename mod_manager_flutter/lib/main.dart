@@ -11,6 +11,7 @@ import 'core/font_licenses.dart';
 import 'screens/mods_screen.dart';
 import 'screens/components/download_queue_host.dart';
 import 'screens/components/launch_update_check_host.dart';
+import 'screens/components/library_actions_host.dart';
 import 'screens/components/shader_fixes_notices.dart';
 import 'screens/components/notification_overlay.dart';
 import 'screens/settings_screen.dart';
@@ -272,34 +273,38 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
     // `LaunchUpdateCheckHost` wraps the screen for the same reason, and needs
     // it more: nobody pressed anything to start its pass, so there is no screen
     // it belongs to. It raises no dialog, so its position relative to the
-    // `Navigator` does not matter. `ShaderRestartNoticeHost` is here because
+    // `Navigator` does not matter. `LibraryActionsHost` runs the update check
+    // the user starts from the Library, which outlives the page it was pressed
+    // on and can end in a dialog. `ShaderRestartNoticeHost` is here because
     // placed shader files change from updates and deletes as well as toggles.
     return DownloadQueueHost(
       child: LaunchUpdateCheckHost(
-        child: ShaderRestartNoticeHost(
-          child: Scaffold(
-            body: Column(
-              children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      const AppSidebar(),
-                      Expanded(
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 180),
-                          child: switch (destination) {
-                            AppDestination.characters => const ModsScreen(key: ValueKey('mods')),
-                            AppDestination.browse => const MarketplaceScreen(key: ValueKey('marketplace')),
-                            AppDestination.storage => const StorageScreen(key: ValueKey('storage')),
-                            AppDestination.settings => const SettingsScreen(key: ValueKey('settings')),
-                          },
+        child: LibraryActionsHost(
+          child: ShaderRestartNoticeHost(
+            child: Scaffold(
+              body: Column(
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        const AppSidebar(),
+                        Expanded(
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 180),
+                            child: switch (destination) {
+                              AppDestination.characters => const ModsScreen(key: ValueKey('mods')),
+                              AppDestination.browse => const MarketplaceScreen(key: ValueKey('marketplace')),
+                              AppDestination.storage => const StorageScreen(key: ValueKey('storage')),
+                              AppDestination.settings => const SettingsScreen(key: ValueKey('settings')),
+                            },
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                const AppStatusBar(),
-              ],
+                  const AppStatusBar(),
+                ],
+              ),
             ),
           ),
         ),

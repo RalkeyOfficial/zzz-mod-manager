@@ -10,7 +10,7 @@ This file is rules and pointers only. Every subject below has a doc in [`../docs
 | [`gamebanana-api.md`](../docs/gamebanana-api.md) | GameBanana's remote protocol. Read before writing any request — the surface is undocumented upstream, so guessing costs more than looking |
 | [`downloads.md`](../docs/downloads.md) | Fetching archives — the isolate pump, resume, backpressure, the stall timeout, the background queue |
 | [`marketplace.md`](../docs/marketplace.md) | The native browser screens — grid, detail view, what an install does |
-| [`library-screen.md`](../docs/library-screen.md) | The Mods tab — card, status slot, toolbar, bulk actions, its dialogs |
+| [`library-screen.md`](../docs/library-screen.md) | The Library's character view — character list, card, status badge, bulk actions, One at a time, notes, details panel, its dialogs |
 | [`notifications.md`](../docs/notifications.md) | What the app tells the user — whether to speak at all, the two levels, the card |
 | [`metadata-schema.md`](../docs/metadata-schema.md) | The sidecar file format |
 | [`migrations.md`](../docs/migrations.md) | Reading data an older version wrote — every migration and tolerance; there is no `migrations/` folder and it says why |
@@ -32,7 +32,7 @@ This file is rules and pointers only. Every subject below has a doc in [`../docs
 Two configured paths drive everything: `modsPath` (where mod folders live — the library) and `saveModsPath` (the game's mods folder, where links go, worked out from the configured ZZMI folder `zzmiPath`).
 Activating a mod creates a link `saveModsPath/<mod>` → `modsPath/<mod>`; deactivating removes it. A link whose source is gone is never removed by the app: the folder may be on an unmounted drive, and the mod is active again once it returns.
 
-Single vs Multi mode (`activationModeProvider`): in Single mode, activating a skin auto-deactivates the character's other active skins — see `ApiService.toggleModForCharacter`.
+One at a time is per character (`oneAtATimeProvider`, `isOneAtATime`): with it on, turning a mod on turns the character's other mods off. Every enable from the library goes through `ApiService.enableMod`, dry run first ([`library-screen.md`](../docs/library-screen.md) §10).
 
 Characters and built-in categories (`cat_ui`, `cat_texture`, `cat_audio`, `cat_misc`) share one id namespace, stored in `ModInfo.characterId`.
 Anything resolving a character from an id must handle both, plus the `unknown` placeholder.
@@ -112,7 +112,7 @@ One exception: `utils/marketplace_providers.dart` holds the marketplace's browsi
 Widgets and dialogs reach `ModManagerService` through `modManagerServiceProvider`, never `ApiService.getModManagerService` — the provider is the one seam a test overrides.
 A flow that outlives its widget reads it through the app's `ProviderContainer`, since a `WidgetRef` throws once its widget is gone.
 
-The library is `libraryProvider` and belongs to no screen. It owns the scan; `modsProvider` is its plain-list view, `installedModsIndexProvider` derives from it, and the Mods tab builds `charactersProvider`'s localized groups from it.
+The library is `libraryProvider` and belongs to no screen. It owns the scan; `modsProvider` is its plain-list view, `installedModsIndexProvider` derives from it, and so does the Library's character list (`libraryGroupCountsProvider`, `currentCharacterSkinsProvider`).
 So: whoever changes a mod folder invalidates `libraryProvider`, never only something derived from it — invalidating the index alone rebuilds it from the same cached scan.
 One walk of the folder at a time: a `rescan()` during a running scan takes that answer, and a scan never overwrites an edit published while it was walking.
 The sidebar's pages (`AppDestination`) are keyed `AnimatedSwitcher` children with no keep-alive, so the inactive page's `State` is disposed and nothing a page owns may be the only copy of something another surface needs.
@@ -128,7 +128,7 @@ Custom JSON i18n (not ARB/gen-l10n). Strings live in `assets/l10n/en.json` and `
 `localeProvider` holds the active locale; English and Ukrainian are supported.
 
 A missing key renders as the raw dotted path, with no exception. Both files must stay at exact parity — `test/l10n_keys_test.dart` enforces that, plus `_single`/`_plural` and `_title`/`_body` sibling pairs.
-Keys built by interpolation or a ternary are invisible to that test's regex; register their prefix in `interpolatedKeyPrefixes`.
+Keys built by interpolation are invisible to that test; register their prefix in `interpolatedKeyPrefixes`. A key picked by a ternary or held in a record is found by its scan of every key-shaped string in `lib/`.
 The test checks code against the JSON files, never the reverse: a key left behind by deleted UI passes. When removing UI, diff the files' keys against the `loc.t('…')` literals in `lib/` too.
 
 Caveat copy ("possibly outdated", "a best guess, not a guarantee") is the feature, so it is a translated key, never English interpolated into a sentence.

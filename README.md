@@ -41,13 +41,12 @@ The application uses symbolic links to manage mods, which means:
 - **👥 Category-based Organization**: Organize mods by character or by non-character categories (UI, Texture, Audio, Misc)
 - **🏷️ Auto-Tagging**: Automatic character detection from folder and `.ini` names
 - **📦 Multiple Import Methods**:
-  - Drag & Drop folders
-  - Paste paths with Ctrl+V
-  - File picker dialog
-- **🔄 Single/Multi Mode**: Enable single or multiple mods per character
+  - Drag & Drop folders and .zip, .7z or .rar archives
+  - Paste them with Ctrl+V
+- **🔄 One at a Time**: A switch per character decides whether turning a mod on turns that character's other mods off
 - **🎨 Modern UI**: Clean Material Design 3 interface
 - **🌓 Dark/Light Theme**: Automatic theme switching
-- **🧹 Auto-Cleanup**: Removes orphaned symbolic links and tags
+- **🧹 Auto-Cleanup**: Clears tags left behind by mods that are gone. A link whose mod folder is missing is left alone, since the folder may be on a drive that isn't mounted yet
 
 ### Advanced Features
 
@@ -60,11 +59,11 @@ The application uses symbolic links to manage mods, which means:
 
 ### Organization & Editing
 
-- **🔎 Search, Sort & Filter**: Search by name, sort (Default / Name A–Z / Z–A, remembered across launches), filter by tags (match any/all), and show favorites only
-- **🗃️ Grouped View**: The ALL view groups mods into collapsible per-category sections
-- **📝 Mod Metadata**: Per-mod description, tags, and a clickable source link (e.g. GameBanana)
+- **🔎 Sort & Filter**: Sort a character's mods (Recently added / Name A–Z / Z–A, remembered across launches) and filter them to the active ones, those with updates, or favorites
+- **🗂️ Character List**: Every agent is listed, after the UI, Texture, Audio and Misc categories and unassigned mods, with how many mods each has and how many are on
+- **📝 Mod Metadata**: Per-mod description, tags, a link to its GameBanana page, and a note of your own
 - **🖼️ Image Gallery**: Multiple images per mod (paste or add files, set a cover)
-- **🔍 Details View**: A read-only dialog with a mod's images, category, description, tags, source link, and keybinds
+- **🔍 Details Panel**: A panel beside the mods with the selected mod's pictures, description, tags, in-game keys, where it came from, size and folder
 - **⌨️ Keybinds**: View and edit a mod's keybinds parsed from its `.ini`
 - **✏️ Rename**: Rename a mod from within the app
 - **⭐ Favorites**: Star mods and filter to favorites
@@ -188,18 +187,17 @@ Mod library                        →     ZZMI folder/Mods (Active Mods)
 1. **Import mods**:
    - Use Drag & Drop to add mod folders to your mod library
    - Or press Ctrl+V to paste paths
-   - Or click the "+" card to use file picker
    - The app will automatically detect character names from folder names
 
 2. **Activate mods**:
-   - Click on a mod card to enable/disable it
+   - Flip the switch on a mod card to enable/disable it
    - Enabled mods get a symbolic link created in your ZZMI folder's Mods
-   - Use Single/Multi toggle to choose activation mode
+   - Use the **One at a time** switch above a character's mods to choose whether one or several can be on
    - Press F10 in game to load the change
 
 3. **Organize by characters**:
-   - Click on character avatars to filter mods
-   - Drag and drop mods between characters
+   - Pick a character in the character list to see their mods
+   - Drag a mod onto another row of the list to move it there
    - The app auto-tags mods based on folder names
 
 ### Understanding the Two Folders
@@ -274,31 +272,31 @@ external tool is required any more. See
 3. Press Ctrl+V
 4. Wait for import to complete
 
-#### Method 3: File Picker
-1. Click the "+" card at the end of the mod list
-2. Browse and select mod folders
-3. Click "Select Folder"
+Pick the character in the character list, then drop or paste onto their page, and the mod is filed under them; anywhere else, its character is worked out from its name. A pasted or dropped archive is deleted once its mod is installed. **Add mod** on a character's page explains both.
 
 ### Managing Mods
 
-#### Single Mode vs Multi Mode
+#### One at a Time
 
-- **Single Mode**: Only one mod can be active per character
-  - Automatically deactivates other mods when enabling one
-  - Best for character replacements
+Each character has a **One at a time** switch above their mods:
 
-- **Multi Mode**: Multiple mods can be active per character
-  - Enable as many mods as you want
-  - Best for accessories, weapons, effects
+- **On**: Only one of the character's mods can be active
+  - Turning a mod on turns the character's other mods off
+  - On by default for every agent, which suits outfit replacements
+
+- **Off**: Several of the character's mods can be active together
+  - Off by default for the UI, Texture, Audio and Misc categories, whose mods are often made to stack
+
+The switch is remembered per character. Unassigned mods have no switch.
 
 #### Activating/Deactivating Mods
 
-1. Click on a mod card to toggle its status
-2. A mod's on/off state is shown by a toggle on its card
+1. Flip the switch on a mod card to toggle its status
+2. Press a card to select it and open its details beside the mods
 3. The symbolic link is created/removed automatically
 4. Press F10 in the game to load the change
 
-**Right-click a mod** for more actions: Details, Edit, Rename, Add image, Open source page, Edit keybinds, favorite/unfavorite, and activate/deactivate.
+**Right-click a mod** for more actions: Details, Edit, Rename, Open in file explorer, Open source page, Edit keybinds, Check for updates, Update tracking, favorite/unfavorite, and Delete.
 
 ### Character Tags
 
@@ -308,14 +306,15 @@ Tags help organize mods by character. The system automatically detects character
 - `miyabi_winter_outfit` → Tagged as "Miyabi" ✅
 - `Burnice-Casual` → Tagged as "Burnice" ✅
 
-**Manual assignment**: right-click a mod → **Edit** and pick a character or a non-character category (UI, Texture, Audio, Misc) from the searchable picker. You can also drag a mod onto a category in the top bar.
+**Manual assignment**: right-click a mod → **Edit** and pick a character or a non-character category (UI, Texture, Audio, Misc) from the searchable picker. You can also drag a mod onto a character or category in the character list.
 
 **Bulk auto-tagging**: Go to Settings → Auto-tagging → "Tag all mods" to automatically tag all untagged mods.
 
 ### Filtering Mods
 
-- Click a category in the top bar to show only its mods, or **All** to show everything grouped into collapsible per-category sections
-- Use the toolbar above the grid to **search** by name, **sort** (Default / Name A–Z / Z–A), **filter by tags** (match any or all), or show **favorites only**
+- Pick a character or category in the character list to show its mods; mods with no character are under **Unassigned**
+- Type in the field above the list to find a character by name, or use its chips to keep only the rows with mods, with a mod on, or with an update
+- Use the chips above the grid to show a character's **Active** mods, those with **Updates**, or **Favorites**, and the menu beside them to **sort** (Recently added / Name A–Z / Z–A)
 
 ## ⚙️ Configuration
 
@@ -405,8 +404,8 @@ makepkg -si
    - Mods should be in individual folders
    - Each folder should contain mod files (INI, DDS, etc.)
 
-3. **Restart the application**:
-   - Sometimes a restart helps refresh the mod list
+3. **Read the library again**:
+   - Choose **Read the library again** from the ⋯ menu above a character's mods, or restart the application
 
 ### Mods Not Activating in Game
 

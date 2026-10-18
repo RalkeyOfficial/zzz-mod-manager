@@ -390,8 +390,8 @@ class OriginResolution {
         ));
   }
 
-  /// "Not from GameBanana / it's my own" — the status slot goes quiet
-  /// permanently.
+  /// "Not from GameBanana / it's my own" — the card shows "Local" and asks for
+  /// nothing about it, permanently.
   ///
   /// Deliberately the one thing that *writes* a block for a mod that had none:
   /// the don't-litter rule says an untracked mod gets no sidecar, but this is an

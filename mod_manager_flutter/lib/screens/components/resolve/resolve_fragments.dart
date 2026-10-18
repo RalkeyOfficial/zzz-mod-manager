@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../l10n/app_localizations.dart';
 import '../../../services/origin_summary.dart';
-import '../mod_status_slot.dart';
+import '../../../core/palette.dart';
 
 /// The small shared pieces the resolve surfaces are built from.
 ///
@@ -31,7 +31,7 @@ Widget resolveNotice(
     ),
     child: Row(
       children: [
-        Icon(icon, size: 15, color: colour ?? ModStatusSlot.amber),
+        Icon(icon, size: 15, color: colour ?? ZenithPalette.of(context).amber),
         const SizedBox(width: 8),
         Expanded(
           child: Text(

@@ -65,9 +65,9 @@ class AppConstants {
   /// 49 covers came to **213 MB decoded at native size** — over twice the limit,
   /// with single images at 14 MB, so about seven cards could evict everything else.
   ///
-  /// That cache is shared with the marketplace's network thumbnails, which is how
-  /// this became visible: opening the Mods tab flushed them, and returning to the
-  /// marketplace re-downloaded every preview. Decoding at display size instead
+  /// That cache is shared with the marketplace's network thumbnails, so covers
+  /// decoded at native size would flush them on opening the Library, and the
+  /// marketplace would download every preview again. Decoding at display size
   /// takes those same 49 covers to roughly 5 MB.
   ///
   /// Also the width of the thumbnail an import writes beside a cover

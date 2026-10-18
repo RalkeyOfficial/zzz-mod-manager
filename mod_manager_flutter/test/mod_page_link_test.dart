@@ -4,9 +4,10 @@ import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
-import 'package:mod_manager_flutter/screens/components/mod_card_widget.dart';
+import 'package:mod_manager_flutter/screens/components/mod_details_panel.dart';
 import 'package:mod_manager_flutter/utils/url_utils.dart';
 
+import 'support/library_override.dart';
 import 'support/localized_harness.dart';
 
 /// Which page a mod's link opens, and whether it is offered at all.
@@ -69,38 +70,74 @@ void main() {
     });
   });
 
-  group('the card', () {
-    Future<void> pump(WidgetTester tester, ModInfo m) => pumpLocalized(
-          tester,
-          Center(
-            child: SizedBox(
-              width: 220,
-              height: 260,
-              child: ModCardWidget(
-                mod: m,
-                isDarkMode: true,
-                onFavoriteToggle: () {},
-                onShowDetails: () {},
-                onOpenLink: () {},
-              ),
-            ),
+  group('the details panel', () {
+    Future<void> pump(WidgetTester tester, ModInfo m) async {
+      await pumpLocalized(
+        tester,
+        Align(
+          alignment: Alignment.topRight,
+          child: ModDetailsPanel(
+            mod: m,
+            onClose: () {},
+            onToggle: () {},
+            onFavoriteToggle: () {},
+            onEdit: () {},
+            onOpenFolder: () {},
+            onCheckForUpdate: () {},
+            onResolveOrigin: () {},
+            onDelete: () {},
+            noteWriter: (_, _) async => true,
           ),
-        );
+        ),
+        // Held in memory: the panel's size row reads the library, and a real scan would reach ApiService.
+        overrides: [libraryOf([m])],
+        surfaceSize: const Size(1200, 2400),
+      );
+      expectBuilt(ModDetailsPanel);
+    }
 
-    // The button is the symptom: a mod the app checks for updates every time,
+    /// The tracking row's label, as the press it is: a link has a tap handler between it and the panel, plain text
+    /// has none.
+    bool isLink(WidgetTester tester, String label) {
+      final presses = find.ancestor(
+        of: find.descendant(of: find.byType(ModDetailsPanel), matching: find.text(label)),
+        matching: find.byType(GestureDetector),
+      );
+      return tester.widgetList<GestureDetector>(presses).any((g) => g.onTap != null);
+    }
+
+    // The link is the symptom: a mod the app checks for updates every time,
     // on a page it plainly knows, with no way to open it.
-    testWidgets('offers the link for a mod known only by its id',
+    testWidgets('links the page for a mod known only by its id',
         (tester) async {
       await pump(tester, mod(origin: origin(modId: 549029)));
-      expectBuilt(ModCardWidget);
 
-      expect(find.byIcon(Icons.open_in_new), findsOneWidget);
+      expect(find.text('GameBanana'), findsOneWidget);
+      expect(isLink(tester, 'GameBanana'), isTrue, reason: 'the tracking row opens the mod page');
+      expect(find.text('Not tracked'), findsNothing);
     });
 
-    testWidgets('offers nothing for a mod with no page at all', (tester) async {
+    testWidgets('offers no page for a mod with none at all', (tester) async {
       await pump(tester, mod(origin: origin()));
 
-      expect(find.byIcon(Icons.open_in_new), findsNothing);
+      expect(find.text('GameBanana'), findsNothing);
+      expect(find.text('Not tracked'), findsOneWidget);
+      expect(isLink(tester, 'Not tracked'), isFalse);
+    });
+
+    testWidgets('a mod the user marked as their own says Local, and links nothing', (tester) async {
+      final local = ModOrigin(
+        source: 'gamebanana',
+        provenance: OriginProvenance.importedFolder,
+        tracking: OriginTracking.off,
+        downloads: const [ModDownload(modId: 549029, modIdConfidence: OriginConfidence.user)],
+      );
+      await pump(tester, mod(origin: local));
+
+      expect(find.text('GameBanana'), findsNothing);
+      final label = find.descendant(of: find.byType(ModDetailsPanel), matching: find.text('Local'));
+      expect(label, findsWidgets);
+      expect(isLink(tester, 'Local'), isFalse, reason: 'a page the user opted out of is not offered');
     });
   });
 }

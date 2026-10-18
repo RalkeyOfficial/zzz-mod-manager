@@ -3,40 +3,40 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/constants.dart';
+import '../../core/palette.dart';
 import '../../l10n/app_localizations.dart';
 import '../../services/api_service.dart';
-import '../../services/bulk_resolution.dart';
-import '../../services/bulk_update_check.dart';
 import '../../services/origin_write.dart';
-import '../../services/update_check_run.dart';
+import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
 import '../dialogs/assume_current_dialog.dart';
-import '../dialogs/bulk_resolution_dialog.dart';
-import 'mod_status_slot.dart';
+import 'character_tile.dart';
+import 'library_actions_host.dart';
 import 'tracking_nudge.dart';
-import 'update_check_feedback.dart';
+import 'zenith_controls.dart';
+import 'zenith_switch.dart';
 
-/// Search + sort + tag-filter + favorites toolbar shown above the mods grid.
+/// The row above a character's mods: the grid's filter chips, the character's One at a time switch, the sort, and
+/// the library menu, with the tracking reminder under it.
 ///
-/// All of its state lives in providers (see `state_providers.dart`), so this
-/// widget only reads/writes those; the search field's controller is the one
-/// piece of local state, kept in sync with [modSearchQueryProvider] so clearing
-/// the query from elsewhere (e.g. the "no results" screen) also clears the box.
+/// Its state lives in providers, so it rebuilds only on the slices it watches. The update check and the tracking
+/// screen run in [LibraryActionsHost], above the page, since they outlive it.
 class ModsToolbar extends ConsumerStatefulWidget {
   const ModsToolbar({
     super.key,
     this.onLibraryChanged,
+    this.onRescan,
     this.originWriter,
     this.nudgeWriter,
-    this.updateFetcher,
-    this.updatesFetcher,
+    this.oneAtATimeWriter,
   });
 
-  /// Called after the bulk "assume current" action wrote something, so the
-  /// screen can rescan — the status slot is drawn from `ModInfo.origin`, which
-  /// only a scan refreshes.
+  /// Called after "mark all as current" ran, so the screen can rescan — the status badge is drawn from
+  /// `ModInfo.origin`, which only a scan refreshes.
   final VoidCallback? onLibraryChanged;
+
+  /// The library menu's "read the library again". Absent hides the entry.
+  final VoidCallback? onRescan;
 
   /// Injected only by tests — see [OriginWriter].
   final OriginWriter? originWriter;
@@ -44,653 +44,220 @@ class ModsToolbar extends ConsumerStatefulWidget {
   /// Injected only by tests — see [NudgeDismissWriter].
   final NudgeDismissWriter? nudgeWriter;
 
-  /// Injected only by tests. Defaults to the shared GameBanana client, which a
-  /// widget test must not be allowed to reach — the same reason the origin
-  /// writer above is injectable.
-  final ModRecordFetcher? updateFetcher;
-
-  /// Injected only by tests, for the same reason. The second phase — asking
-  /// each flagged mod's release feed which files shipped together.
-  final ModUpdatesFetcher? updatesFetcher;
+  /// Injected only by tests. Defaults to `ApiService.setOneAtATime`, which writes the developer's own config.
+  final Future<bool> Function(String groupId, bool on)? oneAtATimeWriter;
 
   @override
   ConsumerState<ModsToolbar> createState() => _ModsToolbarState();
 }
 
 class _ModsToolbarState extends ConsumerState<ModsToolbar> {
-  final TextEditingController _searchController = TextEditingController();
-
-  /// Set while a bulk run is in flight, so the button can't be pressed twice
-  /// into two overlapping passes over the same folders.
+  /// Set while "mark all as current" is in flight, so the menu can't start it twice over the same folders.
   bool _assuming = false;
-
-  /// The same guard for the update check: a second press mid-pass would issue
-  /// the whole batch again and race the first run's results into the map.
-  bool _checkingUpdates = false;
-
-  // Anchored dropdown for the tag filter.
-  final OverlayPortalController _tagMenuController = OverlayPortalController();
-  final LayerLink _tagMenuLink = LayerLink();
-
-  @override
-  void initState() {
-    super.initState();
-    _searchController.text = ref.read(modSearchQueryProvider);
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
 
   AppLocalizations get loc => context.loc;
 
   @override
   Widget build(BuildContext context) {
-    // Mirror the query provider into the field, so clearing it elsewhere also
-    // empties the box. When the user types, the text already matches, so this
-    // is a no-op and never moves the cursor.
-    ref.listen(modSearchQueryProvider, (_, next) {
-      if (_searchController.text != next) _searchController.text = next;
-    });
-
-    // The updates filter switches itself off once the library has none left,
+    // The Updates filters switch themselves off once the library has none left,
     // rather than leaving the grid filtered to nothing with a control the user
-    // has to work out they need to press. Same reasoning as the bulk "assume
-    // current" action clearing its filter when a run leaves nothing behind.
+    // has to work out they need to press.
     //
-    // Keyed on the **library**, not on the view-scoped count beside it: on the
-    // view count this would fire merely because the user clicked a character
-    // tab with no updates of its own, and the filter would evaporate whenever
-    // they looked somewhere else.
+    // Keyed on the **library**, not on the view-scoped count: on that this would
+    // fire merely because the user picked a character with no updates of its
+    // own, and the filter would evaporate whenever they looked somewhere else.
     //
     // Deferred a frame because a listener can fire *during* the rebuild its own
     // change triggered, and Riverpod refuses a provider write in that window.
     ref.listen(libraryHasUpdatesProvider, (_, hasUpdates) {
-      if (hasUpdates || !ref.read(modUpdatesOnlyProvider)) return;
+      if (hasUpdates) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        ref.read(modUpdatesOnlyProvider.notifier).state = false;
+        final grid = ref.read(modGridFilterProvider.notifier);
+        if (grid.state == ModGridFilter.updates) grid.state = ModGridFilter.all;
+        final list = ref.read(characterListFilterProvider.notifier);
+        if (list.state == CharacterListFilter.updates) list.state = CharacterListFilter.all;
       });
     });
 
-    final tags = ref.watch(availableModTagsProvider);
-    final searchQuery = ref.watch(modSearchQueryProvider);
-    final isFiltering = ref.watch(modFiltersActiveProvider);
-    final needsAttentionCount = ref.watch(modsNeedingAttentionCountProvider);
-    final needsAttentionActive = ref.watch(modNeedsAttentionOnlyProvider);
+    final palette = ZenithPalette.of(context);
+    final filter = ref.watch(modGridFilterProvider);
+    final mods = ref.watch(currentCharacterSkinsProvider);
+    final updates = ref.watch(modsWithUpdatesCountProvider);
+    final checked = ref.watch(modUpdateChecksProvider).isNotEmpty;
+    final needsAttention = ref.watch(modsNeedingAttentionCountProvider);
     final untrackedCount = ref.watch(untrackedModsCountProvider);
     final nudgeDismissed = ref.watch(trackingNudgeDismissedProvider);
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        AppConstants.defaultPadding,
-        AppConstants.smallPadding,
-        AppConstants.defaultPadding,
-        0,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (untrackedCount > 0 && !nudgeDismissed)
-            TrackingNudge(
-              count: untrackedCount,
-              onSortOut: () => unawaited(
-                _openResolution(ref.read(bulkUpdateCheckPlanProvider)),
-              ),
-              onDismiss: _dismissNudge,
-            ),
-          // **Row one is search plus the library menu; row two is every
-          // filter.** Interleaving actions with filters puts a bulk write beside
-          // a filter reset in a row that appears and disappears, which is how
-          // the bulk resolution screen ended up with nowhere to be re-opened
-          // from. Row two is always present: it costs a row of height on an
-          // unfiltered library and buys every control a fixed place.
-          Row(
+    final checking = ref.watch(libraryCheckRunningProvider);
+    final group = ref.watch(currentCharacterIdProvider);
+
+    Widget chip(ModGridFilter value, String key, int? count) => ZenithChip(
+      label: loc.t(key),
+      count: count,
+      selected: filter == value,
+      onTap: () => ref.read(modGridFilterProvider.notifier).state = value,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+          decoration: BoxDecoration(border: Border(bottom: BorderSide(color: palette.divider))),
+          child: Wrap(
+            spacing: 14,
+            runSpacing: 10,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Expanded(
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: (v) =>
-                      ref.read(modSearchQueryProvider.notifier).state = v,
-                  decoration: InputDecoration(
-                    isDense: true,
-                    hintText: loc.t('mods.toolbar.search'),
-                    prefixIcon: const Icon(Icons.search, size: 18),
-                    suffixIcon: searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.close, size: 16),
-                            tooltip: loc.t('mods.toolbar.clear'),
-                            onPressed: () => ref
-                                .read(modSearchQueryProvider.notifier)
-                                .state = '',
-                          )
-                        : null,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
+              Wrap(
+                spacing: 10,
+                runSpacing: 6,
+                children: [
+                  chip(ModGridFilter.all, 'library.grid.all', mods.length),
+                  chip(ModGridFilter.active, 'library.grid.active', mods.where((m) => m.isActive).length),
+                  // No number before a check: "0 updates" and "not checked" are different claims.
+                  chip(ModGridFilter.updates, 'library.grid.updates', checked ? updates : null),
+                  chip(ModGridFilter.favorites, 'library.grid.favorites', mods.where((m) => m.isFavorite).length),
+                  // Hidden at zero, unless it is on: the answer is usually nothing or most of the library, and a
+                  // chip that is on must stay to be switched off.
+                  if (needsAttention > 0 || filter == ModGridFilter.needsAttention)
+                    chip(ModGridFilter.needsAttention, 'library.grid.needs_attention', needsAttention),
+                ],
               ),
-              const SizedBox(width: 8),
-              _buildLibraryMenu(),
+              // A Wrap as well: at the minimum window the toolbar has about 300px.
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  if (hasOneAtATime(group)) _OneAtATime(groupId: group, writer: widget.oneAtATimeWriter),
+                  const SizedBox(width: 4),
+                  _buildSortButton(),
+                  _buildLibraryMenu(checking),
+                ],
+              ),
             ],
           ),
-          const SizedBox(height: 8),
-          // A Wrap rather than a Row with a Spacer: the labels are whole words
-          // with nothing to ellipsise, so at the narrow end of the window (an
-          // 800px minimum, less the nav rail and the character panel) a Row
-          // overflows instead of degrading. The outer Wrap holds the filters at
-          // one end and the reset at the other while they fit and stacks them
-          // when they don't; the inner one keeps the filters together as a
-          // group rather than letting `spaceBetween` scatter them.
-          SizedBox(
-            width: double.infinity,
-            child: Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    _buildSortButton(),
-                    if (tags.isNotEmpty) _buildTagFilterButton(tags),
-                    // Still conditional, and still hidden rather than disabled
-                    // at zero: the answer is usually nothing or most of the
-                    // library. The `Wrap` means it no longer has to take a
-                    // spacer with it, which is what the old `Row` got wrong.
-                    if (needsAttentionCount > 0 || needsAttentionActive)
-                      _buildNeedsAttentionToggle(
-                        needsAttentionCount,
-                        needsAttentionActive,
-                      ),
-                    if (_buildUpdatesFilterToggle() case final button?) button,
-                    _buildFavoritesToggle(),
-                  ],
-                ),
-                if (isFiltering)
-                  TextButton.icon(
-                    onPressed: () => clearModFilters(ref),
-                    icon: const Icon(Icons.clear, size: 16),
-                    label: Text(loc.t('mods.toolbar.clear_filters')),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-              ],
+        ),
+        if (untrackedCount > 0 && !nudgeDismissed)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(28, 14, 28, 0),
+            child: TrackingNudge(
+              count: untrackedCount,
+              onSortOut: checking ? null : () => unawaited(LibraryActionsHost.of(context).sortOutTracking()),
+              onDismiss: _dismissNudge,
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _toolbarButton({required Widget child, bool active = false}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-      decoration: BoxDecoration(
-        color: active ? const Color(0xFF0EA5E9).withValues(alpha: 0.12) : null,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: active
-              ? const Color(0xFF0EA5E9).withValues(alpha: 0.6)
-              : Colors.grey.withValues(alpha: 0.4),
-        ),
-      ),
-      child: child,
+      ],
     );
   }
 
   Widget _buildSortButton() {
     final sortMode = ref.watch(modSortProvider);
-    return PopupMenuButton<ModSort>(
-      tooltip: loc.t('mods.toolbar.sort'),
-      initialValue: sortMode,
-      onSelected: (m) {
-        // Update the UI immediately and persist the choice for next launch.
-        ref.read(modSortProvider.notifier).state = m;
-        ApiService.saveSortMode(m);
-      },
-      itemBuilder: (_) => [
+    return MenuAnchor(
+      menuChildren: [
         for (final m in ModSort.values)
-          CheckedPopupMenuItem(
-            value: m,
-            checked: sortMode == m,
+          MenuItemButton(
+            leadingIcon: Icon(sortMode == m ? Icons.check_rounded : null),
+            onPressed: () {
+              // Update the UI immediately and persist the choice for next launch.
+              ref.read(modSortProvider.notifier).state = m;
+              ApiService.saveSortMode(m);
+            },
             child: Text(_sortLabel(m)),
           ),
       ],
-      child: _toolbarButton(
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.sort, size: 18),
-            const SizedBox(width: 6),
-            Text(_sortLabel(sortMode), style: Theme.of(context).textTheme.bodyMedium),
-            const Icon(Icons.arrow_drop_down, size: 18),
-          ],
-        ),
+      builder: (context, controller, _) => TextButton.icon(
+        style: smallButtonStyle(context),
+        onPressed: () => controller.isOpen ? controller.close() : controller.open(),
+        icon: const Icon(Icons.swap_vert_rounded),
+        label: Text(_sortLabel(sortMode)),
       ),
     );
   }
 
-  String _sortLabel(ModSort mode) {
-    switch (mode) {
-      case ModSort.added:
-        return loc.t('mods.sort.added');
-      case ModSort.nameAsc:
-        return loc.t('mods.sort.name_asc');
-      case ModSort.nameDesc:
-        return loc.t('mods.sort.name_desc');
-    }
-  }
+  String _sortLabel(ModSort mode) => switch (mode) {
+    ModSort.added => loc.t('mods.sort.added'),
+    ModSort.nameAsc => loc.t('mods.sort.name_asc'),
+    ModSort.nameDesc => loc.t('mods.sort.name_desc'),
+  };
 
-  /// Tag filter as an anchored dropdown panel (scales to many tags) with an
-  /// Any/All match-mode toggle. Built with OverlayPortal so it's a normal part
-  /// of the tree — toggles update state directly and re-filter live.
-  Widget _buildTagFilterButton(List<String> tags) {
-    // Count only tags present in this view — matches what visibleModsProvider
-    // actually applies, so the badge can't claim a filter that does nothing.
-    final count = ref.watch(modTagFiltersProvider).where(tags.contains).length;
-    return OverlayPortal(
-      controller: _tagMenuController,
-      overlayChildBuilder: (context) {
-        return Stack(
-          children: [
-            // Tap-outside barrier to dismiss.
-            Positioned.fill(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: _tagMenuController.hide,
-              ),
-            ),
-            // Anchor the panel's right edge to the button's right edge so it
-            // grows leftward into the window instead of clipping off the right.
-            CompositedTransformFollower(
-              link: _tagMenuLink,
-              targetAnchor: Alignment.bottomRight,
-              followerAnchor: Alignment.topRight,
-              offset: const Offset(0, 6),
-              child: _buildTagMenuPanel(tags),
-            ),
-          ],
-        );
-      },
-      child: CompositedTransformTarget(
-        link: _tagMenuLink,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: _tagMenuController.toggle,
-          child: _toolbarButton(
-            active: count > 0,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.filter_list, size: 18),
-                const SizedBox(width: 6),
-                Text(loc.t('mods.toolbar.tags'), style: Theme.of(context).textTheme.bodyMedium),
-                if (count > 0) ...[
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0EA5E9),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '$count',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-                const Icon(Icons.arrow_drop_down, size: 18),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTagMenuPanel(List<String> tags) {
-    // The panel lives in the app Overlay (via OverlayPortal), so it watches the
-    // filter providers through its own Consumer to rebuild on toggle.
-    return Consumer(
-      builder: (context, ref, _) {
-        final activeTags = ref.watch(modTagFiltersProvider);
-        final matchAll = ref.watch(modTagMatchAllProvider);
-        return Material(
-          elevation: 8,
-          borderRadius: BorderRadius.circular(10),
-          clipBehavior: Clip.antiAlias,
-          child: SizedBox(
-            width: 280,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        loc.t('mods.toolbar.match'),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Wrap(
-                        spacing: 6,
-                        children: [
-                          ChoiceChip(
-                            label: Text(loc.t('mods.toolbar.match_any')),
-                            selected: !matchAll,
-                            visualDensity: VisualDensity.compact,
-                            onSelected: (_) => ref
-                                .read(modTagMatchAllProvider.notifier)
-                                .state = false,
-                          ),
-                          ChoiceChip(
-                            label: Text(loc.t('mods.toolbar.match_all')),
-                            selected: matchAll,
-                            visualDensity: VisualDensity.compact,
-                            onSelected: (_) => ref
-                                .read(modTagMatchAllProvider.notifier)
-                                .state = true,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 280),
-                  child: ListView(
-                    shrinkWrap: true,
-                    padding: EdgeInsets.zero,
-                    children: [
-                      for (final tag in tags)
-                        CheckboxListTile(
-                          dense: true,
-                          controlAffinity: ListTileControlAffinity.leading,
-                          visualDensity: VisualDensity.compact,
-                          value: activeTags.contains(tag),
-                          title: Text(tag, style: Theme.of(context).textTheme.bodyMedium),
-                          onChanged: (sel) {
-                            final next = Set<String>.from(activeTags);
-                            if (sel == true) {
-                              next.add(tag);
-                            } else {
-                              next.remove(tag);
-                            }
-                            ref.read(modTagFiltersProvider.notifier).state =
-                                next;
-                          },
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  /// Enumerates the mods whose origin isn't fully known.
+  /// The things you can *do* to the library, in one menu. Grouping them is
+  /// what gives the resolution screen a door to be re-opened from.
   ///
-  /// Carries the count because the answer is usually zero or "most of the
-  /// library", and both are worth knowing *before* pressing: a legacy library
-  /// says 47 and a fully-resolved one says nothing at all. Hidden entirely at
-  /// zero rather than shown disabled — a control that can never do anything is
-  /// noise in a toolbar that already has four.
-  ///
-  /// **Whether to show it is decided by the caller**, not here, so the spacer
-  /// beside it disappears with it. Returning an empty box from a build method
-  /// hides the control and keeps its gaps.
-  Widget _buildNeedsAttentionToggle(int count, bool active) {
-    return Tooltip(
-      message: loc.t('mods.toolbar.needs_attention'),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: () =>
-            ref.read(modNeedsAttentionOnlyProvider.notifier).state = !active,
-        child: _toolbarButton(
-          active: active,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.priority_high,
-                size: 18,
-                color: active ? ModStatusSlot.amber : null,
-              ),
-              if (count > 0) ...[
-                const SizedBox(width: 4),
-                Text('$count', style: Theme.of(context).textTheme.bodyMedium),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// **Only ever a filter.** It used to run the check too, which left
-  /// re-checking three clicks away and the results screen with nowhere to be
-  /// re-opened from; checking is an action and lives in the library menu now.
-  ///
-  /// Null when there is nothing to show, so the `Wrap` closes over it — but it
-  /// stays rendered while the filter is *on* even at zero, or ignoring the last
-  /// update would leave the grid filtered with nothing to switch off.
-  Widget? _buildUpdatesFilterToggle() {
-    final active = ref.watch(modUpdatesOnlyProvider);
-    final found = ref.watch(modsWithUpdatesCountProvider);
-    if (found == 0 && !active) return null;
-
-    return Tooltip(
-      message: loc.t('mods.toolbar.show_updates', params: {'count': '$found'}),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: () => ref.read(modUpdatesOnlyProvider.notifier).state = !active,
-        child: _toolbarButton(
-          active: active,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.arrow_circle_up,
-                size: 18,
-                color: active ? ModStatusSlot.updateBlue : null,
-              ),
-              const SizedBox(width: 4),
-              Text('$found', style: Theme.of(context).textTheme.bodyMedium),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// The three things you can *do* to the library, in one menu. Grouping them
-  /// is what gives the resolution screen a door to be re-opened from.
-  ///
-  /// The badge counts what **"sort out mod tracking" would open** — the only
-  /// entry whose work is otherwise invisible. A badge summing all three would
-  /// be a number matching nothing else on screen.
-  Widget _buildLibraryMenu() {
+  /// Each entry shows the count of mods it would act on, even at zero, so a
+  /// disabled entry says why.
+  Widget _buildLibraryMenu(bool checking) {
     final checkPlan = ref.watch(bulkUpdateCheckPlanProvider);
     final resolution = ref.watch(bulkResolutionPlanProvider);
-    final assume = ref.watch(bulkAssumeCurrentPlanProvider);
+    final assumable = ref.watch(characterAssumeCurrentCountProvider);
     final pending = resolution.rows.length;
+    final enabled = !checking && !_assuming;
+    final actions = LibraryActionsHost.of(context);
 
-    return PopupMenuButton<_LibraryAction>(
-      tooltip: loc.t('mods.toolbar.library'),
-      enabled: !_checkingUpdates && !_assuming,
-      onSelected: (action) {
-        switch (action) {
-          case _LibraryAction.check:
-            unawaited(_runUpdateCheck(checkPlan));
-          case _LibraryAction.resolve:
-            unawaited(_openResolution(checkPlan));
-          case _LibraryAction.assumeCurrent:
-            unawaited(_runAssumeCurrent());
-        }
-      },
-      itemBuilder: (_) => [
+    return MenuAnchor(
+      menuChildren: [
         _menuItem(
-          value: _LibraryAction.check,
-          icon: Icons.arrow_circle_up,
+          icon: Icons.sync_rounded,
           label: loc.t('mods.toolbar.check_updates'),
           count: checkPlan.checkableCount,
-          enabled: checkPlan.hasWork,
+          onPressed: checkPlan.hasWork ? () => unawaited(actions.checkForUpdates()) : null,
         ),
         _menuItem(
-          value: _LibraryAction.resolve,
-          icon: Icons.rule,
+          icon: Icons.rule_rounded,
           label: loc.t('mods.toolbar.sort_out_tracking'),
           count: pending,
           // Enabled with nothing in hand as well: the entry runs the check
           // itself in that case, which is the request it would have taken
-          // anyway. Refusing until a check had run would make the menu's most
-          // useful item the one that is greyed out on launch.
-          // An untracked mod is enough on its own, since its row needs no mod page.
-          enabled: pending > 0 ||
-              checkPlan.hasWork ||
-              resolution.untracked.isNotEmpty,
+          // anyway. An untracked mod is enough on its own, since its row needs no mod page.
+          onPressed: pending > 0 || checkPlan.hasWork || resolution.untracked.isNotEmpty
+              ? () => unawaited(actions.sortOutTracking())
+              : null,
         ),
         _menuItem(
-          value: _LibraryAction.assumeCurrent,
-          icon: Icons.event_available,
+          icon: Icons.event_available_rounded,
           label: loc.t('mods.toolbar.assume_current'),
-          count: assume.eligible.length,
-          enabled: assume.hasWork,
+          count: assumable,
+          onPressed: assumable > 0 ? () => unawaited(_runAssumeCurrent()) : null,
         ),
+        if (widget.onRescan != null) ...[
+          const Divider(),
+          MenuItemButton(
+            leadingIcon: const Icon(Icons.refresh_rounded),
+            onPressed: widget.onRescan,
+            child: Text(loc.t('library.grid.rescan')),
+          ),
+        ],
       ],
-      child: _toolbarButton(
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Only for the check, which is a request. `_assuming` merely
-            // disables the menu: its work is milliseconds behind a modal, and a
-            // spinner turning behind a dialog says the app is still busy.
-            if (_checkingUpdates)
-              const SizedBox.square(
-                dimension: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            else
-              const Icon(Icons.more_vert, size: 18),
-            const SizedBox(width: 6),
-            Text(loc.t('mods.toolbar.library'),
-                style: Theme.of(context).textTheme.bodyMedium),
-            if (pending > 0) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(
-                  color: ModStatusSlot.amber,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '$pending',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-            const Icon(Icons.arrow_drop_down, size: 18),
-          ],
-        ),
+      builder: (context, controller, _) => IconButton(
+        style: smallButtonStyle(context, iconOnly: true),
+        tooltip: loc.t('mods.toolbar.library'),
+        onPressed: enabled ? () => controller.isOpen ? controller.close() : controller.open() : null,
+        // Only for the check, which is a request. `_assuming` merely disables the menu: its work is
+        // milliseconds behind a modal, and a spinner turning behind a dialog says the app is still busy.
+        icon: checking
+            ? const SizedBox.square(dimension: 14, child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.more_horiz_rounded),
       ),
     );
   }
 
-  /// One menu row. The count shows even at zero, so a disabled entry says why.
-  PopupMenuItem<_LibraryAction> _menuItem({
-    required _LibraryAction value,
+  Widget _menuItem({
     required IconData icon,
     required String label,
     required int count,
-    required bool enabled,
+    required VoidCallback? onPressed,
   }) {
-    final scheme = Theme.of(context).colorScheme;
-    return PopupMenuItem<_LibraryAction>(
-      value: value,
-      enabled: enabled,
-      child: Row(
-        children: [
-          Icon(icon, size: 18),
-          const SizedBox(width: 10),
-          Expanded(child: Text(label)),
-          const SizedBox(width: 12),
-          Text(
-            '$count',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-          ),
-        ],
+    final palette = ZenithPalette.of(context);
+    return MenuItemButton(
+      leadingIcon: Icon(icon),
+      trailingIcon: Padding(
+        padding: const EdgeInsets.only(left: 12),
+        child: Text('$count', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: palette.text3)),
       ),
-    );
-  }
-
-  /// [onDemand] is the "sort out" doors running the check first: the screen then opens for untracked mods too, since the user asked for it.
-  Future<void> _runUpdateCheck(
-    BulkUpdateCheckPlan plan, {
-    bool onDemand = false,
-  }) async {
-    setState(() => _checkingUpdates = true);
-    final BulkUpdateCheckOutcome outcome;
-    try {
-      // Shared with the opt-in startup check, so the two cannot disagree about
-      // the cache or about what a pass leaves behind.
-      outcome = await runLibraryUpdateCheck(
-        plan: plan,
-        client: ref.read(gameBananaClientProvider),
-        fetch: widget.updateFetcher,
-        fetchUpdates: widget.updatesFetcher,
-      );
-    } finally {
-      // Cleared **before** the results screen opens, not after it closes. The
-      // spinner reports the request, and the request is over — leaving it
-      // turning behind a modal the user is reading says the app is still
-      // working, and disables the control they would press next.
-      if (mounted) setState(() => _checkingUpdates = false);
-    }
-    if (!mounted) return;
-    final checks = ref.read(modUpdateChecksProvider.notifier);
-    checks.state = mergedChecks(checks.state, outcome);
-    final records = ref.read(modUpdateRecordsProvider.notifier);
-    records.state = mergedRecords(records.state, outcome);
-
-    // The results screen opens by itself only when it has something to ask —
-    // otherwise a modal stands between the user and the badges they pressed
-    // for. It states the summary itself when it does open, so a notification is
-    // never raised behind it.
-    // Untracked mods alone do not count as something to ask here, or a library that keeps some would get a modal after every check.
-    final resolution = ref.read(bulkResolutionPlanProvider);
-    if (!(onDemand ? resolution.listsAnything : resolution.hasWork)) {
-      showUpdateCheckOutcome(context, outcome);
-      return;
-    }
-    await _showResolution(
-      resolution,
-      // The pass's own tally of what it could not reach, plus the pages it found gone. More precise than the plan's count, which takes in any tracked mod with no record in hand.
-      // A union of folder ids, so a folder whose base page is gone and whose patch was not reached counts once.
-      unreachable: {...outcome.failed, ...resolution.goneIds}.length,
+      onPressed: onPressed,
+      child: Text(label),
     );
   }
 
@@ -700,85 +267,25 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
     unawaited((widget.nudgeWriter ?? ApiService.setTrackingNudgeDismissed)(true));
   }
 
-  /// The menu's "sort out mod tracking" — the same screen, on demand.
-  ///
-  /// Runs a check first when there is nothing in hand, which is the request it
-  /// would have taken anyway; `_runUpdateCheck` then opens the screen itself,
-  /// so this returns without doing it twice.
-  ///
-  /// Untracked mods open the screen on their own, with no check at all when nothing is tracked:
-  /// their rows need no mod page, and the nudge that leads here must never end in a notification that leaves them out of reach.
-  Future<void> _openResolution(BulkUpdateCheckPlan checkPlan) async {
-    final resolution = ref.read(bulkResolutionPlanProvider);
-    final inHand = ref.read(modUpdateRecordsProvider).isNotEmpty;
-    final showable =
-        resolution.hasWork || (inHand && resolution.untracked.isNotEmpty);
-    if (!showable && checkPlan.hasWork) {
-      await _runUpdateCheck(checkPlan, onDemand: true);
-      return;
-    }
-    if (!resolution.listsAnything) return;
-    // Not zero: a mod with no record in hand is one this screen cannot cover, and dropping it makes the dialog under-report on the door that exists to reopen it.
-    // With no records at all nothing was looked up, so there is nothing to report as unreached.
-    await _showResolution(
-      resolution,
-      unreachable: inHand ? resolution.unreachable : 0,
-    );
-  }
-
-  /// The update count is read **library-wide** rather than taken from whichever
-  /// door opened the screen. The check's own tally and the view-scoped toolbar
-  /// count are different numbers, and one sentence in one dialog must not mean
-  /// "in your library" or "on this character tab" depending on how it was
-  /// reached.
-  Future<void> _showResolution(
-    BulkResolutionPlan plan, {
-    required int unreachable,
-  }) async {
-    final updatesFound = ref.read(libraryUpdateCountProvider);
-    final wrote = await showBulkResolutionDialog(
-      context,
-      plan,
-      updatesFound: updatesFound,
-      unreachable: unreachable,
-      writer: widget.originWriter ??
-          originWriterFor(ref.read(modManagerServiceProvider.future)),
-      // Reached only on a Resolve press, which happens while this toolbar sits under the screen.
-      reader: (modName) =>
-          originReaderFor(ref.read(modManagerServiceProvider.future))(modName),
-    );
-    // Only on a write: the plan is derived from the records and the library, so
-    // a run that changed nothing leaves nothing stale behind.
-    if (wrote) widget.onLibraryChanged?.call();
-  }
-
-  /// The zero-network "assume current" bulk action.
+  /// The zero-network "assume current" bulk action, over the character on screen.
   ///
   /// **Turns the needs-attention filter on before confirming**, so the grid
-  /// behind the confirmation shows exactly the mods about to be rewritten. That
-  /// is the same rule as before — the user must have *seen* the set — enforced
-  /// by the action rather than by hiding it until the filter happens to be on.
-  ///
-  /// Flipping the filter cannot change *which* mods are eligible, only which
-  /// are on screen: `planBulkAssumeCurrent` already keeps only `versionUnknown`
-  /// mods, and needs-attention drops exactly the ones it would have skipped. So
-  /// the count in the menu is the count that gets written.
+  /// behind the confirmation shows exactly the mods about to be rewritten — the
+  /// user must have *seen* the set. The menu's count is taken over that same set
+  /// ([characterAssumeCurrentCountProvider]), whichever filter was on at the press.
   Future<void> _runAssumeCurrent() async {
     setState(() => _assuming = true);
-    // Restored if the action does not go through. Under the old placement the
-    // filter was a precondition, so declining changed nothing; turning it on
-    // *for* the confirmation means cancelling — the one thing a confirmation
-    // exists to allow — would otherwise leave the grid filtered behind the
+    // Restored if the action does not go through: cancelling, the one thing a
+    // confirmation exists to allow, must not leave the grid filtered behind the
     // user's back with nothing on screen saying why.
-    final wasFiltered = ref.read(modNeedsAttentionOnlyProvider);
+    final filter = ref.read(modGridFilterProvider.notifier);
+    final previous = filter.state;
     void restoreFilter() {
-      if (mounted && !wasFiltered) {
-        ref.read(modNeedsAttentionOnlyProvider.notifier).state = false;
-      }
+      if (mounted) filter.state = previous;
     }
 
     try {
-      ref.read(modNeedsAttentionOnlyProvider.notifier).state = true;
+      filter.state = ModGridFilter.needsAttention;
       // One frame, so the grid is actually showing that set before the
       // confirmation appears over it.
       await Future<void>.delayed(Duration.zero);
@@ -801,44 +308,64 @@ class _ModsToolbarState extends ConsumerState<ModsToolbar> {
       showAssumeCurrentOutcome(context, outcome);
       // Unconditional, even when nothing was written. A run that only *declined*
       // means the plan on screen was stale, and skipping the rescan there would
-      // leave the same stale plan behind a button that keeps offering the same
-      // work — a state that cannot correct itself.
+      // leave the same stale plan behind a menu that keeps offering the same work.
       widget.onLibraryChanged?.call();
       // Everything this view had to offer is now resolved, so leaving the
-      // filter on would hand the user an empty grid as the reward for pressing
-      // the button. Computed from the plan rather than from the rescan, which
-      // is asynchronous and owned by the screen above.
+      // filter on would hand the user an empty grid as the reward for pressing.
       if (plan.untracked.isEmpty &&
           plan.undatable.isEmpty &&
           outcome.written > 0 &&
           outcome.failed == 0) {
-        ref.read(modNeedsAttentionOnlyProvider.notifier).state = false;
+        filter.state = ModGridFilter.all;
       }
     } finally {
       if (mounted) setState(() => _assuming = false);
     }
   }
+}
 
-  Widget _buildFavoritesToggle() {
-    final favoritesOnly = ref.watch(modFavoritesOnlyProvider);
+/// The One at a time switch for the character on screen (`docs/library-screen.md` §10).
+class _OneAtATime extends ConsumerWidget {
+  const _OneAtATime({required this.groupId, this.writer});
+
+  final String groupId;
+  final Future<bool> Function(String groupId, bool on)? writer;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final loc = context.loc;
+    final palette = ZenithPalette.of(context);
+    final on = isOneAtATime(ref.watch(oneAtATimeProvider), groupId);
+    final label = loc.t('library.grid.one_at_a_time');
+
     return Tooltip(
-      message: loc.t('mods.toolbar.favorites_only'),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: () =>
-            ref.read(modFavoritesOnlyProvider.notifier).state = !favoritesOnly,
-        child: _toolbarButton(
-          active: favoritesOnly,
-          child: Icon(
-            favoritesOnly ? Icons.star : Icons.star_border,
-            size: 18,
-            color: favoritesOnly ? const Color(0xFFFACC15) : null,
+      message: loc.t(on ? 'library.grid.one_at_a_time_on' : 'library.grid.one_at_a_time_off'),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        spacing: 10,
+        children: [
+          ZenithSwitch(
+            value: on,
+            semanticLabel: label,
+            onChanged: (value) async {
+              final notify = context.notify;
+              final failedTitle = loc.t('library.grid.one_at_a_time_failed_title');
+              final name = libraryGroupName(groupId, loc);
+              final writer = this.writer;
+              // The real path publishes the choice once it is saved; a test's writer has no provider to publish to,
+              // so the switch publishes it the same way, after a successful write.
+              final saved = writer == null
+                  ? await ApiService.setOneAtATime(groupId, value)
+                  : await writer(groupId, value);
+              if (saved && writer != null) {
+                ref.read(oneAtATimeProvider.notifier).state = {...ref.read(oneAtATimeProvider), groupId: value};
+              }
+              if (!saved) notify.error(failedTitle, body: name);
+            },
           ),
-        ),
+          Text(label, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: palette.text2)),
+        ],
       ),
     );
   }
 }
-
-/// The library menu's three entries. All of them act; none of them filter.
-enum _LibraryAction { check, resolve, assumeCurrent }

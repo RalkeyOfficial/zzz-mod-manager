@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 
+import '../../core/palette.dart';
 import '../../l10n/app_localizations.dart';
-import 'mod_status_slot.dart';
+import 'zenith_controls.dart';
 
 /// Persists the reminder's dismissal. Production is `ApiService.setTrackingNudgeDismissed`;
 /// tests inject one so mounting the widget never reaches the developer's own `config.json`.
 typedef NudgeDismissWriter = Future<void> Function(bool dismissed);
 
-/// The reminder above the toolbar that some mods are not set up for update checking.
+/// The reminder above the mod grid that some mods are not set up for update checking. Blue, the colour of
+/// tracking: it asks for something, and nothing is wrong.
 class TrackingNudge extends StatelessWidget {
   const TrackingNudge({
     super.key,
@@ -17,30 +19,29 @@ class TrackingNudge extends StatelessWidget {
   });
 
   final int count;
-  final VoidCallback onSortOut;
+
+  /// Null while an update check is running, which the button would otherwise start a second of.
+  final VoidCallback? onSortOut;
   final VoidCallback onDismiss;
 
   @override
   Widget build(BuildContext context) {
     final loc = context.loc;
-    final scheme = Theme.of(context).colorScheme;
+    final palette = ZenithPalette.of(context);
+    final text = Theme.of(context).textTheme;
+    final tone = palette.badgeInfo;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+      padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
       decoration: BoxDecoration(
-        color: ModStatusSlot.amber.withValues(alpha: 0.12),
+        color: tone.background,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: ModStatusSlot.amber.withValues(alpha: 0.5)),
+        border: Border.all(color: tone.border!),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.only(top: 2),
-            child: Icon(Icons.priority_high, size: 18, color: ModStatusSlot.amber),
-          ),
-          const SizedBox(width: 8),
+          Icon(Icons.info_outline_rounded, color: tone.foreground),
+          const SizedBox(width: 10),
           // A Wrap so the button drops under the text when the two do not fit side by side.
           Expanded(
             child: Wrap(
@@ -55,15 +56,13 @@ class TrackingNudge extends StatelessWidget {
                   children: [
                     Text(
                       loc.plural('mods.nudge.title', count, params: {'count': '$count'}),
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                      style: text.bodyMedium?.copyWith(color: palette.text, fontWeight: FontWeight.w600),
                     ),
-                    Text(
-                      loc.t('mods.nudge.hint'),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                    ),
+                    Text(loc.t('mods.nudge.hint'), style: text.bodySmall?.copyWith(color: palette.text2)),
                   ],
                 ),
-                TextButton(
+                OutlinedButton(
+                  style: smallButtonStyle(context),
                   onPressed: onSortOut,
                   child: Text(loc.t('mods.toolbar.sort_out_tracking')),
                 ),
@@ -71,7 +70,8 @@ class TrackingNudge extends StatelessWidget {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.close, size: 16),
+            style: smallButtonStyle(context, iconOnly: true),
+            icon: const Icon(Icons.close_rounded),
             tooltip: loc.t('mods.nudge.dismiss'),
             onPressed: onDismiss,
           ),

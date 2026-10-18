@@ -107,7 +107,7 @@ class TempLibrary {
       snapshots: SnapshotService(rootPath: p.join(root.path, 'backups')),
     );
 
-    ApiService.useLibraryForTests(config);
+    ApiService.useLibraryForTests(config, service: library.service);
     addTearDown(() {
       ApiService.resetForTests();
       if (root.existsSync()) root.deleteSync(recursive: true);

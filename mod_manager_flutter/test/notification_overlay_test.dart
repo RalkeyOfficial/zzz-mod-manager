@@ -153,10 +153,10 @@ void main() {
       final avatar = tester.widget<CharacterAvatar>(
         find.byType(CharacterAvatar),
       );
-      final scheme = Theme.of(tester.element(find.byType(CharacterAvatar)))
-          .colorScheme;
-      expect(avatar.ring?.color,
-          notificationColor(scheme, NotificationSeverity.error));
+      expect(
+        avatar.ring?.color,
+        notificationColor(tester.element(find.byType(CharacterAvatar)), NotificationSeverity.error),
+      );
 
       // The icon variant gets no ring — the tinted disc and the glyph already
       // carry the accent.

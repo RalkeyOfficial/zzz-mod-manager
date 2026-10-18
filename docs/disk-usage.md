@@ -63,7 +63,7 @@ Tab entry re-reads only the cheap categories — saved versions, downloads, logs
 
 The category providers are **not `autoDispose`**, and that is what makes the tab work: tabs are keyed `AnimatedSwitcher` children with no keep-alive, so the screen's `State` is disposed the moment the user switches away. A container-owned provider is not, so a walk finishes while the user is elsewhere and the answer is waiting on the way back. Nothing needs hosting above the switcher.
 
-**Nothing watches `libraryProvider`.** Because these providers live for the session, that link would stay live all session: every mod toggle, rename and install anywhere in the app would kick off a multi-gigabyte re-walk for a user standing on the Mods tab who has never opened Storage.
+**Nothing watches `libraryProvider`.** Because these providers live for the session, that link would stay live all session: every mod toggle, rename and install anywhere in the app would kick off a multi-gigabyte re-walk for a user standing on the Library page who has never opened Storage.
 
 ## 8. The reclaim
 

@@ -10,8 +10,10 @@ import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/origin_write.dart';
+import 'package:mod_manager_flutter/screens/components/library_actions_host.dart';
 import 'package:mod_manager_flutter/screens/components/mods_toolbar.dart';
 import 'package:mod_manager_flutter/screens/components/tracking_nudge.dart';
+import 'package:mod_manager_flutter/screens/components/zenith_controls.dart';
 import 'package:mod_manager_flutter/screens/dialogs/bulk_resolution_dialog.dart';
 import 'package:mod_manager_flutter/screens/dialogs/mod_update_dialog.dart';
 import 'package:mod_manager_flutter/services/bulk_update_check.dart';
@@ -42,10 +44,10 @@ void main() {
         installedAt: installedAt,
       );
 
-  ModInfo mod(String name, {ModOrigin? origin}) => ModInfo(
+  ModInfo mod(String name, {ModOrigin? origin, String characterId = 'ellen'}) => ModInfo(
         id: name,
         name: name,
-        characterId: 'ellen',
+        characterId: characterId,
         isActive: false,
         origin: origin,
       );
@@ -58,45 +60,38 @@ void main() {
   group('the toolbar button', () {
     late ProviderContainer container;
 
+    /// [selected] is the character on screen; the first with a mod otherwise.
+    /// The library covers every character, and the view is the selected one's.
     Future<void> pumpToolbar(
       WidgetTester tester,
-      List<CharacterInfo> groups, {
+      List<ModInfo> mods, {
+      String? selected,
       ModRecordFetcherStub? fetch,
       Size surfaceSize = const Size(1200, 800),
       List<String>? written,
     }) async {
       await tester.pumpWidget(const SizedBox());
-      // Both halves, because the toolbar reads both: the **library** for what a
-      // check covers, and the **groups** for what the view can filter. Every
-      // mod in the groups is in the library once, which is the relationship the
-      // app's own scan produces.
-      final seen = <String>{};
-      container = ProviderContainer(overrides: [
-        libraryOf([
-          for (final group in groups)
-            for (final mod in group.skins)
-              if (seen.add(mod.id)) mod,
-        ]),
-      ]);
+      container = ProviderContainer(overrides: [libraryOf(mods)]);
       addTearDown(container.dispose);
-      container.read(charactersProvider.notifier).state = groups;
+      container.read(selectedCharacterIdProvider.notifier).state = selected;
       // Out of the way: it repeats the menu's "sort out" label, and it has its own test.
       container.read(trackingNudgeDismissedProvider.notifier).state = true;
 
+      Future<OriginWriteResult> originWriter(String name, ModOrigin? Function(ModOrigin?) update) async {
+        written?.add(name);
+        return written != null ? OriginWriteResult.written : OriginWriteResult.writeFailed;
+      }
+
       await pumpLocalized(
         tester,
-        ModsToolbar(
+        LibraryActionsHost(
           updateFetcher: fetch == null
               ? (ids) async => throw StateError('no fetch expected')
               : fetch.call,
           // Never the real `ApiService`: it lazily builds a `ConfigService`
           // against the developer's own `<appData>/config.json`.
-          originWriter: (name, update) async {
-            written?.add(name);
-            return written != null
-                ? OriginWriteResult.written
-                : OriginWriteResult.writeFailed;
-          },
+          originWriter: originWriter,
+          child: ModsToolbar(originWriter: originWriter),
         ),
         container: container,
         surfaceSize: surfaceSize,
@@ -104,24 +99,24 @@ void main() {
       expectBuilt(ModsToolbar);
     }
 
-    /// Picks an entry out of the library menu — the one place the three bulk
-    /// actions live now that none of them is overloaded onto a filter.
+    /// Picks an entry out of the library menu, the one place the three bulk
+    /// actions live: none of them is overloaded onto a filter.
     Future<void> runAction(WidgetTester tester, String label) async {
-      await tester.tap(find.text('Library'));
+      await tester.tap(find.byTooltip('Library'));
       await tester.pumpAndSettle();
       await tester.tap(find.text(label));
       await tester.pumpAndSettle();
     }
 
+    Finder chip(String label) => find.widgetWithText(ZenithChip, label);
+
     testWidgets('nothing tracked means the check is offered but disabled',
         (tester) async {
-      // Disabled rather than hidden, because it lives in a menu now: an entry
+      // Disabled rather than hidden, because it lives in a menu: an entry
       // reading "Check for updates  0" says why it can do nothing, where a
       // missing entry would just look like the feature isn't there.
-      await pumpToolbar(tester, [
-        CharacterInfo(id: 'all', name: 'All', skins: [mod('bare')]),
-      ]);
-      await tester.tap(find.text('Library'));
+      await pumpToolbar(tester, [mod('bare')]);
+      await tester.tap(find.byTooltip('Library'));
       await tester.pumpAndSettle();
       expect(find.text('Check for updates'), findsOneWidget);
 
@@ -133,45 +128,46 @@ void main() {
       expect(find.text('Check for updates'), findsOneWidget);
     });
 
-    testWidgets('the updates toggle is a filter and nothing else',
+    testWidgets('the Updates chip is a filter and nothing else',
         (tester) async {
-      // It used to run the check as well, which is why re-checking took three
-      // clicks and the results screen had nowhere to be re-opened from. With
-      // nothing found there is nothing to filter, so it isn't rendered at all.
-      final fetch = ModRecordFetcherStub((ids) async => [record(1, fileId: 10)]);
+      // Pressing it never runs the check: a filter with a hidden second job
+      // makes re-checking take extra clicks and leaves the results screen
+      // nowhere to be re-opened from.
+      var runs = 0;
+      final fetch = ModRecordFetcherStub((ids) async {
+        runs++;
+        return [record(1, fileId: 10)];
+      });
       await pumpToolbar(
         tester,
         [
-          CharacterInfo(id: 'all', name: 'All', skins: [
-            mod('current', origin: origin(modId: 1, fileId: 10)),
-            mod('stale', origin: origin(modId: 1, fileId: 99)),
-          ]),
+          mod('current', origin: origin(modId: 1, fileId: 10)),
+          mod('stale', origin: origin(modId: 1, fileId: 99)),
         ],
         fetch: fetch,
       );
-      expect(find.byIcon(Icons.arrow_circle_up), findsNothing);
 
       await runAction(tester, 'Check for updates');
-      expect(find.byIcon(Icons.arrow_circle_up), findsOneWidget);
+      expect(runs, 1);
 
-      // One press filters, a second clears — no hidden second job.
-      await tester.tap(find.byIcon(Icons.arrow_circle_up));
+      await tester.tap(chip('Updates'));
       await tester.pumpAndSettle();
-      expect(container.read(modUpdatesOnlyProvider), isTrue);
+      expect(container.read(modGridFilterProvider), ModGridFilter.updates);
       expect(container.read(visibleModsProvider).map((m) => m.id), ['stale']);
+      expect(runs, 1, reason: 'the filter fetches nothing');
 
-      await tester.tap(find.byIcon(Icons.arrow_circle_up));
+      // All is the way back.
+      await tester.tap(chip('All'));
       await tester.pumpAndSettle();
-      expect(container.read(modUpdatesOnlyProvider), isFalse);
+      expect(container.read(modGridFilterProvider), ModGridFilter.all);
       expect(container.read(visibleModsProvider), hasLength(2));
     });
 
     testWidgets('the results screen can be re-opened after it is dismissed',
         (tester) async {
-      // The complaint that produced the library menu: the screen only ever
-      // appeared as a side effect of a check, so cancelling it — or closing it
-      // by accident — meant it was gone. The records are session state now, so
-      // reopening costs no request at all.
+      // A screen that appears only as a side effect of a check is gone once it
+      // is cancelled or closed by accident. The records are session state, so
+      // reopening it from the library menu costs no request at all.
       var runs = 0;
       final fetch = ModRecordFetcherStub((ids) async {
         runs++;
@@ -187,12 +183,7 @@ void main() {
       });
       await pumpToolbar(
         tester,
-        [
-          CharacterInfo(id: 'all', name: 'All', skins: [
-            mod('Ellen',
-                origin: origin(modId: 1, installedAt: DateTime.utc(2026))),
-          ]),
-        ],
+        [mod('Ellen', origin: origin(modId: 1, installedAt: DateTime.utc(2026)))],
         fetch: fetch,
       );
 
@@ -209,10 +200,9 @@ void main() {
 
     testWidgets('both doors report the same library-wide summary',
         (tester) async {
-      // The check door had the pass's own count and the menu door had the
-      // *view-scoped* toolbar count, so standing on a character tab the same
-      // sentence in the same dialog meant something different. Both read the
-      // library now.
+      // Both read the whole library. With the pass's own count on one door and
+      // the *view-scoped* toolbar count on the other, the same sentence in the
+      // same dialog would mean something different on one character's page.
       final fetch = ModRecordFetcherStub(
         (ids) async => [
           for (final id in ids)
@@ -228,15 +218,13 @@ void main() {
       await pumpToolbar(
         tester,
         [
-          CharacterInfo(id: 'ellen', name: 'Ellen', skins: [
-            mod('Ellen skin',
-                origin: origin(modId: 1, installedAt: DateTime.utc(2026))),
-          ]),
-          CharacterInfo(id: 'rina', name: 'Rina', skins: [
-            mod('Rina skin',
-                origin: origin(modId: 2, fileId: 99, installedAt: DateTime.utc(2026))),
-          ]),
+          mod('Ellen skin',
+              origin: origin(modId: 1, installedAt: DateTime.utc(2026))),
+          mod('Rina skin',
+              characterId: 'rina',
+              origin: origin(modId: 2, fileId: 99, installedAt: DateTime.utc(2026))),
         ],
+        selected: 'ellen',
         fetch: fetch,
       );
 
@@ -270,12 +258,7 @@ void main() {
       });
       await pumpToolbar(
         tester,
-        [
-          CharacterInfo(id: 'all', name: 'All', skins: [
-            mod('Ellen',
-                origin: origin(modId: 1, installedAt: DateTime.utc(2026))),
-          ]),
-        ],
+        [mod('Ellen', origin: origin(modId: 1, installedAt: DateTime.utc(2026)))],
         fetch: fetch,
       );
 
@@ -287,12 +270,7 @@ void main() {
     testWidgets('the menu lists untracked mods when no page was ever fetched',
         (tester) async {
       // Nothing is tracked, so there is nothing to check and no record to wait for; the untracked rows need none.
-      await pumpToolbar(tester, [
-        CharacterInfo(id: 'all', name: 'All', skins: [
-          mod('handmade'),
-          mod('my own thing'),
-        ]),
-      ]);
+      await pumpToolbar(tester, [mod('handmade'), mod('my own thing')]);
 
       await runAction(tester, 'Sort out mod tracking…');
       expect(find.byType(BulkResolutionDialog), findsOneWidget);
@@ -316,10 +294,8 @@ void main() {
       await pumpToolbar(
         tester,
         [
-          CharacterInfo(id: 'all', name: 'All', skins: [
-            mod('done', origin: origin(modId: 1, fileId: 10)),
-            mod('handmade'),
-          ]),
+          mod('done', origin: origin(modId: 1, fileId: 10)),
+          mod('handmade'),
         ],
         fetch: fetch,
       );
@@ -345,10 +321,8 @@ void main() {
       await pumpToolbar(
         tester,
         [
-          CharacterInfo(id: 'all', name: 'All', skins: [
-            mod('done', origin: origin(modId: 1, fileId: 10)),
-            mod('handmade'),
-          ]),
+          mod('done', origin: origin(modId: 1, fileId: 10)),
+          mod('handmade'),
         ],
         fetch: fetch,
       );
@@ -357,7 +331,7 @@ void main() {
 
       await tester.tap(find.descendant(
         of: find.byType(TrackingNudge),
-        matching: find.byType(TextButton),
+        matching: find.byType(OutlinedButton),
       ));
       await tester.pumpAndSettle();
 
@@ -379,11 +353,7 @@ void main() {
       });
       await pumpToolbar(
         tester,
-        [
-          CharacterInfo(id: 'all', name: 'All', skins: [
-            mod('stale', origin: origin(modId: 1, fileId: 99)),
-          ]),
-        ],
+        [mod('stale', origin: origin(modId: 1, fileId: 99))],
         fetch: fetch,
       );
 
@@ -406,20 +376,13 @@ void main() {
       await pumpToolbar(
         tester,
         [
-          CharacterInfo(
-            id: 'ellen',
-            name: 'Ellen',
-            skins: [mod('a', origin: origin(modId: 1, fileId: 10))],
-          ),
-          CharacterInfo(
-            id: 'rina',
-            name: 'Rina',
-            skins: [mod('b', origin: origin(modId: 2, fileId: 10))],
-          ),
+          mod('a', origin: origin(modId: 1, fileId: 10)),
+          mod('b', characterId: 'rina', origin: origin(modId: 2, fileId: 10)),
         ],
+        selected: 'ellen',
         fetch: fetch,
       );
-      // Index 0 is selected, so the grid is showing Ellen's one mod.
+      // The grid is showing Ellen's one mod.
       expect(container.read(currentCharacterSkinsProvider), hasLength(1));
 
       await runAction(tester, 'Check for updates');
@@ -435,21 +398,17 @@ void main() {
       await pumpToolbar(
         tester,
         [
-          CharacterInfo(id: 'all', name: 'All', skins: [
-            mod('current', origin: origin(modId: 1, fileId: 10)),
-            mod('stale', origin: origin(modId: 1, fileId: 99)),
-          ]),
+          mod('current', origin: origin(modId: 1, fileId: 10)),
+          mod('stale', origin: origin(modId: 1, fileId: 99)),
         ],
         fetch: fetch,
       );
-
-      // No number before a run: "0 updates" and "not checked yet" are different
-      // states, and a zero would assert the first while meaning the second.
-      expect(find.text('0'), findsNothing);
+      // No number before a check: "0 updates" and "not checked yet" are different claims.
+      expect(tester.widget<ZenithChip>(chip('Updates')).count, isNull);
 
       await runAction(tester, 'Check for updates');
 
-      expect(find.text('1'), findsOneWidget);
+      expect(tester.widget<ZenithChip>(chip('Updates')).count, 1);
       expect(find.text('1 mod has an update'), findsOneWidget);
       expect(
         container.read(modUpdateChecksProvider)['stale']?.outcome,
@@ -465,11 +424,7 @@ void main() {
       final fetch = ModRecordFetcherStub((ids) async => [record(1)]);
       await pumpToolbar(
         tester,
-        [
-          CharacterInfo(id: 'all', name: 'All', skins: [
-            mod('done', origin: origin(modId: 1, fileId: 10)),
-          ]),
-        ],
+        [mod('done', origin: origin(modId: 1, fileId: 10))],
         fetch: fetch,
       );
       await runAction(tester, 'Check for updates');
@@ -501,12 +456,7 @@ void main() {
       final written = <String>[];
       await pumpToolbar(
         tester,
-        [
-          CharacterInfo(id: 'all', name: 'All', skins: [
-            mod('Ellen',
-                origin: origin(modId: 1, installedAt: DateTime.utc(2026))),
-          ]),
-        ],
+        [mod('Ellen', origin: origin(modId: 1, installedAt: DateTime.utc(2026)))],
         fetch: fetch,
         written: written,
       );
@@ -545,11 +495,8 @@ void main() {
       await pumpToolbar(
         tester,
         [
-          CharacterInfo(id: 'all', name: 'All', skins: [
-            mod('Ellen',
-                origin: origin(modId: 1, installedAt: DateTime.utc(2026))),
-            mod('Vanished', origin: origin(modId: 2, fileId: 20)),
-          ]),
+          mod('Ellen', origin: origin(modId: 1, installedAt: DateTime.utc(2026))),
+          mod('Vanished', origin: origin(modId: 2, fileId: 20)),
         ],
         fetch: fetch,
       );
@@ -565,13 +512,12 @@ void main() {
       // Ignoring the last flagged mod would otherwise leave the grid filtered
       // to nothing, with a control the user has to work out they need to press.
       final target = mod('a', origin: origin(modId: 1, fileId: 99));
-      await pumpToolbar(tester, [
-        CharacterInfo(id: 'all', name: 'All', skins: [target]),
-      ]);
+      await pumpToolbar(tester, [target]);
       container.read(modUpdateChecksProvider.notifier).state = {
         'a': const UpdateCheck(outcome: UpdateOutcome.updateAvailable),
       };
-      container.read(modUpdatesOnlyProvider.notifier).state = true;
+      container.read(modGridFilterProvider.notifier).state = ModGridFilter.updates;
+      container.read(characterListFilterProvider.notifier).state = CharacterListFilter.updates;
       await tester.pumpAndSettle();
       expect(container.read(visibleModsProvider), hasLength(1));
 
@@ -584,7 +530,8 @@ void main() {
       };
       await tester.pumpAndSettle();
 
-      expect(container.read(modUpdatesOnlyProvider), isFalse);
+      expect(container.read(modGridFilterProvider), ModGridFilter.all);
+      expect(container.read(characterListFilterProvider), CharacterListFilter.all);
       expect(container.read(visibleModsProvider), hasLength(1),
           reason: 'the grid is whole again, not empty');
     });
@@ -593,71 +540,54 @@ void main() {
         (tester) async {
       // The trap in keying that on the *view* count: the filter would evaporate
       // the moment the user looked at a tab with no updates of its own.
-      final flagged = mod('rina', origin: origin(modId: 1, fileId: 99));
-      await pumpToolbar(tester, [
-        CharacterInfo(id: 'all', name: 'All', skins: [flagged]),
-        CharacterInfo(id: 'ellen', name: 'Ellen', skins: [
-          mod('ellen skin', origin: origin(modId: 2, fileId: 10)),
-        ]),
-      ]);
-      container.read(modUpdateChecksProvider.notifier).state = {
-        'rina': const UpdateCheck(outcome: UpdateOutcome.updateAvailable),
-      };
-      container.read(modUpdatesOnlyProvider.notifier).state = true;
-      await tester.pumpAndSettle();
-
-      // Switch to the tab with none of its own.
-      container.read(selectedCharacterIndexProvider.notifier).state = 1;
-      await tester.pumpAndSettle();
-
-      expect(container.read(modsWithUpdatesCountProvider), 0);
-      expect(container.read(modUpdatesOnlyProvider), isTrue,
-          reason: 'the library still has one, so the filter stands');
-      // And the control is still there to switch off by hand.
-      expect(find.byIcon(Icons.arrow_circle_up), findsOneWidget);
-    });
-
-    testWidgets('clearing the filters turns it off too', (tester) async {
-      await pumpToolbar(tester, [
-        CharacterInfo(id: 'all', name: 'All', skins: [
-          mod('a', origin: origin(modId: 1, fileId: 10)),
-        ]),
-      ]);
-      container.read(modUpdatesOnlyProvider.notifier).state = true;
-      await tester.pumpAndSettle();
-
-      expect(find.text('Clear filters'), findsOneWidget);
-      await tester.tap(find.text('Clear filters'));
-      await tester.pumpAndSettle();
-      expect(container.read(modUpdatesOnlyProvider), isFalse);
-    });
-
-    testWidgets('the filter row survives every control at 480px',
-        (tester) async {
-      // Where the last overflow bug came from: none of these labels can
-      // ellipsise, so a Row that doesn't fit degrades into a red stripe. The
-      // row is a Wrap for exactly this, and it now has to hold five filters
-      // plus the reset.
-      //
-      // Both status filters at once takes some doing: they AND like every other
-      // filter, and a mod with no recorded version usually has no update
-      // either. The exception is a mod identified by a **banked archive hash**,
-      // which can carry an update while its version is unrecorded.
+      final flagged = mod('rina', characterId: 'rina', origin: origin(modId: 1, fileId: 99));
       await pumpToolbar(
         tester,
         [
-          CharacterInfo(id: 'all', name: 'All', skins: [
-            for (var i = 0; i < 120; i++)
-              mod(
-                'mod $i',
-                origin: origin(
-                  modId: 1,
-                  installedAt: DateTime.utc(2026, 5, 8),
-                ),
-              ),
-          ]),
+          flagged,
+          mod('ellen skin', origin: origin(modId: 2, fileId: 10)),
         ],
-        surfaceSize: const Size(480, 400),
+        selected: 'rina',
+      );
+      container.read(modUpdateChecksProvider.notifier).state = {
+        'rina': const UpdateCheck(outcome: UpdateOutcome.updateAvailable),
+      };
+      container.read(modGridFilterProvider.notifier).state = ModGridFilter.updates;
+      await tester.pumpAndSettle();
+
+      // Switch to the character with none of its own.
+      container.read(selectedCharacterIdProvider.notifier).state = 'ellen';
+      await tester.pumpAndSettle();
+
+      expect(container.read(modsWithUpdatesCountProvider), 0);
+      expect(container.read(modGridFilterProvider), ModGridFilter.updates,
+          reason: 'the library still has one, so the filter stands');
+      // And the chip still shows it on, to switch off by hand.
+      expect(tester.widget<ZenithChip>(chip('Updates')).selected, isTrue);
+    });
+
+    testWidgets('the toolbar survives every control at the minimum window',
+        (tester) async {
+      // Where the last overflow bug came from: none of these labels can
+      // ellipsise, so a Row that doesn't fit degrades into a red stripe.
+      // 800px less the sidebar and the character list leaves 304.
+      //
+      // Every chip carries a three-digit count: mods identified by a **banked
+      // archive hash** can carry an update while their version is unrecorded,
+      // so they count under both Updates and Needs attention.
+      await pumpToolbar(
+        tester,
+        [
+          for (var i = 0; i < 120; i++)
+            mod(
+              'mod $i',
+              origin: origin(
+                modId: 1,
+                installedAt: DateTime.utc(2026, 5, 8),
+              ),
+            ),
+        ],
+        surfaceSize: const Size(304, 600),
       );
       container.read(modUpdateChecksProvider.notifier).state = {
         for (var i = 0; i < 120; i++)
@@ -666,14 +596,12 @@ void main() {
             evidence: InstalledFileEvidence.archiveHash,
           ),
       };
-      container.read(modUpdatesOnlyProvider.notifier).state = true;
-      container.read(modNeedsAttentionOnlyProvider.notifier).state = true;
+      container.read(modGridFilterProvider.notifier).state = ModGridFilter.needsAttention;
       await tester.pumpAndSettle();
 
-      expect(find.text('Clear filters'), findsOneWidget);
-      expect(find.text('Library'), findsOneWidget);
-      expect(find.byIcon(Icons.arrow_circle_up), findsOneWidget);
-      expect(find.byIcon(Icons.priority_high), findsOneWidget);
+      expect(tester.widget<ZenithChip>(chip('Updates')).count, 120);
+      expect(tester.widget<ZenithChip>(chip('Needs attention')).count, 120);
+      expect(find.byTooltip('Library'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -686,11 +614,7 @@ void main() {
       );
       await pumpToolbar(
         tester,
-        [
-          CharacterInfo(id: 'all', name: 'All', skins: [
-            mod('a', origin: origin(modId: 1, fileId: 10)),
-          ]),
-        ],
+        [mod('a', origin: origin(modId: 1, fileId: 10))],
         fetch: fetch,
       );
 
@@ -806,8 +730,8 @@ void main() {
 
     testWidgets('the upload date is a fact about the file, not part of its name',
         (tester) async {
-      // It used to be appended to the filename with a dash, which reads as part
-      // of the name — `v77.zip — 2026-06-19` looks like a file called that. It
+      // Appended to the filename with a dash, it would read as part of the
+      // name — `v77.zip — 2026-06-19` looks like a file called that. It
       // belongs on the greyed line with the version and the author's label,
       // which are the same kind of thing.
       await pumpDialog(tester, mod('Ellen', origin: origin(fileId: 1696178)));
@@ -932,11 +856,11 @@ void main() {
 
     testWidgets('…including when the dialog was opened from the card badge',
         (tester) async {
-      // **The path that was broken and untested.** Arriving from the badge
-      // means a verdict is already on record, so the dialog fetches no mod
-      // page at all — and the dismissal used to be re-derived *from* that page,
-      // producing nothing. The write succeeded and every surface kept showing
-      // the pre-dismissal state, which reads as a button that does nothing.
+      // Arriving from the badge means a verdict is already on record, so the
+      // dialog fetches no mod page at all. A dismissal derived *from* that page
+      // would produce nothing: the write succeeds and every surface keeps
+      // showing the pre-dismissal state, which reads as a button that does
+      // nothing.
       await tester.pumpWidget(const SizedBox());
       final (client, transport) = fakeClient();
       final target = mod('Ellen', origin: origin(fileId: 1696178));
@@ -1503,9 +1427,8 @@ void main() {
           (tester) async {
         // **The write is chosen by which half of the folder it is**, so a
         // verdict about the mod a patch applies to is installable: the base is
-        // written by layout and the patch placed back over it. What used to
-        // refuse this was the *applier* having only one way to write, not
-        // anything about the verdict — see `update_write_route.dart`.
+        // written by layout and the patch placed back over it — see
+        // `update_write_route.dart`.
         await tester.pumpWidget(const SizedBox());
         final (client, _) = mixedClient();
         final target = mixedMod();
@@ -1567,7 +1490,7 @@ void main() {
       testWidgets('the layer that can come out says so, and the mod does not',
           (tester) async {
         // The surface reporting a patch's update is where a user meets a patch
-        // they no longer want, and the only routes out of one were the card's
+        // they do not want, and the other routes out of one are the card's
         // right-click menu and the tracking dialog. The menu is on the layer
         // rather than in the row below it: those buttons act on the update,
         // this acts on whether the folder holds the patch at all.
@@ -1634,7 +1557,7 @@ void main() {
           overrides: [gameBananaClientProvider.overrideWithValue(client)],
         );
         await tester.pumpAndSettle();
-        // In the companion's own section now, not the shared action bar — so it
+        // In the companion's own section, not the shared action bar — so it
         // can be below the fold on a folder rendering two full reports.
         await tester.ensureVisible(find.text('Ignore this update'));
         await tester.pumpAndSettle();

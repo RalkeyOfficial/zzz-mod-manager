@@ -164,7 +164,7 @@ Future<InstallResult> installArchiveFlow(
     // find again. Shared with the drag/drop import.
     //
     // The library it offers is read inside, at the moment the prompt opens: the
-    // widget tree's copy is as old as the last visit to the Mods tab, and this
+    // widget tree's copy is as old as the last scan of the library, and this
     // runs unattended minutes later.
     if (!context.mounted) return InstallResult.cancelled();
     final decision = await decidePatchInstall(

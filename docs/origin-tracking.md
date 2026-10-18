@@ -107,12 +107,8 @@ Two fields are **cleared**, each of which would otherwise be a lie about the fol
 `tracking` survives untouched — it is the user's own statement about whether the mod should be watched at all.
 `ingest` is refreshed from the layout the update actually used, which is how a pre-`ingest` mod gains one.
 
-**`mod_id` is the only record of which mod a folder is, and every link is built
-from it.** `modPageUrl` (`utils/url_utils.dart`) is what each surface offering a
-mod's page asks — the card's ↗ button, the context menu entry, the details view —
-and it answers `gameBananaModUrl(base.mod_id)` or nothing. The id is the **base**
-layer's: a patch written on top modifies the mod, it does not change which page
-the folder belongs to.
+**`mod_id` is the only record of which mod a folder is, and every link is built from it.** `modPageUrl` (`utils/url_utils.dart`) is what each surface offering a mod's page asks — the context menu entry, the details panel's links — and it answers `gameBananaModUrl(base.mod_id)` or nothing.
+The id is the **base** layer's: a patch written on top modifies the mod, it does not change which page the folder belongs to.
 
 There was a second answer, and losing it is the point. `source_url` was the mod's
 page as free text on the sidecar, shown as a link and editable in the edit dialog —
@@ -220,45 +216,36 @@ price is the right one. See
 
 ## 4. The status slot and the "needs attention" filter
 
-`services/origin_status.dart` folds an `origin` block into the single thing a library
-card may render. It is a pure function, and the "needs attention" filter in the mods
-toolbar is built from the *same* function — so the badge and the filter cannot
-disagree about which mods are which.
+`services/origin_status.dart` folds an `origin` block into the single thing a library card may render.
+It is a pure function, and the "needs attention" filter above the grid is built from the *same* function — so the badge and the filter cannot disagree about which mods are which.
 
 | Status | When | How it looks |
 |---|---|---|
-| **`versionUnknown`** | `mod_id` known, `version_confidence` is `unknown` | Amber, actionable. We can query the file list but can't judge what comes back, and one pass through the dialog fixes it. |
-| **`versionGuessed`** | `mod_id` known, version at `assumed_latest` or `inferred` | A muted **clock**. A version is on record but it is a guess. |
-| **`untracked`** | no `origin` block, or no `mod_id` | A muted **dot**. **Informational, never alarming** — most of a pre-origin library looks like this, and badging all of it loudly trains the user to stop seeing the slot. |
-| **`none`** | version at `user` or `exact`, or `tracking: "off"` | Nothing at all. |
+| **`versionUnknown`** | `mod_id` known, `version_confidence` is `unknown` | "Which file?" in blue, actionable. We can query the file list but can't judge what comes back, and one pass through the dialog fixes it. |
+| **`versionGuessed`** | `mod_id` known, the base download's version at `assumed_latest` | "Dated only" in grey. A date is on record and no file: what "Mark all as current" writes. |
+| **`versionGuessed`** | `mod_id` known, the base download's version at `inferred` | "Guessed file" in grey. A file is on record, worked out rather than confirmed. |
+| **`untracked`** | no `origin` block, or no `mod_id` | "Not tracked" in grey. **Informational, never alarming** — most of a pre-origin library looks like this, and badging all of it loudly trains the user to stop seeing the badge. |
+| **`none`** | version at `user` or `exact`, or `tracking: "off"` | Nothing from this function. The card shows "Local" in grey for `tracking: "off"` before it asks. |
 
-The rule the four states follow, in one line: **the slot speaks whenever tracking is less than complete, and how loudly depends on how cheaply the user can act.**
-Amber is the one that asks for something; the two muted states are statements of fact.
+The rule the states follow, in one line: **the badge speaks whenever tracking is less than complete, and how loudly depends on how cheaply the user can act.**
+Blue is the one that asks for something; the grey states are statements of fact. Amber is kept for an update ([`library-screen.md`](library-screen.md) §6).
 
-`versionGuessed` exists because `assumed_latest` and `user` used to render
-identically, so a mod waved through by the bulk action was indistinguishable from one
-whose file the user had actually picked — across a whole library, with no way to tell
-but opening every dialog in turn. Two things about it:
+`versionGuessed` has a state of its own so that a mod waved through by the bulk action is distinguishable from one whose file the user actually picked — across a whole library, without opening every dialog in turn.
+Two things about it:
 
-- **It marks the weak state, not the strong one.** Marking "properly linked" instead
-  was considered and rejected: those marks grow to cover every card as the library is
-  resolved and then are permanent noise, where these *shrink as the user does the
-  work*.
-- **The two muted states differ by shape, not colour.**
-  Two muted colours at 9–15px are indistinguishable, and stay so for anyone colourblind — so it is a dot and a clock face.
+- **It marks the weak state, not the strong one.** Marking "properly linked" instead was considered and rejected: those marks grow to cover every card as the library is resolved and then are permanent noise, where these *shrink as the user does the work*.
+- **The grey states differ by their words**, "Dated only", "Guessed file", "Not tracked" and "Local", never by a shade of grey, which would be indistinguishable at badge size and for anyone colourblind.
 
 Three things here are decisions rather than mechanics:
 
-- **`tracking: "off"` silences the slot.**
+- **`tracking: "off"` asks for nothing, ever.**
   It is the user's explicit "not from GameBanana / it's my own", and the promise attached to it is permanence — it wins over everything, because an id worked out from a link that was wrong is exactly why somebody might have set it.
+  The card shows it back to them as a grey "Local", the one grey badge with no press: there is nothing to settle.
 - **A page that is gone has no state of its own, and nothing about it is stored.**
   GameBanana reports a private, trashed or withheld page on every request, and the update check says so in its verdict each time it asks.
   A stored mark adds nothing to that and goes stale: a privated page that comes back would keep it.
   So the card shows whatever mark the block earns, the filter counts the mod by that same state, and a page that comes back is checked as if nothing happened.
-- **Only `unknown` is actionable.** `assumed_latest` is the user having already
-  answered "I don't know which, I got it around then", and `inferred` is a guess we
-  recorded and label as one. Re-ambering either would make the dialog impossible to
-  finish.
+- **Only `unknown` is actionable.** `assumed_latest` is the user having already answered "I don't know which, I got it around then", and `inferred` is a guess we recorded and label as one. Marking either in blue would make the dialog impossible to finish.
 
 The **filter** keeps `untracked` and `versionUnknown`, and this is the one place it
 and the badge deliberately come apart:
@@ -270,10 +257,8 @@ and the badge deliberately come apart:
   enumerate. (What they get no access to is *bulk* resolution — a separate rule,
   about fuzzy name matching being unsafe to rubber-stamp, see
   [§6](#6-assume-current-in-bulk).)
-- **`versionGuessed` is out.** The bulk "assume current" action turns amber mods into
-  guessed ones, and the count dropping is the entire visible proof that it worked.
-  Were guessed mods still counted, the number would sit unchanged while the marks
-  merely changed shape, which reads as a button that did nothing.
+- **`versionGuessed` is out.** The bulk "assume current" action turns blue mods into dated ones, and the count dropping is the entire visible proof that it worked.
+  Were dated mods still counted, the number would sit unchanged while the marks merely changed colour and wording, which reads as a button that did nothing.
 
 ---
 
@@ -395,10 +380,8 @@ Rules worth knowing before changing any of it:
 
 ## 6. "Assume current" in bulk
 
-The same "I don't know which file — I got it around then" answer, applied to a whole
-view in one press. `services/bulk_assume_current.dart` holds the decisions;
-`screens/dialogs/assume_current_dialog.dart` is the confirmation and the write loop,
-reached from the mods toolbar's **library menu**.
+The same "I don't know which file — I got it around then" answer, applied to the mods of the character on screen in one press.
+`services/bulk_assume_current.dart` holds the decisions; `screens/dialogs/assume_current_dialog.dart` is the confirmation and the write loop, reached from *Mark all as current* in the Library page's **library menu** ([`library-screen.md`](library-screen.md) §7).
 
 It makes **no requests at all**, which is what makes it worth having: it turns a
 legacy library from something that can never report an update into something that
@@ -424,10 +407,7 @@ Four rules, in the order they matter:
   dozens of mods rewritten on a press. It also names what it is *not* touching
   (untracked mods, and mods with no derivable install date), so "12 mods" can't be
   mistaken for "all of them".
-  That number is built from the list **the grid is rendering**, not from the wider
-  list the toolbar's `!` toggle counts: combine the needs-attention filter with the
-  search box and the two come apart, and a control that rewrites more mods than it is
-  showing is the failure this rule exists to avoid.
+  That number is built from the list **the grid is rendering**, not from the wider list the Needs attention chip counts: under another filter the two come apart, and a control that rewrites more mods than it is showing is the failure this rule exists to avoid.
 - **The action turns the needs-attention filter on before it asks, and puts it
   back if it doesn't go through.** The rule is that the user must have *seen* the
   set being rewritten. Enforcing that by hiding the button until the filter happens
@@ -470,24 +450,19 @@ The whole-library update check's **results screen is also the resolution screen*
 `services/bulk_resolution.dart` holds the decisions;
 `screens/dialogs/bulk_resolution_dialog.dart` is the surface.
 
-**It has two doors, and the second one is the correction that mattered.** A check
-opens it by itself when the pass turned up something to ask; and *Sort out mod
-tracking…* in the toolbar's library menu opens it on demand, from the records the
-last check left in session state — or by running that check first when there are
-none. Built only on the first door it was a modal that could be seen once and never
-again: cancelling it, or closing it by accident, meant waiting for the next check.
-Keeping the records (`modUpdateRecordsProvider`, never persisted, exactly like the
-verdicts beside them) is what makes reopening free.
+**It has two doors, and the second one is what makes the first bearable.** A check opens it by itself when the pass turned up something to ask; and *Sort out mod tracking…* in the library menu opens it on demand, from the records the last check left in session state — or by running that check first when there are none.
+Built only on the first door it would be a modal that could be seen once and never again: cancelling it, or closing it by accident, would mean waiting for the next check.
+Keeping the records (`modUpdateRecordsProvider`, never persisted, exactly like the verdicts beside them) is what makes reopening free.
 
 **Untracked mods open the screen only on demand.** A check opens it by itself only for a question row (`BulkResolutionPlan.hasWork`):
 a library that keeps a few mods untracked on purpose would otherwise get a modal after every check, asking nothing.
-The on-demand doors — the menu entry, and the reminder above the toolbar that offers to link mods to their GameBanana pages — open it for a question row *or* an untracked mod (`listsAnything`).
+The on-demand doors — the menu entry, and the reminder above the grid that offers to link mods to their GameBanana pages — open it for a question row *or* an untracked mod (`listsAnything`).
 The untracked list needs no mod page, so the plan is built with no records in hand too, and a library with nothing tracked opens straight onto that list with no check at all.
 When those doors run a check first, an untracked mod is still enough to open the screen afterwards, so the reminder never ends in a notification that leaves those mods out of reach.
 With no records in hand nothing was looked up, so that door reports nothing as unreached.
 
 **Both doors must say the same thing.**
-The update count is read library-wide (`libraryUpdateCountProvider`) rather than from whichever door opened the screen: the check's own tally is library-wide while the toolbar's count is view-scoped, so one sentence in one dialog would otherwise mean "in your library" or "on this character tab" depending on where the user was standing.
+The update count is read library-wide (`libraryUpdateCountProvider`) rather than from whichever door opened the screen: the check's own tally is library-wide while the Updates chip counts the character on screen, so one sentence in one dialog would otherwise mean "in your library" or "for this character" depending on where the user was standing.
 The "couldn't be checked" line is real on both doors, since a zero on either drops the accounting the whole screen is careful about.
 Its two numbers come from different fields on purpose.
 The menu door quotes `BulkResolutionPlan.unreachable`: every tracked mod with no record in hand, and every page the record reports gone.
@@ -841,8 +816,7 @@ list:
 
 ### Where it is shown
 
-**Three dialogs, one implementation** — the details view, the resolve dialog and the
-update dialog, through `screens/components/folder_downloads_summary.dart`.
+**Three surfaces, one implementation** — the details panel, the resolve dialog and the update dialog, through `screens/components/folder_downloads_summary.dart`.
 
 **It renders the stack in the order the stack is in**, and there is nothing else to
 it. That was the point of the change: this section used to hold a derivation
@@ -869,7 +843,7 @@ and the row falls back:
 |---|---|---|
 | Update dialog *(section headers, not this section)* | The records its own check fetched. Failing that it looks one up — **but only when the check did not run**, which is every reopen and every arrival from a card badge, since `initState` skips the check once a verdict is on record and only a *bulk* pass banks records in the session. Withheld once the check has run: a name missing then means that download's request failed, and asking again is a second failure per download on an offline check. | no |
 | Resolve dialog | The session's records, else one small `Mod/Multi` request — it is already talking to GameBanana, and this is not a request it would otherwise make. | no |
-| Details view | The session's records, else the fallback. **It never fetches**: a read-only view opened on a mod should not spend a request the reader did not ask for. | **yes** — the surface whose job is "what is this", and the one with a scrollable column to spend on it |
+| Details panel | The session's records, else the fallback. **It never fetches**: selecting a mod should not spend a request the user did not ask for. | **yes** — the surface whose job is "what is this", and the one with a scrollable column to spend on it |
 
 The fallback itself differs by entry and each uses the best thing available: the
 **bottom** layer falls back to **the folder name**, which is what the user knows it
@@ -903,15 +877,9 @@ download is; see
 [`update-checks.md`](update-checks.md#the-dialog). The section here is for the two
 surfaces where the folder's contents are *context* rather than the subject.
 
-**The affordance is on the row, not beside the list.** A separate editable row below
-the list would put one download in a place of its own again; as a button on the row
-it looks like every other entry with one more thing on it. Which rows offer one, and
-which of the two actions each offers, is passed in by mod id rather than derived:
-what can be done to a layer depends on which flows exist, not on anything visible
-in the row, and a widget guessing would offer a button that does nothing. The
-resolve dialog gives a patch *remove* and a patch-shaped folder's bottom layer
-*change* (see [below](#taking-a-patch-out)); the details view gives none, being a
-read-only answer to "what is this".
+**The affordance is on the row, not beside the list.** A separate editable row below the list would put one download in a place of its own again; as a button on the row it looks like every other entry with one more thing on it.
+Which rows offer one, and which of the two actions each offers, is passed in by mod id rather than derived: what can be done to a layer depends on which flows exist, not on anything visible in the row, and a widget guessing would offer a button that does nothing.
+The resolve dialog gives a patch *remove* and a patch-shaped folder's bottom layer *change* (see [below](#taking-a-patch-out)); the details panel gives none, its summary being a read-only answer to "what is this".
 
 ### Naming what a patch applies to
 
@@ -1088,16 +1056,10 @@ itself — the placement, the snapshot, the refusals, the warnings — is the sa
 operation either way.
 
 **With no identity the card stays quiet, and that ordering is deliberate.**
-`untracked` outranks `secondIdentityUnknown` in `modOriginStatus`, so a hand-dragged
-patch shows the quiet informational mark rather than the amber one — there is no page
-to watch for *either* half of the folder yet, so the amber state's offer ("name the
-other mod and get a real answer about it") has nothing to be an offer about. It is
-still counted in **needs attention** as untracked, so the folder is never lost, and
-the resolve dialog offers the naming row regardless — that row keys on
-`needsBase`, not on the badge. The amber mark appears the moment the folder is
-resolved to a mod page, which is the whole reason the flag is written at install
-rather than when it is wanted. The same ordering is what keeps the bulk "assume
-current" pass from writing baselines for folders it cannot check.
+`untracked` outranks `secondIdentityUnknown` in `modOriginStatus`, so a hand-dragged patch shows the quiet informational mark rather than the blue "Base unknown" — there is no page to watch for *either* half of the folder yet, so the blue state's offer ("name the other mod and get a real answer about it") has nothing to be an offer about.
+It is still counted in **needs attention** as untracked, so the folder is never lost, and the resolve dialog offers the naming row regardless — that row keys on `needsBase`, not on the badge.
+The blue mark appears the moment the folder is resolved to a mod page, which is the whole reason the flag is written at install rather than when it is wanted.
+The same ordering is what keeps the bulk "assume current" pass from writing baselines for folders it cannot check.
 
 **The library is searched, not scrolled, and every row carries the mod's cover.**
 A real library is long, and reading folder names down a list was the whole cost this
@@ -1169,11 +1131,6 @@ Two rules it holds:
 An unanswered prompt is the user declining to say, which is not the same as saying
 there is nothing — so the write only ever *adds* a layer and never clears one.
 
-Once answered, the row states **both axes**: which mod, and which file of it. Naming
-only the mod leaves a recorded file indistinguishable from "I don't know which" —
-two states that are checked differently and one of which puts an amber mark on the
-card. The file half is phrased by `describeRecordedFile`, the same function the
-resolve dialog's own "currently tracked" line uses
-(`summarizeDownload` folds a layer into the summary that feeds it), so "the file
-you chose" cannot come to mean one thing about one layer of a folder and something
-else about another.
+Once answered, the row states **both axes**: which mod, and which file of it.
+Naming only the mod leaves a recorded file indistinguishable from "I don't know which" — two states that are checked differently and one of which puts a blue mark on the card.
+The file half is phrased by `describeRecordedFile`, the same function the resolve dialog's own "currently tracked" line uses (`summarizeDownload` folds a layer into the summary that feeds it), so "the file you chose" cannot come to mean one thing about one layer of a folder and something else about another.

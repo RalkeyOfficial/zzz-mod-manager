@@ -385,8 +385,8 @@ class ModManagerService {
   }
 
   /// Throws [ShaderPlacementRefused] when enabling [modName] would be refused for
-  /// its shader files, and changes nothing either way. Asked before a Single-mode
-  /// switch turns the character's other skins off.
+  /// its shader files, and changes nothing either way. Asked before One at a time
+  /// turns the character's other mods off.
   Future<void> checkActivation(String modName) async {
     final mods = modsPath;
     final save = saveModsPath;
@@ -401,13 +401,8 @@ class ModManagerService {
     );
   }
 
-  Future<bool> toggleMod(String modName) async {
-    final isActive = await isModActive(modName);
-    return isActive ? await deactivateMod(modName) : await activateMod(modName);
-  }
-
   /// Renames a mod's folder and migrates everything keyed to its name: the
-  /// active symlink (if active) and the per-mod config (active/favorite/tag).
+  /// active symlink (if active) and the per-mod config (active/favorite/note/tag).
   /// The in-folder metadata travels with the folder, so it needs no migration.
   /// Returns false on collision or any failure.
   Future<bool> renameMod(String oldName, String newName) async {
@@ -442,7 +437,11 @@ class ModManagerService {
         );
       }
 
-      await _configService.migrateModName(oldName, newName);
+      // The folder has moved, so the rename succeeded either way; what a failed write loses is the mod's state
+      // under its new name after a restart (on/off, favourite, note), and that is worth a line.
+      if (!await _configService.migrateModName(oldName, newName)) {
+        _files.warning('renamed mod state not saved', fields: {'from': oldName, 'to': newName});
+      }
       invalidateKeybinds(oldName);
       return true;
     } catch (error, stack) {
@@ -454,7 +453,7 @@ class ModManagerService {
 
   /// Permanently deletes a mod: removes its active link (if any), deletes the
   /// on-disk folder with all its files, clears its config state
-  /// (active/favorite/category), and **deletes every saved version of it**. The
+  /// (active/favorite/note/category), and **deletes every saved version of it**. The
   /// in-folder metadata is destroyed with the folder. Returns false if the mod
   /// folder is missing or on any failure.
   ///
@@ -490,6 +489,7 @@ class ModManagerService {
 
       await _configService.removeActiveMod(modName);
       await _configService.removeFavoriteMod(modName);
+      await _configService.setModNote(modName, '');
       await _configService.removeModCharacterTag(modName);
       invalidateKeybinds(modName);
 

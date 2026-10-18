@@ -9,10 +9,10 @@ import 'support/temp_library.dart';
 
 /// **The library belongs to no screen.**
 ///
-/// Every test here reads it from a bare container — no widget, no Mods tab, no
-/// `State` alive anywhere. That is the property being pinned: the tabs are keyed
-/// children of a switcher with no keep-alive, so a library owned by the Mods
-/// tab's `State` is unreachable and unrefreshable for as long as the user is
+/// Every test here reads it from a bare container — no widget, no Library page, no
+/// `State` alive anywhere. That is the property being pinned: the pages are keyed
+/// children of a switcher with no keep-alive, so a library owned by the Library
+/// page's `State` is unreachable and unrefreshable for as long as the user is
 /// looking at anything else, which is when installs happen.
 void main() {
   late TempLibrary temp;
@@ -80,7 +80,7 @@ void main() {
 
   test('the installed index answers from the same scan', () async {
     // Derived rather than scanning again: the marketplace's "in library" badges
-    // and the Mods tab's grid are two views of one read, so they cannot
+    // and the Library's grid are two views of one read, so they cannot
     // disagree about what is installed.
     installMod('Ellen School');
     await temp.writeOrigin(
@@ -112,7 +112,7 @@ void main() {
   test('a rescan asked for during the first scan joins it', () async {
     // **The launch ordering.** Something above the tabs reads the library —
     // `LaunchUpdateCheckHost` does, through the bulk check's plan — which starts
-    // the first scan; the Mods tab then mounts and asks for one before that has
+    // the first scan; the Library page then mounts and asks for one before that has
     // landed. Two walks of the same folder at the same moment produce one
     // answer, and the second publish tears the grid down to rebuild it
     // identically.
@@ -132,7 +132,7 @@ void main() {
   });
 
   test('a rescan does not return before the library is readable', () async {
-    // What the Mods tab does next is build its groups from `valueOrNull`, so a
+    // What the Library page does next is build its groups from `valueOrNull`, so a
     // rescan that returns while the state is still loading paints an empty grid
     // and then rebuilds it a frame later.
     installMod('Ellen School');

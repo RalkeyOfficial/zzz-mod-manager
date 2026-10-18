@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/core/palette.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
+import 'package:mod_manager_flutter/models/mod_download.dart';
+import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/components/mod_status_slot.dart';
+import 'package:mod_manager_flutter/screens/components/zenith_controls.dart';
 import 'package:mod_manager_flutter/services/update_check.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
@@ -22,6 +27,7 @@ ModOrigin origin({
   int? modId,
   OriginConfidence versionConfidence = OriginConfidence.unknown,
   OriginTracking tracking = OriginTracking.auto,
+  bool patchShaped = false,
 }) =>
     originFixture(
       modId: modId,
@@ -30,143 +36,204 @@ ModOrigin origin({
       versionConfidence: versionConfidence,
       provenance: OriginProvenance.importedFolder,
       tracking: tracking,
+      ingest: patchShaped ? const ModIngest(patchShaped: true) : null,
     );
+
+/// Every label the badge can show, to assert that exactly one is on screen.
+const _labels = [
+  'Newer file',
+  'Maybe newer',
+  'Which file?',
+  'Base unknown',
+  'Guessed file',
+  'Dated only',
+  'Not tracked',
+  'Local',
+];
+
+/// Asserts the badge reads [label] and no other state's label is on screen, or
+/// that there is no badge at all when [label] is null.
+void expectBadge(String? label) {
+  for (final other in _labels) {
+    expect(find.text(other), other == label ? findsOneWidget : findsNothing,
+        reason: 'expected the badge to read ${label ?? 'nothing'}');
+  }
+  expect(find.byType(ZenithBadge), label == null ? findsNothing : findsOneWidget);
+}
 
 void main() {
-  testWidgets('the actionable state is the loud one', (tester) async {
+  Future<void> pumpSlot(WidgetTester tester, ModOrigin? candidate, {VoidCallback? onTap}) async {
+    await tester.pumpWidget(const SizedBox());
     await pumpLocalized(
       tester,
-      ModStatusSlot(mod: mod(origin: origin(modId: 1)), onTap: () {}),
+      Center(child: ModStatusSlot(mod: mod(origin: candidate), onTap: onTap ?? () {})),
     );
     expectBuilt(ModStatusSlot);
-    expect(find.byIcon(Icons.priority_high), findsOneWidget);
+  }
+
+  TonePair toneOf(WidgetTester tester) => tester.widget<ZenithBadge>(find.byType(ZenithBadge)).tone;
+
+  testWidgets('a known mod with an unknown file asks which file', (tester) async {
+    await pumpSlot(tester, origin(modId: 1));
+    expectBadge('Which file?');
   });
 
-  testWidgets('untracked is a muted dot, not the amber mark', (tester) async {
+  testWidgets('a patch with no base named asks for the base', (tester) async {
+    await pumpSlot(
+      tester,
+      origin(modId: 222, versionConfidence: OriginConfidence.exact, patchShaped: true),
+    );
+    expectBadge('Base unknown');
+  });
+
+  testWidgets('untracked is a grey fact, not a question', (tester) async {
     // Most of a legacy library is untracked. Badging all of it loudly is how a
-    // status slot stops being read at all.
-    await pumpLocalized(tester, ModStatusSlot(mod: mod(), onTap: () {}));
-    expect(find.byIcon(Icons.priority_high), findsNothing);
-    expect(find.byIcon(Icons.circle), findsOneWidget);
+    // status badge stops being read at all.
+    await pumpSlot(tester, null);
+    expectBadge('Not tracked');
   });
 
-  testWidgets('a recorded guess is a muted clock, not amber and not silent',
+  String tooltipOf(WidgetTester tester) => tester.widget<Tooltip>(find.byType(Tooltip)).message!;
+
+  testWidgets('a version on record by date only is grey, not blue and not silent',
       (tester) async {
-    // The gap this closes: a mod waved through by the bulk "assume current"
-    // action used to render exactly like one whose file the user had picked, so
-    // a library of seventeen could not be told apart without opening seventeen
-    // dialogs. It is quiet rather than amber because nothing is wrong — settling
-    // for a date is a legitimate answer — but it is not nothing either.
-    await pumpLocalized(
+    // A mod waved through by the bulk "assume current" action must not render
+    // exactly like one whose file the user picked. It is quiet because nothing
+    // is wrong — settling for a date is a legitimate answer — but it is not
+    // nothing either.
+    await pumpSlot(
       tester,
-      ModStatusSlot(
-        mod: mod(
-          origin: origin(
-            modId: 1,
-            versionConfidence: OriginConfidence.assumedLatest,
-          ),
-        ),
-        onTap: () {},
-      ),
+      origin(modId: 1, versionConfidence: OriginConfidence.assumedLatest),
     );
-    expectBuilt(ModStatusSlot);
-    expect(find.byIcon(Icons.schedule), findsOneWidget);
-    expect(find.byIcon(Icons.priority_high), findsNothing);
-    expect(find.byIcon(Icons.circle), findsNothing);
+    expectBadge('Dated only');
+    expect(tooltipOf(tester), 'Tracked by date only — no file recorded. Click to say which file you have.');
   });
 
-  testWidgets('the two quiet states differ by shape, not by colour',
-      (tester) async {
-    // Two muted colours at this size would be indistinguishable, and would stay
-    // indistinguishable for anyone colourblind. So the dot and the clock share
-    // one colour and carry the meaning in the glyph.
-    Color colourOf(IconData icon) =>
-        tester.widget<Icon>(find.byIcon(icon)).color!;
-
-    await pumpLocalized(tester, ModStatusSlot(mod: mod(), onTap: () {}));
-    final dot = colourOf(Icons.circle);
-
-    await pumpLocalized(
+  testWidgets('a worked-out file reads Guessed file, with its own tooltip', (tester) async {
+    await pumpSlot(
       tester,
-      ModStatusSlot(
-        mod: mod(
-          origin: origin(
-            modId: 1,
+      origin(modId: 1, versionConfidence: OriginConfidence.inferred),
+    );
+    expectBadge('Guessed file');
+    expect(
+      tooltipOf(tester),
+      'Which file you have was worked out, not confirmed. Click to say which file you have.',
+    );
+  });
+
+  testWidgets("a patch dated only does not make the base's worked-out file Dated only", (tester) async {
+    // The base was worked out; the patch on top was marked current by date. The badge describes the base.
+    await pumpSlot(
+      tester,
+      originFixture(
+        modId: 1,
+        modIdConfidence: OriginConfidence.inferred,
+        fileId: 10,
+        versionConfidence: OriginConfidence.inferred,
+        patches: [
+          const ModDownload(
+            modId: 2,
+            modIdConfidence: OriginConfidence.inferred,
             versionConfidence: OriginConfidence.assumedLatest,
           ),
-        ),
-        onTap: () {},
+        ],
       ),
     );
-    expect(colourOf(Icons.schedule), dot);
+    expectBadge('Guessed file');
+  });
+
+  group('a pressable badge', () {
+    Border? ring(WidgetTester tester) {
+      final box = tester.widget<DecoratedBox>(find.descendant(
+        of: find.byType(ZenithBadge),
+        matching: find.byWidgetPredicate((w) => w is DecoratedBox && w.position == DecorationPosition.foreground),
+      ));
+      return (box.decoration as BoxDecoration).border as Border?;
+    }
+
+    testWidgets('shows a focus ring when Tab reaches it, and none otherwise', (tester) async {
+      await pumpSlot(tester, origin(modId: 1));
+      expect(ring(tester), isNull);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+      final focused = ring(tester);
+      expect(focused, isNotNull);
+      expect(focused!.top.width, 2);
+
+      // A pointer press is not keyboard use, so the ring goes.
+      await tester.tap(find.byType(ZenithBadge));
+      await tester.pumpAndSettle();
+      expect(ring(tester), isNull);
+    });
+  });
+
+  testWidgets('the asking states and the grey states differ in tone', (tester) async {
+    await pumpSlot(tester, origin(modId: 1));
+    final asking = toneOf(tester);
+
+    await pumpSlot(tester, null);
+    final untracked = toneOf(tester);
+
+    await pumpSlot(
+      tester,
+      origin(modId: 1, versionConfidence: OriginConfidence.assumedLatest),
+    );
+    final guessed = toneOf(tester);
+
+    // The two quiet states share a tone and carry their meaning in the words.
+    expect(guessed.background, untracked.background);
+    expect(guessed.foreground, untracked.foreground);
+    expect(asking.background, isNot(untracked.background));
   });
 
   testWidgets('a resolved mod renders nothing at all', (tester) async {
-    await pumpLocalized(
-      tester,
-      ModStatusSlot(
-        mod: mod(
-          origin: origin(modId: 1, versionConfidence: OriginConfidence.exact),
-        ),
-        onTap: () {},
-      ),
-    );
-    expect(find.byIcon(Icons.priority_high), findsNothing);
-    expect(find.byIcon(Icons.circle), findsNothing);
-    expect(find.byIcon(Icons.schedule), findsNothing);
+    await pumpSlot(tester, origin(modId: 1, versionConfidence: OriginConfidence.exact));
+    expectBadge(null);
   });
 
-  testWidgets('a mod the user declared their own stays silent', (tester) async {
-    await pumpLocalized(
+  testWidgets('a mod the user declared their own reads Local, and opens nothing',
+      (tester) async {
+    var taps = 0;
+    await pumpSlot(
       tester,
-      ModStatusSlot(
-        mod: mod(origin: origin(modId: 1, tracking: OriginTracking.off)),
-        onTap: () {},
-      ),
+      origin(modId: 1, tracking: OriginTracking.off),
+      onTap: () => taps++,
     );
-    expect(find.byIcon(Icons.priority_high), findsNothing);
-    expect(find.byIcon(Icons.circle), findsNothing);
+    expectBadge('Local');
+
+    await tester.tap(find.byType(ModStatusSlot));
+    expect(taps, 0);
   });
 
-  testWidgets('every visible state is tappable', (tester) async {
+  testWidgets('every other visible state is tappable', (tester) async {
     // The quiet ones too: neither is an error, but each is a case a user may
     // want to change, and the context menu should not be the only way in.
     for (final candidate in [
       origin(modId: 1),
       origin(modId: 1, versionConfidence: OriginConfidence.assumedLatest),
+      origin(modId: 222, versionConfidence: OriginConfidence.exact, patchShaped: true),
       null,
     ]) {
       var taps = 0;
-      await pumpLocalized(
-        tester,
-        ModStatusSlot(mod: mod(origin: candidate), onTap: () => taps++),
-      );
+      await pumpSlot(tester, candidate, onTap: () => taps++);
       await tester.tap(find.byType(ModStatusSlot));
       expect(taps, 1);
     }
   });
 
-  testWidgets('every state occupies the same footprint', (tester) async {
-    // So resolving a mod doesn't reflow the artwork underneath the slot — and
-    // the clock is a larger glyph than the dot, which is exactly the kind of
-    // thing that would have shifted it.
-    Size sizeOf(ModOrigin? candidate) => tester.getSize(find.byType(InkWell));
-
-    await pumpLocalized(
-      tester,
-      Center(child: ModStatusSlot(mod: mod(), onTap: () {})),
-    );
-    final muted = sizeOf(null);
+  testWidgets('every state is the same height', (tester) async {
+    // So resolving a mod doesn't reflow the badges' row on the cover.
+    await pumpSlot(tester, null);
+    final height = tester.getSize(find.byType(ZenithBadge)).height;
 
     for (final candidate in [
       origin(modId: 1),
       origin(modId: 1, versionConfidence: OriginConfidence.assumedLatest),
+      origin(modId: 1, tracking: OriginTracking.off),
     ]) {
-      await pumpLocalized(
-        tester,
-        Center(child: ModStatusSlot(mod: mod(origin: candidate), onTap: () {})),
-      );
-      expect(sizeOf(candidate), muted);
+      await pumpSlot(tester, candidate);
+      expect(tester.getSize(find.byType(ZenithBadge)).height, height);
     }
   });
 
@@ -213,10 +280,10 @@ void main() {
         const UpdateCheck(outcome: UpdateOutcome.updateAvailable),
         modOrigin: origin(modId: 1, versionConfidence: OriginConfidence.exact),
       );
-      expect(find.byIcon(Icons.arrow_circle_up), findsOneWidget);
+      expectBadge('Newer file');
     });
 
-    testWidgets('replaces the amber and the quiet marks rather than stacking',
+    testWidgets('replaces the origin states rather than stacking',
         (tester) async {
       for (final candidate in [
         null,
@@ -228,24 +295,21 @@ void main() {
           const UpdateCheck(outcome: UpdateOutcome.possiblyOutdated),
           modOrigin: candidate,
         );
-        expect(find.byIcon(Icons.arrow_circle_up), findsOneWidget);
-        expect(find.byIcon(Icons.priority_high), findsNothing);
-        expect(find.byIcon(Icons.schedule), findsNothing);
-        expect(find.byIcon(Icons.circle), findsNothing);
+        expectBadge('Maybe newer');
       }
     });
 
-    testWidgets('stays silent for a mod the user declared their own',
+    testWidgets('a mod the user declared their own still reads Local',
         (tester) async {
       // `checkForUpdate` cannot produce a verdict for one, so this is belt and
       // braces — but the promise attached to "not from GameBanana" is
-      // permanence, and a badge appearing on such a card would break it.
+      // permanence, and an update badge on such a card would break it.
       await pumpWithCheck(
         tester,
         const UpdateCheck(outcome: UpdateOutcome.updateAvailable),
         modOrigin: origin(modId: 1, tracking: OriginTracking.off),
       );
-      expect(find.byIcon(Icons.arrow_circle_up), findsNothing);
+      expectBadge('Local');
     });
 
     testWidgets('a clean verdict shows nothing new', (tester) async {
@@ -254,10 +318,9 @@ void main() {
         const UpdateCheck(outcome: UpdateOutcome.upToDate),
         modOrigin: origin(modId: 1),
       );
-      // Still amber: the *version* is unrecorded, which the check happens not
-      // to have changed. The slot reports the origin state it always did.
-      expect(find.byIcon(Icons.arrow_circle_up), findsNothing);
-      expect(find.byIcon(Icons.priority_high), findsOneWidget);
+      // The *version* is unrecorded, which the check happens not to have
+      // changed. The badge reports the origin state it always did.
+      expectBadge('Which file?');
     });
 
     testWidgets('the guess and the confirmed finding say different things',
@@ -285,23 +348,12 @@ void main() {
 
     testWidgets('a "possibly" finding never reads as a confirmed one',
         (tester) async {
-      // `isGuess` and `possiblyOutdated` are **not** the same condition, and
-      // keying the wording on the first overclaimed: a mod recorded at
-      // exact/exact whose author published a newer file under a *different
-      // label* is possibly-outdated with `isGuess == false`, and the card then
-      // asserted "an update is published" while the dialog for the same mod
-      // said "possibly outdated". The badge is the only place that distinction
-      // can be read without opening anything.
-      String tooltip() =>
-          tester.widget<Tooltip>(find.byType(Tooltip)).message!;
-
-      await pumpWithCheck(
-        tester,
-        const UpdateCheck(outcome: UpdateOutcome.updateAvailable),
-        modOrigin: origin(modId: 1),
-      );
-      final confirmed = tooltip();
-
+      // `isGuess` and `possiblyOutdated` are **not** the same condition: a mod
+      // recorded at exact/exact whose author published a newer file under a
+      // *different label* is possibly-outdated with `isGuess == false`. Keyed
+      // on `isGuess`, the card would say "an update is published" while the
+      // dialog for the same mod says "possibly outdated". The badge is the only
+      // place that distinction can be read without opening anything.
       await pumpWithCheck(
         tester,
         // Confirmed evidence on both axes, softer verdict.
@@ -309,12 +361,12 @@ void main() {
           outcome: UpdateOutcome.possiblyOutdated,
           isGuess: false,
         ),
-        modOrigin: origin(modId: 1),
+        modOrigin: origin(modId: 1, versionConfidence: OriginConfidence.exact),
       );
-      expect(tooltip(), isNot(confirmed));
+      expectBadge('Maybe newer');
     });
 
-    testWidgets('the blue state opens the update dialog, not the resolve one',
+    testWidgets('the update badge opens the update dialog, not the resolve one',
         (tester) async {
       var resolves = 0;
       var updates = 0;
@@ -342,16 +394,16 @@ void main() {
       expect(resolves, 1);
     });
 
-    testWidgets('and keeps the slot the same size', (tester) async {
+    testWidgets('and keeps the badge the same height', (tester) async {
       await pumpWithCheck(tester, null);
-      final muted = tester.getSize(find.byType(InkWell));
+      final height = tester.getSize(find.byType(ZenithBadge)).height;
 
       await pumpWithCheck(
         tester,
         const UpdateCheck(outcome: UpdateOutcome.updateAvailable),
         modOrigin: origin(modId: 1),
       );
-      expect(tester.getSize(find.byType(InkWell)), muted);
+      expect(tester.getSize(find.byType(ZenithBadge)).height, height);
     });
   });
 }

@@ -10,7 +10,7 @@ import '../../utils/categories.dart';
 import '../../utils/notifications.dart';
 import '../../utils/zzz_characters.dart';
 import 'character_avatar.dart';
-import 'mod_status_slot.dart';
+import '../../core/palette.dart';
 
 /// Where notifications are drawn: a stack of small cards in the bottom-right
 /// corner, newest at the bottom, older ones pushed up.
@@ -128,15 +128,14 @@ class _NotificationOverlayState extends ConsumerState<NotificationOverlay> {
 /// The colour that carries a notification's meaning.
 ///
 /// One function, so the palette cannot drift between the icon, the accent bar
-/// and anything added later. Two of the four are literals rather than scheme
-/// slots because Material has no "success" or "warning" role — and the two
-/// chosen are already this app's: the amber it marks "needs attention" with
-/// everywhere else, and the green its active-mod count uses.
-Color notificationColor(ColorScheme scheme, NotificationSeverity severity) {
+/// and anything added later. Success is a literal because Material has no
+/// "success" role and the v3 palette has not reached this card yet.
+Color notificationColor(BuildContext context, NotificationSeverity severity) {
+  final scheme = Theme.of(context).colorScheme;
   return switch (severity) {
     NotificationSeverity.success => const Color(0xFF10B981),
     NotificationSeverity.info => scheme.primary,
-    NotificationSeverity.warning => ModStatusSlot.amber,
+    NotificationSeverity.warning => ZenithPalette.of(context).amber,
     NotificationSeverity.error => scheme.error,
   };
 }
@@ -389,7 +388,7 @@ class _NotificationCardState extends State<_NotificationCard>
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final notification = widget.notification;
-    final accent = notificationColor(scheme, notification.severity);
+    final accent = notificationColor(context, notification.severity);
 
     return Material(
       color: Colors.transparent,

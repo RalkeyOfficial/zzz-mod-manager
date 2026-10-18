@@ -18,7 +18,24 @@ enum AccentChoice {
 /// A character's element, which colours the tile its portrait sits on.
 ///
 /// [neutral] is the tile for anything that isn't an agent: the built-in categories and `unknown`.
-enum ElementTone { ice, fire, electric, ether, physical, neutral }
+enum ElementTone { ice, fire, electric, ether, physical, wind, lumiflux, neutral }
+
+/// The dotted ground behind a character's header and behind a mod with no cover, in its character's element:
+/// [background] with [dot]s on a grid, and [stroke] for the outlined initials drawn over it.
+@immutable
+class ElementGround {
+  const ElementGround(this.background, this.dot, this.stroke);
+
+  final Color background;
+  final Color dot;
+  final Color stroke;
+
+  static ElementGround lerp(ElementGround a, ElementGround b, double t) => ElementGround(
+    Color.lerp(a.background, b.background, t)!,
+    Color.lerp(a.dot, b.dot, t)!,
+    Color.lerp(a.stroke, b.stroke, t)!,
+  );
+}
 
 /// A background, foreground and optional border that belong together: a badge, a portrait tile.
 @immutable
@@ -79,6 +96,7 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     required this.amber,
     required this.red,
     required this.onRed,
+    required this.redText,
     required this.windowClose,
     required this.blue,
     required this.overlay,
@@ -87,6 +105,10 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     required this.badgeInfo,
     required this.badgeNeutral,
     required this.elements,
+    required this.grounds,
+    required this.panel,
+    required this.artworkScrim,
+    required this.onArtwork,
   });
 
   final Brightness brightness;
@@ -180,6 +202,9 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
   final Color red;
   final Color onRed;
 
+  /// A destructive action drawn as an icon or text on a plain button, lighter than [red] so it reads at 16px.
+  final Color redText;
+
   /// The title bar's close button under the pointer, with white on it.
   final Color windowClose;
 
@@ -197,12 +222,26 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
   /// Portrait tiles, one per [ElementTone].
   final Map<ElementTone, TonePair> elements;
 
+  /// Dotted grounds, one per [ElementTone].
+  final Map<ElementTone, ElementGround> grounds;
+
+  /// A column beside the page: the Library's character list and details panel.
+  final Color panel;
+
+  /// Behind a control drawn over a mod's cover art, which is dark or light whatever the theme.
+  final Color artworkScrim;
+
+  /// A control drawn on [artworkScrim].
+  final Color onArtwork;
+
   /// The accent washed into the card, behind something focused.
   Color get accentWash => Color.lerp(card, accent, 0.14)!;
 
   TonePair get badgeOn => TonePair(accent, onAccent);
 
   TonePair element(ElementTone tone) => elements[tone]!;
+
+  ElementGround groundFor(ElementTone tone) => grounds[tone]!;
 
   /// The app's palette, or the default dark one where no app theme is installed (a bare test harness).
   static ZenithPalette of(BuildContext context) =>
@@ -265,6 +304,7 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       amber: const Color(0xFFFFB547),
       red: const Color(0xFFFF6B5B),
       onRed: const Color(0xFF160605),
+      redText: const Color(0xFFFF8A7D),
       windowClose: const Color(0xFFC4352B),
       blue: const Color(0xFF6CB6FF),
       overlay: const Color(0xB3060708),
@@ -278,8 +318,23 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
         ElementTone.electric: TonePair(Color(0xFF14244A), Color(0xFF8DB8FF)),
         ElementTone.ether: TonePair(Color(0xFF331741), Color(0xFFEBA0FF)),
         ElementTone.physical: TonePair(Color(0xFF382F10), Color(0xFFF5D46A)),
+        ElementTone.wind: TonePair(Color(0xFF0F2F24), Color(0xFF8EEBBF)),
+        ElementTone.lumiflux: TonePair(Color(0xFF3A1626), Color(0xFFFFA3C7)),
         ElementTone.neutral: TonePair(Color(0xFF1E2126), Color(0xFFA9ADB5)),
       },
+      grounds: const {
+        ElementTone.ice: ElementGround(Color(0xFF0E1D25), Color(0xFF1F4556), Color(0xFF2A5568)),
+        ElementTone.fire: ElementGround(Color(0xFF25130D), Color(0xFF552B19), Color(0xFF6E3820)),
+        ElementTone.electric: ElementGround(Color(0xFF0F1730), Color(0xFF243F73), Color(0xFF2F5290)),
+        ElementTone.ether: ElementGround(Color(0xFF21112A), Color(0xFF4E275E), Color(0xFF643478)),
+        ElementTone.physical: ElementGround(Color(0xFF221E0D), Color(0xFF4F4519), Color(0xFF665A22)),
+        ElementTone.wind: ElementGround(Color(0xFF0C1F18), Color(0xFF1D4A38), Color(0xFF27604A)),
+        ElementTone.lumiflux: ElementGround(Color(0xFF24101A), Color(0xFF55253D), Color(0xFF6E304F)),
+        ElementTone.neutral: ElementGround(Color(0xFF14161A), Color(0xFF2C3038), Color(0xFF3A3E46)),
+      },
+      panel: const Color(0xFF0D0E10),
+      artworkScrim: const Color(0xA60B0C0E),
+      onArtwork: const Color(0xFFC9CCD2),
     );
   }
 
@@ -342,6 +397,7 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       amber: const Color(0xFF9A5B00),
       red: const Color(0xFFC2361F),
       onRed: const Color(0xFFFFFFFF),
+      redText: const Color(0xFFC2361F),
       windowClose: const Color(0xFFC4352B),
       blue: const Color(0xFF1D63B8),
       overlay: const Color(0x6615161C),
@@ -355,8 +411,23 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
         ElementTone.electric: TonePair(Color(0xFFD5DFF6), Color(0xFF284A9E)),
         ElementTone.ether: TonePair(Color(0xFFEAD7F1), Color(0xFF76278F)),
         ElementTone.physical: TonePair(Color(0xFFEFE3BC), Color(0xFF6E5600)),
+        ElementTone.wind: TonePair(Color(0xFFD3ECDF), Color(0xFF1C6644)),
+        ElementTone.lumiflux: TonePair(Color(0xFFF4D6E2), Color(0xFF8C2353)),
         ElementTone.neutral: TonePair(Color(0xFFE4DED7), Color(0xFF55525A)),
       },
+      grounds: const {
+        ElementTone.ice: ElementGround(Color(0xFFDCEAF0), Color(0xFFB9D4DF), Color(0xFF9DC0CF)),
+        ElementTone.fire: ElementGround(Color(0xFFF3DFD5), Color(0xFFE2BBA8), Color(0xFFD4A08A)),
+        ElementTone.electric: ElementGround(Color(0xFFDDE3F4), Color(0xFFBCC8EA), Color(0xFF9FB0DE)),
+        ElementTone.ether: ElementGround(Color(0xFFEBDDF1), Color(0xFFD3B8E0), Color(0xFFC29ED4)),
+        ElementTone.physical: ElementGround(Color(0xFFEEE6CC), Color(0xFFDACB98), Color(0xFFC9B676)),
+        ElementTone.wind: ElementGround(Color(0xFFD9EEE3), Color(0xFFB2DBC5), Color(0xFF91CBAB)),
+        ElementTone.lumiflux: ElementGround(Color(0xFFF4DCE5), Color(0xFFE5B6C8), Color(0xFFD697B0)),
+        ElementTone.neutral: ElementGround(Color(0xFFE6E0D9), Color(0xFFD0C8BF), Color(0xFFBDB4AA)),
+      },
+      panel: const Color(0xFFECE6E0),
+      artworkScrim: const Color(0xA60B0C0E),
+      onArtwork: const Color(0xFFC9CCD2),
     );
   }
 
@@ -397,6 +468,7 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     amber: amber,
     red: red,
     onRed: onRed,
+    redText: redText,
     windowClose: windowClose,
     blue: blue,
     overlay: overlay,
@@ -405,6 +477,10 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     badgeInfo: badgeInfo,
     badgeNeutral: badgeNeutral,
     elements: elements,
+    grounds: grounds,
+    panel: panel,
+    artworkScrim: artworkScrim,
+    onArtwork: onArtwork,
   );
 
   @override
@@ -447,6 +523,7 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       amber: c(amber, other.amber),
       red: c(red, other.red),
       onRed: c(onRed, other.onRed),
+      redText: c(redText, other.redText),
       windowClose: c(windowClose, other.windowClose),
       blue: c(blue, other.blue),
       overlay: c(overlay, other.overlay),
@@ -458,6 +535,13 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
         for (final tone in ElementTone.values)
           tone: TonePair.lerp(elements[tone]!, other.elements[tone]!, t),
       },
+      grounds: {
+        for (final tone in ElementTone.values)
+          tone: ElementGround.lerp(grounds[tone]!, other.grounds[tone]!, t),
+      },
+      panel: c(panel, other.panel),
+      artworkScrim: c(artworkScrim, other.artworkScrim),
+      onArtwork: c(onArtwork, other.onArtwork),
     );
   }
 }

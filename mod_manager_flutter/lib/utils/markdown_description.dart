@@ -4,7 +4,7 @@ import 'package:markdown/markdown.dart' as md;
 
 import 'markdown_style.dart';
 
-/// Renders a mod [description] as markdown for the details dialog. [onLaunchUrl]
+/// Renders a mod [description] as markdown for the details panel. [onLaunchUrl]
 /// is invoked when a link (in the body or inside an alert) is tapped.
 ///
 /// The look comes from [buildMarkdownStyleSheet] — shared with every other

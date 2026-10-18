@@ -13,6 +13,127 @@
     "storage": "Storage",
     "settings": "Settings"
   },
+  "library": {
+    "list": {
+      "filter_hint": "Filter characters",
+      "all": "All",
+      "has_mods": "Has mods",
+      "active": "Active",
+      "updates": "Updates",
+      "agents": "Agents",
+      "other_types": "Other types",
+      "unassigned": "Unassigned",
+      "no_mods": "No mods yet",
+      "mods_single": "{count} mod",
+      "mods_plural": "{count} mods",
+      "active_count": "{count} active",
+      "update_dot": "Update available",
+      "active_dot": "Has an active mod",
+      "no_match": "No character matches"
+    },
+    "attribute": {
+      "physical": "Physical",
+      "fire": "Fire",
+      "ice": "Ice",
+      "electric": "Electric",
+      "ether": "Ether",
+      "wind": "Wind",
+      "lumiflux": "Lumiflux"
+    },
+    "specialty": {
+      "attack": "Attack",
+      "stun": "Stun",
+      "anomaly": "Anomaly",
+      "support": "Support",
+      "defense": "Defense",
+      "rupture": "Rupture",
+      "armorer": "Armorer"
+    },
+    "hero": {
+      "find_mods": "Find mods",
+      "add_mod": "Add mod",
+      "category": "Mods that aren't for one character",
+      "unassigned": "Mods not assigned to a character",
+      "protagonist": "Proxy"
+    },
+    "grid": {
+      "all": "All",
+      "active": "Active",
+      "updates": "Updates",
+      "favorites": "Favorites",
+      "needs_attention": "Needs attention",
+      "one_at_a_time": "One at a time",
+      "one_at_a_time_on": "Turning a mod on turns the others here off",
+      "one_at_a_time_off": "Any number of mods here can be on together",
+      "one_at_a_time_failed_title": "One at a time not saved",
+      "rescan": "Read the library again",
+      "drop_title": "Drop a folder, .zip, .7z or .rar",
+      "drop_lands_on": "It lands on {name} automatically",
+      "drop_detects": "Its character is worked out from its name",
+      "drop_release": "Release to add it",
+      "no_results": "No mods here with this filter",
+      "show_all": "Show all"
+    },
+    "card": {
+      "active": "Active",
+      "off": "Off",
+      "newer_file": "Newer file",
+      "maybe_newer": "Maybe newer",
+      "file_unknown": "Which file?",
+      "base_unknown": "Base unknown",
+      "guessed": "Guessed file",
+      "guessed_tooltip": "Which file you have was worked out, not confirmed. Click to say which file you have.",
+      "dated": "Dated only",
+      "not_tracked": "Not tracked",
+      "local": "Local",
+      "local_tooltip": "You marked this mod as your own, so it is never checked for updates",
+      "added": "added {date}",
+      "file_from": "file from {date}",
+      "favorite": "Favorite",
+      "more": "More actions",
+      "toggle": "Turn {name} on or off",
+      "enable_failed_title": "Mod not turned on",
+      "disable_failed_title": "Mod not turned off",
+      "retag_failed_title": "Mod not moved",
+      "favorite_failed_title": "Favorite not saved"
+    },
+    "details": {
+      "heading": "Details",
+      "close": "Close details",
+      "edit_info": "Edit info",
+      "by": "by {author}",
+      "more": "More",
+      "less": "Less",
+      "active_title": "Active in game",
+      "active_body": "Linked into ZZMI's Mods folder",
+      "off_title": "Not active",
+      "off_body": "Not linked into the game",
+      "keys": "In-game keys",
+      "keys_source": "from the mod's .ini",
+      "file": "File",
+      "variant": "Variant",
+      "uploaded": "Uploaded",
+      "nothing_newer": "nothing newer",
+      "newer_out": "a newer file is out",
+      "tracking": "Tracking",
+      "tracking_gamebanana": "GameBanana",
+      "tracking_change": "change",
+      "tracking_none": "Not tracked",
+      "tracking_set_up": "set up",
+      "tracking_local": "Local",
+      "added": "Added",
+      "added_about": "about {date}",
+      "size": "Size",
+      "copy_path": "Copy the path",
+      "path_copied_title": "Path copied",
+      "note": "Note",
+      "note_hint": "Only you see this",
+      "note_failed_title": "Note not saved",
+      "open_folder": "Open folder",
+      "check_update": "Check for updates",
+      "delete": "Delete mod"
+    }
+  },
   "shell": {
     "window": {
       "minimize": "Minimize",
@@ -232,11 +353,6 @@
     "duplicate_archive_install": "Install anyway"
   },
   "mods": {
-    "all": "ALL",
-    "uncategorized": "Other",
-    "loading": {
-      "title": "Loading mods..."
-    },
     "errors": {
       "load_title": "Failed to load",
       "load": "Error loading mods",
@@ -277,27 +393,6 @@
       "invalid_url_title": "That link can't be opened",
       "paste_error_title": "Paste failed"
     },
-    "tooltips": {
-      "refresh": "Refresh mod list",
-      "card": "Hold to drag\nClick to toggle"
-    },
-    "actions": {
-      "refresh": "Refresh"
-    },
-    "headers": {
-      "characters": "Characters",
-      "active_mods": "Active mods"
-    },
-    "characters": {
-      "empty": "No characters found"
-    },
-    "empty": {
-      "title": "Import mods",
-      "cta": "Add mods",
-      "drag": "Drop folders here\nor click",
-      "prompt": "Drop here",
-      "add_folders": "Add folders"
-    },
     "dialog": {
       "edit_title": "Edit Mod",
       "character_tag": "Category:",
@@ -315,7 +410,6 @@
       "delete_saved_single": "{count} saved version of it goes too, so there will be nothing left to restore.",
       "delete_saved_plural": "{count} saved versions of it go too, so there will be nothing left to restore.",
       "delete_confirm": "Delete",
-      "mod_page": "Mod page:",
       "description": "Description:",
       "description_hint": "Notes about this mod... (markdown supported)",
       "tags": "Tags:",
@@ -339,10 +433,11 @@
       "import_select_confirm": "Install ({count})",
       "import_select_confirm_one": "Install as 1 mod",
       "add_mods_title": "Add mods",
-      "add_mods_description": "Drag mod folders into the app window, press Ctrl+V to paste from clipboard, or copy them directly into the mods folder.",
-      "hint": "If the folder name contains a character name, the tag will be set automatically!",
+      "add_mods_description": "Drop a mod folder, or a .zip, .7z or .rar archive, on the mods of the character it is for. Or copy its path and press Ctrl+V there.",
+      "hint": "On a character you picked, the mod is filed under that character. On Unassigned, its character is worked out from its name.",
       "got_it": "Got it",
-      "import_progress": "Importing {count} {plural}",
+      "import_progress_single": "Importing {count} mod",
+      "import_progress_plural": "Importing {count} mods",
       "import_progress_hint": "This may take a moment",
       "import_auto_tags": "Auto-detected tags:",
       "import_not_as_asked": "Installed, but not as you asked",
@@ -394,29 +489,16 @@
       "failed_missing": "The mod folder is gone."
     },
     "details": {
-      "keybinds": "Keybinds",
-      "no_description": "No description. Use Edit to add one.",
       "no_images": "No images",
       "shader_fixes": "Shader fixes",
       "shader_fixes_files_single": "{count} file, copied into ZZMI's shader folder while this mod is on.",
       "shader_fixes_files_plural": "{count} files, copied into ZZMI's shader folder while this mod is on."
     },
     "toolbar": {
-      "search": "Search mods",
-      "sort": "Sort",
-      "clear": "Clear",
       "no_results": "No mods match your filters",
-      "clear_filters": "Clear filters",
-      "tags": "Tags",
-      "favorites_only": "Show favorites only",
-      "match": "Match",
-      "match_any": "Any",
-      "match_all": "All",
-      "needs_attention": "Show only mods that need attention",
       "assume_current": "Mark all as current",
       "check_updates": "Check for updates",
       "sort_out_tracking": "Sort out mod tracking…",
-      "show_updates": "Show only the {count} mods with updates",
       "library": "Library"
     },
     "nudge": {
@@ -434,8 +516,6 @@
       "tag_hint": "Automatically tags {count} characters",
       "auto_tag_summary": "Automatically assigned {count} {plural}",
       "auto_tag_and_more": "and {count} more...",
-      "single": "mod",
-      "plural": "mods",
       "success_single": "Added {count} mod",
       "success_plural": "Added {count} mods"
     },
@@ -801,11 +881,11 @@
   },
   "clipboard": {
     "empty_title": "Clipboard is empty",
-    "empty_body": "Copy a mod folder, then paste it here.",
-    "no_paths_title": "No folder paths found",
+    "empty_body": "Copy a mod folder or archive, then paste it here.",
+    "no_paths_title": "No paths found",
     "no_paths_body": "What you pasted doesn't look like a file or folder path.",
-    "no_valid_title": "No valid mod folders found",
-    "no_valid_body": "None of the pasted paths point at a folder."
+    "no_valid_title": "No mod folders or archives found",
+    "no_valid_body": "None of the pasted paths point at a folder or a .zip, .7z or .rar archive."
   },
   "settings": {
     "title": "Settings",

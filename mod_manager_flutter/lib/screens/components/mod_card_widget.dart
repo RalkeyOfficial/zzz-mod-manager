@@ -1,46 +1,69 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../core/constants.dart';
+import '../../core/palette.dart';
+import '../../core/type_scale.dart';
+import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../services/cover_thumbnail.dart';
-import '../../utils/url_utils.dart';
+import '../../services/installed_record.dart';
+import '../../utils/state_providers.dart';
+import '../../utils/zzz_characters.dart';
+import 'character_tile.dart';
 import 'mod_status_slot.dart';
+import 'resolve/resolve_fragments.dart' show formatResolveDate;
+import 'zenith_controls.dart';
+import 'zenith_switch.dart';
 
-class ModCardWidget extends StatefulWidget {
-  final ModInfo mod;
-  final bool isDarkMode;
-  final VoidCallback onFavoriteToggle;
-  final VoidCallback onShowDetails;
-  final VoidCallback onOpenLink;
-
-  /// Opens the resolve dialog. Null hides the origin status slot entirely,
-  /// which is what the drag-feedback copy of the card wants — a badge you can
-  /// click on a ghost being dragged across the screen is not a badge.
-  final VoidCallback? onResolveOrigin;
-
-  /// Opens the update dialog. Only reachable while the slot is showing the blue
-  /// "update available" state, so it may be null wherever no check can run.
-  final VoidCallback? onShowUpdate;
-
+/// One mod in a character's grid.
+///
+/// A press selects it, which opens the details panel; the switch along the bottom turns it on and off, and the star
+/// favourites it. Its height is fixed by the grid ([extentFor]), so the cover takes whatever the text leaves.
+class ModCardWidget extends ConsumerStatefulWidget {
   const ModCardWidget({
     super.key,
     required this.mod,
-    required this.isDarkMode,
-    required this.onFavoriteToggle,
-    required this.onShowDetails,
-    required this.onOpenLink,
+    this.selected = false,
+    this.onSelect,
+    this.onToggle,
+    this.onFavoriteToggle,
+    this.onMore,
     this.onResolveOrigin,
     this.onShowUpdate,
   });
 
+  final ModInfo mod;
+
+  /// The mod the details panel shows.
+  final bool selected;
+
+  final VoidCallback? onSelect;
+  final VoidCallback? onToggle;
+  final VoidCallback? onFavoriteToggle;
+
+  /// Opens the context menu at a global position: the ⋯ button's, or the pointer's on a right-click.
+  final void Function(Offset position)? onMore;
+
+  /// Opens the resolve dialog. Null hides the status badge, which is what the faded copy left in the grid while
+  /// the card is dragged wants — a badge you can't press is not a badge.
+  final VoidCallback? onResolveOrigin;
+
+  /// Opens the update dialog, reached only from the amber badge.
+  final VoidCallback? onShowUpdate;
+
+  /// The card's height in a grid column [width] wide: a 16:10 cover over the text and the footer.
+  static double extentFor(double width) => width * 10 / 16 + 112;
+
   @override
-  State<ModCardWidget> createState() => _ModCardWidgetState();
+  ConsumerState<ModCardWidget> createState() => _ModCardWidgetState();
 }
 
-class _ModCardWidgetState extends State<ModCardWidget> {
-  static const Color _accent = Color(0xFF0EA5E9);
-
-  bool isHovered = false;
+class _ModCardWidgetState extends ConsumerState<ModCardWidget> {
+  bool _hovered = false;
+  bool _focused = false;
 
   /// The cover's thumbnail when one exists, else the cover, else nothing.
   ///
@@ -69,408 +92,216 @@ class _ModCardWidgetState extends State<ModCardWidget> {
   @override
   Widget build(BuildContext context) {
     final mod = widget.mod;
-    return MouseRegion(
-      onEnter: (_) => setState(() => isHovered = true),
-      onExit: (_) => setState(() => isHovered = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
-        // Scale from the card's centre and lift slightly straight up, rather
-        // than growing from the top-left corner toward the top-right.
-        transformAlignment: Alignment.center,
-        transform: Matrix4.identity()
-          ..translate(0.0, isHovered ? -6.0 : 0.0)
-          ..scale(isHovered ? 1.03 : 1.0),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          gradient: _getModCardGradient(mod, widget.isDarkMode, isHovered),
-          border: Border.all(
-            color: _getModCardBorderColor(mod, widget.isDarkMode, isHovered),
-            width: mod.isActive ? 2.5 : (isHovered ? 2.0 : 1.2),
+    final palette = ZenithPalette.of(context);
+    final text = Theme.of(context).textTheme;
+    final loc = context.loc;
+    final selectedBorder = Color.lerp(palette.outline, palette.accent, 0.6)!;
+
+    final ringed = widget.selected || _focused;
+
+    // A button to the keyboard and to a screen reader as well as the pointer: Tab reaches it, Enter or Space
+    // selects it, and the switch, star and ⋯ inside it are reached after it.
+    // No label of its own: the name inside is the label, and a second would be read twice.
+    return Semantics(
+      container: true,
+      button: true,
+      selected: widget.selected,
+      child: FocusableActionDetector(
+        enabled: widget.onSelect != null,
+        onShowHoverHighlight: (hovered) => setState(() => _hovered = hovered),
+        onShowFocusHighlight: (focused) => setState(() => _focused = focused),
+        actions: {ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) => widget.onSelect?.call())},
+        child: GestureDetector(
+        onTap: widget.onSelect,
+        onSecondaryTapDown: widget.onMore == null ? null : (d) => widget.onMore!(d.globalPosition),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: palette.card,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: ringed ? selectedBorder : (_hovered ? palette.edge : palette.outline),
+            ),
+            boxShadow: ringed ? [BoxShadow(color: selectedBorder, spreadRadius: 1)] : null,
           ),
-          boxShadow: _getModCardShadows(mod, widget.isDarkMode, isHovered),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(child: _buildImage(mod)),
-            _buildFooter(mod),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _placeholder() => Center(
-        child: Icon(
-          Icons.image_outlined,
-          size: 40,
-          color: widget.isDarkMode
-              ? const Color.fromRGBO(255, 255, 255, 0.4)
-              : const Color.fromRGBO(0, 0, 0, 0.4),
-        ),
-      );
-
-  Widget _buildImage(ModInfo mod) {
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: _cover != null
-              ? null
-              : LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    widget.isDarkMode
-                        ? const Color(0xFF374151)
-                        : const Color(0xFFF3F4F6),
-                    widget.isDarkMode
-                        ? const Color(0xFF1F2937)
-                        : const Color(0xFFE5E7EB),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: _buildCover(context)),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: 2,
+                  children: [
+                    Text(
+                      mod.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: text.titleSmall?.copyWith(color: palette.text),
+                    ),
+                    _subline(loc),
                   ],
                 ),
-        ),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (_cover != null)
-              Image.file(
-                _cover!,
-                fit: BoxFit.cover,
-                // Decode to the card's size rather than the file's. Without this a
-                // 2560px screenshot is held as 14 MB of pixels to fill a 320px
-                // card, and a handful of them evict the whole shared ImageCache —
-                // including the marketplace's previews. See
-                // AppConstants.modCardDecodeWidth for the measurements. Still
-                // set when the file is the thumbnail, which is already this
-                // wide: a shipped preview is not, and one rule covers both.
-                cacheWidth: AppConstants.modCardDecodeWidth,
-                key: ValueKey('${mod.id}_${mod.imagePath}'),
-                // The file was there when the card mounted and is checked
-                // again only when the path changes, so one deleted underneath
-                // an open tab lands here rather than as the framework's error
-                // widget.
-                errorBuilder: (_, __, ___) => _placeholder(),
-              )
-            else
-              _placeholder(),
-
-            // Bottom scrim so overlay badges stay legible over any image.
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    Color.fromRGBO(0, 0, 0, 0.45),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(border: Border(top: BorderSide(color: palette.divider))),
+                child: Row(
+                  children: [
+                    ZenithSwitch(
+                      value: mod.isActive,
+                      semanticLabel: loc.t('library.card.toggle', params: {'name': mod.name}),
+                      onChanged: widget.onToggle == null ? null : (_) => widget.onToggle!(),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        loc.t(mod.isActive ? 'library.card.active' : 'library.card.off'),
+                        style: text.bodySmall?.copyWith(color: palette.text2),
+                      ),
+                    ),
+                    if (widget.onMore != null)
+                      Builder(
+                        builder: (button) => IconButton(
+                          style: smallButtonStyle(context, iconOnly: true),
+                          tooltip: loc.t('library.card.more'),
+                          icon: const Icon(Icons.more_horiz_rounded),
+                          onPressed: () {
+                            final box = button.findRenderObject() as RenderBox;
+                            widget.onMore!(box.localToGlobal(box.size.bottomLeft(Offset.zero)));
+                          },
+                        ),
+                      ),
                   ],
-                  stops: [0.55, 1.0],
                 ),
               ),
-            ),
-
-            // Top-left: open the read-only details dialog.
-            Positioned(
-              top: 8,
-              left: 8,
-              child: _circleButton(Icons.info_outline, widget.onShowDetails),
-            ),
-
-            // Top-right: enabled state.
-            Positioned(top: 10, right: 10, child: _statusBadge(mod)),
-
-            // Bottom-left: the origin status slot. One slot, one state — see
-            // ModStatusSlot for why untracked whispers and only the actionable
-            // state speaks up.
-            if (widget.onResolveOrigin case final resolve?)
-              Positioned(
-                bottom: 8,
-                left: 8,
-                child: ModStatusSlot(
-                  mod: mod,
-                  onTap: resolve,
-                  onShowUpdate: widget.onShowUpdate,
-                ),
-              ),
-
-            // Bottom-right: actions — open source link (if any) + favorite.
-            Positioned(
-              bottom: 8,
-              right: 8,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (modPageUrl(mod) != null) ...[
-                    _circleButton(Icons.open_in_new, widget.onOpenLink),
-                    const SizedBox(width: 6),
-                  ],
-                  _favoriteButton(mod),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
+        ),
         ),
       ),
     );
   }
 
-  /// Enabled/disabled shown as a toggle switch — green with the knob to the
-  /// right when active, grey with the knob to the left when inactive. Reads as
-  /// on/off (not "delete"). Clicking it toggles via the card body.
-  Widget _statusBadge(ModInfo mod) {
-    final active = mod.isActive;
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      width: 42,
-      height: 22,
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: active
-            ? const Color(0xFF10B981)
-            : Colors.black.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(11),
-        boxShadow: [
-          BoxShadow(
-            color: active
-                ? const Color.fromRGBO(16, 185, 129, 0.4)
-                : const Color.fromRGBO(0, 0, 0, 0.3),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: AnimatedAlign(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-        alignment: active ? Alignment.centerRight : Alignment.centerLeft,
-        child: Container(
-          width: 18,
-          height: 18,
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-          ),
-          child: Icon(
-            active ? Icons.check_rounded : Icons.power_settings_new_rounded,
-            size: 12,
-            color: active
-                ? const Color(0xFF10B981)
-                : Colors.black.withValues(alpha: 0.45),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// A translucent circular icon button. Its own InkWell wins the gesture, so
-  /// tapping it doesn't also trigger the card-body toggle.
-  Widget _circleButton(IconData icon, VoidCallback onTap) {
-    return Material(
-      color: Colors.black.withValues(alpha: 0.35),
-      shape: const CircleBorder(),
-      child: InkWell(
-        onTap: onTap,
-        customBorder: const CircleBorder(),
-        child: Padding(
-          padding: const EdgeInsets.all(6),
-          child: Icon(icon, size: 18, color: Colors.white.withValues(alpha: 0.85)),
-        ),
-      ),
-    );
-  }
-
-  Widget _favoriteButton(ModInfo mod) {
-    return Material(
-      color: Colors.black.withValues(alpha: 0.35),
-      shape: const CircleBorder(),
-      child: InkWell(
-        onTap: widget.onFavoriteToggle,
-        customBorder: const CircleBorder(),
-        child: Padding(
-          padding: const EdgeInsets.all(6),
-          child: Icon(
-            mod.isFavorite ? Icons.star : Icons.star_border,
-            size: 18,
-            color: mod.isFavorite
-                ? const Color(0xFFFACC15)
-                : Colors.white.withValues(alpha: 0.85),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFooter(ModInfo mod) {
-    final hasTags = mod.tags.isNotEmpty;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(
-        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(18)),
-        color: mod.isActive
-            ? (widget.isDarkMode
-                ? const Color.fromRGBO(14, 165, 233, 0.1)
-                : const Color.fromRGBO(14, 165, 233, 0.05))
-            : (widget.isDarkMode
-                ? const Color.fromRGBO(255, 255, 255, 0.02)
-                : const Color.fromRGBO(0, 0, 0, 0.01)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+  /// Who made it and which file, when this session's check has the page in hand and the file on record is
+  /// confirmed; the date it was added otherwise. The date half is set in mono, as the design sets it.
+  Widget _subline(AppLocalizations loc) {
+    final mod = widget.mod;
+    final palette = ZenithPalette.of(context);
+    final style = Theme.of(context).textTheme.bodySmall?.copyWith(color: palette.text3);
+    final (:page, :file) = installedRecord(mod, ref.watch(modUpdateRecordsProvider));
+    final author = page?.submitter?.name;
+    // A file only worked out is not stated as the file.
+    final confirmed = mod.origin?.base?.versionConfidence.isConfirmed ?? false;
+    final uploaded = confirmed ? file?.dateAdded : null;
+    final added = mod.origin?.installedAt;
+    final when = uploaded != null
+        ? loc.t('library.card.file_from', params: {'date': formatResolveDate(uploaded)})
+        : added != null
+        ? loc.t('library.card.added', params: {'date': formatResolveDate(added)})
+        : null;
+    return Text.rich(
+      TextSpan(
         children: [
-          Text(
-            mod.name,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.2,
-              color: mod.isActive
-                  ? _accent
-                  : (widget.isDarkMode
-                      ? const Color.fromRGBO(255, 255, 255, 0.9)
-                      : const Color.fromRGBO(0, 0, 0, 0.8)),
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          if (hasTags) ...[
-            const SizedBox(height: 8),
-            _tagStrip(mod.tags),
-          ],
+          if (author != null) TextSpan(text: when == null ? author : '$author · '),
+          if (when != null) TextSpan(text: when, style: ZenithType.of(context).mono.copyWith(color: palette.text3)),
         ],
       ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: style,
     );
   }
 
-  /// A compact one-line-ish strip of tags: shows the first few and a "+N"
-  /// overflow chip so the footer height stays predictable.
-  Widget _tagStrip(List<String> tags) {
-    const maxShown = 3;
-    final shown = tags.take(maxShown).toList();
-    final extra = tags.length - shown.length;
-    return Wrap(
-      spacing: 4,
-      runSpacing: 4,
-      clipBehavior: Clip.hardEdge,
+  Widget _buildCover(BuildContext context) {
+    final mod = widget.mod;
+    final palette = ZenithPalette.of(context);
+    final loc = context.loc;
+    final ground = palette.groundFor(elementToneOf(mod.characterId));
+    final empty = DottedGround(
+      ground: ground,
+      child: Center(
+        child: OutlinedInitials(
+          nameInitials(mod.name),
+          style: ZenithType.of(context).watermark,
+          color: ground.stroke,
+        ),
+      ),
+    );
+
+    return Stack(
+      fit: StackFit.expand,
       children: [
-        for (final t in shown) _tagChip(t),
-        if (extra > 0) _tagChip('+$extra', muted: true),
+        if (_cover != null)
+          Image.file(
+            _cover!,
+            fit: BoxFit.cover,
+            // Decode to the card's size rather than the file's. Without this a
+            // 2560px screenshot is held as 14 MB of pixels to fill a 320px
+            // card, and a handful of them evict the whole shared ImageCache —
+            // including the marketplace's previews. See
+            // AppConstants.modCardDecodeWidth for the measurements.
+            cacheWidth: AppConstants.modCardDecodeWidth,
+            key: ValueKey('${mod.id}_${mod.imagePath}'),
+            // The file was there when the card mounted and is checked again
+            // only when the path changes, so one deleted underneath an open tab
+            // lands here rather than as the framework's error widget.
+            errorBuilder: (_, __, ___) => empty,
+          )
+        else
+          empty,
+        Positioned(
+          left: 10,
+          top: 10,
+          right: 48,
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              if (mod.isActive) ZenithBadge(label: loc.t('library.card.active'), tone: palette.badgeOn),
+              if (widget.onResolveOrigin != null)
+                ModStatusSlot(mod: mod, onTap: widget.onResolveOrigin!, onShowUpdate: widget.onShowUpdate),
+            ],
+          ),
+        ),
+        if (widget.onFavoriteToggle != null)
+          Positioned(right: 8, top: 8, child: _FavoriteButton(on: mod.isFavorite, onTap: widget.onFavoriteToggle!)),
       ],
     );
   }
+}
 
-  Widget _tagChip(String label, {bool muted = false}) {
-    final base = muted
-        ? (widget.isDarkMode ? Colors.white54 : Colors.black45)
-        : _accent;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(
-        color: base.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: base.withValues(alpha: 0.3)),
-      ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          fontWeight: FontWeight.w500,
-          color: widget.isDarkMode
-              ? Colors.white.withValues(alpha: 0.85)
-              : Colors.black.withValues(alpha: 0.7),
+/// The star over a card's cover, on a scrim so it reads over any artwork.
+class _FavoriteButton extends StatelessWidget {
+  const _FavoriteButton({required this.on, required this.onTap});
+
+  final bool on;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ZenithPalette.of(context);
+    return Semantics(
+      button: true,
+      toggled: on,
+      label: context.loc.t('library.card.favorite'),
+      child: Material(
+        color: palette.artworkScrim,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onTap,
+          child: SizedBox.square(
+            dimension: 30,
+            child: Icon(
+              on ? Icons.star_rounded : Icons.star_outline_rounded,
+              color: on ? palette.accent : palette.onArtwork,
+            ),
+          ),
         ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
       ),
     );
-  }
-
-  // Допоміжні методи для стилізації
-  LinearGradient _getModCardGradient(ModInfo mod, bool isDarkMode, bool isHovered) {
-    if (mod.isActive) {
-      return LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          Color.fromRGBO(14, 165, 233, isHovered ? 0.2 : 0.15),
-          Color.fromRGBO(59, 130, 246, isHovered ? 0.15 : 0.1),
-          Color.fromRGBO(139, 92, 246, isHovered ? 0.1 : 0.05),
-        ],
-      );
-    }
-
-    return LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: [
-        isDarkMode
-            ? Color.fromRGBO(31, 41, 55, isHovered ? 0.9 : 0.8)
-            : Color.fromRGBO(255, 255, 255, isHovered ? 0.95 : 0.9),
-        isDarkMode
-            ? Color.fromRGBO(17, 24, 39, isHovered ? 0.95 : 0.9)
-            : Color.fromRGBO(249, 250, 251, isHovered ? 0.98 : 0.95),
-      ],
-    );
-  }
-
-  Color _getModCardBorderColor(ModInfo mod, bool isDarkMode, bool isHovered) {
-    if (mod.isActive) {
-      return Color.fromRGBO(14, 165, 233, isHovered ? 0.8 : 0.6);
-    }
-
-    if (isHovered) {
-      return isDarkMode
-          ? const Color.fromRGBO(255, 255, 255, 0.2)
-          : const Color.fromRGBO(0, 0, 0, 0.15);
-    }
-
-    return isDarkMode
-        ? const Color.fromRGBO(255, 255, 255, 0.08)
-        : const Color.fromRGBO(0, 0, 0, 0.06);
-  }
-
-  List<BoxShadow> _getModCardShadows(ModInfo mod, bool isDarkMode, bool isHovered) {
-    List<BoxShadow> shadows = [];
-
-    if (mod.isActive) {
-      shadows.addAll([
-        BoxShadow(
-          color: Color.fromRGBO(14, 165, 233, isHovered ? 0.3 : 0.2),
-          blurRadius: isHovered ? 20 : 15,
-          offset: Offset(0, isHovered ? 8 : 6),
-          spreadRadius: isHovered ? 2 : 1,
-        ),
-        BoxShadow(
-          color: Color.fromRGBO(14, 165, 233, isHovered ? 0.15 : 0.1),
-          blurRadius: isHovered ? 30 : 25,
-          offset: Offset(0, isHovered ? 12 : 10),
-          spreadRadius: isHovered ? 3 : 2,
-        ),
-      ]);
-    } else {
-      shadows.add(
-        BoxShadow(
-          color: isDarkMode
-              ? Color.fromRGBO(0, 0, 0, isHovered ? 0.4 : 0.2)
-              : Color.fromRGBO(156, 163, 175, isHovered ? 0.2 : 0.1),
-          blurRadius: isHovered ? 15 : 10,
-          offset: Offset(0, isHovered ? 6 : 4),
-          spreadRadius: isHovered ? 1 : 0,
-        ),
-      );
-    }
-
-    if (isHovered && !mod.isActive) {
-      shadows.add(
-        const BoxShadow(
-          color: Color.fromRGBO(255, 255, 255, 0.05),
-          blurRadius: 20,
-          offset: Offset(0, 8),
-          spreadRadius: 1,
-        ),
-      );
-    }
-
-    return shadows;
   }
 }

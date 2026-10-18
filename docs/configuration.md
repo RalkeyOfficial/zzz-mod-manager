@@ -33,6 +33,8 @@ App-data locations are `~/.local/share/zzz-mod-manager` (Linux) and
   "save_mods_path": "/path/to/ZZMI/Mods",
   "active_mods": ["Ellen Swimsuit"],
   "favorite_mods": ["Ellen Swimsuit"],
+  "mod_notes": { "Ellen Swimsuit": "Use with the white hairpin." },
+  "one_at_a_time": { "cat_ui": true },
   "theme": "system",
   "accent": "violet",
   "launch_target": "",
@@ -63,6 +65,8 @@ App-data locations are `~/.local/share/zzz-mod-manager` (Linux) and
 | `save_mods_path` | `save_mods_path` | The links folder, where links are created. Derived from `zzmi_path` and written for older builds; read only when `zzmi_path` is absent |
 | `active_mods` | `active_mods` | String list of mod folder names |
 | `favorite_mods` | `favorite_mods` | String list of mod folder names |
+| `mod_notes` | `mod_notes` | Object from mod folder name to the note the user wrote in the details panel; JSON-encoded string in SharedPreferences. Moved by an in-app rename, removed with the mod, absent when empty. Per install, never in the sidecar ([`library-screen.md` §11](library-screen.md#11-notes)). A value that is not a string is dropped and the rest kept |
+| `one_at_a_time` | `one_at_a_time` | Object from a character or category id to a bool: whether turning one of its mods on turns the others off. Holds only groups the user has switched; the rest take the default, on for agents and off for categories ([`library-screen.md` §10](library-screen.md#10-one-at-a-time-per-character)). JSON-encoded string in SharedPreferences. A value that is not a bool is dropped and the rest kept |
 | `theme` | `theme` | The theme, as a `ThemeMode` Dart name (`light` \| `system` \| `dark`). Empty until chosen ([§3](#3-parsing-a-stored-value)), and parsed by `parseThemeMode`, which **degrades anything unrecognised to `system`** — the key is older than the setting and holds a palette name (`dark-blue`) in any config an earlier build wrote, so the tolerance is what an upgrade lands on |
 | `accent` | `accent` | The accent, as an `AccentChoice` Dart name (`violet` \| `paper` \| `lime` \| `teal`). Empty until chosen, and parsed by `AccentChoice.parse`, which degrades anything unrecognised to `violet` |
 | `launch_target` | `launch_target` | The file the sidebar's Launch game button starts. Empty means the XXMI Launcher beside the ZZMI folder. Set by the button's first press when there is none, or by **Launch game with**, both saving at once. See [`launch-game.md`](launch-game.md) |

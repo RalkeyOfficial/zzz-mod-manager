@@ -563,13 +563,12 @@ Four decisions, all in `services/launch_update_check.dart` (pure) and
   rebuilds from the records this pass leaves behind and therefore costs no
   second request.
 
-**It is hosted above the tab switcher**, beside `DownloadQueueHost`, because
-nobody pressed anything to start it and it outlives whatever the user does
-next. `ModsToolbar` — which owns the manual check — is inside the Mods tab, and
-the tabs are keyed `AnimatedSwitcher` children with no keep-alive, so a pass
-owned by it dies the moment the user looks at the marketplace. Unlike the
-download host it raises no dialog, so it does not need to sit below the
-`Navigator`.
+**It is hosted above the page switcher**, beside `DownloadQueueHost`, because nobody pressed anything to start it and it outlives whatever the user does next.
+The pages are keyed `AnimatedSwitcher` children with no keep-alive, so a pass owned by the Library page would die the moment the user looked at the marketplace.
+Unlike the download host it raises no dialog, so it does not need to sit below the `Navigator`.
+
+**The manual check lives above the page switcher too**, in `LibraryActionsHost`, for the same reason ([`library-screen.md`](library-screen.md) §7).
+The two share `libraryCheckRunningProvider`: whichever pass is running, the other does not start.
 
 **Both surfaces run the same code.** `services/update_check_run.dart` holds the
 request (including the cache bypass, for the reason the marketplace's refresh
@@ -595,22 +594,15 @@ way round.
 
 ### The card
 
-The library card's status slot renders **one** state, and `modSlotStatus()` folds
-the origin block and the verdict together so precedence is a single decision in a
-single place. An update beats every origin state: the two overlap exactly where
-it matters (a mod tracked by date only can be flagged possibly-outdated, a mod
-with no recorded version can still be identified by a banked hash), and "something
-newer is published" is the newer and more actionable fact. The origin state it
-replaces is one click away in the same dialog.
+The library card's status badge renders **one** state, and `modSlotStatus()` folds the origin block and the verdict together so precedence is a single decision in a single place.
+An update beats every origin state: the two overlap exactly where it matters (a mod tracked by date only can be flagged possibly-outdated, a mod with no recorded version can still be identified by a banked hash), and "something newer is published" is the newer and more actionable fact.
+The origin state it replaces is one click away in the same dialog.
 
-Blue, at the same weight as the amber "needs attention" mark rather than louder —
-the card has no room above amber, and two filled pills differing only in
-intensity read as one state rendered twice. `isGuess` changes the **tooltip**,
-not the mark: a card has one badge, and splitting it into "definitely" and
-"probably" would spend the library's whole visual budget on a distinction a
-sentence can make.
+Amber, the one colour the card keeps for an update; blue is tracking and asks for something else ([`library-screen.md`](library-screen.md) §6).
+The badge reads "Newer file" for `updateAvailable` and "Maybe newer" for `possiblyOutdated`, keyed on the outcome.
+`isGuess` changes the **tooltip**, not the badge: a clean outcome resting on a guess stays a clean outcome, and the sentence says how sure it is.
 
-`tracking: "off"` still silences the slot.
+`tracking: "off"` never shows an update: the card shows "Local" and nothing else.
 The check cannot produce a verdict for it, so this is belt and braces — but the promise attached to "not from GameBanana / it's my own" is permanence.
 
 A `sourceGone` verdict is not written to the mod's sidecar.
@@ -636,10 +628,8 @@ they pressed the button to see; when there are questions, raising a notification
 *behind* the dialog would be two reports of one press, which is how a user ends up
 reading neither.
 
-**Auto-opening is not the only way in**, and that is the fix for the complaint this
-arrangement first produced: a screen reachable only as a side effect of a check can
-be seen once and, if dismissed, not again. *Sort out mod tracking…* in the library
-menu below reopens it from the records the check left behind.
+**Auto-opening is not the only way in**: a screen reachable only as a side effect of a check can be seen once and, if dismissed, not again.
+*Sort out mod tracking…* in the library menu (below) reopens it from the records the check left behind.
 
 The screen itself belongs to origin tracking rather than to this document, because
 what it writes is origin data:
@@ -647,63 +637,22 @@ what it writes is origin data:
 
 ### Where the controls live
 
-The Mods toolbar is **two rows: search plus a library menu, then every filter.**
-The split is what this feature needs rather than a tidy-up: with actions and
-filters interleaved the results screen above has no home, so it can only be seen
-as a side effect of pressing a filter toggle, and dismissing it means it is gone
-until the next check.
+The Library page's row above the grid is laid out in [`library-screen.md`](library-screen.md) §7: *Check for updates* and *Sort out mod tracking…* are in the library menu with the other bulk actions, and the **Updates** chips filter to what the last check found.
+What follows are the rules that belong to the check.
 
-**The library menu holds the three things you can do to the whole library**:
-*Check for updates*, *Sort out mod tracking…* and *Mark all as current*. Each row
-carries the number of mods it would act on, and is disabled when it can do
-nothing — a disabled entry reading `0` says why, where a hidden one looks like a
-missing feature. The menu's badge counts what *Sort out mod tracking* would open,
-the only one of the three whose work is otherwise invisible.
+**Two scopes meet here, deliberately.** The *check* covers the whole library, because its badges are drawn on every character.
+The grid's *Updates filter* covers the character on screen, because that is all it can narrow; the character list's Updates chip is how the characters with an update are found.
 
-*Sort out mod tracking* is the **exception to that, deliberately**: it is offered
-at zero, because with nothing in hand it **runs a check first**, which is the
-request it would have taken anyway. Greying it out until a check had run would
-make the menu's most useful item the one disabled on launch. With records already
-fetched it costs nothing, because they are session state
-([`origin-tracking.md` §7](origin-tracking.md#7-the-bulk-resolution-pass)).
+**The Updates filters switch themselves off when the library has no updates left.** Ignoring the last flagged mod would otherwise leave the grid filtered to nothing, with a control the user has to work out they need to press.
+That is keyed on the **library**, not on the character's own count: on that count the filter would switch off whenever the user looked at someone with no updates of their own.
+So on such a character the grid *is* empty, the filter stands, and the chip stays to be switched off by hand.
 
-**The `↑` toggle is now only a filter.** A badge on a card is spatial — across
-128 mods, three marks are something you hunt for — so the count filters the grid
-to what the last check found. It used to run the check as well, on the reasoning
-that a seventh control was too many; the trade never paid. Re-checking took three
-clicks (turn the filter on, find *check again* in a row that only exists while a
-filter is on, turn it off), and the screen the check produced could not be
-re-opened at all. Checking is an action; it belongs with the other actions.
-
-**Two scopes still meet here, deliberately.** The *check* covers the whole
-library, because its badges are drawn on every character tab. The *filter* covers
-the current view, because that is all it can narrow. So updates on other
-character tabs are reachable from the "All" view, not from a tab with none of its
-own.
-
-Two properties of the filter, both of which had to be built rather than falling
-out:
-
-- **It switches itself off when the library runs out of updates.** Ignoring the
-  last flagged mod would otherwise leave the grid filtered to nothing, with a
-  control the user has to work out they need to press.
-  That is keyed on the **library**, not on the view-scoped count beside it. On
-  the view count it would fire merely because the user clicked a character tab
-  with no updates of its own, and the filter would evaporate whenever they
-  looked somewhere else. So on such a tab the grid *is* empty, the filter stands,
-  and the control stays rendered to be switched off by hand.
-- **It ANDs with the other filters**, like everything else here. Combining it
-  with "needs attention" usually empties the grid, because a mod with no
-  recorded version usually has no update either — the exception being one
-  identified by a banked archive hash. `Clear filters` sits at the end of the
-  filter row and resets this along with the rest.
+**The Updates chips show no number until a check has run.** "0 updates" and "not checked" are different claims, and a zero before any check would make the first one.
 
 ### The dialog
 
-One dialog serves both entry points — the context menu's "check for updates",
-which arrives with nothing on record, and the card's blue badge, which arrives
-with a verdict from the last pass. The only difference is whether a request is
-made on open, so they are not two dialogs.
+One dialog serves both entry points — the context menu's "check for updates", which arrives with nothing on record, and the card's amber badge, which arrives with a verdict from the last pass.
+The only difference is whether a request is made on open, so they are not two dialogs.
 
 A save in the resolve dialog drops that mod's stored verdict, so its dialog arrives with nothing on record and checks on open rather than answering about the origin block as it was.
 The bulk resolution screen's Apply does the same for each mod it writes, except a verdict that found an update: that screen never rebinds a folder, so the update is still about the right page ([`origin-tracking.md` §7](origin-tracking.md#7-the-bulk-resolution-pass)).
@@ -940,16 +889,9 @@ deliberate — a mod named here and then missing from the next screen would read
 the app having lost it. Members the confirmation will offer *unticked* are still
 counted, because "offer" is all this line claims.
 
-**Two gates keep it free, both about not paying for a folder walk over the whole
-library.** No sibling group is the case for every mod that predates the origin
-block, so the field being absent ends it rather than starting a scan — and no
-finding means there is no Update button for the line to sit beside, so an
-up-to-date mod that *is* in a group does not pay for it either. The library
-is read when the dialog opens rather than off a provider, for the reason in
-[`../mod_manager_flutter/CLAUDE.md`](../mod_manager_flutter/CLAUDE.md)'s State
-section: the Mods tab owns the cached list and is disposed while another tab is
-up, so a mod the marketplace installed a moment ago would be missing from a group
-it belongs to.
+**Two gates keep it free, both about not paying for a folder walk over the whole library.** No sibling group is the case for every mod that predates the origin block, so the field being absent ends it rather than starting a scan — and no finding means there is no Update button for the line to sit beside, so an up-to-date mod that *is* in a group does not pay for it either.
+The library is read from disk when the dialog opens rather than off `libraryProvider`, for the freshness rule in [`../mod_manager_flutter/CLAUDE.md`](../mod_manager_flutter/CLAUDE.md)'s State section.
+The provider holds what the last scan found, and this dialog is reachable from a card the marketplace has just installed, before anything has invalidated that scan: the sibling the line looks for is the mod that came out of the same archive, the one most likely to be missing from it (`test/modal_freshness_test.dart`).
 
 ---
 

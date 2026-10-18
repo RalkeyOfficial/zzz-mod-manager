@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/services/platform_service.dart';
+import 'package:mod_manager_flutter/services/update_check.dart';
 import 'package:mod_manager_flutter/screens/components/settings/launch_section.dart';
 import 'package:mod_manager_flutter/screens/components/zenith_switch.dart';
 import 'package:mod_manager_flutter/screens/shell/app_sidebar.dart';
@@ -12,6 +13,7 @@ import 'package:mod_manager_flutter/utils/detached_starter.dart';
 import 'package:mod_manager_flutter/utils/home_relative.dart';
 import 'package:mod_manager_flutter/utils/notifications.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
+import 'package:mod_manager_flutter/utils/zzz_characters.dart';
 import 'package:path/path.dart' as p;
 
 import 'support/library_override.dart';
@@ -47,29 +49,53 @@ void main() {
   }
 
   group('sidebar', () {
-    testWidgets('counts the characters that have a mod', (tester) async {
+    testWidgets('counts every agent, whether or not it has a mod', (tester) async {
       await pumpSidebar(tester, containerWith());
-      // Ellen, once for her two mods. The UI category is not a character.
-      expect(find.text('1'), findsOneWidget);
+      // The roster, as the character list shows it. The UI category is not a character.
+      expect(find.text('${zzzCharactersData.length}'), findsOneWidget);
     });
 
-    testWidgets('Updates shows every mod, filtered to the ones with an update', (tester) async {
+    testWidgets('Updates filters the list and the grid, and picks a character with an update', (tester) async {
       final container = containerWith();
-      container.read(selectedCharacterIndexProvider.notifier).state = 4;
+      container.read(selectedCharacterIdProvider.notifier).state = 'cat_ui';
+      container.read(characterPickedByUserProvider.notifier).state = true;
       container.read(destinationProvider.notifier).state = AppDestination.settings;
+      container.read(modUpdateChecksProvider.notifier).state = {
+        'b': const UpdateCheck(outcome: UpdateOutcome.updateAvailable),
+      };
       await pumpSidebar(tester, container);
 
       await tester.tap(find.text('Updates'));
       await tester.pump();
 
       expect(container.read(destinationProvider), AppDestination.characters);
-      expect(container.read(selectedCharacterIndexProvider), 0);
-      expect(container.read(modUpdatesOnlyProvider), isTrue);
+      expect(container.read(selectedCharacterIdProvider), 'ellen');
+      expect(container.read(characterPickedByUserProvider), isFalse,
+          reason: "the app's pick, so a drop there is not filed under it");
+      expect(container.read(characterListFilterProvider), CharacterListFilter.updates);
+      expect(container.read(modGridFilterProvider), ModGridFilter.updates);
 
       // Characters is a way back out of that filter.
       await tester.tap(find.text('Characters'));
       await tester.pump();
-      expect(container.read(modUpdatesOnlyProvider), isFalse);
+      expect(container.read(characterListFilterProvider), CharacterListFilter.all);
+      expect(container.read(modGridFilterProvider), ModGridFilter.all);
+    });
+
+    testWidgets('Updates keeps the character on screen when it has an update of its own', (tester) async {
+      final container = containerWith();
+      container.read(selectedCharacterIdProvider.notifier).state = 'cat_ui';
+      container.read(characterPickedByUserProvider.notifier).state = true;
+      container.read(modUpdateChecksProvider.notifier).state = {
+        'b': const UpdateCheck(outcome: UpdateOutcome.updateAvailable),
+        'c': const UpdateCheck(outcome: UpdateOutcome.updateAvailable),
+      };
+      await pumpSidebar(tester, container);
+
+      await tester.tap(find.text('Updates'));
+      await tester.pump();
+      expect(container.read(selectedCharacterIdProvider), 'cat_ui');
+      expect(container.read(characterPickedByUserProvider), isTrue, reason: 'still the row the user clicked');
     });
 
     testWidgets('Browse and Settings switch the page', (tester) async {

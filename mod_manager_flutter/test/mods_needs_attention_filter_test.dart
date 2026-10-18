@@ -5,6 +5,7 @@ import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
+import 'support/library_override.dart';
 import 'support/origin_shorthand.dart';
 
 /// The "needs attention" filter, at the provider level.
@@ -13,10 +14,10 @@ import 'support/origin_shorthand.dart';
 /// *enumerable*, which is the whole reason it exists — and it is also the part
 /// that can silently empty the grid if it disagrees with the badge.
 void main() {
-  ModInfo mod(String name, {ModOrigin? origin}) => ModInfo(
+  ModInfo mod(String name, {ModOrigin? origin, String characterId = 'ellen'}) => ModInfo(
         id: name,
         name: name,
-        characterId: 'ellen',
+        characterId: characterId,
         isActive: false,
         origin: origin,
       );
@@ -42,18 +43,15 @@ void main() {
   ];
 
   ProviderContainer containerWith(List<ModInfo> mods) {
-    final container = ProviderContainer();
+    final container = ProviderContainer(overrides: [libraryOf(mods)]);
     addTearDown(container.dispose);
-    container.read(charactersProvider.notifier).state = [
-      CharacterInfo(id: 'all', name: 'All', skins: mods),
-    ];
     return container;
   }
 
   test('off, the filter changes nothing', () {
     final container = containerWith(library);
+    expect(container.read(modGridFilterProvider), ModGridFilter.all);
     expect(container.read(visibleModsProvider), hasLength(4));
-    expect(container.read(modFiltersActiveProvider), isFalse);
   });
 
   test('on, it keeps both non-empty states of the slot', () {
@@ -61,47 +59,41 @@ void main() {
     // perfectly well, and excluding them would leave a legacy library with an
     // empty filter and no way to enumerate what it exists to enumerate.
     final container = containerWith(library);
-    container.read(modNeedsAttentionOnlyProvider.notifier).state = true;
+    container.read(modGridFilterProvider.notifier).state = ModGridFilter.needsAttention;
 
     expect(
       container.read(visibleModsProvider).map((m) => m.name),
       ['Untracked', 'Version unknown'],
     );
-    expect(container.read(modFiltersActiveProvider), isTrue);
   });
 
   test('the count matches what the filter would show', () {
     final container = containerWith(library);
     expect(container.read(modsNeedingAttentionCountProvider), 2);
 
-    container.read(modNeedsAttentionOnlyProvider.notifier).state = true;
+    container.read(modGridFilterProvider.notifier).state = ModGridFilter.needsAttention;
     expect(
       container.read(visibleModsProvider),
       hasLength(container.read(modsNeedingAttentionCountProvider)),
     );
   });
 
-  test('it composes with the other filters rather than replacing them', () {
+  test('the count and the filter cover the character on screen only', () {
+    // Both describe what pressing the chip leaves on screen, so another
+    // character's mods are in neither.
     final container = containerWith([
       ...library,
-      mod('Untracked favourite').copyWith(isFavorite: true),
+      mod('Miyabi untracked', characterId: 'miyabi'),
     ]);
-    container.read(modNeedsAttentionOnlyProvider.notifier).state = true;
-    container.read(modFavoritesOnlyProvider.notifier).state = true;
+    container.read(selectedCharacterIdProvider.notifier).state = 'ellen';
+    container.read(modGridFilterProvider.notifier).state = ModGridFilter.needsAttention;
 
+    expect(container.read(modsNeedingAttentionCountProvider), 2);
     expect(
       container.read(visibleModsProvider).map((m) => m.name),
-      ['Untracked favourite'],
+      isNot(contains('Miyabi untracked')),
     );
-  });
-
-  test('clearing the filters clears this one too', () {
-    final container = containerWith(library);
-    container.read(modNeedsAttentionOnlyProvider.notifier).state = true;
-    // Mirrors clearModFilters, which takes a WidgetRef and so cannot be called
-    // here — the assertion that matters is that the flag is part of the set.
-    expect(container.read(modFiltersActiveProvider), isTrue);
-    container.read(modNeedsAttentionOnlyProvider.notifier).state = false;
-    expect(container.read(modFiltersActiveProvider), isFalse);
+    // The whole-library count, for the reminder above the grid, does see it.
+    expect(container.read(untrackedModsCountProvider), 3);
   });
 }

@@ -9,7 +9,7 @@ library;
 
 import 'package:flutter/material.dart';
 
-import 'mod_status_slot.dart';
+import '../../core/palette.dart';
 
 /// A headed group of related facts.
 class DialogSection extends StatelessWidget {
@@ -153,11 +153,11 @@ class DialogNotice extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: emphasis
-            ? ModStatusSlot.amber.withValues(alpha: 0.10)
+            ? ZenithPalette.of(context).amber.withValues(alpha: 0.10)
             : scheme.surfaceContainerHighest.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(10),
         border: emphasis
-            ? Border.all(color: ModStatusSlot.amber.withValues(alpha: 0.55))
+            ? Border.all(color: ZenithPalette.of(context).amber.withValues(alpha: 0.55))
             : null,
       ),
       child: Row(
@@ -166,7 +166,7 @@ class DialogNotice extends StatelessWidget {
           Icon(
             icon,
             size: 20,
-            color: emphasis ? ModStatusSlot.amber : scheme.onSurfaceVariant,
+            color: emphasis ? ZenithPalette.of(context).amber : scheme.onSurfaceVariant,
           ),
           const SizedBox(width: 10),
           Expanded(

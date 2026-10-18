@@ -107,8 +107,9 @@ A mod whose install recorded a root shader folder as a mod of its own finds no f
   The enable fails with `ShaderPlacementRefused`, naming the mod that placed the file, or saying no mod did, and the notice lists only the files that differ.
 - What is already there comes from one listing of the folder, compared case-insensitively.
   Probing each name with `exists()` would miss a file that differs only in case on Linux, which ZZMI under Wine treats as the same file.
-- **Asked before anything else changes.** The card toggle calls `checkActivation`, a dry run, before Single mode switches the character's other skins off,
-  so a refused enable leaves the skin that was on still on.
+- **Asked before anything else changes.** An enable from the library (`ApiService.enableMod`) calls `checkActivation`, a dry run, before One at a time switches the character's other mods off,
+  so a refused enable leaves the mod that was on still on.
+  The dry run does not count files held by the mods about to be turned off as free, so two mods with a shader file at the same path and different contents can't be swapped by turning the second on: it is refused, naming the first. A file at the same path with the same bytes is shared, and does not stop the swap ([`library-screen.md`](library-screen.md) §10).
 - A record naming another mod for a file that is no longer there is stale and does not block. When that mod needed the same bytes, it keeps its hold on the copy put back, since the copy restores its shader too.
 - A copy that fails partway leaves the mod off, and whatever it had copied or taken hold of is let go of again, as when its link cannot be made.
 - Only targets that already exist are hashed, so an enable into an empty folder reads nothing but the mod's own files.
@@ -151,7 +152,7 @@ It is per-install state, so it lives in app data and never in the sidecar, which
 
 ## 6. Where it runs
 
-Every way a mod is switched on or off goes through `activateMod` / `deactivateMod`: the card toggle, Single mode, clearing all mods,
+Every way a mod is switched on or off goes through `activateMod` / `deactivateMod`: the card and details switches, One at a time, clearing all mods,
 and updates, reinstalls and patch installs, which switch an enabled mod off before writing and back on after (`ModActivationPort`).
 A refusal on the way back on after an update leaves the mod off. The update result does not claim it was switched back on,
 and the refusal is shown as the same notice the card toggle gives, since nobody pressed anything to be told.

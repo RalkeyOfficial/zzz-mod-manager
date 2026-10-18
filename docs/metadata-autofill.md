@@ -88,17 +88,11 @@ Five decisions inside that are load-bearing rather than arbitrary:
   never told one — notably the resolve dialog, which runs against a mod that was
   installed long ago.
 
-  Two consequences worth stating. An **unassigned** value falls back to
-  detection, so a mod filed under `Other/Misc` still gets its name read. And the
-  told character is one fact for the whole archive, so an archive that became
-  several mods files them all under the page's character — which is what a mod
-  page filed under one character is asserting. A genuinely mixed pack cannot be
-  filed under a character upstream, so it arrives with no told character and
-  every folder is detected separately, as before.
-- **`Software Used` tags are dropped.** `tags` is *structural* — it drives the filter
-  chips in the mods toolbar — so noise there has a UI cost a noisy description does
-  not, and this is not a marginal family: 3 of the 6 distinct tag values across the
-  captured listings are it.
+  Two consequences worth stating. An **unassigned** value falls back to detection, so a mod filed under `Other/Misc` still gets its name read.
+  And the told character is one fact for the whole archive, so an archive that became several mods files them all under the page's character — which is what a mod page filed under one character is asserting.
+  A genuinely mixed pack cannot be filed under a character upstream, so it arrives with no told character and every folder is detected separately.
+- **`Software Used` tags are dropped.** Each tag is a badge on the Library's details panel, read as a fact about the mod, so noise there costs more than a noisy sentence in a description does.
+  And this is not a marginal family: 3 of the 6 distinct tag values across the captured listings are it.
 - **A shipped `Preview.png` keeps the cover slot.** When the gallery is imported, an
   author-shipped preview found at the folder root is written *first*, so nothing
   local is lost or demoted. Rare — 1 of 16 mods in a real library ships one — which

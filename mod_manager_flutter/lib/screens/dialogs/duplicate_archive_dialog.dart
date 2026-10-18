@@ -11,7 +11,7 @@ import '../../utils/state_providers.dart';
 /// check (null-or-exact — a miss costs nothing and teaches nothing), or when the
 /// user chose to install a known duplicate anyway.
 ///
-/// Shared so the check cannot drift between the marketplace and the mods tab, and
+/// Shared so the check cannot drift between the marketplace and the Library, and
 /// so both get the same freshness guarantee: the library snapshot is invalidated
 /// first, because a stale one would name a folder the user has since deleted —
 /// and being told you already own something you don't is worse than not being
@@ -46,9 +46,8 @@ Future<bool> confirmArchiveNotDuplicate(
 /// Asks whether to install an archive that is byte-identical to one already in
 /// the library. Returns true to go ahead.
 ///
-/// Shared by both ingest paths — the marketplace install and the mods tab's
-/// drag-drop / file-picker import — so the two cannot word the same fact
-/// differently.
+/// Shared by both ingest paths — the marketplace install and the Library's
+/// drop and paste import — so the two cannot word the same fact differently.
 ///
 /// **The wording is the whole point.** A hash match is a *matching key*, never an
 /// integrity or authenticity claim: it says these bytes are the bytes you already

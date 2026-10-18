@@ -1,61 +1,63 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui';
+
+import 'package:cross_file/cross_file.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
-import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
-import 'package:desktop_drop/desktop_drop.dart';
-import 'package:cross_file/cross_file.dart';
+
 import '../core/constants.dart';
+import '../core/palette.dart';
+import '../l10n/app_localizations.dart';
 import '../models/character_info.dart';
 import '../models/mod_download.dart';
 import '../models/mod_origin_seed.dart';
 import '../services/api_service.dart';
-import '../services/cover_thumbnail.dart';
-import '../services/log/logger.dart';
 import '../services/archive_service.dart';
 import '../services/import_result.dart';
 import '../services/ingest_origin_builder.dart';
+import '../services/log/logger.dart';
 import '../services/shader_fixes/shader_fixes_service.dart';
 import '../services/update_apply/mod_activation_port.dart';
 import '../services/update_apply/update_applier.dart';
 import '../utils/notifications.dart';
 import '../utils/state_providers.dart';
-import '../utils/categories.dart';
+import '../utils/url_utils.dart';
 import '../utils/zzz_characters.dart';
-import '../l10n/app_localizations.dart';
-import 'components/mode_toggle_widget.dart';
-import 'components/character_cards_list_widget.dart';
-import 'components/mod_card_widget.dart';
+import 'components/character_hero.dart';
+import 'components/character_list.dart';
+import 'components/character_tile.dart';
 import 'components/import_failure_message.dart';
-import 'components/mods_toolbar.dart';
-import 'components/mods_action_buttons.dart';
-import 'components/mods_empty_states.dart';
-import 'components/mods_grouped_view.dart';
-import 'components/own_scroll_controller.dart';
 import 'components/install_result_feedback.dart';
+import 'components/mod_card_widget.dart';
+import 'components/mod_details_panel.dart';
+import 'components/mods_toolbar.dart';
 import 'components/shader_fixes_notices.dart';
-import 'dialogs/rename_mod_dialog.dart';
+import 'components/zenith_controls.dart';
 import 'dialogs/delete_mod_dialog.dart';
 import 'dialogs/duplicate_archive_dialog.dart';
+import 'dialogs/edit_mod_dialog.dart';
 import 'dialogs/import_selection_dialog.dart';
 import 'dialogs/keybinds_dialog.dart';
-import 'dialogs/mod_context_menu.dart';
-import 'dialogs/remove_patch_flow.dart';
-import 'dialogs/edit_mod_dialog.dart';
-import 'dialogs/mod_details_dialog.dart';
 import 'dialogs/mod_backups_dialog.dart';
+import 'dialogs/mod_context_menu.dart';
 import 'dialogs/mod_update_dialog.dart';
 import 'dialogs/patch_install_flow.dart';
 import 'dialogs/reinstall_flow.dart';
+import 'dialogs/remove_patch_flow.dart';
+import 'dialogs/rename_mod_dialog.dart';
 import 'dialogs/resolve_origin_dialog.dart';
-import '../utils/url_utils.dart';
 
 final Logger _log = Logger('mods');
 final Logger _files = Logger('fileops');
 
+/// The Library's character view: the character list, the character on screen with their mods, and the details
+/// panel for the mod selected among them (`docs/library-screen.md`).
+///
+/// Everything another surface needs lives in providers ([selectedCharacterIdProvider], [selectedModIdProvider],
+/// the filters), because this page is disposed on every page switch.
 class ModsScreen extends ConsumerStatefulWidget {
   const ModsScreen({super.key});
 
@@ -63,130 +65,62 @@ class ModsScreen extends ConsumerStatefulWidget {
   ConsumerState<ModsScreen> createState() => _ModsScreenState();
 }
 
-class _ModsScreenState extends ConsumerState<ModsScreen>
-    with TickerProviderStateMixin {
+class _ModsScreenState extends ConsumerState<ModsScreen> {
   AppLocalizations get loc => context.loc;
-  bool isLoading = false;
   String? errorMessage;
-  Map<String, String> modCharacterTags = {}; // modId -> characterId
-  Set<String> favoriteMods = {};
-  late AnimationController _loadingAnimationController;
-  late Animation<double> _loadingAnimation;
-
-  // Animation controller for mode toggle liquid effect
-  late AnimationController _modeToggleAnimationController;
-  late Animation<double> _modeToggleAnimation;
-
-  // Debounce timers to prevent rapid rebuilds
-  Timer? _rebuildDebounce;
-  Timer? _characterSelectionDebounce;
 
   // Prevent multiple simultaneous operations
   bool _isOperationInProgress = false;
   bool _isLoadingMods = false;
 
-  /// The library the groups on screen were built from, by identity.
-  ///
-  /// `LibraryNotifier` keeps the same list when a scan finds nothing new, so
-  /// this is what stops the grid being rebuilt by the scan that follows every
-  /// toggle and rename. It starts null on a fresh `State`, which is what makes
-  /// coming back to this tab paint from the library already in hand.
-  List<ModInfo>? _groupedFrom;
-
   // Drag & drop state
   bool _isDragging = false;
 
-  // Focus node для обробки клавіатури
   final FocusNode _focusNode = FocusNode();
-
-  // Mods list sorting & filtering live in providers (see state_providers.dart);
-  // the toolbar UI lives in [ModsToolbar].
-  bool get _isFiltering => ref.read(modFiltersActiveProvider);
+  final GlobalKey _panelKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
-    _loadingAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 1500),
-      vsync: this,
-    );
-    _loadingAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _loadingAnimationController,
-        curve: Curves.easeInOut,
-      ),
-    );
-
-    // Initialize liquid animation controller
-    _modeToggleAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-    _modeToggleAnimation = CurvedAnimation(
-      parent: _modeToggleAnimationController,
-      curve: Curves.easeInOutCubic,
-    );
-
-    // The groups follow the library rather than being built alongside it, so a
-    // change made anywhere — an install landing from the queue, an update
-    // applied from a dialog — reaches the grid while this tab is up.
-    ref.listenManual<AsyncValue<List<ModInfo>>>(
-      libraryProvider,
-      (previous, next) {
-        final mods = next.valueOrNull;
-        if (mods != null) _showGroupsIfNeeded(mods);
-      },
-    );
-
-    _loadTags();
+    FocusManager.instance.addListener(_reclaimFocus);
     loadMods();
   }
 
   @override
   void dispose() {
-    _loadingAnimationController.dispose();
-    _modeToggleAnimationController.dispose();
-    _rebuildDebounce?.cancel();
-    _characterSelectionDebounce?.cancel();
+    FocusManager.instance.removeListener(_reclaimFocus);
     _focusNode.dispose();
     super.dispose();
   }
 
-  Future<void> _loadTags() async {
-    final configService = await ApiService.getConfigService();
-    setState(() {
-      modCharacterTags = configService.modCharacterTags;
+  /// Takes keyboard focus back when it falls to the page's own route scope, as it does when a click leaves a text
+  /// field. Up there the page's own key handler is below it, so Ctrl+V would reach nothing until a Tab brought it
+  /// back.
+  ///
+  /// Only that scope. Focus at the root of the app is the window being inactive: Flutter parks it there and hands
+  /// it back to the field or dialog that had it when the window returns, which taking it here would prevent. And
+  /// not while a dialog or another route is above the page.
+  void _reclaimFocus() {
+    final primary = FocusManager.instance.primaryFocus;
+    if (primary == null || primary == _focusNode || primary == FocusManager.instance.rootScope) return;
+    if (!_focusNode.ancestors.contains(primary)) return;
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || FocusManager.instance.primaryFocus != primary) return;
+      if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
+      _focusNode.requestFocus();
     });
   }
 
-  Future<void> _saveTag(String modId, String characterId) async {
-    // Writes the in-folder sidecar (rename-safe) and mirrors to config.json.
-    await ApiService.setModCharacter(modId, characterId);
-    setState(() {
-      modCharacterTags[modId] = characterId;
-    });
-
-    // Перезавантажуємо моди, щоб оновити UI з новими тегами
-    // Це необхідно, бо мод може переміститись в іншу категорію персонажа
-    await loadMods(showLoading: false);
-  }
-
-  Future<void> loadMods({bool showLoading = true}) async {
+  Future<void> loadMods() async {
     // Prevent multiple simultaneous load operations
     if (_isLoadingMods) return;
     _isLoadingMods = true;
-
-    setState(() {
-      if (showLoading) {
-        isLoading = true;
-      }
-      errorMessage = null;
-    });
+    if (errorMessage != null) setState(() => errorMessage = null);
 
     try {
       // The scan itself belongs to `libraryProvider`, which outlives this
-      // screen; the groups it feeds are rebuilt by the listener in `initState`,
-      // and only when the library actually came back different.
+      // screen; everything on it is derived from the library.
       await ref.read(libraryProvider.notifier).rescan();
       final library = ref.read(libraryProvider);
       if (library.hasError) {
@@ -196,32 +130,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         Error.throwWithStackTrace(library.error!, library.stackTrace!);
       }
 
-      // Also the path that paints on the way back into this tab: the `State`
-      // is new, so its groups have to be built from whatever the library holds
-      // — which the scan above has just confirmed or replaced.
-      _showGroupsIfNeeded(library.valueOrNull ?? const []);
-
-      // Reloaded after the scan's tag cleanup, which is what makes a tag for a
-      // deleted mod disappear from the menus.
-      final configService = await ApiService.getConfigService();
-      setState(() {
-        modCharacterTags = configService.modCharacterTags;
-        favoriteMods = configService.favoriteMods.toSet();
-      });
-
       // Reported here because the scan is the only thing that runs the backfill.
       await _reportBackfillWriteFailures();
-
-      if (showLoading) {
-        setState(() => isLoading = false);
-      } else if (mounted) {
-        setState(() {});
-      }
     } catch (e) {
-      setState(() {
-        errorMessage = e.toString();
-        isLoading = false;
-      });
+      if (mounted) setState(() => errorMessage = e.toString());
     } finally {
       _isLoadingMods = false;
     }
@@ -245,56 +157,6 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     );
   }
 
-  /// Groups a flat mod list into the sidebar structure: an "ALL" group, the
-  /// built-in non-character categories (shown whenever any mod exists), then
-  /// each character that has at least one mod. Pure (no disk I/O), so both
-  /// [loadMods] and the targeted in-memory updates below reuse it.
-  List<CharacterInfo> _buildGroups(List<ModInfo> allMods) {
-    final Map<String, List<ModInfo>> characterMods = {};
-    for (final mod in allMods) {
-      characterMods.putIfAbsent(mod.characterId, () => []).add(mod);
-    }
-
-    final characters = <CharacterInfo>[];
-    if (allMods.isNotEmpty) {
-      characters.add(
-        CharacterInfo(
-          id: 'all',
-          name: loc.t('mods.all'),
-          iconPath: null, // Використаємо іконку по замовчуванню
-          skins: allMods,
-        ),
-      );
-      // Built-in categories (UI/Texture/Audio/Misc) always show once any mod
-      // exists — even with none assigned — so users can see where non-character
-      // mods belong. (Characters, below, only appear once they have a mod.)
-      characters.addAll(
-        builtInCategories.map(
-          (cat) => CharacterInfo(
-            id: cat.id,
-            name: categoryDisplayName(cat.id, loc),
-            icon: cat.icon,
-            skins: characterMods[cat.id] ?? [],
-          ),
-        ),
-      );
-    }
-    characters.addAll(
-      zzzCharacterIds
-          .map(
-            (charId) => CharacterInfo(
-              id: charId,
-              name: getCharacterDisplayName(charId),
-              iconPath:
-                  'assets/characters/${getCharacterAssetName(charId)}.png',
-              skins: characterMods[charId] ?? [],
-            ),
-          )
-          .where((char) => char.skins.isNotEmpty),
-    );
-    return characters;
-  }
-
   /// The library as it stands, to edit a copy of. Null before the first scan
   /// has landed, so callers can fall back to a full [loadMods].
   List<ModInfo>? _currentAllMods() {
@@ -304,63 +166,45 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
 
   /// Publishes an edited library without a disk rescan.
   ///
-  /// Backs the targeted editorial-action handlers (rename/edit/favorite/delete)
-  /// so a single-mod action costs O(1) instead of an O(N) rescan of every mod.
-  /// The groups follow through the listener, like any other change to the
-  /// library — this is not a second way to reach the grid.
-  void _applyGroups(List<ModInfo> allMods) {
+  /// Backs the targeted handlers (rename/edit/favorite/delete/toggle) so a
+  /// single-mod action costs O(1) instead of an O(N) rescan of every mod.
+  void _publish(List<ModInfo> allMods) {
     ref.read(libraryProvider.notifier).put(allMods);
   }
 
-  /// Rebuilds the groups, unless they were already built from this library.
-  void _showGroupsIfNeeded(List<ModInfo> allMods) {
-    if (identical(_groupedFrom, allMods)) return;
-    _groupedFrom = allMods;
-    _showGroups(allMods);
-  }
-
-  /// Rebuilds the sidebar's groups from the library, keeping the selected
-  /// character where possible: a group appearing or disappearing moves the
-  /// index while the user is still looking at the same character.
-  ///
-  /// **No `setState`**, deliberately: `build` watches `charactersProvider`, so
-  /// writing it is the rebuild.
-  void _showGroups(List<ModInfo> allMods) {
-    final characters = _buildGroups(allMods);
-
-    final previousCharacters = ref.read(charactersProvider);
-    final selectedIndex = ref.read(selectedCharacterIndexProvider);
-    String? previousSelectedId;
-    if (previousCharacters.isNotEmpty &&
-        selectedIndex >= 0 &&
-        selectedIndex < previousCharacters.length) {
-      previousSelectedId = previousCharacters[selectedIndex].id;
-    }
-
-    ref.read(charactersProvider.notifier).state = characters;
-
-    if (previousSelectedId != null && characters.isNotEmpty) {
-      final newIndex =
-          characters.indexWhere((char) => char.id == previousSelectedId);
-      ref.read(selectedCharacterIndexProvider.notifier).state =
-          newIndex != -1 ? newIndex : 0;
-    } else if (characters.isNotEmpty) {
-      ref.read(selectedCharacterIndexProvider.notifier).state = 0;
+  /// Files [mod] under a row of the character list: what dropping its card on that row does.
+  Future<void> _retag(ModInfo mod, String groupId) async {
+    final notify = context.notify;
+    final failedTitle = loc.t('library.card.retag_failed_title');
+    final saving = notify.pinned(
+      loc.t('mods.dialog.saving_tag'),
+      body: mod.name,
+      characterId: isOtherType(groupId) ? null : groupId,
+    );
+    try {
+      // Writes the in-folder sidecar (rename-safe) and mirrors to config.json.
+      final moved = await ApiService.setModCharacter(mod.id, groupId == unknownCharacterId ? '' : groupId);
+      if (!moved) notify.error(failedTitle, body: mod.name, characterId: mod.characterId);
+      await loadMods();
+    } catch (e) {
+      notify.error(failedTitle, body: mod.name, characterId: mod.characterId);
+    } finally {
+      saving.dismiss();
     }
   }
 
   /// Reflects a completed rename in the UI without a rescan. The folder op and
   /// the service's state migration (active link, config keys, keybind cache)
-  /// already happened; only [charactersProvider] needs the id/name swap — plus
-  /// a rewrite of the cached image paths, which are absolute and still point at
-  /// the old folder (otherwise the thumbnail can't load until a refresh).
+  /// already happened; only the library needs the id/name swap — plus a rewrite
+  /// of the cached image paths, which are absolute and still point at the old
+  /// folder (otherwise the thumbnail can't load until a refresh).
   Future<void> _onModRenamed(String oldId, String newName) async {
     final allMods = _currentAllMods();
     final index = allMods?.indexWhere((m) => m.id == oldId) ?? -1;
     final modsPath =
         (await ref.read(modManagerServiceProvider.future)).modsPath;
     if (allMods == null || index == -1 || modsPath == null || !mounted) {
-      unawaited(loadMods(showLoading: false));
+      unawaited(loadMods());
       return;
     }
 
@@ -383,26 +227,24 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       imagePath: newImages.isNotEmpty ? newImages.first : null,
       images: newImages,
     );
-    _applyGroups(allMods);
+    final selected = ref.read(selectedModIdProvider.notifier);
+    if (selected.state == oldId) selected.state = newName;
+    _publish(allMods);
   }
 
   /// Reflects a saved edit in the UI without a rescan. [updated] carries the
   /// edited fields (character, description, tags, images) already written to
-  /// disk; a character change moves the mod between groups via [_buildGroups].
+  /// disk; a character change moves the mod to another row of the list.
   void _onModEdited(ModInfo updated) {
     final allMods = _currentAllMods();
     final index = allMods?.indexWhere((m) => m.id == updated.id) ?? -1;
     if (allMods == null || index == -1) {
-      unawaited(loadMods(showLoading: false));
+      unawaited(loadMods());
       return;
     }
     final existing = allMods[index];
-    // Normalize the character the same way loadMods does (explicit pick wins,
-    // else fall back to name-based auto-detection).
-    var charId = updated.characterId;
-    if (isUnassignedCharacterId(charId)) {
-      charId = detectCharacterId(updated.name) ?? charId;
-    }
+    // The character the user picked, as the scan reads it: "none" stays none rather than a guess from the name.
+    final charId = updated.characterId;
     // Rebuild explicitly (not copyWith) so cleared fields — a removed cover or
     // an emptied description — actually reset instead of keeping stale values.
     allMods[index] = ModInfo(
@@ -416,125 +258,102 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       images: updated.images,
       isFavorite: existing.isFavorite,
       keybinds: existing.keybinds,
+      origin: existing.origin,
+      uid: existing.uid,
     );
-    setState(() => modCharacterTags[updated.id] = charId);
-    _applyGroups(allMods);
+    _publish(allMods);
   }
 
   /// Removes a deleted mod from the UI without a rescan (its folder and state
   /// are already gone).
   void _onModDeleted(String modId) {
+    final selected = ref.read(selectedModIdProvider.notifier);
+    if (selected.state == modId) selected.state = null;
     final allMods = _currentAllMods();
     if (allMods == null) {
-      unawaited(loadMods(showLoading: false));
+      unawaited(loadMods());
       return;
     }
     allMods.removeWhere((m) => m.id == modId);
-    _applyGroups(allMods);
+    _publish(allMods);
   }
 
+  /// Turns [mod] on or off. Turning one on under a character whose One at a time switch is on turns the
+  /// character's other mods off first (`docs/library-screen.md` §10).
   Future<void> toggleMod(ModInfo mod) async {
-    // Prevent multiple simultaneous operations
     if (_isOperationInProgress) return;
     _isOperationInProgress = true;
 
-    // Cancel any pending debounce
-    _rebuildDebounce?.cancel();
-
-    var othersSwitchedOff = false;
     try {
-      final wasActive = mod.isActive;
-      final activationMode = ref.read(activationModeProvider);
+      final switchOff = modsToSwitchOff(ref.read(modsProvider), mod, ref.read(oneAtATimeProvider));
 
-      // Asked before anything changes, so a refused enable in Single mode does
-      // not first switch off the skin the user still has on.
-      if (!wasActive) await ApiService.checkActivation(mod.id);
-
-      // If activating a mod in single mode, deactivate other active mods for this character
-      if (!wasActive && activationMode == ActivationMode.single) {
-        await _deactivateOtherModsForCharacter(
-          mod.characterId,
-          excludeModId: mod.id,
-        );
-        othersSwitchedOff = true;
-      }
-
-      if (!await ApiService.toggleMod(mod.id)) {
-        // The cards would show the flip that did not happen; read the disk.
-        _isOperationInProgress = false;
-        await loadMods(showLoading: false);
+      final notify = context.notify;
+      final failedTitle = loc.t(mod.isActive ? 'library.card.disable_failed_title' : 'library.card.enable_failed_title');
+      final done = mod.isActive
+          ? await ApiService.disableMod(mod.id)
+          : await ApiService.enableMod(mod.id, switchOff: switchOff);
+      if (!done) {
+        // Said before the rescan, which then shows what is really on: with One at a time, the others may already
+        // be off.
+        notify.error(failedTitle, body: mod.name, characterId: mod.characterId);
+        await loadMods();
         return;
       }
 
       // Flip the flags in the library rather than rescanning: the toggle is one
-      // link, and in single mode the same set of mods the call just deactivated.
+      // link, plus the set of mods the enable just turned off.
       final allMods = _currentAllMods();
       if (mounted && allMods != null) {
-        _applyGroups([
+        _publish([
           for (final candidate in allMods)
             if (candidate.id == mod.id)
-              candidate.copyWith(isActive: !wasActive)
-            else if (!wasActive &&
-                activationMode == ActivationMode.single &&
-                candidate.characterId == mod.characterId &&
-                candidate.isActive)
+              candidate.copyWith(isActive: !mod.isActive)
+            else if (switchOff.contains(candidate.id))
               candidate.copyWith(isActive: false)
             else
               candidate,
         ]);
       }
-      _isOperationInProgress = false;
     } on ShaderPlacementRefused catch (refusal) {
-      _isOperationInProgress = false;
       if (mounted) {
         notifyShaderRefusal(context, refusal, characterId: mod.characterId);
-        // The check passed and the enable was still refused, after Single mode
-        // had switched the other skins off: the cards must show that.
-        if (othersSwitchedOff) await loadMods(showLoading: false);
+        // The dry run passed and the enable was still refused, possibly after
+        // the character's other mods were turned off: the cards must show that.
+        await loadMods();
       }
     } catch (e) {
-      _isOperationInProgress = false;
       if (mounted) {
         context.notify.error(
           loc.t('mods.errors.generic_title'),
           body: e.toString(),
           characterId: mod.characterId,
         );
+        await loadMods();
       }
+    } finally {
+      _isOperationInProgress = false;
     }
   }
 
   Future<void> _toggleFavorite(ModInfo mod) async {
     try {
+      final notify = context.notify;
+      final failedTitle = loc.t('library.card.favorite_failed_title');
       final configService = await ApiService.getConfigService();
-      final isFavorite = favoriteMods.contains(mod.id);
-
-      if (isFavorite) {
-        await configService.removeFavoriteMod(mod.id);
-      } else {
-        await configService.addFavoriteMod(mod.id);
-      }
-
-      if (mounted) {
-        setState(() {
-          final updatedFavorites = Set<String>.from(favoriteMods);
-          if (isFavorite) {
-            updatedFavorites.remove(mod.id);
-          } else {
-            updatedFavorites.add(mod.id);
-          }
-          favoriteMods = updatedFavorites;
-        });
-      }
+      final saved = mod.isFavorite
+          ? await configService.removeFavoriteMod(mod.id)
+          : await configService.addFavoriteMod(mod.id);
+      // The star still follows the press for this session; what failed is keeping it past a restart.
+      if (!saved) notify.error(failedTitle, body: mod.name, characterId: mod.characterId);
 
       // Targeted update: flip the one mod's favorite flag instead of rescanning.
       final allMods = _currentAllMods();
       final index = allMods?.indexWhere((m) => m.id == mod.id) ?? -1;
       if (allMods != null && index != -1) {
-        allMods[index] = allMods[index].copyWith(isFavorite: !isFavorite);
-        _applyGroups(allMods);
+        allMods[index] = allMods[index].copyWith(isFavorite: !mod.isFavorite);
+        _publish(allMods);
       } else {
-        await loadMods(showLoading: false);
+        await loadMods();
       }
     } catch (e) {
       if (mounted) {
@@ -547,17 +366,14 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     }
   }
 
+  /// A manual refresh re-reads everything from disk, including .ini files that
+  /// may have changed outside the app.
   Future<void> _refreshModsList() async {
     if (_isLoadingMods) return;
-    // A manual refresh re-reads everything from disk, including .ini files that
-    // may have changed outside the app.
     await ApiService.clearKeybindCache();
-    await loadMods(showLoading: false);
+    await loadMods();
   }
 
-  /// Renames a mod (its on-disk folder). Live-validates the new name and
-  /// delegates to [ApiService.renameMod], which also migrates the active link
-  /// and the mod's active/favorite/category state.
   Future<void> _openModFolder(ModInfo mod) async {
     final notify = context.notify;
     try {
@@ -578,30 +394,17 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     }
   }
 
-  /// Confirms and permanently deletes a mod (its folder and all state). The
-  /// action is irreversible, so it requires an explicit confirmation.
   void _showEditDialog(ModInfo mod) {
-    showEditModDialog(
-      context,
-      mod,
-      onSaved: _onModEdited,
-    );
+    showEditModDialog(context, mod, onSaved: _onModEdited);
   }
 
-  void _showModDetailsDialog(ModInfo mod) {
-    showModDetailsDialog(
-      context,
-      mod,
-      onEdit: () => _showEditDialog(mod),
-      onChanged: () => unawaited(loadMods(showLoading: false)),
-    );
-  }
+  void _select(ModInfo mod) => ref.read(selectedModIdProvider.notifier).state = mod.id;
 
   /// Opens the resolve dialog and rescans if it wrote anything — the status
-  /// slot is drawn from `ModInfo.origin`, which only a scan refreshes.
+  /// badge is drawn from `ModInfo.origin`, which only a scan refreshes.
   Future<void> _resolveOrigin(ModInfo mod) async {
     if (await showResolveOriginDialog(context, mod)) {
-      await loadMods(showLoading: false);
+      await loadMods();
     }
   }
 
@@ -609,7 +412,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
   /// update lands in the origin block, which only a scan re-reads.
   Future<void> _checkForUpdate(ModInfo mod) async {
     if (await showModUpdateDialog(context, mod)) {
-      await loadMods(showLoading: false);
+      await loadMods();
     }
   }
 
@@ -641,7 +444,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
   /// the files change even though the recorded version does not.
   Future<void> _reinstall(ModInfo mod) async {
     if (await reinstallFlow(context, ref, mod: mod)) {
-      await loadMods(showLoading: false);
+      await loadMods();
     }
   }
 
@@ -649,12 +452,12 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
   /// itself changes, not just the sidecar.
   Future<void> _restoreBackup(ModInfo mod) async {
     if (await showModBackupsDialog(context, mod)) {
-      await loadMods(showLoading: false);
+      await loadMods();
     }
   }
 
   /// Takes one patch back out of a folder and rescans, since the card's status
-  /// slot is drawn from `ModInfo.origin`.
+  /// badge is drawn from `ModInfo.origin`.
   ///
   /// The name comes from what the session already fetched, falling back to the
   /// id: a companion records no title, and a page fetch on the way into a
@@ -664,7 +467,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         context.loc.t('mods.folder.unnamed', params: {'id': '${patch.modId}'});
     if (await removePatchFlow(context, ref,
         mod: mod, patch: patch, patchName: name)) {
-      await loadMods(showLoading: false);
+      await loadMods();
     }
   }
 
@@ -691,7 +494,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       hasBackups: mod.uid != null &&
           (ref.read(modBackupsProvider).valueOrNull?.contains(mod.uid) ??
               false),
-      onDetails: () => _showModDetailsDialog(mod),
+      onDetails: () => _select(mod),
       onEdit: () => _showEditDialog(mod),
       onRename: () => showRenameModDialog(
         context,
@@ -704,7 +507,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       onEditKeybinds: () => showKeybindsDialog(
         context,
         mod,
-        onSaved: () => unawaited(loadMods(showLoading: false)),
+        onSaved: () => unawaited(loadMods()),
       ),
       onToggleFavorite: () => _toggleFavorite(mod),
       onDelete: () => unawaited(_deleteMod(mod)),
@@ -713,111 +516,54 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
 
   @override
   Widget build(BuildContext context) {
-    final characters = ref.watch(charactersProvider);
-    final selectedIndex = ref.watch(selectedCharacterIndexProvider);
-    final currentSkins = ref.watch(currentCharacterSkinsProvider);
-    final isDarkMode = ref.watch(isDarkModeProvider);
-
     // Watched, not read on demand: the context menu asks whether this mod has a
     // rollback to offer, and a `read` from inside the menu builder would start
     // the listing at that moment and answer "no" the first time. Watching it
     // here costs one rebuild when a single readdir resolves.
     ref.watch(modBackupsProvider);
 
-    // The aggregate "ALL" view groups its cards under per-character section
-    // headers; every other tab is a single flat grid.
-    final selectedCharacterId =
-        (selectedIndex >= 0 && selectedIndex < characters.length)
-        ? characters[selectedIndex].id
-        : null;
-    final isAllView = selectedCharacterId == 'all';
+    final current = ref.watch(currentCharacterIdProvider);
+    final selectedId = ref.watch(selectedModIdProvider);
+    // The panel shows a mod of the character on screen; picking another character closes it.
+    final selected = ref
+        .watch(currentCharacterSkinsProvider)
+        .where((m) => m.id == selectedId)
+        .firstOrNull;
 
-    if (isLoading) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            AnimatedBuilder(
-              animation: _loadingAnimation,
-              builder: (context, child) {
-                return Transform.scale(
-                  scale: 0.8 + (_loadingAnimation.value * 0.2),
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF0EA5E9), Color(0xFF06B6D4)],
-                      ),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF0EA5E9).withValues(alpha: 0.3),
-                          blurRadius: 20,
-                          spreadRadius: 5,
-                        ),
-                      ],
-                    ),
-                    child: const CircularProgressIndicator(
-                      strokeWidth: 3,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  ),
-                );
-              },
+    // **One scroll view for the whole page**: the header and the row of filters scroll away with the mods, so a
+    // window at its minimum size still shows some. Fixed above the grid, the two take more than such a window has.
+    final page = KeyedSubtree(
+      key: ValueKey('character_$current'),
+      child: DropTarget(
+        onDragEntered: (_) => setState(() => _isDragging = true),
+        onDragExited: (_) => setState(() => _isDragging = false),
+        onDragDone: (details) => _importModsFromFolders(details.files),
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: CharacterHero(
+                groupId: current,
+                onFindMods: () => ref.read(destinationProvider.notifier).state = AppDestination.browse,
+                onAddMod: _showImportDialog,
+              ),
             ),
-            const SizedBox(height: 24),
-            AnimatedBuilder(
-              animation: _loadingAnimation,
-              builder: (context, child) {
-                return Opacity(
-                  opacity: _loadingAnimation.value,
-                  child: Text(
-                    loc.t('mods.loading.title'),
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Colors.grey[600],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                );
-              },
+            SliverToBoxAdapter(
+              child: ModsToolbar(onLibraryChanged: () => unawaited(loadMods()), onRescan: _refreshModsList),
             ),
+            ..._buildGridSlivers(selected),
           ],
         ),
-      );
-    }
-
-    if (errorMessage != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 48, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text(
-              loc.t('mods.errors.load'),
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              errorMessage!,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
-            ),
-            const SizedBox(height: 24),
-            TextButton.icon(
-              onPressed: () => loadMods(),
-              icon: const Icon(Icons.refresh),
-              label: Text(loc.t('mods.errors.retry')),
-            ),
-          ],
-        ),
-      );
-    }
+      ),
+    );
 
     return Focus(
       focusNode: _focusNode,
       autofocus: true,
       onKeyEvent: (node, event) {
-        // Обробка Ctrl+V
+        // A text field's own Ctrl+V lives higher up, in `WidgetsApp`, so this would see it first: in the note or
+        // the filter, the key is the field's paste.
+        final focused = FocusManager.instance.primaryFocus?.context;
+        if (focused?.findAncestorStateOfType<EditableTextState>() != null) return KeyEventResult.ignored;
         if (event is KeyDownEvent) {
           final isControlPressed =
               HardwareKeyboard.instance.isControlPressed ||
@@ -829,375 +575,67 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         }
         return KeyEventResult.ignored;
       },
-      child: Column(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Header з вибором персонажа
-          Container(
-            // The strip below the title row needs 73px: a 50px portrait, 4px,
-            // and the selected character's `labelSmall` name (19).
-            height: 148,
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              border: Border(
-                bottom: BorderSide(
-                  color: isDarkMode
-                      ? Colors.white.withValues(alpha: 0.1)
-                      : Colors.black.withValues(alpha: 0.05),
-                ),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: EdgeInsets.all(AppConstants.defaultPadding),
-                  child: Row(
-                    children: [
-                      Text(
-                        loc.t('mods.headers.characters'),
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: AppConstants.smallPadding,
-                          vertical: AppConstants.tinyPadding,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(
-                            AppConstants.activeModBorderColor,
-                          ).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(
-                            AppConstants.smallPadding,
-                          ),
-                        ),
-                        child: Text(
-                          // Count only real characters — exclude the synthetic
-                          // "ALL" entry and the built-in categories.
-                          '${characters.where((c) => c.id != 'all' && !isBuiltInCategory(c.id)).length}',
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: const Color(
-                              AppConstants.activeModBorderColor,
-                            ),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      const Spacer(),
-                      RefreshModsButton(busy: isLoading || _isLoadingMods, onRefresh: _refreshModsList),
-                      const SizedBox(width: 12),
-                      // Mode toggle buttons
-                      ModeToggleWidget(
-                        modeToggleAnimationController:
-                            _modeToggleAnimationController,
-                        modeToggleAnimation: _modeToggleAnimation,
-                        activationMode: ref.watch(activationModeProvider),
-                        onModeChanged: (ActivationMode newMode) {
-                          _rebuildDebounce?.cancel();
-                          _characterSelectionDebounce?.cancel();
-                          _isOperationInProgress = false;
-                          ref.read(activationModeProvider.notifier).state =
-                              newMode;
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: CharacterCardsListWidget(
-                    characters: characters,
-                    selectedIndex: selectedIndex,
-                    onCharacterSelected: (int index) {
-                      ref.read(selectedCharacterIndexProvider.notifier).state =
-                          index;
-                    },
-                    onCharacterTagSaved: _saveTag,
-                    modCharacterTags: modCharacterTags,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Search / sort / tag-filter toolbar. Self-contained and
-          // provider-driven, so a keystroke or filter toggle rebuilds only the
-          // toolbar, not the whole screen. The callback is for the one thing it
-          // does that isn't filtering — the bulk "assume current" action writes
-          // sidecars, and the status slots are drawn from `ModInfo.origin`,
-          // which only a rescan refreshes.
-          if (currentSkins.isNotEmpty)
-            ModsToolbar(
-              onLibraryChanged: () => unawaited(loadMods(showLoading: false)),
-            ),
-
-          // Counter for active mods
-          if (currentSkins.isNotEmpty)
-            Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: AppConstants.defaultPadding,
-                vertical: AppConstants.smallPadding,
-              ),
-              child: Row(
-                children: [
-                  Text(
-                    loc.t('mods.headers.active_mods'),
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w500,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                  SizedBox(width: AppConstants.smallMargin),
-                  Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: AppConstants.smallPadding,
-                      vertical: AppConstants.tinyPadding,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(
-                        AppConstants.activeModCountColor,
-                      ).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(
-                        AppConstants.smallPadding,
-                      ),
-                    ),
-                    child: Text(
-                      '${currentSkins.where((mod) => mod.isActive).length}/${currentSkins.length}',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: const Color(AppConstants.activeModCountColor),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-          // Моди для вибраного персонажа
+          CharacterList(onRetag: (mod, groupId) => unawaited(_retag(mod, groupId))),
           Expanded(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 500),
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeInCubic,
-              transitionBuilder: (Widget child, Animation<double> animation) {
-                // Старий контент йде вліво
-                final outOffset =
-                    Tween<Offset>(
-                      begin: Offset.zero,
-                      end: const Offset(-1.0, 0),
-                    ).animate(
-                      CurvedAnimation(
-                        parent: animation,
-                        curve: Curves.easeInCubic,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final panel = selected == null
+                    ? null
+                    : ModDetailsPanel(
+                        // A GlobalKey, so the panel keeps its state when it moves between beside and over.
+                        key: _panelKey,
+                        // Never wider than the page it is drawn over, at the smallest window.
+                        width: constraints.maxWidth < ModDetailsPanel.defaultWidth
+                            ? constraints.maxWidth
+                            : ModDetailsPanel.defaultWidth,
+                        mod: selected,
+                        onClose: () => ref.read(selectedModIdProvider.notifier).state = null,
+                        onToggle: () => toggleMod(selected),
+                        onFavoriteToggle: () => _toggleFavorite(selected),
+                        onEdit: () => _showEditDialog(selected),
+                        onOpenFolder: () => _openModFolder(selected),
+                        onCheckForUpdate: () => unawaited(_checkForUpdate(selected)),
+                        onResolveOrigin: () => unawaited(_resolveOrigin(selected)),
+                        onDelete: () => unawaited(_deleteMod(selected)),
+                      );
+                // Beside the mods while there is room for a column of cards next to it; over them otherwise.
+                const minGrid = 420.0;
+                final beside = panel != null && constraints.maxWidth - ModDetailsPanel.defaultWidth >= minGrid;
+                final over = panel != null && !beside;
+                // **One tree shape whatever the panel does.** The page stays the first child of the same Stack
+                // whether the panel is closed, beside it or over it; a different parent for each would throw the
+                // page away on every open and close, taking the grid's scroll position with it.
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: AnimatedSwitcher(duration: const Duration(milliseconds: 180), child: page),
+                          ),
+                          if (over)
+                            Positioned(
+                              top: 0,
+                              right: 0,
+                              bottom: 0,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  boxShadow: [BoxShadow(color: ZenithPalette.of(context).overlay, blurRadius: 40)],
+                                ),
+                                child: panel,
+                              ),
+                            ),
+                        ],
                       ),
-                    );
-
-                // Новий контент приходить справа
-                final inOffset =
-                    Tween<Offset>(
-                      begin: const Offset(1.0, 0),
-                      end: Offset.zero,
-                    ).animate(
-                      CurvedAnimation(
-                        parent: animation,
-                        curve: Curves.easeOutCubic,
-                      ),
-                    );
-
-                // Масштабування для більш плавного ефекту
-                final scaleAnimation = Tween<double>(begin: 0.8, end: 1.0)
-                    .animate(
-                      CurvedAnimation(
-                        parent: animation,
-                        curve: Curves.easeOutCubic,
-                      ),
-                    );
-
-                return SlideTransition(
-                  position: animation.status == AnimationStatus.reverse
-                      ? outOffset
-                      : inOffset,
-                  child: FadeTransition(
-                    opacity: animation,
-                    child: ScaleTransition(scale: scaleAnimation, child: child),
-                  ),
+                    ),
+                    if (beside) panel,
+                  ],
                 );
               },
-              // **Keyed on which character is shown, and nothing else.**
-              // This switcher's whole job is the 500 ms slide-out/slide-in that
-              // says "you are looking at a different character now", so the key
-              // has to change on exactly that and never on a change to what is
-              // *in* the current view.
-              //
-              // It used to carry `currentSkins.length`, which made importing or
-              // deleting a mod — or retagging one out of this character — play
-              // the character-switch transition over the whole grid. Worse, the
-              // `AnimationLimiter` below lives inside this subtree, so a re-key
-              // remounts it and every card replays its 500 ms staggered scale-in
-              // on top of the slide. Adding one mod re-rendered the entire tab.
-              //
-              // The **id** rather than the index: `loadMods` preserves the
-              // selection by id and recomputes the index, so a group appearing
-              // or disappearing can shift the index while the user is still
-              // looking at the same character.
-              child: Padding(
-                key: ValueKey('character_$selectedCharacterId'),
-                padding: EdgeInsets.all(AppConstants.defaultPadding),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    return DropTarget(
-                      onDragEntered: (details) {
-                        setState(() => _isDragging = true);
-                      },
-                      onDragExited: (details) {
-                        setState(() => _isDragging = false);
-                      },
-                      onDragDone: (details) {
-                        _importModsFromFolders(details.files);
-                      },
-                      // Scoped Consumer: the filtered/sorted list and the
-                      // empty/no-results states rebuild here on filter changes,
-                      // without rebuilding the rest of the screen.
-                      child: Consumer(
-                        builder: (context, ref, _) {
-                          final visibleSkins = ref.watch(visibleModsProvider);
-                          // Also rebuild when the active-filter flag flips (it
-                          // drives the no-results / add-card states).
-                          ref.watch(modFiltersActiveProvider);
-                          return currentSkins.isEmpty && characters.isEmpty
-                              ? Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.inbox_outlined,
-                                        size: 64,
-                                        color: Colors.grey[400],
-                                      ),
-                                      const SizedBox(height: 16),
-                                      Text(
-                                        loc.t('mods.empty.title'),
-                                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                          color: Colors.grey[600],
-                                        ),
-                                      ),
-                                      const SizedBox(height: 24),
-                                      SizedBox(
-                                        width: 250,
-                                        height: 350,
-                                        child: AddModCard(isDragging: _isDragging, onTap: _showImportDialog),
-                                      ),
-                                    ],
-                                  ),
-                                )
-                              : (_isFiltering && visibleSkins.isEmpty)
-                              ? ModsNoResults(onClear: () => clearModFilters(ref))
-                              : isAllView
-                              ? ModsGroupedView(
-                                  visibleSkins: visibleSkins,
-                                  isFiltering: _isFiltering,
-                                  addModCard: AddModCard(isDragging: _isDragging, onTap: _showImportDialog),
-                                  modCardBuilder: _buildModCard,
-                                )
-                              : OwnScrollController(
-                                  builder: (context, scrollController) => AnimationLimiter(
-                                    child: ScrollConfiguration(
-                                      behavior: ScrollConfiguration.of(context)
-                                          .copyWith(
-                                            dragDevices: {
-                                              PointerDeviceKind.touch,
-                                              PointerDeviceKind.mouse,
-                                              PointerDeviceKind.trackpad,
-                                              PointerDeviceKind.stylus,
-                                            },
-                                            physics:
-                                                const BouncingScrollPhysics(),
-                                          ),
-                                      child: GridView.builder(
-                                        controller: scrollController,
-                                        // Vertical padding leaves room for the cards'
-                                        // hover lift/scale so the top row isn't clipped.
-                                        padding: EdgeInsets.symmetric(
-                                          horizontal: AppConstants.smallPadding,
-                                          vertical: 14,
-                                        ),
-                                        gridDelegate:
-                                            const SliverGridDelegateWithFixedCrossAxisCount(
-                                              crossAxisCount: 6,
-                                              childAspectRatio: 0.7,
-                                              crossAxisSpacing: 16,
-                                              mainAxisSpacing: 16,
-                                            ),
-                                        // The "Add" card is hidden while filtering so
-                                        // a no-match search doesn't show just the +.
-                                        itemCount:
-                                            visibleSkins.length +
-                                            (_isFiltering ? 0 : 1),
-                                        itemBuilder: (context, index) {
-                                          // Кнопка "Додати" в кінці
-                                          if (index == visibleSkins.length) {
-                                            return AnimationConfiguration.staggeredGrid(
-                                              key: const ValueKey(
-                                                'add_mod_card',
-                                              ),
-                                              position: index,
-                                              columnCount: 4,
-                                              duration: const Duration(
-                                                milliseconds: 500,
-                                              ),
-                                              child: ScaleAnimation(
-                                                scale: 0.5,
-                                                curve: Curves.easeOutBack,
-                                                child: FadeInAnimation(
-                                                  curve: Curves.easeOut,
-                                                  child: AddModCard(isDragging: _isDragging, onTap: _showImportDialog),
-                                                ),
-                                              ),
-                                            );
-                                          }
-
-                                          final mod = visibleSkins[index];
-                                          return AnimationConfiguration.staggeredGrid(
-                                            // The folder id alone. Folding
-                                            // `isActive` in re-keys the card on
-                                            // every toggle, which throws away
-                                            // `_ModCardWidgetState` — including
-                                            // `isHovered`, so the card you just
-                                            // clicked drops its hover lift and
-                                            // does not get it back until the
-                                            // pointer leaves and returns.
-                                            // Nothing needs the re-key: the card
-                                            // takes `mod` as a prop, and its
-                                            // `AnimatedContainer` eases the
-                                            // active border and gradient in,
-                                            // which is what the state change
-                                            // should look like anyway.
-                                            key: ValueKey('mod_${mod.id}'),
-                                            position: index,
-                                            columnCount: 4,
-                                            duration: const Duration(
-                                              milliseconds: 500,
-                                            ),
-                                            child: ScaleAnimation(
-                                              scale: 0.5,
-                                              curve: Curves.easeOutBack,
-                                              child: FadeInAnimation(
-                                                curve: Curves.easeOut,
-                                                child: _buildModCard(mod),
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                );
-                        },
-                      ),
-                    );
-                  },
-                ),
-              ),
             ),
           ),
         ],
@@ -1205,147 +643,178 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     );
   }
 
-  Widget _buildModCard(ModInfo mod) {
-    final isDarkMode = ref.watch(isDarkModeProvider);
+  /// The mods under the header and the filter row, as slivers of the page's one scroll view; or what stands in
+  /// their place while the library loads, fails to load, or has nothing under the filter.
+  List<Widget> _buildGridSlivers(ModInfo? selected) {
+    final palette = ZenithPalette.of(context);
+    final text = Theme.of(context).textTheme;
+    final library = ref.watch(libraryProvider);
 
-    return LongPressDraggable<ModInfo>(
-      data: mod,
-      delay: AppConstants.dragDelay,
-      hapticFeedbackOnStart: true,
-      feedback: Material(
-        elevation: AppConstants.dragFeedbackElevation,
-        borderRadius: BorderRadius.circular(AppConstants.modCardBorderRadius),
-        child: Container(
-          width: 200, // Fixed width for feedback
-          height: 280, // Fixed height for feedback
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardColor,
-            borderRadius: BorderRadius.circular(
-              AppConstants.modCardBorderRadius,
-            ),
-            border: Border.all(
-              color: const Color(AppConstants.activeModBorderColor),
-              width: AppConstants.modCardBorderWidthActive,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(
-                  AppConstants.activeModBorderColor,
-                ).withValues(alpha: 0.3),
-                blurRadius: AppConstants.modCardBlurRadiusActive,
-                spreadRadius: AppConstants.modCardSpreadRadiusActive,
+    Widget fill(Widget child) => SliverFillRemaining(
+      hasScrollBody: false,
+      child: Padding(padding: const EdgeInsets.all(28), child: Center(child: child)),
+    );
+
+    if (errorMessage != null || library.hasError) {
+      return [
+        fill(
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            spacing: 8,
+            children: [
+              Text(loc.t('mods.errors.load'), style: text.titleMedium?.copyWith(color: palette.text)),
+              Text(
+                errorMessage ?? '${library.error}',
+                textAlign: TextAlign.center,
+                style: text.bodySmall?.copyWith(color: palette.text3),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: loadMods,
+                icon: const Icon(Icons.refresh_rounded),
+                label: Text(loc.t('mods.errors.retry')),
               ),
             ],
           ),
-          child: Column(
+        ),
+      ];
+    }
+    if (!library.hasValue) return [fill(const CircularProgressIndicator())];
+
+    final skins = ref.watch(currentCharacterSkinsProvider);
+    final visible = ref.watch(visibleModsProvider);
+    final filtered = ref.watch(modGridFilterProvider) != ModGridFilter.all;
+    final dropTarget = _dropTarget(watch: true);
+
+    if (skins.isNotEmpty && visible.isEmpty) {
+      return [
+        fill(
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            spacing: 12,
             children: [
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(12),
-                  ),
-                  // Inside a Builder so the cover is looked up on disk when
-                  // the drag starts, not on every rebuild of the grid.
-                  child: Builder(
-                    builder: (_) {
-                      final dragCover = mod.imagePath == null
-                          ? null
-                          : coverFileFor(mod.imagePath!);
-                      return dragCover != null
-                          ? Image.file(
-                              dragCover,
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                              // Same reason as ModCardWidget: this is the other
-                              // card render path, and leaving it unbounded would
-                              // keep the ImageCache-flooding bug alive in
-                              // whichever view uses it.
-                              cacheWidth: AppConstants.modCardDecodeWidth,
-                            )
-                          : Container(
-                              color: Colors.grey.withValues(alpha: 0.1),
-                              child: Icon(
-                                Icons.image_not_supported,
-                                size: 32,
-                                color: Colors.grey[600],
-                              ),
-                            );
-                    },
-                  ),
-                ),
+              Text(loc.t('library.grid.no_results'), style: text.bodyMedium?.copyWith(color: palette.text2)),
+              OutlinedButton(
+                style: smallButtonStyle(context),
+                onPressed: () => ref.read(modGridFilterProvider.notifier).state = ModGridFilter.all,
+                child: Text(loc.t('library.grid.show_all')),
               ),
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: Text(
-                  mod.name,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w500,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+            ],
+          ),
+        ),
+      ];
+    }
+
+    // The drop tile stays out of a filtered grid, where it would read as one of the results, except on a character
+    // with no mods, where it is all there is.
+    final showDrop = !filtered || skins.isEmpty;
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(28, 20, 28, 96),
+        sliver: SliverLayoutBuilder(
+          builder: (context, constraints) {
+            const gap = 16.0;
+            const minCard = 220.0;
+            final width = constraints.crossAxisExtent;
+            final columns = ((width + gap) / (minCard + gap)).floor().clamp(1, 12);
+            final cardWidth = (width - gap * (columns - 1)) / columns;
+            return SliverGrid(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                mainAxisSpacing: gap,
+                crossAxisSpacing: gap,
+                mainAxisExtent: ModCardWidget.extentFor(cardWidth),
               ),
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  if (index == visible.length) {
+                    return _DropCard(
+                      key: const ValueKey('drop'),
+                      filesUnder: dropTarget,
+                      dragging: _isDragging,
+                      onTap: _showImportDialog,
+                    );
+                  }
+                  final mod = visible[index];
+                  return _buildModCard(mod, selected: mod.id == selected?.id);
+                },
+                childCount: visible.length + (showDrop ? 1 : 0),
+                // Finds a card by its folder id when the order changes, so it keeps its state rather than taking
+                // over whichever card was at its old position.
+                findChildIndexCallback: (key) {
+                  if (key is! ValueKey<String>) return null;
+                  final index = visible.indexWhere((m) => 'mod_${m.id}' == key.value);
+                  return index < 0 ? null : index;
+                },
+              ),
+            );
+          },
+        ),
+      ),
+    ];
+  }
+
+  Widget _buildModCard(ModInfo mod, {required bool selected}) {
+    final palette = ZenithPalette.of(context);
+    return LongPressDraggable<ModInfo>(
+      key: ValueKey('mod_${mod.id}'),
+      data: mod,
+      delay: AppConstants.dragDelay,
+      hapticFeedbackOnStart: true,
+      // A slip with the mod's name on it, for dropping on a row of the character list.
+      feedback: Material(
+        color: palette.raised,
+        elevation: AppConstants.dragFeedbackElevation,
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            spacing: 10,
+            children: [
+              Icon(Icons.drag_indicator_rounded, color: palette.text3),
+              Text(mod.name, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: palette.text)),
             ],
           ),
         ),
       ),
       childWhenDragging: Opacity(
         opacity: AppConstants.dragFeedbackOpacity,
-        child: ModCardWidget(
-          mod: mod,
-          isDarkMode: isDarkMode,
-          onFavoriteToggle: () {},
-          onShowDetails: () {},
-          onOpenLink: () {},
-        ),
+        child: ModCardWidget(mod: mod),
       ),
-      child: Tooltip(
-        message: loc.t('mods.tooltips.card'),
-        child: GestureDetector(
-          onTap: () => toggleMod(mod),
-          onSecondaryTapDown: (details) {
-            _showContextMenu(context, mod, details.globalPosition);
-          },
-          child: ModCardWidget(
-            mod: mod,
-            isDarkMode: isDarkMode,
-            onFavoriteToggle: () => _toggleFavorite(mod),
-            onShowDetails: () => _showModDetailsDialog(mod),
-            onOpenLink: () => openModLink(context, mod),
-            onResolveOrigin: () => unawaited(_resolveOrigin(mod)),
-            onShowUpdate: () => unawaited(_checkForUpdate(mod)),
-          ),
-        ),
+      child: ModCardWidget(
+        mod: mod,
+        selected: selected,
+        onSelect: () => _select(mod),
+        onToggle: () => toggleMod(mod),
+        onFavoriteToggle: () => _toggleFavorite(mod),
+        onMore: (position) => _showContextMenu(context, mod, position),
+        onResolveOrigin: () => unawaited(_resolveOrigin(mod)),
+        onShowUpdate: () => unawaited(_checkForUpdate(mod)),
       ),
     );
   }
 
-  Future<void> _deactivateOtherModsForCharacter(
-    String characterId, {
-    String? excludeModId,
-  }) async {
-    try {
-      final characters = ref.read(charactersProvider);
-      final character = characters.firstWhere(
-        (char) => char.id == characterId,
-        orElse: () =>
-            CharacterInfo(id: '', name: '', iconPath: null, skins: []),
-      );
-
-      if (character.id.isNotEmpty) {
-        final activeMods = character.skins
-            .where((mod) => mod.isActive && mod.id != excludeModId)
-            .toList();
-        for (final mod in activeMods) {
-          await ApiService.toggleMod(mod.id);
-        }
-      }
-    } catch (e) {
-      // Handle error silently
-    }
+  /// The character a drop or paste on this page files new mods under, or null when it is worked out from each
+  /// mod's name.
+  ///
+  /// Only a character the user picked by clicking its row: the page shown before they pick one is a fallback, and
+  /// the sidebar's Updates button picks one for them; filing five archives for five agents under either would be
+  /// the app's guess, not theirs. Unassigned has no one to file under.
+  ///
+  /// [watch] for the drop tile, which says which of the two a drop will do and has to follow a pick.
+  String? _dropTarget({bool watch = false}) {
+    final byUser = watch ? ref.watch(characterPickedByUserProvider) : ref.read(characterPickedByUserProvider);
+    final picked = watch ? ref.watch(selectedCharacterIdProvider) : ref.read(selectedCharacterIdProvider);
+    if (!byUser) return null;
+    return picked == null || picked == unknownCharacterId ? null : picked;
   }
 
-  /// Імпортує моди з перетягнутих папок
+  /// Imports dropped or pasted folders and archives.
+  ///
+  /// Dropped on a character the user picked, a new mod is filed under that character: the user said so by where
+  /// they dropped it, so it replaces name detection rather than feeding it ([_dropTarget]). Anywhere else, the
+  /// character is worked out from the name.
   Future<void> _importModsFromFolders(List<XFile> files) async {
     if (_isOperationInProgress) return;
 
@@ -1353,6 +822,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       _isOperationInProgress = true;
       _isDragging = false;
     });
+
+    final droppedOn = _dropTarget();
 
     // Показуємо діалог з прогресом
     bool dialogShown = false;
@@ -1574,24 +1045,11 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                   const SizedBox(
                     width: 50,
                     height: 50,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 4,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        Color(0xFF0EA5E9),
-                      ),
-                    ),
+                    child: CircularProgressIndicator(strokeWidth: 4),
                   ),
                   const SizedBox(height: 24),
                   Text(
-                    loc.t(
-                      'mods.dialog.import_progress',
-                      params: {
-                        'count': expectedCount.toString(),
-                        'plural': expectedCount == 1
-                            ? loc.t('mods.import.single')
-                            : loc.t('mods.import.plural'),
-                      },
-                    ),
+                    loc.plural('mods.dialog.import_progress', expectedCount, params: {'count': '$expectedCount'}),
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
@@ -1599,7 +1057,9 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                   const SizedBox(height: 8),
                   Text(
                     loc.t('mods.dialog.import_progress_hint'),
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: ZenithPalette.of(context).text2,
+                    ),
                   ),
                 ],
               ),
@@ -1621,11 +1081,13 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
               combinedName,
               detectionHint: combinedHint,
               origin: combinedSeed,
+              knownCharacter: droppedOn,
             )
           : await modManagerService.importMods(
               folderPaths,
               detectionHints: detectionHints,
               originSeeds: originSeeds,
+              knownCharacters: droppedOn == null ? null : {for (final folder in folderPaths) folder: droppedOn},
             );
 
       // Закриваємо діалог прогресу
@@ -1635,7 +1097,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       }
 
       final importedMods = importResult.imported;
-      final autoTags = importResult.autoTags;
+      // Only names the app worked out are worth listing; a drop on a character says where they went.
+      final autoTags = droppedOn == null ? importResult.autoTags : const <String, String>{};
 
       // Nothing imported *and* nothing to write into an existing mod. With a
       // patch write pending this is an install going fine, not a duplicate.
@@ -1681,14 +1144,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         return;
       }
 
-      // importMods already persisted the detected tags (sidecar + config); just
-      // mirror them into the current UI state.
-      setState(() {
-        modCharacterTags.addAll(autoTags);
-      });
-
       // Перезавантажуємо список модів
-      await loadMods(showLoading: false);
+      await loadMods();
 
       // **Everything the patch answers imply, now the folders exist.** Writes
       // into an existing mod are update-shaped — deactivate, snapshot, place,
@@ -1788,6 +1245,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
       if (mounted && importedMods.isNotEmpty) {
         // Показуємо детальне повідомлення про успіх
         final hasAutoTags = autoTags.isNotEmpty;
+        final palette = ZenithPalette.of(context);
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
@@ -1797,9 +1255,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                   refusals.isEmpty
                       ? Icons.check_circle
                       : Icons.warning_amber_rounded,
-                  color: refusals.isEmpty
-                      ? const Color(0xFF10B981)
-                      : const Color(0xFFF59E0B),
+                  color: refusals.isEmpty ? palette.accent : palette.amber,
                   size: 28,
                 ),
                 const SizedBox(width: 8),
@@ -1829,10 +1285,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF59E0B).withValues(alpha: 0.1),
+                      color: palette.amber.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: const Color(0xFFF59E0B).withValues(alpha: 0.3),
+                        color: palette.amber.withValues(alpha: 0.3),
                       ),
                     ),
                     child: Column(
@@ -1866,10 +1322,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF0EA5E9).withValues(alpha: 0.1),
+                      color: palette.blue.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: const Color(0xFF0EA5E9).withValues(alpha: 0.3),
+                        color: palette.blue.withValues(alpha: 0.3),
                       ),
                     ),
                     child: Column(
@@ -1877,9 +1333,9 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                       children: [
                         Row(
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.auto_awesome,
-                              color: Color(0xFF0EA5E9),
+                              color: palette.blue,
                               size: 18,
                             ),
                             const SizedBox(width: 6),
@@ -1887,7 +1343,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                               loc.t('mods.dialog.import_auto_tags'),
                               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                                 fontWeight: FontWeight.w600,
-                                color: Color(0xFF0EA5E9),
+                                color: palette.blue,
                               ),
                             ),
                           ],
@@ -1917,7 +1373,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                                 },
                               ),
                               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Colors.grey[600],
+                                color: palette.text3,
                               ),
                             ),
                           ),
@@ -1932,7 +1388,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
                   const SizedBox(height: 12),
                   Text(
                     loc.t('mods.dialog.import_ready'),
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: palette.text2),
                   ),
                 ],
               ],
@@ -1972,55 +1428,27 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
     }
   }
 
-  /// Показує діалог вибору папок для імпорту
+  /// Explains how to add a mod: drop or paste a folder or an archive onto the page.
   Future<void> _showImportDialog() async {
     if (_isOperationInProgress) return;
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.add_circle_outline, color: Color(0xFF0EA5E9)),
-            const SizedBox(width: 8),
-            Text(loc.t('mods.dialog.add_mods_title')),
-          ],
-        ),
+        title: Text(loc.t('mods.dialog.add_mods_title')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: 16,
           children: [
             Text(
               loc.t('mods.dialog.add_mods_description'),
               style: Theme.of(context).textTheme.bodyMedium,
             ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0EA5E9).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: const Color(0xFF0EA5E9).withValues(alpha: 0.3),
-                ),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.lightbulb_outline,
-                    color: Color(0xFF0EA5E9),
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      loc.t('mods.dialog.hint'),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Color(0xFF0EA5E9),
-                      ),
-                    ),
-                  ),
-                ],
+            Text(
+              loc.t('mods.dialog.hint'),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: ZenithPalette.of(context).text2,
               ),
             ),
           ],
@@ -2070,19 +1498,17 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         return;
       }
 
-      // Перевіряємо що це дійсно папки та створюємо XFile об'єкти
+      // Folders and archives, the same as a drop takes.
       final validFolders = <XFile>[];
       for (final filePath in paths) {
-        // Видаляємо file:// префікс якщо є
         String cleanPath = filePath;
         if (cleanPath.startsWith('file://')) {
           cleanPath = Uri.parse(cleanPath).toFilePath();
         }
 
-        final dir = Directory(cleanPath);
-        if (await dir.exists()) {
-          validFolders.add(XFile(cleanPath));
-        }
+        final isFolder = await Directory(cleanPath).exists();
+        final isArchive = !isFolder && ArchiveService.isArchiveFile(cleanPath) && await File(cleanPath).exists();
+        if (isFolder || isArchive) validFolders.add(XFile(cleanPath));
       }
 
       if (validFolders.isEmpty) {
@@ -2105,5 +1531,59 @@ class _ModsScreenState extends ConsumerState<ModsScreen>
         );
       }
     }
+  }
+}
+
+/// The last tile of a character's grid: where a dropped folder or archive lands. Pressing it says how to add one.
+class _DropCard extends StatelessWidget {
+  const _DropCard({
+    super.key,
+    required this.filesUnder,
+    required this.dragging,
+    required this.onTap,
+  });
+
+  /// The character a drop is filed under, or null when it is worked out from the name.
+  final String? filesUnder;
+  final bool dragging;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = context.loc;
+    final palette = ZenithPalette.of(context);
+    final text = Theme.of(context).textTheme;
+    final under = filesUnder;
+    final hint = under == null
+        ? loc.t('library.grid.drop_detects')
+        : loc.t('library.grid.drop_lands_on', params: {'name': libraryGroupName(under, loc)});
+
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        hoverColor: palette.rowHover,
+        onTap: onTap,
+        child: DashedBox(
+          color: dragging ? palette.accent : palette.fieldBorder,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              spacing: 10,
+              children: [
+                Icon(Icons.file_upload_outlined, size: 28, color: dragging ? palette.accent : palette.text3),
+                Text(
+                  loc.t(dragging ? 'library.grid.drop_release' : 'library.grid.drop_title'),
+                  textAlign: TextAlign.center,
+                  style: text.bodyMedium?.copyWith(color: palette.textProse, fontWeight: FontWeight.w600),
+                ),
+                Text(hint, textAlign: TextAlign.center, style: text.bodySmall?.copyWith(color: palette.text3)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

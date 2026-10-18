@@ -6,7 +6,7 @@ import '../../l10n/app_localizations.dart';
 import '../../services/shader_fixes/shader_fixes_service.dart';
 import '../../utils/state_providers.dart';
 
-/// The details dialog's line for a mod that carries shader fixes: how many files,
+/// The details panel's line for a mod that carries shader fixes: how many files,
 /// and that they live in ZZMI's shader folder only while the mod is on. Nothing
 /// for a mod without any.
 class ShaderPartSummary extends ConsumerWidget {
@@ -32,7 +32,7 @@ class ShaderPartSummary extends ConsumerWidget {
             children: [
               Text(
                 loc.t('mods.details.shader_fixes'),
-                // The details dialog's section label.
+                // The details panel's section label.
                 style: textTheme.bodySmall?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: Colors.grey[400],

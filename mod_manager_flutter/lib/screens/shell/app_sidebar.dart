@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/palette.dart';
 import '../../core/type_scale.dart';
 import '../../l10n/app_localizations.dart';
+import '../../utils/categories.dart';
 import '../../utils/state_providers.dart';
 import '../../utils/zzz_characters.dart';
 import '../components/downloads_button.dart';
@@ -13,8 +14,8 @@ import 'launch_game.dart';
 
 /// The app's main navigation, down the left of every page.
 ///
-/// Updates is a view of the Characters page with every mod shown and only those with an update kept, so it is
-/// the current row only while that filter is on.
+/// Updates is a view of the Characters page with the character list and the grid both kept to mods with an update,
+/// so it is the current row only while the list's filter is on.
 class AppSidebar extends ConsumerWidget {
   const AppSidebar({super.key});
 
@@ -28,11 +29,10 @@ class AppSidebar extends ConsumerWidget {
     final palette = ZenithPalette.of(context);
     final loc = context.loc;
     final destination = ref.watch(destinationProvider);
-    final updatesOnly = ref.watch(modUpdatesOnlyProvider);
-    final mods = ref.watch(modsProvider);
+    final updatesOnly = ref.watch(characterListFilterProvider) == CharacterListFilter.updates;
     final updates = ref.watch(libraryUpdateCountProvider);
-    // Agents only, as on the Characters page: the built-in categories and `unknown` are not characters.
-    final characters = mods.map((m) => m.characterId).where((id) => characterById(id) != null).toSet().length;
+    // Every agent, as the Characters page lists every agent; the built-in categories are not characters.
+    final characters = zzzCharactersData.length;
 
     void go(AppDestination to) => ref.read(destinationProvider.notifier).state = to;
     final onCharacters = destination == AppDestination.characters;
@@ -59,10 +59,13 @@ class AppSidebar extends ConsumerWidget {
                   SidebarNavItem(
                     icon: Icons.grid_view_rounded,
                     label: loc.t('navigation.characters'),
-                    count: characters > 0 ? characters : null,
+                    count: characters,
                     selected: onCharacters && !updatesOnly,
                     onTap: () {
-                      ref.read(modUpdatesOnlyProvider.notifier).state = false;
+                      if (updatesOnly) {
+                        ref.read(characterListFilterProvider.notifier).state = CharacterListFilter.all;
+                        ref.read(modGridFilterProvider.notifier).state = ModGridFilter.all;
+                      }
                       go(AppDestination.characters);
                     },
                   ),
@@ -73,9 +76,18 @@ class AppSidebar extends ConsumerWidget {
                     hot: true,
                     selected: onCharacters && updatesOnly,
                     onTap: () {
-                      // Index 0 is the ALL group, every mod across characters.
-                      ref.read(selectedCharacterIndexProvider.notifier).state = 0;
-                      ref.read(modUpdatesOnlyProvider.notifier).state = true;
+                      ref.read(characterListFilterProvider.notifier).state = CharacterListFilter.updates;
+                      ref.read(modGridFilterProvider.notifier).state = ModGridFilter.updates;
+                      // The first character with an update, unless the one on screen has one.
+                      final counts = ref.read(libraryGroupCountsProvider);
+                      if ((counts[ref.read(currentCharacterIdProvider)]?.updates ?? 0) == 0) {
+                        final first = libraryGroupIds.where((id) => (counts[id]?.updates ?? 0) > 0).firstOrNull;
+                        if (first != null) {
+                          ref.read(selectedCharacterIdProvider.notifier).state = first;
+                          // The app's choice, not the user's: a drop there is not filed under it.
+                          ref.read(characterPickedByUserProvider.notifier).state = false;
+                        }
+                      }
                       go(AppDestination.characters);
                     },
                   ),

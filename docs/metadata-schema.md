@@ -40,11 +40,8 @@ Four storage surfaces, three of them current:
 
 > **Intrinsic to the mod → sidecar. Specific to this installation → `config.json`.**
 
-The reason is that the sidecar lives *inside the mod folder*, so it travels with
-the mod: rename the folder and the metadata follows; zip the folder and send it to
-someone and your description, tags, and images arrive with it. Per-install state
-must **not** travel — whether a mod is active depends on this machine's symlinks,
-and a favourite is this user's opinion.
+The reason is that the sidecar lives *inside the mod folder*, so it travels with the mod: rename the folder and the metadata follows; zip the folder and send it to someone and your description, tags, and images arrive with it.
+Per-install state must **not** travel — whether a mod is active depends on this machine's symlinks, and a favourite or a note is this user's opinion.
 
 Consequence to keep in mind: a mod folder can arrive carrying a sidecar written by
 a *different user, possibly on a different app version*. Sidecars are effectively
@@ -121,17 +118,15 @@ dependency at all: see `test/origin_backfill_test.dart` and
 | `uid` | `string?` | non-null only | This folder's **identity**, for what has to outlive its name. Opaque, machine-owned, written at install and migrated onto everything else by the scan. See below. |
 | `description` | `string?` | non-null only | Free-form, **rendered as markdown** in the UI (`utils/markdown_description.dart`). Users can paste rich text and get markdown — see the clipboard-HTML note in `CLAUDE.md`. |
 | `source_url` | `string?` | **read-only legacy** | The mod's page URL as older builds wrote it. Nothing produces it now; it is the offline backfill's only input, and it is written back only while the `origin` block names no mod — see [§4.1](#41-a-key-that-is-only-read). |
-| `tags` | `string[]` | **always** (even `[]`) | Arbitrary user tags. Drive the tag filters in the mods toolbar. |
+| `tags` | `string[]` | **always** (even `[]`) | Arbitrary user tags. Shown as badges on the Library's details panel and edited in *Edit info*; the metadata autofill fills them from the mod page when empty. Nothing filters on them. |
 | `character_id` | `string?` | non-null only | Canonical character/category id. Normalised through `canonicalCharacterId()` (`utils/zzz_characters.dart`) on read. |
 | `images` | `string[]` | **always** (even `[]`) | Gallery, **relative to the mod folder root**. First entry is the cover. |
 | `origin` | `object?` | non-null only | Where the mod came from. **Machine-owned** — see below. |
 
 ### `uid` — the identity a rename cannot take away
 
-**The folder name is this app's identity for a mod, and it is the right one
-almost everywhere.** `config.json` keys `active_mods`, `favorite_mods` and
-`mod_character_tags` by it, and `renameMod` migrates all three — which works
-because a rename *through the app* is an event the app can see.
+**The folder name is this app's identity for a mod, and it is the right one almost everywhere.**
+`config.json` keys `active_mods`, `favorite_mods`, `mod_notes` and `mod_character_tags` by it, and `renameMod` migrates all four — which works because a rename *through the app* is an event the app can see.
 
 A rename in a file manager is not. No hook runs, nothing migrates, and anything
 filed under the old name is stranded silently. What that costs depends on what
@@ -139,7 +134,7 @@ was filed there:
 
 | Filed under the name | Cost of an outside rename |
 |---|---|
-| favourite star, active link, character tag | a star, a dangling link, a tag the sidecar already carries |
+| favourite star, note, active link, character tag | a star, a note, a dangling link, a tag the sidecar already carries |
 | **saved versions** (`<appData>/backups`) | every rollback point for that mod, unreachable **and** exempt from pruning, because retention protects each name-group's newest entry forever |
 
 So saved versions key by `uid` and a rename becomes a non-event, inside the app
@@ -663,15 +658,9 @@ Two rules keep this safe, and both are pinned by tests in
   [§2](#save-semantics-three-classes-of-field) is untouched. `origin` is not an
   exception to that rule; it is on the other side of it.
 
-**The cost this did have, and it was not free.** Putting the block on the runtime
-view means the library's rescan guard has to *notice* it. While that guard was a
-hand-written field comparison, `origin` was not in it — so a mod resolved through
-the resolve dialog was written to disk correctly, re-read correctly, judged
-unchanged, and went on rendering its old status badge until the tab was switched
-away and back. Nothing threw and no test failed. `ModOrigin` therefore has full
-value equality, and the guard now compares whole `ModInfo` values
-([`library-screen.md`](library-screen.md) §1), so **a new field on either model is
-covered the day it is added** rather than the day someone remembers a list.
+**The cost of this, and it is not free.** Putting the block on the runtime view means the library's rescan guard has to *notice* it.
+A guard that leaves `origin` out judges a mod resolved through the resolve dialog unchanged after the rescan has re-read it correctly, and the card goes on rendering its old status badge, with nothing thrown and no test failing.
+So `ModOrigin` has full value equality, and the guard compares whole `ModInfo` values ([`library-screen.md`](library-screen.md) §4): **a new field on either model is covered the day it is added** rather than the day someone remembers a list.
 
 ---
 

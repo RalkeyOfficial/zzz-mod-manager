@@ -4,7 +4,7 @@ The working plan for rebuilding the UI to the Zenith design. It lives on the `ze
 
 ## Ground rules
 
-- **Target:** the claude.ai Design canvas "Zenith v3 UI", https://claude.ai/artifact/1Sy7dkEKL6RwurthEEpZgv. Read it with the Artifact tool (`action: "read"`, then the `project/*.dc.html` files). It has 22 artboards.
+- **Target:** the claude.ai Design canvas "Zenith v3 UI", https://claude.ai/artifact/1Sy7dkEKL6RwurthEEpZgv. Read it with the Artifact tool (`action: "read"`, then the `project/*.dc.html` files). It has 26 artboards.
 - The canvas was designed without seeing the code. It is the target; the current UI is replaced, not preserved. Everything on it gets built, including features the app lacks.
 - Where the canvas has a gap, design the missing piece in its style without asking. Where it moved something (rename is the Name field in Edit info, not a right-click dialog), the canvas placement wins. Ask only when it contradicts a decision written in `docs/`.
 - **Branch:** `zenith-ui`, cut from `development`. Never commit unless the user says so.
@@ -39,6 +39,8 @@ The memory note `v3-canvas-vs-docs-decisions` holds these. In short:
 - **Mod page:** no file-tree preview anywhere. "In the folder" keeps its note and the Stored at / Linked as / Tracking facts.
 - **Rename to Zenith:** application id, window title and app-data folder, as the last phase with a migration. The UI already says Zenith.
 - **Paper accent:** the canvas's option B. Paper fills the primary button and a selected chip; links, switches, badges and other on-states stay violet.
+- **Install decisions wait in Downloads:** a background download that needs a decision (looks like a patch, several folders in the archive, a password) doesn't open a dialog. It waits in the Downloads panel's "Needs your attention" group with a button that opens its dialog, and the sidebar's Downloads item shows an amber warning badge with that count.
+- **Recommended Proton builds:** Proton-GE, Proton-Cachy and DWProton (for example `dwproton-11.0-5`) carry a Recommended badge in first run's Proton list.
 
 ## Status
 
@@ -64,23 +66,24 @@ The memory note `v3-canvas-vs-docs-decisions` holds these. In short:
     - a sidebar that scrolls when short.
   - Docs updated: `desktop-integration.md` §4 (the rule, the hazard and what still differs).
 
+- **Phase 3, Library character view and details panel:** built and reviewed; the review's findings are fixed. Not committed, waiting on the user.
+  - Agreed with the user: the scan does not guess a character from the folder name, so a mod with no stored character is under Unassigned.
+  - The manual update check runs in `LibraryActionsHost` above the page switcher.
+  - A known limit, in `library-screen.md` §10: One at a time can't swap two mods with a shader file at the same path and different contents.
+  - Decided with the user: notes live in `config.json` (`mod_notes`), not the sidecar, since a note is per-user opinion and the canvas says "Only you see this".
+  - Decided without asking, written into `library-screen.md`: one status badge per card beside the Active badge (amber update, blue asks, grey states, "Local" for tracking off); One at a time defaults on for agents and off for categories, absent on Unassigned, stored as `one_at_a_time`; a drop on a character the user picked files the mod under them; dates stay `2026-09-28` as elsewhere in the app; no "open character folder" button, since the library is flat.
+  - Wind and Lumiflux tiles are colours designed in the canvas's style (Wind green, Lumiflux rose); the canvas has only the five original elements.
+  - Interim until phase 5: the library menu (check, sort out tracking, mark all as current, read again) is a ⋯ button in the row above the grid, and the tracking reminder sits under that row. The Library has no search or tag filter until the palette (phase 8) and the All mods table (phase 5).
+  - The author line and the File / Uploaded facts show only once a check has the mod page in hand; phase 8's Edit info adds an author field of its own.
+  - The roster's attributes, factions and roles are for the user to verify (Phoenix and Severian are unreleased; Belle and Wise are set to Phaethon with no attribute).
+
 ## Phases left
 
 Each is reviewable on its own and ends with tests green, docs and changelog updated, and the user's go-ahead.
 
-3. **Library character view and details sidebar** (artboard `Main`).
-   - Add element, faction and specialty to the roster in `utils/zzz_characters.dart`; 64 entries for the user to verify.
-   - Character list: element tiles, transparent portraits through `CharacterAvatar.assetPathFor`, initials as the fallback, update and active dots.
-   - The list holds every agent, dimmed with "No mods yet" when it has none, as the canvas draws it. The sidebar's Characters count then counts every agent too; it follows the list, which today holds only agents with a mod.
-   - Hero header and mod cards, with every update-check verdict mapped onto canvas badges: Active, Newer file (amber), Local, plus the tracking states in blue.
-   - Favourites: these exist in `config.json` as `favorite_mods`.
-   - Per-character "One at a time": today `activationModeProvider` is global and not persisted. Write a design note first.
-   - Details sidebar in place of the details dialog: keys, facts, the note field, Open folder / Check for update / Delete.
-   - Notes: a new sidecar field. Write a design note first, and update `metadata-schema.md` and `migrations.md`.
-   - Rewrite `library-screen.md`.
 4. **Mod page** (artboard `ModPage`).
    - A page route inside Library with Overview, In-game keys, History and Note tabs.
-   - History: installed files with Reinstall and Restore (snapshots exist), the latest update post, the ignored update with Stop ignoring, and the In-the-folder facts.
+   - History: installed files with Reinstall and Restore (snapshots exist), the latest update post, Patches on top (each patch layer with its file, author, upload date, files added and replaced, and Take out), the ignored update with Stop ignoring, and the In-the-folder facts.
 5. **All mods table and Updates** (artboard `AllMods`).
    - Table with multi-select and bulk Enable / Disable / Check / Add to loadout (hidden until phase 9) / Delete.
    - Filters: All, Active, Off, Updates, Folder missing, Favourites, Not tracked.
@@ -92,26 +95,48 @@ Each is reviewable on its own and ends with tests green, docs and changelog upda
    - Grid restyle, carousel, character chip and type chips, Hide installed, the mature-content and sort menus, infinite scroll.
    - Mod page with Install for (a character override), multi-file pick and Turn on after installing.
    - The downloads side panel, Pause, and archive passwords.
+   - "Needs your attention" as the panel's first group: one amber row per waiting decision (patch, several folders, password), each with the button that opens its dialog and Don't install. The patch and folders dialogs are restyled in phase 8; until then the buttons open the current ones.
+   - `DownloadsNavItem` shows the amber warning badge (triangle and count) while anything waits. The canvas draws only that state; the idle look is designed in its style.
 7. **Settings, Storage, About** (artboards `Settings`, `Storage`, `About`).
-   - Section nav, and Game & folders including Move library… (design note first).
+   - Section nav (General, Game & folders, Launching, Mods, GameBanana, Storage, Appearance, About), and Game & folders including Move library… (design note first). Game & folders holds only the ZZMI folder and the mod library.
+   - Launching: its own section for phase 2's launch settings, laid out per platform (the artboard's Platform tweak shows both).
+     - Both: XXMI Launcher (`launch_target`, path with a Found line and Change) and Launch arguments (`launch_arguments`, a text field; empty opens the launcher's window).
+     - Linux only, under the line "On Linux the game runs through Proton, so Zenith needs to know how to start XXMI": Use umu-launcher (`wine_use_umu`, with where `umu-run` was found), Proton (`wine_runner`, a dropdown of the builds found plus a folder button) and Wine prefix (`wine_prefix`, Open and Change).
+     - No preview of the command that Launch game runs.
    - Mods: One active per character, Snapshots to keep, Check for mod updates, Remind me to press F10. The reminder's "while the game runs" reads `PlatformService.findGameProcesses`.
    - GameBanana mature content, Appearance, Language.
    - Storage: the bar meter, per-category actions and Largest mods. Storage then leaves the sidebar.
    - About: version, an app update check (GitHub releases, a new network call), links, and app data / logs / system info.
    - Existing settings without a canvas place: auto-tagging goes to Mods, the file-logging switch to About.
-8. **Dialogs and overlays** (artboards `ImportModal`, `UpdateModal`, `UpdateOneModal`, `ReinstallModal`, `TrackingModal`, `EditModal`, `DeleteModal`, `ContextMenu`, `Palette`).
+8. **Dialogs and overlays** (artboards `ImportModal`, `UpdateModal`, `UpdateOneModal`, `ReinstallModal`, `TrackingModal`, `EditModal`, `DeleteModal`, `ContextMenu`, `Palette`, `PatchModal`, `FoldersModal`, `MakePatchModal`).
    - Edit info: rename, cover, author, tags, "Use GameBanana text", key recording, add and remove keys, "Restore the author's keys".
    - Delete goes to the trash.
-   - Right-click menu with Space / F / E / Del shortcuts. Remove patch goes into History and the menu.
+   - Right-click menu with Space / F / E / Del shortcuts. Remove patch goes into History and the menu. The menu also has "Make this a patch for…".
+   - Registering a patch by hand, for when detection misses one:
+     - Make this a patch (`MakePatchModal`): turns an installed mod into a patch. Two radio cards, the same split as the install-time patch dialog, each with its own "What happens":
+       - Put it into a mod you already have: library search and a ranked list with hints, nothing picked. The target is snapshotted, the files go on top with the originals kept, the patch's own folder and its ZZMI link are removed, it shows in the target's History with its tracking, and the target's on/off is unchanged.
+       - Install the mod it patches from GameBanana: search or a pasted link, the linked mod suggested as a hint, a file picked. The patch's folder is snapshotted and stays; the base file goes underneath it in the same folder (the patch wins where both have a file); the mod becomes the base mod with the patch on top, both tracked; it keeps its on/off and its place.
+     - Update tracking (`TrackingModal`) gets an optional step 3, Patches in this folder: patches from other GameBanana pages that were copied in by hand, added from GameBanana and removable. It only records layers; no files are downloaded or changed.
    - Command palette on Ctrl K, with a design note first. This brings back the title bar's search field.
-   - The patch-destination prompt keeps its logic, restyled.
+   - Install a patch (`PatchModal`, the patch-destination prompt): "This looks like a patch", the missing-file count with an expandable list, and two radio cards with Don't install.
+     - Add it to a mod you already have: library search and a ranked list with the match reasons as dashed hints ("Same author", "12 of 14 missing files are here"), nothing picked (`patch-destinations.md`).
+     - Install it as a new mod with the mod it patches: GameBanana search or a pasted link, the patch page's linked mod suggested as a hint, and a file picked from that mod.
+     - The install button names the result ("Patch Winter Maid Uniform", "Install as new mod") and stays disabled until the choice is complete.
+   - Archive with several folders (`FoldersModal`): the archive's folders as checkboxes with a content summary, size and hints ("Looks like preview images"), nothing ticked; One mod or Separate mods; a name and character per resulting mod; the button counts the mods it creates. Where this meets the base-plus-patch combine choice under "Decisions already made", design the overlap in the canvas's style.
 9. **Loadouts** (artboard `Loadouts`), with a design note first.
-10. **First run** (artboard `Onboarding`): ZZMI auto-detection with evidence lines, "Bring in mods you already have", and a language picker on the welcome step.
+10. **First run** (artboards `Onboarding`, `OnboardingLaunch`): ZZMI auto-detection with evidence lines, "Bring in mods you already have", and a language picker on the welcome step.
+    - On Linux a Set up launching step comes after Find ZZMI, making five steps; Windows keeps four (the `Onboarding` artboard's Platform tweak shows both step lists).
+    - Set up launching: the XXMI Launcher found next to ZZMI, the Proton builds found with Recommended on the three named under "Decisions already made", the umu-launcher switch, a suggested new prefix, and launch arguments collapsed. Skip leaves it for Settings.
+    - Two states, behind the artboard's scenario tweak: no Proton found (install links for the three, Check again, choose a folder; Continue disabled) and umu-run not installed (switch off and disabled, Proton started directly, Check again).
 11. **Rename to Zenith:** the application id in its three places, the window title, and the app-data folder moved with a migration. This goes with the v3 release.
 
 ## Open items
 
 - Offer the user a correction of the keybind copy on the canvas's Edit info and Reinstall artboards.
+- The install links in `OnboardingLaunch`'s no-Proton state point at a placeholder; the user supplies the real Proton-GE, Proton-Cachy and DWProton pages. The Proton-Cachy folder name on the canvas is a guess.
+- Ask the user whether the Settings Proton dropdown also marks the recommended builds.
+- Phase 3 follow-up, the details panel: a "Made of N mods" list (base first, patches on top; each with a Base or Patch badge, its name, file, author and upload date) and a "Manage in History" link, between the keys and the facts. It shows only when more than one download is registered on the mod (`origin.downloads`).
+- The status bar's "Watching library for changes" and the library file watcher behind it have no phase yet; give them one before phase 7, whose Settings may want a switch for it.
 - The existing screens still hold about 177 `Color(0x…)` literals and sky-blue gradients. Each goes when its screen is rebuilt.
 - The canvas's search field in the title bar waits for the palette in phase 8.
 - **Launch game follow-up: the app knows whether the game is running.** Design note first, in `launch-game.md`.
