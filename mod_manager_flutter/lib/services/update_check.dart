@@ -568,6 +568,27 @@ UpdateCheck foldDownloads(List<DownloadCheck> layers) {
   return winner.check.asSubject(winner.download.modId, layers);
 }
 
+/// Applies a dismissal to one identity's verdict and folds the folder again,
+/// with no mod page in hand: what the update dialog and the History tab of the
+/// mod's page store after writing or taking back a dismissal.
+///
+/// [subject] names the layer the user pressed. A folder with one layer folds
+/// to that layer, so this is `asDismissed` on the one verdict there is.
+///
+/// **Re-folded rather than patched in place**, because a dismissal can change
+/// which layer wins: a live finding beats a dismissed stronger one, so
+/// silencing the winner has to let another layer through.
+UpdateCheck refoldDismissal(UpdateCheck folded, int? subject, bool dismissed) {
+  if (folded.layers.length < 2) return folded.asDismissed(dismissed);
+  return foldDownloads([
+    for (final layer in folded.layers)
+      DownloadCheck(
+        download: layer.download,
+        check: layer.download.modId == subject ? layer.check.asDismissed(dismissed) : layer.check,
+      ),
+  ]);
+}
+
 /// The comparison itself, for **one** download against **one** mod page.
 ///
 /// Takes a layer rather than a folder, which is what makes it the same code for

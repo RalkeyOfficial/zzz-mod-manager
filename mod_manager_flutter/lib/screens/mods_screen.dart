@@ -50,6 +50,8 @@ import 'dialogs/reinstall_flow.dart';
 import 'dialogs/remove_patch_flow.dart';
 import 'dialogs/rename_mod_dialog.dart';
 import 'dialogs/resolve_origin_dialog.dart';
+import 'dialogs/restore_snapshot_flow.dart';
+import 'mod_page/mod_page.dart';
 
 final Logger _log = Logger('mods');
 final Logger _files = Logger('fileops');
@@ -230,6 +232,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
     );
     final selected = ref.read(selectedModIdProvider.notifier);
     if (selected.state == oldId) selected.state = newName;
+    final page = ref.read(openModPageProvider.notifier);
+    if (page.state case final open? when open.modId == oldId) {
+      page.state = ModPageRequest(newName, tab: open.tab, pageKey: open.pageKey);
+    }
     _publish(allMods);
   }
 
@@ -270,6 +276,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
   void _onModDeleted(String modId) {
     final selected = ref.read(selectedModIdProvider.notifier);
     if (selected.state == modId) selected.state = null;
+    final page = ref.read(openModPageProvider.notifier);
+    if (page.state?.modId == modId) page.state = null;
     final allMods = _currentAllMods();
     if (allMods == null) {
       unawaited(loadMods());
@@ -401,6 +409,15 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
 
   void _select(ModInfo mod) => ref.read(selectedModIdProvider.notifier).state = mod.id;
 
+  /// Shows [mod]'s page in place of the character view, on [tab]. The mod stays selected, so going back shows it in
+  /// the details panel.
+  void _openPage(ModInfo mod, ModPageTab tab) {
+    ref.read(selectedModIdProvider.notifier).state = mod.id;
+    ref.read(openModPageProvider.notifier).state = ModPageRequest(mod.id, tab: tab, pageKey: mod.uid ?? mod.id);
+  }
+
+  void _closePage() => ref.read(openModPageProvider.notifier).state = null;
+
   /// Opens the resolve dialog and rescans if it wrote anything — the status
   /// badge is drawn from `ModInfo.origin`, which only a scan refreshes.
   Future<void> _resolveOrigin(ModInfo mod) async {
@@ -457,6 +474,19 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
     }
   }
 
+  /// Takes back an ignored update on one of the folder's downloads (`stopIgnoringUpdate`). Ignoring stays in the
+  /// update dialog, where the finding is read before it is waved away (`docs/update-checks.md` §6).
+  Future<void> _stopIgnoring(ModInfo mod, ModDownload download) async {
+    final subject = download.modId;
+    if (subject == null) return;
+    final notify = context.notify;
+    final failedTitle = loc.t('library.history.stop_ignoring_failed_title');
+    final container = ProviderScope.containerOf(context, listen: false);
+    if (!await stopIgnoringUpdate(container, mod: mod, subject: subject)) {
+      notify.error(failedTitle, body: mod.name, characterId: mod.characterId);
+    }
+  }
+
   /// Takes one patch back out of a folder and rescans, since the card's status
   /// badge is drawn from `ModInfo.origin`.
   ///
@@ -467,8 +497,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
     final name = downloadName(context.loc, patch,
         folderName: mod.name,
         fetched: ref.read(knownModPagesProvider)[patch.modId]?.name);
-    if (await removePatchFlow(context, ref,
-        mod: mod, patch: patch, patchName: name)) {
+    // The flow reaches the library itself; this rescan is only for a page still showing.
+    if (await removePatchFlow(context, mod: mod, patch: patch, patchName: name) && mounted) {
       await loadMods();
     }
   }
@@ -532,11 +562,23 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
         .where((m) => m.id == selectedId)
         .firstOrNull;
 
+    final request = ref.watch(openModPageProvider);
+    final pageMod = request == null ? null : ref.watch(modsProvider).where((m) => m.id == request.modId).firstOrNull;
+    // A mod gone from a scanned library, removed outside the app, takes its page with it.
+    if (request != null && pageMod == null && ref.watch(libraryProvider).hasValue) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && ref.read(openModPageProvider) == request) _closePage();
+      });
+    }
+
     // **One scroll view for the whole page**: the header and the row of filters scroll away with the mods, so a
     // window at its minimum size still shows some. Fixed above the grid, the two take more than such a window has.
     final page = KeyedSubtree(
       key: ValueKey('character_$current'),
       child: DropTarget(
+        // Off under a mod's page: the hidden view still has its bounds, and a drop there would import under a
+        // character the user can't see.
+        enable: pageMod == null,
         onDragEntered: (_) => setState(() => _isDragging = true),
         onDragExited: (_) => setState(() => _isDragging = false),
         onDragDone: (details) => _importModsFromFolders(details.files),
@@ -566,6 +608,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
         // the filter, the key is the field's paste.
         final focused = FocusManager.instance.primaryFocus?.context;
         if (focused?.findAncestorStateOfType<EditableTextState>() != null) return KeyEventResult.ignored;
+        // The import files under the character on screen, and a mod's page shows none.
+        if (pageMod != null) return KeyEventResult.ignored;
         if (event is KeyDownEvent) {
           final isControlPressed =
               HardwareKeyboard.instance.isControlPressed ||
@@ -577,7 +621,44 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
         }
         return KeyEventResult.ignored;
       },
-      child: Row(
+      // The character view stays mounted under a mod's page, so the grid keeps its scroll position and the panel its
+      // state; hidden, it is kept out of Tab's reach too.
+      child: IndexedStack(
+        index: pageMod == null ? 0 : 1,
+        sizing: StackFit.expand,
+        children: [
+          ExcludeFocus(excluding: pageMod != null, child: _characterView(page, selected)),
+          if (pageMod == null)
+            const SizedBox.shrink()
+          else
+            LibraryModPage(
+              // Fixed when the page opened, so a rename or a newly assigned uid keeps it on its tab with nothing fetched
+              // again.
+              key: ValueKey('page_${request!.pageKey}'),
+              mod: pageMod,
+              initialTab: request.tab,
+              onBack: _closePage,
+              onToggle: () => toggleMod(pageMod),
+              onFavoriteToggle: () => _toggleFavorite(pageMod),
+              onEdit: () => _showEditDialog(pageMod),
+              onEditKeys: () => showKeybindsDialog(context, pageMod, onSaved: () => unawaited(loadMods())),
+              onOpenFolder: () => _openModFolder(pageMod),
+              onCheckForUpdate: () => unawaited(_checkForUpdate(pageMod)),
+              onResolveOrigin: () => unawaited(_resolveOrigin(pageMod)),
+              onDelete: () => unawaited(_deleteMod(pageMod)),
+              onReinstall: () => unawaited(_reinstall(pageMod)),
+              onRestore: (snapshot) => unawaited(restoreSnapshotFlow(context, mod: pageMod, snapshot: snapshot)),
+              onTakeOut: (patch) => unawaited(_removePatch(pageMod, patch)),
+              onStopIgnoring: (download) => unawaited(_stopIgnoring(pageMod, download)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// The character list, and the character on screen with their mods and the details panel.
+  Widget _characterView(Widget page, ModInfo? selected) {
+    return Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           CharacterList(onRetag: (mod, groupId) => unawaited(_retag(mod, groupId))),
@@ -595,6 +676,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
                             : ModDetailsPanel.defaultWidth,
                         mod: selected,
                         onClose: () => ref.read(selectedModIdProvider.notifier).state = null,
+                        onOpenPage: (tab) => _openPage(selected, tab),
                         onToggle: () => toggleMod(selected),
                         onFavoriteToggle: () => _toggleFavorite(selected),
                         onEdit: () => _showEditDialog(selected),
@@ -641,8 +723,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
             ),
           ),
         ],
-      ),
-    );
+      );
   }
 
   /// The mods under the header and the filter row, as slivers of the page's one scroll view; or what stands in

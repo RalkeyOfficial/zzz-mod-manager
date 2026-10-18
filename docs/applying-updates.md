@@ -739,7 +739,9 @@ The numbers are **not user-configurable**; add a setting only if it is actually 
 ### Rollback
 
 Reachable from a mod's right-click menu, and only for mods that have a snapshot (one
-`readdir` of the backups root answers that for the whole library). If restoring meant
+`readdir` of the backups root answers that for the whole library), and from the
+History tab of the mod's page, which lists each snapshot with a Restore
+([`library-screen.md`](library-screen.md) §15). Both run `restoreSnapshotFlow`. If restoring meant
 finding `<appData>/backups/` in a file manager, "recoverable from the snapshot" would
 not be a real answer to a user who has just lost a mesh fix.
 
@@ -838,6 +840,11 @@ something newer.
 It needs its own surface because the update dialog appears when there is a *finding*,
 and a repair is wanted precisely when there is none — a mod broken by a game patch, a
 file deleted by accident, an edit that went wrong.
+
+**It is offered only for a confirmed file on a tracked mod** (`canReinstall`), in the
+right-click menu and on the History tab of the mod's page alike. A file id that was only
+worked out would write that guess over the folder, which "guesses may inform, never
+drive" refuses, and a mod marked Local was said not to come from its page.
 
 Two things it is not:
 
@@ -1016,13 +1023,14 @@ update set the patch aside and what makes the confirmation warn when it cannot, 
 dropping it while the files stayed took the patch's only protection away
 ([`origin-tracking.md` §10](origin-tracking.md#taking-a-patch-out)).
 
-**Two ways in, offering the same set.** The card's right-click menu names each
-removable patch, and the update dialog carries the same entry on the patch's own
+**Three ways in, offering the same set.** The card's right-click menu names each
+removable patch, the History tab of the mod's page gives each one a Take out
+([`library-screen.md`](library-screen.md) §15), and the update dialog carries the same entry on the patch's own
 layer — in a menu beside that layer's ↗, not in the row of update buttons under
 it: those act on the release being reported, this acts on whether the folder
 holds the patch at all. It is the surface that matters most for the case, since a
 patch somebody no longer has is usually noticed when something offers to update
-it. Both ask `removablePatches`, so neither can offer what the other refuses, and
+it. All three ask `removablePatches`, so none can offer what another refuses, and
 the dialog closes after a removal because the layers it drew are what changed.
 
 ---

@@ -383,7 +383,8 @@ Six rules:
   quiet. The dialog goes on saying what is published, because "there is an
   update and you dismissed it" and "there is nothing new" are different facts,
   and someone reopening that dialog is usually there to change their mind. The
-  undo sits where the dismissal did.
+  undo sits where the dismissal did, and on the History tab of the mod's page
+  ([`library-screen.md`](library-screen.md) §15).
 - **A finding with no date is never suppressed.** If a dismissal cannot be shown
   to cover it, it does not.
 - **It is dropped when the folder is rebound** to a different mod, like every
@@ -776,11 +777,17 @@ to tell which press was which. Re-checking the whole library, cache and all, is
 the toolbar button's job.
 
 **"Ignore this update" and its undo live here**, and the dialog is the only
-place either appears — ignoring from the card would mean dismissing something
+place the ignore appears — ignoring from the card would mean dismissing something
 the user has not read. It writes to the sidecar, so the dialog reports back
 whether it wrote anything and the mods screen rescans on the way out; the status
 slot is drawn from `ModInfo.origin`, which only a scan re-reads. See
 [§4](#4-dismissing-an-update) for what it stores and why it is a date.
+
+The undo is also on the History tab of the mod's page
+([`library-screen.md`](library-screen.md) §15): taking a dismissal back only
+brings the badge back, so it needs no finding read first. It re-folds the
+session's verdict with the same `refoldDismissal` the dialog uses, so the badge
+speaks up without another check.
 
 The label is worth guarding. It was "Not now", which reads as a deferral, and
 this is not one: it is permanent until the author publishes something newer.

@@ -56,6 +56,7 @@ void main() {
     ModInfo target, {
     Map<int, GbMod> sessionRecords = const {},
     Map<String, UpdateCheck> sessionChecks = const {},
+    ValueChanged<ModPageTab>? onOpenPage,
   }) async {
     await pumpLocalized(
       tester,
@@ -64,6 +65,7 @@ void main() {
         child: ModDetailsPanel(
           mod: target,
           onClose: () {},
+          onOpenPage: onOpenPage ?? (_) {},
           onToggle: () {},
           onFavoriteToggle: () {},
           onEdit: () {},
@@ -210,8 +212,16 @@ void main() {
       expect(find.byTooltip("Open this mod's page"), findsOneWidget, reason: 'only the base has a page');
     });
 
-    testWidgets('Manage in History is offered when the mod has a page', (tester) async {
-      await open(tester, mod(origin: origin(patches: [patch])));
+    testWidgets('Manage in History opens the History tab of the mod\'s page', (tester) async {
+      ModPageTab? opened;
+      await open(tester, mod(origin: origin(patches: [patch])), onOpenPage: (tab) => opened = tab);
+
+      await tester.tap(find.text('Manage in History'));
+      expect(opened, ModPageTab.history);
+    });
+
+    testWidgets('Manage in History is offered for a stack with no page of its own', (tester) async {
+      await open(tester, mod(origin: originFixture(source: null, patches: [patchFixture(modId: null)])));
 
       expect(find.text('Manage in History'), findsOneWidget);
     });

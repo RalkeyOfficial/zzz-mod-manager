@@ -1,6 +1,6 @@
 # The library screen — the character view and its surfaces
 
-**Scope:** the Library's character view — the character list, a character's header, the mod grid with its card and status badge, the row above the grid with the library menu's bulk actions, One at a time, notes, the details panel, and the dialogs reached from a mod.
+**Scope:** the Library's character view — the character list, a character's header, the mod grid with its card and status badge, the row above the grid with the library menu's bulk actions, One at a time, notes, the details panel, a mod's page with its History tab, and the dialogs reached from a mod.
 
 Not in scope: the rules about origin *states* and what each answer may write ([`origin-tracking.md`](origin-tracking.md) §4–§5), the update comparator ([`update-checks.md`](update-checks.md)), or how an update is written to disk ([`applying-updates.md`](applying-updates.md)).
 What follows is only what is specific to these widgets.
@@ -20,6 +20,7 @@ The page itself holds only the drag-and-drop state and the guard against two ope
 
 The panel shows a mod of the character on screen. Picking another character closes it, and the selection is kept, so going back to that character opens it again.
 At the smallest window the panel is no wider than the page it is drawn over.
+A mod's page (§15) takes the place of all three columns while it is open.
 
 **Opening, closing or moving the panel leaves the page where it is in the tree.** The page is always the first child of the same stack, and the panel joins that stack or the row beside it.
 A different parent for each would throw the page away on every press of a card, taking its scroll position and every card's state with it. The panel keeps its own state as it moves between beside and over, through a `GlobalKey`.
@@ -199,7 +200,7 @@ Turning the first off by hand, then the second on, works. The dry run treating f
 
 ## 11. Notes
 
-The details panel has a **Note** field: free text the user writes about a mod for themselves ("use with the white hairpin").
+The details panel and the Note tab of a mod's page (§15) have a **Note** field: free text the user writes about a mod for themselves ("use with the white hairpin").
 
 **It is stored in `config.json` as `mod_notes`, a map from mod folder name to text, never in the sidecar.** A note is this user's opinion, like a favourite, and the sidecar travels with the folder when it is zipped or shared ([`metadata-schema.md`](metadata-schema.md) §1). Rejected: the sidecar, where a note would arrive in someone else's library and a snapshot restore would put back the note from before the snapshot.
 
@@ -209,7 +210,7 @@ What follows from the key being the folder name, the same as `favorite_mods`:
 - deleting the mod removes its note;
 - a folder renamed outside the app leaves its note behind under the old name, where it comes back if the name does.
 
-The note is saved when typing pauses, when the user clicks elsewhere, and when the panel moves to another mod or closes, so there is no Save button. Text that is empty once trimmed removes the entry.
+The note is saved when typing pauses, when the user clicks elsewhere, and when the panel moves to another mod or closes or the page's tab changes, so there is no Save button. Text that is empty once trimmed removes the entry.
 It is published to `modNotesProvider` before it is written, so a field rebuilt for the same mod while the write is in flight shows what was typed.
 A saved note is on screen as typed, so only a failed save is reported ([`notifications.md`](notifications.md) §1), including one made as the panel closed.
 
@@ -219,11 +220,12 @@ A saved note is on screen as typed, so only a failed save is reported ([`notific
 
 From the top: the gallery (the cover, with the rest as thumbnails; pressing the cover opens it large over a dark backdrop, and a tap anywhere closes it), the name and, once the session holds the page, its author;
 the description, folded to three lines of its own text size, with More and Less; the tags, as badges; **Active in game** with its own switch; the in-game keys from the mod's `.ini`;
-the shader-fixes line and, for a folder that holds more than one download, **Made of N mods**; the facts; the folder's path; the note. Along the bottom: Open folder, Check for updates, Delete.
+the shader-fixes line and, for a folder that holds more than one download, **Made of N mods**; the facts; the folder's path; the note. In the header: the favourite star, Edit info, the full-page button that opens the mod's page (§15), and Close. Along the bottom: Open folder, Check for updates, Delete.
+The pieces it shares with the mod's page (description, Active box, keys, Made of, facts, note) live in `components/mod_detail_parts.dart`.
 
 **It never fetches.** A mod is selected far more often than a dialog is opened, and a mod selected in passing should not spend a request nobody asked for.
 So the facts that live only on the mod page (the file's name, its upload date, the author) appear once this session holds the page, and are absent before.
-The session holds a page once an update check fetched it, or the install or a dialog did (`knownModPagesProvider`), so a mod installed a moment ago already names them.
+The session holds a page once an update check fetched it, or the install, a dialog or the mod's page did (`knownModPagesProvider`), so a mod installed a moment ago already names them.
 File and Uploaded also need the file on record to be confirmed (`exact` or `user`), as the card's "file from" does: a file only worked out is not stated as the file.
 
 **The name is the type scale's `titleLarge`, 17px, where the canvas draws 18px.** The type scale has no 18px role, so the difference is kept on purpose rather than adding a size for one line.
@@ -234,15 +236,15 @@ File and Uploaded also need the file on record to be confirmed (`exact` or `user
 | Variant | the recorded version label, when there is one |
 | Uploaded | for a confirmed file only, the file's date, with "nothing newer" or "a newer file is out" when the last check said so about the base mod; a patch's verdict is never put on the base mod's file |
 | Tracking | GameBanana · change, Not tracked · set up, or Local · change; the second half opens the resolve dialog |
-| Added | the install date, "about" when it is the oldest file's date standing in for one |
+| Added | the install date, whether the app saw the install or worked it out from the oldest file |
 | Size | the mod's own files, as in the header |
 
 - **Check for updates is offered only with an identity to check**, and not for a mod marked Local, which is never checked; for either the update dialog would say so and nothing else, and Tracking's "set up" or "change" is the way in.
-- **Ignoring an update is not here.** It lives in the update dialog with its undo, where the finding is read before it is waved away ([`update-checks.md`](update-checks.md) §6).
+- **Ignoring an update is not here.** It lives in the update dialog with its undo, where the finding is read before it is waved away ([`update-checks.md`](update-checks.md) §6). Taking one back is also on the History tab of the mod's page (§15).
 - **Made of N mods lists the folder's stack** (`origin.downloads`), base first and patches on top, and is absent for a folder with one download ([`origin-tracking.md`](origin-tracking.md) §10).
   Each row has a Base or Patch badge, the name, which links to its page, and, once the session holds that layer's page, its author and, for a confirmed file, the file's name and upload date. A patch's file is never put on the base's row.
   The name is the page's when it is in hand, else the one saved with the layer (`ModDownload.name`), else the id. It is never the folder name for a layer with an id: a patch installed as its own folder names the folder after the patch's archive ([`origin-tracking.md`](origin-tracking.md) §10).
-  "Manage in History" under the list opens the mod's GameBanana page, and is offered only while there is one.
+  "Manage in History" under the list opens the History tab of the mod's page (§15), where a patch is taken out, for every folder the list shows.
 - **In-game keys leave out the `no_` tokens**, which name a modifier that must *not* be held, so the caps show what to press.
 - **The path is shortened to `~` inside the home folder**, as the status bar shortens it, and **copies itself in full when pressed**. That success is reported: the clipboard can't be seen.
 - **Edit info** opens the edit dialog for character, description, tags and pictures.
@@ -257,7 +259,7 @@ File and Uploaded also need the file on record to be confirmed (`exact` or `user
   The header doubles as the section divider and as the thing that *fetches* on the badge path, so one gesture does both.
 - **`update_confirm_dialog.dart` is the last screen before a live install is touched**, and everything on it is something that cannot be said afterwards: the snapshot, the accepted keybind loss, a patch-shaped download, and the one question it asks.
   It offers **no way to proceed** against an unreconcilable layout — an "install anyway" there would invite the user to guess where the app refused to.
-- **`mod_backups_dialog.dart`** is the rollback, reachable from the context menu only for mods that have a snapshot (`modBackupsProvider`, one readdir for the whole library).
+- **`mod_backups_dialog.dart`** is the rollback, reachable from the context menu only for mods that have a snapshot (`modBackupsProvider`, one readdir for the whole library). The History tab of a mod's page (§15) restores one snapshot through the same `restoreSnapshotFlow`, and the confirmation says a restore removes what was added to the folder since, files the user put there included.
 - **`dialogs/download_with_progress.dart` is the app's last *foreground* download**, and the exception rather than the rule — every marketplace download runs in the background queue.
   Applying an update is a conversation (fetch, show what is about to be written over a live mod, write only if they agree), and holding that open across a page switch would mean asking about a mod the user has navigated away from.
   It still goes through the queue, exempt from the concurrency cap on the way in — see [`downloads.md`](downloads.md) §7.
@@ -281,3 +283,44 @@ File and Uploaded also need the file on record to be confirmed (`exact` or `user
   Every selected row carries a chip naming what put it there, so "on record" and "our best guess" cannot be confused — the ambiguity worth removing is *what selected this*, not *that something is selected*.
   `_hasSomethingToSave` asks the write path (`OriginResolution.pickFile`) whether the result would differ rather than re-deriving the rule, because the interesting cases are not obvious: re-picking an `inferred` row looks like a no-op but is the confirmation that tier waits for.
 - **`ResolveOriginGateway` is the local-side seam.** Calling `ApiService` straight from a dialog is this codebase's convention (delete, rename and edit all do) and the default keeps it — but `ApiService` lazily builds a `ConfigService` that writes the developer's **real** `<appData>/config.json`, so a widget test that merely mounted this dialog would clobber their library paths and favourites.
+
+## 15. A mod's page
+
+`mod_page/mod_page.dart` and `mod_page_history.dart`: one mod with the room the panel doesn't have. The details panel's full-page button opens it on Overview, and the panel's "Manage in History" on History.
+
+**It shows in place of the character view, as state rather than a route.** `openModPageProvider` holds the mod and the tab it opened on, as the marketplace's open mod does; the character view stays mounted under it in an `IndexedStack`, kept out of Tab's reach, so going back finds the grid scrolled where it was and the mod still in the panel.
+The hidden view takes no drop and no Ctrl+V while the page shows: it still has its bounds, and an import there would be filed under a character the user can't see.
+The provider outlives the page, so leaving the Library and coming back through the sidebar's Characters row shows the same mod. The page's Back button, its breadcrumb, the Characters row pressed while the Library is showing, and the Updates row close it, Updates because the characters with an update are what it shows.
+The page is keyed by what `ModPageRequest.pageKey` fixed when it opened, the folder's uid or its id when it has none yet, so neither a rename nor a uid the first snapshot assigns sends it back to its first tab or fetches again; a mod deleted or gone from a scan closes it.
+
+**Opening it fetches.** The GameBanana page of each download in the folder and the base mod's update feed are fetched once, through the client's response cache, and the pages join `knownModPagesProvider`, so the details panel and the card name the file too. Each download's saved name is rewritten from its page, as after a check.
+The panel never fetches because a mod is selected in passing far more often than looked at; opening this page is asking to look at it. A mod marked Local, or with no page, fetches nothing, and a page that fails to load leaves the facts it would have filled absent, with only a log line.
+Tracking › change can point the mod at another page, mark it Local or set it up while the page is open, so a change to the tracking or to the pages its downloads name drops the post in hand and fetches again; a fetch that lands after such a change is dropped.
+
+**The note follows the other field.** The panel's note field stays alive under the page, so each field takes the note the other saved whenever it isn't the one being typed in; otherwise the panel would show the note from before and save over the page's on the next keystroke.
+
+**At the top**, the pictures one at a time with arrows and a count, a picture opening large when pressed; beside them the badges (Active, the status badge or "GameBanana" for a tracked mod with nothing to report, the character), the name in the type scale's 30px page title, the favourite star (framed whether starred or not), the author with the file's upload date and "installed on" the install date, the Active box, and Edit info, Open folder, Mod page (the GameBanana page, when there is one), Check for update and Delete.
+In the Active box of an agent with One at a time on, the line under "Active in game" says turning it off "leaves the default look": the canvas's "leaves her on the default look" assumes a pronoun, which the app does not.
+
+**The tabs**, with In the folder beside each tab's content once the content area is at least 848px wide, and under it below that:
+
+- **Overview**: the description in full, the tags, the shader-fixes line, Made of N mods (its link switches to History) and the facts.
+- **In-game keys**: every key the `.ini` binds, and Change keys, which opens the keybinds dialog, with a line saying a change needs F10 in game.
+- **History**, below.
+- **Note**: the note of §11, with room to write.
+
+**In the folder** is the side column on every tab: what the sidecar keeps through an update and what the app keeps outside the folder, then Stored at (the library folder, shortened to `~`), Linked as (the link from the ZZMI folder down, `ZZMI/Mods/<folder>` as the canvas writes it, or "not linked" while off) and Tracking, with the file's name for a confirmed file.
+The canvas's "Manager data holds your note, the source link and version history" is not drawn: the note lives in `config.json` (§11), the link is built from the mod id, and snapshots live in `<appData>/backups`.
+
+### History
+
+- **Installed files**: the file in use, then each snapshot newest first (`modSnapshotsProvider`, rebuilt whenever `modBackupsProvider` is invalidated).
+  The file in use is named from the page in hand, for a confirmed file only, with "File not known yet" otherwise. Reinstall shows under the same gate as the right-click menu's, `canReinstall`: a recorded file id that is confirmed, and tracking on ([`applying-updates.md`](applying-updates.md) §6).
+  A snapshot is named by the file its own copy of the sidecar recorded, when that file is confirmed and its page is in hand, and otherwise by the time it was saved, with why ("before an update", "before a restore", "before a patch was taken out") and its size. Restore runs `restoreSnapshotFlow`, the same confirmation and write as the backups dialog.
+  The line above says only what holds whatever the retention does: older snapshots are cleared as the store fills, and the newest is always kept ([`applying-updates.md`](applying-updates.md) §5). The age floor, the count and the 5 GB budget can all prune, so no number is stated. Snapshots are of the whole folder, so the canvas's "an update keeps the file it replaces" is not said, and the canvas's "change" link has no setting to open.
+- **Latest update post**: the newest post in the base mod's feed that has text or a change list, its title, change list and text folded to three lines.
+- **Patches on top**, in stack order, "applied over the current file" as the canvas says: each patch's name, file, author, upload date, its files added and replaced counted from its file registry, and whether it is tracked. Take out shows only for a patch `removablePatches` lists and runs `removePatchFlow`; a patch with no file registry, or no page on record, says why it can't be taken out here ([`origin-tracking.md`](origin-tracking.md) §10).
+- **Ignored update**, one row per download with `updates_dismissed_until`: the files this session's check listed, when it did, and "Ignoring files uploaded up to <date>". **Stop ignoring** takes the dismissal back (`stopIgnoringUpdate`): the same `withDismissal` write as the update dialog, and the session's verdict re-folded with `refoldDismissal` as the dialog's undo does, since the badge reads that verdict and a rescan alone would leave it quiet until the next check.
+  Ignoring stays in the update dialog only, where the finding is read before it is waved away; taking it back costs nothing to undo, since the badge only comes back, so it is offered here too ([`update-checks.md`](update-checks.md) §6).
+  The heading's note says the ignored files stay installable and anything newer brings the mark back. The canvas's "Ignored on <date> · these files won't be offered again" is not drawn: the sidecar stores the upload date the ignore covers up to, not the day it was pressed, and the files are offered again.
+- **One write at a time.** A restore, a patch removal or Stop ignoring puts the mod in `modWritesInProgressProvider` while it writes, and History's buttons are held until it is done: nothing else on screen shows the write is running, and a second write into the folder would snapshot it half done. Reinstall has its own progress dialog. The restore and removal flows read the app's container rather than the page's `ref`, so leaving the Library mid-write still reports the result, refreshes the snapshot list and rescans.

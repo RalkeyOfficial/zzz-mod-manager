@@ -77,21 +77,25 @@ The memory note `v3-canvas-vs-docs-decisions` holds these. In short:
   - Interim until phase 5: the library menu (check, sort out tracking, mark all as current, read again) is a ⋯ button in the row above the grid, and the tracking reminder sits under that row. The Library has no search or tag filter until the palette (phase 8) and the All mods table (phase 5).
   - The author line and the File / Uploaded facts show only once a check has the mod page in hand; phase 8's Edit info adds an author field of its own.
   - The roster's attributes, factions and roles are for the user to verify (Phoenix and Severian are unreleased; Belle and Wise are set to Phaethon with no attribute).
+  - The details panel's "Made of N mods" list, committed (`36b59bc`): between the keys and the facts, base first and patches on top, each with a Base or Patch badge, its name, file, author and upload date, and a "Manage in History" link. It shows only when more than one download is registered on the mod (`origin.downloads`).
+    - The panel draws its own list (`ModMadeOf` in `mod_detail_parts.dart`); `FolderDownloadsSummary` stays for the resolve dialog.
+    - Like the facts, a row's file, author and date come from a page the session holds (fetched by a check, an install or a dialog), and the file and its date only for a confirmed file. A row's name links to its GameBanana page; a patch with no page reads "Patch from a local file".
+    - Decided with the user: each download saves its page's title as `name` in the sidecar, a display copy that every fetch rewrites. Without it, a patch installed as its own folder listed the base by the patch's file name and the patch by its id until a check ran, since the folder takes the patch's archive name. No row uses the folder name for a layer with an id.
+    - Not changed, and for the user to decide: that same folder's description and pictures come from the patch's page.
+
+- **Phase 4, Mod page** (artboard `ModPage`): built, reviewed and committed (the commit after `ab3fc69`). Written up in `library-screen.md` §15.
+  - The page shows in place of the character view through `openModPageProvider`, with the character view kept mounted under it; the panel's full-page button opens it on Overview and "Manage in History" on History, for every stacked mod.
+  - The canvas draws only History. Overview (description, tags, Made of, facts), In-game keys (the list, Change keys opening the keybinds dialog, an F10 line) and Note were designed in its style, with "In the folder" as the side column on every tab.
+  - Decided with the user: opening the page fetches each download's GameBanana page and the base mod's update feed (Local and pageless mods fetch nothing); Stop ignoring is on History, while Ignore stays in the update dialog only; the install date reads "installed on <date>" on the page and as the bare date in the facts, however it was worked out.
+  - Decided without asking: canvas copy that contradicted the docs is rewritten (snapshots are of the whole folder; taking a patch out also deletes what it added; an ignored update stays installable and lapses on anything newer; the note and snapshots live outside the folder). The retention line states no numbers ("older snapshots are cleared as the store fills; the newest is always kept") and has no "change" link until phase 7 adds the setting. A snapshot is named by its sidecar's file when that page is held, else by when it was saved. The page's mod name got a 30px `ZenithType.pageTitle` and its empty gallery a 120px `watermarkMedium`.
+  - From review: the panel's note follows the page's; Stop ignoring re-folds the session verdict so the badge returns; restore and patch removal read the app's container and hold History's buttons while they write (`modWritesInProgressProvider`); the page refetches when the tracking changes and keeps a key fixed at opening (`ModPageRequest.pageKey`); drops and Ctrl+V are off under the page; Reinstall needs a confirmed file on a tracked mod in the menu and on History (`canReinstall`); the Characters row closes the page only when the Library is showing; links take the text colour on hover (`ZenithLink`). Canvas values matched: framed star, 12px gaps, `dialog`/`check`/`control` tokens, 14/16 Active box, radius 12 boxes, 12px side notes on the page and 11px regular ones in the panel.
+  - The restore confirmation is shared with the backups dialog (`restoreSnapshotFlow`) and says a restore removes what was added since. Snapshots taken before a patch removal are labelled as such.
+  - Not yet compared with the canvas on screen: KDE asks before xdotool may drive the window.
 
 ## Phases left
 
 Each is reviewable on its own and ends with tests green, docs and changelog updated, and the user's go-ahead.
 
-- **Phase 3 follow-up, details panel** (artboard `Main`): a "Made of N mods" list between the keys and the facts, base first and patches on top, each with a Base or Patch badge, its name, file, author and upload date, and a "Manage in History" link. It shows only when more than one download is registered on the mod (`origin.downloads`). The link lands on phase 4's History; until then it opens the mod's current page.
-  - Built, not committed, waiting on the user. The panel draws its own list (`_MadeOf` in `mod_details_panel.dart`); `FolderDownloadsSummary` stays for the resolve dialog, without the "why two" hint the panel used to show.
-  - Like the facts, a row's file, author and date come from a page the session holds (fetched by a check, an install or a dialog), and the file and its date only for a confirmed file. A row's name links to its GameBanana page, as the old rows' ↗ button did; a patch with no page reads "Patch from a local file".
-  - Phase 4 points "Manage in History" at the Mod page's History tab and shows it for every stacked mod, not only one with a page.
-  - Decided with the user: each download saves its page's title as `name` in the sidecar, a display copy that every fetch rewrites, reversing the old "nothing stores a name" rule. The cause was a patch installed as its own folder: the folder takes the patch's archive name, so the base was listed by the patch's file name and the patch by its id until a check ran. No row uses the folder name for a layer with an id any more.
-  - Not changed, and for the user to decide: that same folder's description and pictures come from the patch's page.
-
-4. **Mod page** (artboard `ModPage`).
-   - A page route inside Library with Overview, In-game keys, History and Note tabs.
-   - History: installed files with Reinstall and Restore (snapshots exist), the latest update post, Patches on top (each patch layer with its file, author, upload date, files added and replaced, and Take out), the ignored update with Stop ignoring, and the In-the-folder facts.
 5. **All mods table and Updates** (artboard `AllMods`).
    - Table with multi-select and bulk Enable / Disable / Check / Add to loadout (hidden until phase 9) / Delete.
    - Filters: All, Active, Off, Updates, Folder missing, Favourites, Not tracked.

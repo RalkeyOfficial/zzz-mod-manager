@@ -147,8 +147,9 @@ class _PressableBadgeState extends State<_PressableBadge> {
   );
 }
 
-/// Text that does something when pressed, in [style] (the link colour by default). Reachable with Tab and pressed
-/// with Enter or Space, with the badge's accent ring while it has keyboard focus.
+/// Text that does something when pressed, in [style] (the link colour by default), turning the text colour under the
+/// pointer as the design's links do. Reachable with Tab and pressed with Enter or Space, with the badge's accent ring
+/// while it has keyboard focus.
 class ZenithLink extends StatefulWidget {
   const ZenithLink(this.label, {super.key, required this.onTap, this.style});
 
@@ -162,14 +163,17 @@ class ZenithLink extends StatefulWidget {
 
 class _ZenithLinkState extends State<ZenithLink> {
   bool _focused = false;
+  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
     final palette = ZenithPalette.of(context);
+    final style = widget.style ?? TextStyle(color: palette.link);
     // The semantics inside the focus widget, so the node keeps its focusable flag.
     return FocusableActionDetector(
       mouseCursor: SystemMouseCursors.click,
       onShowFocusHighlight: (focused) => setState(() => _focused = focused),
+      onShowHoverHighlight: (hovered) => setState(() => _hovered = hovered),
       actions: {ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) => widget.onTap())},
       child: Semantics(
         link: true,
@@ -184,7 +188,7 @@ class _ZenithLinkState extends State<ZenithLink> {
               borderRadius: BorderRadius.circular(4),
               border: _focused ? Border.all(color: palette.accent, width: 2) : null,
             ),
-            child: Text(widget.label, style: widget.style ?? TextStyle(color: palette.link)),
+            child: Text(widget.label, style: _hovered ? style.copyWith(color: palette.text) : style),
           ),
         ),
       ),

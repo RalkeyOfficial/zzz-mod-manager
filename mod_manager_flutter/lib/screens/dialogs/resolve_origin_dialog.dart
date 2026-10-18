@@ -687,7 +687,6 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     if (patch.modId == null) return;
     final changed = await removePatchFlow(
       context,
-      ref,
       mod: widget.mod,
       patch: patch,
       patchName: _layerName(patch.modId!),

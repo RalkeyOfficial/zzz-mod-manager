@@ -45,17 +45,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Update checks say whether they are sure or guessing.
   - The library check reports mods it couldn't reach separately from mods with nothing new.
   - Files an author published together count as one release, so another variant isn't read as an update.
-  - An update can be ignored from its dialog, and one click undoes it.
+  - An update can be ignored from its dialog, and one click undoes it, there or on the mod's History tab.
   - Updates filters narrow the character list, and a character's mods, to those with updates.
   - Settings can check for updates at startup. Off by default, and it never installs anything.
 - Updates can be installed from the update dialog. The mod keeps its name, character tag, favourite star and on/off state.
   - The dialog lists every newer file and marks the one it would pick.
   - Updating replaces the mod's files with the new version's. Old files are removed.
   - An update empties the mod folder before writing the new version, so nothing of the old one is left loading. Anything you added to the folder by hand goes with it, and the saved copy still has all of it.
-  - Every update saves a copy of the mod first, and "Restore a previous version…" puts it back.
+  - Every update saves a copy of the mod first, and "Restore a previous version…" or Restore on the mod's History tab puts it back. The confirmation says that anything added to the folder since is removed.
   - Saved versions survive renaming a mod, including renaming its folder outside the app.
   - Deleting a mod deletes every saved version of it too, and the confirmation says how many.
-  - "Reinstall this version…" in a mod's right-click menu empties the folder and puts the author's files back, without changing which version you have.
+  - "Reinstall this version…" in a mod's right-click menu, or Reinstall on its History tab, empties the folder and puts the author's files back, without changing which version you have. It is offered once the file you have is confirmed, and not for a mod marked Local.
   - A mod whose file has been taken off GameBanana says so instead of quietly reinstalling a different version.
   - The dialog shows the author's release notes for anything published since your version.
   - Hotkeys the new version moved are listed after an update.
@@ -75,7 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - A folder holding a patch plus the mod it patches can be told about both, and both are checked for updates.
   - Checking such a folder for updates reports on both mods in full — each with its own verdict, its own before-and-after, its own release notes and its own Update button.
   - Its details panel lists the mods it is made of by name, base first and patches on top, with each one's file, author and upload date once the app has its page. The tracking dialog lists both side by side, each marked as the mod or the patch. Which one you installed first makes no difference to how any of it reads.
-  - A patch can be taken back out, from "Remove patch…" in the mod's right-click menu or from its row in the tracking dialog: the files it added are deleted and the mod's own files come back. It saves a copy of the mod first, tells you what it will do before it does it, and says so when one of your mod's files was never saved.
+  - A patch can be taken back out, from "Remove patch…" in the mod's right-click menu, from its row in the tracking dialog, or with Take out on the mod's History tab: the files it added are deleted and the mod's own files come back. It saves a copy of the mod first, tells you what it will do before it does it, and says so when one of your mod's files was never saved.
   - Updating a patch takes its old version back out: your mod's own files return wherever the new patch no longer replaces them, and anything the old patch added and the new one doesn't goes.
   - A patch you dragged in yourself is remembered too, so it survives an update to the mod under it — even though it has no page to check for updates and can't be taken out from the menu.
 - Every install records the files it wrote, with their sizes.
@@ -89,6 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A character's page opens with their portrait, element, faction and role, and how many mods they have, how many are on and how much space they take.
 - A character's mods can be filtered to the active ones.
 - Each mod has a Note in its details panel, saved as you type and kept only on this computer.
+- Each mod has a page in the Library, opened from its details panel: its pictures one at a time, its buttons, and Overview, In-game keys, History and Note tabs, with where it is stored and linked beside them. History lists the file in use and each saved version with Reinstall and Restore, the author's latest update post, the patches on top with what each changed, and an ignored update. Opening the page looks the mod up on GameBanana, so its file, author and dates show without an update check.
 - A mod dropped or pasted onto a character you picked by clicking it in the list is filed under that character; elsewhere its character is worked out from its name.
 - Settings has an **Updates** section for the startup check, and a **Marketplace** section for the adult-content filter.
 - Settings › Appearance has an **Accent** choice: violet, paper, lime or teal. Paper colours the main button and selected chips and keeps violet for links and switches.

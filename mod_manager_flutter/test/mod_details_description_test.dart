@@ -30,6 +30,7 @@ void main() {
       ModDetailsPanel(
         mod: mod,
         onClose: () {},
+        onOpenPage: (_) {},
         onToggle: () {},
         onFavoriteToggle: () {},
         onEdit: () {},

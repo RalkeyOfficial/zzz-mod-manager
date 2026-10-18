@@ -54,8 +54,8 @@ String downloadName(
 
 /// **What this folder holds**, as a list of peers.
 ///
-/// Shown by the resolve dialog. The details panel draws the same stack in the
-/// canvas's own layout (`mod_details_panel.dart`).
+/// Shown by the resolve dialog. The details panel and the mod's page draw the
+/// same stack in the canvas's own layout (`ModMadeOf`, `mod_detail_parts.dart`).
 ///
 /// **Nothing here ranks the folder's own download above the other one.** Which
 /// of a mod and its patch a sidecar stores in `origin`'s own fields is install

@@ -1,17 +1,11 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as path;
 
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
-import '../../services/api_service.dart';
-import '../../utils/notifications.dart';
 import '../../services/backup/snapshot_service.dart';
-import '../../services/update_apply/mod_activation_port.dart';
-import '../../services/update_apply/update_applier.dart';
 import '../../utils/state_providers.dart';
+import 'restore_snapshot_flow.dart';
 
 /// Rolling an update back.
 ///
@@ -136,11 +130,7 @@ class _ModBackupsDialogState extends ConsumerState<ModBackupsDialog> {
       _formatSize(snapshot.sizeBytes),
       if (snapshot.version case final v? when v.isNotEmpty) v,
       if (snapshot.versionLabel case final l? when l.isNotEmpty) l,
-      loc.t(
-        snapshot.reason == SnapshotReason.beforeRestore
-            ? 'mods.backups.reason_restore'
-            : 'mods.backups.reason_update',
-      ),
+      loc.t(snapshotReasonKey(snapshot.reason)),
     ].join(' · ');
 
     return Padding(
@@ -160,7 +150,7 @@ class _ModBackupsDialogState extends ConsumerState<ModBackupsDialog> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _formatDate(snapshot.takenAt),
+                    formatSnapshotTime(snapshot.takenAt),
                     style: Theme.of(context).textTheme.bodyMedium
                         ?.copyWith(fontWeight: FontWeight.w700),
                   ),
@@ -188,83 +178,12 @@ class _ModBackupsDialogState extends ConsumerState<ModBackupsDialog> {
   }
 
   Future<void> _restore(ModSnapshot snapshot) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(dialogContext.loc.t('mods.backups.confirm_title')),
-        content: Text(
-          dialogContext.loc.t(
-            'mods.backups.confirm_body',
-            params: {
-              'mod': widget.mod.name,
-              'date': _formatDate(snapshot.takenAt),
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(dialogContext.loc.t('mods.update_apply.cancel')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(dialogContext.loc.t('mods.backups.restore')),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
     setState(() => _busy = true);
-    final config = await ApiService.getConfig();
-    final modsPath = config['mods_path'] ?? '';
-    if (modsPath.isEmpty) {
-      // Not reachable from a configured app, but without this the restore runs
-      // against a *relative* `Directory(mod.id)` and fails through the generic
-      // "couldn't restore" message, which says nothing the user can act on.
-      if (!mounted) return;
-      setState(() => _busy = false);
-      context.notify.error(
-        loc.t('marketplace.install_missing_path_title'),
-        body: loc.t('marketplace.install_missing_path_body'),
-      );
-      return;
-    }
-    final mods = await ref.read(modManagerServiceProvider.future);
-    final snapshots = ref.read(snapshotServiceProvider);
-    final applier = UpdateApplier(
-      snapshots: snapshots,
-      activation: ModManagerActivationPort(mods),
-    );
-    final result = await applier.restore(
-      modName: widget.mod.id,
-      modFolder: Directory(path.join(modsPath, widget.mod.id)),
-      snapshot: snapshot,
-    );
-
-    // **A rollback takes a safety copy of its own before it writes**, so the
-    // budget has moved here as much as on any other write — and rolling back is
-    // when the store is most likely to be large, since that is what having one
-    // is for. Whether the restore landed or not: the copy was taken first.
-    if (result.snapshot != null) await snapshots.prune();
+    final restored = await restoreSnapshotFlow(context, mod: widget.mod, snapshot: snapshot);
     if (!mounted) return;
-
-    _changed = _changed || result.success;
-    ref.invalidate(modBackupsProvider);
+    _changed = _changed || restored;
     setState(() => _busy = false);
     await _load();
-    if (!mounted) return;
-
-    context.notify.show(
-      loc.t(result.success
-          ? 'mods.backups.restored_title'
-          : 'mods.backups.restore_failed_title'),
-      body: widget.mod.name,
-      severity: result.success
-          ? NotificationSeverity.success
-          : NotificationSeverity.error,
-      characterId: widget.mod.characterId,
-    );
   }
 
   Future<void> _delete(ModSnapshot snapshot) async {
@@ -274,13 +193,6 @@ class _ModBackupsDialogState extends ConsumerState<ModBackupsDialog> {
     if (!mounted) return;
     setState(() => _busy = false);
     await _load();
-  }
-
-  static String _formatDate(DateTime date) {
-    final d = date.toLocal();
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${d.year}-${two(d.month)}-${two(d.day)} '
-        '${two(d.hour)}:${two(d.minute)}';
   }
 
   static String _formatSize(int bytes) {

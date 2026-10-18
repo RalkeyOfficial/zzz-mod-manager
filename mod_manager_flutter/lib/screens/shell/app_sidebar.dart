@@ -66,6 +66,9 @@ class AppSidebar extends ConsumerWidget {
                         ref.read(characterListFilterProvider.notifier).state = CharacterListFilter.all;
                         ref.read(modGridFilterProvider.notifier).state = ModGridFilter.all;
                       }
+                      // Pressed on the Library, it goes back from a mod's page as the page's own Back does; from another
+                      // page it returns to whatever the Library showed, a mod's page included.
+                      if (onCharacters) ref.read(openModPageProvider.notifier).state = null;
                       go(AppDestination.characters);
                     },
                   ),
@@ -88,6 +91,8 @@ class AppSidebar extends ConsumerWidget {
                           ref.read(characterPickedByUserProvider.notifier).state = false;
                         }
                       }
+                      // The characters with an update are what it shows, so a mod's page gives way to them.
+                      ref.read(openModPageProvider.notifier).state = null;
                       go(AppDestination.characters);
                     },
                   ),

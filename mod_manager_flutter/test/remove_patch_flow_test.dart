@@ -95,7 +95,6 @@ void main() {
           onPressed: () async {
             changed = await removePatchFlow(
               context,
-              ref,
               mod: ModInfo(
                 id: modName,
                 name: modName,

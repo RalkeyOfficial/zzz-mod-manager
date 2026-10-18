@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../models/gamebanana/gamebanana.dart';
+import '../../models/origin_enums.dart';
 import '../../services/gamebanana/file_selection.dart';
 import '../../services/log/logger.dart';
 import '../../services/update_apply/update_write_route.dart';
@@ -12,6 +13,19 @@ import '../../utils/state_providers.dart';
 import 'apply_update_flow.dart';
 
 final Logger _log = Logger('update.reinstall');
+
+/// Whether [mod] can be reinstalled: its base records the exact file it came from, confirmed rather than worked out,
+/// and it is tracked. A guessed file id would write the guess over the folder, and a mod marked Local was said not to
+/// come from its page. The right-click menu and the History tab of the mod's page both ask this.
+bool canReinstall(ModInfo mod) {
+  final origin = mod.origin;
+  final base = origin?.base;
+  return base != null &&
+      base.modId != null &&
+      base.fileId != null &&
+      base.versionConfidence.isConfirmed &&
+      origin!.tracking != OriginTracking.off;
+}
 
 /// **Writing the version already installed over the folder again**, to repair
 /// it.

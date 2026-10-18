@@ -26,6 +26,7 @@ void main() {
   Widget panel(ModInfo mod) => ModDetailsPanel(
     mod: mod,
     onClose: () {},
+    onOpenPage: (_) {},
     onToggle: () {},
     onFavoriteToggle: () {},
     onEdit: () {},

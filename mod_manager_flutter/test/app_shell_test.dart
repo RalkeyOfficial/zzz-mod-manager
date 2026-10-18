@@ -49,6 +49,32 @@ void main() {
   }
 
   group('sidebar', () {
+    testWidgets("Characters returns to a mod's page from elsewhere, and closes it from the Library", (tester) async {
+      final container = containerWith();
+      container.read(openModPageProvider.notifier).state = const ModPageRequest('a');
+      container.read(destinationProvider.notifier).state = AppDestination.settings;
+      await pumpSidebar(tester, container);
+
+      await tester.tap(find.text('Characters'));
+      await tester.pump();
+      expect(container.read(openModPageProvider)?.modId, 'a', reason: 'coming back shows the same mod');
+
+      await tester.tap(find.text('Characters'));
+      await tester.pump();
+      expect(container.read(openModPageProvider), isNull, reason: 'pressed on the Library, it goes back');
+    });
+
+    testWidgets("Updates gives a mod's page way to the characters with an update", (tester) async {
+      final container = containerWith();
+      container.read(openModPageProvider.notifier).state = const ModPageRequest('a');
+      container.read(destinationProvider.notifier).state = AppDestination.settings;
+      await pumpSidebar(tester, container);
+
+      await tester.tap(find.text('Updates'));
+      await tester.pump();
+      expect(container.read(openModPageProvider), isNull);
+    });
+
     testWidgets('counts every agent, whether or not it has a mod', (tester) async {
       await pumpSidebar(tester, containerWith());
       // The roster, as the character list shows it. The UI category is not a character.

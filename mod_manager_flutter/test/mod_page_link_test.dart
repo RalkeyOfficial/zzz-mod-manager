@@ -79,6 +79,7 @@ void main() {
           child: ModDetailsPanel(
             mod: m,
             onClose: () {},
+            onOpenPage: (_) {},
             onToggle: () {},
             onFavoriteToggle: () {},
             onEdit: () {},

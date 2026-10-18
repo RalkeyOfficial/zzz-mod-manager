@@ -602,33 +602,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     // outright, because with several downloads a dismissal changes which one
     // wins: waving away the patch's update on a folder whose mod also has one
     // must leave the mod's finding standing, not mark the folder dismissed.
-    _store(_fold() ?? _refoldDismissal(folded, subject, dismissed));
-  }
-
-  /// Applies a dismissal to one identity's verdict and folds the folder again,
-  /// with no mod page in hand.
-  ///
-  /// [subject] names the layer the user pressed. A folder with one layer folds
-  /// to that layer, so this is `asDismissed` on the one verdict there is.
-  ///
-  /// **Re-folded rather than patched in place**, because a dismissal can change
-  /// which layer wins: a live finding beats a dismissed stronger one, so
-  /// silencing the winner has to let another layer through.
-  UpdateCheck _refoldDismissal(
-    UpdateCheck folded,
-    int? subject,
-    bool dismissed,
-  ) {
-    if (folded.layers.length < 2) return folded.asDismissed(dismissed);
-    return foldDownloads([
-      for (final layer in folded.layers)
-        DownloadCheck(
-          download: layer.download,
-          check: layer.download.modId == subject
-              ? layer.check.asDismissed(dismissed)
-              : layer.check,
-        ),
-    ]);
+    _store(_fold() ?? refoldDismissal(folded, subject, dismissed));
   }
 
   /// The file the Update button would install.
@@ -1036,7 +1010,6 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     setState(() => _writing = true);
     final removed = await removePatchFlow(
       context,
-      ref,
       mod: widget.mod,
       patch: section.download,
       patchName: section.name,

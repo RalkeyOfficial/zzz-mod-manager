@@ -31,20 +31,25 @@ import '../../utils/state_providers.dart';
 ///
 /// Returns true when the folder changed, so the caller rescans: the card's
 /// status slot is drawn from `ModInfo.origin`, which only a scan refreshes.
+///
+/// **The app's container, not a screen's `ref`.** From the History tab of the
+/// mod's page nothing holds the user on the page while files move, so what
+/// reached the disk has to reach the library and the snapshot list after they
+/// have left; a `ref` dies with its widget. The outcome is reported either way.
 Future<bool> removePatchFlow(
-  BuildContext context,
-  WidgetRef ref, {
+  BuildContext context, {
   required ModInfo mod,
   required ModDownload patch,
   required String patchName,
 }) async {
   final loc = context.loc;
   final notify = context.notify;
+  final container = ProviderScope.containerOf(context, listen: false);
   // Guaranteed by `removablePatches`, which is the only way in: a layer with no
   // page has no store keyed by one and no update to check.
   final patchModId = patch.modId!;
 
-  final mods = await ref.read(modManagerServiceProvider.future);
+  final mods = await container.read(modManagerServiceProvider.future);
   final modsPath = mods.modsPath;
   if (modsPath == null) return false;
   final modFolder = Directory(path.join(modsPath, mod.id));
@@ -98,16 +103,20 @@ Future<bool> removePatchFlow(
   );
   if (!accepted || !context.mounted) return false;
 
-  final snapshots = ref.read(snapshotServiceProvider);
+  final snapshots = container.read(snapshotServiceProvider);
   final applier = UpdateApplier(
     snapshots: snapshots,
     activation: ModManagerActivationPort(mods),
   );
-  final result = await applier.removePatch(
-    modName: mod.id,
-    modFolder: modFolder,
-    patchModId: patchModId,
-    plan: plan,
+  final result = await whileWritingMod(
+    container,
+    mod.id,
+    () => applier.removePatch(
+      modName: mod.id,
+      modFolder: modFolder,
+      patchModId: patchModId,
+      plan: plan,
+    ),
   );
 
   // **Before the success check**, the same as the update path: a snapshot exists
@@ -119,12 +128,11 @@ Future<bool> removePatchFlow(
   // added a whole folder to the budget — see §5 of
   // `docs/applying-updates.md`.
   if (result.snapshot != null) {
-    ref.invalidate(modBackupsProvider);
+    container.invalidate(modBackupsProvider);
     await snapshots.prune();
   }
 
   if (!result.success) {
-    if (!context.mounted) return false;
     notify.error(
       loc.t('mods.remove_patch.failed_title'),
       body: switch (result.failure!) {
@@ -146,10 +154,9 @@ Future<bool> removePatchFlow(
   await _forget(mods, mod, patch);
 
   // Pruning already ran with the snapshot, above.
-  ref.invalidate(modBackupsProvider);
-  ref.invalidate(libraryProvider);
+  container.invalidate(modBackupsProvider);
+  container.invalidate(libraryProvider);
 
-  if (!context.mounted) return true;
   if (result.failed.isEmpty) {
     notify.success(
       loc.t('mods.remove_patch.done_title'),

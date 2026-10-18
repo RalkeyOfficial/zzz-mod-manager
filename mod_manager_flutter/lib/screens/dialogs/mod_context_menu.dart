@@ -4,6 +4,7 @@ import '../../models/character_info.dart';
 import '../../models/mod_download.dart';
 import '../../services/patch_removal.dart';
 import '../../utils/url_utils.dart';
+import 'reinstall_flow.dart' show canReinstall;
 
 /// The right-click menu for a mod card. A thin dispatcher: each entry runs the
 /// matching callback (deferred so the menu closes first). The caller wires the
@@ -140,7 +141,7 @@ void showModContextMenu(
       // is what a repair fetches again. A mod known only by its page has no
       // version to put back — offering "reinstall" and then having to ask which
       // file would be an update in everything but name.
-      if (mod.origin?.base?.fileId != null)
+      if (canReinstall(mod))
         PopupMenuItem(
           child: Row(
             children: [

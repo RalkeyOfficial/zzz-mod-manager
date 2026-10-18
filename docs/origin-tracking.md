@@ -816,9 +816,10 @@ list:
 
 ### Where it is shown
 
-**Three surfaces, one set of rules.** The resolve dialog reads the stack through `screens/components/folder_downloads_summary.dart`, and the update dialog gives each download a full report of its own, as said further down.
-The Library's details panel draws it as the canvas does, as "Made of N mods" (`_MadeOf` in `mod_details_panel.dart`, [`library-screen.md`](library-screen.md) §12): a Base or Patch badge, the name, and the file, author and upload date once the session holds the page.
-Everything below holds for all three.
+**Four surfaces, one set of rules.** The resolve dialog reads the stack through `screens/components/folder_downloads_summary.dart`, and the update dialog gives each download a full report of its own, as said further down.
+The Library's details panel and the Overview of the mod's page draw it as the canvas does, as "Made of N mods" (`ModMadeOf` in `mod_detail_parts.dart`, [`library-screen.md`](library-screen.md) §12): a Base or Patch badge, the name, and the file, author and upload date once the session holds the page.
+The History tab of the mod's page lists the patches on top with what each changed and a Take out ([`library-screen.md`](library-screen.md) §15).
+Everything below holds for all four.
 
 **It renders the stack in the order the stack is in**, and there is nothing else to
 it: position is the role, so no surface works out which entry is the patch or
@@ -980,9 +981,9 @@ affordance's first suggestion is that the *mod's* files go, and none do. Recorde
 through `logConfirmation('patch.remove', …)`. Installing that patch through the app
 again records it again; the install prompt is the only route to one.
 
-**Both surfaces run the same flow**, and that is deliberate rather than convenient:
-the menu entry is where a mod action belongs, and the row is where the user is
-looking at the patch. Two spellings of one operation is how the record-only version
+**Every surface runs the same flow**, and that is deliberate rather than convenient:
+the menu entry is where a mod action belongs, and the row, in this dialog or on the
+History tab of the mod's page, is where the user is looking at the patch. Two spellings of one operation is how the record-only version
 came to exist.
 
 **Which affordance a row carries comes from what can be done to that layer**

@@ -19,8 +19,10 @@ import '../services/bulk_assume_current.dart';
 import '../services/bulk_update_check.dart';
 import '../services/download_names.dart';
 import '../services/installed_mods_index.dart';
+import '../models/mod_origin.dart';
 import '../services/log/logger.dart';
 import '../services/mod_manager_service.dart';
+import '../services/mod_metadata_service.dart';
 import '../services/origin_status.dart';
 import '../services/origin_write.dart';
 import '../services/platform_service.dart';
@@ -333,6 +335,29 @@ final modGridFilterProvider = StateProvider<ModGridFilter>((ref) => ModGridFilte
 /// The mod the details panel shows, by folder id. Null closes the panel.
 final selectedModIdProvider = StateProvider<String?>((ref) => null);
 
+/// The tabs of a mod's page in the Library.
+enum ModPageTab { overview, keys, history, note }
+
+/// The mod whose page the Library shows in place of the character view, and the tab it opened on.
+///
+/// State rather than a route, as the marketplace's open mod is: the Library is one of the shell's pages, and a page
+/// left for another is disposed while this survives, so coming back shows the same mod.
+@immutable
+class ModPageRequest {
+  const ModPageRequest(this.modId, {this.tab = ModPageTab.overview, String? pageKey}) : pageKey = pageKey ?? modId;
+
+  final String modId;
+  final ModPageTab tab;
+
+  /// What the page is keyed by for as long as it is open, fixed when it opens: the folder's uid, or its id when it
+  /// has none yet. A rename carries it over, and a uid the first snapshot assigns later doesn't change it, so neither
+  /// sends the page back to its first tab or fetches again.
+  final String pageKey;
+}
+
+/// Null shows the character view.
+final openModPageProvider = StateProvider<ModPageRequest?>((ref) => null);
+
 /// The user's note on each mod, by folder id. Hydrated in `ApiService.initialize`, written through
 /// `ApiService.setModNote` (`docs/library-screen.md` §11).
 final modNotesProvider = StateProvider<Map<String, String>>((ref) => const {});
@@ -405,6 +430,13 @@ final modsPathProvider = StateProvider<String>((ref) => '');
 /// The configured ZZMI folder, the one holding `d3dx.ini`. Hydrated in `ApiService.initialize` and updated when
 /// Settings saves the paths.
 final zzmiPathProvider = StateProvider<String>((ref) => '');
+
+/// ZZMI's folder of links, `Mods` under [zzmiPathProvider] in whatever case it is spelled on disk. Null with no ZZMI
+/// folder set.
+final linksFolderProvider = Provider<String?>((ref) {
+  final zzmi = ref.watch(zzmiPathProvider);
+  return zzmi.isEmpty ? null : linksFolderIn(zzmi);
+});
 
 /// Whether [zzmiPathProvider] names a ZZMI install: it holds `d3dx.ini`.
 final zzmiFoundProvider = FutureProvider<bool>((ref) async {
@@ -668,6 +700,33 @@ void keepModPages(WidgetRef ref, Map<int, GbMod> pages) {
   fetched.state = {...fetched.state, ...pages};
 }
 
+/// Takes back the ignored update on [mod]'s download from mod page [subject], and rescans. Returns false when the
+/// sidecar could not be written.
+///
+/// The session's verdict is re-folded too (`refoldDismissal`, as the update dialog's undo does): the badge reads it,
+/// and a rescan alone leaves it saying "ignored" until the next check. A single verdict about another page is left
+/// alone. [writer] is the caller's seam, the library service's write by default.
+Future<bool> stopIgnoringUpdate(
+  ProviderContainer container, {
+  required ModInfo mod,
+  required int subject,
+  OriginWriter? writer,
+}) async {
+  final write = writer ?? originWriterFor(container.read(modManagerServiceProvider.future));
+  final result = await whileWritingMod(
+    container,
+    mod.id,
+    () => write(mod.id, (origin) => origin?.withDismissal(subject: subject, until: null)),
+  );
+  if (!result.ok) return false;
+  final checks = container.read(modUpdateChecksProvider.notifier);
+  if (checks.state[mod.id] case final check? when check.layers.length > 1 || check.subjectModId == subject) {
+    checks.state = {...checks.state, mod.id: refoldDismissal(check, subject, false)};
+  }
+  await container.read(libraryProvider.notifier).rescan();
+  return true;
+}
+
 /// Writes the titles of [pages] onto the sidecars of the library's mods whose downloads they name
 /// (`ModDownload.name`), and rescans when one changed. Run after a check, which fetches every tracked mod's page.
 ///
@@ -792,4 +851,40 @@ final snapshotServiceProvider = Provider<SnapshotService>(
 /// only things that create one are inside this app.
 final modBackupsProvider = FutureProvider<Set<String>>((ref) async {
   return ref.read(snapshotServiceProvider).uidsWithSnapshots();
+});
+
+/// The mods, by folder id, whose folders a restore or a patch removal is changing right now. The History tab of the
+/// mod's page holds its buttons while its mod is here: nothing else on screen shows the write is running, and a second
+/// write into the same folder would snapshot it half done.
+final modWritesInProgressProvider = StateProvider<Set<String>>((ref) => const {});
+
+/// Runs [write] with [modId] in [modWritesInProgressProvider].
+Future<T> whileWritingMod<T>(ProviderContainer container, String modId, Future<T> Function() write) async {
+  final busy = container.read(modWritesInProgressProvider.notifier);
+  busy.state = {...busy.state, modId};
+  try {
+    return await write();
+  } finally {
+    busy.state = {...busy.state}..remove(modId);
+  }
+}
+
+/// One snapshot and the origin block its copy of the sidecar holds, which says the file the mod was at then. The
+/// origin is null when that sidecar is missing or unreadable.
+typedef SnapshotEntry = ({ModSnapshot snapshot, ModOrigin? origin});
+
+/// A mod's snapshots by uid, newest first, each with the origin it was taken at: the History tab's installed files.
+///
+/// Rebuilt whenever [modBackupsProvider] is invalidated, which every write that takes or deletes a snapshot does.
+final modSnapshotsProvider = FutureProvider.autoDispose.family<List<SnapshotEntry>, String>((ref, uid) async {
+  ref.watch(modBackupsProvider);
+  final snapshots = await ref.read(snapshotServiceProvider).list(uid);
+  final sidecars = ModMetadataService();
+  return [
+    for (final snapshot in snapshots)
+      (
+        snapshot: snapshot,
+        origin: (await sidecars.read(p.join(snapshot.directory.path, 'files')))?.origin,
+      ),
+  ];
 });

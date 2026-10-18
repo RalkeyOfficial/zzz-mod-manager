@@ -65,7 +65,9 @@ class ZenithType extends ThemeExtension<ZenithType> {
     required this.mono,
     required this.monoSmall,
     required this.wordmark,
+    required this.pageTitle,
     required this.watermark,
+    required this.watermarkMedium,
     required this.watermarkLarge,
     required this.initials,
   });
@@ -82,8 +84,14 @@ class ZenithType extends ThemeExtension<ZenithType> {
   /// ZENITH in the title bar.
   final TextStyle wordmark;
 
+  /// A mod's name at the top of its page.
+  final TextStyle pageTitle;
+
   /// The large initials drawn faintly behind an empty cover.
   final TextStyle watermark;
+
+  /// The same, behind the empty gallery of a mod's page.
+  final TextStyle watermarkMedium;
 
   /// The same, behind a character's header.
   final TextStyle watermarkLarge;
@@ -108,12 +116,26 @@ class ZenithType extends ThemeExtension<ZenithType> {
       height: 1,
       letterSpacing: 13 * 0.08,
     ),
+    pageTitle: const TextStyle(
+      fontFamily: kDisplayFont,
+      fontSize: 30,
+      fontWeight: FontWeight.w700,
+      height: 1.1,
+      letterSpacing: 30 * -0.01,
+    ),
     watermark: const TextStyle(
       fontFamily: kDisplayFont,
       fontSize: 56,
       fontWeight: FontWeight.w800,
       height: 1,
       letterSpacing: 56 * -0.01,
+    ),
+    watermarkMedium: const TextStyle(
+      fontFamily: kDisplayFont,
+      fontSize: 120,
+      fontWeight: FontWeight.w800,
+      height: 1,
+      letterSpacing: 120 * -0.01,
     ),
     watermarkLarge: const TextStyle(
       fontFamily: kDisplayFont,
@@ -133,7 +155,9 @@ class ZenithType extends ThemeExtension<ZenithType> {
     TextStyle? mono,
     TextStyle? monoSmall,
     TextStyle? wordmark,
+    TextStyle? pageTitle,
     TextStyle? watermark,
+    TextStyle? watermarkMedium,
     TextStyle? watermarkLarge,
     TextStyle? initials,
   }) => ZenithType(
@@ -141,7 +165,9 @@ class ZenithType extends ThemeExtension<ZenithType> {
     mono: mono ?? this.mono,
     monoSmall: monoSmall ?? this.monoSmall,
     wordmark: wordmark ?? this.wordmark,
+    pageTitle: pageTitle ?? this.pageTitle,
     watermark: watermark ?? this.watermark,
+    watermarkMedium: watermarkMedium ?? this.watermarkMedium,
     watermarkLarge: watermarkLarge ?? this.watermarkLarge,
     initials: initials ?? this.initials,
   );
