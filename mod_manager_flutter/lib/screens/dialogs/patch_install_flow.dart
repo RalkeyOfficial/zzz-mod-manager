@@ -75,6 +75,7 @@ List<PlannedMod> plannedMods(ImportPlan plan, List<String> folders) =>
 class PatchIdentity {
   const PatchIdentity({
     required this.modId,
+    this.name,
     this.fileId,
     this.version,
     this.versionLabel,
@@ -82,6 +83,9 @@ class PatchIdentity {
   });
 
   final int modId;
+
+  /// The patch's mod page title, for the layer's `name`.
+  final String? name;
   final int? fileId;
   final String? version;
   final String? versionLabel;
@@ -96,6 +100,7 @@ class PatchIdentity {
   ModDownload get layer => ModDownload(
         modId: modId,
         modIdConfidence: OriginConfidence.exact,
+        name: name,
         fileId: fileId,
         version: version,
         versionLabel: versionLabel,

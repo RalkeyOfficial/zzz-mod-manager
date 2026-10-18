@@ -6,6 +6,7 @@ import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gb_submitter.dart';
 import 'package:mod_manager_flutter/screens/components/mod_details_panel.dart';
 import 'package:mod_manager_flutter/services/update_check.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
@@ -85,51 +86,142 @@ void main() {
     expectBuilt(ModDetailsPanel);
   }
 
-  testWidgets('both downloads are listed, each with its role', (tester) async {
-    await open(
-      tester,
-      mod(origin: origin(patches: [patch])),
-      sessionRecords: const {
-        605460: GbMod(idRow: 605460, name: 'Pulchra Bottom Heavy - Reworked'),
-      },
-    );
+  group('Made of N mods', () {
+    testWidgets('lists the stack base first, each with its role', (tester) async {
+      await open(
+        tester,
+        mod(origin: origin(patches: [patch])),
+        sessionRecords: const {
+          605460: GbMod(idRow: 605460, name: 'Pulchra Bottom Heavy - Reworked'),
+        },
+      );
 
-    expect(find.text('This folder holds two downloads'), findsOneWidget);
-    // The folder's own download, named by the folder — nothing here has fetched
-    // its page, and the folder name is what the user knows it by anyway.
-    expect(find.text('Pulchra-BottomHeavy'), findsWidgets);
-    expect(find.text('Pulchra Bottom Heavy - Reworked'), findsOneWidget);
-    expect(find.text('Mod'), findsOneWidget);
-    expect(find.text('Patch'), findsOneWidget);
-  });
+      expect(find.text('MADE OF 2 MODS'), findsOneWidget);
+      expect(find.text('base first, patches on top'), findsOneWidget);
+      // Nothing has fetched the base's page and nothing saved its name, so it is named by its id.
+      final base = find.text('GameBanana mod #585282');
+      expect(base, findsOneWidget);
+      final top = find.text('Pulchra Bottom Heavy - Reworked');
+      expect(top, findsOneWidget);
+      expect(tester.getTopLeft(base).dy, lessThan(tester.getTopLeft(top).dy));
+      expect(tester.getTopLeft(find.text('Base')).dy, lessThan(tester.getTopLeft(find.text('Patch')).dy));
+    });
 
-  testWidgets('this is the surface that explains why a folder holds two',
-      (tester) async {
-    // The one caller that shows the hint: the details view's job is answering
-    // "what is this", and its column has the room. The action dialogs are at
-    // their height budget and a sentence there competes with their controls.
-    await open(tester, mod(origin: origin(patches: [patch])));
+    testWidgets("names each row's file, author and upload date once a check has its page", (tester) async {
+      await open(
+        tester,
+        mod(origin: origin(patches: [patch])),
+        sessionRecords: {
+          585282: GbMod(
+            idRow: 585282,
+            name: 'Pulchra Bottom Heavy',
+            submitter: const GbSubmitter(idRow: 1, name: 'frostbyte'),
+            files: [GbFile(idRow: 1433843, file: 'pulchra.zip', dateAdded: DateTime.utc(2025, 3, 1, 12))],
+          ),
+          605460: GbMod(
+            idRow: 605460,
+            name: 'Pulchra Bottom Heavy - Reworked',
+            submitter: const GbSubmitter(idRow: 2, name: 'patcher'),
+            files: [GbFile(idRow: 1473174, file: 'reworked.zip', dateAdded: DateTime.utc(2025, 4, 2, 12))],
+          ),
+        },
+      );
 
-    expect(find.textContaining('A patch replaces some of a mod\'s files'),
-        findsOneWidget);
-  });
+      expect(find.text('Pulchra Bottom Heavy'), findsWidgets);
+      expect(find.text('reworked.zip'), findsOneWidget);
+      expect(find.text('frostbyte · uploaded 2025-03-01'), findsOneWidget);
+      expect(find.text('patcher · uploaded 2025-04-02'), findsOneWidget);
+    });
 
-  testWidgets('with no name in hand it still lists the download',
-      (tester) async {
-    // **And spends no request to find one.** A read-only view opened on a mod
-    // should not reach the network for a label, so an unnamed download shows
-    // its id — which is why every row also carries a link to its page.
-    await open(tester, mod(origin: origin(patches: [patch])));
+    testWidgets('leaves out a file that was only worked out, and its date', (tester) async {
+      final guessed = patchFixture(
+        modId: 605460,
+        modIdConfidence: OriginConfidence.exact,
+        fileId: 1473174,
+        versionConfidence: OriginConfidence.inferred,
+      );
+      await open(
+        tester,
+        mod(origin: origin(patches: [guessed])),
+        sessionRecords: {
+          605460: GbMod(
+            idRow: 605460,
+            name: 'Pulchra Bottom Heavy - Reworked',
+            submitter: const GbSubmitter(idRow: 2, name: 'patcher'),
+            files: [GbFile(idRow: 1473174, file: 'reworked.zip', dateAdded: DateTime.utc(2025, 4, 2, 12))],
+          ),
+        },
+      );
 
-    expect(find.text('GameBanana mod #605460'), findsOneWidget);
-    expect(find.byIcon(Icons.open_in_new), findsWidgets);
-  });
+      expect(find.text('reworked.zip'), findsNothing);
+      expect(find.text('patcher'), findsOneWidget, reason: 'the author is the page\'s, not the file\'s');
+    });
 
-  testWidgets('an ordinary mod says nothing about a second download',
-      (tester) async {
-    await open(tester, mod(origin: origin()));
+    testWidgets('with no name in hand a patch is named by its id, and links to its page', (tester) async {
+      // **And spends no request to find one.** A read-only view opened on a mod should not reach the network for a
+      // label, so an unnamed download shows its id, which is why every row with a page links to it.
+      await open(tester, mod(origin: origin(patches: [patch])));
 
-    expect(find.text('This folder holds two downloads'), findsNothing);
+      expect(find.text('GameBanana mod #605460'), findsOneWidget);
+      expect(find.byTooltip("Open this mod's page"), findsNWidgets(2));
+    });
+
+    testWidgets("a folder named after its patch never puts the patch's name on the base", (tester) async {
+      // A patch installed as its own folder, with the mod it patches fetched in: the folder is named after the
+      // patch's archive. The names saved at install are what the rows show, with no page in hand.
+      final stacked = origin(patches: [patch]);
+      await open(
+        tester,
+        ModInfo(
+          id: 'zhuyuan_blacksuit_culture_edit_52313',
+          name: 'zhuyuan_blacksuit_culture_edit_52313',
+          characterId: 'zhuyuan',
+          isActive: false,
+          origin: stacked.copyWith(downloads: [
+            stacked.downloads[0].copyWith(name: 'Zhu-Yuan Black-Suit'),
+            stacked.downloads[1].copyWith(name: 'Zhu Yuan - Black-Suit edit'),
+          ]),
+        ),
+      );
+
+      expect(find.text('Zhu-Yuan Black-Suit'), findsOneWidget);
+      expect(find.text('Zhu Yuan - Black-Suit edit'), findsOneWidget);
+      expect(find.text('zhuyuan_blacksuit_culture_edit_52313'), findsOneWidget, reason: 'the panel title only');
+    });
+
+    testWidgets('a page in hand wins over a saved name, which may be stale', (tester) async {
+      final stacked = origin(patches: [patch]);
+      await open(
+        tester,
+        mod(
+          origin: stacked.copyWith(downloads: [stacked.downloads[0], stacked.downloads[1].copyWith(name: 'Old title')]),
+        ),
+        sessionRecords: const {605460: GbMod(idRow: 605460, name: 'New title')},
+      );
+
+      expect(find.text('New title'), findsOneWidget);
+      expect(find.text('Old title'), findsNothing);
+    });
+
+    testWidgets('a patch from a local file is said to be one', (tester) async {
+      await open(tester, mod(origin: origin(patches: [patchFixture(modId: null)])));
+
+      expect(find.text('Patch from a local file'), findsOneWidget);
+      expect(find.byTooltip("Open this mod's page"), findsOneWidget, reason: 'only the base has a page');
+    });
+
+    testWidgets('Manage in History is offered when the mod has a page', (tester) async {
+      await open(tester, mod(origin: origin(patches: [patch])));
+
+      expect(find.text('Manage in History'), findsOneWidget);
+    });
+
+    testWidgets('an ordinary mod has no list', (tester) async {
+      await open(tester, mod(origin: origin()));
+
+      expect(find.textContaining('MADE OF'), findsNothing);
+      expect(find.text('Manage in History'), findsNothing);
+    });
   });
 
   group("the Uploaded line's verdict is the base mod's own", () {

@@ -129,15 +129,37 @@ void main() {
     expect(find.text('Patch'), findsOneWidget);
   });
 
-  testWidgets('the folder\'s own row falls back to the folder name',
+  testWidgets('with no name in hand every row with an id is named by it',
       (tester) async {
-    // Better than an id and better than a spinner: it is the name the user
-    // knows this thing by everywhere else in the app. Only the folder's own
-    // entry has one to fall back to.
+    // The base too: a patch installed as its own folder, with the mod it
+    // patches fetched in, names the folder after the patch's archive, so the
+    // folder name would put the patch's name on the base.
     await pump(tester, origin(patches: [patch()]));
 
-    expect(find.text('Pulchra-BottomHeavy(NSFW)'), findsOneWidget);
+    expect(find.text('GameBanana mod #585282'), findsOneWidget);
     expect(find.text('GameBanana mod #605460'), findsOneWidget);
+    expect(find.text('Pulchra-BottomHeavy(NSFW)'), findsNothing);
+  });
+
+  testWidgets('a base with no id at all falls back to the folder name',
+      (tester) async {
+    await pump(tester, origin(modId: null, patches: [patch()]));
+
+    expect(find.text('Pulchra-BottomHeavy(NSFW)'), findsOneWidget);
+  });
+
+  testWidgets('a saved name is used with no page in hand', (tester) async {
+    final block = origin(patches: [patch()]);
+    await pump(
+      tester,
+      block.copyWith(downloads: [
+        block.downloads[0].copyWith(name: 'Pulchra Bottom Heavy'),
+        block.downloads[1].copyWith(name: 'Pulchra Bottom Heavy - Reworked'),
+      ]),
+    );
+
+    expect(find.text('Pulchra Bottom Heavy'), findsOneWidget);
+    expect(find.text('Pulchra Bottom Heavy - Reworked'), findsOneWidget);
   });
 
   testWidgets('a name fetched earlier this session is used', (tester) async {

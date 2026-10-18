@@ -217,19 +217,20 @@ A saved note is on screen as typed, so only a failed save is reported ([`notific
 
 `components/mod_details_panel.dart`, in place of a details dialog: a mod is looked at beside the others rather than over them.
 
-From the top: the gallery (the cover, with the rest as thumbnails; pressing the cover opens it large over a dark backdrop, and a tap anywhere closes it), the name and, once a check holds the page, its author;
+From the top: the gallery (the cover, with the rest as thumbnails; pressing the cover opens it large over a dark backdrop, and a tap anywhere closes it), the name and, once the session holds the page, its author;
 the description, folded to three lines of its own text size, with More and Less; the tags, as badges; **Active in game** with its own switch; the in-game keys from the mod's `.ini`;
-the shader-fixes line and, for a folder that holds more than one download, what it holds, in stack order; the facts; the folder's path; the note. Along the bottom: Open folder, Check for updates, Delete.
+the shader-fixes line and, for a folder that holds more than one download, **Made of N mods**; the facts; the folder's path; the note. Along the bottom: Open folder, Check for updates, Delete.
 
 **It never fetches.** A mod is selected far more often than a dialog is opened, and a mod selected in passing should not spend a request nobody asked for.
-So the facts that live only on the mod page — the file's name, its upload date, the author — appear once this session's update check holds the page, and are absent before.
+So the facts that live only on the mod page (the file's name, its upload date, the author) appear once this session holds the page, and are absent before.
+The session holds a page once an update check fetched it, or the install or a dialog did (`knownModPagesProvider`), so a mod installed a moment ago already names them.
 File and Uploaded also need the file on record to be confirmed (`exact` or `user`), as the card's "file from" does: a file only worked out is not stated as the file.
 
 **The name is the type scale's `titleLarge`, 17px, where the canvas draws 18px.** The type scale has no 18px role, so the difference is kept on purpose rather than adding a size for one line.
 
 | Fact | Shown |
 |---|---|
-| File | the recorded file's name, from the check's records, for a confirmed file only |
+| File | the recorded file's name, from the page in hand, for a confirmed file only |
 | Variant | the recorded version label, when there is one |
 | Uploaded | for a confirmed file only, the file's date, with "nothing newer" or "a newer file is out" when the last check said so about the base mod; a patch's verdict is never put on the base mod's file |
 | Tracking | GameBanana · change, Not tracked · set up, or Local · change; the second half opens the resolve dialog |
@@ -238,6 +239,10 @@ File and Uploaded also need the file on record to be confirmed (`exact` or `user
 
 - **Check for updates is offered only with an identity to check**, and not for a mod marked Local, which is never checked; for either the update dialog would say so and nothing else, and Tracking's "set up" or "change" is the way in.
 - **Ignoring an update is not here.** It lives in the update dialog with its undo, where the finding is read before it is waved away ([`update-checks.md`](update-checks.md) §6).
+- **Made of N mods lists the folder's stack** (`origin.downloads`), base first and patches on top, and is absent for a folder with one download ([`origin-tracking.md`](origin-tracking.md) §10).
+  Each row has a Base or Patch badge, the name, which links to its page, and, once the session holds that layer's page, its author and, for a confirmed file, the file's name and upload date. A patch's file is never put on the base's row.
+  The name is the page's when it is in hand, else the one saved with the layer (`ModDownload.name`), else the id. It is never the folder name for a layer with an id: a patch installed as its own folder names the folder after the patch's archive ([`origin-tracking.md`](origin-tracking.md) §10).
+  "Manage in History" under the list opens the mod's GameBanana page, and is offered only while there is one.
 - **In-game keys leave out the `no_` tokens**, which name a modifier that must *not* be held, so the caps show what to press.
 - **The path is shortened to `~` inside the home folder**, as the status bar shortens it, and **copies itself in full when pressed**. That success is reported: the clipboard can't be seen.
 - **Edit info** opens the edit dialog for character, description, tags and pictures.

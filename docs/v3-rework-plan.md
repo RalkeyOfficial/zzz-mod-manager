@@ -66,7 +66,7 @@ The memory note `v3-canvas-vs-docs-decisions` holds these. In short:
     - a sidebar that scrolls when short.
   - Docs updated: `desktop-integration.md` §4 (the rule, the hazard and what still differs).
 
-- **Phase 3, Library character view and details panel:** built and reviewed; the review's findings are fixed. Not committed, waiting on the user.
+- **Phase 3, Library character view and details panel:** built, reviewed and committed (`3a163d3`).
   - Agreed with the user: the scan does not guess a character from the folder name, so a mod with no stored character is under Unassigned.
   - The manual update check runs in `LibraryActionsHost` above the page switcher.
   - A known limit, in `library-screen.md` §10: One at a time can't swap two mods with a shader file at the same path and different contents.
@@ -80,6 +80,13 @@ The memory note `v3-canvas-vs-docs-decisions` holds these. In short:
 ## Phases left
 
 Each is reviewable on its own and ends with tests green, docs and changelog updated, and the user's go-ahead.
+
+- **Phase 3 follow-up, details panel** (artboard `Main`): a "Made of N mods" list between the keys and the facts, base first and patches on top, each with a Base or Patch badge, its name, file, author and upload date, and a "Manage in History" link. It shows only when more than one download is registered on the mod (`origin.downloads`). The link lands on phase 4's History; until then it opens the mod's current page.
+  - Built, not committed, waiting on the user. The panel draws its own list (`_MadeOf` in `mod_details_panel.dart`); `FolderDownloadsSummary` stays for the resolve dialog, without the "why two" hint the panel used to show.
+  - Like the facts, a row's file, author and date come from a page the session holds (fetched by a check, an install or a dialog), and the file and its date only for a confirmed file. A row's name links to its GameBanana page, as the old rows' ↗ button did; a patch with no page reads "Patch from a local file".
+  - Phase 4 points "Manage in History" at the Mod page's History tab and shows it for every stacked mod, not only one with a page.
+  - Decided with the user: each download saves its page's title as `name` in the sidecar, a display copy that every fetch rewrites, reversing the old "nothing stores a name" rule. The cause was a patch installed as its own folder: the folder takes the patch's archive name, so the base was listed by the patch's file name and the patch by its id until a check ran. No row uses the folder name for a layer with an id any more.
+  - Not changed, and for the user to decide: that same folder's description and pictures come from the patch's page.
 
 4. **Mod page** (artboard `ModPage`).
    - A page route inside Library with Overview, In-game keys, History and Note tabs.
@@ -135,7 +142,6 @@ Each is reviewable on its own and ends with tests green, docs and changelog upda
 - Offer the user a correction of the keybind copy on the canvas's Edit info and Reinstall artboards.
 - The install links in `OnboardingLaunch`'s no-Proton state point at a placeholder; the user supplies the real Proton-GE, Proton-Cachy and DWProton pages. The Proton-Cachy folder name on the canvas is a guess.
 - Ask the user whether the Settings Proton dropdown also marks the recommended builds.
-- Phase 3 follow-up, the details panel: a "Made of N mods" list (base first, patches on top; each with a Base or Patch badge, its name, file, author and upload date) and a "Manage in History" link, between the keys and the facts. It shows only when more than one download is registered on the mod (`origin.downloads`).
 - The status bar's "Watching library for changes" and the library file watcher behind it have no phase yet; give them one before phase 7, whose Settings may want a switch for it.
 - The existing screens still hold about 177 `Color(0x…)` literals and sky-blue gradients. Each goes when its screen is rebuilt.
 - The canvas's search field in the title bar waits for the palette in phase 8.

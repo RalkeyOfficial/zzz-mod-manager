@@ -74,6 +74,9 @@ Shader fixes — full reasoning in [`shader-fixes.md`](../docs/shader-fixes.md)
 - Never overwrite or delete a file in ZZMI's shader folder that the app did not place. An enable whose target is taken is refused whole.
 - What the app placed is recorded in `<appData>/shader_fixes.json`, never in the sidecar.
 
+Sidecars — full reasoning in [`metadata-schema.md`](../docs/metadata-schema.md) §2
+- Every read-then-write of a sidecar runs inside `lockSidecar`, and a locked section never takes the lock again: it is not re-entrant, so a nested call hangs with no error.
+
 Characters
 - The `characterAliases` map is duplicated in `_detectCharacterFromName` and `_findCharacterInText` (`mod_manager_service.dart`) — update both copies when adding a character. The canonical roster is `utils/zzz_characters.dart`.
 - `assets/characters/<name>.png` is spelled in exactly one place, `CharacterAvatar.assetPathFor`. It returns null when there is no portrait, and that check must run before an `Image` is built.

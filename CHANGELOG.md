@@ -74,7 +74,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - A patch whose files don't belong in the mod you picked installs as its own mod instead, and says which of the two reasons it was.
   - A folder holding a patch plus the mod it patches can be told about both, and both are checked for updates.
   - Checking such a folder for updates reports on both mods in full — each with its own verdict, its own before-and-after, its own release notes and its own Update button.
-  - Its details panel and tracking dialog list both mods side by side, each marked as the mod or the patch. Which one you installed first makes no difference to how any of it reads.
+  - Its details panel lists the mods it is made of by name, base first and patches on top, with each one's file, author and upload date once the app has its page. The tracking dialog lists both side by side, each marked as the mod or the patch. Which one you installed first makes no difference to how any of it reads.
   - A patch can be taken back out, from "Remove patch…" in the mod's right-click menu or from its row in the tracking dialog: the files it added are deleted and the mod's own files come back. It saves a copy of the mod first, tells you what it will do before it does it, and says so when one of your mod's files was never saved.
   - Updating a patch takes its old version back out: your mod's own files return wherever the new patch no longer replaces them, and anything the old patch added and the new one doesn't goes.
   - A patch you dragged in yourself is remembered too, so it survives an update to the mod under it — even though it has no page to check for updates and can't be taken out from the menu.

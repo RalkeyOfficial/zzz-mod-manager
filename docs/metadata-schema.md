@@ -103,6 +103,7 @@ dependency at all: see `test/origin_backfill_test.dart` and
         "role": "base",
         "mod_id": 123456,
         "mod_id_confidence": "exact",
+        "name": "Ellen Swimsuit",
         "file_id": 1433843,
         "version_confidence": "exact",
         "archive_md5": "9e107d9d372bb6826bd81d3542a419d6"
@@ -211,6 +212,7 @@ lives on an entry in `downloads`.
 |---|---|
 | `role` | `base` at index 0, `patch` above it. **Redundant with the position**, which is the authority — see below. |
 | `mod_id` / `file_id` | Remote handles. A mod publishes many files, so both are needed to say what is installed. `mod_id` may be absent: a patch written in from a local archive has no page, and the layer is still worth recording. |
+| `name` | The mod page's title as the app last saw it, **for display only**: written by the install, the tracking dialog and every update check, rewritten when the page's title changes, and cleared when the layer is rebound to another mod. Never read to work out which mod a layer is; `mod_id` is that. See [`origin-tracking.md` §10](origin-tracking.md#where-it-is-shown). |
 | `mod_id_confidence` / `version_confidence` | `exact` \| `user` \| `inferred` \| `assumed_latest` \| `unknown`. Identity and version resolve independently, so they carry separate confidences. What each tier means and who may write it: [`origin-tracking.md`](origin-tracking.md#1-two-axes-confidence-and-provenance). |
 | `version` / `version_label` | `version` is a version string; `version_label` is the author's free-text *variant* marker ("white hair ver"). **Never conflate them** — that makes two variants of one release look like two releases. |
 | `archive_md5` | md5 of the archive **this layer** came from. |
@@ -564,6 +566,15 @@ doesn't exist, instead of relying on `create(recursive: true)`. This prevents th
 **"ghost folder" bug**: a mod renamed out from under a still-open edit dialog would
 otherwise be re-materialised as a folder containing nothing but our sidecar.
 Preserve this guard in any new write path.
+
+### One read-then-write per folder at a time
+
+A write puts back the whole sidecar it read, so two writers that interleave on one folder leave only the later one's changes: a check saving a page title while the user saves Edit info would put back the description from before the edit.
+Writers run whenever they like (a check nobody pressed, a dialog, a scan), so the order cannot be arranged by the callers.
+
+- **Every read-then-write of a sidecar runs inside `lockSidecar`** (`services/mod_metadata_service.dart`), which queues it behind any earlier one for the same folder. Different folders do not wait for each other. A new write path that reads, changes and writes a sidecar goes through it too.
+- **A locked section never takes the lock again**, directly or through a method that does. The queue is not re-entrant, so the inner call waits for the outer one to finish and the outer one waits for the inner: it hangs, with no error and nothing in the log.
+- A failed writer does not hold up the next one.
 
 ### Nothing in a sidecar that says nothing
 

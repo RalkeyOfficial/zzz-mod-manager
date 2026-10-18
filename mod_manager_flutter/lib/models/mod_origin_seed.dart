@@ -17,6 +17,7 @@ class ModOriginSeed {
     this.source,
     this.modId,
     this.modIdConfidence = OriginConfidence.unknown,
+    this.name,
     this.fileId,
     this.version,
     this.versionLabel,
@@ -41,6 +42,9 @@ class ModOriginSeed {
   final String? source;
   final int? modId;
   final OriginConfidence modIdConfidence;
+
+  /// The mod page's title, for `ModDownload.name`.
+  final String? name;
   final int? fileId;
   final String? version;
   final String? versionLabel;

@@ -226,7 +226,9 @@ class OriginResolution {
   /// [OriginConfidence.user] and never higher: the user picking a mod page is
   /// trusted enough for a confirmed update, but it is not the same as having
   /// downloaded the file or matched its checksum, which is what `exact` means.
-  static ModOrigin bind(ModOrigin? existing, int modId) {
+  ///
+  /// [name] is the page's title, when the caller has the page.
+  static ModOrigin bind(ModOrigin? existing, int modId, {String? name}) {
     final base = existing ??
         // Genuinely unknown for a mod that never had a block: it may have been
         // hand-copied, imported, or downloaded by an older build. The
@@ -239,6 +241,7 @@ class OriginResolution {
         .withBase((download) => download.boundTo(
               modId: modId,
               confidence: OriginConfidence.user,
+              name: name,
             ))
         .copyWith(source: gameBananaSource);
   }

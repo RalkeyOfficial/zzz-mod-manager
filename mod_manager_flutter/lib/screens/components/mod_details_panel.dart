@@ -10,7 +10,9 @@ import '../../core/palette.dart';
 import '../../core/type_scale.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
+import '../../models/gamebanana/gb_mod.dart';
 import '../../models/keybind_info.dart';
+import '../../models/mod_download.dart';
 import '../../models/origin_enums.dart';
 import '../../services/api_service.dart';
 import '../../services/cover_thumbnail.dart';
@@ -19,6 +21,7 @@ import '../../services/installed_record.dart';
 import '../../services/platform_service_factory.dart';
 import '../../services/update_check.dart';
 import '../../utils/byte_format.dart';
+import '../../utils/gamebanana_url.dart';
 import '../../utils/home_relative.dart';
 import '../../utils/markdown_description.dart';
 import '../../utils/markdown_style.dart';
@@ -28,7 +31,7 @@ import '../../utils/url_utils.dart';
 import '../../utils/zzz_characters.dart';
 import '../shell/keycap.dart';
 import 'character_tile.dart';
-import 'folder_downloads_summary.dart';
+import 'folder_downloads_summary.dart' show downloadName;
 import 'resolve/resolve_fragments.dart' show formatResolveDate;
 import 'shader_part_summary.dart';
 import 'zenith_controls.dart';
@@ -81,7 +84,7 @@ class ModDetailsPanel extends ConsumerWidget {
     final loc = context.loc;
     final palette = ZenithPalette.of(context);
     final text = Theme.of(context).textTheme;
-    final (:page, file: _) = installedRecord(mod, ref.watch(modUpdateRecordsProvider));
+    final (:page, file: _) = installedRecord(mod, ref.watch(knownModPagesProvider));
     final author = page?.submitter?.name;
     final keys = [
       for (final k in mod.keybinds ?? const <KeybindInfo>[])
@@ -179,8 +182,8 @@ class ModDetailsPanel extends ConsumerWidget {
                 ],
                 ShaderPartSummary(folderName: mod.name),
                 if ((mod.origin?.downloads.length ?? 0) > 1) ...[
-                  const SizedBox(height: 10),
-                  FolderDownloadsSummary(origin: mod.origin, folderName: mod.name, showHint: true),
+                  const SizedBox(height: 18),
+                  _MadeOf(mod: mod),
                 ],
                 const SizedBox(height: 18),
                 _Facts(mod: mod, onResolveOrigin: onResolveOrigin),
@@ -249,15 +252,10 @@ class _Link extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => MouseRegion(
-    cursor: SystemMouseCursors.click,
-    child: GestureDetector(
-      onTap: onTap,
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: ZenithPalette.of(context).link),
-      ),
-    ),
+  Widget build(BuildContext context) => ZenithLink(
+    label,
+    onTap: onTap,
+    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: ZenithPalette.of(context).link),
   );
 }
 
@@ -535,19 +533,7 @@ class _Keys extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 8,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Expanded(
-              child: Text(
-                loc.t('library.details.keys').toUpperCase(),
-                style: ZenithType.of(context).caps.copyWith(color: palette.text3),
-              ),
-            ),
-            Text(loc.t('library.details.keys_source'), style: text.labelSmall?.copyWith(color: palette.text3)),
-          ],
-        ),
+        _Heading(loc.t('library.details.keys'), aside: loc.t('library.details.keys_source')),
         Container(
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
@@ -584,6 +570,156 @@ class _Keys extends StatelessWidget {
   }
 }
 
+/// A section's label in caps, and a quieter remark on the right.
+class _Heading extends StatelessWidget {
+  const _Heading(this.label, {required this.aside});
+
+  final String label;
+  final String aside;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ZenithPalette.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        Expanded(
+          child: Text(label.toUpperCase(), style: ZenithType.of(context).caps.copyWith(color: palette.text3)),
+        ),
+        Text(aside, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: palette.text3)),
+      ],
+    );
+  }
+}
+
+/// The downloads a folder is made of, in stack order: the base first, each patch above what it is written over
+/// (`docs/origin-tracking.md` §10). Shown only for a folder with more than one.
+///
+/// Like the facts below it, a row's file, author and upload date come from a page this session holds, fetched by a
+/// check, an install or a dialog, and are absent without one; the file and its date also need the file on record to
+/// be confirmed.
+class _MadeOf extends ConsumerWidget {
+  const _MadeOf({required this.mod});
+
+  final ModInfo mod;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final loc = context.loc;
+    final palette = ZenithPalette.of(context);
+    final downloads = mod.origin?.downloads ?? const <ModDownload>[];
+    final records = ref.watch(knownModPagesProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 8,
+      children: [
+        _Heading(
+          loc.plural('library.details.made_of', downloads.length, params: {'count': '${downloads.length}'}),
+          aside: loc.t('library.details.made_of_order'),
+        ),
+        Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: palette.outline),
+          ),
+          child: Column(
+            children: [
+              for (final (i, download) in downloads.indexed)
+                _DownloadRow(
+                  download: download,
+                  folderName: mod.name,
+                  records: records,
+                  last: i == downloads.length - 1,
+                ),
+            ],
+          ),
+        ),
+        // Opens the mod's GameBanana page, so it is offered only when there is one.
+        if (modPageUrl(mod) != null)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: _SmallLink(loc.t('library.details.manage_history'), onTap: () => openModLink(context, mod)),
+          ),
+      ],
+    );
+  }
+}
+
+class _DownloadRow extends StatelessWidget {
+  const _DownloadRow({required this.download, required this.folderName, required this.records, required this.last});
+
+  final ModDownload download;
+  final String folderName;
+  final Map<int, GbMod> records;
+  final bool last;
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = context.loc;
+    final palette = ZenithPalette.of(context);
+    final text = Theme.of(context).textTheme;
+    final (:page, file: recorded) = downloadRecord(download, records);
+    final file = download.versionConfidence.isConfirmed ? recorded : null;
+    final isBase = download.role == DownloadRole.base;
+    final modId = download.modId;
+
+    final name = downloadName(loc, download, folderName: folderName, fetched: page?.name);
+    final byline = [
+      ?page?.submitter?.name,
+      if (file?.dateAdded case final date?)
+        loc.t('library.details.uploaded_on', params: {'date': formatResolveDate(date)}),
+    ].join(' · ');
+
+    final nameStyle = text.bodyMedium?.copyWith(color: palette.text, fontWeight: FontWeight.w600);
+    // Every row with a page links to it: an id is not something a person can act on.
+    final title = modId == null
+        ? Text(name, style: nameStyle)
+        : Tooltip(
+            message: loc.t('mods.folder.open_page'),
+            child: ZenithLink(
+              name,
+              onTap: () => launchExternalUrl(context, gameBananaModUrl(modId)),
+              style: nameStyle,
+            ),
+          );
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        border: last ? null : Border(bottom: BorderSide(color: palette.divider)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: 10,
+        children: [
+          ZenithBadge(
+            label: loc.t(isBase ? 'library.details.role_base' : 'library.details.role_patch'),
+            tone: palette.badgeNeutral,
+            minWidth: 46,
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 1,
+              children: [
+                title,
+                if (file != null)
+                  Text(
+                    fileDisplayName(file),
+                    style: ZenithType.of(context).monoSmall.copyWith(color: palette.text2, height: 1.4),
+                  ),
+                if (byline.isNotEmpty) Text(byline, style: text.labelSmall?.copyWith(color: palette.text3)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// File, variant, upload date, tracking, when it was added, and its size.
 class _Facts extends ConsumerWidget {
   const _Facts({required this.mod, required this.onResolveOrigin});
@@ -598,7 +734,7 @@ class _Facts extends ConsumerWidget {
     final style = Theme.of(context).textTheme.bodySmall;
     final origin = mod.origin;
     final base = origin?.base;
-    final (page: _, file: recorded) = installedRecord(mod, ref.watch(modUpdateRecordsProvider));
+    final (page: _, file: recorded) = installedRecord(mod, ref.watch(knownModPagesProvider));
     // A file only worked out is not stated as the file, here as on the card: not its name, its date or its variant.
     final confirmed = base?.versionConfidence.isConfirmed ?? false;
     final file = confirmed ? recorded : null;
@@ -702,15 +838,10 @@ class _SmallLink extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => MouseRegion(
-    cursor: SystemMouseCursors.click,
-    child: GestureDetector(
-      onTap: onTap,
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: ZenithPalette.of(context).link),
-      ),
-    ),
+  Widget build(BuildContext context) => ZenithLink(
+    label,
+    onTap: onTap,
+    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: ZenithPalette.of(context).link),
   );
 }
 

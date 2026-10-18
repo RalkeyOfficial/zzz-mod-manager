@@ -70,8 +70,7 @@ class InstallAsNewMod extends PatchDestination {
 
   final ModDownload? base;
 
-  /// The base mod page's own name, for the row to say. Not stored on the
-  /// layer — a name is the remote's to change.
+  /// The base mod page's own name, for the row to say.
   final String? baseName;
 
   /// The file of the base mod the install should **fetch and write into this

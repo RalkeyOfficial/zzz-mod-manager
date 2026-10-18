@@ -17,7 +17,9 @@ import '../services/gamebanana/gamebanana_client.dart';
 import '../services/backup/snapshot_service.dart';
 import '../services/bulk_assume_current.dart';
 import '../services/bulk_update_check.dart';
+import '../services/download_names.dart';
 import '../services/installed_mods_index.dart';
+import '../services/log/logger.dart';
 import '../services/mod_manager_service.dart';
 import '../services/origin_status.dart';
 import '../services/origin_write.dart';
@@ -29,6 +31,8 @@ import 'categories.dart';
 import 'directory_size.dart';
 import 'mod_sorting.dart';
 import 'zzz_characters.dart';
+
+final Logger _log = Logger('origin');
 
 // The marketplace's own browsing state (query, results, categories, open mod)
 // lives in `marketplace_providers.dart` — one screen's session rather than
@@ -644,6 +648,43 @@ final modUpdateChecksProvider =
 /// last week is the same mistake as a restored verdict.
 final modUpdateRecordsProvider =
     StateProvider<Map<int, GbMod>>((ref) => const {});
+
+/// Mod pages fetched this session **outside a check**: by an install, and by the dialogs that look a mod up.
+///
+/// Kept apart from [modUpdateRecordsProvider] because a record there also means "the check reached this mod", which
+/// the resolution screen counts on: a page an install fetched would have it report every other mod as unreached.
+final fetchedModPagesProvider = StateProvider<Map<int, GbMod>>((ref) => const {});
+
+/// Every mod page in hand this session, for the surfaces that only display one: the card's file line and the
+/// details panel. A mod installed a moment ago names its file, author and upload date without a check.
+final knownModPagesProvider = Provider<Map<int, GbMod>>((ref) {
+  return {...ref.watch(fetchedModPagesProvider), ...ref.watch(modUpdateRecordsProvider)};
+});
+
+/// Keeps [pages] in [fetchedModPagesProvider] for this session.
+void keepModPages(WidgetRef ref, Map<int, GbMod> pages) {
+  if (pages.isEmpty) return;
+  final fetched = ref.read(fetchedModPagesProvider.notifier);
+  fetched.state = {...fetched.state, ...pages};
+}
+
+/// Writes the titles of [pages] onto the sidecars of the library's mods whose downloads they name
+/// (`ModDownload.name`), and rescans when one changed. Run after a check, which fetches every tracked mod's page.
+///
+/// A failure is logged and goes no further: the name is a display copy, and the next check tries again. [writer] is
+/// the caller's seam, the library service's write by default.
+Future<void> rememberDownloadNamesFrom(WidgetRef ref, Map<int, GbMod> pages, {OriginWriter? writer}) async {
+  if (pages.isEmpty) return;
+  final mods = ref.read(modsProvider);
+  final library = ref.read(libraryProvider.notifier);
+  final write = writer ?? originWriterFor(ref.read(modManagerServiceProvider.future));
+  try {
+    final wrote = await rememberDownloadNames(mods: mods, pages: pages, write: write);
+    if (wrote) await library.rescan();
+  } catch (e) {
+    _log.warning('download names were not saved', error: e);
+  }
+}
 
 /// What the resolution screen would show for the records currently in hand.
 ///

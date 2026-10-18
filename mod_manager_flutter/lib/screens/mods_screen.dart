@@ -24,6 +24,7 @@ import '../services/update_apply/mod_activation_port.dart';
 import '../services/update_apply/update_applier.dart';
 import '../utils/notifications.dart';
 import '../utils/state_providers.dart';
+import 'components/folder_downloads_summary.dart';
 import '../utils/url_utils.dart';
 import '../utils/zzz_characters.dart';
 import 'components/character_hero.dart';
@@ -459,12 +460,13 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
   /// Takes one patch back out of a folder and rescans, since the card's status
   /// badge is drawn from `ModInfo.origin`.
   ///
-  /// The name comes from what the session already fetched, falling back to the
-  /// id: a companion records no title, and a page fetch on the way into a
-  /// confirmation would be a request the user did not ask for.
+  /// The name comes from what the session already fetched or the layer saved,
+  /// falling back to the id: a page fetch on the way into a confirmation would
+  /// be a request the user did not ask for.
   Future<void> _removePatch(ModInfo mod, ModDownload patch) async {
-    final name = ref.read(modUpdateRecordsProvider)[patch.modId]?.name ??
-        context.loc.t('mods.folder.unnamed', params: {'id': '${patch.modId}'});
+    final name = downloadName(context.loc, patch,
+        folderName: mod.name,
+        fetched: ref.read(knownModPagesProvider)[patch.modId]?.name);
     if (await removePatchFlow(context, ref,
         mod: mod, patch: patch, patchName: name)) {
       await loadMods();

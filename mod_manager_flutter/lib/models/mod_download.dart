@@ -75,6 +75,7 @@ class ModDownload {
     this.role = DownloadRole.base,
     this.modId,
     this.modIdConfidence = OriginConfidence.unknown,
+    this.name,
     this.fileId,
     this.version,
     this.versionLabel,
@@ -99,6 +100,16 @@ class ModDownload {
   final int? modId;
 
   final OriginConfidence modIdConfidence;
+
+  /// The mod page's title as the app last saw it, for display only.
+  ///
+  /// **A copy of the remote's name, never an answer to which mod this is**:
+  /// [modId] is that. Written by whatever fetches the page (an install, an
+  /// update check, the tracking dialog) and rewritten whenever a fetch finds it
+  /// changed, so a folder lists its downloads by name after a restart without a
+  /// request. Null until a page has been seen, and cleared by a rebind to
+  /// another mod, whose name it is not.
+  final String? name;
 
   /// Which *file* of that mod this is. A mod publishes many.
   final int? fileId;
@@ -148,6 +159,7 @@ class ModDownload {
         if (modId != null) 'mod_id': modId,
         if (modIdConfidence != OriginConfidence.unknown)
           'mod_id_confidence': modIdConfidence.wire,
+        if (name != null) 'name': name,
         if (fileId != null) 'file_id': fileId,
         if (version != null) 'version': version,
         if (versionLabel != null) 'version_label': versionLabel,
@@ -188,6 +200,7 @@ class ModDownload {
       role: actual,
       modId: _int(raw['mod_id']),
       modIdConfidence: OriginConfidence.parse(raw['mod_id_confidence']),
+      name: _string(raw['name']),
       fileId: _int(raw['file_id']),
       version: _string(raw['version']),
       versionLabel: _string(raw['version_label']),
@@ -203,6 +216,7 @@ class ModDownload {
     DownloadRole? role,
     int? modId,
     OriginConfidence? modIdConfidence,
+    String? name,
     int? fileId,
     String? version,
     String? versionLabel,
@@ -216,6 +230,7 @@ class ModDownload {
         role: role ?? this.role,
         modId: modId ?? this.modId,
         modIdConfidence: modIdConfidence ?? this.modIdConfidence,
+        name: name ?? this.name,
         fileId: fileId ?? this.fileId,
         version: version ?? this.version,
         versionLabel: versionLabel ?? this.versionLabel,
@@ -243,15 +258,20 @@ class ModDownload {
   ///
   /// So do [files]: they name what is on disk, and disk did not change because
   /// somebody corrected a record.
+  ///
+  /// [name] is the new mod's, when the caller has its page; without one a
+  /// rebind clears the old mod's name and keeps it otherwise.
   ModDownload boundTo({
     required int modId,
     required OriginConfidence confidence,
+    String? name,
   }) {
     final rebinding = this.modId != null && this.modId != modId;
     return ModDownload(
       role: role,
       modId: modId,
       modIdConfidence: confidence,
+      name: name ?? (rebinding ? null : this.name),
       fileId: rebinding ? null : fileId,
       version: rebinding ? null : version,
       versionLabel: rebinding ? null : versionLabel,
@@ -295,6 +315,8 @@ class ModDownload {
         role: role,
         modId: modId,
         modIdConfidence: OriginConfidence.exact,
+        // The old name only while it is still the same mod's.
+        name: modId == this.modId ? name : null,
         fileId: fileId,
         version: version,
         versionLabel: versionLabel,
@@ -312,6 +334,7 @@ class ModDownload {
         role: role,
         modId: modId,
         modIdConfidence: modIdConfidence,
+        name: name,
         fileId: fileId,
         version: version,
         versionLabel: versionLabel,
@@ -333,6 +356,7 @@ class ModDownload {
       other.role == role &&
       other.modId == modId &&
       other.modIdConfidence == modIdConfidence &&
+      other.name == name &&
       other.fileId == fileId &&
       other.version == version &&
       other.versionLabel == versionLabel &&
@@ -355,6 +379,7 @@ class ModDownload {
         role,
         modId,
         modIdConfidence,
+        name,
         fileId,
         version,
         versionLabel,

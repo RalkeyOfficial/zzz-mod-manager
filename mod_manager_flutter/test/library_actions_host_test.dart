@@ -7,6 +7,7 @@ import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_update.dart';
+import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/components/library_actions_host.dart';
 import 'package:mod_manager_flutter/screens/components/mods_toolbar.dart';
@@ -46,7 +47,7 @@ void main() {
     ModInfo(id: 'bare', name: 'bare', characterId: 'ellen', isActive: false),
   ];
 
-  Future<void> pumpHost(WidgetTester tester) async {
+  Future<void> pumpHost(WidgetTester tester, {OriginWriter? originWriter}) async {
     container = ProviderContainer(overrides: [libraryOf(library)]);
     addTearDown(container.dispose);
     container.read(selectedCharacterIdProvider.notifier).state = 'ellen';
@@ -63,7 +64,7 @@ void main() {
           return response.future;
         },
         updatesFetcher: (_) async => const <GbUpdate>[],
-        originWriter: (_, _) async => OriginWriteResult.writeFailed,
+        originWriter: originWriter ?? (_, _) async => OriginWriteResult.writeFailed,
         child: ValueListenableBuilder<bool>(
           valueListenable: toolbarShown,
           builder: (_, shown, _) => shown
@@ -113,6 +114,24 @@ void main() {
     expect(container.read(modUpdateChecksProvider)['stale']?.outcome, UpdateOutcome.updateAvailable);
     expect(find.text('1 mod has an update'), findsOneWidget, reason: 'the report is the host\'s, not the toolbar\'s');
     expect(container.read(libraryCheckRunningProvider), isFalse);
+  });
+
+  testWidgets("a check saves each download's page title on its sidecar", (tester) async {
+    // So the details panel names the downloads after a restart, without a request.
+    final written = <String, ModOrigin?>{};
+    await pumpHost(
+      tester,
+      originWriter: (modId, update) async {
+        written[modId] = update(library.firstWhere((mod) => mod.id == modId).origin);
+        return OriginWriteResult.written;
+      },
+    );
+    await startCheck(tester);
+    answer();
+    await tester.pumpAndSettle();
+
+    expect(written.keys, ['stale'], reason: 'only the mod the page names');
+    expect(written['stale']?.base?.name, 'Ellen Swimsuit');
   });
 
   testWidgets('while it runs, nothing can start another', (tester) async {

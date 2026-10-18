@@ -570,6 +570,9 @@ Unlike the download host it raises no dialog, so it does not need to sit below t
 **The manual check lives above the page switcher too**, in `LibraryActionsHost`, for the same reason ([`library-screen.md`](library-screen.md) §7).
 The two share `libraryCheckRunningProvider`: whichever pass is running, the other does not start.
 
+**Both save the titles of the pages they fetched** on each download they name (`ModDownload.name`, `rememberDownloadNamesFrom`), before the results screen opens. The update dialog's own check does the same for its mod.
+Only a title that differs is written, so a pass with nothing new touches no file. Why a title is saved at all is in [`origin-tracking.md` §10](origin-tracking.md#where-it-is-shown).
+
 **Both surfaces run the same code.** `services/update_check_run.dart` holds the
 request (including the cache bypass, for the reason the marketplace's refresh
 button has one) and the merge rule — *merge, never replace*, since a per-mod

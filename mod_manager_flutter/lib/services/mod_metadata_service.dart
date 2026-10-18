@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -8,6 +9,26 @@ import 'cover_thumbnail.dart';
 import 'log/logger.dart';
 
 final Logger _log = Logger('metadata');
+
+/// The last queued read-then-write per folder, see [lockSidecar].
+final Map<String, Future<void>> _sidecarQueue = {};
+
+/// Runs [body] once every earlier [lockSidecar] call for [modFolder] has finished.
+///
+/// **Every read-then-write of a sidecar goes through this**, because the write puts back the whole file it read:
+/// two writers that interleave (a check saving a page title while the user saves Edit info) leave only the later
+/// one's changes. Per folder, so writes to different mods still run side by side. Not re-entrant: a body that locks
+/// its own folder again never runs.
+Future<T> lockSidecar<T>(String modFolder, Future<T> Function() body) {
+  final key = path.normalize(modFolder);
+  final result = (_sidecarQueue[key] ?? Future<void>.value()).then((_) => body());
+  final done = result.then<void>((_) {}, onError: (Object _) {});
+  _sidecarQueue[key] = done;
+  unawaited(done.whenComplete(() {
+    if (identical(_sidecarQueue[key], done)) _sidecarQueue.remove(key);
+  }));
+  return result;
+}
 
 /// Reads and writes the per-mod metadata sidecar stored inside each mod folder
 /// at `<mod>/.zzz-mod-manager/metadata.json`. All paths are based off the mod

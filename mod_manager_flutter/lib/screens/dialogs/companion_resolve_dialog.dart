@@ -30,8 +30,7 @@ class CompanionNamed extends CompanionOutcome {
   /// The mod page's own name, when this step had the record in hand.
   ///
   /// Carried so a caller can say *which* mod was recorded rather than printing
-  /// an id. Not stored on the companion: a name is the remote's to change, and
-  /// a sidecar holding a stale copy would be a second source of truth for it.
+  /// an id. The companion carries it too, as its display copy (`ModDownload.name`).
   final String? modName;
 
   /// The file row the user picked, when they picked one.
@@ -227,6 +226,8 @@ class _CompanionResolveDialogState
       final record =
           await fetchModRecord(ref.read(gameBananaClientProvider), modId);
       if (!mounted) return;
+      // So the mod this names can show its file and author once installed.
+      keepModPages(ref, {modId: record});
       setState(() {
         _record = record;
         _loading = false;
@@ -270,6 +271,7 @@ class _CompanionResolveDialogState
           modId: modId,
           // `user`, never `exact` — see the class doc.
           modIdConfidence: OriginConfidence.user,
+          name: _record?.name,
           fileId: file?.idRow,
           version: file?.version,
           versionLabel: file?.description,

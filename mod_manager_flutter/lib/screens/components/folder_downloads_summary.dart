@@ -29,10 +29,33 @@ enum FolderRowAction {
   remove,
 }
 
+/// What to call one layer of a folder's stack, without fetching anything.
+///
+/// [fetched] first, a page this session holds; then the name saved with the
+/// layer (`ModDownload.name`); then its id. Only a bottom layer with no id at
+/// all is called by [folderName]: a folder can be named after its patch (a patch
+/// installed as its own folder, with the mod it patches fetched in), so the
+/// folder name is a fact about the folder and not about its base.
+String downloadName(
+  AppLocalizations loc,
+  ModDownload download, {
+  required String folderName,
+  String? fetched,
+}) {
+  if (fetched?.trim() case final name? when name.isNotEmpty) return name;
+  if (download.name case final name?) return name;
+  if (download.modId case final id?) {
+    return loc.t('mods.folder.unnamed', params: {'id': '$id'});
+  }
+  return download.role == DownloadRole.base
+      ? folderName
+      : loc.t('mods.folder.local_patch');
+}
+
 /// **What this folder holds**, as a list of peers.
 ///
-/// Shown by the details view, the tracking dialog and the update dialog — one
-/// implementation, because the thing worth getting right is not the layout.
+/// Shown by the resolve dialog. The details panel draws the same stack in the
+/// canvas's own layout (`mod_details_panel.dart`).
 ///
 /// **Nothing here ranks the folder's own download above the other one.** Which
 /// of a mod and its patch a sidecar stores in `origin`'s own fields is install
@@ -59,7 +82,6 @@ class FolderDownloadsSummary extends ConsumerStatefulWidget {
     this.knownNames = const <int, String>{},
     this.notes = const <int, String>{},
     this.lookUpNames = false,
-    this.showHint = false,
     this.onEdit,
     this.rowActions = const <int, FolderRowAction>{},
   });
@@ -95,15 +117,6 @@ class FolderDownloadsSummary extends ConsumerStatefulWidget {
   /// entry that can be acted on looks like every other entry and simply has one
   /// more thing on it.
   final void Function(ModDownload download)? onEdit;
-
-  /// Whether to explain *why* one folder holds two downloads.
-  ///
-  /// On for the details view, which is the surface whose job is answering "what
-  /// is this", and where a scrollable column has the room. Off for the two
-  /// action dialogs: both are already at their height budget, and a sentence
-  /// there competes with the controls the user opened them to reach. The heading
-  /// and the role labels carry the meaning without it.
-  final bool showHint;
 
   /// Which rows [onEdit] applies to, by mod id, and what it does to each.
   ///
@@ -156,10 +169,11 @@ class _FolderDownloadsSummaryState
       final id = download.modId;
       if (id == null || _asked.contains(id)) continue;
       if (widget.knownNames.containsKey(id)) continue;
-      if (ref.read(modUpdateRecordsProvider).containsKey(id)) continue;
+      if (ref.read(knownModPagesProvider).containsKey(id)) continue;
       _asked.add(id);
       fetchModRecord(ref.read(gameBananaClientProvider), id).then((record) {
         if (!mounted) return;
+        keepModPages(ref, {id: record});
         final name = record.name;
         if (name == null || name.isEmpty) return;
         setState(() => _fetched[id] = name);
@@ -173,16 +187,9 @@ class _FolderDownloadsSummaryState
         ? null
         : widget.knownNames[id] ??
             _fetched[id] ??
-            ref.watch(modUpdateRecordsProvider)[id]?.name;
-    if (fetched != null && fetched.isNotEmpty) return fetched;
-    // **The bottom layer falls back to the folder name**, which is what the
-    // user knows this thing by everywhere else in the app — and the folder is
-    // named after what it is. A layer written over it has no such claim.
-    if (download.role == DownloadRole.base) return widget.folderName;
-    return context.loc.t(
-      'mods.folder.unnamed',
-      params: {'id': id == null ? '?' : '$id'},
-    );
+            ref.watch(knownModPagesProvider)[id]?.name;
+    return downloadName(context.loc, download,
+        folderName: widget.folderName, fetched: fetched);
   }
 
   @override
@@ -202,14 +209,6 @@ class _FolderDownloadsSummaryState
             fontWeight: FontWeight.w700,
           ),
         ),
-        if (widget.showHint) ...[
-          const SizedBox(height: 2),
-          Text(
-            loc.t('mods.folder.hint'),
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-          ),
-        ],
         const SizedBox(height: 8),
         for (final download in downloads) _row(download),
       ],

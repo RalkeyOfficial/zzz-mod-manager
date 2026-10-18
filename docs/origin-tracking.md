@@ -816,14 +816,14 @@ list:
 
 ### Where it is shown
 
-**Three surfaces, one implementation** — the details panel, the resolve dialog and the update dialog, through `screens/components/folder_downloads_summary.dart`.
+**Three surfaces, one set of rules.** The resolve dialog reads the stack through `screens/components/folder_downloads_summary.dart`, and the update dialog gives each download a full report of its own, as said further down.
+The Library's details panel draws it as the canvas does, as "Made of N mods" (`_MadeOf` in `mod_details_panel.dart`, [`library-screen.md`](library-screen.md) §12): a Base or Patch badge, the name, and the file, author and upload date once the session holds the page.
+Everything below holds for all three.
 
 **It renders the stack in the order the stack is in**, and there is nothing else to
-it. That was the point of the change: this section used to hold a derivation
-(`folderDownloads`) that read two signals to work out which entry was the patch,
-and a partition to put the mod's half first, because a section that read the old
-block straight would have put the same pair of mods in different places for two
-users who did the same thing in a different sequence.
+it: position is the role, so no surface works out which entry is the patch or
+reorders them, and the same pair of mods reads the same for two users who
+installed them in a different sequence.
 
 Bottom-first is the order the files themselves go on disk
 ([`applying-updates.md` §6](applying-updates.md#6-the-order-and-why-it-is-the-safety-argument)),
@@ -835,21 +835,34 @@ look like a change to the folder.
 restatement of the mod already on screen; and saying "nothing else here" would be a
 claim about a scan this never performs.
 
-**Nothing stores a name**, for either entry — a name belongs to the remote, and a
-stored copy would be a second source of truth. So each caller supplies what it has,
-and the row falls back:
+**Each layer saves its page's title as `name`**, a display copy written by whatever fetches the page:
+- the install, from the page it installs and from the base the patch prompt fetched;
+- the tracking dialog, when it binds a mod;
+- every update check: a whole-library one for every layer its pages name, before its results screen opens, and the update dialog's own check for the mod it is about (`rememberDownloadNames`, `services/download_names.dart`).
 
-| Surface | Where a name comes from | Explains the "why two" hint |
-|---|---|---|
-| Update dialog *(section headers, not this section)* | The records its own check fetched. Failing that it looks one up — **but only when the check did not run**, which is every reopen and every arrival from a card badge, since `initState` skips the check once a verdict is on record and only a *bulk* pass banks records in the session. Withheld once the check has run: a name missing then means that download's request failed, and asking again is a second failure per download on an offline check. | no |
-| Resolve dialog | The session's records, else one small `Mod/Multi` request — it is already talking to GameBanana, and this is not a request it would otherwise make. | no |
-| Details panel | The session's records, else the fallback. **It never fetches**: selecting a mod should not spend a request the user did not ask for. | **yes** — the surface whose job is "what is this", and the one with a scrollable column to spend on it |
+A write happens only when the title differs, so a check with nothing new touches no file. A name saved by a check never puts back an older copy of an edit the user saved at the same moment, because every sidecar read-then-write queues per folder ([`metadata-schema.md`](metadata-schema.md#one-read-then-write-per-folder-at-a-time)).
 
-The fallback itself differs by entry and each uses the best thing available: the
-**bottom** layer falls back to **the folder name**, which is what the user knows it
-by everywhere else in the app and what the folder is named after; a layer above it
-falls back to its id. Every row links to its page either way, because an id is not
-something a person can act on.
+**It is never an answer to which mod a layer is**: `mod_id` is, and nothing reads `name` to match, rank or bind, which is why a second copy of the remote's name is safe to keep.
+Without it a folder could be named only while a check's pages are in memory, so after a restart a patch installed as its own folder would list its base by the patch's archive name and its patch by an id.
+A renamed page is picked up by the next check that reaches it, and until then the old title shows.
+
+So each surface takes the best name it has, through one helper, `downloadName` (`screens/components/folder_downloads_summary.dart`):
+1. a page in hand this session;
+2. the saved `name`;
+3. the id, "GameBanana mod #564819";
+4. and only for a bottom layer with no id at all, the folder name; a patch with no id reads "Patch from a local file".
+
+**The folder name is last because it is a fact about the folder, not about its base.** A patch installed as its own folder, with the mod it patches fetched in, names the folder after the patch's archive, so the folder name would put the patch's name on the base.
+
+| Surface | Where a page comes from |
+|---|---|
+| Update dialog *(section headers, not this section)* | The records its own check fetched, which it also keeps for the session. Failing that, a layer with no saved name and no page in hand is looked up, **but only when the check did not run**: every reopen and every arrival from a card badge, since `initState` skips the check once a verdict is on record. Withheld once the check has run: a name missing then means that download's request failed, and asking again is a second failure per download on an offline check. |
+| Resolve dialog | The session's pages, else one small `Mod/Multi` request: it is already talking to GameBanana, and this is not a request it would otherwise make. |
+| Details panel | The session's pages (`knownModPagesProvider`: a check's records and the pages an install or a dialog fetched). **It never fetches**: selecting a mod should not spend a request the user did not ask for. |
+
+Every row with a page links to it, because an id is not something a person can act on: a ↗ button in the dialogs, the name itself in the details panel.
+
+No surface explains *why* one folder holds two: the canvas's "base first, patches on top" and the Base and Patch badges say it.
 
 **The file line appears only when it carries something.** Not
 `describeRecordedFile`, which the resolve surfaces use and which always produces a

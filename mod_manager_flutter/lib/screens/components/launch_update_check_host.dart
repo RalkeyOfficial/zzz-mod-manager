@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/bulk_update_check.dart';
 import '../../services/launch_update_check.dart';
 import '../../services/log/logger.dart';
+import '../../services/origin_write.dart';
 import '../../services/update_check_run.dart';
 import '../../utils/state_providers.dart';
 import 'update_check_feedback.dart';
@@ -51,6 +52,7 @@ class LaunchUpdateCheckHost extends ConsumerStatefulWidget {
     required this.child,
     this.updateFetcher,
     this.updatesFetcher,
+    this.originWriter,
   });
 
   final Widget child;
@@ -63,6 +65,9 @@ class LaunchUpdateCheckHost extends ConsumerStatefulWidget {
   /// Injected only by tests, for the same reason: the second phase, asking each
   /// flagged mod's release feed which files shipped together.
   final ModUpdatesFetcher? updatesFetcher;
+
+  /// Injected only by tests: the pass saves page titles on the sidecars, and a test must not reach a library.
+  final OriginWriter? originWriter;
 
   @override
   ConsumerState<LaunchUpdateCheckHost> createState() =>
@@ -147,6 +152,7 @@ class _LaunchUpdateCheckHostState extends ConsumerState<LaunchUpdateCheckHost> {
     checks.state = mergedChecks(checks.state, outcome);
     final records = ref.read(modUpdateRecordsProvider.notifier);
     records.state = mergedRecords(records.state, outcome);
+    await rememberDownloadNamesFrom(ref, outcome.records, writer: widget.originWriter);
 
     // Only when it found something. The badges carry the answer either way, and
     // this pass has no press behind it to justify a card that says "nothing".

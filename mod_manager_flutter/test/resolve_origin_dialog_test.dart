@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -233,6 +235,20 @@ void main() {
       // Confirming an inferred identity raises it — it came from a free-form
       // field a human typed, and this is the human saying yes.
       expect(gateway.written!.modIdConfidence, OriginConfidence.user);
+    });
+
+    testWidgets("binding the mod saves its page's title with it", (tester) async {
+      // So the details panel names the download after a restart, without a request.
+      final pageName = (jsonDecode(gbMultiRecordFixture(531649)) as List).single['_sName'] as String;
+      final gateway = await pumpDialog(
+        tester,
+        target: mod(origin: tracked(archiveMd5: '18b741db96df8c640d7c897681c5e478')),
+      );
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(gateway.writes, 1);
+      expect(gateway.written!.base!.name, pageName);
     });
 
     testWidgets('identity and file are one write, not two', (tester) async {

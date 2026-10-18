@@ -80,12 +80,14 @@ class ModUid {
   ///
   /// Null when the sidecar could not be written.
   Future<String?> assign(Directory modFolder) async {
-    final metadata = await _sidecars.read(modFolder.path);
     final uid = newUid();
-    final written = await _sidecars.write(
-      modFolder.path,
-      (metadata ?? const ModMetadata()).copyWith(uid: uid),
-    );
+    final written = await lockSidecar(modFolder.path, () async {
+      final metadata = await _sidecars.read(modFolder.path);
+      return _sidecars.write(
+        modFolder.path,
+        (metadata ?? const ModMetadata()).copyWith(uid: uid),
+      );
+    });
     if (!written) {
       _log.warning('could not give a mod an identity',
           fields: {'mod': modFolder.path});

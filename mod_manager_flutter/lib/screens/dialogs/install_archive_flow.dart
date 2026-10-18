@@ -276,6 +276,9 @@ Future<InstallResult> installArchiveFlow(
     // the app describing its own routine work at the one moment the user is
     // waiting to be told one thing: that the mod arrived.
     await modManager.applyRemoteMetadata(importedMods, remote);
+    // The page is in hand, so the card and the details panel can name its file and author now rather than after a
+    // check.
+    keepModPages(ref, {mod.idRow: mod});
 
     // ---- everything the patch answers imply, now the folders exist ---------
     //
@@ -308,6 +311,7 @@ Future<InstallResult> installArchiveFlow(
       // record against the mod it went into.
       patch: PatchIdentity(
         modId: mod.idRow,
+        name: mod.name,
         fileId: file.idRow,
         version: file.version,
         versionLabel: file.description,
@@ -387,6 +391,7 @@ ModOriginSeed _seedFor(GbMod mod, GbFile file, {String? archiveMd5}) {
     source: gameBananaSource,
     modId: mod.idRow,
     modIdConfidence: OriginConfidence.exact,
+    name: mod.name,
     fileId: file.idRow,
     version: file.version,
     versionLabel: file.description,

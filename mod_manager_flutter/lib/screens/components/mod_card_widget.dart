@@ -185,13 +185,14 @@ class _ModCardWidgetState extends ConsumerState<ModCardWidget> {
     );
   }
 
-  /// Who made it and which file, when this session's check has the page in hand and the file on record is
-  /// confirmed; the date it was added otherwise. The date half is set in mono, as the design sets it.
+  /// Who made it and which file, when this session has the page in hand (from a check, an install or a dialog) and
+  /// the file on record is confirmed; the date it was added otherwise. The date half is set in mono, as the design
+  /// sets it.
   Widget _subline(AppLocalizations loc) {
     final mod = widget.mod;
     final palette = ZenithPalette.of(context);
     final style = Theme.of(context).textTheme.bodySmall?.copyWith(color: palette.text3);
-    final (:page, :file) = installedRecord(mod, ref.watch(modUpdateRecordsProvider));
+    final (:page, :file) = installedRecord(mod, ref.watch(knownModPagesProvider));
     final author = page?.submitter?.name;
     // A file only worked out is not stated as the file.
     final confirmed = mod.origin?.base?.versionConfidence.isConfirmed ?? false;

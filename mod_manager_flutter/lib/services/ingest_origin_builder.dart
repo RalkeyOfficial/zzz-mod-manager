@@ -114,6 +114,7 @@ class IngestOriginBuilder {
           ModDownload(
             modId: seed.modId,
             modIdConfidence: seed.modIdConfidence,
+            name: seed.name,
             fileId: seed.fileId,
             version: seed.version,
             versionLabel: seed.versionLabel,

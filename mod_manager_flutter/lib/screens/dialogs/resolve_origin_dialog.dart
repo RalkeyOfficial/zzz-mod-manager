@@ -217,6 +217,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
       final record =
           await fetchModRecord(ref.read(gameBananaClientProvider), modId);
       if (!mounted) return;
+      keepModPages(ref, {modId: record});
       setState(() {
         _record = record;
         _loadingRecord = false;
@@ -340,10 +341,11 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     final exact = _selectionIsExact;
     final identityNeedsWrite = _identityNeedsWrite;
     final installedAt = _installedAt;
+    final name = _pageName(modId);
 
     await _write(outcome: _boundOutcome, (current) {
       var next = current;
-      if (identityNeedsWrite) next = OriginResolution.bind(current, modId);
+      if (identityNeedsWrite) next = OriginResolution.bind(current, modId, name: name);
       // Recorded even when the user changed nothing about it, because a folder
       // bound for the first time has no install date of its own — and the
       // "assume current" baseline and the file ranking both need one.
@@ -369,10 +371,11 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     final installedAt = _installedAt;
     final createdAt = _record?.dateAdded;
     final identityNeedsWrite = _identityNeedsWrite;
+    final name = _pageName(modId);
 
     await _write(outcome: _boundOutcome, (current) {
       final bound =
-          identityNeedsWrite ? OriginResolution.bind(current, modId) : current;
+          identityNeedsWrite ? OriginResolution.bind(current, modId, name: name) : current;
       return OriginResolution.assumeCurrent(
         bound,
         installedAt: installedAt,
@@ -774,14 +777,16 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
   }
 
   /// The best name this dialog can put on a layer, without fetching one.
-  ///
-  /// The summary row does its own lookup and may well be showing a real title
-  /// while this returns the id form. Accepted rather than plumbed: the
-  /// confirmation names the mod so the user can tell two entries apart, and the
-  /// id is on the row directly above it either way.
-  String _layerName(int modId) =>
-      ref.read(modUpdateRecordsProvider)[modId]?.name ??
-      loc.t('mods.folder.unnamed', params: {'id': '$modId'});
+  String _layerName(int modId) => switch (_origin?.downloadOf(modId)) {
+        final layer? => downloadName(loc, layer,
+            folderName: widget.mod.name,
+            fetched: ref.read(knownModPagesProvider)[modId]?.name),
+        null => loc.t('mods.folder.unnamed', params: {'id': '$modId'}),
+      };
+
+  /// The title of [modId]'s page, when this dialog holds that page.
+  String? _pageName(int modId) =>
+      _record?.idRow == modId ? _record?.name : null;
 
   /// The bound mod, and — while this dialog is still looking at the mod the
   /// sidecar names — **what is currently recorded about it.**

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -11,6 +12,7 @@ import 'package:mod_manager_flutter/services/origin_write.dart';
 import 'package:mod_manager_flutter/services/gamebanana/remote_mod_metadata.dart';
 import 'package:mod_manager_flutter/services/http/image_fetcher.dart';
 import 'package:mod_manager_flutter/services/mod_metadata_repository.dart';
+import 'package:mod_manager_flutter/services/mod_metadata_service.dart' show lockSidecar;
 import 'package:mod_manager_flutter/services/origin_backfill.dart';
 import 'package:mod_manager_flutter/services/origin_resolution.dart';
 
@@ -986,6 +988,56 @@ void main() {
 
       expect(await repo.recordOrigin('Locked', origin()), isFalse);
     }, skip: Platform.isWindows ? 'chmod is POSIX-only' : false);
+  });
+
+  group('two writers on one sidecar', () {
+    test('both land, whichever starts first', () async {
+      // A check saving a page title while the user saves Edit info: each puts back the whole file it read, so
+      // without the per-folder queue the later write restores the earlier one's stale copy.
+      makeMod('Ellen');
+      await repo.recordOrigin('Ellen', originFixture(modId: 1, modIdConfidence: OriginConfidence.exact));
+
+      await Future.wait([
+        repo.updateOrigin('Ellen', (current) => current!.withBase((d) => d.copyWith(name: 'Ellen Swimsuit'))),
+        repo.save(ModInfo(
+          id: 'Ellen',
+          name: 'Ellen',
+          characterId: 'ellen',
+          isActive: false,
+          description: 'Typed while the check ran',
+        )),
+        repo.setCharacter('Ellen', 'ellen'),
+      ]);
+
+      final onDisk = sidecarOf('Ellen')!;
+      expect(onDisk['description'], 'Typed while the check ran');
+      expect(baseJson(onDisk['origin'] as Map)['name'], 'Ellen Swimsuit');
+    });
+
+    test('run one after another, in the order they were queued', () async {
+      final folder = path.join(tmp.path, 'Queued');
+      final order = <String>[];
+      final firstMayFinish = Completer<void>();
+      final first = lockSidecar(folder, () async {
+        order.add('first starts');
+        await firstMayFinish.future;
+        order.add('first ends');
+      });
+      final second = lockSidecar(folder, () async => order.add('second starts'));
+      // Another folder is not held up.
+      await lockSidecar(path.join(tmp.path, 'Elsewhere'), () async => order.add('elsewhere'));
+
+      firstMayFinish.complete();
+      await Future.wait([first, second]);
+      expect(order, ['first starts', 'elsewhere', 'first ends', 'second starts']);
+    });
+
+    test('a failed writer does not block the next', () async {
+      final folder = path.join(tmp.path, 'Failing');
+      final failed = lockSidecar<void>(folder, () async => throw StateError('disk full'));
+      await expectLater(failed, throwsStateError);
+      expect(await lockSidecar(folder, () async => 'ran'), 'ran');
+    });
   });
 
   group('updateOrigin', () {

@@ -67,17 +67,21 @@ class ZenithChip extends StatelessWidget {
 /// A 22px status badge in one of the palette's pairs: [ZenithPalette.badgeOn], `badgeUpdate`, `badgeInfo`,
 /// `badgeNeutral`, `badgeMissing`, or an element tile.
 class ZenithBadge extends StatelessWidget {
-  const ZenithBadge({super.key, required this.label, required this.tone, this.tooltip, this.onTap});
+  const ZenithBadge({super.key, required this.label, required this.tone, this.tooltip, this.onTap, this.minWidth});
 
   final String label;
   final TonePair tone;
   final String? tooltip;
   final VoidCallback? onTap;
 
+  /// Widens a short label, centred, so badges stacked in a column line up. A longer label still hugs its text.
+  final double? minWidth;
+
   @override
   Widget build(BuildContext context) {
     Widget badge = Container(
       height: 22,
+      constraints: minWidth == null ? null : BoxConstraints(minWidth: minWidth!),
       padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         color: tone.background,
@@ -87,6 +91,7 @@ class ZenithBadge extends StatelessWidget {
       // A row so the badge hugs its label wherever it is placed, and the label is centred in its height.
       child: Row(
         mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: tone.foreground)),
         ],
@@ -116,16 +121,17 @@ class _PressableBadge extends StatefulWidget {
 class _PressableBadgeState extends State<_PressableBadge> {
   bool _focused = false;
 
+  // The semantics inside the focus widget, so the node keeps its focusable flag.
   @override
-  Widget build(BuildContext context) => Semantics(
-    button: true,
-    label: widget.label,
-    excludeSemantics: true,
-    onTap: widget.onTap,
-    child: FocusableActionDetector(
-      mouseCursor: SystemMouseCursors.click,
-      onShowFocusHighlight: (focused) => setState(() => _focused = focused),
-      actions: {ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) => widget.onTap())},
+  Widget build(BuildContext context) => FocusableActionDetector(
+    mouseCursor: SystemMouseCursors.click,
+    onShowFocusHighlight: (focused) => setState(() => _focused = focused),
+    actions: {ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) => widget.onTap())},
+    child: Semantics(
+      button: true,
+      label: widget.label,
+      excludeSemantics: true,
+      onTap: widget.onTap,
       child: GestureDetector(
         onTap: widget.onTap,
         child: DecoratedBox(
@@ -139,6 +145,51 @@ class _PressableBadgeState extends State<_PressableBadge> {
       ),
     ),
   );
+}
+
+/// Text that does something when pressed, in [style] (the link colour by default). Reachable with Tab and pressed
+/// with Enter or Space, with the badge's accent ring while it has keyboard focus.
+class ZenithLink extends StatefulWidget {
+  const ZenithLink(this.label, {super.key, required this.onTap, this.style});
+
+  final String label;
+  final VoidCallback onTap;
+  final TextStyle? style;
+
+  @override
+  State<ZenithLink> createState() => _ZenithLinkState();
+}
+
+class _ZenithLinkState extends State<ZenithLink> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ZenithPalette.of(context);
+    // The semantics inside the focus widget, so the node keeps its focusable flag.
+    return FocusableActionDetector(
+      mouseCursor: SystemMouseCursors.click,
+      onShowFocusHighlight: (focused) => setState(() => _focused = focused),
+      actions: {ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) => widget.onTap())},
+      child: Semantics(
+        link: true,
+        label: widget.label,
+        excludeSemantics: true,
+        onTap: widget.onTap,
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: DecoratedBox(
+            position: DecorationPosition.foreground,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(4),
+              border: _focused ? Border.all(color: palette.accent, width: 2) : null,
+            ),
+            child: Text(widget.label, style: widget.style ?? TextStyle(color: palette.link)),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// [ground]'s background with a grid of dots, behind [child]: a character's header, a cover with no image.

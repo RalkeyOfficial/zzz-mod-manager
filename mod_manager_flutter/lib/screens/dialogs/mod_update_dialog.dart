@@ -8,6 +8,7 @@ import '../../models/character_info.dart';
 import '../../models/gamebanana/gamebanana.dart';
 import '../../models/mod_origin.dart';
 import '../../services/api_service.dart';
+import '../../services/download_names.dart';
 import '../../services/log/logger.dart';
 import '../../services/mod_manager_service.dart';
 import '../../services/origin_write.dart';
@@ -26,10 +27,13 @@ import '../../utils/html_to_markdown.dart';
 import '../../utils/markdown_description.dart';
 import '../../utils/marketplace_providers.dart';
 import '../../utils/state_providers.dart';
+import '../components/folder_downloads_summary.dart';
 import '../../utils/url_utils.dart';
 import '../../core/palette.dart';
 import 'apply_update_flow.dart';
 import 'remove_patch_flow.dart';
+
+final Logger _log = Logger('update');
 
 /// The one thing a layer's own menu offers.
 enum _PatchAction { remove }
@@ -245,7 +249,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       if (!mounted) return;
       setState(() => _library = library);
     } catch (e) {
-      Logger('update').debug('could not read the library for a sibling group',
+      _log.debug('could not read the library for a sibling group',
           fields: {'mod': widget.mod.id, 'reason': '$e'});
     }
   }
@@ -254,22 +258,23 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   ///
   /// Only reached on the path where `initState` skips the check — a card badge,
   /// or reopening after this dialog's own check — and only for a folder holding
-  /// more than one download, since a single one renders no header. A per-mod
-  /// check banks nothing in the session, so on a reopen there is otherwise
-  /// nothing local to name either download from and both headers fall back.
+  /// more than one download, since a single one renders no header. Pages this
+  /// session holds and names saved with the layers answer it without a request;
+  /// what is left is a layer nothing has named yet.
   ///
   /// One `Mod/Multi` request each, at most once, and a failure is silent: the
-  /// header falls back to the folder name or the id, and an error notice about
+  /// header falls back to the id, and an error notice about
   /// a label would be noise on a dialog opened to read a verdict.
   void _lookUpNames() {
     final origin = widget.mod.origin;
     if (origin == null || !origin.isMixed) return;
-    final records = ref.read(modUpdateRecordsProvider);
+    final records = ref.read(knownModPagesProvider);
     final client = ref.read(gameBananaClientProvider);
     for (final download in origin.downloads) {
       final id = download.modId;
       if (id == null || !_askedNames.add(id)) continue;
-      if (records.containsKey(id)) continue;
+      // A saved name answers it without a request.
+      if (records.containsKey(id) || download.name != null) continue;
       fetchModRecord(client, id).then((record) {
         if (!mounted) return;
         final name = record.name;
@@ -386,12 +391,30 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       });
       _store(_fold());
       unawaited(_lookUpSiblings());
+
+      // The pages serve the card and the details panel too, and their titles are saved so the panel keeps them
+      // after a restart (`docs/origin-tracking.md` §10).
+      final pages = {modId: profile, ...companionProfiles};
+      keepModPages(ref, pages);
+      await _rememberNames(pages);
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _error = e;
         _checking = false;
       });
+    }
+  }
+
+  /// Saves the titles of [pages] on this mod's downloads, through the dialog's own write. Counted as a write, so the
+  /// library rescans when the dialog closes. A failure is logged and nothing more: the check itself succeeded.
+  Future<void> _rememberNames(Map<int, GbMod> pages) async {
+    try {
+      if (await rememberDownloadNames(mods: [widget.mod], pages: pages, write: _gateway.writeOrigin)) {
+        _wrote = true;
+      }
+    } catch (e) {
+      _log.warning('download names were not saved', error: e, fields: {'mod': widget.mod.id});
     }
   }
 
@@ -466,9 +489,8 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     ];
   }
 
-  /// What to call a download. The bottom layer falls back to the folder name,
-  /// which is what the user knows it by everywhere else; a layer above it falls
-  /// back to its id, which is at least something to look up.
+  /// What to call a download: a page this dialog or the session holds, then
+  /// the name saved with the layer, then its id ([downloadName]).
   String _nameFor(ModDownload download) {
     final id = download.modId;
     final isBase = download.role == DownloadRole.base;
@@ -476,10 +498,9 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
         ? null
         : (isBase ? _profile?.name : _companionProfiles[id]?.name) ??
             _fetchedNames[id] ??
-            ref.read(modUpdateRecordsProvider)[id]?.name;
-    if (fetched != null && fetched.isNotEmpty) return fetched;
-    if (isBase) return widget.mod.name;
-    return loc.t('mods.folder.unnamed', params: {'id': '${id ?? '?'}'});
+            ref.read(knownModPagesProvider)[id]?.name;
+    return downloadName(loc, download,
+        folderName: widget.mod.name, fetched: fetched);
   }
 
   void _store(UpdateCheck? check) {

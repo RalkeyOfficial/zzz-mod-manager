@@ -102,6 +102,9 @@ class _LibraryActionsHostState extends ConsumerState<LibraryActionsHost> impleme
     checks.state = mergedChecks(checks.state, outcome);
     final records = ref.read(modUpdateRecordsProvider.notifier);
     records.state = mergedRecords(records.state, outcome);
+    // Before the results screen, whose own writes go to the same sidecars.
+    await rememberDownloadNamesFrom(ref, outcome.records, writer: widget.originWriter);
+    if (!mounted) return;
 
     // The results screen opens by itself only when it has something to ask — otherwise a modal stands between the
     // user and the badges they pressed for. It states the summary itself when it does open, so a notification is

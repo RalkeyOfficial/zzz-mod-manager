@@ -185,7 +185,13 @@ class ModMetadataRepository {
     // first snapshot to get one is a folder whose history a rename in the
     // meantime would have stranded.
     final identified = migrated.copyWith(uid: ModUid.newUid());
-    if (await _service.write(modFolder, identified)) {
+    // Read again under the lock: a sidecar written since the read above is another writer's, and is kept.
+    final landed = await lockSidecar(modFolder, () async {
+      if (await _service.read(modFolder) case final written?) return written;
+      return await _service.write(modFolder, identified) ? identified : null;
+    });
+    if (landed != null && !identical(landed, identified)) return landed;
+    if (landed != null) {
       // **Only now**, and only on a write that landed. A migration is not done
       // until the sidecar naming the copy is on disk: delete the source before
       // that and a failed write loses the image entirely, since the copy inside
@@ -297,25 +303,27 @@ class ModMetadataRepository {
       // would then quietly revert their description and tags — the one class of
       // damage this file exists to prevent. Contributing only the machine-owned
       // key to whatever is on disk now costs one extra read, once per mod.
-      final fresh = await _service.read(modFolder) ?? existing;
-      if (OriginBackfill.recoverableModId(fresh) != modId) return fresh;
+      return await lockSidecar(modFolder, () async {
+        final fresh = await _service.read(modFolder) ?? existing;
+        if (OriginBackfill.recoverableModId(fresh) != modId) return fresh;
 
-      final updated = fresh.withOrigin(
-        OriginBackfill.merge(
-          existing: fresh.origin,
-          modId: modId,
-          installedAt: installedAt,
-        ),
-      );
+        final updated = fresh.withOrigin(
+          OriginBackfill.merge(
+            existing: fresh.origin,
+            modId: modId,
+            installedAt: installedAt,
+          ),
+        );
 
-      // Best-effort: an unwritable folder still yields the derived identity in
-      // memory, and loses it on restart. Retried on every scan rather than
-      // suppressed — a successful write stops the mod qualifying above, so only
-      // failing mods pay the walk, measured at 0.51 ms each.
-      if (!await _service.write(modFolder, updated)) {
-        _backfillWriteFailures.add(modName);
-      }
-      return updated;
+        // Best-effort: an unwritable folder still yields the derived identity in
+        // memory, and loses it on restart. Retried on every scan rather than
+        // suppressed — a successful write stops the mod qualifying above, so only
+        // failing mods pay the walk, measured at 0.51 ms each.
+        if (!await _service.write(modFolder, updated)) {
+          _backfillWriteFailures.add(modName);
+        }
+        return updated;
+      });
     } catch (e) {
       _log.warning('origin backfill failed',
           error: e, fields: {'folder': modFolder});
@@ -343,15 +351,17 @@ class ModMetadataRepository {
       // full save — while replaceUserFields carries the machine-owned ones
       // (schema_version, origin) and any unknown keys over from the copy on
       // disk.
-      final existing = await _service.read(modFolder);
-      String? orNull(String? v) => (v == null || v.isEmpty) ? null : v;
-      final metadata = (existing ?? const ModMetadata()).replaceUserFields(
-        description: orNull(mod.description),
-        tags: mod.tags,
-        characterId: mod.characterId, // normalised by replaceUserFields
-        images: relImages,
-      );
-      return await _service.write(modFolder, metadata);
+      return await lockSidecar(modFolder, () async {
+        final existing = await _service.read(modFolder);
+        String? orNull(String? v) => (v == null || v.isEmpty) ? null : v;
+        final metadata = (existing ?? const ModMetadata()).replaceUserFields(
+          description: orNull(mod.description),
+          tags: mod.tags,
+          characterId: mod.characterId, // normalised by replaceUserFields
+          images: relImages,
+        );
+        return await _service.write(modFolder, metadata);
+      });
     } catch (e) {
       _log.error('could not save a sidecar', error: e, fields: {'mod': mod.id});
       return false;
@@ -381,8 +391,10 @@ class ModMetadataRepository {
     try {
       final modFolder = _folderOf(modName);
       if (modFolder == null) return false;
-      final existing = await _service.read(modFolder) ?? const ModMetadata();
-      return await _service.write(modFolder, existing.withOrigin(origin));
+      return await lockSidecar(modFolder, () async {
+        final existing = await _service.read(modFolder) ?? const ModMetadata();
+        return await _service.write(modFolder, existing.withOrigin(origin));
+      });
     } catch (e) {
       _log.error('could not record an origin',
           error: e, fields: {'mod': modName});
@@ -418,11 +430,13 @@ class ModMetadataRepository {
       if (modFolder == null || !await Directory(modFolder).exists()) {
         return OriginWriteResult.folderMissing;
       }
-      final existing = await _service.read(modFolder) ?? const ModMetadata();
-      final next = update(existing.origin);
-      if (next == null) return OriginWriteResult.declined;
-      final written = await _service.write(modFolder, existing.withOrigin(next));
-      return written ? OriginWriteResult.written : OriginWriteResult.writeFailed;
+      return await lockSidecar(modFolder, () async {
+        final existing = await _service.read(modFolder) ?? const ModMetadata();
+        final next = update(existing.origin);
+        if (next == null) return OriginWriteResult.declined;
+        final written = await _service.write(modFolder, existing.withOrigin(next));
+        return written ? OriginWriteResult.written : OriginWriteResult.writeFailed;
+      });
     } catch (e) {
       _log.error('could not update an origin',
           error: e, fields: {'mod': modName});
@@ -541,59 +555,13 @@ class ModMetadataRepository {
       final modName = entry.key;
       final folder = entry.value.folder;
       try {
-        // Re-read and re-decide against what is on disk *now*. The fetch above
-        // is a network await, and a scan is kicked off after every toggle and
-        // rename, so a `save()` can land inside that window — the same hazard
-        // the origin backfill re-reads for, and the same fix.
-        final fresh = await _service.read(folder) ?? const ModMetadata();
-        final plan = planMetadataAutofill(
-          existing: fresh,
-          remote: remote,
-          shippedPreview: entry.value.preview,
+        final filled = await lockSidecar(
+          folder,
+          () => _fillOne(folder, remote, entry.value.preview, bytes),
         );
-        if (plan.isEmpty) continue;
-
-        var galleryImages = fresh.images;
-        var storedImages = 0;
-        if (plan.imageUrls.isNotEmpty) {
-          final stored = <String>[
-            if (plan.shippedPreview case final shipped?) shipped,
-          ];
-          for (final url in plan.imageUrls) {
-            final data = bytes[url];
-            if (data == null) continue;
-            final rel = await _service.addImageBytes(
-              folder,
-              data,
-              extension: _imageExtension(url),
-            );
-            if (rel == null) continue;
-            stored.add(rel);
-            storedImages++;
-          }
-          // Only take the new list when something remote actually landed:
-          // otherwise this would write a lone `Preview.png` entry that the scan
-          // already resolves by itself.
-          if (storedImages > 0) galleryImages = stored;
-        }
-
-        // Nothing survived — every image the plan wanted failed to arrive, and
-        // it wanted nothing else. Writing here would leave an *empty* sidecar in
-        // a folder that had none, breaking the don't-litter rule for no gain.
-        if (plan.description == null &&
-            plan.tags == null &&
-            plan.characterId == null &&
-            storedImages == 0) {
-          continue;
-        }
-
-        final metadata = fresh.replaceUserFields(
-          description: plan.description ?? fresh.description,
-          tags: plan.tags ?? fresh.tags,
-          characterId: plan.characterId ?? fresh.characterId,
-          images: galleryImages,
-        );
-        if (!await _service.write(folder, metadata)) {
+        if (filled == null) continue;
+        final (:plan, :storedImages, :written) = filled;
+        if (!written) {
           unwritable.add(modName);
           _log.warning('could not autofill', fields: {'mod': modName});
           continue;
@@ -622,6 +590,69 @@ class ModMetadataRepository {
       images: images,
       unwritable: unwritable,
     );
+  }
+
+  /// [applyRemoteMetadata]'s write for one folder, run under [lockSidecar]. Null when there is nothing to write.
+  Future<({MetadataAutofillPlan plan, int storedImages, bool written})?> _fillOne(
+    String folder,
+    RemoteModMetadata remote,
+    String? shippedPreview,
+    Map<Uri, List<int>> bytes,
+  ) async {
+    // Re-read and re-decide against what is on disk *now*. The fetch above
+    // is a network await, and a scan is kicked off after every toggle and
+    // rename, so a `save()` can land inside that window — the same hazard
+    // the origin backfill re-reads for, and the same fix.
+    final fresh = await _service.read(folder) ?? const ModMetadata();
+    final plan = planMetadataAutofill(
+      existing: fresh,
+      remote: remote,
+      shippedPreview: shippedPreview,
+    );
+    if (plan.isEmpty) return null;
+
+    var galleryImages = fresh.images;
+    var storedImages = 0;
+    if (plan.imageUrls.isNotEmpty) {
+      final stored = <String>[
+        if (plan.shippedPreview case final shipped?) shipped,
+      ];
+      for (final url in plan.imageUrls) {
+        final data = bytes[url];
+        if (data == null) continue;
+        final rel = await _service.addImageBytes(
+          folder,
+          data,
+          extension: _imageExtension(url),
+        );
+        if (rel == null) continue;
+        stored.add(rel);
+        storedImages++;
+      }
+      // Only take the new list when something remote actually landed:
+      // otherwise this would write a lone `Preview.png` entry that the scan
+      // already resolves by itself.
+      if (storedImages > 0) galleryImages = stored;
+    }
+
+    // Nothing survived — every image the plan wanted failed to arrive, and
+    // it wanted nothing else. Writing here would leave an *empty* sidecar in
+    // a folder that had none, breaking the don't-litter rule for no gain.
+    if (plan.description == null &&
+        plan.tags == null &&
+        plan.characterId == null &&
+        storedImages == 0) {
+      return null;
+    }
+
+    final metadata = fresh.replaceUserFields(
+      description: plan.description ?? fresh.description,
+      tags: plan.tags ?? fresh.tags,
+      characterId: plan.characterId ?? fresh.characterId,
+      images: galleryImages,
+    );
+    final written = await _service.write(folder, metadata);
+    return (plan: plan, storedImages: storedImages, written: written);
   }
 
   /// The stored file's extension, from the remote url.
@@ -653,19 +684,21 @@ class ModMetadataRepository {
 
       final modFolder = _folderOf(modName);
       if (modFolder == null) return false;
-      final existing = await _service.read(modFolder) ?? const ModMetadata();
+      return await lockSidecar(modFolder, () async {
+        final existing = await _service.read(modFolder) ?? const ModMetadata();
 
-      // copyWith can't express clearing — copyWith(characterId: null) is a
-      // no-op — so go through replaceUserFields, which can actually clear.
-      return await _service.write(
-        modFolder,
-        existing.replaceUserFields(
-          description: existing.description,
-          tags: existing.tags,
-          characterId: canonical,
-          images: existing.images,
-        ),
-      );
+        // copyWith can't express clearing — copyWith(characterId: null) is a
+        // no-op — so go through replaceUserFields, which can actually clear.
+        return await _service.write(
+          modFolder,
+          existing.replaceUserFields(
+            description: existing.description,
+            tags: existing.tags,
+            characterId: canonical,
+            images: existing.images,
+          ),
+        );
+      });
     } catch (e) {
       _log.error('could not set the character',
           error: e, fields: {'mod': modName});

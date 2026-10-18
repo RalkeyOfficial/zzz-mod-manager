@@ -7,6 +7,7 @@ import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_update.dart';
+import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/components/launch_update_check_host.dart';
 import 'package:mod_manager_flutter/screens/components/library_actions_host.dart';
@@ -91,6 +92,7 @@ void main() {
     List<ModInfo> mods = const [],
     GbMod Function(int modId)? page,
     Future<List<GbMod>> Function(List<int>)? fetch,
+    OriginWriter? originWriter,
     Widget child = const SizedBox.shrink(),
   }) async {
     container.read(updateCheckOnLaunchProvider.notifier).state = enabled;
@@ -105,6 +107,8 @@ void main() {
               return [for (final id in ids) (page ?? superseded)(id)];
             },
         updatesFetcher: (_) async => const <GbUpdate>[],
+        // Fails every write by default: no test here reaches a library.
+        originWriter: originWriter ?? (_, _) async => OriginWriteResult.writeFailed,
         child: child,
       ),
       container: container,
@@ -145,6 +149,26 @@ void main() {
 
     expect(fetchCalls, 1);
     expect(container.read(libraryUpdateCountProvider), 1);
+  });
+
+  testWidgets("saves each download's page title on its sidecar", (tester) async {
+    // So the details panel names the downloads after a restart, without a request.
+    final library = [mod('Ellen', modId: 1, fileId: 10)];
+    final written = <String, ModOrigin?>{};
+    await mount(
+      tester,
+      enabled: true,
+      mods: library,
+      page: (id) => GbMod(idRow: id, name: 'Ellen Swimsuit', files: unchanged(id).files),
+      originWriter: (modId, update) async {
+        written[modId] = update(library.firstWhere((m) => m.id == modId).origin);
+        return OriginWriteResult.written;
+      },
+    );
+    await tester.pumpAndSettle();
+
+    expect(written.keys, ['Ellen']);
+    expect(written['Ellen']?.base?.name, 'Ellen Swimsuit');
   });
 
   testWidgets('does nothing at all when it is switched off', (tester) async {

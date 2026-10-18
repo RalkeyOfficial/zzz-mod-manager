@@ -466,7 +466,9 @@ void main() {
       // And the summary is stated *here* rather than raised behind it — two
       // reports of one press is how a user ends up reading neither.
       expect(find.text('No updates found'), findsNothing);
+      expect(written, ['Ellen'], reason: "the check saves the page's title on the sidecar first");
 
+      written.clear();
       await tester.tap(find.widgetWithText(FilledButton, 'Save 1 mod'));
       await tester.pumpAndSettle();
       expect(written, ['Ellen']);
@@ -840,7 +842,9 @@ void main() {
       final written = await pumpDialog(tester, target);
       await tester.pumpAndSettle();
       expect(find.text('An update is available'), findsOneWidget);
+      expect(written.single?.base?.name, isNotNull, reason: "the check saves the page's title first");
 
+      written.clear();
       await tester.tap(find.text('Ignore this update'));
       await tester.pumpAndSettle();
 
@@ -1557,6 +1561,9 @@ void main() {
           overrides: [gameBananaClientProvider.overrideWithValue(client)],
         );
         await tester.pumpAndSettle();
+        // The check saved both pages' titles first.
+        expect(written.single?.downloads.map((d) => d.name), everyElement(isNotNull));
+        written.clear();
         // In the companion's own section, not the shared action bar — so it
         // can be below the fold on a folder rendering two full reports.
         await tester.ensureVisible(find.text('Ignore this update'));
