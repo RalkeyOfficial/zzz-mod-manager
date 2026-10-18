@@ -4,6 +4,7 @@ import 'package:ffi/ffi.dart';
 import 'package:path/path.dart' as path;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:pasteboard/pasteboard.dart';
+import '../utils/detached_starter.dart';
 import '../utils/process_probe.dart';
 import 'log/logger.dart';
 import 'log/system_report.dart';
@@ -224,34 +225,46 @@ class WindowsPlatformService implements PlatformService {
   }
 
   @override
-  Future<LaunchOutcome> launchGame(String target) async {
+  bool get launchesThroughWine => false;
+
+  @override
+  Future<List<WineRunner>> findWineRunners() async => const [];
+
+  @override
+  Future<LaunchResult> launchGame(LaunchRequest request, {DetachedStarter starter = const DetachedStarter()}) async {
+    final target = request.executable;
+    final fields = {'target': target, 'arguments': request.arguments};
     Pointer<Utf16>? file;
+    Pointer<Utf16>? parameters;
     Pointer<Utf16>? directory;
     try {
-      if (!await File(target).exists()) return LaunchOutcome.notFound;
-      // ShellExecute is what a double-click does, so an .exe with its UAC prompt, a .lnk shortcut and a .bat all
-      // work. The path is handed over as it is, with no command line to read `&` or `%` in it.
+      if (!await File(target).exists()) return const LaunchResult(LaunchOutcome.notFound);
+      // ShellExecute is what a double-click does, so the XXMI Launcher's UAC prompt shows, and a .lnk shortcut and a
+      // .bat work too. The path is handed over as it is, with no command line to read `&` or `%` in it.
       final shell32 = DynamicLibrary.open('shell32.dll');
       final shellExecuteW = shell32.lookupFunction<
           IntPtr Function(IntPtr, Pointer<Utf16>, Pointer<Utf16>, Pointer<Utf16>, Pointer<Utf16>, Int32),
           int Function(int, Pointer<Utf16>, Pointer<Utf16>, Pointer<Utf16>, Pointer<Utf16>, int)>('ShellExecuteW');
 
       file = target.toNativeUtf16();
+      final arguments = request.arguments.trim();
+      if (arguments.isNotEmpty) parameters = arguments.toNativeUtf16();
       directory = path.dirname(target).toNativeUtf16();
       const showNormal = 1;
       // A null verb is the file's default action. Anything at or below 32 is an error code.
-      final result = shellExecuteW(0, nullptr, file, nullptr, directory, showNormal);
+      final result = shellExecuteW(0, nullptr, file, parameters ?? nullptr, directory, showNormal);
       if (result <= 32) {
-        _log.warning('could not launch game', fields: {'target': target, 'code': result});
-        return LaunchOutcome.failed;
+        _log.warning('could not launch game', fields: {...fields, 'code': result});
+        return const LaunchResult(LaunchOutcome.failed);
       }
-      _log.info('game launched', fields: {'target': target});
-      return LaunchOutcome.started;
+      _log.info('game launched', fields: fields);
+      return const LaunchResult(LaunchOutcome.started);
     } catch (error, stack) {
-      _log.warning('could not launch game', error: error, stack: stack, fields: {'target': target});
-      return LaunchOutcome.failed;
+      _log.warning('could not launch game', error: error, stack: stack, fields: fields);
+      return const LaunchResult(LaunchOutcome.failed);
     } finally {
       if (file != null) malloc.free(file);
+      if (parameters != null) malloc.free(parameters);
       if (directory != null) malloc.free(directory);
     }
   }

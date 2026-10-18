@@ -1,18 +1,62 @@
+import '../utils/detached_starter.dart';
 import '../utils/process_probe.dart';
 import 'log/system_report.dart';
+import 'wine_runners.dart';
+
+export 'wine_runners.dart' show WineRunner, WineRunnerKind, WineRunnerSource;
 
 /// What happened when the app tried to start the game.
 enum LaunchOutcome {
   started,
 
-  /// The chosen file is gone.
+  /// The launcher file is gone.
   notFound,
 
-  /// This platform cannot start that kind of file, such as a Windows `.exe` on Linux.
+  /// This platform cannot start that kind of file, such as a `.desktop` shortcut, which can't take arguments.
   unsupported,
+
+  /// The Wine or Proton that runs the launcher couldn't be started: missing from PATH, or the chosen file is gone.
+  runnerMissing,
+
+  /// Proton started without umu-launcher has no prefix to run in: it has no default of its own.
+  prefixRequired,
 
   /// Starting it threw.
   failed,
+}
+
+/// The [outcome] of a launch, and for [LaunchOutcome.runnerMissing] the [program] that couldn't be run.
+class LaunchResult {
+  const LaunchResult(this.outcome, {this.program});
+
+  final LaunchOutcome outcome;
+  final String? program;
+}
+
+/// What the Launch game button starts and how. See `docs/launch-game.md`.
+class LaunchRequest {
+  const LaunchRequest({
+    required this.executable,
+    required this.arguments,
+    this.runner = '',
+    this.prefix = '',
+    this.useUmu = false,
+  });
+
+  /// The XXMI Launcher, or the file chosen instead, exactly as stored.
+  final String executable;
+
+  /// The arguments as typed: one string, split into words only where the platform needs a list.
+  final String arguments;
+
+  /// Linux only: the Wine binary or Proton script, empty for `wine` from PATH.
+  final String runner;
+
+  /// Linux only: the Wine prefix, empty for the runner's own default.
+  final String prefix;
+
+  /// Linux only: whether a Proton runner starts through umu-launcher rather than directly.
+  final bool useUmu;
 }
 
 /// Абстрактний клас для платформно-специфічних операцій
@@ -49,11 +93,18 @@ abstract class PlatformService {
   /// Відкриває вказану папку у файловому менеджері системи
   Future<bool> openFolderInFileManager(String folderPath);
 
-  /// Starts [target], the file the Launch game button was pointed at, and returns without waiting for it.
+  /// Starts the launcher [request] names, with its arguments, and returns without waiting for it.
   ///
-  /// What counts as startable differs: Linux runs an executable or a `.desktop` shortcut and cannot run a Windows
-  /// program directly, Windows starts whatever the shell would on a double-click. See `docs/launch-game.md`.
-  Future<LaunchOutcome> launchGame(String target);
+  /// Linux runs an `.exe` under Wine or Proton and an executable script directly; Windows starts what a double-click
+  /// would. [starter] is the seam a test records the command through; Windows starts through the shell and ignores
+  /// it. See `docs/launch-game.md`.
+  Future<LaunchResult> launchGame(LaunchRequest request, {DetachedStarter starter = const DetachedStarter()});
+
+  /// Whether Launch game runs the launcher under Wine or Proton, so Settings shows where to find them.
+  bool get launchesThroughWine;
+
+  /// The Wine and Proton builds Settings offers to run the launcher with; empty where [launchesThroughWine] is false.
+  Future<List<WineRunner>> findWineRunners();
 
   /// Reads rich-text HTML from the system clipboard, or null when the
   /// clipboard holds no HTML (or the platform tool needed to read it is

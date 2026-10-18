@@ -48,6 +48,13 @@ Future<String?> resolveZzmiFolder(String picked) async {
   return null;
 }
 
+/// Where the XXMI Launcher's exe sits when [zzmiRoot] is its `ZZMI/` folder: `<XXMI>/Resources/Bin/XXMI Launcher.exe`.
+///
+/// The path is not normalised, so a link in it reaches XXMI unresolved (`docs/launch-game.md`). The names are XXMI's
+/// own and matched in exact case.
+String xxmiLauncherBeside(String zzmiRoot) =>
+    p.join(p.dirname(zzmiRoot), 'Resources', 'Bin', 'XXMI Launcher.exe');
+
 /// The links folder inside [zzmiRoot]: its existing child named `mods` in any
 /// case, or `<root>/Mods` when there is none.
 ///

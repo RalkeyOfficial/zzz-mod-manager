@@ -15,6 +15,10 @@ class AppConstants {
   /// version bump can't leave one of them claiming the old release.
   static const String httpUserAgent = 'zzz-mod-manager/$appVersion';
 
+  /// What Launch game passes the XXMI Launcher until the user edits it: start the game with ZZMI and no launcher
+  /// window (`docs/launch-game.md`).
+  static const String defaultLaunchArguments = '--nogui --xxmi ZZMI';
+
   /// Zenless Zone Zero's game id on GameBanana. Every remote request is scoped
   /// to it: <https://gamebanana.com/games/19567>.
   static const int gameBananaGameId = 19567;

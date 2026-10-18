@@ -17,15 +17,15 @@ class SettingsRow extends StatelessWidget {
     required this.label,
     required this.description,
     required this.trailing,
-    this.descriptionStyle,
+    this.detail,
   });
 
   final String label;
   final String description;
   final Widget trailing;
 
-  /// Replaces the description's style, for a description that is a value such as a path.
-  final TextStyle? descriptionStyle;
+  /// A line under the description holding the setting's value, such as a path, or a warning about it.
+  final Widget? detail;
 
   @override
   Widget build(BuildContext context) {
@@ -62,12 +62,15 @@ class SettingsRow extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   description,
-                  style: descriptionStyle ??
-                      theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        height: 1.35,
-                      ),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    height: 1.35,
+                  ),
                 ),
+                if (detail != null) ...[
+                  const SizedBox(height: 6),
+                  detail!,
+                ],
               ],
             ),
           ),

@@ -35,7 +35,11 @@ App-data locations are `~/.local/share/zzz-mod-manager` (Linux) and
   "favorite_mods": ["Ellen Swimsuit"],
   "theme": "system",
   "accent": "violet",
-  "launch_target": "/home/user/.local/share/applications/xxmi-launcher.desktop",
+  "launch_target": "",
+  "launch_arguments": "--nogui --xxmi ZZMI",
+  "wine_runner": "/home/user/.local/share/Steam/compatibilitytools.d/GE-Proton10-1/proton",
+  "wine_prefix": "/home/user/Games/zzz-prefix",
+  "wine_use_umu": true,
   "language": "en",
   "sort_mode": "added",
   "content_filter": "blur",
@@ -61,7 +65,11 @@ App-data locations are `~/.local/share/zzz-mod-manager` (Linux) and
 | `favorite_mods` | `favorite_mods` | String list of mod folder names |
 | `theme` | `theme` | The theme, as a `ThemeMode` Dart name (`light` \| `system` \| `dark`). Empty until chosen ([§3](#3-parsing-a-stored-value)), and parsed by `parseThemeMode`, which **degrades anything unrecognised to `system`** — the key is older than the setting and holds a palette name (`dark-blue`) in any config an earlier build wrote, so the tolerance is what an upgrade lands on |
 | `accent` | `accent` | The accent, as an `AccentChoice` Dart name (`violet` \| `paper` \| `lime` \| `teal`). Empty until chosen, and parsed by `AccentChoice.parse`, which degrades anything unrecognised to `violet` |
-| `launch_target` | `launch_target` | The file the sidebar's Launch game button starts, empty until chosen. Set by the button's first press or by **Launch game with**, both saving at once. See [`launch-game.md`](launch-game.md) |
+| `launch_target` | `launch_target` | The file the sidebar's Launch game button starts. Empty means the XXMI Launcher beside the ZZMI folder. Set by the button's first press when there is none, or by **Launch game with**, both saving at once. See [`launch-game.md`](launch-game.md) |
+| `launch_arguments` | `launch_arguments` | The arguments Launch game passes, as typed. Read on `containsKey` and written only when set: absent means `--nogui --xxmi ZZMI`, while a stored empty string is a choice and stays empty. Reset removes it |
+| `wine_runner` | `wine_runner` | Linux only. The Wine or Proton that runs the launcher, picked from the builds Settings finds or as any other file: empty means `wine` from PATH, a file named `proton` means that Proton, started directly or through umu-run when `wine_use_umu` is on, any other file is a wine binary |
+| `wine_prefix` | `wine_prefix` | Linux only. The Wine prefix the launcher runs in. Empty means the runner's own default, which Proton started directly doesn't have |
+| `wine_use_umu` | `wine_use_umu` | Linux only. Bool, **default `true`**. Whether a Proton runner starts through umu-launcher, inside the Steam runtime it is built for, rather than directly on the system's libraries. See [`launch-game.md`](launch-game.md) |
 | `language` | `language` | Locale code (`en`, `uk`) |
 | `sort_mode` | `sort_mode` | The **mods library** sort. Parsed into `ModSort`; falls back to `added` |
 | `content_filter` | `content_filter` | Marketplace adult-content treatment: `blur` (default) \| `show` \| `hide`. Stored as a raw string and parsed by `ContentFilterMode.parse`, which **degrades anything unrecognised to `blur`** — the only value that is wrong in neither direction ([§3](#3-parsing-a-stored-value)) |
@@ -161,12 +169,9 @@ page and category.
 
 ## 5. Where a setting is surfaced
 
-The Settings tab (`screens/settings_screen.dart`) renders section by section:
-**Mod directories** (with **Launch game with** under the two paths),
-**Language**, **Updates**, **Marketplace**, **Automatic tagging**,
-**Appearance**, **Diagnostics**. Only the paths are applied by the *Save
-configuration* button; everything else, the launch target included, writes as it
-is changed.
+The Settings tab (`screens/settings_screen.dart`) renders section by section: **Mod directories**, **Language**, **Updates**, **Marketplace**, **Automatic tagging**, **Appearance**, **Diagnostics**.
+Under the two paths sit the launch rows: **Launch game with** and **Launch arguments**, plus **Wine or Proton**, **Run Proton through umu-launcher** (for a Proton runner) and **Wine prefix** on Linux.
+Only the paths are applied by the *Save configuration* button; everything else, the launch rows included, writes as it is changed.
 
 Anything with a description of its own lives in `screens/components/settings/` as
 its own widget rather than inside the screen, which is already over a thousand

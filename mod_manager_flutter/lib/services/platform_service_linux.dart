@@ -1,12 +1,16 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import 'package:url_launcher/url_launcher.dart';
+import '../utils/command_arguments.dart';
+import '../utils/detached_starter.dart';
 import '../utils/df_output.dart';
 import '../utils/process_probe.dart';
 import 'log/logger.dart';
 import 'log/system_report.dart';
 import 'platform_service.dart';
+import 'wine_runners.dart' as wine_runners;
 
 final Logger _log = Logger('platform');
 final Logger _files = Logger('fileops');
@@ -210,34 +214,110 @@ class LinuxPlatformService implements PlatformService {
   }
 
   @override
-  Future<LaunchOutcome> launchGame(String target) async {
+  bool get launchesThroughWine => true;
+
+  @override
+  Future<List<WineRunner>> findWineRunners() async {
+    final home = homeDirectoryPath;
+    return home == null ? const [] : wine_runners.findWineRunners(home: home);
+  }
+
+  @override
+  Future<LaunchResult> launchGame(LaunchRequest request, {DetachedStarter starter = const DetachedStarter()}) async {
+    final target = request.executable;
+    final fields = {
+      'target': target,
+      'runner': request.runner,
+      'prefix': request.prefix,
+      'umu': request.useUmu,
+      'arguments': request.arguments,
+    };
     try {
       final file = File(target);
-      if (!await file.exists()) return LaunchOutcome.notFound;
+      if (!await file.exists()) return const LaunchResult(LaunchOutcome.notFound);
 
       final ext = path.extension(target).toLowerCase();
-      final ProcessStartMode mode = ProcessStartMode.detached;
-      // A Windows file needs a runner the app can't guess. It is refused by name, since NTFS and exFAT mounts mark
-      // every file executable and binfmt would hand an .exe to Wine's default prefix.
-      if (_windowsTypes.contains(ext) || !(ext == '.desktop' || await _isExecutable(file))) {
-        _log.warning('game target not startable', fields: {'target': target});
-        return LaunchOutcome.unsupported;
-      }
-      if (ext == '.desktop') {
-        // The way a launcher shortcut from Steam, Lutris or Heroic is meant to be started.
-        await Process.start('gio', ['launch', target], mode: mode);
+      final workingDirectory = path.dirname(target);
+      if (ext == '.exe') {
+        if (request.runner.isNotEmpty && !await File(request.runner).exists()) {
+          _log.warning('wine runner missing', fields: fields);
+          return LaunchResult(LaunchOutcome.runnerMissing, program: request.runner);
+        }
+        if (WineRunner.isProton(request.runner) && !request.useUmu && request.prefix.isEmpty) {
+          _log.warning('proton has no prefix', fields: fields);
+          return const LaunchResult(LaunchOutcome.prefixRequired);
+        }
+        final command = wineCommand(request, home: homeDirectoryPath ?? '');
+        try {
+          await starter.start(
+            command.executable,
+            command.arguments,
+            workingDirectory: workingDirectory,
+            environment: command.environment,
+          );
+        } on ProcessException catch (error, stack) {
+          _log.warning('wine runner missing', error: error, stack: stack, fields: fields);
+          return LaunchResult(LaunchOutcome.runnerMissing, program: command.executable);
+        }
+      } else if (_unstartableTypes.contains(ext) || !await _isExecutable(file)) {
+        // Windows files are refused by name, since NTFS and exFAT mounts mark every file executable.
+        _log.warning('game target not startable', fields: fields);
+        return const LaunchResult(LaunchOutcome.unsupported);
       } else {
-        await Process.start(target, const [], workingDirectory: path.dirname(target), mode: mode);
+        // A script the user chose for a setup the runner settings can't express: it gets the arguments as they are.
+        await starter.start(target, splitCommandArguments(request.arguments), workingDirectory: workingDirectory);
       }
-      _log.info('game launched', fields: {'target': target});
-      return LaunchOutcome.started;
+      _log.info('game launched', fields: fields);
+      return const LaunchResult(LaunchOutcome.started);
     } catch (error, stack) {
-      _log.warning('could not launch game', error: error, stack: stack, fields: {'target': target});
-      return LaunchOutcome.failed;
+      _log.warning('could not launch game', error: error, stack: stack, fields: fields);
+      return const LaunchResult(LaunchOutcome.failed);
     }
   }
 
-  static const Set<String> _windowsTypes = {'.exe', '.bat', '.cmd', '.lnk', '.msi'};
+  /// The program, arguments and environment that run [request]'s `.exe` under Wine or Proton.
+  ///
+  /// Proton starts directly the way Heroic starts it with UMU disabled, outside the Steam runtime umu-run wraps it
+  /// in, or through umu-run when [LaunchRequest.useUmu] is on. [home] finds Steam for Proton's
+  /// `STEAM_COMPAT_CLIENT_INSTALL_PATH`. The exe path goes in as stored, so a link in it reaches XXMI unresolved.
+  /// Paths are built in POSIX style whatever the host, since the command is only ever a Linux one.
+  /// See `docs/launch-game.md`.
+  @visibleForTesting
+  static ({String executable, List<String> arguments, Map<String, String> environment}) wineCommand(
+    LaunchRequest request, {
+    required String home,
+  }) {
+    final arguments = [request.executable, ...splitCommandArguments(request.arguments)];
+    final runner = request.runner;
+    if (WineRunner.isProton(runner) && !request.useUmu) {
+      return (
+        executable: runner,
+        arguments: ['waitforexitandrun', ...arguments],
+        environment: {
+          'STEAM_COMPAT_DATA_PATH': request.prefix,
+          'STEAM_COMPAT_CLIENT_INSTALL_PATH': path.posix.join(home, '.steam', 'steam'),
+          'STEAM_COMPAT_INSTALL_PATH': path.posix.dirname(request.executable),
+          // Proton's protonfixes needs a game id. Without one it reads the digits out of the prefix path, and a
+          // path with none, such as Heroic's `Prefixes/HoyoPlay`, stops Proton before anything starts. 0 is the
+          // id Heroic passes: no game-specific fixes.
+          'SteamAppId': '0',
+          'SteamGameId': '0',
+        },
+      );
+    }
+    final environment = {if (request.prefix.isNotEmpty) 'WINEPREFIX': request.prefix};
+    if (runner.isEmpty) return (executable: 'wine', arguments: arguments, environment: environment);
+    if (WineRunner.isProton(runner)) {
+      environment['PROTONPATH'] = path.posix.dirname(runner);
+      // Picks umu-protonfixes' Zenless Zone Zero fix, which runs the game with the steam.exe its anti-cheat needs.
+      environment['GAMEID'] = 'umu-zenlesszonezero';
+      return (executable: 'umu-run', arguments: arguments, environment: environment);
+    }
+    return (executable: runner, arguments: arguments, environment: environment);
+  }
+
+  /// Files Linux can't start: Windows types, and a `.desktop` shortcut, which can't take arguments.
+  static const Set<String> _unstartableTypes = {'.bat', '.cmd', '.lnk', '.msi', '.desktop'};
 
   static Future<bool> _isExecutable(File file) async {
     final mode = (await file.stat()).mode;

@@ -243,7 +243,11 @@ void main() {
     await service.setPaths('/mods', '/game');
     await service.setTheme('light');
     await service.setAccent('teal');
-    await service.setLaunchTarget('/games/xxmi.desktop');
+    await service.setLaunchTarget('/games/XXMI Launcher.exe');
+    await service.setLaunchArguments('--nogui --xxmi ZZMI -use-d3d11');
+    await service.setWineRunner('/proton/GE/proton');
+    await service.setWinePrefix('/prefixes/zzz');
+    await service.setWineUseUmu(false);
     await service.setLanguage('uk');
     await service.setSortMode('nameAsc');
     await service.setContentFilter('hide');
@@ -265,6 +269,10 @@ void main() {
       'theme': next.theme,
       'accent': next.accent,
       'launch_target': next.launchTarget,
+      'launch_arguments': next.launchArguments,
+      'wine_runner': next.wineRunner,
+      'wine_prefix': next.winePrefix,
+      'wine_use_umu': next.wineUseUmu,
       'language': next.language,
       'sort_mode': next.sortMode,
       'content_filter': next.contentFilter,
@@ -291,6 +299,41 @@ void main() {
     }
     expect(next.updateCheckOnLaunch, isTrue,
         reason: 'update_check_on_launch did not survive the restart');
+    expect(next.wineUseUmu, isFalse, reason: 'wine_use_umu did not survive the restart');
+  });
+
+  test('umu-launcher is on until switched off', () async {
+    final service = await build();
+    expect(service.wineUseUmu, isTrue);
+  });
+
+  group('launch arguments', () {
+    test('unset, they read as the default and are not written', () async {
+      final service = await build();
+      await service.setTheme('dark');
+
+      expect(service.launchArguments, '--nogui --xxmi ZZMI');
+      expect((await readFile()).containsKey('launch_arguments'), isFalse);
+    });
+
+    test('emptied, they stay empty after a restart', () async {
+      final service = await build();
+      await service.setLaunchArguments('');
+
+      SharedPreferences.setMockInitialValues({});
+      final next = await build();
+      await next.loadFromFile();
+      expect(next.launchArguments, '');
+    });
+
+    test('reset, the key is gone and the default applies again', () async {
+      final service = await build();
+      await service.setLaunchArguments('--xxmi ZZMI');
+      await service.setLaunchArguments(null);
+
+      expect(service.launchArguments, '--nogui --xxmi ZZMI');
+      expect((await readFile()).containsKey('launch_arguments'), isFalse);
+    });
   });
 
   group('the ZZMI folder', () {

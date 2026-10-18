@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+import '../core/constants.dart';
 import '../core/palette.dart';
 import '../models/character_info.dart';
 import '../services/api_service.dart';
@@ -20,6 +21,9 @@ import '../services/installed_mods_index.dart';
 import '../services/mod_manager_service.dart';
 import '../services/origin_status.dart';
 import '../services/origin_write.dart';
+import '../services/platform_service.dart';
+import '../services/platform_service_factory.dart';
+import '../services/shader_fixes/zzmi_layout.dart';
 import '../services/update_check.dart';
 import 'mod_sorting.dart';
 import 'zzz_characters.dart';
@@ -347,8 +351,67 @@ final zzmiFoundProvider = FutureProvider<bool>((ref) async {
   return File(p.join(path, 'd3dx.ini')).exists();
 });
 
-/// What the sidebar's Launch game button starts, empty until chosen. See `docs/launch-game.md`.
+/// The file the sidebar's Launch game button starts when one is chosen; empty means the XXMI Launcher beside the
+/// ZZMI folder ([xxmiLauncherProvider]). See `docs/launch-game.md`.
 final launchTargetProvider = StateProvider<String>((ref) => '');
+
+/// The XXMI Launcher beside the configured ZZMI folder, or null when there is none there.
+final xxmiLauncherProvider = FutureProvider<String?>((ref) async {
+  final zzmi = ref.watch(zzmiPathProvider);
+  if (zzmi.isEmpty) return null;
+  final exe = xxmiLauncherBeside(zzmi);
+  return await File(exe).exists() ? exe : null;
+});
+
+/// What Launch game passes the launcher, as typed.
+final launchArgumentsProvider = StateProvider<String>((ref) => AppConstants.defaultLaunchArguments);
+
+/// Linux only: the Wine or Proton that runs the launcher, empty for `wine` from PATH.
+final wineRunnerProvider = StateProvider<String>((ref) => '');
+
+/// Linux only: whether a Proton runner starts through umu-launcher rather than directly. On by default.
+final wineUseUmuProvider = StateProvider<bool>((ref) => true);
+
+/// The Wine and Proton builds on this machine, for Settings › Wine or Proton. Looked for again each time Settings
+/// opens, so a build installed meanwhile shows up.
+final wineRunnersProvider = FutureProvider.autoDispose<List<WineRunner>>(
+  (ref) => PlatformServiceFactory.getInstance().findWineRunners(),
+);
+
+/// Linux only: the Wine prefix the launcher runs in, empty for the runner's own default.
+final winePrefixProvider = StateProvider<String>((ref) => '');
+
+/// How the folder in [winePrefixProvider] is laid out, for the warnings under it in Settings.
+enum WinePrefixLayout {
+  /// No prefix chosen: the runner's own default.
+  unset,
+
+  /// `drive_c` both at the top and under `pfx`, because `pfx` links back to the folder, as umu makes it in every
+  /// prefix it runs in, Heroic's for Proton games included. Every runner finds the same prefix here.
+  compatData,
+
+  /// `drive_c` only under a real `pfx/`, as Steam makes it, and Heroic with UMU off. Proton finds the prefix there,
+  /// but plain Wine would build a new prefix at the top of the folder.
+  protonOnly,
+
+  /// `drive_c` and no `pfx`, as plain Wine and Lutris make it, and Heroic for a Wine game. Proton started directly
+  /// would build a new prefix in a `pfx/` inside it.
+  plain,
+
+  /// Neither: not a prefix.
+  missing,
+}
+
+/// Checked again each time Settings opens, so a folder a runner has filled since loses its warning.
+final winePrefixLayoutProvider = FutureProvider.autoDispose<WinePrefixLayout>((ref) async {
+  final prefix = ref.watch(winePrefixProvider);
+  if (prefix.isEmpty) return WinePrefixLayout.unset;
+  final top = await Directory(p.join(prefix, 'drive_c')).exists();
+  if (await Directory(p.join(prefix, 'pfx', 'drive_c')).exists()) {
+    return top ? WinePrefixLayout.compatData : WinePrefixLayout.protonOnly;
+  }
+  return top ? WinePrefixLayout.plain : WinePrefixLayout.missing;
+});
 final autoRefreshProvider = StateProvider<bool>((ref) => false);
 
 /// How the marketplace presents mods GameBanana flags as adult.

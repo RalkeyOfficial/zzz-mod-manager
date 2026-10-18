@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as p;
 
 import '../../core/constants.dart';
 import '../../core/palette.dart';
 import '../../core/type_scale.dart';
 import '../../l10n/app_localizations.dart';
 import '../../services/platform_service_factory.dart';
+import '../../utils/home_relative.dart';
 import '../../utils/state_providers.dart';
 
 /// The strip along the bottom of the window: where ZZMI is, how many library mods are on (one link each in ZZMI's
@@ -59,15 +59,4 @@ class AppStatusBar extends ConsumerWidget {
 
   static String _homeRelative(String path) =>
       homeRelative(path, home: PlatformServiceFactory.getInstance().homeDirectoryPath);
-
-  /// `~/Games/ZZMI` rather than the full home path, the way a path reads in a terminal. Only a path inside [home]
-  /// is shortened, so `/home/alice` stays whole when home is `/home/al`.
-  @visibleForTesting
-  static String homeRelative(String path, {required String? home, p.Context? style}) {
-    final paths = style ?? p.context;
-    if (home == null || home.isEmpty) return path;
-    if (paths.equals(home, path)) return '~';
-    if (!paths.isWithin(home, path)) return path;
-    return '~${paths.separator}${paths.relative(path, from: home)}';
-  }
 }

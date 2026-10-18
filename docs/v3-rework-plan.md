@@ -49,15 +49,17 @@ The memory note `v3-canvas-vs-docs-decisions` holds these. In short:
   - the bundled fonts with their OFL licences, the accent setting and the new icons.
   - Follow-up, commit `6c5d5ac`: component values matched to the canvas, with new palette tokens (`rowHover`, `rowDivider`, `dialog`, `menu`, `menuBorder`, `chip`, `track`, `edge`, `check`, `link`, `selected`), 36px fields, 16px icons, `ZenithSwitch`, the primary hover on every accent, and the test harness on `buildAppTheme`. Canvas colours still without a token (toast `#1E2125`/`#353941`, panel `#0D0E10`, danger hover `#FF7F70`, the 30px small button, Unbounded 30/22/18, the outlined slanted watermark) get one when a screen needs them.
 - **Phase 2, title bar and shell:** done, commit `5e531d2`.
-  - Follow-up, the commit after it: Linux refuses a Windows file by its extension whatever its mode; Windows launches through `ShellExecuteW`; Tab reaches the sidebar rows; the status bar shortens only a path inside home; saving Settings re-checks ZZMI; the window buttons are the canvas's line drawings; the selected row takes `rowSelected`; the top resize strip stops at the window buttons; the Downloads panel opens against the sidebar's edge.
+  - Follow-up, commit `53474e9`: Tab reaches the sidebar rows; the status bar shortens only a path inside home; saving Settings re-checks ZZMI; the window buttons are the canvas's line drawings; the selected row takes `rowSelected`; the top resize strip stops at the window buttons; the Downloads panel opens against the sidebar's edge.
+  - Follow-up, the commit after it: Launch game runs the XXMI Launcher beside ZZMI with editable arguments, through `ShellExecuteW` on Windows and on Linux under a Wine or Proton build picked from the ones found (Proton through umu-run, or directly when switched off).
   - The user has confirmed edge resize works on KDE Wayland and accepted the slight resize lag.
-  - Not yet reported back on: the title bar's drag, double-click and right-click window menu, the window buttons, Super+arrow tiling, Launch game.
+  - Not yet reported back on: the title bar's drag, double-click and right-click window menu, the window buttons, Super+arrow tiling, and Launch game with Proton started directly.
+  - The user has confirmed Launch game through umu-run, with the Zenless Zone Zero game id, starts the game with mods.
   - What it added:
     - the runner's hidden `GtkHeaderBar` with `TitleBarStyle.hidden`;
     - `screens/shell/` (`title_bar.dart`, `app_sidebar.dart`, `status_bar.dart`, `keycap.dart`, `launch_game.dart`);
     - `AppDestination` with `destinationProvider` in place of `tabIndexProvider`;
     - `zzmiPathProvider` and `zzmiFoundProvider`;
-    - `launch_target` with `PlatformService.launchGame`, and `docs/launch-game.md`;
+    - `launch_target`, `launch_arguments`, `wine_runner`, `wine_prefix` and `wine_use_umu`, with `PlatformService.launchGame(LaunchRequest)`, and `docs/launch-game.md`;
     - `DownloadsNavItem`;
     - a sidebar that scrolls when short.
   - Docs updated: `desktop-integration.md` §4 (the rule, the hazard and what still differs).
@@ -112,3 +114,7 @@ Each is reviewable on its own and ends with tests green, docs and changelog upda
 - Offer the user a correction of the keybind copy on the canvas's Edit info and Reinstall artboards.
 - The existing screens still hold about 177 `Color(0x…)` literals and sky-blue gradients. Each goes when its screen is rebuilt.
 - The canvas's search field in the title bar waits for the palette in phase 8.
+- **Launch game follow-up: the app knows whether the game is running.** Design note first, in `launch-game.md`.
+  - A launch log: the runner's stdout and stderr go to a file in the app-data folder, never to a pipe the app holds, since closing the app must not kill the game. A Proton or Wine failure is then readable, and one that quits within a few seconds can be reported instead of passing as started.
+  - A running state: the app tracks the game from the press until it closes, whether it quits or crashes. While it runs, Launch game is disabled, and the "Remind me to press F10" toast from phase 7 has its "while the game runs" signal.
+  - `PlatformService.findGameProcesses` can't be that signal as it stands: its match on `zzz` also catches the app's own `zzz-mod-manager`. It needs fixing or replacing.

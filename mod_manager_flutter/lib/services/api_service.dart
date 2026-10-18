@@ -78,6 +78,10 @@ class ApiService {
           _configService!.zzmiPath ?? '';
       _container!.read(launchTargetProvider.notifier).state =
           _configService!.launchTarget;
+      _container!.read(launchArgumentsProvider.notifier).state = _configService!.launchArguments;
+      _container!.read(wineRunnerProvider.notifier).state = _configService!.wineRunner;
+      _container!.read(winePrefixProvider.notifier).state = _configService!.winePrefix;
+      _container!.read(wineUseUmuProvider.notifier).state = _configService!.wineUseUmu;
     }
 
     _modManager ??= ModManagerService(_configService!);
@@ -326,6 +330,34 @@ class ApiService {
     _container?.read(launchTargetProvider.notifier).state = target;
   }
 
+  /// Persists what Launch game passes the launcher. Null goes back to the default.
+  static Future<void> setLaunchArguments(String? arguments) async {
+    await initialize();
+    await _configService!.setLaunchArguments(arguments);
+    _container?.read(launchArgumentsProvider.notifier).state = _configService!.launchArguments;
+  }
+
+  /// Persists the Wine or Proton that runs the launcher on Linux.
+  static Future<void> setWineRunner(String runner) async {
+    await initialize();
+    await _configService!.setWineRunner(runner);
+    _container?.read(wineRunnerProvider.notifier).state = runner;
+  }
+
+  /// Persists the Wine prefix the launcher runs in on Linux.
+  static Future<void> setWinePrefix(String prefix) async {
+    await initialize();
+    await _configService!.setWinePrefix(prefix);
+    _container?.read(winePrefixProvider.notifier).state = prefix;
+  }
+
+  /// Persists whether a Proton runner starts through umu-launcher on Linux.
+  static Future<void> setWineUseUmu(bool useUmu) async {
+    await initialize();
+    await _configService!.setWineUseUmu(useUmu);
+    _container?.read(wineUseUmuProvider.notifier).state = useUmu;
+  }
+
   /// Persists the accent and applies it immediately.
   static Future<void> setAccent(AccentChoice accent) async {
     await initialize();
@@ -374,6 +406,7 @@ class ApiService {
       _container?.read(zzmiPathProvider.notifier).state = zzmiPath;
       // An unchanged path doesn't rebuild the check, and ZZMI may have been installed into it since.
       _container?.invalidate(zzmiFoundProvider);
+      _container?.invalidate(xxmiLauncherProvider);
       return 'Конфігурацію збережено';
     } catch (e) {
       throw Exception('Помилка оновлення конфігурації: $e');

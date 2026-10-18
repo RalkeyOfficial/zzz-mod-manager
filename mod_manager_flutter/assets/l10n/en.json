@@ -30,10 +30,13 @@
     },
     "launch": {
       "button": "Launch game",
-      "choose": "Choose what Launch game starts",
+      "choose": "Choose the XXMI Launcher",
       "not_found_title": "The game launcher is gone",
       "unsupported_title": "Can't start this file",
-      "unsupported_body": "{file}: choose its .desktop shortcut or a script in Settings instead.",
+      "unsupported_body": "{file}: choose the XXMI Launcher's .exe or an executable script in Settings instead.",
+      "runner_missing_title": "Couldn't run Wine or Proton",
+      "prefix_required_title": "Proton needs a Wine prefix",
+      "prefix_required_body": "Choose the game's prefix in Settings, or turn on umu-launcher there.",
       "failed_title": "Couldn't start the game"
     },
     "status": {
@@ -881,8 +884,35 @@
     },
     "launch": {
       "label": "Launch game with",
-      "hint": "What the Launch game button starts: the XXMI Launcher, its shortcut, or a script.",
-      "choose": "Choose…"
+      "hint": "What the Launch game button starts: the XXMI Launcher beside the ZZMI folder, unless you choose another.",
+      "missing": "No XXMI Launcher beside the ZZMI folder. Choose it.",
+      "change": "Change…",
+      "reset": "Reset",
+      "arguments": "Launch arguments",
+      "arguments_hint": "Passed to the XXMI Launcher. --nogui starts the game without its window, --xxmi ZZMI picks Zenless Zone Zero.",
+      "runner": "Wine or Proton",
+      "runner_hint": "What runs the XXMI Launcher: the same Proton or Wine build the game runs with.",
+      "umu": "Run Proton through umu-launcher",
+      "umu_hint": "Runs the game the way Steam does, which works more reliably. Needs umu-launcher installed.",
+      "runner_default": "System Wine (wine)",
+      "runner_chosen": "Chosen file",
+      "runner_other": "Other file…",
+      "source": {
+        "steam": "Steam",
+        "heroic": "Heroic",
+        "lutris": "Lutris",
+        "bottles": "Bottles",
+        "system": "System"
+      },
+      "runner_choose": "Choose wine or proton",
+      "prefix": "Wine prefix",
+      "prefix_hint": "The prefix the game is set up in. XXMI starts the game inside it.",
+      "prefix_default": "The runner's default prefix",
+      "prefix_missing": "This folder doesn't look like a Wine prefix: it has no drive_c.",
+      "prefix_required": "Proton started directly has no prefix of its own. Choose the game's.",
+      "prefix_nested": "This prefix has no pfx folder, so Proton started directly would make a new prefix inside it. Use a prefix made for Proton, or turn on umu-launcher.",
+      "prefix_proton_only": "This is a Proton prefix folder, with the prefix in its pfx folder. For Wine, choose that pfx folder.",
+      "prefix_choose": "Choose the Wine prefix"
     },
     "auto_tag": {
       "title": "Automatic tagging",

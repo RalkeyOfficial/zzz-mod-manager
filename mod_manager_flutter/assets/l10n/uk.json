@@ -31,10 +31,13 @@
     },
     "launch": {
       "button": "Запустити гру",
-      "choose": "Виберіть, що запускає кнопка «Запустити гру»",
+      "choose": "Виберіть XXMI Launcher",
       "not_found_title": "Програму запуску гри не знайдено",
       "unsupported_title": "Цей файл не вдається запустити",
-      "unsupported_body": "{file}: виберіть натомість його ярлик .desktop або скрипт у налаштуваннях.",
+      "unsupported_body": "{file}: виберіть натомість .exe XXMI Launcher або виконуваний скрипт у налаштуваннях.",
+      "runner_missing_title": "Не вдалося запустити Wine або Proton",
+      "prefix_required_title": "Для Proton потрібен префікс Wine",
+      "prefix_required_body": "Виберіть префікс гри в налаштуваннях або ввімкніть там umu-launcher.",
       "failed_title": "Не вдалося запустити гру"
     },
     "status": {
@@ -913,8 +916,35 @@
     },
     "launch": {
       "label": "Запускати гру через",
-      "hint": "Що запускає кнопка «Запустити гру»: XXMI Launcher, його ярлик або скрипт.",
-      "choose": "Вибрати…"
+      "hint": "Що запускає кнопка «Запустити гру»: XXMI Launcher поруч із папкою ZZMI, якщо ви не виберете інший.",
+      "missing": "Поруч із папкою ZZMI немає XXMI Launcher. Виберіть його.",
+      "change": "Змінити…",
+      "reset": "Скинути",
+      "arguments": "Аргументи запуску",
+      "arguments_hint": "Передаються XXMI Launcher. --nogui запускає гру без його вікна, --xxmi ZZMI вибирає Zenless Zone Zero.",
+      "runner": "Wine або Proton",
+      "runner_hint": "Що запускає XXMI Launcher: та сама збірка Proton або Wine, з якою працює гра.",
+      "umu": "Запускати Proton через umu-launcher",
+      "umu_hint": "Запускає гру так, як це робить Steam, тож вона працює надійніше. Потрібен встановлений umu-launcher.",
+      "runner_default": "Системний Wine (wine)",
+      "runner_chosen": "Вибраний файл",
+      "runner_other": "Інший файл…",
+      "source": {
+        "steam": "Steam",
+        "heroic": "Heroic",
+        "lutris": "Lutris",
+        "bottles": "Bottles",
+        "system": "Системний"
+      },
+      "runner_choose": "Виберіть wine або proton",
+      "prefix": "Префікс Wine",
+      "prefix_hint": "Префікс, у якому налаштована гра. XXMI запускає гру в ньому.",
+      "prefix_default": "Типовий префікс Wine або Proton",
+      "prefix_missing": "Ця папка не схожа на префікс Wine: у ній немає drive_c.",
+      "prefix_required": "Proton, запущений напряму, не має власного префікса. Виберіть префікс гри.",
+      "prefix_nested": "У цьому префіксі немає папки pfx, тож Proton, запущений напряму, створить у ньому новий префікс. Використайте префікс, створений для Proton, або ввімкніть umu-launcher.",
+      "prefix_proton_only": "Це папка префікса Proton: сам префікс лежить у її папці pfx. Для Wine виберіть цю папку pfx.",
+      "prefix_choose": "Виберіть префікс Wine"
     },
     "auto_tag": {
       "title": "Автоматичне тегування",

@@ -87,4 +87,21 @@ void main() {
       expect(await shaderFolderIn(dir('ZZMI')), isNull);
     });
   });
+
+  group('xxmiLauncherBeside', () {
+    test("is the launcher's exe in the folder above ZZMI", () {
+      expect(xxmiLauncherBeside('/home/al/XXMI Launcher/ZZMI'), '/home/al/XXMI Launcher/Resources/Bin/XXMI Launcher.exe');
+    });
+
+    test('a trailing separator on the ZZMI folder changes nothing', () {
+      expect(xxmiLauncherBeside('/home/al/XXMI Launcher/ZZMI/'), '/home/al/XXMI Launcher/Resources/Bin/XXMI Launcher.exe');
+    });
+
+    test('a path through a link is kept as written, not normalised', () {
+      expect(
+        xxmiLauncherBeside('/mnt/Game/XXMI Launcher/../XXMI Launcher/ZZMI'),
+        '/mnt/Game/XXMI Launcher/../XXMI Launcher/Resources/Bin/XXMI Launcher.exe',
+      );
+    });
+  });
 }

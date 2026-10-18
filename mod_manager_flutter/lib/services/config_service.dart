@@ -22,6 +22,10 @@ class ConfigService implements ModCharacterTagStore {
   static const String _keyTheme = 'theme';
   static const String _keyAccent = 'accent';
   static const String _keyLaunchTarget = 'launch_target';
+  static const String _keyLaunchArguments = 'launch_arguments';
+  static const String _keyWineRunner = 'wine_runner';
+  static const String _keyWinePrefix = 'wine_prefix';
+  static const String _keyWineUseUmu = 'wine_use_umu';
   static const String _keyLanguage = 'language';
   static const String _keyModCharacterTags = 'mod_character_tags';
   static const String _keyFavoriteMods = 'favorite_mods';
@@ -129,8 +133,22 @@ class ConfigService implements ModCharacterTagStore {
   /// The accent, as an `AccentChoice` **name**. Empty when never chosen; `AccentChoice.parse` applies the default.
   String get accent => _prefs.getString(_keyAccent) ?? '';
 
-  /// The file the Launch game button starts. Empty when never chosen.
+  /// The file the Launch game button starts. Empty means the XXMI Launcher beside the ZZMI folder.
   String get launchTarget => _prefs.getString(_keyLaunchTarget) ?? '';
+
+  /// The arguments Launch game passes. Read on `containsKey`: absent is the default, while a stored empty string
+  /// is the user's choice and stays empty.
+  String get launchArguments => _prefs.getString(_keyLaunchArguments) ?? AppConstants.defaultLaunchArguments;
+
+  /// Linux only: the Wine or Proton that runs the launcher, empty for `wine` from PATH.
+  String get wineRunner => _prefs.getString(_keyWineRunner) ?? '';
+
+  /// Linux only: the Wine prefix the launcher runs in, empty for the runner's own default.
+  String get winePrefix => _prefs.getString(_keyWinePrefix) ?? '';
+
+  /// Linux only: whether a Proton runner starts through umu-launcher, inside the Steam runtime it is built for. On by
+  /// default; off starts Proton directly on the system's libraries (`docs/launch-game.md`).
+  bool get wineUseUmu => _prefs.getBool(_keyWineUseUmu) ?? true;
   String get language => _prefs.getString(_keyLanguage) ?? 'en';
   String get sortMode => _prefs.getString(_keySortMode) ?? 'added';
   bool get isFirstRun => _prefs.getBool(_keyFirstRun) ?? true;
@@ -384,6 +402,51 @@ class ConfigService implements ModCharacterTagStore {
     }
   }
 
+  /// Null removes the key, so the default applies again.
+  Future<bool> setLaunchArguments(String? arguments) async {
+    try {
+      if (arguments == null) {
+        await _prefs.remove(_keyLaunchArguments);
+      } else {
+        await _prefs.setString(_keyLaunchArguments, arguments);
+      }
+      await _saveToFile();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> setWineRunner(String runner) async {
+    try {
+      await _prefs.setString(_keyWineRunner, runner);
+      await _saveToFile();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> setWinePrefix(String prefix) async {
+    try {
+      await _prefs.setString(_keyWinePrefix, prefix);
+      await _saveToFile();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> setWineUseUmu(bool useUmu) async {
+    try {
+      await _prefs.setBool(_keyWineUseUmu, useUmu);
+      await _saveToFile();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<bool> setLanguage(String language) async {
     try {
       await _prefs.setString(_keyLanguage, language);
@@ -497,6 +560,18 @@ class ConfigService implements ModCharacterTagStore {
       if (config.containsKey('launch_target')) {
         await _prefs.setString(_keyLaunchTarget, config['launch_target']);
       }
+      if (config.containsKey('launch_arguments')) {
+        await _prefs.setString(_keyLaunchArguments, config['launch_arguments']);
+      }
+      if (config.containsKey('wine_runner')) {
+        await _prefs.setString(_keyWineRunner, config['wine_runner']);
+      }
+      if (config.containsKey('wine_prefix')) {
+        await _prefs.setString(_keyWinePrefix, config['wine_prefix']);
+      }
+      if (config.containsKey('wine_use_umu')) {
+        await _prefs.setBool(_keyWineUseUmu, config['wine_use_umu']);
+      }
       if (config.containsKey('language')) {
         await _prefs.setString(_keyLanguage, config['language']);
       }
@@ -554,6 +629,11 @@ class ConfigService implements ModCharacterTagStore {
         'theme': theme,
         'accent': accent,
         'launch_target': launchTarget,
+        // Written only once set, so an unedited field follows a change to the default.
+        if (_prefs.containsKey(_keyLaunchArguments)) 'launch_arguments': launchArguments,
+        'wine_runner': wineRunner,
+        'wine_prefix': winePrefix,
+        'wine_use_umu': wineUseUmu,
         'language': language,
         'sort_mode': sortMode,
         'content_filter': contentFilter,
