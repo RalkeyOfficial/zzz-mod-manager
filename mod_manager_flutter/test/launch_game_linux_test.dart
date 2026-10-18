@@ -20,8 +20,8 @@ void main() {
     starter = _RecordingStarter();
   });
 
-  File write(String name, {bool executable = false}) {
-    final file = File(p.join(dir.path, name))..writeAsStringSync('MZ');
+  File write(String name, {bool executable = false, String contents = 'MZ'}) {
+    final file = File(p.join(dir.path, name))..writeAsStringSync(contents);
     if (executable) Process.runSync('chmod', ['+x', file.path]);
     return file;
   }
@@ -46,7 +46,7 @@ void main() {
     final exe = write('XXMI Launcher.exe');
     expect((await launch(exe.path)).outcome, LaunchOutcome.started);
 
-    final call = starter.calls.single;
+    final call = starter.calls.first;
     expect(call.executable, 'wine');
     expect(call.arguments, [exe.path, '--nogui', '--xxmi', 'ZZMI']);
     expect(call.workingDirectory, dir.path);
@@ -62,14 +62,15 @@ void main() {
     expect(starter.calls, isEmpty);
   });
 
-  test('a runner that cannot be run, such as umu-run not installed, is named', () async {
+  test('a runner that cannot be run, such as umu-run not installed, is named, and no lock starts', () async {
     final exe = write('XXMI Launcher.exe');
     final proton = write('proton', executable: true);
-    starter.fails = true;
+    starter.missing = {'umu-run'};
     final result = await launch(exe.path, runner: proton.path, useUmu: true);
 
     expect(result.outcome, LaunchOutcome.runnerMissing);
     expect(result.program, 'umu-run');
+    expect(starter.calls, isEmpty);
   });
 
   test('Proton started directly runs the proton script in the prefix', () async {
@@ -77,7 +78,7 @@ void main() {
     final proton = write('proton', executable: true);
     expect((await launch(exe.path, runner: proton.path, prefix: '/prefixes/HoyoPlay')).outcome, LaunchOutcome.started);
 
-    final call = starter.calls.single;
+    final call = starter.calls.first;
     expect(call.executable, proton.path);
     expect(call.arguments.take(2), ['waitforexitandrun', exe.path]);
     expect(call.environment['STEAM_COMPAT_DATA_PATH'], '/prefixes/HoyoPlay');
@@ -94,7 +95,7 @@ void main() {
     final script = write('start.sh', executable: true);
     expect((await launch(script.path, arguments: '-a "b c"')).outcome, LaunchOutcome.started);
 
-    final call = starter.calls.single;
+    final call = starter.calls.first;
     expect(call.executable, script.path);
     expect(call.arguments, ['-a', 'b c']);
     expect(call.environment, isEmpty);
@@ -120,20 +121,167 @@ void main() {
       throwsA(isA<ProcessException>()),
     );
   });
+
+  test("the real starter returns the started program's own process id, not that of the fork that detaches it", () async {
+    // What the screen locks rest on: they watch this id until the runner exits.
+    final pid = await const DetachedStarter().start('sleep', const ['5'], workingDirectory: dir.path);
+    addTearDown(() => Process.killPid(pid));
+    expect(File('/proc/$pid/comm').readAsStringSync().trim(), 'sleep');
+  });
+
+  group('keeping the screen awake', () {
+    // The game is the first call, pid 1000; every call after it is a lock holder.
+    List<_Call> locks() => starter.calls.skip(1).toList();
+
+    List<String> watching(String server) => ['sh', '-c', LinuxPlatformService.awakeScript, 'sh', '1000', server];
+
+    // The watcher a lock holder runs: its last six arguments.
+    List<String> watcher(_Call lock) => lock.arguments.sublist(lock.arguments.length - 6);
+
+    test("logind's idle lock, GNOME's idle lock and the freedesktop power and screen locks start beside the game", () async {
+      final exe = write('XXMI Launcher.exe');
+      await launch(exe.path);
+
+      expect(locks().map((call) => call.executable), ['systemd-inhibit', 'gnome-session-inhibit', 'kde-inhibit']);
+      expect(locks()[0].arguments, containsAllInOrder(['--what=idle', '--who=Zenith', '--why=Playing Zenless Zone Zero']));
+      expect(locks()[1].arguments, containsAllInOrder(['--inhibit', 'idle']));
+      expect(locks()[2].arguments, containsAllInOrder(['--power', '--screenSaver']));
+    });
+
+    test("under wine each lock waits for the game's runner, then for the prefix's wineserver", () async {
+      final exe = write('XXMI Launcher.exe');
+      await launch(exe.path, prefix: '/prefixes/zzz');
+
+      for (final lock in locks()) {
+        expect(watcher(lock), watching('wineserver'), reason: lock.executable);
+        expect(lock.environment, {'WINEPREFIX': '/prefixes/zzz'}, reason: lock.executable);
+        expect(lock.workingDirectory, dir.path, reason: lock.executable);
+      }
+    });
+
+    test('a wine build waits on the wineserver beside it', () async {
+      final exe = write('XXMI Launcher.exe');
+      final wine = write('wine', executable: true);
+      await launch(exe.path, runner: wine.path);
+
+      expect(watcher(locks().first), watching(p.join(dir.path, 'wineserver')));
+      expect(locks().first.environment, isEmpty);
+    });
+
+    test("Proton started directly waits on its own wineserver, in the prefix's pfx folder", () async {
+      final exe = write('XXMI Launcher.exe');
+      final proton = write('proton', executable: true);
+      await launch(exe.path, runner: proton.path, prefix: '/prefixes/HoyoPlay');
+
+      expect(watcher(locks().first), watching(p.join(dir.path, 'files', 'bin', 'wineserver')));
+      expect(locks().first.environment, {'WINEPREFIX': '/prefixes/HoyoPlay/pfx'});
+    });
+
+    test('umu-run lasts as long as the game, so there is no wineserver to wait on', () async {
+      final exe = write('XXMI Launcher.exe');
+      final proton = write('proton', executable: true);
+      await launch(exe.path, runner: proton.path, prefix: '/prefixes/HoyoPlay', useUmu: true);
+
+      expect(locks(), hasLength(3));
+      expect(watcher(locks().first), watching(''));
+      expect(locks().first.environment, isEmpty);
+    });
+
+    test('a script gets the locks too, waiting only for the script', () async {
+      final script = write('start.sh', executable: true);
+      await launch(script.path);
+
+      expect(locks(), hasLength(3));
+      expect(watcher(locks().first), watching(''));
+    });
+
+    test('with no lock holder installed the game still starts', () async {
+      final exe = write('XXMI Launcher.exe');
+      starter.missing = {for (final lock in LinuxPlatformService.awakeLocks) lock.first};
+
+      expect((await launch(exe.path)).outcome, LaunchOutcome.started);
+      expect(starter.calls.single.executable, 'wine');
+    });
+
+    group('the watcher', () {
+      late String called;
+
+      // A wineserver that writes down its arguments.
+      setUp(() {
+        called = p.join(dir.path, 'called');
+        write('wineserver', executable: true, contents: '#!/bin/sh\necho "\$@" > "$called"\n');
+      });
+
+      Future<int> exitedPid() async {
+        final exited = await Process.start('true', const []);
+        await exited.exitCode;
+        return exited.pid;
+      }
+
+      Future<ProcessResult> watch(int pid, String server, {Map<String, String>? environment}) =>
+          Process.run('sh', ['-c', LinuxPlatformService.awakeScript, 'sh', '$pid', server], environment: environment);
+
+      test('runs the wineserver with -w once the runner has exited', () async {
+        final result = await watch(await exitedPid(), p.join(dir.path, 'wineserver'));
+
+        expect(result.exitCode, 0, reason: '${result.stderr}');
+        expect(File(called).readAsStringSync().trim(), '-w');
+      });
+
+      test('waits while the runner runs', () async {
+        // Up to one 5-second poll.
+        final runner = await Process.start('sleep', const ['30']);
+        addTearDown(runner.kill);
+        final watcher = watch(runner.pid, p.join(dir.path, 'wineserver'));
+
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        expect(File(called).existsSync(), isFalse);
+
+        runner.kill();
+        await runner.exitCode;
+        expect((await watcher).exitCode, 0);
+        expect(File(called).readAsStringSync().trim(), '-w');
+      });
+
+      test('falls back to the wineserver on PATH when the one given is no file, as for a wrapper script', () async {
+        final result = await watch(
+          await exitedPid(),
+          p.join(dir.path, 'bin', 'wineserver'),
+          environment: {'PATH': '${dir.path}:${Platform.environment['PATH']}'},
+        );
+
+        expect(result.exitCode, 0, reason: '${result.stderr}');
+        expect(File(called).readAsStringSync().trim(), '-w');
+      });
+
+      test('ends once the runner has exited when there is no wineserver', () async {
+        final result = await watch(await exitedPid(), '');
+
+        expect(result.exitCode, 0, reason: '${result.stderr}');
+        expect(File(called).existsSync(), isFalse);
+      });
+    });
+  });
 }
 
+typedef _Call = ({String executable, List<String> arguments, String workingDirectory, Map<String, String> environment});
+
 class _RecordingStarter implements DetachedStarter {
-  final calls = <({String executable, List<String> arguments, String workingDirectory, Map<String, String> environment})>[];
-  bool fails = false;
+  final calls = <_Call>[];
+
+  /// Programs that throw as if not installed.
+  Set<String> missing = {};
 
   @override
-  Future<void> start(
+  Future<int> start(
     String executable,
     List<String> arguments, {
     required String workingDirectory,
     Map<String, String> environment = const {},
   }) async {
-    if (fails) throw ProcessException(executable, arguments, 'No such file or directory', 2);
+    if (missing.contains(executable)) throw ProcessException(executable, arguments, 'No such file or directory', 2);
+    final pid = 1000 + calls.length;
     calls.add((executable: executable, arguments: arguments, workingDirectory: workingDirectory, environment: environment));
+    return pid;
   }
 }

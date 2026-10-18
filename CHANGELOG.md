@@ -95,6 +95,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Launch game** in the sidebar starts the XXMI Launcher beside your ZZMI folder with `--nogui --xxmi ZZMI`.
 - Settings › **Launch game with** picks another file, and **Launch arguments** changes what it passes.
 - On Linux, Settings › **Wine or Proton** lists the builds installed by Steam, Heroic, Lutris and Bottles by name, and **Wine prefix** picks the prefix. Proton runs through umu-launcher, or directly when that is switched off.
+- On Plasma, GNOME and Hyprland with hypridle, while a game started with **Launch game** runs, the screen stays on and the computer doesn't go to sleep on its own, even after the app is closed.
 - The sidebar shows whether ZZMI is where Settings says, how many mods are on, and a reminder to press F10 in game after changes.
 - RAR and 7z mods install with no setup: 7-Zip ships with the app, and the Arch package installs it.
 - The Arch package pulls in what "open mod page" and "open mod folder" need, and lists xdotool and ydotool as optional.

@@ -15,6 +15,10 @@ import 'wine_runners.dart' as wine_runners;
 final Logger _log = Logger('platform');
 final Logger _files = Logger('fileops');
 
+/// The wineserver a screen lock waits on once the game's runner has exited, empty for none, and the environment
+/// naming the prefix it serves.
+typedef PrefixServer = ({String server, Map<String, String> environment});
+
 /// Linux-специфічна реалізація PlatformService
 class LinuxPlatformService implements PlatformService {
   @override
@@ -238,6 +242,8 @@ class LinuxPlatformService implements PlatformService {
 
       final ext = path.extension(target).toLowerCase();
       final workingDirectory = path.dirname(target);
+      final int pid;
+      final PrefixServer prefix;
       if (ext == '.exe') {
         if (request.runner.isNotEmpty && !await File(request.runner).exists()) {
           _log.warning('wine runner missing', fields: fields);
@@ -249,7 +255,7 @@ class LinuxPlatformService implements PlatformService {
         }
         final command = wineCommand(request, home: homeDirectoryPath ?? '');
         try {
-          await starter.start(
+          pid = await starter.start(
             command.executable,
             command.arguments,
             workingDirectory: workingDirectory,
@@ -259,14 +265,17 @@ class LinuxPlatformService implements PlatformService {
           _log.warning('wine runner missing', error: error, stack: stack, fields: fields);
           return LaunchResult(LaunchOutcome.runnerMissing, program: command.executable);
         }
+        prefix = prefixServer(request);
       } else if (_unstartableTypes.contains(ext) || !await _isExecutable(file)) {
         // Windows files are refused by name, since NTFS and exFAT mounts mark every file executable.
         _log.warning('game target not startable', fields: fields);
         return const LaunchResult(LaunchOutcome.unsupported);
       } else {
         // A script the user chose for a setup the runner settings can't express: it gets the arguments as they are.
-        await starter.start(target, splitCommandArguments(request.arguments), workingDirectory: workingDirectory);
+        pid = await starter.start(target, splitCommandArguments(request.arguments), workingDirectory: workingDirectory);
+        prefix = (server: '', environment: const {});
       }
+      fields['awake'] = await _keepAwake(starter, pid, prefix, workingDirectory: workingDirectory);
       _log.info('game launched', fields: fields);
       return const LaunchResult(LaunchOutcome.started);
     } catch (error, stack) {
@@ -314,6 +323,67 @@ class LinuxPlatformService implements PlatformService {
       return (executable: 'umu-run', arguments: arguments, environment: environment);
     }
     return (executable: runner, arguments: arguments, environment: environment);
+  }
+
+  /// The programs that each hold a lock against the screen turning off and the computer going to sleep on its own
+  /// while [awakeScript] runs: logind's, GNOME's, and the freedesktop ones Plasma's power manager reads. One that
+  /// isn't installed, or whose desktop isn't running, holds nothing. See `docs/launch-game.md`.
+  @visibleForTesting
+  static const List<List<String>> awakeLocks = [
+    ['systemd-inhibit', '--what=idle', '--who=Zenith', '--why=Playing Zenless Zone Zero'],
+    ['gnome-session-inhibit', '--app-id', 'Zenith', '--reason', 'Playing Zenless Zone Zero', '--inhibit', 'idle'],
+    ['kde-inhibit', '--power', '--screenSaver'],
+  ];
+
+  /// Waits for the runner, process `$1`, to exit, then for the prefix's wineserver: `$2`, or the one on PATH when `$2`
+  /// isn't an executable file, since any version waits on the same lock. An empty `$2` waits for nothing more.
+  @visibleForTesting
+  static const String awakeScript =
+      r'while kill -0 "$1" 2>/dev/null; do sleep 5; done; [ -z "$2" ] || { [ -x "$2" ] && exec "$2" -w; exec wineserver -w; }';
+
+  /// The wineserver [awakeScript] waits on once the runner has exited, and the prefix it serves. Wine and Proton
+  /// started directly return when XXMI does, a few seconds into the game, while the game runs on in the prefix.
+  /// umu-run lasts as long as the game, so it has none.
+  @visibleForTesting
+  static PrefixServer prefixServer(LaunchRequest request) {
+    final runner = request.runner;
+    if (WineRunner.isProton(runner)) {
+      if (request.useUmu) return (server: '', environment: const {});
+      return (
+        server: path.posix.join(path.posix.dirname(runner), 'files', 'bin', 'wineserver'),
+        environment: {'WINEPREFIX': path.posix.join(request.prefix, 'pfx')},
+      );
+    }
+    final environment = {if (request.prefix.isNotEmpty) 'WINEPREFIX': request.prefix};
+    if (runner.isEmpty) return (server: 'wineserver', environment: environment);
+    return (server: path.posix.join(path.posix.dirname(runner), 'wineserver'), environment: environment);
+  }
+
+  /// Starts each of [awakeLocks] beside the game and returns the ones that started. The game is already running, so
+  /// nothing here changes the launch's outcome.
+  static Future<List<String>> _keepAwake(
+    DetachedStarter starter,
+    int pid,
+    PrefixServer prefix, {
+    required String workingDirectory,
+  }) async {
+    final started = <String>[];
+    for (final lock in awakeLocks) {
+      try {
+        await starter.start(
+          lock.first,
+          [...lock.skip(1), 'sh', '-c', awakeScript, 'sh', '$pid', prefix.server],
+          workingDirectory: workingDirectory,
+          environment: prefix.environment,
+        );
+        started.add(lock.first);
+      } on ProcessException {
+        // Not installed.
+      } catch (error, stack) {
+        _log.warning('screen lock not started', error: error, stack: stack, fields: {'program': lock.first});
+      }
+    }
+    return started;
   }
 
   /// Files Linux can't start: Windows types, and a `.desktop` shortcut, which can't take arguments.

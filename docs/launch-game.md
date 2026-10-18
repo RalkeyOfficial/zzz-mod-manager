@@ -93,6 +93,42 @@ The launch arguments are split into words without a shell:
 
 A chosen file that isn't an `.exe` is the way out for a setup these settings can't express, such as gamescope or a Flatpak runner. An executable script runs directly from its own folder with the split arguments and no Wine environment. A `.desktop` file is refused, because `gio launch` can't pass arguments and they would be silently dropped. So are `.bat`, `.cmd`, `.lnk` and `.msi`, whatever their mode: an NTFS or exFAT mount, which a dual-booting player is likely to have, marks every file executable. A file without the execute bit is refused too.
 
+## Keeping the screen awake
+
+On Linux, a game started from the button keeps the screen on, and keeps the computer from going to sleep on its own, for as long as the game runs, even after the app is closed. A desktop decides the user is idle from the keyboard, mouse and touch alone, so during controller play the screen would turn off, and Plasma's default of sleeping after 15 minutes on AC would put the computer to sleep mid-game. Sleep the user asks for, from the menu or by closing a laptop's lid, still works.
+
+Each desktop reads a different lock, so the app starts three programs, each holding one (`awakeLocks` in `services/platform_service_linux.dart`):
+
+| Program | Lock | Read by |
+|---|---|---|
+| `systemd-inhibit --what=idle --who=Zenith --why="Playing Zenless Zone Zero"` | logind's `idle` | Plasma, for the screen only; Hyprland's hypridle, which then runs none of its idle actions, sleep included |
+| `gnome-session-inhibit --app-id Zenith --reason "Playing Zenless Zone Zero" --inhibit idle` | GNOME's session `idle` | GNOME, for both: gsd-power drops its sleep timer while the session may not go idle. GNOME reads no logind lock |
+| `kde-inhibit --power --screenSaver` | `org.freedesktop.PowerManagement.Inhibit` and `org.freedesktop.ScreenSaver.Inhibit` | Plasma's power manager: the power lock is the one its automatic sleep checks, and the screen lock covers a Plasma without logind. Plasma lists it as "Running Script" with `sh` as the reason, since `kde-inhibit` sets its own label |
+
+A program that isn't installed is skipped, and a lock no running desktop reads holds nothing. `gnome-session-inhibit` with no GNOME session exits at once.
+
+Plasma's power manager splits the two: a logind `idle` lock and the screensaver lock stop only dimming, turning off and locking the screen, and its automatic sleep checks a separate lock, which the power lock or a logind `sleep` lock sets.
+
+The programs start after the game, beside it rather than around it, so no lock can change the launch. Wrapped around the game, a missing umu-run would fail inside the lock program, out of the app's sight, and the button couldn't say which program it couldn't run. A `systemd-inhibit` that can't reach logind also exits without starting its command at all. The programs are detached like the game, so closing the app doesn't end them.
+
+Each program runs the same watcher (`awakeScript`), a fixed `sh -c` script that receives the runner's process id and the wineserver's path as arguments, so no path is ever pasted into its text. It checks every 5 seconds whether the runner's process is still there, then waits for the prefix's `wineserver -w` where there is one, and the lock ends with it. Wine returns when XXMI exits, a few seconds into the game, and so does Proton started directly: `waitforexitandrun` waits for the prefix before it starts XXMI, not after. The game keeps running in the prefix, and `wineserver -w` returns once the last program in it has exited, so anything else running in that prefix, such as a launcher in the tray, keeps the lock too. umu-run lasts as long as the game, so the watcher waits only for it. A chosen script is watched the same way, and its lock lasts as long as the script: a script that runs Wine itself and returns when XXMI does keeps the lock only for those first seconds.
+
+| Runner | wineserver waited on | Prefix it serves |
+|---|---|---|
+| empty | `wineserver`, from PATH | `WINEPREFIX` when a prefix is set |
+| any other wine file | the `wineserver` beside it, else the one on PATH | `WINEPREFIX` when a prefix is set |
+| a file named `proton`, umu off | `files/bin/wineserver` in the Proton build, else the one on PATH | `<prefix>/pfx` |
+| a file named `proton`, umu on, or a script | none | |
+
+`wineserver -w` waits only on the prefix's server lock file, so a wineserver of another version works, and it returns at once when no server is running. That is why the one on PATH stands in for a runner with none beside it, such as a wrapper script or a link to a build kept elsewhere. A lock ends up to 5 seconds after the game, plus the few seconds Wine keeps an empty prefix's server.
+
+Measured on Plasma 6.8, through umu-run with dwproton 11: XXMI exits within 9 seconds of the launch while umu-run and the game run on, and Plasma counts both its screen and its automatic sleep as blocked from about 5 seconds after the locks are taken, the delay before it takes a new lock into account. When the game closes, umu-run, the watchers and every lock are gone within one 5-second poll; 3 seconds in the run measured. What other desktops read comes from their source and is not tried, and neither is Wine or Proton started directly.
+
+Not used:
+- A lock the app holds over D-Bus itself, which is how Heroic does it through Electron: it ends when the app closes, and the game is meant to outlive the app.
+- logind's `sleep` lock, which every desktop's automatic sleep would meet: logind then also refuses sleep the user asks for, from the menu or a laptop's lid.
+- KWin's game controller plugin, which counts controller input as activity. Whenever it decides no app is using the controller, it also makes the controller a mouse and keyboard on the desktop, and it decides that from the controller's `/dev/input/event*` device, while the game under Proton reads `/dev/hidraw*`.
+
 ## What the button reports
 
 `PlatformService.launchGame` answers with a `LaunchOutcome`, and the button reports only a failure: a game that starts is its own feedback ([`notifications.md`](notifications.md)).
@@ -112,3 +148,5 @@ The process is started detached and never waited on: the app has no business hol
 
 - Detecting whether the game is already running before starting it again. `PlatformService.findGameProcesses` would answer that, but its match on `zzz` also catches the app's own `zzz-mod-manager` folder.
 - Not yet run on Windows. A declined UAC prompt most likely reports `failed`.
+- No lock on Windows. Whether the game holds one itself is not checked.
+- No lock where the idle daemon honours only Wayland's idle-inhibit protocol, such as sway's swayidle: that protocol needs a window of the app's own. XFCE, Cinnamon, MATE and others get one only where one of the three programs is installed and the desktop reads its lock.

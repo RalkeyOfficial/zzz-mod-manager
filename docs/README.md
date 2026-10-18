@@ -25,7 +25,7 @@ the root [`README.md`](../README.md).
 | [`logging.md`](logging.md) | **What the app records about itself**: the levels and tags, what each area logs, the rotating file and its header, and what redaction does and does not promise |
 | [`mod-reload.md`](mod-reload.md) | **Why the app does not press F10 for you**: what 3DMigoto actually needs, what was measured on Wayland, and why the feature was removed rather than fixed |
 | [`desktop-integration.md`](desktop-integration.md) | **The window itself** — the application id, the desktop entry and the icon that depends on it, and the drawn title bar and what keeps the window resizable |
-| [`launch-game.md`](launch-game.md) | **Launch game**: the XXMI Launcher beside ZZMI and its arguments, how Windows and Linux (Wine, or Proton directly or through umu-run) start it, and what is refused |
+| [`launch-game.md`](launch-game.md) | **Launch game**: the XXMI Launcher beside ZZMI and its arguments, how Windows and Linux (Wine, or Proton directly or through umu-run) start it, what is refused, and on Linux the locks that keep the screen awake while the game runs |
 | [`gamebanana-api.md`](gamebanana-api.md) | The **remote protocol**: which of the two APIs to use, browsing/filtering/sorting, the mod and file objects, NSFW handling, downloads, the category tree, and the gotchas |
 | [`writing-conventions.md`](writing-conventions.md) | How to write anything meant for a person to read: present-tense prose, and reporting finished work as user experience |
 

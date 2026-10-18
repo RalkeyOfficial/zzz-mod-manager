@@ -23,7 +23,7 @@ This file is rules and pointers only. Every subject below has a doc in [`../docs
 | [`logging.md`](../docs/logging.md) | What the app records about itself — levels, tags, the rotating file, redaction |
 | [`mod-reload.md`](../docs/mod-reload.md) | Why the app does not press F10 for you — what was measured, and why the feature is removed rather than fixed |
 | [`desktop-integration.md`](../docs/desktop-integration.md) | The window itself — the application id, the desktop entry and the icon that depends on it, and the drawn title bar and what keeps the window resizable |
-| [`launch-game.md`](../docs/launch-game.md) | The sidebar's Launch game button — the XXMI Launcher and its arguments, how each platform starts it (Wine or Proton on Linux), and what it refuses |
+| [`launch-game.md`](../docs/launch-game.md) | The sidebar's Launch game button — the XXMI Launcher and its arguments, how each platform starts it (Wine or Proton on Linux), what it refuses, and the locks that keep the screen awake while the game runs |
 | [`disk-usage.md`](../docs/disk-usage.md) | What the app is keeping on disk — the Storage tab's categories, apparent size vs free space, the shared directory walk, and what the reclaim may delete |
 | [`configuration.md`](../docs/configuration.md) | The app's own settings |
 

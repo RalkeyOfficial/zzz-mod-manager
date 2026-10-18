@@ -56,6 +56,7 @@ The memory note `v3-canvas-vs-docs-decisions` holds these. In short:
   - The user has confirmed edge resize works on KDE Wayland and accepted the slight resize lag.
   - Not yet reported back on: the title bar's drag, double-click and right-click window menu, the window buttons, Super+arrow tiling, and Launch game with Proton started directly.
   - The user has confirmed Launch game through umu-run, with the Zenless Zone Zero game id, starts the game with mods.
+  - Follow-up: on Linux, while the game runs, locks keep the screen on and the computer from sleeping on its own, held by `systemd-inhibit`, `gnome-session-inhibit` and `kde-inhibit` beside the game ([`launch-game.md`](launch-game.md), "Keeping the screen awake"). Measured on Plasma through umu-run with the commands the button runs, started by hand; not yet through the button itself.
   - What it added:
     - the runner's hidden `GtkHeaderBar` with `TitleBarStyle.hidden`;
     - `screens/shell/` (`title_bar.dart`, `app_sidebar.dart`, `status_bar.dart`, `keycap.dart`, `launch_game.dart`);
@@ -148,4 +149,4 @@ Each is reviewable on its own and ends with tests green, docs and changelog upda
 - **Launch game follow-up: the app knows whether the game is running.** Design note first, in `launch-game.md`.
   - A launch log: the runner's stdout and stderr go to a file in the app-data folder, never to a pipe the app holds, since closing the app must not kill the game. A Proton or Wine failure is then readable, and one that quits within a few seconds can be reported instead of passing as started.
   - A running state: the app tracks the game from the press until it closes, whether it quits or crashes. While it runs, Launch game is disabled, and the "Remind me to press F10" toast from phase 7 has its "while the game runs" signal.
-  - `PlatformService.findGameProcesses` can't be that signal as it stands: its match on `zzz` also catches the app's own `zzz-mod-manager`. It needs fixing or replacing.
+  - `PlatformService.findGameProcesses` can't be that signal as it stands: its match on `zzz` also catches the app's own `zzz-mod-manager`. It needs fixing or replacing. On Linux, the screen locks already follow the runner's process id and then the prefix's wineserver, which is the same lifetime.
