@@ -31,8 +31,13 @@ class AppSidebar extends ConsumerWidget {
     final destination = ref.watch(destinationProvider);
     final updatesOnly = ref.watch(characterListFilterProvider) == CharacterListFilter.updates;
     final updates = ref.watch(libraryUpdateCountProvider);
-    // Every agent, as the Characters page lists every agent; the built-in categories are not characters.
-    final characters = zzzCharactersData.length;
+    // The agents the Characters page lists; the built-in categories are not characters.
+    final counts = ref.watch(libraryGroupCountsProvider);
+    // Until the first scan returns every agent reads as empty, so the roster stands in.
+    final scanned = ref.watch(libraryProvider.select((library) => library.hasValue));
+    final characters = ref.watch(hideEmptyCharactersProvider) && scanned
+        ? zzzCharacterIds.where((id) => (counts[id]?.mods ?? 0) > 0).length
+        : zzzCharactersData.length;
 
     void go(AppDestination to) => ref.read(destinationProvider.notifier).state = to;
     final onCharacters = destination == AppDestination.characters;

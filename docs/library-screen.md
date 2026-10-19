@@ -34,7 +34,7 @@ A pasted archive is deleted once its mod is installed, as a dropped one is: the 
 
 **Every agent is listed, with or without mods**, under the four built-in categories and **Unassigned**. The five other types come first because they are few: a short block above the long roster stays in reach, where at its end it would be 64 rows down.
 The list is the roster rather than a summary of the library: a character is found where they always are, and every row is a place to drop a mod onto.
-Every row with no mods is dimmed and says "No mods yet", the categories and Unassigned as much as the agents, unless it is the row on screen or a card is being dragged over it. The sidebar's Characters count follows the list and counts the roster.
+Every row with no mods is dimmed and says "No mods yet", the categories and Unassigned as much as the agents, unless it is the row on screen or a card is being dragged over it. The sidebar's Characters count follows the list: the roster, or the agents with a mod while Hide empty is on.
 
 - **A row** is the portrait on the agent's element tile (`CharacterTile`; initials when `CharacterAvatar.assetPathFor` has no portrait), the name, the mod and active counts, an amber dot when the last check found an update, and an accent diamond when a mod is on.
 - **The name** is the real name where it is the short name made longer ("Ellen Joe", "Hoshimi Miyabi"), the short name otherwise: "Flora" is what Seed is called in the story, not what players call her (`CharacterData.fullName`).
@@ -42,7 +42,13 @@ Every row with no mods is dimmed and says "No mods yet", the categories and Unas
 - **Unassigned** holds the mods with no character and the ones whose id neither the roster nor the categories know (`libraryGroupOf`), such as an id left behind by a roster rename.
   A mod is filed by the character stored for it, never by a guess from its name: "Zhao Nicole" reads as Nicole, and a mod the user dropped on Unassigned must stay there. An import works a character out from the name once and saves it, where the user sees the result.
   It is not called "Unknown", as on the design canvas: the row holds mods not assigned to anyone, which "Unknown" would misdescribe.
-- **The filter field** matches names and the roster's detection aliases. The chips keep the rows with mods, with a mod on, or with an update; Updates counts rows, not mods.
+- **The filter field** matches names and the roster's detection aliases. The chips keep the rows with a mod on or with an update; Updates counts rows, not mods.
+- **Hide empty**, a switch under the chips, is off by default and remembered (`hide_empty_characters`). On, it hides every row with no mods, the categories and Unassigned included, and a line under the agents says how many agents it hides, with a Show link that turns it back off.
+  Only agents are counted: the line sits under them, and the five other types are always the same five. The count is of the agents the field and chips would otherwise show, so a chip that already leaves out the empty rows shows no line.
+  The row on screen is kept, dimmed or not by the rule above: deleting a character's last mod doesn't take their row out from under their page. It goes once another row is picked.
+  When everything the field matches is hidden and none of it is an agent, the list says "Only rows without mods match · Show" in place of "No character matches", which would be false.
+  Until the first scan returns, every row reads as empty: the rows stay hidden, but neither the line nor the sidebar's count says so, and the count stays the roster. A Show pressed then would switch the preference off over a library that hadn't been read.
+  It is a switch rather than a chip because it is a standing preference about the roster, where the chips are a look at one question that is set and cleared.
 - **A card dropped on a row** files the mod under that row; Unassigned clears its character. A long press starts the drag, so a click on a card stays a click.
 - **With nothing picked**, the page shows the first row with a mod in `libraryGroupIds` order: the agents in roster order, then UI, Texture, Audio and Misc, then Unassigned.
   That is not the list's own order, which puts the categories first. A library with no mods at all opens on the first agent.

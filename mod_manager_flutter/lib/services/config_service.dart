@@ -37,6 +37,7 @@ class ConfigService implements ModCharacterTagStore {
   static const String _keyMarketplaceSort = 'marketplace_sort';
   static const String _keyUpdateCheckOnLaunch = 'update_check_on_launch';
   static const String _keyTrackingNudgeDismissed = 'tracking_nudge_dismissed';
+  static const String _keyHideEmptyCharacters = 'hide_empty_characters';
 
   /// Mirrored by `services/log/log_setup.dart`, which reads the same key
   /// straight off `config.json` during bootstrap — `SharedPreferences` does not
@@ -186,6 +187,9 @@ class ConfigService implements ModCharacterTagStore {
   /// Whether the user has closed the reminder that some mods are not set up for update checking.
   bool get trackingNudgeDismissed =>
       _prefs.getBool(_keyTrackingNudgeDismissed) ?? false;
+
+  /// Whether the Library's character list hides the characters and categories with no mods.
+  bool get hideEmptyCharacters => _prefs.getBool(_keyHideEmptyCharacters) ?? false;
 
   /// Whether each run writes a log file.
   ///
@@ -571,6 +575,16 @@ class ConfigService implements ModCharacterTagStore {
     }
   }
 
+  Future<bool> setHideEmptyCharacters(bool hide) async {
+    try {
+      await _prefs.setBool(_keyHideEmptyCharacters, hide);
+      await _saveToFile();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<bool> setFileLogging(bool enabled) async {
     try {
       await _prefs.setBool(_keyFileLogging, enabled);
@@ -674,6 +688,9 @@ class ConfigService implements ModCharacterTagStore {
           config['tracking_nudge_dismissed'],
         );
       }
+      if (config['hide_empty_characters'] is bool) {
+        await _prefs.setBool(_keyHideEmptyCharacters, config['hide_empty_characters']);
+      }
       if (config.containsKey('file_logging')) {
         await _prefs.setBool(_keyFileLogging, config['file_logging']);
       }
@@ -713,6 +730,7 @@ class ConfigService implements ModCharacterTagStore {
         'marketplace_sort': marketplaceSort,
         'update_check_on_launch': updateCheckOnLaunch,
         'tracking_nudge_dismissed': trackingNudgeDismissed,
+        'hide_empty_characters': hideEmptyCharacters,
         'file_logging': fileLogging,
         'mod_character_tags': modCharacterTags,
         'first_run': false,

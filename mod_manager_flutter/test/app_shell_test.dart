@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -5,6 +7,7 @@ import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/services/platform_service.dart';
 import 'package:mod_manager_flutter/services/update_check.dart';
 import 'package:mod_manager_flutter/screens/components/settings/launch_section.dart';
+import 'package:mod_manager_flutter/screens/components/sidebar_nav_item.dart';
 import 'package:mod_manager_flutter/screens/components/zenith_switch.dart';
 import 'package:mod_manager_flutter/screens/shell/app_sidebar.dart';
 import 'package:mod_manager_flutter/screens/shell/launch_game.dart';
@@ -78,6 +81,23 @@ void main() {
     testWidgets('counts every agent, whether or not it has a mod', (tester) async {
       await pumpSidebar(tester, containerWith());
       // The roster, as the character list shows it. The UI category is not a character.
+      expect(find.text('${zzzCharactersData.length}'), findsOneWidget);
+    });
+
+    testWidgets('with Hide empty on, counts the agents that have a mod', (tester) async {
+      final container = containerWith();
+      container.read(hideEmptyCharactersProvider.notifier).state = true;
+      await pumpSidebar(tester, container);
+
+      expect(find.descendant(of: find.byType(SidebarNavItem).first, matching: find.text('1')), findsOneWidget);
+    });
+
+    testWidgets('with Hide empty on, counts every agent until the first scan returns', (tester) async {
+      final container = ProviderContainer(overrides: [libraryProvider.overrideWith(_NeverScanned.new)]);
+      addTearDown(container.dispose);
+      container.read(hideEmptyCharactersProvider.notifier).state = true;
+      await pumpSidebar(tester, container);
+
       expect(find.text('${zzzCharactersData.length}'), findsOneWidget);
     });
 
@@ -559,4 +579,10 @@ class _FakePlatform implements PlatformService {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// A library whose first scan is still running.
+class _NeverScanned extends LibraryNotifier {
+  @override
+  Future<List<ModInfo>> build() => Completer<List<ModInfo>>().future;
 }

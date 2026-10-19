@@ -70,6 +70,7 @@ class ApiService {
           _configService!.updateCheckOnLaunch;
       _container!.read(trackingNudgeDismissedProvider.notifier).state =
           _configService!.trackingNudgeDismissed;
+      _container!.read(hideEmptyCharactersProvider.notifier).state = _configService!.hideEmptyCharacters;
       _container!.read(modNotesProvider.notifier).state = _configService!.modNotes;
       _container!.read(oneAtATimeProvider.notifier).state = _configService!.oneAtATime;
       _container!.read(fileLoggingProvider.notifier).state =
@@ -385,6 +386,13 @@ class ApiService {
     await initialize();
     await _configService!.setTrackingNudgeDismissed(dismissed);
     _container?.read(trackingNudgeDismissedProvider.notifier).state = dismissed;
+  }
+
+  /// Persists whether the Library's character list hides the rows with no mods.
+  static Future<void> setHideEmptyCharacters(bool hide) async {
+    await initialize();
+    await _configService!.setHideEmptyCharacters(hide);
+    _container?.read(hideEmptyCharactersProvider.notifier).state = hide;
   }
 
   /// Persists the setting **and applies it now**, in that order.

@@ -253,6 +253,7 @@ void main() {
     await service.setContentFilter('hide');
     await service.setMarketplaceSort('mostDownloaded');
     await service.setUpdateCheckOnLaunch(true);
+    await service.setHideEmptyCharacters(true);
     await service.addActiveMod('SomeMod');
     await service.addFavoriteMod('SomeMod');
     await service.setModCharacterTag('SomeMod', 'ellen');
@@ -281,6 +282,7 @@ void main() {
       'marketplace_sort': next.marketplaceSort,
       'update_check_on_launch': next.updateCheckOnLaunch,
       'tracking_nudge_dismissed': next.trackingNudgeDismissed,
+      'hide_empty_characters': next.hideEmptyCharacters,
       'file_logging': next.fileLogging,
       'active_mods': next.activeMods,
       'favorite_mods': next.favoriteMods,
@@ -304,6 +306,16 @@ void main() {
     expect(next.updateCheckOnLaunch, isTrue,
         reason: 'update_check_on_launch did not survive the restart');
     expect(next.wineUseUmu, isFalse, reason: 'wine_use_umu did not survive the restart');
+    expect(next.hideEmptyCharacters, isTrue, reason: 'hide_empty_characters did not survive the restart');
+  });
+
+  test('a Hide empty that is not a bool is ignored, and the settings after it still load', () async {
+    await configFile().writeAsString(jsonEncode({'hide_empty_characters': 'yes', 'file_logging': false}));
+
+    final service = await build();
+    expect(await service.loadFromFile(), isTrue);
+    expect(service.hideEmptyCharacters, isFalse);
+    expect(service.fileLogging, isFalse);
   });
 
   test('umu-launcher is on until switched off', () async {

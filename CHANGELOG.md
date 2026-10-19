@@ -85,7 +85,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Settings has a **Diagnostics** section to turn the log file off, open its folder, or copy a summary to the clipboard for a bug report.
 - Installing an archive you have installed before asks first.
 - The library's bulk actions (check for updates, sort out tracking, mark all as current) are in one menu above a character's mods, each with the number of mods it would act on.
-- The Library lists every agent with their portrait on their element's colour, and how many mods they have and how many are on. Rows with no mods yet are dimmed, and the UI, Texture, Audio and Misc categories and unassigned mods sit above the agents. A filter field and chips narrow the list.
+- The Library lists every agent with their portrait on their element's colour, and how many mods they have and how many are on. Rows with no mods yet are dimmed, and the UI, Texture, Audio and Misc categories and unassigned mods sit above the agents. A filter field and chips narrow the list, and "Hide empty" hides the rows with no mods, remembered between runs.
 - A character's page opens with their portrait, element, faction and role, and how many mods they have, how many are on and how much space they take.
 - A character's mods can be filtered to the active ones.
 - Each mod has a Note in its details panel, saved as you type and kept only on this computer.

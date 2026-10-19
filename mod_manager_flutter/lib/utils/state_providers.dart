@@ -320,9 +320,13 @@ final modSizeProvider = FutureProvider.autoDispose.family<DirSize?, String>((ref
 });
 
 /// Which rows the character list shows.
-enum CharacterListFilter { all, hasMods, active, updates }
+enum CharacterListFilter { all, active, updates }
 
 final characterListFilterProvider = StateProvider<CharacterListFilter>((ref) => CharacterListFilter.all);
+
+/// Whether the character list hides the rows with no mods. Hydrated from `config.json` in `ApiService.initialize`,
+/// written through `ApiService.setHideEmptyCharacters`.
+final hideEmptyCharactersProvider = StateProvider<bool>((ref) => false);
 
 /// Which of the character's mods the grid shows. One at a time, like the chips that set it.
 ///

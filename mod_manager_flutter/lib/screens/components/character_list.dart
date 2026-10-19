@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -7,24 +8,29 @@ import '../../core/palette.dart';
 import '../../core/type_scale.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
+import '../../services/api_service.dart';
 import '../../utils/categories.dart';
 import '../../utils/state_providers.dart';
 import '../../utils/zzz_characters.dart';
 import 'character_tile.dart';
 import 'zenith_controls.dart';
+import 'zenith_switch.dart';
 
 /// The Library's left column: the built-in categories and unassigned mods, then every agent, each with how many mods
 /// it holds. An agent with none is listed too, dimmed, so the list is the roster rather than a summary of the
-/// library.
+/// library, unless "Hide empty" is switched on.
 ///
 /// A mod card dropped on a row files the mod under that row.
 class CharacterList extends ConsumerStatefulWidget {
-  const CharacterList({super.key, required this.onRetag});
+  const CharacterList({super.key, required this.onRetag, this.hideEmptyWriter});
 
   static const double width = 280;
 
   /// Files a dragged mod under a row: a roster id, a category id, or [unknownCharacterId] to unassign it.
   final void Function(ModInfo mod, String groupId) onRetag;
+
+  /// Persists "Hide empty". Defaults to [ApiService.setHideEmptyCharacters].
+  final Future<void> Function(bool hide)? hideEmptyWriter;
 
   @override
   ConsumerState<CharacterList> createState() => _CharacterListState();
@@ -48,27 +54,44 @@ class _CharacterListState extends ConsumerState<CharacterList> {
 
   bool _passes(CharacterListFilter filter, LibraryGroupCounts counts) => switch (filter) {
     CharacterListFilter.all => true,
-    CharacterListFilter.hasMods => counts.mods > 0,
     CharacterListFilter.active => counts.active > 0,
     CharacterListFilter.updates => counts.updates > 0,
   };
+
+  /// The provider first so the rows change this frame, then the write so the choice survives a restart.
+  void _setHideEmpty(bool hide) {
+    ref.read(hideEmptyCharactersProvider.notifier).state = hide;
+    unawaited((widget.hideEmptyWriter ?? ApiService.setHideEmptyCharacters)(hide));
+  }
 
   @override
   Widget build(BuildContext context) {
     final loc = context.loc;
     final palette = ZenithPalette.of(context);
+    final text = Theme.of(context).textTheme;
     final allCounts = ref.watch(libraryGroupCountsProvider);
     final filter = ref.watch(characterListFilterProvider);
+    final hideEmpty = ref.watch(hideEmptyCharactersProvider);
     final current = ref.watch(currentCharacterIdProvider);
     final withUpdates = allCounts.values.where((c) => c.updates > 0).length;
 
-    List<String> visible(Iterable<String> ids) => [
+    List<String> matching(Iterable<String> ids) => [
       for (final id in ids)
         if (_matches(id, libraryGroupName(id, loc)) && _passes(filter, allCounts[id] ?? LibraryGroupCounts.empty))
           id,
     ];
-    final agents = visible(zzzCharacterIds);
-    final others = visible([for (final c in builtInCategories) c.id, unknownCharacterId]);
+    // Until the first scan returns, every row reads as empty: the rows stay hidden, but nothing says they are.
+    final scanned = ref.watch(libraryProvider.select((library) => library.hasValue));
+    // The row on screen stays, so deleting a character's last mod doesn't take their row out from under their page.
+    bool kept(String id) => (allCounts[id]?.mods ?? 0) > 0 || (scanned && id == current);
+    final matchingAgents = matching(zzzCharacterIds);
+    final matchingOthers = matching([for (final c in builtInCategories) c.id, unknownCharacterId]);
+    final agents = hideEmpty ? matchingAgents.where(kept).toList() : matchingAgents;
+    final others = hideEmpty ? matchingOthers.where(kept).toList() : matchingOthers;
+    // Only the agents are counted, since the line saying so sits under them.
+    final hiddenAgents = matchingAgents.length - agents.length;
+    final hiddenOthers = matchingOthers.length - others.length;
+    void showHidden() => _setHideEmpty(false);
 
     Widget chip(CharacterListFilter value, String key, {int? count}) => ZenithChip(
       label: loc.t(key),
@@ -108,7 +131,7 @@ class _CharacterListState extends ConsumerState<CharacterList> {
                 TextField(
                   controller: _query,
                   onChanged: (_) => setState(() {}),
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: palette.text),
+                  style: text.bodyMedium?.copyWith(color: palette.text),
                   decoration: InputDecoration(
                     hintText: loc.t('library.list.filter_hint'),
                     prefixIcon: const Icon(Icons.search_rounded),
@@ -119,7 +142,6 @@ class _CharacterListState extends ConsumerState<CharacterList> {
                   runSpacing: 6,
                   children: [
                     chip(CharacterListFilter.all, 'library.list.all'),
-                    chip(CharacterListFilter.hasMods, 'library.list.has_mods'),
                     chip(CharacterListFilter.active, 'library.list.active'),
                     // No number before a check: "0 updates" and "not checked" are different claims.
                     chip(
@@ -129,18 +151,42 @@ class _CharacterListState extends ConsumerState<CharacterList> {
                     ),
                   ],
                 ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(2, 2, 2, 0),
+                  child: Row(
+                    spacing: 10,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          loc.t('library.list.hide_empty'),
+                          style: text.bodySmall?.copyWith(color: palette.text2),
+                        ),
+                      ),
+                      ZenithSwitch(
+                        value: hideEmpty,
+                        semanticLabel: loc.t('library.list.hide_empty'),
+                        onChanged: _setHideEmpty,
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
           Expanded(
-            child: agents.isEmpty && others.isEmpty
+            child: agents.isEmpty && others.isEmpty && !(scanned && hiddenAgents > 0)
                 ? Padding(
                     padding: const EdgeInsets.all(20),
-                    child: Text(
-                      loc.t('library.list.no_match'),
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: palette.text3),
-                    ),
+                    child: hiddenAgents + hiddenOthers == 0
+                        ? Text(
+                            loc.t('library.list.no_match'),
+                            textAlign: TextAlign.center,
+                            style: text.bodySmall?.copyWith(color: palette.text3),
+                          )
+                        // Something matched, and Hide empty is what took it away.
+                        : scanned
+                        ? _HiddenLine(loc.t('library.list.only_empty_match'), center: true, onShow: showHidden)
+                        : const SizedBox.shrink(),
                   )
                 : ListView(
                     padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
@@ -150,15 +196,45 @@ class _CharacterListState extends ConsumerState<CharacterList> {
                         _Label(loc.t('library.list.other_types'), top: 6),
                         for (final id in others) row(id),
                       ],
-                      if (agents.isNotEmpty) ...[
+                      if (agents.isNotEmpty || (scanned && hiddenAgents > 0)) ...[
                         _Label(loc.t('library.list.agents'), top: others.isEmpty ? 6 : 14),
                         for (final id in agents) row(id),
                       ],
+                      if (scanned && hiddenAgents > 0)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
+                          child: _HiddenLine(
+                            loc.plural('library.list.hidden_agents', hiddenAgents, params: {'count': '$hiddenAgents'}),
+                            onShow: showHidden,
+                          ),
+                        ),
                     ],
                   ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// What Hide empty is keeping off the list, with a Show link that turns it off.
+class _HiddenLine extends StatelessWidget {
+  const _HiddenLine(this.text, {required this.onShow, this.center = false});
+
+  final String text;
+  final VoidCallback onShow;
+  final bool center;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ZenithPalette.of(context);
+    final style = Theme.of(context).textTheme.bodySmall;
+    return Row(
+      mainAxisAlignment: center ? MainAxisAlignment.center : MainAxisAlignment.start,
+      children: [
+        Flexible(child: Text('$text · ', style: style?.copyWith(color: palette.text3))),
+        ZenithLink(context.loc.t('library.list.show_hidden'), onTap: onShow, style: style?.copyWith(color: palette.link)),
+      ],
     );
   }
 }

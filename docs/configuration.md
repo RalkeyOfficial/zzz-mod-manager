@@ -48,6 +48,7 @@ App-data locations are `~/.local/share/zzz-mod-manager` (Linux) and
   "marketplace_sort": "newest",
   "update_check_on_launch": false,
   "tracking_nudge_dismissed": false,
+  "hide_empty_characters": false,
   "file_logging": true,
   "mod_character_tags": { "Ellen Swimsuit": "ellen" },
   "first_run": false
@@ -80,6 +81,7 @@ App-data locations are `~/.local/share/zzz-mod-manager` (Linux) and
 | `marketplace_sort` | `marketplace_sort` | The **marketplace browse** sort, as a `GbModSort` Dart name (`newest`, `latestModified`, …). Empty until chosen ([§3](#3-parsing-a-stored-value)) |
 | `update_check_on_launch` | `update_check_on_launch` | Bool, **default `false`**. Whether the whole-library update check runs by itself at startup ([`update-checks.md` §5.1](update-checks.md#51-checking-at-startup)). The default is the safety property: the standing rule is that a check never runs unpressed, and this is the only opt-in out of it. It governs *checking* — nothing here consents to an update being applied |
 | `tracking_nudge_dismissed` | `tracking_nudge_dismissed` | Bool, **default `false`**. Whether the user has closed the reminder above the mods list that some mods are not set up for update checking. Closing the reminder sets it, and the **Updates** section's second switch clears it. Read on `containsKey` like the row above, so a stored `false` is a choice and not an absence |
+| `hide_empty_characters` | `hide_empty_characters` | Bool, **default `false`**. Whether the Library's character list hides the characters and categories with no mods, the **Hide empty** switch ([`library-screen.md` §2](library-screen.md#2-the-character-list)). A value that is not a bool is ignored |
 | `file_logging` | `file_logging` | Bool, **default `true`** — the opposite call from the row above, and for the opposite reason: a log reaches nothing and costs kilobytes, and is worthless if it was switched off on the run that broke. **This is the one key read outside `ConfigService`**: `log_setup.dart` reads it straight off the file during bootstrap, because SharedPreferences does not exist until the first frame and the first lines worth keeping are written before that. Any failure to read it means `true` ([`logging.md` §9](logging.md#9-settings)) |
 | `mod_character_tags` | `mod_character_tags` | JSON-encoded string in SharedPreferences, real object in the file. **Legacy** — superseded by the sidecar's `character_id`, still mirrored by `ModMetadataRepository.setCharacter()` for backward compatibility. See [`metadata-schema.md`](metadata-schema.md) |
 | `first_run` | `first_run` | Bool; always serialised as `false` by `_saveToFile()` |
