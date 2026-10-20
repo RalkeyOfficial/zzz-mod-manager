@@ -479,7 +479,7 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       toast: const TonePair(Color(0xFFFDFBF8), Color(0xFF1B1A18), Color(0xFFD8D0C6)),
       notification: const TonePair(Color(0xFFFDFBF8), Color(0xFF1B1A18), Color(0xFFD8D0C6)),
       notificationError: const TonePair(Color(0xFFFBEDEA), Color(0xFF1B1A18), Color(0xFFEDC6BE)),
-      notificationErrorHover: const Color(0xFFF5DBD6),
+      notificationErrorHover: const Color(0xFFECC4BC),
       notificationShadow: const Color(0x6615161C),
       noteMissing: const TonePair(Color(0xFFFBEDEA), Color(0xFF7A2A1C), Color(0xFFEDC6BE)),
       coverageWhich: const Color(0xFF5B93D6),

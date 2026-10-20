@@ -522,6 +522,19 @@ void main() {
     expect(fill.color, palette.notificationErrorHover);
   });
 
+  testWidgets('an action on a card that is not an error is filled with line under the pointer', (tester) async {
+    await pumpOverlay(tester);
+    center().warning('Low on space', body: 'x', actions: [NotificationAction('Storage', () {}, closes: false)]);
+    await tester.pumpAndSettle();
+
+    final pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await pointer.addPointer(location: tester.getCenter(find.text('Storage')));
+    addTearDown(pointer.removePointer);
+    await tester.pumpAndSettle();
+    final fill = tester.widget<Material>(find.descendant(of: find.byType(TextButton), matching: find.byType(Material)));
+    expect(fill.color, palette.line);
+  });
+
   testWidgets('a press beside or under the label, inside the button, runs the action', (tester) async {
     await pumpOverlay(tester);
     var pressed = 0;

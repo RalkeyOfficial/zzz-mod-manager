@@ -119,15 +119,6 @@ The memory note `v3-canvas-vs-docs-decisions` holds these. In short:
     - Marking reports a failure, always names mods skipped because their folder was being written, and reports other skips only when nothing was written, since the card shows the success.
     - New tokens: `coverageWhich`, `hatch` and `infoWash` in the palette, and `ZenithType.lead` for the 18px coverage line.
   - Checked in renders from a widget test (wide, 700px, after marking, and the strip before, during and after a check), not yet in the running app.
-  - Follow-ups:
-    - An Ignore or an applied update from the update dialog while a check runs is overwritten when the check's results land, and All mods' Update button is enabled during checks. Check all for updates is also enabled while the Updates page's Undo or Ignore is still writing, and that check's results then bring back what they took away. One fix covers all of them: skip merging the results for folders whose tracking changed while the check ran.
-    - For a native Ukrainian speaker to check: `library.updates.coverage_all_single` at 21 ("Ваш 21 мод перевірено"), `legend_base_*` keeping "основа невідома" whatever the count, and `undo_failed_write`.
-    - `refoldDismissal` (Ignore, the update dialog) finds a layer by its mod id, so a patch from its base's own mod page shares the base's Ignore. Finding the layer by position, as Undo's `forgetBaseVerdict` does, would keep them apart.
-    - In the strip, a fade still running among the question pills can land on the neighbouring pill when the strip grows or shrinks, since fades are kept by position.
-    - The Base unknown legend tooltip says "The patch is checked" before any check has run this session.
-    - A mixed folder whose patch already had an update counts as checked, by date, the moment it is marked, where §17 says a mod just marked isn't checked until the next check.
-    - A rare verdict, a taken-down installed file whose page lists only files released with it, gives an update with no date to ignore up to, so nothing on the Updates page or in the dialog can silence it. The row reads "Its page changed" with Ignore off.
-    - The `openModPageProvider` doc comment in `state_providers.dart` says "Null shows the character view", which has been stale since phase 5.
 
 - **Phase 5c, Notifications** (artboard `Notifications`): built, reviewed and committed (the commit after `a9703ea`). Written up in `notifications.md`.
   - `context.notify` raises one of seven kinds (`NotificationKind`: Working, Done, Note, Update, Needs you, Warning, Error), and the kind alone picks the tile, icon, badge and clock (`notificationLook`, `kNotificationDurations`). The card is 380 wide on the new `notification` / `notificationError` tokens, with the portrait on its element tile and the kind as a badge, up to two text actions, a keycap in the body, and a bar or sweep on a Working card. Three cards show and the rest fold into "+N more"; repeats count on one card; a Working card turns into its result in place, and hiding it never hides that result.
@@ -159,6 +150,16 @@ Each is reviewable on its own and ends with tests green, docs and changelog upda
    - A notification's text actions show no keyboard focus ring; the canvas draws a 2px accent outline on focus (`.na:focus-visible`). Nothing else in the app draws one yet either.
    - In a stack of mixed cards the text's left edge is ragged: a 28px icon tile sits beside a 32px portrait, as the canvas draws them.
    - Open on the install card waits for a running rescan; if that rescan fails, Open says the mod is no longer in the library though it is (`showModInCharacters` returns false for both).
+
+5e. **Updates page follow-ups**, found while building 5b and outside its scope.
+   - An Ignore or an applied update from the update dialog while a check runs is overwritten when the check's results land, and All mods' Update button is enabled during checks. Check all for updates is also enabled while the Updates page's Undo or Ignore is still writing, and that check's results then bring back what they took away. One fix covers all of them: skip merging the results for folders whose tracking changed while the check ran.
+   - For a native Ukrainian speaker to check: `library.updates.coverage_all_single` at 21 ("Ваш 21 мод перевірено"), `legend_base_*` keeping "основа невідома" whatever the count, and `undo_failed_write`.
+   - `refoldDismissal` (Ignore, the update dialog) finds a layer by its mod id, so a patch from its base's own mod page shares the base's Ignore. Finding the layer by position, as Undo's `forgetBaseVerdict` does, would keep them apart.
+   - In the strip, a fade still running among the question pills can land on the neighbouring pill when the strip grows or shrinks, since fades are kept by position.
+   - The Base unknown legend tooltip says "The patch is checked" before any check has run this session.
+   - A mixed folder whose patch already had an update counts as checked, by date, the moment it is marked, where §17 says a mod just marked isn't checked until the next check.
+   - A rare verdict, a taken-down installed file whose page lists only files released with it, gives an update with no date to ignore up to, so nothing on the Updates page or in the dialog can silence it. The row reads "Its page changed" with Ignore off.
+   - The `openModPageProvider` doc comment in `state_providers.dart` says "Null shows the character view", which is no longer true now that All mods and Updates are views too.
 
 6. **Browse** (artboards `Browse`, `BrowseMod`, `Downloads`).
    - Grid restyle, carousel, character chip and type chips, Hide installed, the mature-content and sort menus, infinite scroll.
