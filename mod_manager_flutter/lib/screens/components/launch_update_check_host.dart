@@ -35,9 +35,9 @@ import 'update_check_feedback.dart';
 /// the pass turned up mods whose tracking could be sorted out — but that screen
 /// is a modal, and one thrown over an app the user has just opened is the
 /// interruption the whole notification-or-screen arrangement exists to avoid.
-/// It stays reachable from *Sort these out* under the All mods table, which
-/// rebuilds itself from the records this pass leaves behind and therefore costs
-/// no second request.
+/// It stays reachable from the Updates page's *Pick the files one by one* and
+/// *Sort out tracking…*: the screen rebuilds itself from the records this pass
+/// leaves behind and therefore costs no second request.
 ///
 /// **It waits for the library rather than for a timer.** The plan is derived
 /// from the scan `ModsScreen` runs on the way in, so it is empty until that
@@ -127,13 +127,18 @@ class _LaunchUpdateCheckHostState extends ConsumerState<LaunchUpdateCheckHost> {
 
     final BulkUpdateCheckOutcome outcome;
     running.state = true;
+    final progress = ref.read(libraryCheckProgressProvider.notifier);
+    final checks = ref.read(modUpdateChecksProvider.notifier);
     try {
       outcome = await runLibraryUpdateCheck(
         plan: plan,
         client: ref.read(gameBananaClientProvider),
         fetch: widget.updateFetcher,
         fetchUpdates: widget.updatesFetcher,
+        onProgress: (reached) => progress.state = reached,
       );
+      // Before the progress is cleared, so a mod the check reached never reads unchecked in between.
+      checks.state = mergedChecks(checks.state, outcome);
     } catch (e) {
       // Silent, and deliberately. Nobody asked for this pass, so a failure is
       // not something the user has to act on — and the commonest cause by far
@@ -145,12 +150,11 @@ class _LaunchUpdateCheckHostState extends ConsumerState<LaunchUpdateCheckHost> {
       return;
     } finally {
       // Unconditional: the controller outlives this host, and a flag left set would disable every check.
+      progress.state = const {};
       running.state = false;
     }
 
     if (!mounted) return;
-    final checks = ref.read(modUpdateChecksProvider.notifier);
-    checks.state = mergedChecks(checks.state, outcome);
     final records = ref.read(modUpdateRecordsProvider.notifier);
     records.state = mergedRecords(records.state, outcome);
     if (outcome.abortedBy == null) ref.read(libraryCheckedAtProvider.notifier).state = DateTime.now();

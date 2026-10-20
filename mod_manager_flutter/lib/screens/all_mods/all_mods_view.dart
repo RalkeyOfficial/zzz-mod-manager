@@ -80,7 +80,7 @@ class _AllModsViewState extends ConsumerState<AllModsView> {
 
   @override
   Widget build(BuildContext context) {
-    // The box follows a search cleared from elsewhere, as the sidebar's Updates row clears it.
+    // The box follows a search cleared from elsewhere, as the no-results line's Show all clears it.
     ref.listen(allModsSearchProvider, (_, search) {
       if (_search.text != search) _search.text = search;
     });
@@ -1259,26 +1259,23 @@ class _MissingTableRow extends StatelessWidget {
   }
 }
 
-/// Under the table while the Can't be checked filter is on: the way to settle those mods, the tracking screen.
+/// Under the table while the Can't be checked filter is on: the way to settle those mods, the Updates page.
 class _SortOutLine extends ConsumerWidget {
   const _SortOutLine();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final checking = ref.watch(libraryCheckRunningProvider);
     final palette = ZenithPalette.of(context);
     final style = Theme.of(context).textTheme.bodySmall;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 14, 12, 0),
       child: Align(
         alignment: Alignment.centerLeft,
-        child: checking
-            ? Text(context.loc.t('library.all.sort_out'), style: style?.copyWith(color: palette.text3))
-            : ZenithLink(
-                context.loc.t('library.all.sort_out'),
-                onTap: () => unawaited(LibraryActionsHost.of(context).sortOutTracking()),
-                style: style?.copyWith(color: palette.link),
-              ),
+        child: ZenithLink(
+          context.loc.t('library.all.sort_out'),
+          onTap: () => ref.read(destinationProvider.notifier).state = AppDestination.updates,
+          style: style?.copyWith(color: palette.link),
+        ),
       ),
     );
   }

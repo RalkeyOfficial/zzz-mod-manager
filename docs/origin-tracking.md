@@ -437,23 +437,23 @@ The whole-library update check's **results screen is also the resolution screen*
 `services/bulk_resolution.dart` holds the decisions;
 `screens/dialogs/bulk_resolution_dialog.dart` is the surface.
 
-**It has two doors, and the second one is what makes the first bearable.** A whole-library check opens it by itself when the pass turned up something to ask; and **Sort these out**, under the All mods table while its Can't be checked filter is on ([`library-screen.md`](library-screen.md) §16), opens it on demand, from the records the last check left in session state — or by running that check first when there are none.
-Built only on the first door it would be a modal that could be seen once and never again: cancelling it, or closing it by accident, would mean waiting for the next check.
+**It opens two ways, and the second is what makes the first bearable.** A whole-library check opens it by itself when the pass turned up something to ask; and **Pick the files one by one** and **Sort out tracking…** on the Updates page ([`library-screen.md`](library-screen.md) §17) open it on demand, from the records the last check left in session state — or by running that check first when there are none.
+Built only on the first way in it would be a modal that could be seen once and never again: cancelling it, or closing it by accident, would mean waiting for the next check.
 Keeping the records (`modUpdateRecordsProvider`, never persisted, exactly like the verdicts beside them) is what makes reopening free.
 
 **Untracked mods open the screen only on demand.** A check opens it by itself only for a question row (`BulkResolutionPlan.hasWork`):
 a library that keeps a few mods untracked on purpose would otherwise get a modal after every check, asking nothing.
-The on-demand door opens it for a question row *or* an untracked mod (`listsAnything`): the filter it sits under lists untracked mods, so a door that ignored them would lead nowhere from the mods it is shown with.
+On demand it opens for a question row *or* an untracked mod (`listsAnything`): Sort out tracking… sits on the Updates page card that lists the untracked mods, so a button that ignored them would lead nowhere from the mods it is shown with.
 The untracked list needs no mod page, so the plan is built with no records in hand too, and a library with nothing tracked opens straight onto that list with no check at all.
-When that door runs a check first, an untracked mod is still enough to open the screen afterwards, so it never ends in a notification that leaves those mods out of reach.
-With no records in hand nothing was looked up, so that door reports nothing as unreached.
+When a button runs a check first, an untracked mod is still enough to open the screen afterwards, so it never ends in a notification that leaves those mods out of reach.
+With no records in hand nothing was looked up, so the screen opened on demand reports nothing as unreached.
 
-**Both doors must say the same thing.**
-The update count is read library-wide (`libraryUpdateCountProvider`) rather than from whichever door opened the screen: the check's own tally is library-wide while the Updates chip counts the character on screen, so one sentence in one dialog would otherwise mean "in your library" or "for this character" depending on where the user was standing.
-The "couldn't be checked" line is real on both doors, since a zero on either drops the accounting the whole screen is careful about.
+**Both ways in must say the same thing**, the check opening it by itself and either button opening it on demand.
+The update count is read library-wide (`libraryUpdateCountProvider`) rather than from whatever opened the screen: the check's own tally is library-wide while the Updates chip counts the character on screen, so one sentence in one dialog would otherwise mean "in your library" or "for this character" depending on where the user was standing.
+The "couldn't be checked" line is real both ways, since a zero on either drops the accounting the whole screen is careful about.
 Its two numbers come from different fields on purpose.
-The on-demand door quotes `BulkResolutionPlan.unreachable`: every tracked mod with no record in hand, and every page the record reports gone.
-The check door quotes the folders the pass failed to reach together with `BulkResolutionPlan.goneIds`, as a union of folder ids so a folder counted by both is counted once.
+Opened on demand, it quotes `BulkResolutionPlan.unreachable`: every tracked mod with no record in hand, and every page the record reports gone.
+Opened by the check, it quotes the folders the pass failed to reach together with `BulkResolutionPlan.goneIds`, as a union of folder ids so a folder counted by both is counted once.
 The pass itself counts a gone page as answered rather than failed, and without `goneIds` such a mod would appear nowhere on the screen.
 
 **There is deliberately no separate migration screen.**

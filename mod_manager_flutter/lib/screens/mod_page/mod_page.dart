@@ -254,8 +254,8 @@ class _LibraryModPageState extends ConsumerState<LibraryModPage> {
   }
 }
 
-/// Back, and where the page is: Characters / the character / the mod, or All mods / the mod when it was opened from
-/// the table.
+/// Back, and where the page is: Characters / the character / the mod, or All mods / the mod and Updates / the mod
+/// when it was opened from one of those.
 class _Crumbs extends ConsumerWidget {
   const _Crumbs({required this.mod, required this.onBack});
 
@@ -264,7 +264,11 @@ class _Crumbs extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final fromTable = ref.watch(destinationProvider) == AppDestination.allMods;
+    final view = switch (ref.watch(destinationProvider)) {
+      AppDestination.allMods => 'navigation.all_mods',
+      AppDestination.updates => 'navigation.updates',
+      _ => null,
+    };
     final loc = context.loc;
     final palette = ZenithPalette.of(context);
     final style = Theme.of(context).textTheme.bodySmall;
@@ -284,8 +288,8 @@ class _Crumbs extends ConsumerWidget {
             onPressed: onBack,
             icon: const Icon(Icons.chevron_left_rounded),
           ),
-          if (fromTable)
-            ZenithLink(loc.t('navigation.all_mods'), onTap: onBack, style: crumb)
+          if (view != null)
+            ZenithLink(loc.t(view), onTap: onBack, style: crumb)
           else ...[
             ZenithLink(loc.t('navigation.characters'), onTap: onBack, style: crumb),
             slash,

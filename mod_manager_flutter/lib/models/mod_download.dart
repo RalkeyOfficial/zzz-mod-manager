@@ -329,6 +329,23 @@ class ModDownload {
         files: files ?? this.files,
       );
 
+  /// Sets [versionConfidence] and [baselineRemoteDate] to exactly these, null included, which [copyWith] cannot
+  /// express.
+  ModDownload withVersionBaseline(OriginConfidence confidence, DateTime? baseline) => ModDownload(
+        role: role,
+        modId: modId,
+        modIdConfidence: modIdConfidence,
+        name: name,
+        fileId: fileId,
+        version: version,
+        versionLabel: versionLabel,
+        versionConfidence: confidence,
+        archiveMd5: archiveMd5,
+        baselineRemoteDate: baseline,
+        updatesDismissedUntil: updatesDismissedUntil,
+        files: files,
+      );
+
   /// Clears [updatesDismissedUntil], which [copyWith] cannot express.
   ModDownload withUpdatesUndismissed() => ModDownload(
         role: role,

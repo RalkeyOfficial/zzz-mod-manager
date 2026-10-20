@@ -10,6 +10,7 @@ import '../core/constants.dart';
 import '../core/palette.dart';
 import '../models/character_info.dart';
 import '../services/api_service.dart';
+import '../services/bulk_assume_current.dart';
 import '../services/bulk_resolution.dart';
 import '../models/gamebanana/gb_enums.dart';
 import '../models/gamebanana/gb_mod.dart';
@@ -253,9 +254,9 @@ final installedModsIndexProvider =
   return InstalledModsIndex.fromMods(await ref.watch(libraryProvider.future));
 });
 
-/// The pages the sidebar switches between. [characters] and [allMods] are the Library's two views, one page that
-/// stays mounted between them.
-enum AppDestination { characters, allMods, browse, storage, settings }
+/// The pages the sidebar switches between. [characters], [allMods] and [updates] are the Library's three views, one
+/// page that stays mounted between them.
+enum AppDestination { characters, allMods, updates, browse, storage, settings }
 
 /// The page the main area shows. Its pages are keyed `AnimatedSwitcher` children
 /// with no keep-alive, so the page left behind is disposed.
@@ -263,7 +264,26 @@ final destinationProvider = StateProvider<AppDestination>((ref) => AppDestinatio
 
 /// Whether [destination] is one of the Library's views.
 bool isLibraryView(AppDestination destination) =>
-    destination == AppDestination.characters || destination == AppDestination.allMods;
+    destination == AppDestination.characters ||
+    destination == AppDestination.allMods ||
+    destination == AppDestination.updates;
+
+/// Whether the Updates page's Can't be checked section is folded, for the session.
+final updatesCantCheckHiddenProvider = StateProvider<bool>((ref) => false);
+
+/// The mods the Updates page's last "Mark all as current" wrote, for its Undo, until the app closes. Null when there
+/// is none to show, or it was undone.
+final lastMarkingProvider = StateProvider<List<MarkedAsCurrent>?>((ref) => null);
+
+/// Opens the All mods table on [filter] alone: no search, no folded group and no mod's page left from before, so it
+/// shows every mod the filter keeps.
+void openAllModsFiltered(WidgetRef ref, AllModsFilter filter) {
+  ref.read(allModsFilterProvider.notifier).state = filter;
+  ref.read(allModsSearchProvider.notifier).state = '';
+  ref.read(allModsCollapsedProvider.notifier).state = const {};
+  ref.read(openModPageProvider.notifier).state = null;
+  ref.read(destinationProvider.notifier).state = AppDestination.allMods;
+}
 
 /// Every mod in the library, once each — as far as a synchronous reader is
 /// concerned.
@@ -819,6 +839,10 @@ final visibleModsProvider = Provider<List<ModInfo>>((ref) {
 /// `LibraryActionsHost`.
 final libraryCheckRunningProvider = StateProvider<bool>((ref) => false);
 
+/// The mods the running check has reached so far, by folder id: their pages are in hand and their verdicts are on
+/// the way. Empty while no check runs. The Updates page's coverage strip fills from it.
+final libraryCheckProgressProvider = StateProvider<Set<String>>((ref) => const {});
+
 // ── Update checks ───────────────────────────────────────────────────────────
 
 /// What the last update check concluded, per mod folder id.
@@ -929,6 +953,35 @@ Future<bool> stopIgnoringUpdate(
   final checks = container.read(modUpdateChecksProvider.notifier);
   if (checks.state[mod.id] case final check? when check.layers.length > 1 || check.subjectModId == subject) {
     checks.state = {...checks.state, mod.id: refoldDismissal(check, subject, false)};
+  }
+  await container.read(libraryProvider.notifier).rescan();
+  return true;
+}
+
+/// Ignores the update [check] found on [mod], as the update dialog's Ignore does, and rescans. Returns false when
+/// the sidecar could not be written, or the check names nothing to ignore.
+///
+/// The dismissal is written on the layer whose page has the update, up to the newest file the check reported
+/// (`UpdateCheck.dismissableUpTo`), so anything uploaded after speaks up again.
+Future<bool> ignoreUpdate(
+  ProviderContainer container, {
+  required ModInfo mod,
+  required UpdateCheck check,
+  OriginWriter? writer,
+}) async {
+  final subject = check.subjectModId;
+  final until = check.dismissableUpTo;
+  if (subject == null || until == null) return false;
+  final write = writer ?? originWriterFor(container.read(modManagerServiceProvider.future));
+  final result = await whileWritingMod(
+    container,
+    mod.id,
+    () => write(mod.id, (origin) => origin?.withDismissal(subject: subject, until: until)),
+  );
+  if (!result.ok) return false;
+  final checks = container.read(modUpdateChecksProvider.notifier);
+  if (checks.state[mod.id] case final held?) {
+    checks.state = {...checks.state, mod.id: refoldDismissal(held, subject, true)};
   }
   await container.read(libraryProvider.notifier).rescan();
   return true;

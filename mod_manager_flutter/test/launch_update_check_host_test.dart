@@ -147,6 +147,20 @@ void main() {
     );
   });
 
+  testWidgets('says which mods it has reached while it runs, and keeps them checked once it ends', (tester) async {
+    await mount(tester, enabled: true);
+    final seen = <String>[];
+    container.listen(
+      libraryCheckProgressProvider,
+      (_, reached) => seen.add('${reached.toList()} ${container.read(modUpdateChecksProvider).containsKey('Ellen')}'),
+    );
+
+    await scanLands(tester, [mod('Ellen', modId: 1, fileId: 10)]);
+
+    expect(seen, ['[Ellen] false', '[] true'],
+        reason: 'the verdict lands before the progress is cleared, so the mod never reads unchecked in between');
+  });
+
   testWidgets('runs against a library that was already scanned',
       (tester) async {
     // The hot-reload case: the host is rebuilt under a library scanned long

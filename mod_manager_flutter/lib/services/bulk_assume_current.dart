@@ -31,6 +31,7 @@
 library;
 
 import '../models/character_info.dart';
+import '../models/mod_download.dart';
 import '../models/mod_origin.dart';
 import '../models/origin_enums.dart';
 import 'origin_resolution.dart';
@@ -174,3 +175,40 @@ bool _onlyBaseAsks(ModOrigin? origin) =>
     !origin!.patches.any(
       (patch) => patch.hasIdentity && patch.versionConfidence == OriginConfidence.unknown,
     );
+
+/// One mod a marking wrote: its base download as it was, and the baseline the marking gave it.
+class MarkedAsCurrent {
+  const MarkedAsCurrent({required this.modId, required this.before, required this.baseline});
+
+  final String modId;
+  final ModDownload before;
+  final DateTime? baseline;
+}
+
+/// [bulkAssumeCurrent], also handing [onMarked] the base it replaced and the baseline it wrote. Called only when the
+/// transform writes; the caller keeps the record once the write is known to have landed.
+ModOrigin? bulkAssumeCurrentRecorded(
+  ModOrigin? current,
+  void Function(ModDownload before, DateTime? baseline) onMarked,
+) {
+  final next = bulkAssumeCurrent(current);
+  if (next != null) onMarked(current!.base!, next.base?.baselineRemoteDate);
+  return next;
+}
+
+/// The transform that takes [marked] back: the base's file confidence and baseline as they were before the marking.
+///
+/// Declines (null) when the base no longer holds what the marking wrote, since the user has answered it another way
+/// since, and undoing the marking must not undo that.
+ModOrigin? undoAssumeCurrent(ModOrigin? current, MarkedAsCurrent marked) {
+  final base = current?.base;
+  if (base == null ||
+      base.modId != marked.before.modId ||
+      base.versionConfidence != OriginConfidence.assumedLatest ||
+      base.baselineRemoteDate != marked.baseline) {
+    return null;
+  }
+  return current!.withBase(
+    (download) => download.withVersionBaseline(marked.before.versionConfidence, marked.before.baselineRemoteDate),
+  );
+}

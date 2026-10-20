@@ -1,6 +1,6 @@
-# The library screen — the character view, the All mods table and their surfaces
+# The library screen — the character view, the All mods table, the Updates page and their surfaces
 
-**Scope:** the Library's two views. The character view: the character list, a character's header, the mod grid with its card and status badge, the row above the grid, One at a time, notes and the details panel. The All mods table with its filters, its Folder missing rows and its bulk actions. And what both reach: a mod's page with its History tab, and the dialogs reached from a mod.
+**Scope:** the Library's three views. The character view: the character list, a character's header, the mod grid with its card and status badge, the row above the grid, One at a time, notes and the details panel. The All mods table with its filters, its Folder missing rows and its bulk actions. The Updates page with its coverage strip, its newer files and the mods it can't check. And what they reach: a mod's page with its History tab, and the dialogs reached from a mod.
 
 Not in scope: the rules about origin *states* and what each answer may write ([`origin-tracking.md`](origin-tracking.md) §4–§5), the update comparator ([`update-checks.md`](update-checks.md)), or how an update is written to disk ([`applying-updates.md`](applying-updates.md)).
 What follows is only what is specific to these widgets.
@@ -9,7 +9,9 @@ What follows is only what is specific to these widgets.
 
 ## 1. The page
 
-The Library is one page with two views, picked by the sidebar's Characters and All mods rows (`AppDestination.characters` and `allMods`). Both are the same keyed child of the page switcher, so moving between them keeps the page, and a mod's page (§15) opens over either. §2–§5, §7, §11 and §12 are the character view, and §16 is the table. §6, §8, §10, §13 and §14 serve both, and §9 is reached from the table.
+The Library is one page with three views, picked by the sidebar's Characters, All mods and Updates rows (`AppDestination.characters`, `allMods` and `updates`). All three are the same keyed child of the page switcher, so moving between them keeps the page, and a mod's page (§15) opens over any of them. §2–§5, §7, §11 and §12 are the character view, §16 is the table and §17 the Updates page. §8 and §15 serve all three, and §13's dialogs are reached from all three too.
+§6's status badge is drawn on the card and a mod's page, and its needs-attention set is also the table's Can't be checked filter and the Updates page's Can't be checked section. §10 governs the character view's switches and the table's Enable, and §14's resolve dialog opens from a card, the details panel, a mod's page and the table's Updates column. §9 is reached from the table and the Updates page.
+The Updates page itself has no switches, no status badge and no resolve dialog.
 
 The character view has three columns: the character list, the character on screen (their header, the row of filters, their mods), and the details panel for the mod selected among them.
 The panel sits beside the mods while that leaves them at least 420px, room for one column of cards, and over them otherwise.
@@ -152,7 +154,7 @@ One filter at a time, like the chips that set them.
 **The Updates filters here and in the character list switch themselves off** when the library has no updates left, keyed on the library rather than on the character: on the character's own count the filter would vanish whenever the user looked at someone with no updates of their own.
 The listener is in `LibraryActionsHost`, above the pages, since the last update is often dealt with from the All mods table while the character view is not mounted.
 
-Then **One at a time** (§10), absent on Unassigned, and the sort, and nothing else. This row is about one character; the actions over the whole library — checking it for updates, the tracking screen, marking mods as current — are on the All mods table (§16), which is about the whole library.
+Then **One at a time** (§10), absent on Unassigned, and the sort, and nothing else. This row is about one character; the actions over the whole library are elsewhere: checking it for updates on the All mods table (§16) and the Updates page (§17), and the tracking screen and marking every mod that asks Which file? as current on the Updates page.
 
 ## 8. Check results are session state
 
@@ -167,14 +169,15 @@ Raising a notification behind a modal is how a user ends up reading neither.
 The spinner is cleared **before** the dialog opens — the request is what it reports, and one turning behind a dialog says the app is still working while disabling the control they would press next.
 
 **The checks and the tracking screen run in `LibraryActionsHost`, above the page switcher**, like the download queue's host. A check over a large library takes seconds, and the page is disposed on every page switch: owned by the page, a pass would lose its results and its report the moment the user looked elsewhere.
-`libraryCheckRunningProvider` says a pass is running, and every control that would start another is disabled until it ends: the table's Check all for updates, the selection bar's Check for updates and the Sort these out link (§16).
+`libraryCheckRunningProvider` says a pass is running, and every control that would start another is disabled until it ends: the table's Check all for updates and the selection bar's Check for updates (§16), and the Updates page's Check all for updates, Check them now, Pick the files one by one and Sort out tracking… (§17).
 
 ## 9. Bulk "assume current" lists every mod it writes
 
-`services/bulk_assume_current.dart`, `dialogs/assume_current_dialog.dart`. It is **Mark N as current** in the All mods table's selection bar (§16), there only while a ticked mod asks Which file? of its base and has a date added; N is how many do.
+`services/bulk_assume_current.dart`, `dialogs/assume_current_dialog.dart`. It is **Mark N as current** in the All mods table's selection bar (§16), there only while a ticked mod asks Which file? of its base and has a date added; N is how many do. It is also **Mark all as current…** on the Updates page (§17).
 The rule is that the user must have *seen* the set being rewritten, and the confirmation enforces it: it lists every mod it would write, each with a box, all ticked.
 
 **Its plan comes from the ticked rows the table shows**, the filter and the search together, as every bulk action's does (§16): a control that rewrites more mods than it displays is exactly what this rule exists to prevent.
+On the Updates page the plan is every mod asking Which file?, which is the set the card above the button counts and names.
 
 The confirmation, from the top:
 
@@ -262,7 +265,7 @@ File, Variant and Uploaded also need a file on record, confirmed or accepted in 
 | Size | the mod's own files, as in the header |
 
 - **Check for updates is offered only with an identity to check**, and not for a mod marked Local, which is never checked; for either the update dialog would say so and nothing else, and Tracking's "set up" or "change" is the way in.
-- **Ignoring an update is not here.** It lives in the update dialog with its undo, where the finding is read before it is waved away ([`update-checks.md`](update-checks.md) §6). Taking one back is also on the History tab of the mod's page (§15).
+- **Ignoring an update is not here.** It is in the update dialog, with its undo, and on the Updates page's Newer files rows (§17), which both show the file you have beside the newer one, so the finding is read before it is waved away ([`update-checks.md`](update-checks.md) §6). Taking one back is also on the History tab of the mod's page (§15).
 - **Made of N mods lists the folder's stack** (`origin.downloads`), base first and patches on top, and is absent for a folder with one download ([`origin-tracking.md`](origin-tracking.md) §10).
   Each row has a Base or Patch badge, the name, which links to its page, and, once the session holds that layer's page, its author and, for a file on record, the file's name and upload date. A patch's file is never put on the base's row.
   The name is the page's when it is in hand, else the one saved with the layer (`ModDownload.name`), else the id. It is never the folder name for a layer with an id: a patch installed as its own folder names the folder after the patch's archive ([`origin-tracking.md`](origin-tracking.md) §10).
@@ -321,8 +324,8 @@ File, Variant and Uploaded also need a file on record, confirmed or accepted in 
 
 **It shows in place of the view it opened from, as state rather than a route.** `openModPageProvider` holds the mod and the tab it opened on, as the marketplace's open mod does; the view stays mounted under it in an `IndexedStack`, kept out of Tab's reach, so going back finds the grid scrolled where it was and the mod still in the panel, or the table as it was left.
 The hidden view takes no drop and no Ctrl+V while the page shows: it still has its bounds, and an import there would land where the user can't see it.
-The breadcrumb says which view is under it: "Characters / <character> / <mod>" over the character view and "All mods / <mod>" over the table, each link going back.
-The provider outlives the page, so leaving the Library and coming back through a Library row in the sidebar shows the same mod. The page's Back button, its breadcrumb, a Library row (Characters or All mods) pressed while a Library view is showing, and the Updates row close it, Updates because the mods with an update are what it shows.
+The breadcrumb says which view is under it: "Characters / <character> / <mod>" over the character view, "All mods / <mod>" over the table and "Updates / <mod>" over the Updates page, each link going back.
+The provider outlives the page, so leaving the Library and coming back through a Library row in the sidebar shows the same mod. The page's Back button, its breadcrumb and a Library row (Characters, All mods or Updates) pressed while a Library view is showing close it.
 The page is keyed by what `ModPageRequest.pageKey` fixed when it opened, the folder's uid or its id when it has none yet, so neither a rename nor a uid the first snapshot assigns sends it back to its first tab or fetches again; a mod deleted or gone from a scan closes it.
 
 **Opening it fetches.** The GameBanana page of each download in the folder and the base mod's update feed are fetched once, through the client's response cache, and the pages join `knownModPagesProvider`, so the details panel and the card name the file too. Each download's saved name is rewritten from its page, as after a check.
@@ -353,7 +356,7 @@ The canvas's "Manager data holds your note, the source link and version history"
 - **Latest update post**: the newest post in the base mod's feed that has text or a change list, its title, change list and text folded to three lines.
 - **Patches on top**, in stack order, "applied over the current file" as the canvas says: each patch's name, file, author, upload date, its files added and replaced counted from its file registry, and whether it is tracked. Take out shows only for a patch `removablePatches` lists and runs `removePatchFlow`; a patch with no file registry, or no page on record, says why it can't be taken out here ([`origin-tracking.md`](origin-tracking.md) §10).
 - **Ignored update**, one row per download with `updates_dismissed_until`: the files this session's check listed, when it did, and "Ignoring files uploaded up to <date>". **Stop ignoring** takes the dismissal back (`stopIgnoringUpdate`): the same `withDismissal` write as the update dialog, and the session's verdict re-folded with `refoldDismissal` as the dialog's undo does, since the badge reads that verdict and a rescan alone would leave it quiet until the next check.
-  Ignoring stays in the update dialog only, where the finding is read before it is waved away; taking it back costs nothing to undo, since the badge only comes back, so it is offered here too ([`update-checks.md`](update-checks.md) §6).
+  Ignore is in the update dialog and on the Updates page's Newer files rows (§17), both of which show the file you have beside the newer one, so an update is read before it is waved away; it is never on a card or a badge. Taking it back costs nothing to undo, since the badge only comes back, so it is offered here too ([`update-checks.md`](update-checks.md) §6).
   The heading's note says the ignored files stay installable and anything newer brings the mark back. The canvas's "Ignored on <date> · these files won't be offered again" is not drawn: the sidecar stores the upload date the ignore covers up to, not the day it was pressed, and the files are offered again.
 - **One write at a time.** A restore, a patch removal, Stop ignoring, an update or Reinstall, or a patch installed into the mod (from Browse or a drop) puts the mod in `modWritesInProgressProvider` while it writes, and History's buttons are held until it is done: nothing else on screen shows the write is running, and a second write into the folder would snapshot it half done. Reinstall has its own progress dialog. The restore and removal flows read the app's container rather than the page's `ref`, so leaving the Library mid-write still reports the result, refreshes the snapshot list and rescans.
 
@@ -367,9 +370,7 @@ When the library fails to load, the table shows what the character view shows in
 ### The sidebar's rows
 
 - **All mods** opens the table and counts the mods in the library, with no number until the first scan returns.
-- **Updates** opens the table with its Updates filter on and closes a mod's page, since the mods with an update are what it shows. Its count is the mods the last check flagged, with no number at zero.
-  It is the table under one filter rather than a page of its own, so it is the current row while that filter is on, and All mods is then not. Pressing All mods from there turns the filter back to All.
-  It also clears the search and unfolds every group, so the table shows every mod its count covers.
+- **Updates** opens the Updates page (§17). Its count is the mods the last check flagged, with no number at zero. The table's own Updates chip is a filter of the table and leaves All mods the current row.
 
 ### The header
 
@@ -460,8 +461,8 @@ An action that reaches mods the user can't see is the failure §9 exists to prev
   **Two or more ticked mods of one character with One at a time on are all left off**, with a warning naming the characters and asking the user to turn on the one they want. Turning them on in turn would leave whichever came last, which is the app picking which mod stays on.
   A ticked mod of such a character on its own is turned on as the switch would.
 - **Enable, Disable and Delete report only what didn't happen**, naming the mods: the table shows what did ([`notifications.md`](notifications.md) §1). Enable reports its failures, the characters it left off, and each mod the shader check refused with the reason, all the mods a missing shader folder kept off sharing one notice. Check for updates and Mark N as current report their outcome.
-- **Check for updates checks only the ticked mods** (`LibraryActions.checkMods`) and reports the outcome as a notification. It never opens the tracking screen, which is about the whole library and has its own door, and it doesn't set "updates checked <ago>". It is disabled while a check runs or when no ticked mod can be checked.
-  The pages it fetches go to `fetchedModPagesProvider` and add no record to the check's (§8): a record there means the library was checked, and Sort these out would then skip its check and call every other tracked mod unreached.
+- **Check for updates checks only the ticked mods** (`LibraryActions.checkMods`) and reports the outcome as a notification. It never opens the tracking screen, which is about the whole library and opens after a whole-library check or from the Updates page (§17), and it doesn't set "updates checked <ago>". It is disabled while a check runs or when no ticked mod can be checked.
+  The pages it fetches go to `fetchedModPagesProvider` and add no record to the check's (§8): a record there means the library was checked, and opening the tracking screen would then skip its check and call every other tracked mod unreached.
   A record the check already holds, and a page fetched before, is replaced with the fetched page unless that page is older, by its newest file or its last update. The same goes for every page the app fetches, a mod's page and the update dialog included: they read through the response cache, which the whole check bypasses, so a page fetched after the check can still be the older one.
 - **Mark N as current** is §9.
 - **Delete** asks first: the names (six, then "and N more"), the total size when the walk has it, how many are on in the game, and how many saved versions go with them, so there will be nothing left to restore.
@@ -472,11 +473,83 @@ An action that reaches mods the user can't see is the failure §9 exists to prev
   **A switch is never greyed out by a press**, its own or another's: a disabled switch drops keyboard focus, so the next Space would reach the card instead. Presses run one at a time in the order made, each on the library as the press before it left it, so two switches pressed together under One at a time leave the later one on; a press that waits for a write is the exception, below. A press asks for the opposite of what its switch showed, so pressing the same switch again before the first press lands does nothing more. A press is never dropped, an import running included.
   **A press on a mod whose folder is being written waits for that write**, then runs: an update or Reinstall, a patch installed into it from Browse or a drop (turn off, snapshot, place, turn back on), a patch taken out, or a restore. Turning the mod on or off in the middle would race the write's own turning off and back on, or link a folder that is half written. A press on another of the character's mods that One at a time makes turn this one off doesn't wait; the write then leaves this one off (§10). The switch is not greyed out, and the wait is outside the queue, so presses on other mods go ahead: such a press lands after the write, and a later press on another mod can land before it. Under One at a time that later mod is then turned off by it, so the mod whose write ended stays on. Keeping the order would hold every other switch for the length of the write. Every such write goes through `whileWritingMod`, which marks the mod in `modWritesInProgressProvider` (§15); Stop ignoring's sidecar write marks it too, for its moment. A press that reaches its turn while a new write has started on its mod waits for that one too.
 
-### Sort these out
+### Sort these out on Updates
 
-While Can't be checked is on, a **Sort these out** link under the table opens the tracking screen ([`origin-tracking.md`](origin-tracking.md) §7), running the check first when this session has nothing in hand to show. It is plain text while a check runs.
-It is the screen's one door besides a check that turns up something to ask, and it sits under the filter whose mods are the ones the screen sorts out.
+While Can't be checked is on, a **Sort these out on Updates** link under the table opens the Updates page (§17), where those mods are counted with the ways to settle them.
 
 ### Drop and paste
 
 A folder or archive dropped or pasted on the table is imported with its character worked out from its name (§3): the table has no character on screen to file it under. Ctrl+V works as on the character view (§1), and in the search field it is the field's paste.
+
+## 17. The Updates page
+
+`updates/updates_page.dart` is the page, and `updates_coverage.dart` sorts the library into its pills and its newer files (pure, so it is tested without a widget).
+It answers three questions: how much of the library the app can check for updates, which mods have a newer file, and what it would take to check the rest.
+Its state that outlives the page is in providers, as the table's is (§16).
+
+### The header
+
+"Updates", and under it "Last checked <ago>" from `libraryCheckedAtProvider` (§16), redrawn every 30 seconds, or "Not checked since Zenith started" before a whole-library check has finished this session. Beside it, Check all for updates, the table's button.
+
+### Coverage
+
+"N of your M mods checked for updates", over the strip, and a legend with each state's count. A state no mod is in has no legend item.
+Before any check the line says "None of your M mods have been checked for updates yet", and with every mod checked "All M of your mods have been checked for updates".
+
+- **Checked means checked this session.** A mod the app can compare counts as "not checked yet" until the session holds an answer from its page: an update, up to date, or the page gone (`answeredByCheck`).
+  A page the check can't compare, the mod's own or a patch's in the same folder, keeps the mod from filling in while the check runs: a withheld mod whose profile couldn't be fetched, or a page listing no current files. The verdict decides once it lands: such a mod stays not checked, unless another of its pages has an update, which answers it.
+  Like the verdicts (§8), this is never persisted, so a restart leaves every mod the app can check not checked again; the questions still show.
+- **A mod not checked yet has no pill of its own.** The strip is a pill per checked mod and per mod that can't be checked, with empty pills between the two to make 60 (`coveragePills`). Each mod checked takes an empty pill's place, and once those run out the strip grows a pill per mod, the pills narrowing as it does. A library with fewer than 60 mods keeps the empty pills it has left.
+- **It builds as the check runs.** The check fetches pages 50 at a time and says after each batch which folders it has every page of (`libraryCheckProgressProvider`); their pills fill in then, before the verdicts land.
+  The strip fills by position: a pill that changes colour fades from the colour its place shows on screen to its new one, and a place the strip didn't have fades from empty, each a moment after the one before and a batch after the batch before it, so the strip fills from the left. A Base unknown or Not tracked pill changes at once, and with reduced motion the whole strip does.
+- **The pills, in this order:** Checked, solid accent; Dated only, the accent washed out; the empty pills; Which file?, blue; Base unknown, a thin accent cap for the checked patch, a gap and a blue body for the base nobody named, its legend item's tooltip saying "The patch is checked, the mod under it isn't"; Not tracked, hatched.
+- **The questions are drawn from the start.** Which file?, Base unknown and Not tracked come from the mod's tracking, so no check is needed to know them.
+- **Checked is a known file**: one the app downloaded, one the user named, or one worked out in the tracking screen and accepted there. A worked-out file is drawn as a known one, as everywhere: the user accepted it, and the difference changes nothing they do.
+- **A folder can be checked only when every layer in it can** (`modOriginStatus`): a known base under a patch whose file isn't known is Which file?.
+- **Dated only counts as checked** once a check has compared it by the day it was added. A mod just marked as current is not checked yet until Check them now or the next check.
+- **Local mods have no pill and are not in M.** The user said they are never checked, and counting them would keep the line short of all of them for good. The legend says "N Local, not counted", so M can be read against the All mods count.
+- Narrow pills lose their gaps, and a library too large for pills at all reads as a bar of segments in the same order.
+
+### Newer files
+
+Every mod the last check flagged (`UpdateCheck.hasUpdate`), the set the sidebar's Updates count covers, newest upload first. A row has:
+
+- the thumbnail, the name, which opens the mod's page, and the character, with the author once the session holds the page;
+- **You have**: the installed file and its upload date; "Marked as current" and "the newest on <date>" when the check compared by date, with no installed file named; or "No longer on its page" when the author took the file down;
+- **Newer**, or **Maybe newer** when the verdict rests on a guess: the file the update dialog would pick, its upload date and its variant label; or "N newer files" with the newest upload date when no one file is its successor. With no newer file to name it reads "Its page changed": a mod compared by date whose page changed after that date, with "after <date>", or a taken-down file whose page lists only files released with it, with no date. An upload date shown is only ever a file's;
+- **Ignore** and **Update**. Update opens the update dialog.
+
+**Ignore writes what the update dialog's Ignore writes** (`ignoreUpdate`): a dismissal on the layer whose page has the update, up to the newest file the check reported, so anything uploaded after speaks up again ([`update-checks.md`](update-checks.md) §4). The row leaves the list, so only a failure is said, and Stop ignoring on the mod's History tab (§15) takes it back.
+Ignore is here and in the update dialog because both show the file you have beside the newer one, so an update is read before it is waved away; it is never on a card or a badge.
+The write goes through `whileWritingMod`. Ignore is disabled while a check runs, while the mod's folder is being written, and when the check names nothing to ignore; Update is disabled while the folder is being written.
+
+With nothing flagged, the list is one line: before any check this session it says to check, and after one "No newer files since the last check."
+Below 760px a row's two files go under its name and buttons.
+
+### Can't be checked
+
+The heading counts the needs-attention set (§6), Which file?, Base unknown and Not tracked, in blue, and shows the count only when there is one. **Hide** folds the section to "Can't be checked N · hidden" with Show, for the session (`updatesCantCheckHiddenProvider`): it is a to-do list, and seeing it again after a restart is the point.
+Under the heading, "Zenith finds updates by comparing your file with the mod's GameBanana page. These can't be compared yet.", then two cards side by side, stacked below 760px. The section is left out while there is nothing to settle and no marking to undo.
+
+- **Which file?**: the count with its badge, the portraits of up to five of their characters, the first three names and "and N more", and **See them**. Then what marking does, **Mark all as current…** (§9), and **Pick the files one by one**, which opens the tracking screen ([`origin-tracking.md`](origin-tracking.md) §7).
+  Mark all as current… is disabled when none of them can be marked: none has a date added on record, or each asks which file of a patch.
+- **"Zenith doesn't know where these came from"**, for both kinds the tracking screen settles: "N mods" Not tracked with the names and See them, "N patches" Base unknown with "Zenith doesn't know which mod they patch.", "Link each to its GameBanana page, or mark your own mods as Local.", and **Sort out tracking…**, which opens the tracking screen. A kind with no mods has no row.
+
+**See them opens All mods on Can't be checked alone**: no search, no folded group and no mod's page left from before (`openAllModsFiltered`). The table has no filter for one of the three kinds, and its Updates column names each mod's.
+
+**The tracking screen opens two ways**: by itself after a whole-library check that turns up something to ask, and on demand from this page's Pick the files one by one and Sort out tracking… ([`origin-tracking.md`](origin-tracking.md) §7). The two buttons run the check first when the session has nothing in hand to show, and are disabled while a check runs.
+
+### Drop and paste
+
+Ctrl+V imports as on the All mods table (§16), with each mod's character worked out from its name. A folder or archive dropped on the page does nothing.
+
+### Undoing a marking
+
+After Mark all as current…, once the library is read again, a card "N mods marked as current" with the Dated only badge comes first among the cards: "Anything uploaded after the day you added one now shows under Newer files.", **Check them now**, which checks only those mods, and **Undo**, disabled while a check runs. The Which file? card is under it while any mod still asks, and gone when none does.
+What was written shows as that card. A failure is said, the mods skipped because their folder was being written are always named, and other skips are said only when nothing was written.
+
+`lastMarkingProvider` holds the marking: each mod written, with its base download as it was and the date written. It lasts until Undo leaves nothing to undo, the next marking, or the app closing.
+
+**Undo puts back each mod's base as it was before the marking** (`undoAssumeCurrent`), where the base still holds what the marking wrote. A mod given a file since, or marked again, is left as it is: the user answered it another way, and undoing the marking must not undo that.
+A mod whose folder is being written is skipped and named. A write that fails, or a folder gone since the marking, is said in one notice, with a line for each of the two naming its mods. The skipped ones and the failed writes stay in the marking, so Undo can be pressed again, and the card goes once nothing is left to undo; a folder that is gone can't be found under that name again, so it leaves the marking.
+The session's check by date on a mod put back goes with the date: a folder of one download loses its verdict, and in a mixed folder the base's verdict is taken back and the folder folded again, so a patch's own update stays and nothing about the base comes back on an Ignore. A base whose page was found gone or couldn't be compared keeps that verdict in either, since no file would change it.

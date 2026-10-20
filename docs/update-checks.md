@@ -385,7 +385,7 @@ Eight rules:
   dismissed.
 - **The verdict is kept, not rewritten.** Only `hasUpdate` — the badge — goes quiet.
   The dialog goes on saying what is published, because "there is an update and you dismissed it" and "there is nothing new" are different facts, and someone reopening that dialog is usually there to change their mind.
-  The undo sits where the dismissal did, and on the History tab of the mod's page, which lists it as an Ignored update ([`library-screen.md`](library-screen.md) §15).
+  Any dismissal, the Updates page's Ignore included, is undone with Stop ignoring in the update dialog or on the History tab of the mod's page, which lists it as an Ignored update ([`library-screen.md`](library-screen.md) §15).
 - **The All mods table's Updates column reads it as Up to date.** An update is ignored because it isn't the user's file, a different variant say, so the mod is as up to date as it gets.
   That column is a summary over the whole library; the dialog and the History tab are where the two facts stay apart ([`library-screen.md`](library-screen.md) §16).
 - **A finding with no date is never suppressed.** If a dismissal cannot be shown
@@ -507,7 +507,7 @@ Both follow the same rule — *a bulk control must act on the set the user can s
 "Assume current" rewrites sidecars, so it takes only the ticked mods the table shows and lists each one before it writes.
 A check writes nothing; its only effect is badges, and badges are drawn on every character and every row, so scoping it to a view would leave the rest looking checked-and-clean.
 
-**A check of the ticked mods is the narrower door, and it does less.** It checks only the ticked mods the table shows, reports its outcome as a notification, and never opens the results screen below, which is about the whole library and has its own door.
+**A check of the ticked mods is the narrower door, and it does less.** It checks only the ticked mods the table shows, reports its outcome as a notification, and never opens the results screen below, which is about the whole library and opens after a whole-library check or from the Updates page.
 Its pages are kept for display (`fetchedModPagesProvider`) and add no record to the check's, which the results screen reads as "the library was checked".
 A record the check already holds is refreshed with a page fetched since, this check's or any other fetch's, unless that page is older by its newest file or its last update (`keepModPages`); a page already in `fetchedModPagesProvider` is kept over an older one the same way. A mod's page and the update dialog read through the 10-minute response cache, which the whole check bypasses, so a page fetched after the check can still be the older one, and replacing the record with it would show the old file under the update badge.
 It also leaves the table's "updates checked <ago>" alone, since that line says the whole library was checked; only a whole-library pass that ran to the end sets it, the startup check included.
@@ -561,7 +561,7 @@ Four decisions, all in `services/launch_update_check.dart` (pure) and
   The card's body says the check happened *at startup*, since a notification
   nobody pressed for has to explain its own presence.
 - **It never opens the resolution screen.** The manual check does when there is something to sort out ([§6](#the-results-screen)); a modal thrown over an app the user has just opened is exactly the interruption that arrangement exists to avoid.
-  The screen stays reachable from **Sort these out** under the All mods table, which rebuilds from the records this pass leaves behind and therefore costs no second request.
+  The screen stays reachable from the Updates page's Pick the files one by one and Sort out tracking…, and rebuilds itself from the records this pass leaves behind, so it costs no second request.
 
 **It is hosted above the page switcher**, beside `DownloadQueueHost`, because nobody pressed anything to start it and it outlives whatever the user does next.
 The pages are keyed `AnimatedSwitcher` children with no keep-alive, so a pass owned by the Library page would die the moment the user looked at the marketplace.
@@ -634,7 +634,7 @@ they pressed the button to see; when there are questions, raising a notification
 reading neither.
 
 **Auto-opening is not the only way in**: a screen reachable only as a side effect of a check can be seen once and, if dismissed, not again.
-**Sort these out**, under the All mods table while its Can't be checked filter is on (below), reopens it from the records the check left behind.
+**Pick the files one by one** and **Sort out tracking…** on the Updates page (below) reopen it from the records the check left behind.
 
 The screen itself belongs to origin tracking rather than to this document, because
 what it writes is origin data:
@@ -642,8 +642,8 @@ what it writes is origin data:
 
 ### Where the controls live
 
-The All mods table holds the check's controls ([`library-screen.md`](library-screen.md) §16): **Check all for updates** in its header, **Check for updates** in its selection bar for the ticked mods, and **Sort these out** under it.
-The **Updates** chips filter to what the last check found: the table's, the one above a character's mods and the one in the character list ([`library-screen.md`](library-screen.md) §7). The sidebar's Updates row is the table under its Updates filter.
+The All mods table and the Updates page hold the check's controls: **Check all for updates** in the header of both, **Check for updates** in the table's selection bar for the ticked mods ([`library-screen.md`](library-screen.md) §16), and on the Updates page **Check them now** for the mods just marked as current and **Pick the files one by one** and **Sort out tracking…**, which open the tracking screen on demand ([`library-screen.md`](library-screen.md) §17).
+The Updates page lists what the last check found, each with the file you have and the newer one. The **Updates** chips filter to the same set: the table's, the one above a character's mods and the one in the character list ([`library-screen.md`](library-screen.md) §7).
 What follows are the rules that belong to the check.
 
 **Two scopes meet here, deliberately.** The *check* covers the whole library, because its badges are drawn on every character.
@@ -775,12 +775,8 @@ up to three buttons in every other state.
 That retry bypasses the client's response cache, for the reason the marketplace's refresh button does: a re-check answerable from a ten-minute-old copy is a control that sometimes cannot do its one job, with no way for the user to tell which press was which.
 Re-checking the whole library, cache and all, is the job of the All mods table's Check all for updates.
 
-**"Ignore this update" and its undo live here**, and the dialog is the only
-place the ignore appears — ignoring from the card would mean dismissing something
-the user has not read. It writes to the sidecar, so the dialog reports back
-whether it wrote anything and the mods screen rescans on the way out; the status
-slot is drawn from `ModInfo.origin`, which only a scan re-reads. See
-[§4](#4-dismissing-an-update) for what it stores and why it is a date.
+**"Ignore this update" and its undo live here.** Ignore is in the dialog and on the Updates page's Newer files rows ([`library-screen.md`](library-screen.md) §17), both of which show the file you have beside the newer one, so an update is read before it is waved away; it is never on a card or a badge, where it would dismiss something the user has not read.
+It writes to the sidecar, so the dialog reports back whether it wrote anything and the mods screen rescans on the way out; the status slot is drawn from `ModInfo.origin`, which only a scan re-reads. See [§4](#4-dismissing-an-update) for what it stores and why it is a date.
 
 The undo is also on the History tab of the mod's page
 ([`library-screen.md`](library-screen.md) §15): taking a dismissal back only

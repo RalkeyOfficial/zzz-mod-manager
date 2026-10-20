@@ -66,6 +66,7 @@ class ZenithType extends ThemeExtension<ZenithType> {
     required this.monoSmall,
     required this.wordmark,
     required this.pageTitle,
+    required this.lead,
     required this.watermark,
     required this.watermarkMedium,
     required this.watermarkLarge,
@@ -86,6 +87,9 @@ class ZenithType extends ThemeExtension<ZenithType> {
 
   /// A mod's name at the top of its page.
   final TextStyle pageTitle;
+
+  /// The one sentence a section leads with, such as the Updates page's coverage line.
+  final TextStyle lead;
 
   /// The large initials drawn faintly behind an empty cover.
   final TextStyle watermark;
@@ -123,6 +127,13 @@ class ZenithType extends ThemeExtension<ZenithType> {
       height: 1.1,
       letterSpacing: 30 * -0.01,
     ),
+    lead: const TextStyle(
+      fontFamily: kUiFont,
+      fontSize: 18,
+      fontWeight: FontWeight.w500,
+      height: 1.35,
+      letterSpacing: 18 * -0.01,
+    ),
     watermark: const TextStyle(
       fontFamily: kDisplayFont,
       fontSize: 56,
@@ -156,6 +167,7 @@ class ZenithType extends ThemeExtension<ZenithType> {
     TextStyle? monoSmall,
     TextStyle? wordmark,
     TextStyle? pageTitle,
+    TextStyle? lead,
     TextStyle? watermark,
     TextStyle? watermarkMedium,
     TextStyle? watermarkLarge,
@@ -166,6 +178,7 @@ class ZenithType extends ThemeExtension<ZenithType> {
     monoSmall: monoSmall ?? this.monoSmall,
     wordmark: wordmark ?? this.wordmark,
     pageTitle: pageTitle ?? this.pageTitle,
+    lead: lead ?? this.lead,
     watermark: watermark ?? this.watermark,
     watermarkMedium: watermarkMedium ?? this.watermarkMedium,
     watermarkLarge: watermarkLarge ?? this.watermarkLarge,

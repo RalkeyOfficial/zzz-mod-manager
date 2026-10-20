@@ -189,7 +189,7 @@ void main() {
   ///
   /// The call-site regex sees only `t('literal')`. A key chosen by a ternary inside `t(...)`
   /// (`t(on ? 'library.grid.one_at_a_time_on' : '…_off')`), or held in a record and looked up later (the status
-  /// badge's `('library.card.dated', tone, tooltip)`), is a quoted literal somewhere else in the file.
+  /// badge's `('library.card.maybe_newer', tone, tooltip)`), is a quoted literal somewhere else in the file.
   Map<String, String> keyLiterals() {
     final namespaces = en.keys.map((k) => k.split('.').first).toSet();
     final literal = RegExp(r"'([a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+)'");
@@ -215,7 +215,7 @@ void main() {
       'library.grid.one_at_a_time_off',
       'library.details.active_title',
       'library.details.off_title',
-      'library.card.dated',
+      'library.card.maybe_newer',
       'mods.origin.version_guessed_tooltip',
     ]) {
       expect(found, contains(key));

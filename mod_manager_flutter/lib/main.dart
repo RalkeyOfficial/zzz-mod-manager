@@ -293,9 +293,10 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
                           child: AnimatedSwitcher(
                             duration: const Duration(milliseconds: 180),
                             child: switch (destination) {
-                              // One key for both views, so moving between them keeps the page and its mod page.
+                              // One key for the Library's views, so moving between them keeps the page and its mod page.
                               AppDestination.characters ||
-                              AppDestination.allMods => const ModsScreen(key: ValueKey('mods')),
+                              AppDestination.allMods ||
+                              AppDestination.updates => const ModsScreen(key: ValueKey('mods')),
                               AppDestination.browse => const MarketplaceScreen(key: ValueKey('marketplace')),
                               AppDestination.storage => const StorageScreen(key: ValueKey('storage')),
                               AppDestination.settings => const SettingsScreen(key: ValueKey('settings')),

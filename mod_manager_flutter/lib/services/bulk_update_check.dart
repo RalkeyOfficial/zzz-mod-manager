@@ -193,6 +193,7 @@ Future<BulkUpdateCheckOutcome> runBulkUpdateCheck({
   required ModRecordFetcher fetch,
   ModUpdatesFetcher? fetchUpdates,
   ModProfileFetcher? fetchProfile,
+  void Function(Set<String> reached)? onProgress,
   int batchSize = 50,
 }) async {
   final checks = <String, UpdateCheck>{...plan.skipped};
@@ -306,6 +307,15 @@ Future<BulkUpdateCheckOutcome> runBulkUpdateCheck({
   for (var start = 0; start < ids.length; start += batchSize) {
     final end = start + batchSize < ids.length ? start + batchSize : ids.length;
     if (!await resolve(ids.sublist(start, end))) break;
+    // After each batch, the folders with every page they name in hand and comparable. A blank the profile couldn't
+    // replace, or a page listing no current files, can fold the folder to Couldn't check whichever layer it belongs
+    // to, so such a folder waits for its verdict; one that lands with another layer's update still answers it.
+    bool comparable(GbMod? page) =>
+        page != null && (page.isRemoteMissing || (!isBlankedRecord(page) && (page.currentFiles?.isNotEmpty ?? false)));
+    onProgress?.call({
+      for (final mod in plan.checkable)
+        if (mod.origin!.trackable.every((download) => comparable(records[download.modId]))) mod.id,
+    });
   }
 
   /// One folder's verdict, across every identity it carries.

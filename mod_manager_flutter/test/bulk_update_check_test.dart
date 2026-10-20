@@ -434,6 +434,55 @@ void main() {
       expect(outcome.failed, isEmpty);
     });
 
+    test('after each batch, says which folders it has reached', () async {
+      final reached = <Set<String>>[];
+      await runBulkUpdateCheck(
+        plan: planBulkUpdateCheck([
+          mod('a', origin: origin(modId: 1, fileId: 10)),
+          mod('b', origin: origin(modId: 1, fileId: 99)),
+          mod('c', origin: origin(modId: 2, fileId: 10)),
+          mod('d', origin: origin(modId: 3, fileId: 10)),
+        ]),
+        fetch: (ids) async => [
+          for (final id in ids)
+            GbMod(idRow: id, dateAdded: DateTime.utc(2025), files: [GbFile(idRow: 10, dateAdded: DateTime.utc(2026))]),
+        ],
+        onProgress: reached.add,
+        batchSize: 2,
+      );
+
+      expect(reached, [
+        {'a', 'b', 'c'},
+        {'a', 'b', 'c', 'd'},
+      ]);
+    });
+
+    test('leaves out a folder whose page it reached but cannot compare', () async {
+      final reached = <Set<String>>[];
+      final plan = planBulkUpdateCheck([
+        mod('fine', origin: origin(modId: 1, fileId: 10)),
+        mod('no files', origin: origin(modId: 2, fileId: 10)),
+        mod('withheld', origin: origin(modId: 3, fileId: 10)),
+        mod('gone', origin: origin(modId: 4, fileId: 10)),
+        // The base can be compared, its patch's page can't.
+        mod('mixed', origin: origin(modId: 1, fileId: 10, patches: [patchFixture(modId: 2)])),
+      ]);
+      expect([for (final m in plan.checkable) m.id], contains('mixed'));
+      await runBulkUpdateCheck(
+        plan: plan,
+        fetch: (ids) async => [
+          GbMod(idRow: 1, dateAdded: DateTime.utc(2025), files: [GbFile(idRow: 10, dateAdded: DateTime.utc(2026))]),
+          GbMod(idRow: 2, dateAdded: DateTime.utc(2025)),
+          const GbMod(idRow: 3),
+          const GbMod(idRow: 4, isTrashed: true),
+        ],
+        fetchProfile: (_) async => throw StateError('offline'),
+        onProgress: reached.add,
+      );
+
+      expect(reached.single, {'fine', 'gone'}, reason: 'a page found gone is an answer');
+    });
+
     test('halves the batch around an id the server refuses', () async {
       final asked = <List<int>>[];
       final outcome = await runBulkUpdateCheck(

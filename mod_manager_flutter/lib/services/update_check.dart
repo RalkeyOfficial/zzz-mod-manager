@@ -610,6 +610,21 @@ UpdateCheck refoldDismissal(UpdateCheck folded, int? subject, bool dismissed) {
   ]);
 }
 
+/// [folded] with the base's comparison taken back, as when the base's file is no longer known: it then asks which
+/// file instead, and the folder is folded again. Null for a folder of one layer, which has no other verdict left to
+/// show.
+///
+/// The base is the bottom layer, by position: a patch from the base's own mod page carries the same mod id. A base
+/// whose page was found gone or couldn't be compared keeps that verdict, which no file would change, in a folder of
+/// one layer too.
+UpdateCheck? forgetBaseVerdict(UpdateCheck folded) {
+  bool lasting(UpdateOutcome outcome) => outcome == UpdateOutcome.sourceGone || outcome == UpdateOutcome.indeterminate;
+  if (folded.layers.length < 2) return lasting(folded.outcome) ? folded : null;
+  final base = folded.layers.first;
+  final kept = lasting(base.check.outcome) ? base.check : const UpdateCheck(outcome: UpdateOutcome.versionUnknown);
+  return foldDownloads([DownloadCheck(download: base.download, check: kept), ...folded.layers.skip(1)]);
+}
+
 /// The comparison itself, for **one** download against **one** mod page.
 ///
 /// Takes a layer rather than a folder, which is what makes it the same code for

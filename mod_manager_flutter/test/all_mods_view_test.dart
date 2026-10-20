@@ -200,19 +200,24 @@ void main() {
       expect(cantCheckChip(), findsNothing);
     });
 
-    testWidgets('alone puts the Sort these out line under the table', (tester) async {
+    testWidgets('alone puts a line under the table that opens the Updates page', (tester) async {
+      const line = 'Sort these out on Updates';
       await pumpAllMods(tester, [mod('bare'), mod('fine', origin: onFile(OriginConfidence.exact))]);
-      expect(find.text('Sort these out'), findsNothing);
+      expect(find.text(line), findsNothing);
 
       await tester.tap(cantCheckChip());
       await tester.pumpAndSettle();
       expect(container.read(allModsFilterProvider), AllModsFilter.needsAttention);
       expect(find.text('fine'), findsNothing);
-      expect(find.widgetWithText(ZenithLink, 'Sort these out'), findsOneWidget);
+      expect(find.widgetWithText(ZenithLink, line), findsOneWidget);
+
+      await tester.tap(find.text(line));
+      await tester.pump();
+      expect(container.read(destinationProvider), AppDestination.updates);
 
       await tester.tap(find.widgetWithText(ZenithChip, 'All'));
       await tester.pumpAndSettle();
-      expect(find.text('Sort these out'), findsNothing);
+      expect(find.text(line), findsNothing);
     });
   });
 

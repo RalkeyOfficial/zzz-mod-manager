@@ -34,9 +34,11 @@ Future<BulkUpdateCheckOutcome> runLibraryUpdateCheck({
   ModRecordFetcher? fetch,
   ModUpdatesFetcher? fetchUpdates,
   ModProfileFetcher? fetchProfile,
+  void Function(Set<String> reached)? onProgress,
 }) {
   return runBulkUpdateCheck(
     plan: plan,
+    onProgress: onProgress,
     fetch: fetch ??
         (ids) => client.modsMulti(
               ids,

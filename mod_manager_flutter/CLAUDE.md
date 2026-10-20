@@ -10,7 +10,7 @@ This file is rules and pointers only. Every subject below has a doc in [`../docs
 | [`gamebanana-api.md`](../docs/gamebanana-api.md) | GameBanana's remote protocol. Read before writing any request — the surface is undocumented upstream, so guessing costs more than looking |
 | [`downloads.md`](../docs/downloads.md) | Fetching archives — the isolate pump, resume, backpressure, the stall timeout, the background queue |
 | [`marketplace.md`](../docs/marketplace.md) | The native browser screens — grid, detail view, what an install does |
-| [`library-screen.md`](../docs/library-screen.md) | The Library's character view and All mods table — character list, card, status badge, the table and its bulk actions, One at a time, notes, details panel, a mod's page and its History tab, its dialogs |
+| [`library-screen.md`](../docs/library-screen.md) | The Library's character view, All mods table and Updates page — character list, card, status badge, the table and its bulk actions, the coverage strip and newer files, One at a time, notes, details panel, a mod's page and its History tab, its dialogs |
 | [`notifications.md`](../docs/notifications.md) | What the app tells the user — whether to speak at all, the two levels, the card |
 | [`metadata-schema.md`](../docs/metadata-schema.md) | The sidecar file format |
 | [`migrations.md`](../docs/migrations.md) | Reading data an older version wrote — every migration and tolerance; there is no `migrations/` folder and it says why |

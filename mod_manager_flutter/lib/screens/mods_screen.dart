@@ -55,6 +55,7 @@ import 'dialogs/rename_mod_dialog.dart';
 import 'dialogs/resolve_origin_dialog.dart';
 import 'dialogs/restore_snapshot_flow.dart';
 import 'mod_page/mod_page.dart';
+import 'updates/updates_page.dart';
 
 final Logger _log = Logger('mods');
 final Logger _files = Logger('fileops');
@@ -502,8 +503,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
     }
   }
 
-  /// Takes back an ignored update on one of the folder's downloads (`stopIgnoringUpdate`). Ignoring stays in the
-  /// update dialog, where the finding is read before it is waved away (`docs/update-checks.md` §6).
+  /// Takes back an ignored update on one of the folder's downloads (`stopIgnoringUpdate`). Ignoring is in the update
+  /// dialog and on the Updates page's rows, where the finding is read before it is waved away (update-checks.md §6).
   Future<void> _stopIgnoring(ModInfo mod, ModDownload download) async {
     final subject = download.modId;
     if (subject == null) return;
@@ -585,7 +586,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
     // here costs one rebuild when a single readdir resolves.
     ref.watch(modBackupsProvider);
 
-    final allMods = ref.watch(destinationProvider) == AppDestination.allMods;
+    final destination = ref.watch(destinationProvider);
     final current = ref.watch(currentCharacterIdProvider);
     final selectedId = ref.watch(selectedModIdProvider);
     // The panel shows a mod of the character on screen; picking another character closes it.
@@ -659,7 +660,15 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
         children: [
           ExcludeFocus(
             excluding: pageMod != null,
-            child: allMods ? _allModsView(enableDrop: pageMod == null) : _characterView(page, selected),
+            child: switch (destination) {
+              AppDestination.allMods => _allModsView(enableDrop: pageMod == null),
+              AppDestination.updates => UpdatesPage(
+                onOpenPage: (mod) => _openPage(mod, ModPageTab.overview),
+                onShowUpdate: (mod) => unawaited(_checkForUpdate(mod)),
+                loadError: _loadError(),
+              ),
+              _ => _characterView(page, selected),
+            },
           ),
           if (pageMod == null)
             const SizedBox.shrink()
@@ -774,7 +783,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       );
   }
 
-  /// Why the library didn't load, with Retry, or null when it did. Both views show it in place of their mods.
+  /// Why the library didn't load, with Retry, or null when it did. All three views show it in place of their content.
   Widget? _loadError() {
     final library = ref.watch(libraryProvider);
     if (errorMessage == null && !library.hasError) return null;
@@ -934,11 +943,11 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
   ///
   /// Only a character the user picked by clicking its row: the page shown before they pick one is a fallback, and
   /// filing five archives for five agents under it would be the app's guess, not theirs. Unassigned has no one to
-  /// file under, and the All mods table no one on screen.
+  /// file under, and the All mods table and the Updates page no one on screen.
   ///
   /// [watch] for the drop tile, which says which of the two a drop will do and has to follow a pick.
   String? _dropTarget({bool watch = false}) {
-    if (ref.read(destinationProvider) == AppDestination.allMods) return null;
+    if (ref.read(destinationProvider) != AppDestination.characters) return null;
     final byUser = watch ? ref.watch(characterPickedByUserProvider) : ref.read(characterPickedByUserProvider);
     final picked = watch ? ref.watch(selectedCharacterIdProvider) : ref.read(selectedCharacterIdProvider);
     if (!byUser) return null;

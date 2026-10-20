@@ -11,7 +11,7 @@ import '../dialogs/bulk_resolution_dialog.dart';
 import 'update_check_feedback.dart';
 
 /// The update checks a press starts and that outlive the page it was pressed on: checking every mod or the ticked
-/// ones, and the tracking screen that can follow a whole-library check or that "Sort these out" opens. It also
+/// ones, and the tracking screen that can follow a whole-library check or that the Updates page opens. It also
 /// switches the character view's Updates filters off once the library has no updates left.
 ///
 /// **Mounted above the page switcher**, like `DownloadQueueHost`. A check over a large library takes seconds, and
@@ -56,8 +56,9 @@ abstract interface class LibraryActions {
   /// screen; otherwise reports the outcome as a notification.
   Future<void> checkForUpdates();
 
-  /// Checks only [mods], the All mods table's selection, and reports the outcome as a notification. The tracking
-  /// screen is the whole library's and stays behind its own door.
+  /// Checks only [mods], the All mods table's selection or the mods the Updates page's "Check them now" names, and
+  /// reports the outcome as a notification. The tracking screen is the whole library's, opened by a whole-library
+  /// check or from the Updates page, never by this.
   Future<void> checkMods(List<ModInfo> mods);
 
   /// Opens the "sort out mod tracking" screen, running the check first when there is nothing in hand to show.
@@ -110,6 +111,8 @@ class _LibraryActionsHostState extends ConsumerState<LibraryActionsHost> impleme
     final running = ref.read(libraryCheckRunningProvider.notifier);
     if (running.state || !plan.hasWork) return;
     running.state = true;
+    final progress = ref.read(libraryCheckProgressProvider.notifier);
+    final checks = ref.read(modUpdateChecksProvider.notifier);
     final BulkUpdateCheckOutcome outcome;
     try {
       // Shared with the opt-in startup check, so the two cannot disagree about
@@ -119,24 +122,26 @@ class _LibraryActionsHostState extends ConsumerState<LibraryActionsHost> impleme
         client: ref.read(gameBananaClientProvider),
         fetch: widget.updateFetcher,
         fetchUpdates: widget.updatesFetcher,
+        onProgress: (reached) => progress.state = reached,
       );
+      // Before the progress is cleared, so a mod the check reached never reads unchecked in between.
+      checks.state = mergedChecks(checks.state, outcome);
     } finally {
       // Cleared **before** the results screen opens, not after it closes. The
       // spinner reports the request, and the request is over — leaving it
       // turning behind a modal the user is reading says the app is still
       // working, and disables the control they would press next.
       // Unconditional: the controller outlives this host, and a flag left set would disable every check.
+      progress.state = const {};
       running.state = false;
     }
     if (!mounted) return;
-    final checks = ref.read(modUpdateChecksProvider.notifier);
-    checks.state = mergedChecks(checks.state, outcome);
     if (wholeLibrary) {
       final records = ref.read(modUpdateRecordsProvider.notifier);
       records.state = mergedRecords(records.state, outcome);
       if (outcome.abortedBy == null) ref.read(libraryCheckedAtProvider.notifier).state = DateTime.now();
     } else {
-      // A record there means the library was checked, and "Sort these out" would call every other mod unreached.
+      // A record there means the library was checked, and the tracking screen would call every other mod unreached.
       // A page the whole check already holds is refreshed there too.
       keepModPages(ref, outcome.records);
     }
@@ -167,7 +172,7 @@ class _LibraryActionsHostState extends ConsumerState<LibraryActionsHost> impleme
   }
 
   /// Untracked mods open the screen on their own, with no check at all when nothing is tracked:
-  /// their rows need no mod page, and "Sort these out" must never end in a notification that leaves them out of reach.
+  /// their rows need no mod page, and the Updates page's buttons must never end in a notice that leaves them out.
   @override
   Future<void> sortOutTracking() async {
     if (ref.read(libraryCheckRunningProvider)) return;

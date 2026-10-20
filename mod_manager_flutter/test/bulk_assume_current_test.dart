@@ -199,4 +199,53 @@ void main() {
       expect(after.installedAtIsProxy, before.installedAtIsProxy);
     });
   });
+
+  group('undo', () {
+    MarkedAsCurrent mark(ModOrigin before, {void Function(ModOrigin? next)? wrote}) {
+      late MarkedAsCurrent marked;
+      final next = bulkAssumeCurrentRecorded(before, (base, baseline) {
+        marked = MarkedAsCurrent(modId: 'a', before: base, baseline: baseline);
+      });
+      wrote?.call(next);
+      return marked;
+    }
+
+    test('the recorded transform writes what the plain one does, and names what it replaced', () {
+      final before = origin();
+      ModOrigin? written;
+      final marked = mark(before, wrote: (next) => written = next);
+
+      expect(written, bulkAssumeCurrent(before));
+      expect(marked.before, before.base);
+      expect(marked.baseline, installedAt);
+    });
+
+    test('the recorded transform says nothing when it declines', () {
+      var called = false;
+      final next = bulkAssumeCurrentRecorded(origin(versionConfidence: OriginConfidence.exact), (_, _) => called = true);
+      expect(next, isNull);
+      expect(called, isFalse);
+    });
+
+    test('puts back the base as it was before the marking', () {
+      final before = origin();
+      final marked = mark(before);
+      final undone = undoAssumeCurrent(bulkAssumeCurrent(before), marked)!;
+
+      expect(undone.base, before.base, reason: 'the baseline is cleared, not kept');
+      expect(modOriginStatus(undone), ModOriginStatus.versionUnknown);
+      expect(undone.installedAt, before.installedAt);
+    });
+
+    test('leaves a mod answered another way since', () {
+      final before = origin();
+      final marked = mark(before);
+      final picked = bulkAssumeCurrent(before)!.copyBase(fileId: 10, versionConfidence: OriginConfidence.user);
+      expect(undoAssumeCurrent(picked, marked), isNull, reason: 'a file picked since stays picked');
+
+      final redated = bulkAssumeCurrent(before)!.copyBase(baselineRemoteDate: DateTime.utc(2026, 9));
+      expect(undoAssumeCurrent(redated, marked), isNull, reason: 'a later marking is not this one');
+      expect(undoAssumeCurrent(null, marked), isNull);
+    });
+  });
 }

@@ -11,9 +11,8 @@ import '../components/sidebar_nav_item.dart';
 import 'keycap.dart';
 import 'launch_game.dart';
 
-/// The app's main navigation, down the left of every page.
-///
-/// Updates is the All mods table kept to mods with an update, so it is the current row only while that filter is on.
+/// The app's main navigation, down the left of every page. Characters, All mods and Updates are the Library's three
+/// views.
 class AppSidebar extends ConsumerWidget {
   const AppSidebar({super.key});
 
@@ -27,7 +26,6 @@ class AppSidebar extends ConsumerWidget {
     final palette = ZenithPalette.of(context);
     final loc = context.loc;
     final destination = ref.watch(destinationProvider);
-    final updatesOnly = ref.watch(allModsFilterProvider) == AllModsFilter.updates;
     final updates = ref.watch(libraryUpdateCountProvider);
     final modCount = ref.watch(modsProvider).length;
     // The agents the Characters page lists; the built-in categories are not characters.
@@ -39,7 +37,6 @@ class AppSidebar extends ConsumerWidget {
         : zzzCharactersData.length;
 
     void go(AppDestination to) => ref.read(destinationProvider.notifier).state = to;
-    final onAllMods = destination == AppDestination.allMods;
 
     // Pressed on the Library, a Library row goes back from a mod's page as the page's own Back does; from another
     // page it returns to whatever the Library showed, a mod's page included.
@@ -78,27 +75,16 @@ class AppSidebar extends ConsumerWidget {
                     icon: Icons.format_list_bulleted_rounded,
                     label: loc.t('navigation.all_mods'),
                     count: scanned ? modCount : null,
-                    selected: onAllMods && !updatesOnly,
-                    onTap: () {
-                      if (updatesOnly) ref.read(allModsFilterProvider.notifier).state = AllModsFilter.all;
-                      goToLibrary(AppDestination.allMods);
-                    },
+                    selected: destination == AppDestination.allMods,
+                    onTap: () => goToLibrary(AppDestination.allMods),
                   ),
                   SidebarNavItem(
                     icon: Icons.arrow_circle_up_rounded,
                     label: loc.t('navigation.updates'),
                     count: updates > 0 ? updates : null,
                     hot: true,
-                    selected: onAllMods && updatesOnly,
-                    onTap: () {
-                      ref.read(allModsFilterProvider.notifier).state = AllModsFilter.updates;
-                      // Every mod its count covers: a search or a folded group left from before would hide some.
-                      ref.read(allModsSearchProvider.notifier).state = '';
-                      ref.read(allModsCollapsedProvider.notifier).state = const {};
-                      // The mods with an update are what it shows, so a mod's page gives way to them.
-                      ref.read(openModPageProvider.notifier).state = null;
-                      go(AppDestination.allMods);
-                    },
+                    selected: destination == AppDestination.updates,
+                    onTap: () => goToLibrary(AppDestination.updates),
                   ),
                   _SectionLabel(loc.t('navigation.gamebanana'), top: 18),
                   SidebarNavItem(

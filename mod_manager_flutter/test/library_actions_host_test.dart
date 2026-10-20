@@ -11,7 +11,6 @@ import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/all_mods/all_mods_view.dart';
 import 'package:mod_manager_flutter/screens/components/library_actions_host.dart';
-import 'package:mod_manager_flutter/screens/components/zenith_controls.dart';
 import 'package:mod_manager_flutter/services/origin_write.dart';
 import 'package:mod_manager_flutter/services/update_check.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
@@ -44,7 +43,7 @@ void main() {
         provenance: OriginProvenance.downloaded,
       ),
     ),
-    // Untracked, so the Can't be checked filter lists it with its Sort these out line.
+    // Untracked, so the tracking screen has a row for it.
     ModInfo(id: 'bare', name: 'bare', characterId: 'ellen', isActive: false),
   ];
 
@@ -86,9 +85,6 @@ void main() {
     await tester.pump();
   }
 
-  /// The Sort these out line under the Can't be checked filter, pressable only as a link.
-  Finder sortOutLink() => find.widgetWithText(ZenithLink, 'Sort these out');
-
   // Dated, as every real record is: an undated one is a withheld mod's blank, and the check fetches its profile.
   void answer() => response.complete([
     GbMod(
@@ -116,6 +112,21 @@ void main() {
     expect(find.text('1 mod has an update'), findsOneWidget, reason: 'the report is the host\'s, not the page\'s');
     expect(find.text('Checked 2 mods.'), findsOneWidget, reason: 'a page request no test stubbed would read "couldn\'t be checked"');
     expect(container.read(libraryCheckRunningProvider), isFalse);
+  });
+
+  testWidgets('says which mods it has reached while it runs, and keeps them checked once it ends', (tester) async {
+    await pumpHost(tester);
+    // Each time the progress changes, whether the session's verdict on the mod it reached was in by then.
+    final seen = <String>[];
+    container.listen(
+      libraryCheckProgressProvider,
+      (_, reached) => seen.add('${reached.toList()} ${container.read(modUpdateChecksProvider).containsKey('stale')}'),
+    );
+    await startCheck(tester);
+    answer();
+    await tester.pumpAndSettle();
+
+    expect(seen, ['[stale] false', '[] true'], reason: 'the verdict lands before the progress is cleared, so the mod never reads unchecked in between');
   });
 
   testWidgets("a check saves each download's page title on its sidecar", (tester) async {
@@ -149,7 +160,7 @@ void main() {
     expect(container.read(modUpdateRecordsProvider), isEmpty);
     expect(container.read(libraryCheckedAtProvider), isNull);
 
-    // So Sort these out runs a check of its own rather than calling every other mod unreached.
+    // So Sort out tracking runs a check of its own rather than calling every other mod unreached.
     unawaited(actions.sortOutTracking());
     await tester.pump();
     expect(fetches, 2);
@@ -171,16 +182,11 @@ void main() {
 
   testWidgets('while it runs, nothing can start another', (tester) async {
     await pumpHost(tester);
-    container.read(allModsFilterProvider.notifier).state = AllModsFilter.needsAttention;
-    await tester.pump();
-    expect(sortOutLink(), findsOneWidget);
     await startCheck(tester);
     expect(container.read(libraryCheckRunningProvider), isTrue);
 
     expect(tester.widget<OutlinedButton>(checkAll()).onPressed, isNull, reason: 'the check button is disabled');
     expect(find.descendant(of: checkAll(), matching: find.byType(CircularProgressIndicator)), findsOneWidget);
-    expect(sortOutLink(), findsNothing, reason: 'Sort these out is plain text');
-    expect(find.text('Sort these out'), findsOneWidget);
 
     // A request from anywhere else is ignored rather than raced into the same results.
     final actions = LibraryActionsHost.of(tester.element(find.byType(AllModsView)));
@@ -193,6 +199,5 @@ void main() {
     await tester.pumpAndSettle();
     expect(container.read(libraryCheckRunningProvider), isFalse);
     expect(tester.widget<OutlinedButton>(checkAll()).onPressed, isNotNull);
-    expect(sortOutLink(), findsOneWidget);
   });
 }

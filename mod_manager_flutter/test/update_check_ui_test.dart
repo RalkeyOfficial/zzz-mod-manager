@@ -16,6 +16,7 @@ import 'package:mod_manager_flutter/screens/components/mods_toolbar.dart';
 import 'package:mod_manager_flutter/screens/components/zenith_controls.dart';
 import 'package:mod_manager_flutter/screens/dialogs/bulk_resolution_dialog.dart';
 import 'package:mod_manager_flutter/screens/dialogs/mod_update_dialog.dart';
+import 'package:mod_manager_flutter/screens/updates/updates_page.dart';
 import 'package:mod_manager_flutter/services/bulk_update_check.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_client.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_endpoints.dart';
@@ -66,7 +67,8 @@ void main() {
     /// The character view's toolbar above the All mods page, so a test can start a check from the page and read
     /// the grid's filters. [selected] is the character on screen; the first with a mod otherwise. [search] narrows
     /// the All mods table; [toolbarOnly] leaves the page out, and [tableOnly] the toolbar, as the table replaces the
-    /// character view in the app.
+    /// character view in the app. [updatesPage] puts the Updates page where the table would be, for its doors to the
+    /// tracking screen.
     Future<void> pumpLibrary(
       WidgetTester tester,
       List<ModInfo> mods, {
@@ -76,6 +78,7 @@ void main() {
       List<String>? written,
       bool toolbarOnly = false,
       bool tableOnly = false,
+      bool updatesPage = false,
       Size surfaceSize = const Size(1400, 900),
     }) async {
       await tester.pumpWidget(const SizedBox());
@@ -102,7 +105,12 @@ void main() {
           child: Column(
             children: [
               if (!tableOnly) const ModsToolbar(),
-              if (!toolbarOnly) Expanded(child: allModsViewForTest(originWriter: originWriter)),
+              if (!toolbarOnly)
+                Expanded(
+                  child: updatesPage
+                      ? UpdatesPage(onOpenPage: (_) {}, onShowUpdate: (_) {}, originWriter: originWriter)
+                      : allModsViewForTest(originWriter: originWriter),
+                ),
             ],
           ),
         ),
@@ -110,7 +118,7 @@ void main() {
         surfaceSize: surfaceSize,
       );
       if (!tableOnly) expectBuilt(ModsToolbar);
-      if (!toolbarOnly) expectBuilt(AllModsView);
+      if (!toolbarOnly) expectBuilt(updatesPage ? UpdatesPage : AllModsView);
     }
 
     Finder checkAll() => find.widgetWithText(OutlinedButton, 'Check all for updates');
@@ -121,14 +129,11 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    /// Turns on the All mods page's Can't be checked filter and presses the Sort these out line under it.
+    /// Presses the Updates page's door to the tracking screen: Sort out tracking… when a mod isn't tracked, and Pick
+    /// the files one by one when every mod it can't check asks which file.
     Future<void> sortOut(WidgetTester tester) async {
-      await tester.tap(find.descendant(
-        of: find.byType(AllModsView),
-        matching: find.widgetWithText(ZenithChip, "Can't be checked"),
-      ));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Sort these out'));
+      final sortOutTracking = find.text('Sort out tracking…');
+      await tester.tap(sortOutTracking.evaluate().isNotEmpty ? sortOutTracking : find.text('Pick the files one by one'));
       await tester.pumpAndSettle();
     }
 
@@ -190,7 +195,7 @@ void main() {
         (tester) async {
       // A screen that appears only as a side effect of a check is gone once it
       // is cancelled or closed by accident. The records are session state, so
-      // reopening it from Sort these out costs no request at all.
+      // reopening it from the Updates page costs no request at all.
       var runs = 0;
       final fetch = ModRecordFetcherStub((ids) async {
         runs++;
@@ -208,6 +213,7 @@ void main() {
         tester,
         [mod('Ellen', origin: origin(modId: 1, installedAt: DateTime.utc(2026)))],
         fetch: fetch,
+        updatesPage: true,
       );
 
       await runCheck(tester);
@@ -251,6 +257,7 @@ void main() {
         selected: 'ellen',
         search: 'Ellen skin',
         fetch: fetch,
+        updatesPage: true,
       );
 
       // File 99 is gone from mod 2's list, so Rina — on the *other* tab and
@@ -285,6 +292,7 @@ void main() {
         tester,
         [mod('Ellen', origin: origin(modId: 1, installedAt: DateTime.utc(2026)))],
         fetch: fetch,
+        updatesPage: true,
       );
 
       await sortOut(tester);
@@ -292,10 +300,10 @@ void main() {
       expect(find.byType(BulkResolutionDialog), findsOneWidget);
     });
 
-    testWidgets('Sort these out lists untracked mods when no page was ever fetched',
+    testWidgets('Sort out tracking lists untracked mods when no page was ever fetched',
         (tester) async {
       // Nothing is tracked, so there is nothing to check and no record to wait for; the untracked rows need none.
-      await pumpLibrary(tester, [mod('handmade'), mod('my own thing')]);
+      await pumpLibrary(tester, [mod('handmade'), mod('my own thing')], updatesPage: true);
 
       await sortOut(tester);
       expect(find.byType(BulkResolutionDialog), findsOneWidget);
@@ -314,7 +322,7 @@ void main() {
 
     testWidgets('a check does not open the screen for untracked mods alone',
         (tester) async {
-      // Mods that stay untracked would otherwise raise a modal after every check; Sort these out still reaches them.
+      // Mods that stay untracked would otherwise raise a modal after every check; Sort out tracking still reaches them.
       final fetch = ModRecordFetcherStub((ids) async => [record(1)]);
       await pumpLibrary(
         tester,
@@ -323,6 +331,7 @@ void main() {
           mod('handmade'),
         ],
         fetch: fetch,
+        updatesPage: true,
       );
 
       await runCheck(tester);
@@ -335,7 +344,7 @@ void main() {
           findsOneWidget);
     });
 
-    testWidgets('Sort these out checks first, then lists the untracked mods',
+    testWidgets('Sort out tracking checks first, then lists the untracked mods',
         (tester) async {
       // Nothing in hand and a tracked mod to look up, so it runs the check; with no question rows that check alone would end in a notification.
       var runs = 0;
@@ -350,6 +359,7 @@ void main() {
           mod('handmade'),
         ],
         fetch: fetch,
+        updatesPage: true,
       );
       await sortOut(tester);
 
