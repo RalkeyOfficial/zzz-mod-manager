@@ -3,11 +3,9 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
-import 'package:mod_manager_flutter/screens/components/library_actions_host.dart';
 import 'package:mod_manager_flutter/screens/components/mods_toolbar.dart';
 import 'package:mod_manager_flutter/screens/components/notification_overlay.dart';
 import 'package:mod_manager_flutter/screens/components/zenith_switch.dart';
-import 'package:mod_manager_flutter/services/origin_write.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
 import 'support/library_override.dart';
@@ -25,21 +23,15 @@ void main() {
     ]);
     addTearDown(container.dispose);
     container.read(selectedCharacterIdProvider.notifier).state = 'ellen';
-    container.read(trackingNudgeDismissedProvider.notifier).state = true;
     writes = [];
 
     await pumpLocalized(
       tester,
-      LibraryActionsHost(
-        updateFetcher: (_) async => throw StateError('no fetch expected'),
-        updatesFetcher: (_) async => throw StateError('no fetch expected'),
-        child: ModsToolbar(
-          originWriter: (_, _) async => OriginWriteResult.writeFailed,
-          oneAtATimeWriter: (groupId, on) {
-            writes.add((groupId, on));
-            return result();
-          },
-        ),
+      ModsToolbar(
+        oneAtATimeWriter: (groupId, on) {
+          writes.add((groupId, on));
+          return result();
+        },
       ),
       container: container,
     );

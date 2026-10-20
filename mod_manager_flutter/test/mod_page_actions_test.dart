@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,6 +15,7 @@ import 'package:mod_manager_flutter/utils/state_providers.dart';
 import 'support/library_override.dart';
 import 'support/localized_harness.dart';
 import 'support/origin_shorthand.dart';
+import 'support/recording_service.dart';
 import 'support/temp_library.dart';
 
 /// What the History tab of a mod's page writes, against a real library in a temp directory: the snapshot list read
@@ -79,6 +83,23 @@ void main() {
     expect(container.read(modWritesInProgressProvider), isEmpty);
   });
 
+  test('a mod stays marked as being written until its last write ends', () async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final first = Completer<void>();
+    final second = Completer<void>();
+    final firstWrite = whileWritingMod(container, modName, () => first.future);
+    final secondWrite = whileWritingMod(container, modName, () => second.future);
+
+    first.complete();
+    await firstWrite;
+    expect(container.read(modWritesInProgressProvider), {modName}, reason: 'the second write is still running');
+
+    second.complete();
+    await secondWrite;
+    expect(container.read(modWritesInProgressProvider), isEmpty);
+  });
+
   testWidgets('a restore asks, puts the old files back and says it did', (tester) async {
     late ModSnapshot snapshot;
     await tester.runAsync(() async {
@@ -116,5 +137,73 @@ void main() {
     expect(temp.read(modName, 'mod.ini'), 'old');
     expect(temp.has(modName, 'added later.dds'), isFalse);
     expect(find.text('Previous version restored'), findsOneWidget);
+  });
+
+  testWidgets('a restore that fails still reads the library again', (tester) async {
+    // It may have changed the folder before it failed.
+    late ModSnapshot snapshot;
+    await tester.runAsync(() async {
+      temp.write(modName, 'mod.ini', 'old');
+      snapshot = await snapshotNow();
+      // Its files gone, its folder kept, so the safety copy the restore takes first gets an id of its own.
+      Directory('${snapshot.directory.path}/files').deleteSync(recursive: true);
+    });
+    final container = ProviderContainer(overrides: [libraryOf([mod()]), ...temp.overrides]);
+    addTearDown(container.dispose);
+    bool? restored;
+    await pumpLocalized(
+      tester,
+      Builder(
+        builder: (context) => ElevatedButton(
+          onPressed: () async => restored = await restoreSnapshotFlow(context, mod: mod(), snapshot: snapshot),
+          child: const Text('restore'),
+        ),
+      ),
+      container: container,
+    );
+    final scans = container.read(libraryScansProvider);
+
+    await tapWithIo(tester, find.text('restore'));
+    await tester.pumpAndSettle();
+    await tapWithIo(tester, find.widgetWithText(FilledButton, 'Restore'));
+    for (var i = 0; i < 40 && restored == null; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump();
+    }
+
+    expect(restored, isFalse);
+    expect(container.read(libraryScansProvider), scans + 1);
+  });
+
+  testWidgets("a restore drops the mod's keys, whether or not it landed", (tester) async {
+    // A restore puts back old modification times, which the keys' stamp can't tell from what was there.
+    late ModSnapshot snapshot;
+    await tester.runAsync(() async {
+      temp.write(modName, 'mod.ini', 'old');
+      snapshot = await snapshotNow();
+      Directory('${snapshot.directory.path}/files').deleteSync(recursive: true);
+    });
+    final service = RecordingService(temp);
+    bool? restored;
+    await pumpLocalized(
+      tester,
+      Builder(
+        builder: (context) => ElevatedButton(
+          onPressed: () async => restored = await restoreSnapshotFlow(context, mod: mod(), snapshot: snapshot),
+          child: const Text('restore'),
+        ),
+      ),
+      overrides: [libraryOf([mod()]), ...service.overrides],
+    );
+
+    await tapWithIo(tester, find.text('restore'));
+    await tapWithIo(tester, find.widgetWithText(FilledButton, 'Restore'));
+    for (var i = 0; i < 40 && restored == null; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump();
+    }
+
+    expect(restored, isFalse);
+    expect(service.keysDropped, [modName]);
   });
 }

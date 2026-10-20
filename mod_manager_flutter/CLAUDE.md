@@ -10,7 +10,7 @@ This file is rules and pointers only. Every subject below has a doc in [`../docs
 | [`gamebanana-api.md`](../docs/gamebanana-api.md) | GameBanana's remote protocol. Read before writing any request — the surface is undocumented upstream, so guessing costs more than looking |
 | [`downloads.md`](../docs/downloads.md) | Fetching archives — the isolate pump, resume, backpressure, the stall timeout, the background queue |
 | [`marketplace.md`](../docs/marketplace.md) | The native browser screens — grid, detail view, what an install does |
-| [`library-screen.md`](../docs/library-screen.md) | The Library's character view — character list, card, status badge, bulk actions, One at a time, notes, details panel, a mod's page and its History tab, its dialogs |
+| [`library-screen.md`](../docs/library-screen.md) | The Library's character view and All mods table — character list, card, status badge, the table and its bulk actions, One at a time, notes, details panel, a mod's page and its History tab, its dialogs |
 | [`notifications.md`](../docs/notifications.md) | What the app tells the user — whether to speak at all, the two levels, the card |
 | [`metadata-schema.md`](../docs/metadata-schema.md) | The sidecar file format |
 | [`migrations.md`](../docs/migrations.md) | Reading data an older version wrote — every migration and tolerance; there is no `migrations/` folder and it says why |
@@ -30,7 +30,8 @@ This file is rules and pointers only. Every subject below has a doc in [`../docs
 ## How mods work
 
 Two configured paths drive everything: `modsPath` (where mod folders live — the library) and `saveModsPath` (the game's mods folder, where links go, worked out from the configured ZZMI folder `zzmiPath`).
-Activating a mod creates a link `saveModsPath/<mod>` → `modsPath/<mod>`; deactivating removes it. A link whose source is gone is never removed by the app: the folder may be on an unmounted drive, and the mod is active again once it returns.
+Activating a mod creates a link `saveModsPath/<mod>` → `modsPath/<mod>`; deactivating removes it. A mod is on only while the link of its name points at its own folder: any other link of that name reads off, is replaced when the mod is turned on (and left as it was when the new link can't be made), and is never removed by turning it off.
+The app never removes a dead link on its own: the folder may be on an unmounted drive, and the mod is active again once it returns. Such a link changes only when the user turns on a mod of that name, when a mod that is on is renamed to that name while the link is dead (a working link of that name refuses the rename), or when it follows a library change to a library that has that mod ([`configuration.md`](../docs/configuration.md#changing-the-mod-library)).
 
 One at a time is per character (`oneAtATimeProvider`, `isOneAtATime`): with it on, turning a mod on turns the character's other mods off. Every enable from the library goes through `ApiService.enableMod`, dry run first ([`library-screen.md`](../docs/library-screen.md) §10).
 
@@ -117,7 +118,7 @@ A flow that outlives its widget reads it through the app's `ProviderContainer`, 
 
 The library is `libraryProvider` and belongs to no screen. It owns the scan; `modsProvider` is its plain-list view, `installedModsIndexProvider` derives from it, and so does the Library's character list (`libraryGroupCountsProvider`, `currentCharacterSkinsProvider`).
 So: whoever changes a mod folder invalidates `libraryProvider`, never only something derived from it — invalidating the index alone rebuilds it from the same cached scan.
-One walk of the folder at a time: a `rescan()` during a running scan takes that answer, and a scan never overwrites an edit published while it was walking.
+One walk of the folder at a time: a `rescan()` during a running scan waits for it and then walks once more, since the running one may predate the caller's change. A scan never overwrites an edit (`put`) or an invalidate that came in while it was walking; it walks again instead, until a walk ends with nothing come in. The read an invalidate starts does the same, rather than keeping the edit's list.
 The sidebar's pages (`AppDestination`) are keyed `AnimatedSwitcher` children with no keep-alive, so the inactive page's `State` is disposed and nothing a page owns may be the only copy of something another surface needs.
 A provider in the root container is not disposed with it, which is how the Storage tab's scan survives a tab switch without a host widget.
 A question asked mid-install reads the disk instead — nothing has invalidated anything yet (`test/modal_freshness_test.dart`).

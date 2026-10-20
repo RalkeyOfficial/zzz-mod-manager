@@ -73,8 +73,8 @@ LaunchCheckAction launchCheckAction({
 ///   offline launch, is what gets a feature switched off.
 ///
 /// A pass that found updates *and* failed on some mods reports the updates. The
-/// finding is the actionable half, and the toolbar is one click away for
-/// anything else.
+/// finding is the actionable half, and Check all for updates is one click away
+/// for anything else.
 int? launchCheckFindings(BulkUpdateCheckOutcome outcome) {
   final found = outcome.updatesFound;
   return found > 0 ? found : null;

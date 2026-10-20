@@ -429,7 +429,8 @@ UpdateCheck? verdictWithoutAsking(ModOrigin? origin) {
 /// [companionRemotes] and [companionReleases] are keyed by remote mod id and
 /// supply the records for the folder's *other* downloads. **A caller that omits
 /// one for a companion the block names gets [UpdateOutcome.indeterminate]**,
-/// never a clean bill — see [foldDownloads].
+/// never a clean bill — see [foldDownloads]. A download with no mod id names
+/// no page, needs no record, and is left out of the verdict.
 UpdateCheck checkForUpdate({
   required ModOrigin? origin,
   required GbMod remote,
@@ -447,8 +448,12 @@ UpdateCheck checkForUpdate({
   // fetched that page to get here; the rest arrive through the maps. Nothing
   // here privileges the bottom layer beyond that — it is judged by the same
   // function as everything above it.
+  //
+  // **A layer with no mod page is left out**, as a patch dragged in from a
+  // local folder is: there is nothing to ask about it, so the folder reads what
+  // its other layers say, as a Local mod is left out of the library's checks.
   final layers = <DownloadCheck>[
-    for (final download in origin!.downloads)
+    for (final download in origin!.trackable)
       DownloadCheck(
         download: download,
         check: _judgeLayer(
@@ -467,14 +472,13 @@ UpdateCheck checkForUpdate({
   return foldDownloads(layers);
 }
 
-/// One layer, judged. Every layer goes through here, including the bottom.
+/// One layer with a mod page, judged. Every such layer goes through here,
+/// including the bottom.
 ///
 /// **Never fetched is not "nothing new".** A null [remote] is silence, and
 /// silence is not evidence — the same rule this file applies to a response that
 /// carried no file list. Reporting clean because we only looked at part of the
-/// folder is precisely the false clean the whole feature exists to remove. A
-/// layer with no identity gets the same answer for the same reason: there is no
-/// page to ask.
+/// folder is precisely the false clean the whole feature exists to remove.
 ///
 /// [patchShaped] downgrades a clean bill on a folder whose base is missing —
 /// see the note at the call site.
@@ -484,7 +488,7 @@ UpdateCheck _judgeLayer({
   required ReleaseGroups releases,
   required bool patchShaped,
 }) {
-  if (remote == null || !download.hasIdentity) {
+  if (remote == null) {
     return const UpdateCheck(outcome: UpdateOutcome.indeterminate);
   }
   final judged = _judgeDownload(
@@ -509,7 +513,8 @@ UpdateCheck _judgeLayer({
 }
 
 /// Most actionable first. The fold reports the first outcome any identity
-/// reached, so `upToDate` is only claimed when every one of them agrees.
+/// reached, so `upToDate` is only claimed when every one of them agrees, an
+/// ignored finding counting as up to date.
 ///
 /// The order is the file's existing asymmetry applied across identities: a
 /// false "up to date" hides an update silently and the feature fails, while a
@@ -539,6 +544,11 @@ const List<UpdateOutcome> _foldOrder = <UpdateOutcome>[
 /// had none. A dismissal is a statement about one page's releases, so it
 /// disqualifies that layer from winning rather than the whole folder.
 ///
+/// **A dismissed finding counts as up to date** against the other layers: one
+/// that couldn't be checked, or whose page is gone, wins over it. It ranks just
+/// above a plain clean bill, so a folder with nothing else to say keeps the
+/// finding the user ignored as its subject.
+///
 /// **Every layer's verdict is kept** on the result, the winner included — the
 /// dialog reports on all of them, and nothing here is discarded.
 UpdateCheck foldDownloads(List<DownloadCheck> layers) {
@@ -550,16 +560,26 @@ UpdateCheck foldDownloads(List<DownloadCheck> layers) {
         .asSubject(layers.single.download.modId, layers);
   }
 
+  bool isFinding(UpdateOutcome outcome) =>
+      outcome == UpdateOutcome.updateAvailable || outcome == UpdateOutcome.possiblyOutdated;
+  final ranks = <bool Function(UpdateCheck)>[
+    for (final outcome in _foldOrder)
+      if (isFinding(outcome))
+        (check) => check.outcome == outcome && check.hasUpdate
+      else if (outcome == UpdateOutcome.upToDate) ...[
+        for (final ignored in _foldOrder.where(isFinding))
+          (check) => check.outcome == ignored && check.dismissed,
+        (check) => check.outcome == outcome,
+      ] else
+        (check) => check.outcome == outcome,
+  ];
+
   DownloadCheck? best;
-  for (final live in [true, false]) {
-    for (final outcome in _foldOrder) {
-      for (final candidate in layers) {
-        if (candidate.check.outcome != outcome) continue;
-        if (candidate.check.hasUpdate != live) continue;
-        best = candidate;
-        break;
-      }
-      if (best != null) break;
+  for (final rank in ranks) {
+    for (final candidate in layers) {
+      if (!rank(candidate.check)) continue;
+      best = candidate;
+      break;
     }
     if (best != null) break;
   }

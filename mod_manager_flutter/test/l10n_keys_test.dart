@@ -216,7 +216,7 @@ void main() {
       'library.details.active_title',
       'library.details.off_title',
       'library.card.dated',
-      'library.card.guessed_tooltip',
+      'mods.origin.version_guessed_tooltip',
     ]) {
       expect(found, contains(key));
       expect(referenced, isNot(contains(key)), reason: 'the call-site regex alone cannot see $key');

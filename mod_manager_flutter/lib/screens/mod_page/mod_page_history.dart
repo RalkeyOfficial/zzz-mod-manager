@@ -231,9 +231,9 @@ class _CurrentRow extends ConsumerWidget {
     final palette = ZenithPalette.of(context);
     final origin = mod.origin;
     final base = origin?.base;
-    final confirmed = base?.versionConfidence.isConfirmed ?? false;
+    final named = base?.versionConfidence.namesFile ?? false;
     final (page: _, file: recorded) = installedRecord(mod, records);
-    final file = confirmed ? recorded : null;
+    final file = named ? recorded : null;
     final size = ref.watch(modSizeProvider(mod.id)).valueOrNull;
     final facts = [
       loc.t('library.history.current'),
@@ -275,8 +275,8 @@ class _SnapshotRow extends StatelessWidget {
     final loc = context.loc;
     final snapshot = entry.snapshot;
     final base = entry.origin?.base;
-    final confirmed = base?.versionConfidence.isConfirmed ?? false;
-    final file = confirmed && base != null ? downloadRecord(base, records).file : null;
+    final named = base?.versionConfidence.namesFile ?? false;
+    final file = named && base != null ? downloadRecord(base, records).file : null;
     final time = formatSnapshotTime(snapshot.takenAt);
     final facts = [
       loc.t('library.history.snapshot'),
@@ -363,7 +363,7 @@ class _PatchRow extends StatelessWidget {
     final palette = ZenithPalette.of(context);
     final text = Theme.of(context).textTheme;
     final (:page, file: recorded) = downloadRecord(patch, records);
-    final file = patch.versionConfidence.isConfirmed ? recorded : null;
+    final file = patch.versionConfidence.namesFile ? recorded : null;
     final added = patch.files.where((f) => f.role == InstalledFileRole.added).length;
     final replaced = patch.files.length - added;
     final tracked = patch.hasIdentity && mod.origin?.tracking != OriginTracking.off;

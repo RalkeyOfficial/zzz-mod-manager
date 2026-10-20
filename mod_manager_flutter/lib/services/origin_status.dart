@@ -28,14 +28,15 @@ enum ModOriginStatus {
   /// Identity known and a version *recorded*, but only as a guess — the user
   /// answered "I don't know which file, I got it around then" (`assumed_latest`,
   /// shown as "Dated only"), or the bulk resolution pass worked a file out
-  /// (`inferred`, shown as "Guessed file").
+  /// (`inferred`), which the user accepted there and the UI names like a known
+  /// file, with no badge.
   ///
   /// **Informational, like [untracked], and grey like it.** Nothing is
   /// wrong here and nothing is owed: settling for a date is a legitimate answer,
   /// and the bulk action exists to make it the answer for a whole library at
-  /// once. What the user loses without this state is the ability to tell a mod
-  /// they *resolved* from one they *waved through*, since both otherwise render
-  /// nothing at all.
+  /// once. The state is what keeps a worked-out file's update verdicts at
+  /// "possibly outdated", and what lets "Dated only" say a mod was dated
+  /// rather than resolved.
   versionGuessed,
 
   /// Identity known, installed version unknown. The actionable one: we *can*
@@ -84,10 +85,9 @@ enum ModOriginStatus {
 ///   already answered "I don't know which, I got it around then", and
 ///   `inferred` is a guess we recorded and label as one. Both are resolved
 ///   states; asking about them again would mean the dialog can never be
-///   finished. They are not *silent*, though — see
-///   [ModOriginStatus.versionGuessed]: rendered like a known file, they would
-///   leave the user unable to tell which of their mods they had actually sorted
-///   out. So they get a quieter state, not a louder one.
+///   finished. [ModOriginStatus.versionGuessed] keeps them apart from a known
+///   file for the update check; on screen only `assumed_latest` has a badge,
+///   "Dated only", since the user accepted an `inferred` file.
 ModOriginStatus modOriginStatus(ModOrigin? origin) {
   if (origin == null) return ModOriginStatus.untracked;
   if (origin.tracking == OriginTracking.off) return ModOriginStatus.none;
@@ -118,8 +118,8 @@ ModOriginStatus modOriginStatus(ModOrigin? origin) {
   return switch (base.versionConfidence) {
     OriginConfidence.unknown => ModOriginStatus.versionUnknown,
     // A recorded guess: a date with no file, or a file the bulk resolution
-    // pass worked out. A guess that renders as fully known is precisely the gap
-    // this state exists to close.
+    // pass worked out. Kept apart from `none` so the update check can cap what
+    // it says about either.
     OriginConfidence.assumedLatest ||
     OriginConfidence.inferred =>
       ModOriginStatus.versionGuessed,

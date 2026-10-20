@@ -81,10 +81,29 @@ class ShaderEntry {
 /// The path ignores case because ZZMI runs on Windows, or under Wine, where
 /// `ABC-ps_replace.txt` and `abc-ps_replace.txt` are one file.
 class ShaderFixesRecord {
-  ShaderFixesRecord([Iterable<ShaderEntry> entries = const []])
-      : _byKey = {for (final entry in entries) _keyFor(entry.folder, entry.path): entry};
+  ShaderFixesRecord([Iterable<ShaderEntry> entries = const [], Map<String, String> sources = const {}])
+      : _byKey = {for (final entry in entries) _keyFor(entry.folder, entry.path): entry},
+        _sources = sources;
 
   final Map<String, ShaderEntry> _byKey;
+
+  /// Each holder's uid to the mod folder its files were last placed from, so a copy whose folder can't be read,
+  /// such as one on an unplugged drive, is still known by the path a link names. A record written without them
+  /// has none, and nothing guesses them.
+  final Map<String, String> _sources;
+
+  /// The folder [uid]'s files were last placed from, if recorded.
+  String? sourceOf(String uid) => _sources[uid];
+
+  /// Every holder with a recorded folder that still holds a file.
+  Map<String, String> get sources => {
+        for (final source in _sources.entries)
+          if (heldBy(source.key).isNotEmpty) source.key: source.value,
+      };
+
+  /// This record with [uid]'s files recorded as placed from [folder].
+  ShaderFixesRecord withSource(String uid, String folder) =>
+      ShaderFixesRecord(_byKey.values, {..._sources, uid: folder});
 
   /// A path as compared: `/`-separated and lower-case.
   static String keyOf(String relative) => relative.replaceAll(r'\', '/').toLowerCase();
@@ -110,12 +129,13 @@ class ShaderFixesRecord {
     for (final entry in added) {
       next[_keyFor(entry.folder, entry.path)] = entry;
     }
-    return ShaderFixesRecord(next.values);
+    return ShaderFixesRecord(next.values, _sources);
   }
 
   Map<String, dynamic> toJson() => {
         'version': 1,
         'files': [for (final entry in _byKey.values) entry.toJson()],
+        'sources': sources,
       };
 
   /// Reads what [toJson] wrote. Anything unreadable reads as empty rather than
@@ -124,10 +144,18 @@ class ShaderFixesRecord {
   /// is adopted as [ShaderEntry.external] and left in place.
   static ShaderFixesRecord fromJson(Object? json) {
     if (json is! Map || json['files'] is! List) return ShaderFixesRecord();
-    return ShaderFixesRecord([
-      for (final entry in json['files'] as List)
-        if (ShaderEntry.fromJson(entry) case final parsed?) parsed,
-    ]);
+    final sources = json['sources'];
+    return ShaderFixesRecord(
+      [
+        for (final entry in json['files'] as List)
+          if (ShaderEntry.fromJson(entry) case final parsed?) parsed,
+      ],
+      {
+        if (sources is Map)
+          for (final source in sources.entries)
+            if (source.key is String && source.value is String) source.key as String: source.value as String,
+      },
+    );
   }
 }
 
@@ -143,9 +171,15 @@ class ShaderSource {
 /// A target that holds different bytes, and whose they are: a mod's name, or
 /// null for a file no mod the app knows placed.
 class ShaderConflict {
-  const ShaderConflict(this.path, this.owner);
+  const ShaderConflict(this.path, this.owner, {this.ownerUid, this.link = false});
   final String path;
   final String? owner;
+
+  /// The identity of [owner], which tells two copies of one mod apart.
+  final String? ownerUid;
+
+  /// The target, or a folder on its way, is a link, which the app never writes through. [owner] is null.
+  final bool link;
 }
 
 sealed class ShaderPlacementPlan {
@@ -189,6 +223,10 @@ class ShaderRefusedPlan extends ShaderPlacementPlan {
 /// One holding different bytes is overwritten only when it is this mod's own
 /// earlier version, untouched since. All or nothing: any other target refuses the
 /// whole enable, since half a shader fix is a broken one.
+///
+/// [links] are the keys whose target, or a folder on the way to it, is a link,
+/// live or dangling: each is a conflict with no owner, since a copy would write
+/// through it into a file the app did not place.
 ShaderPlacementPlan planShaderPlacement({
   required String uid,
   required String mod,
@@ -196,6 +234,7 @@ ShaderPlacementPlan planShaderPlacement({
   required List<ShaderSource> sources,
   required Map<String, String?> onDisk,
   required ShaderFixesRecord record,
+  Set<String> links = const {},
 }) {
   final conflicts = <ShaderConflict>[];
   final copy = <ShaderCopy>[];
@@ -203,6 +242,10 @@ ShaderPlacementPlan planShaderPlacement({
   var adopted = 0;
   for (final source in sources) {
     final key = ShaderFixesRecord.keyOf(source.path);
+    if (links.contains(key)) {
+      conflicts.add(ShaderConflict(source.path, null, link: true));
+      continue;
+    }
     final entry = record.at(folder, source.path);
     if (!onDisk.containsKey(key)) {
       final stillNeeded = entry != null && entry.md5 == source.md5 ? entry.holders : const <String, String>{};
@@ -244,8 +287,8 @@ ShaderPlacementPlan planShaderPlacement({
       ));
       continue;
     }
-    final owner = entry?.holders.entries.where((holder) => holder.key != uid).firstOrNull?.value;
-    conflicts.add(ShaderConflict(source.path, owner));
+    final owner = entry?.holders.entries.where((holder) => holder.key != uid).firstOrNull;
+    conflicts.add(ShaderConflict(source.path, owner?.value, ownerUid: owner?.key));
   }
   if (conflicts.isNotEmpty) return ShaderRefusedPlan(conflicts);
   return ShaderCopyPlan(copy: copy, held: held, adopted: adopted);
@@ -303,13 +346,17 @@ final RegExp _shaderSource = RegExp(r'^((?:.*/)?[0-9a-f]{16}-(vs|ps|cs|gs|hs|ds)
 /// someone else holds it: ZZMI writes that cache itself when `cache_shaders` is on,
 /// and it loads a `.bin` with no `.txt` beside it, so leaving one keeps the shader
 /// applied after the mod is off.
+///
+/// With [only], just the holds it accepts are let go of, and a `.bin` the mod
+/// holds outside them stays.
 ShaderRemovalPlan planShaderRemoval({
   required String uid,
   required String folder,
   required ShaderFixesRecord record,
   required Map<String, String?> onDisk,
+  bool Function(ShaderEntry entry)? only,
 }) {
-  final held = record.heldBy(uid).where((entry) => entry.folder == folder).toList();
+  final held = record.heldBy(uid).where((entry) => entry.folder == folder && (only == null || only(entry))).toList();
   final delete = <String>[];
   final changed = <String>[];
   final update = <ShaderEntry>[];
@@ -350,6 +397,7 @@ ShaderRemovalPlan planShaderRemoval({
     if (bin == null || !onDisk.containsKey(bin) || delete.contains(bin)) continue;
     final entry = record.at(folder, bin);
     if (entry != null && (entry.external || entry.holders.keys.any((holder) => holder != uid))) continue;
+    if (entry != null && only != null && !only(entry)) continue;
     delete.add(bin);
     if (changed.remove(bin)) {
       forget.remove(entry);

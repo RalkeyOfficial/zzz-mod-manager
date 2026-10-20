@@ -67,7 +67,7 @@ void main() {
       expect(container.read(openModPageProvider), isNull, reason: 'pressed on the Library, it goes back');
     });
 
-    testWidgets("Updates gives a mod's page way to the characters with an update", (tester) async {
+    testWidgets("Updates gives a mod's page way to the mods with an update", (tester) async {
       final container = containerWith();
       container.read(openModPageProvider.notifier).state = const ModPageRequest('a');
       container.read(destinationProvider.notifier).state = AppDestination.settings;
@@ -101,7 +101,8 @@ void main() {
       expect(find.text('${zzzCharactersData.length}'), findsOneWidget);
     });
 
-    testWidgets('Updates filters the list and the grid, and picks a character with an update', (tester) async {
+    testWidgets('Updates opens All mods kept to mods with an update, and leaves the character view alone',
+        (tester) async {
       final container = containerWith();
       container.read(selectedCharacterIdProvider.notifier).state = 'cat_ui';
       container.read(characterPickedByUserProvider.notifier).state = true;
@@ -109,39 +110,72 @@ void main() {
       container.read(modUpdateChecksProvider.notifier).state = {
         'b': const UpdateCheck(outcome: UpdateOutcome.updateAvailable),
       };
+      // Left from earlier, and would hide mods the row's count covers.
+      container.read(allModsSearchProvider.notifier).state = 'ellen';
+      container.read(allModsCollapsedProvider.notifier).state = {'ellen'};
       await pumpSidebar(tester, container);
 
       await tester.tap(find.text('Updates'));
       await tester.pump();
 
-      expect(container.read(destinationProvider), AppDestination.characters);
-      expect(container.read(selectedCharacterIdProvider), 'ellen');
-      expect(container.read(characterPickedByUserProvider), isFalse,
-          reason: "the app's pick, so a drop there is not filed under it");
-      expect(container.read(characterListFilterProvider), CharacterListFilter.updates);
-      expect(container.read(modGridFilterProvider), ModGridFilter.updates);
-
-      // Characters is a way back out of that filter.
-      await tester.tap(find.text('Characters'));
-      await tester.pump();
-      expect(container.read(characterListFilterProvider), CharacterListFilter.all);
-      expect(container.read(modGridFilterProvider), ModGridFilter.all);
-    });
-
-    testWidgets('Updates keeps the character on screen when it has an update of its own', (tester) async {
-      final container = containerWith();
-      container.read(selectedCharacterIdProvider.notifier).state = 'cat_ui';
-      container.read(characterPickedByUserProvider.notifier).state = true;
-      container.read(modUpdateChecksProvider.notifier).state = {
-        'b': const UpdateCheck(outcome: UpdateOutcome.updateAvailable),
-        'c': const UpdateCheck(outcome: UpdateOutcome.updateAvailable),
-      };
-      await pumpSidebar(tester, container);
-
-      await tester.tap(find.text('Updates'));
-      await tester.pump();
+      expect(container.read(destinationProvider), AppDestination.allMods);
+      expect(container.read(allModsFilterProvider), AllModsFilter.updates);
+      expect(container.read(allModsSearchProvider), '');
+      expect(container.read(allModsCollapsedProvider), isEmpty);
       expect(container.read(selectedCharacterIdProvider), 'cat_ui');
       expect(container.read(characterPickedByUserProvider), isTrue, reason: 'still the row the user clicked');
+      expect(container.read(characterListFilterProvider), CharacterListFilter.all);
+      expect(container.read(modGridFilterProvider), ModGridFilter.all);
+
+      // All mods is a way back out of that filter.
+      await tester.tap(find.text('All mods'));
+      await tester.pump();
+      expect(container.read(destinationProvider), AppDestination.allMods);
+      expect(container.read(allModsFilterProvider), AllModsFilter.all);
+    });
+
+    testWidgets('one Library row is selected: Characters, All mods, or Updates while its filter is on',
+        (tester) async {
+      final container = containerWith();
+      await pumpSidebar(tester, container);
+      List<String> selected() => [
+            for (final item in tester.widgetList<SidebarNavItem>(find.byType(SidebarNavItem)))
+              if (item.selected) item.label,
+          ];
+      expect(selected(), ['Characters']);
+
+      await tester.tap(find.text('Updates'));
+      await tester.pump();
+      expect(selected(), ['Updates']);
+
+      // Another filter turned on in the table is no longer the Updates view.
+      container.read(allModsFilterProvider.notifier).state = AllModsFilter.favorites;
+      await tester.pump();
+      expect(selected(), ['All mods']);
+
+      await tester.tap(find.text('Characters'));
+      await tester.pump();
+      expect(selected(), ['Characters']);
+    });
+
+    testWidgets('All mods counts the mods in the library', (tester) async {
+      await pumpSidebar(tester, containerWith());
+      expect(
+        tester.widget<SidebarNavItem>(find.widgetWithText(SidebarNavItem, 'All mods')).count,
+        mods.length,
+      );
+    });
+
+    testWidgets("All mods closes a mod's page when pressed on the Library", (tester) async {
+      final container = containerWith();
+      container.read(openModPageProvider.notifier).state = const ModPageRequest('a');
+      container.read(destinationProvider.notifier).state = AppDestination.characters;
+      await pumpSidebar(tester, container);
+
+      await tester.tap(find.text('All mods'));
+      await tester.pump();
+      expect(container.read(destinationProvider), AppDestination.allMods);
+      expect(container.read(openModPageProvider), isNull);
     });
 
     testWidgets('Browse and Settings switch the page', (tester) async {

@@ -144,7 +144,7 @@ second one here fails twice over:
 - **The badge would be blank most of the time, and blank reads as "no update".**
   Rendering it needs no request at all — `modUpdateChecksProvider` is keyed by folder and `InstalledModsIndex.installsOfMod` turns a remote mod id into folders, so a card showing an installed mod is showing one a library-wide check already covered.
   But that map is **session state that is never persisted** (see [`library-screen.md`](library-screen.md) §8) and the launch check is **off by default** ([`update-checks.md`](update-checks.md) §5.1), so on a normal launch it is empty.
-  An indicator that is usually absent teaches the user that absence means *no update*, when it means *nobody checked*. The library gets away with the same emptiness because the menu that fills it is on its own page.
+  An indicator that is usually absent teaches the user that absence means *no update*, when it means *nobody checked*. The library gets away with the same emptiness because the button that fills it, Check all for updates, is on its own page, All mods.
 - **The action behind it does not exist here, and cannot cheaply.** This screen's
   Download enqueues an install, and `ModManagerService.importMods` skips a folder
   that already exists — so pressing it on a mod you own downloads a whole archive

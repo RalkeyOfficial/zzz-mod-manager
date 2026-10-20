@@ -446,7 +446,9 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     }
   }
 
-  /// The folder's downloads, each paired with **its own** verdict and name.
+  /// The folder's downloads that have a mod page, each paired with **its own**
+  /// verdict and name. A download with no page, such as a patch from a local
+  /// folder, has no verdict and no section, as the check leaves it out.
   ///
   /// One entry for an ordinary mod, several for a folder holding a patch as
   /// well as the mod it patches. **Order and roles are the stack's**, which is
@@ -457,7 +459,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// nothing: a stack has no privileged entry whose answer could be the one left
   /// out.
   List<_Section> _sections(UpdateCheck folded) {
-    final downloads = widget.mod.origin?.downloads ?? const <ModDownload>[];
+    final downloads = widget.mod.origin?.trackable ?? const <ModDownload>[];
     if (downloads.isEmpty) return const <_Section>[];
 
     final byMod = <int, UpdateCheck>{

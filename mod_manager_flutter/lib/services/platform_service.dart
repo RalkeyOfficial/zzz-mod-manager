@@ -1,9 +1,17 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
+
 import '../utils/detached_starter.dart';
 import '../utils/process_probe.dart';
+import 'log/logger.dart';
 import 'log/system_report.dart';
 import 'wine_runners.dart';
 
 export 'wine_runners.dart' show WineRunner, WineRunnerKind, WineRunnerSource;
+
+final Logger _log = Logger('platform');
 
 /// What happened when the app tried to start the game.
 enum LaunchOutcome {
@@ -59,6 +67,102 @@ class LaunchRequest {
   final bool useUmu;
 }
 
+/// A link in ZZMI's mods folder whose target folder is missing.
+@immutable
+class DeadModLink {
+  const DeadModLink({required this.name, this.target});
+
+  /// The link's own name, which is the mod folder's name.
+  final String name;
+
+  /// Where it points, or null when that can't be read.
+  final String? target;
+
+  @override
+  bool operator ==(Object other) => other is DeadModLink && other.name == name && other.target == target;
+
+  @override
+  int get hashCode => Object.hash(name, target);
+}
+
+/// A link to [target], a folder on a network share or drive, refused because only a symlink can lead there and this
+/// system refused one: on Windows, one without Developer Mode, where the app's fallback, a junction, leads only to a
+/// local folder. Nothing was left at [link] that was not there before.
+class NetworkLinkRefused implements Exception {
+  const NetworkLinkRefused(this.link, this.target);
+  final String link;
+  final String target;
+
+  @override
+  String toString() => 'a link to a network folder needs a symlink, and one was refused: $link -> $target';
+}
+
+/// What every temporary name a link replace uses in ZZMI's Mods folder starts with. `DISABLED` because ZZMI's
+/// `exclude_recursive = DISABLED*` then never loads one a replace left behind; the rest because no mod is named so.
+const String temporaryLinkPrefix = 'DISABLED.zzz-mod-manager.';
+
+/// The temporary name the new link for [name] is made under before it takes [name]'s place.
+String replacementLinkName(String name) => '${temporaryLinkPrefix}relink.$name';
+
+/// The temporary name the old link of [name] is moved aside to while the new one takes its place (Windows).
+String asideLinkName(String name) => '${temporaryLinkPrefix}relink-old.$name';
+
+/// Whether [name], an entry of ZZMI's Mods folder, is one of the temporary names above, which no reader of that
+/// folder takes for a mod.
+bool isTemporaryLinkName(String name) =>
+    name.startsWith('${temporaryLinkPrefix}relink.') || name.startsWith('${temporaryLinkPrefix}relink-old.');
+
+/// [raw], a link's target as stored, as an absolute normalised path in [context]'s style: a relative target is
+/// resolved against [linkFolder], and a Windows `\??\` or `\\?\` prefix is stripped, with `UNC\` after it read as
+/// the `\\` of a network path.
+String normaliseLinkTarget(String raw, String linkFolder, {p.Context? context}) {
+  final paths = context ?? p.context;
+  var target = raw;
+  if (paths.style == p.Style.windows && (target.startsWith(r'\??\') || target.startsWith(r'\\?\'))) {
+    target = target.substring(4);
+    if (target.toUpperCase().startsWith(r'UNC\')) target = '\\\\${target.substring(4)}';
+  }
+  return paths.normalize(paths.isAbsolute(target) ? target : paths.join(linkFolder, target));
+}
+
+/// Whether [a] and [b] name the same path once normalised in [context]'s style, ignoring case when [ignoreCase].
+bool pathsEqual(String a, String b, {bool ignoreCase = false, p.Context? context}) {
+  final paths = context ?? p.context;
+  final x = paths.normalize(a);
+  final y = paths.normalize(b);
+  return ignoreCase ? x.toLowerCase() == y.toLowerCase() : x == y;
+}
+
+/// Lists [linksFolder] and keeps the entries [isLinkEntry] calls links and whose target can't be found, each with
+/// its target as [readTarget] reads it. Shared by both platforms, which differ only in how a link shows up in a
+/// listing and how its target is read.
+Future<List<DeadModLink>> readDeadModLinks(
+  String linksFolder, {
+  required Future<bool> Function(FileSystemEntity entry) isLinkEntry,
+  required Future<String?> Function(String linkPath) readTarget,
+}) async {
+  final dead = <DeadModLink>[];
+  try {
+    await for (final entry in Directory(linksFolder).list(followLinks: false)) {
+      final name = p.basename(entry.path);
+      if (name.startsWith('.') || isTemporaryLinkName(name)) continue;
+      if (!await isLinkEntry(entry)) continue;
+      // Follows the link, so a link to a missing folder reads as not found.
+      if (await FileSystemEntity.type(entry.path) != FileSystemEntityType.notFound) continue;
+      dead.add(DeadModLink(name: name, target: await readTarget(entry.path)));
+    }
+  } on PathNotFoundException {
+    // No links folder yet: nothing is linked, so nothing is missing.
+    return const [];
+  } catch (e) {
+    // A folder that can't be read, such as one the user can't open, shows no rows, so the reason goes to the log.
+    _log.warning('could not list the links folder', error: e, fields: {'folder': linksFolder});
+    return const [];
+  }
+  dead.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  return dead;
+}
+
 /// Абстрактний клас для платформно-специфічних операцій
 ///
 /// **There is deliberately nothing here for reloading mods in the running
@@ -66,7 +170,9 @@ class LaunchRequest {
 /// [`docs/mod-reload.md`](../../../docs/mod-reload.md) for what was measured and
 /// why it loses. Press F10 in the game.
 abstract class PlatformService {
-  /// Створює symbolic link або його аналог (junction на Windows)
+  /// Makes the link at [linkPath] to [sourcePath], a symlink, or a junction on Windows where a symlink is refused.
+  /// A link already at [linkPath] is changed through [replaceModLink], so one that can't be made leaves it as it was.
+  /// Throws only [NetworkLinkRefused], so the user can be told why; any other failure is false.
   Future<bool> createModLink(String sourcePath, String linkPath);
   
   /// Видаляє symbolic link або його аналог
@@ -74,7 +180,25 @@ abstract class PlatformService {
   
   /// Перевіряє чи є шлях symbolic link
   Future<bool> isModLink(String linkPath);
-  
+
+  /// Where the link at [linkPath] points, as an absolute normalised path ([normaliseLinkTarget]), or null when it is
+  /// not a link or its target can't be read. Never throws.
+  Future<String?> readModLinkTarget(String linkPath);
+
+  /// Points the existing link at [linkPath] at [newTarget], logging the change on one line. False when it is not a
+  /// link or the change failed; a failed change leaves the link pointing where it did, unless putting it back failed
+  /// too, which is logged. Throws only [NetworkLinkRefused], after putting the old link back.
+  Future<bool> replaceModLink(String linkPath, String newTarget);
+
+  /// Whether [a] and [b] name the same path on this platform's filesystem ([pathsEqual]).
+  bool samePath(String a, String b);
+
+  /// The links directly in [linksFolder] whose target isn't there, such as a mod folder on an unplugged drive.
+  ///
+  /// Read only: such a link is never removed, since it works again the moment its folder is back
+  /// (`docs/library-screen.md` §16). Empty when the folder can't be listed. Never throws.
+  Future<List<DeadModLink>> listDeadModLinks(String linksFolder);
+
   /// Отримує шлях до директорії даних додатку
   String getAppDataPath();
   

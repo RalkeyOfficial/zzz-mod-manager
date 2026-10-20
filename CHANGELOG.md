@@ -35,13 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - It leaves your downloads alone while a transfer or install is running, and says so rather than doing it quietly.
 - Mods record where they came from, so they can be checked for updates.
   - Existing mods are linked back to their GameBanana page from the source URL they already carry.
-  - Mod cards show how well each mod is set up for update checking: "Which file?" or "Base unknown" in blue when there is something to sort out, "Dated only", "Guessed file" or "Not tracked" in grey, and "Local" for a mod you marked as your own. A Needs attention filter narrows a character's mods to the ones to sort out.
-  - A reminder above the mods says how many mods aren't set up for update checking, with a button to sort them out. Close it once and it stays away; a switch in Settings brings it back.
+  - Mod cards show how well each mod is set up for update checking: "Which file?" or "Base unknown" in blue when there is something to sort out, "Dated only" or "Not tracked" in grey, and "Local" for a mod you marked as your own. A Needs attention filter narrows a character's mods to the ones to sort out.
   - "Update tracking…" in a mod's right-click menu links it to its GameBanana page and records which file you have.
   - That dialog can settle for the install date instead, or stop asking if the mod isn't from GameBanana.
-  - "Mark all as current" settles the tracked mods with no known version among the character on screen's mods, using each mod's install date.
-  - "Sort out mod tracking…" turns a library check into one pass for confirming mod pages and filling in versions.
-- Mods can be checked for updates, one at a time or the whole library, and only when you press it. An amber "Newer file" badge shows what has something newer, or "Maybe newer" when that rests on a guess.
+  - "Mark N as current" in All mods settles the ticked mods that ask "Which file?", using the date each mod was added. It lists them first, each with a box to untick.
+  - After a library check, one screen confirms mod pages and fills in versions, and "Sort these out" under All mods' Can't be checked filter opens it again.
+- Mods can be checked for updates, one at a time, the ones ticked in All mods, or the whole library, and only when you press it. An amber "Newer file" badge shows what has something newer, or "Maybe newer" when that rests on a guess.
   - Update checks say whether they are sure or guessing.
   - The library check reports mods it couldn't reach separately from mods with nothing new.
   - Files an author published together count as one release, so another variant isn't read as an update.
@@ -55,7 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Every update saves a copy of the mod first, and "Restore a previous version…" or Restore on the mod's History tab puts it back. The confirmation says that anything added to the folder since is removed.
   - Saved versions survive renaming a mod, including renaming its folder outside the app.
   - Deleting a mod deletes every saved version of it too, and the confirmation says how many.
-  - "Reinstall this version…" in a mod's right-click menu, or Reinstall on its History tab, empties the folder and puts the author's files back, without changing which version you have. It is offered once the file you have is confirmed, and not for a mod marked Local.
+  - "Reinstall this version…" in a mod's right-click menu, or Reinstall on its History tab, empties the folder and puts the author's files back, without changing which version you have. It is offered once the mod names the file you have, and not for a mod marked Local.
   - A mod whose file has been taken off GameBanana says so instead of quietly reinstalling a different version.
   - The dialog shows the author's release notes for anything published since your version.
   - Hotkeys the new version moved are listed after an update.
@@ -84,12 +83,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Each log opens with your system details: OS, distro, display server, and which required tools are installed and at what version.
   - Settings has a **Diagnostics** section to turn the log file off, open its folder, or copy a summary to the clipboard for a bug report.
 - Installing an archive you have installed before asks first.
-- The library's bulk actions (check for updates, sort out tracking, mark all as current) are in one menu above a character's mods, each with the number of mods it would act on.
+- **All mods** in the Library lists every mod in one table, saying how many mods and characters there are, how many are on, how much space they take and when updates were last checked, with a button to check them all.
+  - It can be searched by name or character, filtered to mods that are on, off, have an update, are favourites, can't be checked or have their folder missing, and grouped by character, with groups that fold away.
+  - Columns for each mod's character, whether it is on, its updates, its size and when it was added. Pressing a heading sorts by it, a second press reverses the order, and a third goes back to newest added first.
+  - The Updates column says whether a mod has a newer file, is up to date, is no longer on GameBanana or couldn't be checked, and asks which file you have, which mod a patch went on, or where an untracked mod comes from. Updates sorts the mods that need something first.
+  - Pressing a mod opens its page, and right-clicking opens its menu.
+  - Ticked mods, with Shift-click for a range, can be turned on or off, checked for updates, marked as current or deleted together. Only the mods the table is showing are acted on.
+  - Turning on two or more ticked mods of one character with One at a time on leaves them all off, and says which characters.
+  - Enable, Disable, Delete and Mark as current skip a ticked mod that is being updated, patched or restored, and the notice names it so it can be done again.
+  - Deleting several mods lists them first, with their total size, how many are on and how many saved versions go with them.
+  - A link in ZZMI's Mods folder whose mod folder is missing, such as one on an unplugged drive, is listed as Folder missing and left in place.
 - The Library lists every agent with their portrait on their element's colour, and how many mods they have and how many are on. Rows with no mods yet are dimmed, and the UI, Texture, Audio and Misc categories and unassigned mods sit above the agents. A filter field and chips narrow the list, and "Hide empty" hides the rows with no mods, remembered between runs.
 - A character's page opens with their portrait, element, faction and role, and how many mods they have, how many are on and how much space they take.
 - A character's mods can be filtered to the active ones.
 - Each mod has a Note in its details panel, saved as you type and kept only on this computer.
-- Each mod has a page in the Library, opened from its details panel: its pictures one at a time, its buttons, and Overview, In-game keys, History and Note tabs, with where it is stored and linked beside them. History lists the file in use and each saved version with Reinstall and Restore, the author's latest update post, the patches on top with what each changed, and an ignored update. Opening the page looks the mod up on GameBanana, so its file, author and dates show without an update check.
+- Each mod has a page in the Library, opened from its details panel or its row in All mods: its pictures one at a time, its buttons, and Overview, In-game keys, History and Note tabs, with where it is stored and linked beside them. History lists the file in use and each saved version with Reinstall and Restore, the author's latest update post, the patches on top with what each changed, and an ignored update. Opening the page looks the mod up on GameBanana, so its file, author and dates show without an update check.
 - A mod dropped or pasted onto a character you picked by clicking it in the list is filed under that character; elsewhere its character is worked out from its name.
 - Settings has an **Updates** section for the startup check, and a **Marketplace** section for the adult-content filter.
 - Settings › Appearance has an **Accent** choice: violet, paper, lime or teal. Paper colours the main button and selected chips and keeps violet for links and switches.
@@ -112,25 +120,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ctrl+V on the Library imports .zip, .7z and .rar archives whose paths are on the clipboard, as well as folders.
 - Notifications are small cards in the bottom-right corner. Several can show at once, any can be closed, and hovering pauses their countdowns.
 - Every notification says what happened and what it happened to, led by the character's portrait.
-- Enabling, favouriting, renaming, retagging, reading the library again and deleting report only when they fail.
+- Enabling, favouriting, renaming, retagging and deleting report only when they fail.
 - Notifications are drawn above dialogs instead of behind them.
 - Install confirmations name the mod that arrived, and anything you need to act on comes as its own warning beside it.
 - Mod descriptions are better spaced, and consistently styled everywhere they're shown.
 - Descriptions keep the paragraph spacing their author gave them.
 - Downloaded archives land in the app's own downloads folder and are deleted once installed. Anything left over is cleared when you next start the app.
 - The title bar shows the Zenith logo and its own window buttons. Dragging it moves the window, a double-click maximises it, and a right-click opens the window menu.
-- The sidebar is laid out in Library and GameBanana sections. Characters shows how many agents there are, and Updates opens the characters and mods with an update.
+- The ALL tab is All mods in the sidebar, a table of every mod, with a search.
+- The sidebar is laid out in Library and GameBanana sections. Characters shows how many agents there are, All mods how many mods, and Updates opens All mods at the mods with an update.
 - Pressing a mod card selects it and opens its details; the switch on the card turns it on and off.
 - A mod's details are a panel beside the mods instead of a dialog, showing its pictures, description, tags, in-game keys, where it came from, when it was added, its size and its folder, with Open folder, Check for updates and Delete.
 - The Single/Multi switch is **One at a time**, a switch per character: with it on, turning a mod on turns that character's other mods off. It starts on for agents and off for the UI, Texture, Audio and Misc categories, and is remembered.
 - The favourites filter is a Favorites chip beside the other filters above a character's mods, and one filter applies at a time.
-- Refresh is **Read the library again** in the ⋯ menu above a character's mods.
 - A status bar along the bottom shows the ZZMI folder, how many links are active, and the version.
 - Settings offers Light, System or Dark in place of the dark-mode switch. System is what the app starts on, and it follows your desktop's own light or dark setting for as long as you leave it there.
 - A mod's right-click "Open source page" and the GameBanana link in its details panel open the page it's tracked against, so a mod you linked through "Update tracking…" has them without you typing a link.
 - Settings and first-run setup ask for the ZZMI folder instead of the links folder, and show where links and shader fixes go.
 - The "Mods folder" setting is called "Mod library".
 - A links folder that isn't ZZMI's Mods folder gives way to the Mods folder beside it, so mods linked there show as off until they are switched on again.
+- The Library reads the mod folder again whenever you return to the app's window, so mods added and `.ini` keys edited outside the app show up without a refresh.
+- Changing the Mod library points the links of mods it also has at the new folder, so they stay on.
+- ZZMI's Mods folder, a folder within it that ZZMI loads, or one that holds it can't be chosen as the Mod library.
 
 ### Removed
 
@@ -138,9 +149,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - F10 auto-reload — the F10 button, the auto-reload toggle and the "Automatic mod reload" settings section — because a keypress the app sends never reaches a game running under Proton, so it only ever claimed to work. Press F10 in the game; xdotool is no longer needed.
 - The Source link box in a mod's Edit dialog. Which mod page a mod belongs to is set by "Update tracking…" now, which is also what decides where updates are checked.
 - Collapsing the sidebar.
-- The ALL tab. Every mod is under its character, and mods with no character have a row of their own.
-- The search box and tag filter above the mods.
-- The ↗ button on mod cards. A mod's page opens from its right-click menu and its details panel.
+- The Library's Refresh button.
+- The tag filter above the mods.
+- The ↗ button on mod cards. A mod's GameBanana page opens from its right-click menu and its details panel.
 - Editing a description from a mod's details. Edit info edits it.
 - Tags on mod cards. A mod's tags are in its details panel.
 
@@ -160,6 +171,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ukrainian counted messages use the right form of the noun.
 - Importing or deleting a mod no longer replays the "switched character" animation across the grid.
 - Turning a mod on or off no longer rebuilds its card, so it keeps its hover lift.
+- A mod's switch pressed while another mod is still turning on or off, or while an import runs, is no longer ignored; it takes effect once the one before it is done.
 - "Detect tags for all mods" no longer blanks the Settings page behind a blocking dialog.
 - Cover images are decoded at the size they're shown, cutting the app's image memory.
 - Certificate validation is no longer disabled when downloading mods.
@@ -168,6 +180,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Saving a mod with no character no longer records "unknown" as its character.
 - The theme you pick is still there the next time you start the app.
 - A saved version's size is measured past a file the app can't read, instead of stopping there and reporting the short total as the whole.
+- A mod's keys leave out `.ini` files the game ignores (names starting with `DISABLED`, and `desktop.ini`), and Change keys no longer writes into them.
+- A mod whose link points at another folder's copy reads as off, instead of on while the game loads the other copy, and turning it off no longer removes that link.
+- Renaming a mod that is on no longer deletes a working link of the new name in ZZMI's Mods folder; the rename is refused instead.
+- Renaming a mod whose folder can't be renamed, such as one with a file open in the game, says so instead of saying the name is taken, and a mod that is on stays on.
+- Renaming a mod that is on, when its link can't be made under the new name, keeps its old name and leaves it on, and says so, instead of renaming it and turning it off.
+- On Windows, a mod whose folder name contains `&`, `^` or `%` can no longer start another program or be linked to the wrong folder.
+- On Windows, opening a folder whose path contains a comma opens that folder instead of another one.
+- On Windows without Developer Mode, turning on a mod in a library on a network folder says it needs Developer Mode, instead of failing without a reason or leaving a link that leads nowhere.
+- On Windows with Developer Mode on, a mod in a library on a mapped network drive is linked to the network share rather than the drive letter, so the game started through the launcher finds it.
 
 ## [2.2.2] - 2026-07-19
 

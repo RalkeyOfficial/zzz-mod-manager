@@ -1,8 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
+import 'package:mod_manager_flutter/models/mod_download.dart';
+import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/bulk_assume_current.dart';
+import 'package:mod_manager_flutter/services/origin_status.dart';
 
 import 'support/origin_shorthand.dart';
 
@@ -85,6 +88,48 @@ void main() {
             .anyBaselineIsProxy,
         isFalse,
       );
+    });
+
+    test('a folder whose base mod nobody named is skipped, whatever its version', () {
+      // Settled in the tracking dialog: a date for one layer leaves it asking.
+      for (final versionConfidence in [OriginConfidence.unknown, OriginConfidence.exact]) {
+        final baseUnknown = originFixture(
+          source: 'gamebanana',
+          modId: 1,
+          modIdConfidence: OriginConfidence.inferred,
+          versionConfidence: versionConfidence,
+          installedAt: installedAt,
+          ingest: const ModIngest(patchShaped: true),
+        );
+        expect(modOriginStatus(baseUnknown), ModOriginStatus.secondIdentityUnknown);
+        final plan = planBulkAssumeCurrent([mod('patch only', origin: baseUnknown)]);
+        expect(plan.eligible, isEmpty, reason: '$versionConfidence');
+        expect(plan.untracked, isEmpty, reason: '$versionConfidence');
+        expect(plan.undatable, isEmpty, reason: '$versionConfidence');
+        expect(plan.elsewhere.map((m) => m.name), ['patch only'], reason: 'named under Left as they are');
+      }
+    });
+
+    test("a known base under a patch whose file is unknown keeps its file", () {
+      // "Which file?" is the patch's question here, and the date this action writes is the base's.
+      for (final baseVersion in [OriginConfidence.exact, OriginConfidence.unknown]) {
+        final patched = originFixture(
+          source: 'gamebanana',
+          modId: 1,
+          modIdConfidence: OriginConfidence.exact,
+          fileId: 10,
+          versionConfidence: baseVersion,
+          installedAt: installedAt,
+          patches: const [
+            ModDownload(role: DownloadRole.patch, modId: 2, modIdConfidence: OriginConfidence.exact),
+          ],
+        );
+        expect(modOriginStatus(patched), ModOriginStatus.versionUnknown);
+        final plan = planBulkAssumeCurrent([mod('patched', origin: patched)]);
+        expect(plan.eligible, isEmpty, reason: '$baseVersion');
+        expect(plan.elsewhere.map((m) => m.name), ['patched'], reason: '$baseVersion');
+        expect(bulkAssumeCurrent(patched), isNull, reason: 'the write declines it too');
+      }
     });
 
     test('an empty library plans no work', () {

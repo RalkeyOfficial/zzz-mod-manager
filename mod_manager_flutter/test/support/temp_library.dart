@@ -9,6 +9,7 @@ import 'package:mod_manager_flutter/services/api_service.dart';
 import 'package:mod_manager_flutter/services/backup/snapshot_service.dart';
 import 'package:mod_manager_flutter/services/config_service.dart';
 import 'package:mod_manager_flutter/services/mod_manager_service.dart';
+import 'package:mod_manager_flutter/services/platform_service.dart';
 import 'package:mod_manager_flutter/services/shader_fixes/shader_fixes_service.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 import 'package:path/path.dart' as p;
@@ -82,8 +83,8 @@ class TempLibrary {
   /// Builds the library, installs it, and registers its tear-down.
   ///
   /// Call it from `setUp`, which runs outside the fake-async zone, or from
-  /// inside a [WidgetTester.runAsync].
-  static Future<TempLibrary> create({String prefix = 'zzz_library_'}) async {
+  /// inside a [WidgetTester.runAsync]. [platform] makes the links the way another platform does.
+  static Future<TempLibrary> create({String prefix = 'zzz_library_', PlatformService? platform}) async {
     final root = Directory.systemTemp.createTempSync(prefix);
     final mods = Directory(p.join(root.path, 'library'))..createSync();
     final saveMods = Directory(p.join(root.path, 'Mods'))..createSync();
@@ -95,6 +96,9 @@ class TempLibrary {
     );
     await config.setPaths(mods.path, root.path);
 
+    // One store for the service and the tests: a delete removes a mod's saved versions, and the service's default
+    // store is the developer's real `<appData>/backups`.
+    final snapshots = SnapshotService(rootPath: p.join(root.path, 'backups'));
     final library = TempLibrary._(
       root: root,
       mods: mods,
@@ -103,8 +107,10 @@ class TempLibrary {
       service: ModManagerService(
         config,
         shaderFixes: ShaderFixesService(recordPath: p.join(root.path, 'shader_fixes.json')),
+        snapshots: snapshots,
+        platform: platform,
       ),
-      snapshots: SnapshotService(rootPath: p.join(root.path, 'backups')),
+      snapshots: snapshots,
     );
 
     ApiService.useLibraryForTests(config, service: library.service);

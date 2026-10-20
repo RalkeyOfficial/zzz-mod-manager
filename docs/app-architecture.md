@@ -12,18 +12,12 @@ doc. This file is the map; the rules that must never be missed are in the
 
 ## 1. Layers
 
-- **`main.dart`** — app entry. Initializes `window_manager` with a hidden title
-  bar and wraps the app in a Riverpod `ProviderScope`. `MaterialApp.builder` puts
-  `ZenithTitleBar` (`screens/shell/`) above every page, the first-run screen
-  included, since nothing else can move the window. `MainScreen` is
-  `AppSidebar` + `AnimatedSwitcher` + `AppStatusBar`; the switcher shows one page
-  per `AppDestination` (characters, browse, storage, settings), selected via
-  `destinationProvider`. The sidebar's Updates row is the characters page with
-  the updates filter on, not a page of its own.
-  **The pages are keyed children with no keep-alive**, so the inactive page's
-  `State` is *disposed* — which is why nothing a page owns may be the only copy of
-  something another surface needs. The library is the case that decided the rule:
-  it belongs to `libraryProvider` (§3), not to the characters page.
+- **`main.dart`** — app entry. Initializes `window_manager` with a hidden title bar and wraps the app in a Riverpod `ProviderScope`.
+  `MaterialApp.builder` puts `ZenithTitleBar` (`screens/shell/`) above every page, the first-run screen included, since nothing else can move the window.
+  `MainScreen` is `AppSidebar` + `AnimatedSwitcher` + `AppStatusBar`; the switcher shows the page for the `AppDestination` in `destinationProvider` (characters, all mods, browse, storage, settings).
+  Characters and All mods are the Library's two views and one page, `ModsScreen` under one key, so moving between them keeps it ([`library-screen.md`](library-screen.md) §1). The sidebar's Updates row is the All mods table with its Updates filter on, not a page of its own.
+  **The pages are keyed children with no keep-alive**, so the inactive page's `State` is *disposed* — which is why nothing a page owns may be the only copy of something another surface needs.
+  The library is the case that decided the rule: it belongs to `libraryProvider` (§3), not to the Library page.
 - **`services/`** — all business logic.
 - **`utils/state_providers.dart`** — the **central Riverpod provider registry**.
   All app state (current page, the character on screen, mods, theme, locale, One at a time) is declared here.
@@ -91,7 +85,7 @@ markdown would otherwise flatten `<br>`×6 to the same break as `<br>`×2.
 - **`ConfigService`** — persistence. **Dual storage**: writes through both
   `SharedPreferences` and a JSON `config.json`. See
   [`configuration.md`](configuration.md).
-- **`IniParserService`** — parses mod `.ini` files into keybinds.
+- **`IniParserService`** — lists the `.ini` files ZZMI loads from a mod folder and parses them into keybinds; `IniFilesStamp` is what tells a scan whether a mod's keys must be parsed again ([`library-screen.md`](library-screen.md) §12).
 - **`ArchiveService`** — extracts `.zip` in-process (`archive` package) and
   `.rar`/`.7z` by shelling out to 7-Zip: the copy bundled with the app first (below), then a system one.
   The system lookup is `where 7z` and the Program Files `7-Zip\7z.exe` on Windows, and `7z`, `7za`, `7zr` on PATH, in that order, on Linux.
@@ -117,11 +111,10 @@ Not verified from a built artifact. The Linux fetch has been run by hand and the
 
 ### The platform abstraction
 
-The most important architectural decision. `PlatformService` (abstract) defines
-symlink creation/removal, app-data paths, the system description for the log
-header, free space on a volume, and opening folders and URLs. `PlatformServiceFactory.getInstance()`
-returns `LinuxPlatformService` (real symlinks) or `WindowsPlatformService`
-(junctions).
+The most important architectural decision. `PlatformService` (abstract) defines symlink creation, removal and replacement, reading where a link points and comparing paths as the platform does, listing the dead links in ZZMI's Mods folder, app-data paths, the system description for the log header, free space on a volume, and opening folders and URLs.
+`PlatformServiceFactory.getInstance()` returns `LinuxPlatformService` (real symlinks) or `WindowsPlatformService` (a directory symlink, or a junction where a symlink is refused). Windows links are made and told apart through the Win32 API (`services/windows/`), never through `cmd`, which would read `&`, `^` or `%` in a folder name as its own syntax.
+Each path goes to Win32 in its long-path form (`\\?\C:\…`, `\\?\UNC\server\share\…`), so a link whose path passes 260 characters can still be made. A symlink's target is the exception where it fits, since the symlink keeps it as the name `dir` and Explorer show. The symlink is tried once more without its unprivileged flag only when Windows refuses that flag (`ERROR_INVALID_PARAMETER`, Windows 10 before build 14972), as dart:io's `Link.create` does, so any other failure is reported with its own error. A junction is the fallback only when the symlink fails for want of rights (`ERROR_PRIVILEGE_NOT_HELD`, Windows without Developer Mode); a symlink that fails for another reason, such as a links folder on exFAT, fails with its own error, since a junction would hide it, and is reported as a plain failure to turn the mod on. A junction leads only to a local folder, so a link to a network share or a mapped network drive is made only as a symlink: where that fallback would be needed, the link is refused rather than left as a dead junction. That refusal is the one link failure the platform service throws (`NetworkLinkRefused`) rather than returns as false, with the old link untouched, so the user is told why: the card's switch, bulk Enable and a library change each say that a mod on a network folder can only be turned on with Windows Developer Mode on.
+A symlink to a mapped network drive leads to the share it is mapped to (`WNetGetConnectionW`), not its letter, since the game, started elevated through the launcher, may not see the user's drive letters; when the share can't be read, the letter is kept and that is logged. Paths compare with a mapped drive's letter read as its share, so such a link still reads as the mod's own while the library path uses the letter. A symlink to a network folder is stored as `\??\UNC\server\share\…`, which Dart's `Link.target` hands back as `UNC\server\share\…`, and reading it gives that back its `\\`. "Open folder" goes through `ShellExecuteW` as well, since `explorer.exe` given a path reads a comma in it as a separator. `WindowsLinkCalls` holds the Win32 calls, so making and replacing a link are tested against a fake on Linux. Not yet run on Windows.
 
 **Never branch on `Platform.isX` for these in business logic** — add a method here
 and implement it in both subclasses.
@@ -157,17 +150,17 @@ Three rules follow, and breaking any of them produces a wrong answer rather than
 - **A question asked mid-install reads the disk**, not the provider — the archive is being unpacked, so nothing has invalidated anything yet.
   That is the rule `test/modal_freshness_test.dart` pins, and the two readers of it are the patch destination prompt and the sibling preview.
 
-A scan is **4 ms warm, 12 ms cold** over a mirror of a real 23-mod / 748-file library, and building the index over it is **under 1 ms**, so a refresh is not something to design around.
+A scan, the in-game keys check included, is **7 ms warm, 14 ms cold** over a mirror of a real 23-mod library, and over made-up libraries **26 ms warm, 54 ms cold** for 100 mods and **88 ms warm, 167 ms cold** for 300 mods of 100 files each, and building the index over it is **under 1 ms**, so a refresh is not something to design around, the one on every return to the window included.
 
-**An unchanged rescan publishes nothing.** `rescan()` compares what it read with what it holds (`listEquals` over `ModInfo`'s value equality) and keeps the old list when they match, which is what stops the grid rebuilding after every toggle, rename and import.
+**An unchanged rescan publishes nothing.** `rescan()` compares what it read with what it holds (`listEquals` over `ModInfo`'s value equality) and keeps the old list when they match, so a rescan that found nothing changed doesn't rebuild the grid.
 `library-screen.md` §4 is what that guard costs when a field escapes it.
 
-Two more rules keep that promise true at launch, where the provider is read from two places within a frame of each other — the bulk update check's plan reads it from above the pages, then the Library page mounts and asks for a scan of its own:
+**One walk at a time.** At launch the provider is read from two places within a frame of each other — the bulk update check's plan reads it from above the pages, then the Library page mounts and asks for a scan of its own.
+A `rescan()` that finds a scan already running waits for it rather than starting a second walk of the same folder alongside, and waits until it is published — the caller's next act is to read the library, and a rescan that returned early would hand the grid an empty list to draw.
+Then it walks once more, or joins a walk that started after it began waiting: the running walk may have read the folder before the caller's change, as a scan on return to the window does midway through a bulk Enable. A walk that finds nothing changed publishes nothing, so the extra walk costs one scan.
 
-- **One walk at a time.** A `rescan()` that finds a scan already running takes *that* answer rather than starting a second walk of the same folder, and waits until it is published — the caller's next act is to read the library, and a rescan that returned early would hand the grid an empty list to draw.
-- **A scan never overwrites an edit made while it was walking.** A rename or a
-  delete publishes what it already knows; a scan that started before it is the
-  older answer however late it lands, so it defers to what is there.
+**A scan never overwrites an edit or an invalidate that came in while it was walking.** A rename or a delete (`put`) publishes what it already knows, and an invalidate after an install or an update starts a new read of the folder, so a walk that started before either is the older answer however late it lands.
+It isn't published, failed or not, and another walk reads the folder as it is now, until a walk ends with nothing come in while it ran. That holds for the read an invalidate starts too: an edit made during it is followed by a walk, rather than kept, since the edit's list was built from the library as it was before the invalidate.
 
 `folder_contents.dart` excludes `.zzz-mod-manager/` throughout: a sidecar image
 counted as a shipped resource would make a patch look complete.

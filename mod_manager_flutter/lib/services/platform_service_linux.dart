@@ -23,16 +23,10 @@ typedef PrefixServer = ({String server, Map<String, String> environment});
 class LinuxPlatformService implements PlatformService {
   @override
   Future<bool> createModLink(String sourcePath, String linkPath) async {
+    // A link already of that name, live or dead, is replaced in one step, so a failure leaves it as it was.
+    if (await isModLink(linkPath)) return replaceModLink(linkPath, sourcePath);
     try {
-      // На Linux використовуємо звичайні symbolic links
-      final link = Link(linkPath);
-      
-      // Видаляємо якщо вже існує
-      if (await link.exists() || await FileSystemEntity.isLink(linkPath)) {
-        await removeModLink(linkPath);
-      }
-      
-      await link.create(sourcePath, recursive: false);
+      await Link(linkPath).create(sourcePath, recursive: false);
       _files.info('link created', fields: {
         'kind': 'symlink',
         'link': linkPath,
@@ -60,8 +54,9 @@ class LinuxPlatformService implements PlatformService {
         return false;
       }
 
+      final target = await readModLinkTarget(linkPath);
       await Link(linkPath).delete();
-      _files.info('link removed', fields: {'link': linkPath});
+      _files.info('link removed', fields: {'link': linkPath, 'target': target});
       return true;
     } catch (error, stack) {
       _files.error('link removal failed',
@@ -69,7 +64,7 @@ class LinuxPlatformService implements PlatformService {
       return false;
     }
   }
-  
+
   @override
   Future<bool> isModLink(String linkPath) async {
     try {
@@ -78,7 +73,68 @@ class LinuxPlatformService implements PlatformService {
       return false;
     }
   }
-  
+
+  @override
+  Future<String?> readModLinkTarget(String linkPath) async {
+    try {
+      if (!await FileSystemEntity.isLink(linkPath)) return null;
+      return normaliseLinkTarget(await Link(linkPath).target(), path.dirname(linkPath));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Made under a temporary name beside the old link ([replacementLinkName]) and renamed over it, so the name always
+  /// points somewhere: the rename replaces the old link in one step.
+  @override
+  Future<bool> replaceModLink(String linkPath, String newTarget) async {
+    if (!await isModLink(linkPath)) {
+      _files.warning('not a link, left alone', fields: {'path': linkPath});
+      return false;
+    }
+    final previous = await readModLinkTarget(linkPath);
+    if (previous == null) {
+      _files.warning('link target unreadable, left alone', fields: {'path': linkPath});
+      return false;
+    }
+    final temporary = Link(path.join(path.dirname(linkPath), replacementLinkName(path.basename(linkPath))));
+    try {
+      if (await FileSystemEntity.isLink(temporary.path)) await temporary.delete();
+      await temporary.create(newTarget, recursive: false);
+      await temporary.rename(linkPath);
+      _files.info('link replaced', fields: {
+        'kind': 'symlink',
+        'link': linkPath,
+        'from': previous,
+        'target': newTarget,
+      });
+      return true;
+    } catch (error, stack) {
+      _files.error('link replace failed', error: error, stack: stack, fields: {
+        'link': linkPath,
+        'from': previous,
+        'target': newTarget,
+      });
+      try {
+        if (await FileSystemEntity.isLink(temporary.path)) await temporary.delete();
+      } catch (error) {
+        // The old link is untouched; only the temporary, which ZZMI and the app skip, is left beside it.
+        _files.warning('temporary link left behind', error: error, fields: {'path': temporary.path});
+      }
+      return false;
+    }
+  }
+
+  @override
+  bool samePath(String a, String b) => pathsEqual(a, b);
+
+  @override
+  Future<List<DeadModLink>> listDeadModLinks(String linksFolder) => readDeadModLinks(
+        linksFolder,
+        isLinkEntry: (entry) async => entry is Link,
+        readTarget: readModLinkTarget,
+      );
+
   @override
   String getAppDataPath() {
     final homeDir = Platform.environment['HOME'];

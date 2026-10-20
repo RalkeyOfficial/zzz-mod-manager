@@ -69,7 +69,9 @@ class LibraryModPage extends ConsumerStatefulWidget {
   final ModInfo mod;
   final ModPageTab initialTab;
   final VoidCallback onBack;
-  final VoidCallback onToggle;
+
+  /// Null while the switch can't be pressed.
+  final VoidCallback? onToggle;
   final VoidCallback onFavoriteToggle;
   final VoidCallback onEdit;
   final VoidCallback onEditKeys;
@@ -252,15 +254,17 @@ class _LibraryModPageState extends ConsumerState<LibraryModPage> {
   }
 }
 
-/// Back, and where the page is: Characters / the character / the mod.
-class _Crumbs extends StatelessWidget {
+/// Back, and where the page is: Characters / the character / the mod, or All mods / the mod when it was opened from
+/// the table.
+class _Crumbs extends ConsumerWidget {
   const _Crumbs({required this.mod, required this.onBack});
 
   final ModInfo mod;
   final VoidCallback onBack;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final fromTable = ref.watch(destinationProvider) == AppDestination.allMods;
     final loc = context.loc;
     final palette = ZenithPalette.of(context);
     final style = Theme.of(context).textTheme.bodySmall;
@@ -280,9 +284,13 @@ class _Crumbs extends StatelessWidget {
             onPressed: onBack,
             icon: const Icon(Icons.chevron_left_rounded),
           ),
-          ZenithLink(loc.t('navigation.characters'), onTap: onBack, style: crumb),
-          slash,
-          ZenithLink(libraryGroupName(libraryGroupOf(mod.characterId), loc), onTap: onBack, style: crumb),
+          if (fromTable)
+            ZenithLink(loc.t('navigation.all_mods'), onTap: onBack, style: crumb)
+          else ...[
+            ZenithLink(loc.t('navigation.characters'), onTap: onBack, style: crumb),
+            slash,
+            ZenithLink(libraryGroupName(libraryGroupOf(mod.characterId), loc), onTap: onBack, style: crumb),
+          ],
           slash,
           Flexible(
             child: Text(
@@ -422,7 +430,7 @@ class _Summary extends ConsumerWidget {
   });
 
   final ModInfo mod;
-  final VoidCallback onToggle;
+  final VoidCallback? onToggle;
   final VoidCallback onFavoriteToggle;
   final VoidCallback onEdit;
   final VoidCallback onOpenFolder;
@@ -437,11 +445,11 @@ class _Summary extends ConsumerWidget {
     final origin = mod.origin;
     final group = libraryGroupOf(mod.characterId);
     final (:page, file: recorded) = installedRecord(mod, ref.watch(knownModPagesProvider));
-    final file = (origin?.base?.versionConfidence.isConfirmed ?? false) ? recorded : null;
+    final file = (origin?.base?.versionConfidence.namesFile ?? false) ? recorded : null;
     final check = ref.watch(modUpdateChecksProvider.select((checks) => checks[mod.id]));
     // The status badge says nothing for a tracked mod with nothing to report, and the canvas names the source there.
     final quietTracked =
-        modSlotStatus(origin, check) == ModOriginStatus.none &&
+        isQuietStatus(mod, modSlotStatus(origin, check)) &&
         origin?.tracking != OriginTracking.off &&
         (origin?.hasIdentity ?? false);
 
@@ -768,8 +776,8 @@ class _InTheFolder extends ConsumerWidget {
     final links = ref.watch(linksFolderProvider);
     final zzmi = ref.watch(zzmiPathProvider);
     final (page: _, file: recorded) = installedRecord(mod, ref.watch(knownModPagesProvider));
-    final confirmed = mod.origin?.base?.versionConfidence.isConfirmed ?? false;
-    final file = confirmed && recorded != null ? fileDisplayName(recorded) : null;
+    final named = mod.origin?.base?.versionConfidence.namesFile ?? false;
+    final file = named && recorded != null ? fileDisplayName(recorded) : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 12,

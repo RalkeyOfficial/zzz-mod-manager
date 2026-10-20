@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/palette.dart';
 import '../../core/type_scale.dart';
 import '../../l10n/app_localizations.dart';
-import '../../utils/categories.dart';
 import '../../utils/state_providers.dart';
 import '../../utils/zzz_characters.dart';
 import '../components/downloads_button.dart';
@@ -14,8 +13,7 @@ import 'launch_game.dart';
 
 /// The app's main navigation, down the left of every page.
 ///
-/// Updates is a view of the Characters page with the character list and the grid both kept to mods with an update,
-/// so it is the current row only while the list's filter is on.
+/// Updates is the All mods table kept to mods with an update, so it is the current row only while that filter is on.
 class AppSidebar extends ConsumerWidget {
   const AppSidebar({super.key});
 
@@ -29,8 +27,9 @@ class AppSidebar extends ConsumerWidget {
     final palette = ZenithPalette.of(context);
     final loc = context.loc;
     final destination = ref.watch(destinationProvider);
-    final updatesOnly = ref.watch(characterListFilterProvider) == CharacterListFilter.updates;
+    final updatesOnly = ref.watch(allModsFilterProvider) == AllModsFilter.updates;
     final updates = ref.watch(libraryUpdateCountProvider);
+    final modCount = ref.watch(modsProvider).length;
     // The agents the Characters page lists; the built-in categories are not characters.
     final counts = ref.watch(libraryGroupCountsProvider);
     // Until the first scan returns every agent reads as empty, so the roster stands in.
@@ -40,7 +39,14 @@ class AppSidebar extends ConsumerWidget {
         : zzzCharactersData.length;
 
     void go(AppDestination to) => ref.read(destinationProvider.notifier).state = to;
-    final onCharacters = destination == AppDestination.characters;
+    final onAllMods = destination == AppDestination.allMods;
+
+    // Pressed on the Library, a Library row goes back from a mod's page as the page's own Back does; from another
+    // page it returns to whatever the Library showed, a mod's page included.
+    void goToLibrary(AppDestination view) {
+      if (isLibraryView(destination)) ref.read(openModPageProvider.notifier).state = null;
+      go(view);
+    }
 
     return Container(
       width: width,
@@ -65,16 +71,17 @@ class AppSidebar extends ConsumerWidget {
                     icon: Icons.grid_view_rounded,
                     label: loc.t('navigation.characters'),
                     count: characters,
-                    selected: onCharacters && !updatesOnly,
+                    selected: destination == AppDestination.characters,
+                    onTap: () => goToLibrary(AppDestination.characters),
+                  ),
+                  SidebarNavItem(
+                    icon: Icons.format_list_bulleted_rounded,
+                    label: loc.t('navigation.all_mods'),
+                    count: scanned ? modCount : null,
+                    selected: onAllMods && !updatesOnly,
                     onTap: () {
-                      if (updatesOnly) {
-                        ref.read(characterListFilterProvider.notifier).state = CharacterListFilter.all;
-                        ref.read(modGridFilterProvider.notifier).state = ModGridFilter.all;
-                      }
-                      // Pressed on the Library, it goes back from a mod's page as the page's own Back does; from another
-                      // page it returns to whatever the Library showed, a mod's page included.
-                      if (onCharacters) ref.read(openModPageProvider.notifier).state = null;
-                      go(AppDestination.characters);
+                      if (updatesOnly) ref.read(allModsFilterProvider.notifier).state = AllModsFilter.all;
+                      goToLibrary(AppDestination.allMods);
                     },
                   ),
                   SidebarNavItem(
@@ -82,23 +89,15 @@ class AppSidebar extends ConsumerWidget {
                     label: loc.t('navigation.updates'),
                     count: updates > 0 ? updates : null,
                     hot: true,
-                    selected: onCharacters && updatesOnly,
+                    selected: onAllMods && updatesOnly,
                     onTap: () {
-                      ref.read(characterListFilterProvider.notifier).state = CharacterListFilter.updates;
-                      ref.read(modGridFilterProvider.notifier).state = ModGridFilter.updates;
-                      // The first character with an update, unless the one on screen has one.
-                      final counts = ref.read(libraryGroupCountsProvider);
-                      if ((counts[ref.read(currentCharacterIdProvider)]?.updates ?? 0) == 0) {
-                        final first = libraryGroupIds.where((id) => (counts[id]?.updates ?? 0) > 0).firstOrNull;
-                        if (first != null) {
-                          ref.read(selectedCharacterIdProvider.notifier).state = first;
-                          // The app's choice, not the user's: a drop there is not filed under it.
-                          ref.read(characterPickedByUserProvider.notifier).state = false;
-                        }
-                      }
-                      // The characters with an update are what it shows, so a mod's page gives way to them.
+                      ref.read(allModsFilterProvider.notifier).state = AllModsFilter.updates;
+                      // Every mod its count covers: a search or a folded group left from before would hide some.
+                      ref.read(allModsSearchProvider.notifier).state = '';
+                      ref.read(allModsCollapsedProvider.notifier).state = const {};
+                      // The mods with an update are what it shows, so a mod's page gives way to them.
                       ref.read(openModPageProvider.notifier).state = null;
-                      go(AppDestination.characters);
+                      go(AppDestination.allMods);
                     },
                   ),
                   _SectionLabel(loc.t('navigation.gamebanana'), top: 18),

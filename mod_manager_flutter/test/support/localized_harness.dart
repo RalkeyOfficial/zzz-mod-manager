@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/core/app_theme.dart';
@@ -69,7 +70,13 @@ Future<void> pumpLocalized(
 
   final app = MaterialApp(
     locale: locale,
-    localizationsDelegates: [_PreloadedLocalizations(loaded!)],
+    // The Material and Widgets ones as `main.dart` has them, so a field or a dialog renders in Ukrainian too.
+    localizationsDelegates: [
+      _PreloadedLocalizations(loaded!),
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate,
+    ],
     supportedLocales: [locale],
     // The app's own theme, so a layout test measures the text and the controls the app renders.
     theme: buildAppTheme(brightness: Brightness.dark, accent: AccentChoice.violet),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../models/character_info.dart';
 import '../../services/bulk_resolution.dart';
 import '../../services/bulk_update_check.dart';
 import '../../services/origin_write.dart';
@@ -9,8 +10,9 @@ import '../../utils/state_providers.dart';
 import '../dialogs/bulk_resolution_dialog.dart';
 import 'update_check_feedback.dart';
 
-/// The whole-library actions a press starts and that outlive the page it was pressed on: checking every mod for
-/// updates, and the "sort out mod tracking" screen that can follow it.
+/// The update checks a press starts and that outlive the page it was pressed on: checking every mod or the ticked
+/// ones, and the tracking screen that can follow a whole-library check or that "Sort these out" opens. It also
+/// switches the character view's Updates filters off once the library has no updates left.
 ///
 /// **Mounted above the page switcher**, like `DownloadQueueHost`. A check over a large library takes seconds, and
 /// the Library page is rebuilt for every character and disposed on every page switch; a pass owned by it would
@@ -54,6 +56,10 @@ abstract interface class LibraryActions {
   /// screen; otherwise reports the outcome as a notification.
   Future<void> checkForUpdates();
 
+  /// Checks only [mods], the All mods table's selection, and reports the outcome as a notification. The tracking
+  /// screen is the whole library's and stays behind its own door.
+  Future<void> checkMods(List<ModInfo> mods);
+
   /// Opens the "sort out mod tracking" screen, running the check first when there is nothing in hand to show.
   Future<void> sortOutTracking();
 }
@@ -69,13 +75,38 @@ class _LibraryActionsScope extends InheritedWidget {
 
 class _LibraryActionsHostState extends ConsumerState<LibraryActionsHost> implements LibraryActions {
   @override
-  Widget build(BuildContext context) => _LibraryActionsScope(actions: this, child: widget.child);
+  Widget build(BuildContext context) {
+    // The character view's Updates filters switch themselves off once the library has none left, rather than leaving
+    // the grid filtered to nothing with a control the user has to work out they need to press. Here because the last
+    // update is as often dealt with from the All mods table, while the character view is disposed.
+    //
+    // Keyed on the **library**, not on the view-scoped count: on that this would fire merely because the user picked
+    // a character with no updates of its own, and the filter would evaporate whenever they looked somewhere else.
+    //
+    // Deferred a frame because a listener can fire *during* the rebuild its own change triggered, and Riverpod
+    // refuses a provider write in that window.
+    ref.listen(libraryHasUpdatesProvider, (_, hasUpdates) {
+      if (hasUpdates) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final grid = ref.read(modGridFilterProvider.notifier);
+        if (grid.state == ModGridFilter.updates) grid.state = ModGridFilter.all;
+        final list = ref.read(characterListFilterProvider.notifier);
+        if (list.state == CharacterListFilter.updates) list.state = CharacterListFilter.all;
+      });
+    });
+    return _LibraryActionsScope(actions: this, child: widget.child);
+  }
 
   @override
   Future<void> checkForUpdates() => _runUpdateCheck(ref.read(bulkUpdateCheckPlanProvider));
 
-  /// [onDemand] is the "sort out" doors running the check first: the screen then opens for untracked mods too, since the user asked for it.
-  Future<void> _runUpdateCheck(BulkUpdateCheckPlan plan, {bool onDemand = false}) async {
+  @override
+  Future<void> checkMods(List<ModInfo> mods) => _runUpdateCheck(planBulkUpdateCheck(mods), wholeLibrary: false);
+
+  /// [onDemand] is "sort out mod tracking" running the check first: the screen then opens for untracked mods too, since the user asked for it.
+  /// A check of part of the library ([wholeLibrary] false) only reports, and doesn't count as the library checked.
+  Future<void> _runUpdateCheck(BulkUpdateCheckPlan plan, {bool onDemand = false, bool wholeLibrary = true}) async {
     final running = ref.read(libraryCheckRunningProvider.notifier);
     if (running.state || !plan.hasWork) return;
     running.state = true;
@@ -100,11 +131,22 @@ class _LibraryActionsHostState extends ConsumerState<LibraryActionsHost> impleme
     if (!mounted) return;
     final checks = ref.read(modUpdateChecksProvider.notifier);
     checks.state = mergedChecks(checks.state, outcome);
-    final records = ref.read(modUpdateRecordsProvider.notifier);
-    records.state = mergedRecords(records.state, outcome);
+    if (wholeLibrary) {
+      final records = ref.read(modUpdateRecordsProvider.notifier);
+      records.state = mergedRecords(records.state, outcome);
+      if (outcome.abortedBy == null) ref.read(libraryCheckedAtProvider.notifier).state = DateTime.now();
+    } else {
+      // A record there means the library was checked, and "Sort these out" would call every other mod unreached.
+      // A page the whole check already holds is refreshed there too.
+      keepModPages(ref, outcome.records);
+    }
     // Before the results screen, whose own writes go to the same sidecars.
     await rememberDownloadNamesFrom(ref, outcome.records, writer: widget.originWriter);
     if (!mounted) return;
+    if (!wholeLibrary) {
+      showUpdateCheckOutcome(context, outcome);
+      return;
+    }
 
     // The results screen opens by itself only when it has something to ask — otherwise a modal stands between the
     // user and the badges they pressed for. It states the summary itself when it does open, so a notification is
@@ -125,7 +167,7 @@ class _LibraryActionsHostState extends ConsumerState<LibraryActionsHost> impleme
   }
 
   /// Untracked mods open the screen on their own, with no check at all when nothing is tracked:
-  /// their rows need no mod page, and the reminder that leads here must never end in a notification that leaves them out of reach.
+  /// their rows need no mod page, and "Sort these out" must never end in a notification that leaves them out of reach.
   @override
   Future<void> sortOutTracking() async {
     if (ref.read(libraryCheckRunningProvider)) return;

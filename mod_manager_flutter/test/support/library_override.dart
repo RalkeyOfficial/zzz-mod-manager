@@ -19,6 +19,24 @@ import 'package:mod_manager_flutter/utils/state_providers.dart';
 Override libraryOf(List<ModInfo> mods) =>
     libraryProvider.overrideWith(() => _HeldLibrary(mods));
 
+/// A library whose every read fails with [error], as a scan of an unreadable folder does.
+Override libraryFailing(Object error) => libraryProvider.overrideWith(() => _FailingLibrary(error));
+
+class _FailingLibrary extends LibraryNotifier {
+  _FailingLibrary(this._error);
+
+  final Object _error;
+
+  @override
+  FutureOr<List<ModInfo>> build() => throw _error;
+
+  @override
+  Future<void> rescan() async {
+    await Future<void>.value();
+    state = AsyncValue.error(_error, StackTrace.current);
+  }
+}
+
 class _HeldLibrary extends LibraryNotifier {
   _HeldLibrary(this._mods);
 
@@ -28,7 +46,12 @@ class _HeldLibrary extends LibraryNotifier {
   FutureOr<List<ModInfo>> build() => _mods;
 
   /// A rescan would reach the disk, which is the one thing this override exists
-  /// to avoid. The list is whatever the test said it is.
+  /// to avoid. The list is whatever the test said it is; the scan is still
+  /// counted in `libraryScansProvider`, as a real one is. After a yield, as a
+  /// real scan's walk is, so a rescan started from `initState` is legal.
   @override
-  Future<void> rescan() async {}
+  Future<void> rescan() async {
+    await Future<void>.value();
+    ref.read(libraryScansProvider.notifier).state++;
+  }
 }

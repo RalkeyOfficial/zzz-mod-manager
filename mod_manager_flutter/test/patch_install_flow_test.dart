@@ -6,6 +6,7 @@ import 'package:mod_manager_flutter/l10n/app_localizations.dart';
 import 'package:mod_manager_flutter/models/app_notification.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gamebanana.dart';
+import 'package:mod_manager_flutter/models/installed_file.dart';
 import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
@@ -13,11 +14,13 @@ import 'package:mod_manager_flutter/services/origin_write.dart';
 import 'package:mod_manager_flutter/screens/dialogs/patch_install_flow.dart';
 import 'package:mod_manager_flutter/screens/dialogs/patch_install_prompt.dart';
 import 'package:mod_manager_flutter/services/backup/snapshot_service.dart';
+import 'package:mod_manager_flutter/services/folder_contents.dart';
 import 'package:mod_manager_flutter/services/mod_metadata_repository.dart';
 import 'package:mod_manager_flutter/services/mod_metadata_service.dart';
 import 'package:mod_manager_flutter/services/origin_status.dart';
 import 'package:mod_manager_flutter/services/patch_destination_ranking.dart';
 import 'package:mod_manager_flutter/services/patch_detection.dart';
+import 'package:mod_manager_flutter/services/patch_placement.dart';
 import 'package:mod_manager_flutter/services/patch_scan.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_applier.dart';
 import 'package:path/path.dart' as p;
@@ -71,6 +74,24 @@ class _FakeActivation implements ModActivationPort {
 
   @override
   Future<bool> deactivate(String modName) async => active.remove(modName);
+}
+
+/// A patch write whose copy fails part-way, after the folder may already have changed.
+class _CopyFailsApplier extends UpdateApplier {
+  _CopyFailsApplier({required super.snapshots}) : super(activation: _FakeActivation());
+
+  @override
+  Future<UpdateApplyResult> applyPatchInto({
+    required String modName,
+    required Directory modFolder,
+    required Directory source,
+    required FolderContents incoming,
+    required FolderContents existing,
+    required PatchPlacement placement,
+    int? patchModId,
+    List<InstalledFile> recorded = const <InstalledFile>[],
+    Iterable<String> claimedAbove = const <String>[],
+  }) async => UpdateApplyResult.failed(UpdateApplyFailure.copy);
 }
 
 void main() {
@@ -445,6 +466,90 @@ void main() {
       expect(read(p.join(modsPath, 'Ellen'), 'Body.dds'), isNull,
           reason: 'the patch never adds a second copy beside the real one');
       expect(lines.map((l) => l.title), contains(loc.t('mods.snackbar.patch_applied_title')));
+    });
+
+    test('the mod a patch went into has its keys read again', () async {
+      library('Ellen', {'ellen.ini': 'x', 'Textures/Body.dds': 'v1'});
+      final folder = incoming('Ellen Fix', {'Body.dds': 'v2'});
+      final decision = await decide(
+        folders: [folder],
+        answers: {
+          'Ellen Fix': const InstallIntoMod(modId: 'Ellen', modName: 'Ellen'),
+        },
+      );
+      final keysDropped = <String>[];
+
+      await applyPatchInstall(
+        loc,
+        decision: decision,
+        importedMods: const [],
+        modsPath: modsPath,
+        applier: applier,
+        amend: amend,
+        patch: patchFromAPage,
+        onPatched: keysDropped.add,
+      );
+
+      expect(keysDropped, ['Ellen']);
+    });
+
+    test('the write into an existing mod runs marked as writing that mod', () async {
+      // What holds a press on that mod's switch until the write is done.
+      library('Ellen', {'ellen.ini': 'x', 'Textures/Body.dds': 'v1'});
+      final folder = incoming('Ellen Fix', {'Body.dds': 'v2'});
+      final decision = await decide(
+        folders: [folder],
+        answers: {
+          'Ellen Fix': const InstallIntoMod(modId: 'Ellen', modName: 'Ellen'),
+        },
+      );
+      final marked = <String>[];
+      String? readDuringWrite;
+
+      await applyPatchInstall(
+        loc,
+        decision: decision,
+        importedMods: const [],
+        modsPath: modsPath,
+        applier: applier,
+        amend: amend,
+        patch: patchFromAPage,
+        whileWriting: (modId, write) async {
+          marked.add(modId);
+          final result = await write();
+          readDuringWrite = read(p.join(modsPath, 'Ellen'), 'Textures/Body.dds');
+          return result;
+        },
+      );
+
+      expect(marked, ['Ellen']);
+      expect(readDuringWrite, 'v2', reason: 'the write ran inside the mark');
+    });
+
+    test('a mod whose patch write failed part-way has its keys read again', () async {
+      library('Ellen', {'ellen.ini': 'x', 'Textures/Body.dds': 'v1'});
+      final folder = incoming('Ellen Fix', {'Body.dds': 'v2'});
+      final decision = await decide(
+        folders: [folder],
+        answers: {
+          'Ellen Fix': const InstallIntoMod(modId: 'Ellen', modName: 'Ellen'),
+        },
+      );
+      final keysDropped = <String>[];
+
+      final lines = await applyPatchInstall(
+        loc,
+        decision: decision,
+        importedMods: const [],
+        modsPath: modsPath,
+        applier: _CopyFailsApplier(snapshots: SnapshotService(rootPath: p.join(tmp.path, 'backups'))),
+        amend: amend,
+        patch: patchFromAPage,
+        onPatched: keysDropped.add,
+      );
+
+      expect(lines.map((l) => l.title), contains(loc.t('mods.snackbar.patch_write_failed_title')));
+      expect(keysDropped, ['Ellen']);
     });
 
     test('a mod page download is recorded against the mod it went into',

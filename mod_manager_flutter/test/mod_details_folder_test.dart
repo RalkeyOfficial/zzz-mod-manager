@@ -135,7 +135,7 @@ void main() {
       expect(find.text('patcher · uploaded 2025-04-02'), findsOneWidget);
     });
 
-    testWidgets('leaves out a file that was only worked out, and its date', (tester) async {
+    testWidgets('names a file that was only worked out, and its date, like a confirmed one', (tester) async {
       final guessed = patchFixture(
         modId: 605460,
         modIdConfidence: OriginConfidence.exact,
@@ -145,6 +145,31 @@ void main() {
       await open(
         tester,
         mod(origin: origin(patches: [guessed])),
+        sessionRecords: {
+          605460: GbMod(
+            idRow: 605460,
+            name: 'Pulchra Bottom Heavy - Reworked',
+            submitter: const GbSubmitter(idRow: 2, name: 'patcher'),
+            files: [GbFile(idRow: 1473174, file: 'reworked.zip', dateAdded: DateTime.utc(2025, 4, 2, 12))],
+          ),
+        },
+      );
+
+      expect(find.text('reworked.zip'), findsOneWidget);
+      expect(find.text('patcher · uploaded 2025-04-02'), findsOneWidget);
+    });
+
+    testWidgets('leaves out the file and its date for a patch marked as current', (tester) async {
+      // Marking as current records a date and no file.
+      final dated = patchFixture(
+        modId: 605460,
+        modIdConfidence: OriginConfidence.exact,
+        fileId: 1473174,
+        versionConfidence: OriginConfidence.assumedLatest,
+      );
+      await open(
+        tester,
+        mod(origin: origin(patches: [dated])),
         sessionRecords: {
           605460: GbMod(
             idRow: 605460,
@@ -323,9 +348,18 @@ void main() {
       expect(find.text('Uploaded'), findsOneWidget);
     });
 
-    testWidgets('leave out a file that was only worked out, its variant included', (tester) async {
-      // The card says "Guessed file"; stating it here as the file would contradict it.
+    testWidgets('state a file that was only worked out, like a confirmed one', (tester) async {
       await open(tester, recordedAt(OriginConfidence.inferred), sessionRecords: {585282: page});
+
+      expect(find.text('File'), findsOneWidget);
+      expect(find.text('pulchra.zip'), findsOneWidget);
+      expect(find.text('Variant'), findsOneWidget);
+      expect(find.text('Uploaded'), findsOneWidget);
+    });
+
+    testWidgets('leave out the file of a mod marked as current, its variant included', (tester) async {
+      // Marking as current records a date and no file.
+      await open(tester, recordedAt(OriginConfidence.assumedLatest), sessionRecords: {585282: page});
 
       expect(find.text('File'), findsNothing);
       expect(find.text('pulchra.zip'), findsNothing);

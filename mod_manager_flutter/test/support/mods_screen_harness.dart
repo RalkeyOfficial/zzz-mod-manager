@@ -14,7 +14,7 @@ import 'temp_library.dart';
 /// Mounts the Library page the way `main.dart` does, under a [LibraryActionsHost], and hands back its container.
 ///
 /// [selected] is the character list's row, set as the app would before any click: [characterPickedByUserProvider]
-/// stays false. The tracking reminder is dismissed unless [showTrackingNudge].
+/// stays false.
 ///
 /// The list on screen is [mods], held in memory ([libraryOf]); a rescan leaves it as it is. [temp] is where every
 /// write lands: `ApiService` points at it, so a toggle, a favourite or a note reaches a real folder and a real
@@ -26,20 +26,18 @@ Future<ProviderContainer> pumpModsScreen(
   TempLibrary temp,
   List<ModInfo> mods, {
   String? selected,
+  Override? library,
   Size surfaceSize = const Size(1200, 800),
-  bool showTrackingNudge = false,
 }) async {
   final container = ProviderContainer(
     overrides: [
-      libraryOf(mods),
+      library ?? libraryOf(mods),
       ...temp.overrides,
       modBackupsProvider.overrideWith((ref) async => <String>{}),
     ],
   );
   addTearDown(container.dispose);
   container.read(selectedCharacterIdProvider.notifier).state = selected;
-  // Out of the way unless asked for: most tests here are about the grid and the panel.
-  container.read(trackingNudgeDismissedProvider.notifier).state = !showTrackingNudge;
 
   await pumpLocalized(
     tester,

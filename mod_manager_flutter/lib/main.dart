@@ -14,6 +14,7 @@ import 'screens/components/launch_update_check_host.dart';
 import 'screens/components/library_actions_host.dart';
 import 'screens/components/shader_fixes_notices.dart';
 import 'screens/components/notification_overlay.dart';
+import 'screens/components/rescan_on_focus.dart';
 import 'screens/settings_screen.dart';
 import 'screens/shell/app_sidebar.dart';
 import 'screens/shell/status_bar.dart';
@@ -292,7 +293,9 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
                           child: AnimatedSwitcher(
                             duration: const Duration(milliseconds: 180),
                             child: switch (destination) {
-                              AppDestination.characters => const ModsScreen(key: ValueKey('mods')),
+                              // One key for both views, so moving between them keeps the page and its mod page.
+                              AppDestination.characters ||
+                              AppDestination.allMods => const ModsScreen(key: ValueKey('mods')),
                               AppDestination.browse => const MarketplaceScreen(key: ValueKey('marketplace')),
                               AppDestination.storage => const StorageScreen(key: ValueKey('storage')),
                               AppDestination.settings => const SettingsScreen(key: ValueKey('settings')),
@@ -303,6 +306,8 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
                     ),
                   ),
                   const AppStatusBar(),
+                  // Draws nothing: reads the library again on return to the window.
+                  const RescanOnWindowFocus(),
                 ],
               ),
             ),

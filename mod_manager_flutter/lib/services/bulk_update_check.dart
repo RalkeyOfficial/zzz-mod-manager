@@ -114,7 +114,7 @@ class BulkUpdateCheckPlan {
   ///
   /// Separate from [byModId] because the two count different things: that map
   /// is the *requests*, this list is the *answers*. A mixed folder is two
-  /// entries there and one here, and conflating them makes the toolbar promise
+  /// entries there and one here, and conflating them makes a count promise
   /// more work than the user can see.
   final List<ModInfo> checkable;
 
@@ -124,10 +124,6 @@ class BulkUpdateCheckPlan {
   final Map<String, UpdateCheck> skipped;
 
   List<int> get modIds => byModId.keys.toList();
-
-  /// How many **mods** a run would report on. What the toolbar button counts —
-  /// the user counts cards, not requests.
-  int get checkableCount => checkable.length;
 
   bool get hasWork => byModId.isNotEmpty;
 }

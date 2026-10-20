@@ -110,6 +110,13 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
       );
       
       widget.onComplete();
+    } on LibraryOverlapsLinksFolder catch (refusal) {
+      if (mounted) {
+        context.notify.error(
+          loc.t('settings.library_is_links_folder_title'),
+          body: loc.t(refusal.bodyKey, params: {'folder': refusal.folder}),
+        );
+      }
     } catch (e) {
       if (mounted) {
         context.notify.error(

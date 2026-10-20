@@ -58,7 +58,9 @@ class ModDetailsPanel extends ConsumerWidget {
 
   /// Opens the mod's page in the Library on [ModPageTab].
   final ValueChanged<ModPageTab> onOpenPage;
-  final VoidCallback onToggle;
+
+  /// Null while the switch can't be pressed.
+  final VoidCallback? onToggle;
   final VoidCallback onFavoriteToggle;
   final VoidCallback onEdit;
   final VoidCallback onOpenFolder;

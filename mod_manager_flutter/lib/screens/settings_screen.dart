@@ -7,6 +7,7 @@ import '../services/api_service.dart';
 import '../utils/notifications.dart';
 import '../utils/state_providers.dart';
 import '../l10n/app_localizations.dart';
+import 'components/network_link_notice.dart';
 import 'components/zzmi_folder_field.dart';
 import 'components/settings/appearance_section.dart';
 import 'components/settings/auto_tag_section.dart';
@@ -89,17 +90,37 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
 
   Future<void> saveConfig() async {
     final loc = context.loc;
+    final notify = context.notify;
+    final library = ref.read(libraryProvider.notifier);
     try {
-      await ApiService.updateConfig(
+      final onNetwork = <String>{};
+      final failed = await ApiService.updateConfig(
         modsPath: _modsPathController.text,
         zzmiPath: _zzmiController.text,
+        networkRefused: onNetwork,
       );
+      // Either path changes which mods read as on.
+      await library.rescan();
+      // A mod refused for its network folder is told why on its own, and named only there.
+      if (onNetwork.isNotEmpty) reportNetworkLinkRefused(loc, notify, onNetwork);
+      final notRelinked = [for (final name in failed) if (!onNetwork.contains(name)) name];
+      if (notRelinked.isNotEmpty) {
+        notify.warning(
+          loc.plural('settings.relink_failed_title', notRelinked.length, params: {'count': '${notRelinked.length}'}),
+          body: loc.t('settings.relink_failed_body', params: {'names': notRelinked.join(', ')}),
+        );
+      }
       if (mounted) {
         context.notify.success(
           loc.t('settings.save_success_title'),
           body: loc.t('settings.save_success_body'),
         );
       }
+    } on LibraryOverlapsLinksFolder catch (refusal) {
+      notify.error(
+        loc.t('settings.library_is_links_folder_title'),
+        body: loc.t(refusal.bodyKey, params: {'folder': refusal.folder}),
+      );
     } catch (e) {
       if (mounted) {
         context.notify.error(

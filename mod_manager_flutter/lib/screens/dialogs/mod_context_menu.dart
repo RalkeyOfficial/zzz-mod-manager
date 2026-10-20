@@ -137,8 +137,8 @@ void showModContextMenu(
           ),
           onTap: () => Future.delayed(Duration.zero, onCheckForUpdate),
         ),
-      // **Only for a folder that records the exact file it came from**, which
-      // is what a repair fetches again. A mod known only by its page has no
+      // **Only for a folder that records the file it came from**, confirmed or
+      // worked out, which is what a repair fetches again. A mod known only by its page has no
       // version to put back — offering "reinstall" and then having to ask which
       // file would be an update in everything but name.
       if (canReinstall(mod))

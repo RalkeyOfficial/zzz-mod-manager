@@ -108,8 +108,9 @@ class OriginBackfill {
   ///
   /// Identity lands at [OriginConfidence.inferred] and never higher: it came
   /// from a free-form text field, so it may be a wrong paste, a collection
-  /// link, or a different mod entirely. `inferred` may badge and suggest, and
-  /// it must be confirmed once before any update acts on it.
+  /// link, or a different mod entirely. `inferred` caps every update verdict at
+  /// "possibly outdated"; Reinstall is still offered, since the link is the
+  /// user's own, and writes only on their yes behind a snapshot.
   ///
   /// **Version stays unknown.** Identity and version are separate unknowns that
   /// resolve independently: the archive is deleted after extraction, so there

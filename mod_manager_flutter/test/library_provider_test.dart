@@ -1,8 +1,15 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
+import 'package:mod_manager_flutter/services/api_service.dart';
+import 'package:mod_manager_flutter/services/mod_manager_service.dart';
+import 'package:mod_manager_flutter/services/shader_fixes/shader_fixes_service.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
+import 'package:path/path.dart' as p;
 
 import 'support/origin_shorthand.dart';
 import 'support/temp_library.dart';
@@ -33,6 +40,24 @@ void main() {
     return container;
   }
 
+  /// A container over the temp library whose walks [held] can stop midway.
+  ({ProviderContainer ref, _HeldWalkService held}) heldContainer() {
+    final held = _HeldWalkService(
+      temp.config,
+      shaderFixes: ShaderFixesService(recordPath: p.join(temp.root.path, 'shader_fixes.json')),
+      snapshots: temp.snapshots,
+    );
+    ApiService.useLibraryForTests(temp.config, service: held);
+    final container = ProviderContainer(overrides: [
+      modManagerServiceProvider.overrideWith((ref) async => held),
+      snapshotServiceProvider.overrideWithValue(temp.snapshots),
+    ]);
+    addTearDown(container.dispose);
+    return (ref: container, held: held);
+  }
+
+  List<String> ids(ProviderContainer ref) => [for (final m in ref.read(modsProvider)) m.id];
+
   test('the first read scans the library, with nothing mounted', () async {
     installMod('Ellen School');
     installMod('Miyabi Kimono');
@@ -54,9 +79,8 @@ void main() {
   });
 
   test('a rescan that finds nothing new keeps the list it has', () async {
-    // What stops the grid being torn down and rebuilt after every toggle,
-    // rename and import — each of which triggers a scan that usually finds one
-    // mod changed, or none.
+    // What stops the grid being torn down and rebuilt by a rescan that finds one
+    // mod changed, or none, as most do.
     installMod('Ellen School');
     final ref = container();
     final before = await ref.read(libraryProvider.future);
@@ -144,29 +168,171 @@ void main() {
     expect(ref.read(modsProvider), isNotEmpty);
   });
 
-  test('an edit made during the first scan survives it', () async {
+  /// Waited out rather than awaited: the point is what a read does when it lands *after* an edit, and
+  /// `libraryProvider.future` already answers with the edit. A scan of this library is ~5 ms.
+  Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 250));
+
+  /// Renames Ellen School as the app does: the folder on disk, then the list it knows.
+  void rename(ProviderContainer ref) {
+    temp.modFolder('Ellen School').renameSync(temp.modFolder('Renamed').path);
+    ref.read(libraryProvider.notifier).put([
+      ModInfo(id: 'Renamed', name: 'Renamed', characterId: 'ellen', isActive: false),
+    ]);
+  }
+
+  test("the first scan's answer is not published over an edit made while it walked", () async {
     // A rename or a delete knows exactly what it did. The scan that was already
     // walking the folder when it happened is the older answer, whichever of the
     // two finishes last.
     installMod('Ellen School');
-    final ref = container();
+    final (:ref, :held) = heldContainer();
+    final hold = held.holdNextWalk();
 
     ref.read(libraryProvider);
-    ref.read(libraryProvider.notifier).put([
-      ModInfo(
-        id: 'Renamed',
-        name: 'Renamed',
-        characterId: 'ellen',
-        isActive: false,
-      ),
-    ]);
+    await hold.listed;
+    rename(ref);
+    hold.release();
+    await settle();
 
-    // Waited out rather than awaited: the point is what the scan does when it
-    // lands *after* the edit, and `libraryProvider.future` already answers with
-    // the edit. A scan of this library is ~5 ms.
-    await Future<void>.delayed(const Duration(milliseconds: 250));
+    expect(ids(ref), ['Renamed']);
+  });
 
-    expect(ref.read(modsProvider).single.id, 'Renamed');
+  test('an edit made while the library is read again keeps what the invalidate came for', () async {
+    // A press waiting on an install is let go when the install ends, just before the install invalidates the
+    // library: the edit's list predates the install, and the read the invalidate started walked before the edit.
+    installMod('Ellen School');
+    final (:ref, :held) = heldContainer();
+    await ref.read(libraryProvider.future);
+
+    installMod('Miyabi Kimono');
+    final hold = held.holdNextWalk();
+    ref.invalidate(libraryProvider);
+    ref.read(libraryProvider);
+    await hold.listed;
+    rename(ref);
+    hold.release();
+    await settle();
+
+    expect(ids(ref), unorderedEquals(['Renamed', 'Miyabi Kimono']));
+  });
+
+  test('an edit made during a rescan survives it', () async {
+    // A card's switch pressed as the window gains focus: the focus rescan read the mod before the toggle.
+    installMod('Ellen School');
+    final (:ref, :held) = heldContainer();
+    await ref.read(libraryProvider.future);
+
+    final hold = held.holdNextWalk();
+    final scan = ref.read(libraryProvider.notifier).rescan();
+    await hold.listed;
+    rename(ref);
+    hold.release();
+    await scan;
+
+    expect(ids(ref), ['Renamed']);
+  });
+
+  test('a rescan whose walk an edit overtook reads the folder once more', () async {
+    // The edit is newer than the walk, and the walk after it sees whatever else changed beside it.
+    installMod('Ellen School');
+    final (:ref, :held) = heldContainer();
+    await ref.read(libraryProvider.future);
+
+    final hold = held.holdNextWalk();
+    final scan = ref.read(libraryProvider.notifier).rescan();
+    await hold.listed;
+    ref.read(libraryProvider.notifier).put(const []);
+    installMod('Miyabi Kimono');
+    hold.release();
+    await scan;
+
+    expect(ids(ref), containsAll(['Ellen School', 'Miyabi Kimono']));
+  });
+
+  test('a rescan whose walks two edits overtook in turn still publishes what the folder holds', () async {
+    installMod('Ellen School');
+    final (:ref, :held) = heldContainer();
+    await ref.read(libraryProvider.future);
+
+    final first = held.holdNextWalk();
+    final scan = ref.read(libraryProvider.notifier).rescan();
+    await first.listed;
+    ref.read(libraryProvider.notifier).put(const []);
+    installMod('Miyabi Kimono');
+    final second = held.holdNextWalk();
+    first.release();
+    await second.listed;
+    ref.read(libraryProvider.notifier).put(const []);
+    installMod('Yanagi Office');
+    second.release();
+    await scan;
+
+    expect(ids(ref), unorderedEquals(['Ellen School', 'Miyabi Kimono', 'Yanagi Office']));
+  });
+
+  test('a rescan that joins a running one sees a change made after that one read the folder', () async {
+    // A bulk Enable's rescan while the focus scan is midway: the focus scan read the folder before the links changed.
+    installMod('Ellen School');
+    final (:ref, :held) = heldContainer();
+    await ref.read(libraryProvider.future);
+
+    final hold = held.holdNextWalk();
+    final focus = ref.read(libraryProvider.notifier).rescan();
+    await hold.listed;
+    installMod('Miyabi Kimono');
+    final joined = ref.read(libraryProvider.notifier).rescan();
+    hold.release();
+    await joined;
+
+    expect(ids(ref), containsAll(['Ellen School', 'Miyabi Kimono']));
+    await focus;
+  });
+
+  test('a failed walk an edit overtook leaves the edit in place', () async {
+    installMod('Ellen School');
+    final (:ref, :held) = heldContainer();
+    await ref.read(libraryProvider.future);
+
+    final hold = held.holdNextWalk(fail: true);
+    final scan = ref.read(libraryProvider.notifier).rescan();
+    await hold.listed;
+    rename(ref);
+    hold.release();
+    await scan;
+
+    expect(ref.read(libraryProvider).hasError, isFalse);
+    expect(ids(ref), ['Renamed']);
+  });
+
+  test('a rescan running when the library is invalidated does not undo the read after it', () async {
+    // An install finishing while the focus scan is midway: the install invalidates the library, whose new read sees
+    // the new mod, and the focus scan read the folder before the install wrote it.
+    installMod('Ellen School');
+    final (:ref, :held) = heldContainer();
+    await ref.read(libraryProvider.future);
+
+    final hold = held.holdNextWalk();
+    final focus = ref.read(libraryProvider.notifier).rescan();
+    await hold.listed;
+    installMod('Miyabi Kimono');
+    ref.invalidate(libraryProvider);
+    await ref.read(libraryProvider.future);
+    hold.release();
+    await focus;
+
+    expect(ids(ref), containsAll(['Ellen School', 'Miyabi Kimono']));
+  });
+
+  test('every rescan is counted, one that finds nothing new too', () async {
+    // What the Folder missing rows re-read on.
+    installMod('Ellen School');
+    final ref = container();
+    await ref.read(libraryProvider.future);
+    final before = ref.read(libraryScansProvider);
+
+    await ref.read(libraryProvider.notifier).rescan();
+
+    expect(ref.read(libraryScansProvider), before + 1);
   });
 
   test('put replaces the library without touching the disk', () async {
@@ -189,4 +355,39 @@ void main() {
     expect(temp.modFolder('Ellen School').existsSync(), isTrue,
         reason: 'put is an in-memory publish, not a write');
   });
+}
+
+/// The library's service, with a walk that can be held after it has read the folder and before it answers.
+class _HeldWalkService extends ModManagerService {
+  _HeldWalkService(super.config, {super.shaderFixes, super.snapshots});
+
+  _Hold? _next;
+
+  /// Holds the next walk; [fail] makes it throw once released.
+  _Hold holdNextWalk({bool fail = false}) => _next = _Hold(fail);
+
+  @override
+  Future<List<ModInfo>> getModsInfo() async {
+    final mods = await super.getModsInfo();
+    final hold = _next;
+    if (hold == null) return mods;
+    _next = null;
+    hold._listed.complete();
+    await hold._released.future;
+    if (hold.fail) throw const FileSystemException('the library folder went away');
+    return mods;
+  }
+}
+
+class _Hold {
+  _Hold(this.fail);
+
+  final bool fail;
+  final _listed = Completer<void>();
+  final _released = Completer<void>();
+
+  /// Completes once the held walk has read the folder.
+  Future<void> get listed => _listed.future;
+
+  void release() => _released.complete();
 }

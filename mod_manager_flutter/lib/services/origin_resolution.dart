@@ -307,9 +307,8 @@ class OriginResolution {
   /// Separate from [pickFile] because it claims something weaker and is allowed
   /// to do less. The user consented to a plan; they did not look at this mod's
   /// file list and recognise their download, so the tier is
-  /// [OriginConfidence.inferred] — which renders as a guess on the card.
-  /// Writing `user` here would launder a one-line inference into the user's
-  /// own testimony.
+  /// [OriginConfidence.inferred], which the update check caps at "possibly
+  /// outdated". Writing `user` here would launder a one-line inference into the user's own testimony.
   ///
   /// Returns null — abandoning that mod's write — unless the block as freshly
   /// read still names [modId] and still has **no** version at all. It never

@@ -8,6 +8,7 @@ import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/components/mod_details_panel.dart';
+import 'package:mod_manager_flutter/screens/components/zenith_controls.dart';
 import 'package:mod_manager_flutter/screens/mod_page/mod_page.dart';
 import 'package:mod_manager_flutter/services/backup/snapshot_service.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_client.dart';
@@ -46,12 +47,13 @@ void main() {
     OriginTracking tracking = OriginTracking.auto,
     DateTime? updatesDismissedUntil,
     List<ModDownload> patches = const [],
+    OriginConfidence versionConfidence = OriginConfidence.exact,
   }) => originFixture(
     modId: modId,
     modIdConfidence: OriginConfidence.exact,
     fileId: 1491924,
     versionLabel: 'RabbitFX Fixer EXE Version',
-    versionConfidence: OriginConfidence.exact,
+    versionConfidence: versionConfidence,
     provenance: OriginProvenance.downloaded,
     tracking: tracking,
     updatesDismissedUntil: updatesDismissedUntil,
@@ -128,6 +130,21 @@ void main() {
     expect(find.text('In use'), findsOneWidget);
     expect(find.text('Reinstall'), findsOneWidget);
     expect(find.text('Version 1.5'), findsOneWidget, reason: 'the newest post with something to say');
+  });
+
+  testWidgets('a file worked out in the tracking screen is badged GameBanana, as a known one is', (tester) async {
+    for (final confidence in [OriginConfidence.exact, OriginConfidence.inferred]) {
+      await open(tester, modWith(tracked(versionConfidence: confidence)));
+      expect(find.widgetWithText(ZenithBadge, 'GameBanana'), findsOneWidget, reason: '$confidence');
+    }
+  });
+
+  testWidgets('History offers Reinstall for a worked-out file, and not for a date with no file', (tester) async {
+    await open(tester, modWith(tracked(versionConfidence: OriginConfidence.inferred)));
+    expect(find.text('Reinstall'), findsOneWidget);
+
+    await open(tester, modWith(tracked(versionConfidence: OriginConfidence.assumedLatest)));
+    expect(find.text('Reinstall'), findsNothing);
   });
 
   testWidgets('a mod marked Local fetches nothing and offers no reinstall', (tester) async {

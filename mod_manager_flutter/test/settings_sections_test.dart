@@ -170,28 +170,6 @@ void main() {
 
       expect(tester.widget<ZenithSwitch>(find.byType(ZenithSwitch).first).value, isTrue);
     });
-
-    testWidgets('the reminder switch is on until dismissed, and switching it writes the dismissal',
-        (tester) async {
-      bool? written;
-      await pumpLocalized(
-        tester,
-        UpdatesSettingsSection(
-          writer: _noopBool,
-          nudgeWriter: (dismissed) async => written = dismissed,
-        ),
-        container: container,
-      );
-
-      final reminder = find.byType(ZenithSwitch).last;
-      expect(tester.widget<ZenithSwitch>(reminder).value, isTrue);
-
-      await tester.tap(reminder);
-      await tester.pumpAndSettle();
-
-      expect(container.read(trackingNudgeDismissedProvider), isTrue);
-      expect(written, isTrue);
-    });
   });
 
   testWidgets('every row survives a minimum-width window', (tester) async {

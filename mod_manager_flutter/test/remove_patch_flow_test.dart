@@ -10,6 +10,7 @@ import 'package:mod_manager_flutter/services/patch_store.dart';
 
 import 'support/localized_harness.dart';
 import 'support/origin_shorthand.dart';
+import 'support/recording_service.dart';
 import 'support/temp_library.dart';
 
 /// **Taking a patch out, from the press to the bytes.**
@@ -201,6 +202,47 @@ void main() {
         find.text('That patch is not in this folder any more'), findsOneWidget);
     expect(changed, isTrue);
     expect(library.originOf(modName)!.patches, isEmpty);
+  });
+
+  testWidgets("the mod's keys are dropped even when the record can't be written",
+      (tester) async {
+    // The files have moved by then, and the record is the last step.
+    final origin = await patchedFolder(tester);
+    final service = RecordingService(library)..failOriginWrites = true;
+    Object? thrown;
+    await pumpLocalized(
+      tester,
+      Consumer(
+        builder: (context, ref, _) => ElevatedButton(
+          onPressed: () async {
+            try {
+              await removePatchFlow(
+                context,
+                mod: ModInfo(
+                  id: modName,
+                  name: modName,
+                  characterId: 'ellen',
+                  isActive: false,
+                  origin: origin,
+                ),
+                patch: origin.patches.single,
+                patchName: 'Ellen Fix',
+              );
+            } catch (e) {
+              thrown = e;
+            }
+          },
+          child: const Text('open'),
+        ),
+      ),
+      overrides: service.overrides,
+    );
+    await tapWithIo(tester, find.text('open'));
+    await confirm(tester);
+
+    expect(thrown, isNotNull, reason: 'the record write failed');
+    expect(library.read(modName, 'Ellen.ini'), 'the mod');
+    expect(service.keysDropped, [modName]);
   });
 
   testWidgets('a file with no saved original stays, and is warned about first',

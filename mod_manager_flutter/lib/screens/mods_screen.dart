@@ -19,6 +19,7 @@ import '../services/archive_service.dart';
 import '../services/import_result.dart';
 import '../services/ingest_origin_builder.dart';
 import '../services/log/logger.dart';
+import '../services/platform_service.dart' show NetworkLinkRefused;
 import '../services/shader_fixes/shader_fixes_service.dart';
 import '../services/update_apply/mod_activation_port.dart';
 import '../services/update_apply/update_applier.dart';
@@ -35,8 +36,10 @@ import 'components/install_result_feedback.dart';
 import 'components/mod_card_widget.dart';
 import 'components/mod_details_panel.dart';
 import 'components/mods_toolbar.dart';
+import 'components/network_link_notice.dart';
 import 'components/shader_fixes_notices.dart';
 import 'components/zenith_controls.dart';
+import 'all_mods/all_mods_view.dart';
 import 'dialogs/delete_mod_dialog.dart';
 import 'dialogs/duplicate_archive_dialog.dart';
 import 'dialogs/edit_mod_dialog.dart';
@@ -56,8 +59,9 @@ import 'mod_page/mod_page.dart';
 final Logger _log = Logger('mods');
 final Logger _files = Logger('fileops');
 
-/// The Library's character view: the character list, the character on screen with their mods, and the details
-/// panel for the mod selected among them (`docs/library-screen.md`).
+/// The Library: the character view (the character list, the character on screen with their mods, and the details
+/// panel for the mod selected among them) or the All mods table, with a mod's page over either
+/// (`docs/library-screen.md`).
 ///
 /// Everything another surface needs lives in providers ([selectedCharacterIdProvider], [selectedModIdProvider],
 /// the filters), because this page is disposed on every page switch.
@@ -72,9 +76,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
   AppLocalizations get loc => context.loc;
   String? errorMessage;
 
-  // Prevent multiple simultaneous operations
+  // One import at a time, from a drop or a paste.
   bool _isOperationInProgress = false;
-  bool _isLoadingMods = false;
 
   // Drag & drop state
   bool _isDragging = false;
@@ -115,10 +118,9 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
     });
   }
 
+  /// Walks the library folder again. A call during a running walk is not skipped: the rescan waits for that walk
+  /// and then walks once more, since it may predate the caller's change.
   Future<void> loadMods() async {
-    // Prevent multiple simultaneous load operations
-    if (_isLoadingMods) return;
-    _isLoadingMods = true;
     if (errorMessage != null) setState(() => errorMessage = null);
 
     try {
@@ -137,8 +139,6 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       await _reportBackfillWriteFailures();
     } catch (e) {
       if (mounted) setState(() => errorMessage = e.toString());
-    } finally {
-      _isLoadingMods = false;
     }
   }
 
@@ -169,7 +169,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
 
   /// Publishes an edited library without a disk rescan.
   ///
-  /// Backs the targeted handlers (rename/edit/favorite/delete/toggle) so a
+  /// Backs the targeted handlers (rename/edit/favorite/delete) so a
   /// single-mod action costs O(1) instead of an O(N) rescan of every mod.
   void _publish(List<ModInfo> allMods) {
     ref.read(libraryProvider.notifier).put(allMods);
@@ -236,6 +236,9 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
     if (page.state case final open? when open.modId == oldId) {
       page.state = ModPageRequest(newName, tab: open.tab, pageKey: open.pageKey);
     }
+    // The tick moves with the mod, so a new folder taking the old name doesn't come in ticked.
+    final ticked = ref.read(allModsSelectionProvider.notifier);
+    if (ticked.state.contains(oldId)) ticked.state = {...ticked.state.difference({oldId}), newName};
     _publish(allMods);
   }
 
@@ -278,6 +281,9 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
     if (selected.state == modId) selected.state = null;
     final page = ref.read(openModPageProvider.notifier);
     if (page.state?.modId == modId) page.state = null;
+    // Or a mod installed later under the same name comes in ticked.
+    final ticked = ref.read(allModsSelectionProvider.notifier);
+    if (ticked.state.contains(modId)) ticked.state = ticked.state.difference({modId});
     final allMods = _currentAllMods();
     if (allMods == null) {
       unawaited(loadMods());
@@ -289,34 +295,68 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
 
   /// Turns [mod] on or off. Turning one on under a character whose One at a time switch is on turns the
   /// character's other mods off first (`docs/library-screen.md` §10).
+  ///
+  /// Presses run in turn, each on the library the one before left ([LibraryToggles]), and none is dropped. A press on
+  /// a mod whose folder an update, install or restore is writing waits for that write. A press asks for the opposite
+  /// of what its switch showed, so pressing again before the first press lands asks for the same thing twice rather
+  /// than undoing it.
   Future<void> toggleMod(ModInfo mod) async {
-    if (_isOperationInProgress) return;
-    _isOperationInProgress = true;
+    final container = ProviderScope.containerOf(context, listen: false);
+    // The switches are greyed out while a bulk action runs, so only a call from outside them gets here then.
+    if (container.read(allModsBulkRunningProvider)) return;
+    final turnOn = !mod.isActive;
+    final notify = context.notify;
+    final loc = this.loc;
+    await container
+        .read(libraryTogglesProvider.notifier)
+        .run(mod.id, () => _toggle(container, notify, loc, mod.id, turnOn: turnOn));
+  }
+
+  /// One press of [toggleMod], on the library as it is when its turn comes. Reads the app's [container] rather than
+  /// [ref], so a press still lands, and says so if it fails, after the page is gone.
+  Future<void> _toggle(
+    ProviderContainer container,
+    NotificationCenter notify,
+    AppLocalizations loc,
+    String modId, {
+    required bool turnOn,
+  }) async {
+    final mod = container.read(modsProvider).where((m) => m.id == modId).firstOrNull;
+    // Gone, or already as asked: a press before this one got there first.
+    if (mod == null || mod.isActive == turnOn) return;
+    // Shows what is really on after a failure: with One at a time, the others may already be off.
+    Future<void> reload() => mounted ? loadMods() : container.read(libraryProvider.notifier).rescan();
 
     try {
-      final switchOff = modsToSwitchOff(ref.read(modsProvider), mod, ref.read(oneAtATimeProvider));
-
-      final notify = context.notify;
-      final failedTitle = loc.t(mod.isActive ? 'library.card.disable_failed_title' : 'library.card.enable_failed_title');
-      final done = mod.isActive
-          ? await ApiService.disableMod(mod.id)
-          : await ApiService.enableMod(mod.id, switchOff: switchOff);
+      final switchOff = modsToSwitchOff(
+        container.read(modsProvider),
+        mod,
+        container.read(oneAtATimeProvider),
+        beingWritten: container.read(modWritesInProgressProvider),
+      );
+      final failedTitle = loc.t(turnOn ? 'library.card.enable_failed_title' : 'library.card.disable_failed_title');
+      final done = turnOn
+          // A mod being written is turned off at once all the same, and its write leaves it off.
+          ? await ApiService.enableMod(
+              mod.id,
+              switchOff: switchOff,
+              whileWritten: (other) => turnOffDuringWrite(container, other),
+            )
+          : await ApiService.disableMod(mod.id);
       if (!done) {
-        // Said before the rescan, which then shows what is really on: with One at a time, the others may already
-        // be off.
         notify.error(failedTitle, body: mod.name, characterId: mod.characterId);
-        await loadMods();
+        await reload();
         return;
       }
 
       // Flip the flags in the library rather than rescanning: the toggle is one
       // link, plus the set of mods the enable just turned off.
-      final allMods = _currentAllMods();
-      if (mounted && allMods != null) {
-        _publish([
+      final allMods = container.read(libraryProvider).valueOrNull;
+      if (allMods != null) {
+        container.read(libraryProvider.notifier).put([
           for (final candidate in allMods)
             if (candidate.id == mod.id)
-              candidate.copyWith(isActive: !mod.isActive)
+              candidate.copyWith(isActive: turnOn)
             else if (switchOff.contains(candidate.id))
               candidate.copyWith(isActive: false)
             else
@@ -324,25 +364,21 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
         ]);
       }
     } on ShaderPlacementRefused catch (refusal) {
-      if (mounted) {
-        notifyShaderRefusal(context, refusal, characterId: mod.characterId);
-        // The dry run passed and the enable was still refused, possibly after
-        // the character's other mods were turned off: the cards must show that.
-        await loadMods();
-      }
+      reportShaderRefusal(loc, notify, refusal, characterId: mod.characterId);
+      // The dry run passed and the enable was still refused, possibly after
+      // the character's other mods were turned off: the cards must show that.
+      await reload();
+    } on NetworkLinkRefused {
+      reportNetworkLinkRefused(loc, notify, [mod.name], characterId: mod.characterId);
+      await reload();
     } catch (e) {
-      if (mounted) {
-        context.notify.error(
-          loc.t('mods.errors.generic_title'),
-          body: e.toString(),
-          characterId: mod.characterId,
-        );
-        await loadMods();
-      }
-    } finally {
-      _isOperationInProgress = false;
+      notify.error(loc.t('mods.errors.generic_title'), body: e.toString(), characterId: mod.characterId);
+      await reload();
     }
   }
+
+  /// Whether a bulk action is turning mods on or off, so the switches are greyed out.
+  bool get _bulkRunning => ref.watch(allModsBulkRunningProvider);
 
   Future<void> _toggleFavorite(ModInfo mod) async {
     try {
@@ -373,14 +409,6 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
         );
       }
     }
-  }
-
-  /// A manual refresh re-reads everything from disk, including .ini files that
-  /// may have changed outside the app.
-  Future<void> _refreshModsList() async {
-    if (_isLoadingMods) return;
-    await ApiService.clearKeybindCache();
-    await loadMods();
   }
 
   Future<void> _openModFolder(ModInfo mod) async {
@@ -515,7 +543,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       onRemovePatch: (patch) => unawaited(_removePatch(mod, patch)),
       // Whatever this session already knows. Nothing is fetched for a menu.
       patchNames: {
-        for (final entry in ref.read(modUpdateRecordsProvider).entries)
+        for (final entry in ref.read(knownModPagesProvider).entries)
           if (entry.value.name case final name?) entry.key: name,
       },
       // `valueOrNull` rather than a `when`: the listing is one readdir and
@@ -526,7 +554,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       hasBackups: mod.uid != null &&
           (ref.read(modBackupsProvider).valueOrNull?.contains(mod.uid) ??
               false),
-      onDetails: () => _select(mod),
+      // The table has no details panel, so Details there is the mod's page.
+      onDetails: () => ref.read(destinationProvider) == AppDestination.allMods
+          ? _openPage(mod, ModPageTab.overview)
+          : _select(mod),
       onEdit: () => _showEditDialog(mod),
       onRename: () => showRenameModDialog(
         context,
@@ -554,6 +585,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
     // here costs one rebuild when a single readdir resolves.
     ref.watch(modBackupsProvider);
 
+    final allMods = ref.watch(destinationProvider) == AppDestination.allMods;
     final current = ref.watch(currentCharacterIdProvider);
     final selectedId = ref.watch(selectedModIdProvider);
     // The panel shows a mod of the character on screen; picking another character closes it.
@@ -591,9 +623,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
                 onAddMod: _showImportDialog,
               ),
             ),
-            SliverToBoxAdapter(
-              child: ModsToolbar(onLibraryChanged: () => unawaited(loadMods()), onRescan: _refreshModsList),
-            ),
+            const SliverToBoxAdapter(child: ModsToolbar()),
             ..._buildGridSlivers(selected),
           ],
         ),
@@ -627,7 +657,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
         index: pageMod == null ? 0 : 1,
         sizing: StackFit.expand,
         children: [
-          ExcludeFocus(excluding: pageMod != null, child: _characterView(page, selected)),
+          ExcludeFocus(
+            excluding: pageMod != null,
+            child: allMods ? _allModsView(enableDrop: pageMod == null) : _characterView(page, selected),
+          ),
           if (pageMod == null)
             const SizedBox.shrink()
           else
@@ -638,7 +671,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
               mod: pageMod,
               initialTab: request.tab,
               onBack: _closePage,
-              onToggle: () => toggleMod(pageMod),
+              onToggle: _bulkRunning ? null : () => toggleMod(pageMod),
               onFavoriteToggle: () => _toggleFavorite(pageMod),
               onEdit: () => _showEditDialog(pageMod),
               onEditKeys: () => showKeybindsDialog(context, pageMod, onSaved: () => unawaited(loadMods())),
@@ -652,6 +685,21 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
               onStopIgnoring: (download) => unawaited(_stopIgnoring(pageMod, download)),
             ),
         ],
+      ),
+    );
+  }
+
+  /// Every mod in one table. A drop or paste here works the character out from each mod's name.
+  Widget _allModsView({required bool enableDrop}) {
+    return DropTarget(
+      enable: enableDrop,
+      onDragDone: (details) => _importModsFromFolders(details.files),
+      child: AllModsView(
+        onOpenPage: (mod) => _openPage(mod, ModPageTab.overview),
+        onContextMenu: _showContextMenu,
+        onShowUpdate: (mod) => unawaited(_checkForUpdate(mod)),
+        onResolveOrigin: (mod) => unawaited(_resolveOrigin(mod)),
+        loadError: _loadError(),
       ),
     );
   }
@@ -677,7 +725,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
                         mod: selected,
                         onClose: () => ref.read(selectedModIdProvider.notifier).state = null,
                         onOpenPage: (tab) => _openPage(selected, tab),
-                        onToggle: () => toggleMod(selected),
+                        onToggle: _bulkRunning ? null : () => toggleMod(selected),
                         onFavoriteToggle: () => _toggleFavorite(selected),
                         onEdit: () => _showEditDialog(selected),
                         onOpenFolder: () => _openModFolder(selected),
@@ -726,6 +774,32 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       );
   }
 
+  /// Why the library didn't load, with Retry, or null when it did. Both views show it in place of their mods.
+  Widget? _loadError() {
+    final library = ref.watch(libraryProvider);
+    if (errorMessage == null && !library.hasError) return null;
+    final palette = ZenithPalette.of(context);
+    final text = Theme.of(context).textTheme;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      spacing: 8,
+      children: [
+        Text(loc.t('mods.errors.load'), style: text.titleMedium?.copyWith(color: palette.text)),
+        Text(
+          errorMessage ?? '${library.error}',
+          textAlign: TextAlign.center,
+          style: text.bodySmall?.copyWith(color: palette.text3),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: loadMods,
+          icon: const Icon(Icons.refresh_rounded),
+          label: Text(loc.t('mods.errors.retry')),
+        ),
+      ],
+    );
+  }
+
   /// The mods under the header and the filter row, as slivers of the page's one scroll view; or what stands in
   /// their place while the library loads, fails to load, or has nothing under the filter.
   List<Widget> _buildGridSlivers(ModInfo? selected) {
@@ -738,30 +812,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       child: Padding(padding: const EdgeInsets.all(28), child: Center(child: child)),
     );
 
-    if (errorMessage != null || library.hasError) {
-      return [
-        fill(
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            spacing: 8,
-            children: [
-              Text(loc.t('mods.errors.load'), style: text.titleMedium?.copyWith(color: palette.text)),
-              Text(
-                errorMessage ?? '${library.error}',
-                textAlign: TextAlign.center,
-                style: text.bodySmall?.copyWith(color: palette.text3),
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: loadMods,
-                icon: const Icon(Icons.refresh_rounded),
-                label: Text(loc.t('mods.errors.retry')),
-              ),
-            ],
-          ),
-        ),
-      ];
-    }
+    if (_loadError() case final error?) return [fill(error)];
     if (!library.hasValue) return [fill(const CircularProgressIndicator())];
 
     final skins = ref.watch(currentCharacterSkinsProvider);
@@ -869,7 +920,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
         mod: mod,
         selected: selected,
         onSelect: () => _select(mod),
-        onToggle: () => toggleMod(mod),
+        onToggle: _bulkRunning ? null : () => toggleMod(mod),
         onFavoriteToggle: () => _toggleFavorite(mod),
         onMore: (position) => _showContextMenu(context, mod, position),
         onResolveOrigin: () => unawaited(_resolveOrigin(mod)),
@@ -882,11 +933,12 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
   /// mod's name.
   ///
   /// Only a character the user picked by clicking its row: the page shown before they pick one is a fallback, and
-  /// the sidebar's Updates button picks one for them; filing five archives for five agents under either would be
-  /// the app's guess, not theirs. Unassigned has no one to file under.
+  /// filing five archives for five agents under it would be the app's guess, not theirs. Unassigned has no one to
+  /// file under, and the All mods table no one on screen.
   ///
   /// [watch] for the drop tile, which says which of the two a drop will do and has to follow a pick.
   String? _dropTarget({bool watch = false}) {
+    if (ref.read(destinationProvider) == AppDestination.allMods) return null;
     final byUser = watch ? ref.watch(characterPickedByUserProvider) : ref.read(characterPickedByUserProvider);
     final picked = watch ? ref.watch(selectedCharacterIdProvider) : ref.read(selectedCharacterIdProvider);
     if (!byUser) return null;
@@ -900,6 +952,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
   /// character is worked out from the name.
   Future<void> _importModsFromFolders(List<XFile> files) async {
     if (_isOperationInProgress) return;
+    final container = ProviderScope.containerOf(context, listen: false);
 
     setState(() {
       _isOperationInProgress = true;
@@ -1243,9 +1296,11 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
           modsPath: modsPath,
           applier: UpdateApplier(
             snapshots: ref.read(snapshotServiceProvider),
-            activation: ModManagerActivationPort(modManagerService),
+            activation: ModManagerActivationPort(modManagerService, leaveOff: (m) => leftOffAfterWrite(container, m)),
           ),
           amend: modManagerService.updateModOrigin,
+          onPatched: modManagerService.invalidateKeybinds,
+          whileWriting: (modId, write) => whileWritingMod(container, modId, write),
           // Naming what a patch patches installs that mod into the folder, the
           // same as it does for a download from the Marketplace.
           installBase: (modName, base, baseFile) => installNamedBase(
@@ -1258,6 +1313,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
           ),
         );
         if (mounted) showNotificationLines(context, lines);
+        // The library was read before these writes, so the patched mods' files and keys are read again.
+        if (mounted) await ref.read(libraryProvider.notifier).rescan();
       }
 
       // Reported once, here: nothing re-attempts an origin write, because it

@@ -1,9 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/palette.dart';
+import '../../core/type_scale.dart';
 import '../../l10n/app_localizations.dart';
+import '../../models/character_info.dart';
 import '../../services/bulk_assume_current.dart';
+import '../../services/installed_record.dart';
+import '../../services/log/logger.dart';
 import '../../services/origin_write.dart';
+import '../../utils/categories.dart';
 import '../../utils/notifications.dart';
+import '../../utils/state_providers.dart';
+import '../components/character_tile.dart';
+import '../components/mod_thumb.dart';
+import '../components/resolve/resolve_fragments.dart';
+import '../components/zenith_controls.dart';
+
+final Logger _log = Logger('origin');
 
 /// How a bulk run ended.
 ///
@@ -26,42 +40,42 @@ class BulkAssumeCurrentOutcome {
   final int failed;
 }
 
-/// Confirms the bulk "assume current" action and, if the user agrees, applies
-/// it. Returns null when they cancelled.
+/// Confirms the bulk "assume current" action and, if the user agrees, applies it to the mods left ticked. Returns
+/// null when they cancelled.
 ///
-/// **The confirmation states the size before acting**, which is the whole reason
-/// it exists rather than the button just doing the work: the answer is usually
-/// either nothing or most of the library, and a user who presses expecting the
-/// first and gets the second has had 47 mods rewritten on a guess. It also names
-/// the two groups it is *not* touching, because "12 mods" is a very different
-/// offer from "12 of your 47".
+/// **The confirmation lists every mod it would write**, each with a box to untick, so the set rewritten is the set
+/// the user has seen (`docs/origin-tracking.md` §6). It also names what it leaves alone, because "12 mods" is a very
+/// different offer from "12 of your 47".
 Future<BulkAssumeCurrentOutcome?> confirmAndApplyAssumeCurrent(
   BuildContext context,
   BulkAssumeCurrentPlan plan, {
   required OriginWriter writer,
 }) async {
   if (!plan.hasWork) return null;
-  final confirmed = await showDialog<bool>(
+  final chosen = await showDialog<List<ModInfo>>(
     context: context,
     builder: (context) => _AssumeCurrentConfirmation(plan: plan),
   );
-  if (confirmed != true) return null;
+  if (chosen == null || chosen.isEmpty) return null;
 
   var written = 0;
   var skipped = 0;
   var failed = 0;
-  for (final mod in plan.eligible) {
+  for (final mod in chosen) {
     // Sequential on purpose. These are small sidecar rewrites through one
     // service, and the ordering keeps a failure attributable to a mod rather
     // than to the batch.
-    switch (await writer(mod.id, bulkAssumeCurrent)) {
+    final result = await writer(mod.id, bulkAssumeCurrent);
+    switch (result) {
       case OriginWriteResult.written:
         written++;
+        _log.info('marked as current', fields: {'mod': mod.id, 'baseline': mod.origin?.installedAt});
       case OriginWriteResult.declined:
         skipped++;
       case OriginWriteResult.folderMissing:
       case OriginWriteResult.writeFailed:
         failed++;
+        _log.warning('could not mark as current', fields: {'mod': mod.id, 'result': result.name});
     }
   }
   return BulkAssumeCurrentOutcome(
@@ -80,11 +94,14 @@ Future<BulkAssumeCurrentOutcome?> confirmAndApplyAssumeCurrent(
 ///
 /// A run that only *declined* says so plainly and calmly — it is not a failure
 /// and must not be coloured or worded like one.
+///
+/// Takes [loc] and [notify] rather than a context: the writes run after the confirmation closes, and the page that
+/// asked may be gone by the time they end.
 void showAssumeCurrentOutcome(
-  BuildContext context,
+  AppLocalizations loc,
+  NotificationCenter notify,
   BulkAssumeCurrentOutcome outcome,
 ) {
-  final loc = context.loc;
   String plural(String key, int count) =>
       loc.plural(key, count, params: {'count': '$count'});
 
@@ -115,80 +132,372 @@ void showAssumeCurrentOutcome(
       ),
   };
   // No portrait: this is about a count across the library, not about one mod.
-  context.notify.show(title, body: body, severity: severity);
+  notify.show(title, body: body, severity: severity);
 }
 
-class _AssumeCurrentConfirmation extends StatelessWidget {
+class _AssumeCurrentConfirmation extends ConsumerStatefulWidget {
   const _AssumeCurrentConfirmation({required this.plan});
 
   final BulkAssumeCurrentPlan plan;
 
   @override
+  ConsumerState<_AssumeCurrentConfirmation> createState() => _AssumeCurrentConfirmationState();
+}
+
+class _AssumeCurrentConfirmationState extends ConsumerState<_AssumeCurrentConfirmation> {
+  /// The mods unticked, by folder id: left asking "Which file?".
+  final Set<String> _off = {};
+
+  @override
   Widget build(BuildContext context) {
     final loc = context.loc;
-    final muted = Theme.of(context).textTheme.bodySmall?.copyWith(
-      color: Theme.of(context).colorScheme.onSurfaceVariant,
-    );
+    final palette = ZenithPalette.of(context);
+    final text = Theme.of(context).textTheme;
+    final plan = widget.plan;
+    final eligible = plan.eligible;
+    final chosen = [for (final mod in eligible) if (!_off.contains(mod.id)) mod];
+    final count = chosen.length;
+    final small = text.bodySmall?.copyWith(color: palette.text2);
+    final info = palette.badgeInfo;
 
-    // A library with one unresolved mod is an ordinary state, not an edge case,
-    // and "Mark 1 mods" is not what you want to read immediately before a bulk
-    // rewrite. `t` has no plural machinery, so this follows the pattern the
-    // import summary already uses: a `_single` / `_plural` key pair.
-    String plural(String key, int count) =>
-        loc.plural(key, count, params: {'count': '$count'});
+    String plural(String key, int n, [Map<String, String> more = const {}]) =>
+        loc.plural(key, n, params: {'count': '$n', ...more});
 
-    return AlertDialog(
-      title: Text(plural('mods.assume_current.title', plan.eligible.length)),
-      content: SizedBox(
-        width: 460,
+    final left = [
+      if (plan.untracked.isNotEmpty) plural('mods.assume_current.left_untracked', plan.untracked.length),
+      if (plan.undatable.isNotEmpty) plural('mods.assume_current.left_undatable', plan.undatable.length),
+      if (plan.elsewhere.isNotEmpty) plural('mods.assume_current.left_elsewhere', plan.elsewhere.length),
+    ];
+
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 600),
         child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 18,
             children: [
-              Text(loc.t('mods.assume_current.body')),
-              const SizedBox(height: 10),
-              // Said plainly and never buried: the point of this action is that
-              // it records a *date* instead of guessing a version, and a user
-              // who thinks it filled in version numbers would trust the result
-              // far more than it deserves.
-              Text(loc.t('mods.assume_current.no_version'), style: muted),
-              if (plan.anyBaselineIsProxy) ...[
-                const SizedBox(height: 8),
-                Text(loc.t('mods.assume_current.proxy_caveat'), style: muted),
-              ],
-              if (plan.untracked.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  plural('mods.assume_current.excluded_untracked',
-                      plan.untracked.length),
-                  style: muted,
-                ),
-              ],
-              if (plan.undatable.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  plural('mods.assume_current.excluded_undatable',
-                      plan.undatable.length),
-                  style: muted,
-                ),
-              ],
+              Row(
+                spacing: 14,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: info.background,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: info.border!),
+                    ),
+                    child: Icon(Icons.event_available_rounded, size: 20, color: info.foreground),
+                  ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      spacing: 2,
+                      children: [
+                        Text(plural('mods.assume_current.title', count),
+                            style: text.titleLarge?.copyWith(color: palette.text)),
+                        Row(
+                          spacing: 6,
+                          children: [
+                            Text(loc.t('mods.assume_current.subtitle'),
+                                style: text.bodySmall?.copyWith(color: palette.text3)),
+                            ZenithBadge(label: loc.t('library.card.file_unknown'), tone: info, small: true),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              Text(loc.t('mods.assume_current.body'), style: text.bodyMedium?.copyWith(color: palette.textProse)),
+              _Example(mod: eligible.first),
+              _ModList(
+                eligible: eligible,
+                off: _off,
+                onChanged: (id, on) => setState(() => on ? _off.remove(id) : _off.add(id)),
+                onAll: (on) => setState(() => on ? _off.clear() : _off.addAll(eligible.map((m) => m.id))),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: 6,
+                children: [
+                  if (left.isNotEmpty)
+                    Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: '${loc.t('mods.assume_current.left_title')} ',
+                            style: TextStyle(fontWeight: FontWeight.w600, color: palette.textProse),
+                          ),
+                          TextSpan(
+                            text: switch (left) {
+                              [final a] => '$a.',
+                              [final a, final b] => loc.t('mods.assume_current.left_both', params: {'a': a, 'b': b}),
+                              _ => loc.t('mods.assume_current.left_three',
+                                  params: {'a': left[0], 'b': left[1], 'c': left[2]}),
+                            },
+                          ),
+                        ],
+                      ),
+                      style: small,
+                    ),
+                  if (plan.anyBaselineIsProxy) Text(loc.t('mods.assume_current.proxy_caveat'), style: small),
+                ],
+              ),
+              Row(
+                spacing: 8,
+                children: [
+                  Expanded(
+                    child: Text(loc.t('mods.assume_current.nothing_downloaded'),
+                        style: text.bodySmall?.copyWith(color: palette.text3)),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(loc.t('mods.assume_current.cancel')),
+                  ),
+                  FilledButton(
+                    onPressed: count == 0 ? null : () => Navigator.pop(context, chosen),
+                    child: Text(plural('mods.assume_current.confirm', count)),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: Text(loc.t('mods.assume_current.cancel')),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, true),
-          child: Text(
-            plural('mods.assume_current.confirm', plan.eligible.length),
+    );
+  }
+}
+
+/// One mod's date added as the line between what counts as the user's file and what shows as an update.
+class _Example extends StatelessWidget {
+  const _Example({required this.mod});
+
+  final ModInfo mod;
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = context.loc;
+    final palette = ZenithPalette.of(context);
+    final text = Theme.of(context).textTheme;
+    final added = mod.origin?.installedAt;
+    final small = text.bodySmall;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+      decoration: BoxDecoration(
+        color: palette.ground,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: palette.outline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 10,
+        children: [
+          Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(text: loc.t('mods.assume_current.example', params: {'mod': mod.name})),
+                if (added != null)
+                  TextSpan(
+                    text: ' ${formatResolveDate(added)}',
+                    style: TextStyle(fontWeight: FontWeight.w600, color: palette.text),
+                  ),
+              ],
+            ),
+            style: small?.copyWith(color: palette.text2),
           ),
-        ),
-      ],
+          SizedBox(
+            height: 18,
+            child: LayoutBuilder(
+              builder: (context, constraints) => Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: 5,
+                    height: 8,
+                    child: Row(
+                      spacing: 3,
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Color.lerp(palette.raised, palette.accent, 0.45),
+                              borderRadius: const BorderRadius.horizontal(left: Radius.circular(99)),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: palette.badgeUpdate.border,
+                              borderRadius: const BorderRadius.horizontal(right: Radius.circular(99)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Positioned(
+                    left: constraints.maxWidth * 0.6 - 1,
+                    top: 0,
+                    width: 2,
+                    height: 18,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(color: palette.text, borderRadius: BorderRadius.circular(2)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Row(
+            spacing: 16,
+            children: [
+              Expanded(
+                child: Text(loc.t('mods.assume_current.by_then'), style: small?.copyWith(color: palette.textProse)),
+              ),
+              Expanded(
+                child: Text(
+                  loc.t('mods.assume_current.after'),
+                  textAlign: TextAlign.right,
+                  style: small?.copyWith(color: palette.badgeUpdate.foreground),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The mods the action would mark, each with a box: unticked, a mod is left asking.
+class _ModList extends ConsumerWidget {
+  const _ModList({required this.eligible, required this.off, required this.onChanged, required this.onAll});
+
+  final List<ModInfo> eligible;
+  final Set<String> off;
+  final void Function(String id, bool on) onChanged;
+  final ValueChanged<bool> onAll;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final loc = context.loc;
+    final palette = ZenithPalette.of(context);
+    final text = Theme.of(context).textTheme;
+    final pages = ref.watch(knownModPagesProvider);
+    final count = eligible.length - off.length;
+
+    Widget box({required bool? value, required ValueChanged<bool?> onChanged, required String label}) => Checkbox(
+      tristate: value == null,
+      value: value,
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      semanticLabel: label,
+      onChanged: onChanged,
+    );
+
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: palette.outline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            color: palette.card,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Row(
+              spacing: 12,
+              children: [
+                box(
+                  value: off.isEmpty ? true : (count == 0 ? false : null),
+                  label: loc.t('library.all.select_all'),
+                  onChanged: (_) => onAll(off.isNotEmpty),
+                ),
+                Expanded(
+                  child: Text(
+                    loc.t('mods.assume_current.count_of', params: {'count': '$count', 'total': '${eligible.length}'}),
+                    style: text.bodyMedium?.copyWith(color: palette.text, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                Text(loc.t('mods.assume_current.untick_hint'), style: text.bodySmall?.copyWith(color: palette.text3)),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: palette.outline),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 216),
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: eligible.length,
+              itemBuilder: (context, index) {
+                final mod = eligible[index];
+                final on = !off.contains(mod.id);
+                final author = installedRecord(mod, pages).page?.submitter?.name;
+                final added = mod.origin?.installedAt;
+                final byline = [libraryGroupName(libraryGroupOf(mod.characterId), loc), ?author].join(' · ');
+                return Opacity(
+                  opacity: on ? 1 : 0.55,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(border: Border(bottom: BorderSide(color: palette.rowDivider))),
+                    child: Row(
+                      spacing: 12,
+                      children: [
+                        box(
+                          value: on,
+                          label: loc.t('mods.assume_current.mark_one', params: {'mod': mod.name}),
+                          onChanged: (value) => onChanged(mod.id, value ?? false),
+                        ),
+                        ModThumb(mod: mod, width: 36, height: 24),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                mod.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: text.bodyMedium?.copyWith(color: palette.text, fontWeight: FontWeight.w600),
+                              ),
+                              Text(
+                                byline,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: text.bodySmall?.copyWith(color: palette.text3),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (added != null)
+                          Text.rich(
+                            TextSpan(
+                              children: [
+                                TextSpan(text: '${loc.t('mods.assume_current.added')} '),
+                                TextSpan(text: formatResolveDate(added), style: ZenithType.of(context).monoSmall),
+                              ],
+                            ),
+                            style: text.bodySmall?.copyWith(color: palette.text2),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

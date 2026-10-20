@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/services/platform_service.dart';
+import 'package:mod_manager_flutter/services/platform_service_linux.dart';
 import 'package:path/path.dart' as p;
 
 import 'support/temp_library.dart';
@@ -58,5 +60,49 @@ void main() {
     final mods = await temp.service.getModsInfo();
     expect(mods.where((m) => m.isActive).map((m) => m.name),
         containsAll(['Ellen School', 'Miyabi Kimono']));
+  });
+
+  group('listing the dead links', () {
+    late String links;
+
+    setUp(() {
+      links = temp.saveMods.path;
+      // A live link, a real folder, a dead link, a dead link with a relative target, and a dead dot-name.
+      installMod('Live');
+      Link(p.join(links, 'Live')).createSync(temp.modFolder('Live').path);
+      Directory(p.join(links, 'Real Folder')).createSync();
+      Link(p.join(links, 'Unplugged')).createSync('/media/drive/Unplugged');
+      Link(p.join(links, 'relative')).createSync('../gone');
+      Link(p.join(links, '.hidden')).createSync('/media/drive/.hidden');
+    });
+
+    test('lists a link whose target is missing, with its target, and nothing else', () async {
+      final dead = await LinuxPlatformService().listDeadModLinks(links);
+
+      expect(dead, [
+        DeadModLink(name: 'relative', target: p.normalize(p.join(links, '../gone'))),
+        const DeadModLink(name: 'Unplugged', target: '/media/drive/Unplugged'),
+      ]);
+    });
+
+    test('listing changes nothing: every link, dead or live, is still there with the same target', () async {
+      final before = {
+        for (final name in ['Live', 'Unplugged', 'relative', '.hidden'])
+          name: Link(p.join(links, name)).targetSync(),
+      };
+
+      await LinuxPlatformService().listDeadModLinks(links);
+
+      for (final MapEntry(key: name, value: target) in before.entries) {
+        final link = Link(p.join(links, name));
+        expect(FileSystemEntity.isLinkSync(link.path), isTrue, reason: '$name lost its link');
+        expect(link.targetSync(), target, reason: '$name points elsewhere');
+      }
+      expect(Directory(p.join(links, 'Real Folder')).existsSync(), isTrue);
+    });
+
+    test('a folder that cannot be listed is no dead links, not an error', () async {
+      expect(await LinuxPlatformService().listDeadModLinks(p.join(links, 'not here')), isEmpty);
+    });
   });
 }

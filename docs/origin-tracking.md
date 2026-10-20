@@ -36,7 +36,7 @@ Confidence tiers, strongest first:
 |---|---|---|
 | `exact` | We know the file | We downloaded it, or its archive hash matched a published checksum |
 | `user` | The user told us | Confirming an identity or picking a file in the resolve dialog |
-| `inferred` | Guessed from local data | A `source_url` parse, a name match |
+| `inferred` | Worked out by the app, not confirmed | A `source_url` parse, a name match; for a file, one the tracking screen worked out and the user accepted ([§7](#7-the-bulk-resolution-pass)) |
 | `assumed_latest` | "Don't know what I have, got it around then" | The resolve dialog's third answer, or the bulk action |
 | `unknown` | Nothing on record | A manual import; the default |
 
@@ -48,8 +48,8 @@ Four rules follow from the split, and they govern everything below:
   the mod but not the file is not enough to know what to replace it with. Anything
   weaker may badge, suggest and prompt, but its verdict is capped at "possibly
   outdated" ([`update-checks.md`](update-checks.md#the-cap-that-confidence-imposes)).
-  `inferred` in particular came from a free-form text field a human typed, so it must
-  be confirmed once before any update acts on it.
+  `inferred` in particular came from a free-form text field a human typed, so its verdicts stay capped until it is confirmed.
+  Reinstall still writes from it on the user's yes, since a link the user typed is their own registration ([`applying-updates.md`](applying-updates.md) §6).
   **This is not a licence to overwrite unattended.** `exact` is a claim about
   *which remote file this is*; it says nothing about what the mod folder holds,
   which is where every hazard of applying an update actually lives. No update is
@@ -163,7 +163,7 @@ What it writes, and what it deliberately doesn't:
 |---|---|---|
 | `source` | `gamebanana` | The only service the parser understands. |
 | `mod_id` | from `source_url` | `/mods/<id>` and `/mods/download/<id>` only. A `/dl/<id>` link is a **file** id in a different id space and yields null. |
-| `mod_id_confidence` | `inferred` | It came from a free-form text field, so it may be a wrong paste or a different mod. May badge and suggest, but caps every verdict at "possibly outdated", and must be confirmed once before any update acts on it. |
+| `mod_id_confidence` | `inferred` | It came from a free-form text field, so it may be a wrong paste or a different mod. May badge and suggest, but caps every verdict at "possibly outdated" until it is confirmed. Reinstall still writes from it on the user's yes. |
 | `installed_at` | oldest file mtime | With `installed_at_is_proxy: true`. |
 | `provenance` | `imported_folder` | Genuinely unknown for a legacy mod — it may have been downloaded by an old build, imported, or hand-copied. Takes the least-privileged of the three, matching `OriginProvenance.parse`'s own fallback. Nothing gates on it — the confidences do that — so understating it costs nothing. |
 | `file_id`, `version`, `version_confidence` | **not written** | Identity and version are separate unknowns. The archive is deleted after extraction, so nothing local remains to match against the per-file checksums the remote publishes. Sniffing a version out of folder names or `.ini` comments is deliberately not done: mods embed ZZMI and game versions indistinguishable from mod versions, and a wrong stored version is worse than none. |
@@ -217,24 +217,25 @@ price is the right one. See
 ## 4. The status slot and the "needs attention" filter
 
 `services/origin_status.dart` folds an `origin` block into the single thing a library card may render.
-It is a pure function, and the "needs attention" filter above the grid is built from the *same* function — so the badge and the filter cannot disagree about which mods are which.
+It is a pure function, and the "needs attention" filter is built from the *same* function — Needs attention above a character's mods and Can't be checked on the All mods table ([`library-screen.md`](library-screen.md) §16) — so the badge and the filter cannot disagree about which mods are which.
 
 | Status | When | How it looks |
 |---|---|---|
 | **`versionUnknown`** | `mod_id` known, `version_confidence` is `unknown` | "Which file?" in blue, actionable. We can query the file list but can't judge what comes back, and one pass through the dialog fixes it. |
-| **`versionGuessed`** | `mod_id` known, the base download's version at `assumed_latest` | "Dated only" in grey. A date is on record and no file: what "Mark all as current" writes. |
-| **`versionGuessed`** | `mod_id` known, the base download's version at `inferred` | "Guessed file" in grey. A file is on record, worked out rather than confirmed. |
+| **`versionGuessed`** | `mod_id` known, the base download's version at `assumed_latest` | "Dated only" in grey. A date is on record and no file: what "Mark as current" writes. |
+| **`versionGuessed`** | `mod_id` known, the base download's version at `inferred` | No badge. A file is on record, worked out by the tracking screen and accepted there, and every surface names it as it names a confirmed one. |
 | **`untracked`** | no `origin` block, or no `mod_id` | "Not tracked" in grey. **Informational, never alarming** — most of a pre-origin library looks like this, and badging all of it loudly trains the user to stop seeing the badge. |
 | **`none`** | version at `user` or `exact`, or `tracking: "off"` | Nothing from this function. The card shows "Local" in grey for `tracking: "off"` before it asks. |
 
 The rule the states follow, in one line: **the badge speaks whenever tracking is less than complete, and how loudly depends on how cheaply the user can act.**
 Blue is the one that asks for something; the grey states are statements of fact. Amber is kept for an update ([`library-screen.md`](library-screen.md) §6).
 
-`versionGuessed` has a state of its own so that a mod waved through by the bulk action is distinguishable from one whose file the user actually picked — across a whole library, without opening every dialog in turn.
+`versionGuessed` has a state of its own so that a mod waved through by "Mark as current" is distinguishable from one whose file the user actually picked — across a whole library, without opening every dialog in turn.
+The state is not the badge, though: only its `assumed_latest` half is drawn. A file the tracking screen worked out is one the user accepted there, and whether it was guessed doesn't matter to them once they agreed to it; the state stays for what still depends on it, since an update found against a worked-out file is capped at "possibly outdated" unless the archive's checksum matched ([`update-checks.md`](update-checks.md) §3). Reinstall is offered on it as on a confirmed file ([`applying-updates.md`](applying-updates.md) §6).
 Two things about it:
 
 - **It marks the weak state, not the strong one.** Marking "properly linked" instead was considered and rejected: those marks grow to cover every card as the library is resolved and then are permanent noise, where these *shrink as the user does the work*.
-- **The grey states differ by their words**, "Dated only", "Guessed file", "Not tracked" and "Local", never by a shade of grey, which would be indistinguishable at badge size and for anyone colourblind.
+- **The grey states differ by their words**, "Dated only", "Not tracked" and "Local", never by a shade of grey, which would be indistinguishable at badge size and for anyone colourblind.
 
 Three things here are decisions rather than mechanics:
 
@@ -245,10 +246,9 @@ Three things here are decisions rather than mechanics:
   GameBanana reports a private, trashed or withheld page on every request, and the update check says so in its verdict each time it asks.
   A stored mark adds nothing to that and goes stale: a privated page that comes back would keep it.
   So the card shows whatever mark the block earns, the filter counts the mod by that same state, and a page that comes back is checked as if nothing happened.
-- **Only `unknown` is actionable.** `assumed_latest` is the user having already answered "I don't know which, I got it around then", and `inferred` is a guess we recorded and label as one. Marking either in blue would make the dialog impossible to finish.
+- **Only `unknown` is actionable.** `assumed_latest` is the user having already answered "I don't know which, I got it around then", and `inferred` is a file the tracking screen worked out and the user accepted. Marking either in blue would make the dialog impossible to finish.
 
-The **filter** keeps `untracked` and `versionUnknown`, and this is the one place it
-and the badge deliberately come apart:
+The **filter** keeps `untracked`, `versionUnknown` and `secondIdentityUnknown` ([`library-screen.md`](library-screen.md) §6), and this is the one place it and the badge deliberately come apart:
 
 - **Untracked mods are in**, though the badge keeps them quiet. The badge asks "how
   loudly should this card speak", the filter asks "what have I not dealt with", and
@@ -257,7 +257,7 @@ and the badge deliberately come apart:
   enumerate. (What they get no access to is *bulk* resolution — a separate rule,
   about fuzzy name matching being unsafe to rubber-stamp, see
   [§6](#6-assume-current-in-bulk).)
-- **`versionGuessed` is out.** The bulk "assume current" action turns blue mods into dated ones, and the count dropping is the entire visible proof that it worked.
+- **`versionGuessed` is out.** "Mark as current" turns blue mods into dated ones, and the count dropping is the entire visible proof that it worked.
   Were dated mods still counted, the number would sit unchanged while the marks merely changed colour and wording, which reads as a button that did nothing.
 
 ---
@@ -380,14 +380,14 @@ Rules worth knowing before changing any of it:
 
 ## 6. "Assume current" in bulk
 
-The same "I don't know which file — I got it around then" answer, applied to the mods of the character on screen in one press.
-`services/bulk_assume_current.dart` holds the decisions; `screens/dialogs/assume_current_dialog.dart` is the confirmation and the write loop, reached from *Mark all as current* in the Library page's **library menu** ([`library-screen.md`](library-screen.md) §7).
+The same "I don't know which file — I got it around then" answer, applied to many mods in one press.
+`services/bulk_assume_current.dart` holds the decisions; `screens/dialogs/assume_current_dialog.dart` is the confirmation and the write loop, reached from **Mark N as current** in the All mods table's selection bar, over the ticked mods the table shows ([`library-screen.md`](library-screen.md) §9, §16).
 
 It makes **no requests at all**, which is what makes it worth having: it turns a
 legacy library from something that can never report an update into something that
 can, without a mod page, a version string, or a single answer from the user.
 
-Four rules, in the order they matter:
+Five rules, in the order they matter:
 
 - **It acts only on precise handles.** A mod with no `mod_id` is excluded, and the
   confirmation says how many were excluded for that reason. Identifying one means
@@ -402,25 +402,14 @@ Four rules, in the order they matter:
   A decline is reported as a decline, never as a failure: `updateOrigin` answers `declined` for it,
   distinct from `folderMissing` and `writeFailed`, so the guard's own correct behaviour never surfaces as "those folders may be read-only".
   The reachable case needs no concurrency at all: press the button, then press it again before the rescan has refreshed the plan.
-- **The confirmation states the size first.** The answer is usually either nothing or
-  most of the library, and a user expecting the first who gets the second has had
-  dozens of mods rewritten on a press. It also names what it is *not* touching
-  (untracked mods, and mods with no derivable install date), so "12 mods" can't be
-  mistaken for "all of them".
-  That number is built from the list **the grid is rendering**, not from the wider list the Needs attention chip counts: under another filter the two come apart, and a control that rewrites more mods than it is showing is the failure this rule exists to avoid.
-- **The action turns the needs-attention filter on before it asks, and puts it
-  back if it doesn't go through.** The rule is that the user must have *seen* the
-  set being rewritten. Enforcing that by hiding the button until the filter happens
-  to be on is the rejected alternative: it puts a bulk write in a row that appears
-  and disappears. The menu entry flips the filter itself, so the grid behind
-  the confirmation shows exactly those mods — and restores it on cancel, since
-  turning it on *for* a confirmation means declining the one thing a confirmation
-  exists to allow would otherwise leave the grid filtered behind the user's back.
-  Restoring means restoring: a filter the user had already set stays on.
-  Flipping it cannot change *which* mods are eligible, only which are on screen —
-  `planBulkAssumeCurrent` already keeps only `versionUnknown` mods and
-  needs-attention drops exactly the ones it would have skipped — so the count in the
-  menu is the count that gets written.
+- **The confirmation lists every mod it would write, each with a box to untick.** The rule is that the user must have *seen* the set being rewritten, and a list in the dialog is the set itself rather than a count standing for it.
+  Every eligible mod starts ticked, under "N of M"; unticking one leaves it asking "Which file?", and only the mods left ticked are written.
+  The count leads the title because the answer is usually either nothing or most of the selection, and a user expecting the first who gets the second has had dozens of mods rewritten on a press.
+  It also names what it is *not* touching among the ticked mods (untracked mods, mods with no derivable install date, and the folders below whose question is another layer's), so "12 mods" can't be mistaken for "all of them".
+  The plan is built from **the ticked rows the table shows**, the filter and the search together, so a mod ticked and then hidden is never planned: a control that rewrites more mods than it is showing is the failure this rule exists to avoid.
+- **A Base unknown folder is not eligible.** A date for one layer of a folder whose base mod nobody named leaves it asking, so it is settled by naming the base mod, from the resolve dialog's naming row ([§10](#10-a-folder-that-holds-two-downloads)).
+- **Nor is a folder whose patch's file is unknown.** "Which file?" is also the badge of a folder whose base file is known and whose identified patch's file isn't (`modOriginStatus`), and the date this action writes is the base's: it would turn the known file into a date and leave the question. A folder where both are unknown is left out for the same reason.
+  The planner and the write share one test, `bulkAssumeCurrentEligible`: the folder asks "Which file?" of its base alone and has a date added. Both kinds of folder above are listed under "Left as they are" as settled in the tracking screen.
 - **The baseline it writes is unclamped, and that is a deferred problem, not a solved
   one.** The per-mod dialog clamps `baseline_remote_date` to the mod's own
   `_tsDateAdded`, because a proxy install date taken from file timestamps can read
@@ -437,10 +426,8 @@ and the resolve dialog probes before it binds — so a tracked mod still missing
 field is one whose walk found no files, and re-walking would return null again. Those
 mods are listed as skipped rather than dropped quietly.
 
-Measured against a mirror of a real library (17 mods with sidecars, 10 of them
-eligible): **13 ms** for the whole pass including all 10 rewrites, and a re-run is a
-4 ms no-op because `assumed_latest` is no longer eligible. There is no progress UI and
-none is needed; the button simply disables while it runs.
+Measured against a mirror of a real library (17 mods with sidecars, 10 of them eligible): **13 ms** for the whole pass including all 10 rewrites, and a re-run is a 4 ms no-op because `assumed_latest` is no longer eligible.
+There is no progress UI and none is needed; the selection bar's action buttons simply disable while it runs.
 
 ---
 
@@ -450,22 +437,22 @@ The whole-library update check's **results screen is also the resolution screen*
 `services/bulk_resolution.dart` holds the decisions;
 `screens/dialogs/bulk_resolution_dialog.dart` is the surface.
 
-**It has two doors, and the second one is what makes the first bearable.** A check opens it by itself when the pass turned up something to ask; and *Sort out mod tracking…* in the library menu opens it on demand, from the records the last check left in session state — or by running that check first when there are none.
+**It has two doors, and the second one is what makes the first bearable.** A whole-library check opens it by itself when the pass turned up something to ask; and **Sort these out**, under the All mods table while its Can't be checked filter is on ([`library-screen.md`](library-screen.md) §16), opens it on demand, from the records the last check left in session state — or by running that check first when there are none.
 Built only on the first door it would be a modal that could be seen once and never again: cancelling it, or closing it by accident, would mean waiting for the next check.
 Keeping the records (`modUpdateRecordsProvider`, never persisted, exactly like the verdicts beside them) is what makes reopening free.
 
 **Untracked mods open the screen only on demand.** A check opens it by itself only for a question row (`BulkResolutionPlan.hasWork`):
 a library that keeps a few mods untracked on purpose would otherwise get a modal after every check, asking nothing.
-The on-demand doors — the menu entry, and the reminder above the grid that offers to link mods to their GameBanana pages — open it for a question row *or* an untracked mod (`listsAnything`).
+The on-demand door opens it for a question row *or* an untracked mod (`listsAnything`): the filter it sits under lists untracked mods, so a door that ignored them would lead nowhere from the mods it is shown with.
 The untracked list needs no mod page, so the plan is built with no records in hand too, and a library with nothing tracked opens straight onto that list with no check at all.
-When those doors run a check first, an untracked mod is still enough to open the screen afterwards, so the reminder never ends in a notification that leaves those mods out of reach.
+When that door runs a check first, an untracked mod is still enough to open the screen afterwards, so it never ends in a notification that leaves those mods out of reach.
 With no records in hand nothing was looked up, so that door reports nothing as unreached.
 
 **Both doors must say the same thing.**
 The update count is read library-wide (`libraryUpdateCountProvider`) rather than from whichever door opened the screen: the check's own tally is library-wide while the Updates chip counts the character on screen, so one sentence in one dialog would otherwise mean "in your library" or "for this character" depending on where the user was standing.
 The "couldn't be checked" line is real on both doors, since a zero on either drops the accounting the whole screen is careful about.
 Its two numbers come from different fields on purpose.
-The menu door quotes `BulkResolutionPlan.unreachable`: every tracked mod with no record in hand, and every page the record reports gone.
+The on-demand door quotes `BulkResolutionPlan.unreachable`: every tracked mod with no record in hand, and every page the record reports gone.
 The check door quotes the folders the pass failed to reach together with `BulkResolutionPlan.goneIds`, as a union of folder ids so a folder counted by both is counted once.
 The pass itself counts a gone page as answered rather than failed, and without `goneIds` such a mod would appear nowhere on the screen.
 
@@ -479,12 +466,8 @@ One row per mod, and a row can carry more than one question — a legacy mod
 backfilled from a pasted url has both an unconfirmed identity and no version, and
 both answers land in a **single** `updateOrigin` call so it cannot half-write itself.
 
-**Rows are grouped by the question they lead with, under a heading that says what
-the group is for and why it matters** — the same `DialogSection` shape the update
-flow's dialogs use. That is a correction, and the report behind it was that the
-screen took minutes to understand: ungrouped, a row asking *is this the right mod?*
-looked identical to one asking *which file?*, nothing said what the screen was for,
-and the type was the 11–13px the rest of the app had already moved away from.
+**Rows are grouped by the question they lead with, under a heading that says what the group is for and why it matters** — the same `DialogSection` shape the update flow's dialogs use.
+Ungrouped, a row asking *is this the right mod?* looks identical to one asking *which file?*, and nothing says what the screen is for.
 
 The grouping is by **leading** question rather than by question, and a mod appears once.
 A section per question with mods appearing in two of them reads better on paper and is worse in practice: on a legacy library nearly every row asks both, so every name would be listed twice.
@@ -559,10 +542,9 @@ model in miniature:
 - the mod publishing **exactly one file, uploaded at or before the install**,
   recorded at **`inferred`**.
 
-`inferred` rather than `user` because the user consented to a plan; they did not look
-at a file list and recognise their download. It caps every verdict it produces at
-"possibly outdated" and renders as a guess on the card, which is what makes offering
-it safe.
+`inferred` rather than `user` because the user consented to a plan; they did not look at a file list and recognise their download.
+It caps every verdict it produces at "possibly outdated", which is what makes offering it safe. Reinstall is offered on it like on a confirmed file, since a wrong one is undone from the snapshot taken first ([`applying-updates.md`](applying-updates.md) §6).
+Once the user applies the plan, the card and every other surface name the file as theirs, with no badge of its own ([`library-screen.md`](library-screen.md) §6).
 
 The install-date test on the single-file case is easy to drop and is load-bearing: a
 mod whose only file was published *after* the install is one whose original file has
@@ -582,15 +564,10 @@ mod's own file list is a stronger statement that it is your mod than ticking a b
 beside its name, and a banked checksum matching a file the page publishes is proof
 rather than testimony.
 
-**A file at `inferred` does not**, and the trap is worth stating plainly. The pass
-pre-ticks its own single-file inference, so letting a file answer raise identity
-would mean pressing Save on a row whose *"yes, this is the right mod page"* was
-deliberately left unticked still lifting `mod_id_confidence` to `user` — laundering
-a guess parsed out of a pasted url into the tier that lets an update overwrite
-files, on the one screen where the user has visibly declined to confirm it. It is the "never-confirmed ≠ safe" rule
-([§1](#1-two-axes-confidence-and-provenance)) inverted. Both axes stay guesses
-instead, which caps that mod's verdict at *possibly outdated* — honest, and exactly
-what two separate confidences are for.
+**A file at `inferred` does not**, and the trap is worth stating plainly. The pass pre-ticks its own single-file inference, so letting a file answer raise identity would mean pressing Save on a row whose *"yes, this is the right mod page"* was deliberately left unticked still lifting `mod_id_confidence` to `user`,
+laundering a guess parsed out of a pasted url into the tier whose verdicts are not capped, on the one screen where the user has visibly declined to confirm it. It is the "never-confirmed ≠ safe" rule ([§1](#1-two-axes-confidence-and-provenance)) inverted.
+Both axes stay guesses instead, which caps that mod's verdict at *possibly outdated*: honest, and exactly what two separate confidences are for.
+What stays a guess is how sure a verdict may sound, not whether the folder may be written: Reinstall is still offered on such a mod, since a page parsed from the user's own source link is their registration, and the write waits for their yes behind a snapshot ([`applying-updates.md`](applying-updates.md) §6).
 
 A row with **nothing ticked writes nothing**: it is not in the map the dialog hands
 over, and the transform declines it even if it were.

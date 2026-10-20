@@ -12,8 +12,29 @@ import 'log/log_setup.dart';
 import '../models/gamebanana/gb_enums.dart';
 import 'gamebanana/content_filter.dart';
 import 'mod_manager_service.dart';
+import 'platform_service.dart' show NetworkLinkRefused;
 import 'platform_service_factory.dart';
 import 'shader_fixes/shader_fixes_service.dart';
+import 'shader_fixes/zzmi_layout.dart';
+
+/// A save refused because the Mod library [folder] would overlap ZZMI's Mods folder, where the links go, as
+/// [overlap] says.
+class LibraryOverlapsLinksFolder implements Exception {
+  const LibraryOverlapsLinksFolder(this.folder, this.overlap);
+  final String folder;
+  final LibraryOverlap overlap;
+
+  /// The body of the error that refuses it, worded for [overlap], with `{folder}` to fill.
+  String get bodyKey => switch (overlap) {
+        LibraryOverlap.same => 'settings.library_is_links_folder_body',
+        LibraryOverlap.leadsTo => 'settings.library_leads_to_links_folder',
+        LibraryOverlap.inside => 'settings.library_inside_links_folder',
+        LibraryOverlap.contains => 'settings.library_holds_links_folder',
+      };
+
+  @override
+  String toString() => 'the Mod library cannot overlap ZZMI\'s Mods folder (${overlap.name}): $folder';
+}
 
 /// API сервіс для роботи з модами
 class ApiService {
@@ -68,8 +89,6 @@ class ApiService {
           AccentChoice.parse(_configService!.accent);
       _container!.read(updateCheckOnLaunchProvider.notifier).state =
           _configService!.updateCheckOnLaunch;
-      _container!.read(trackingNudgeDismissedProvider.notifier).state =
-          _configService!.trackingNudgeDismissed;
       _container!.read(hideEmptyCharactersProvider.notifier).state = _configService!.hideEmptyCharacters;
       _container!.read(modNotesProvider.notifier).state = _configService!.modNotes;
       _container!.read(oneAtATimeProvider.notifier).state = _configService!.oneAtATime;
@@ -171,6 +190,13 @@ class ApiService {
       // The note moved with the rename; the provider still has it under the old name.
       if (renamed) _container?.read(modNotesProvider.notifier).state = _configService!.modNotes;
       return renamed;
+    } on RenameRefused {
+      rethrow;
+    } on RenameFolderFailed {
+      rethrow;
+    } on RenameLinkFailed catch (failure) {
+      if (failure.renamed) _container?.read(modNotesProvider.notifier).state = _configService!.modNotes;
+      rethrow;
     } catch (e) {
       throw Exception('Помилка перейменування моду: $e');
     }
@@ -212,20 +238,32 @@ class ApiService {
   /// Turns [modId] on, after turning every mod in [switchOff] off: the enable a character's One at a time switch
   /// asks for (`docs/library-screen.md` §10).
   ///
-  /// The dry run comes first, so a refused enable throws [ShaderPlacementRefused] before anything changes. A mod in
+  /// The dry run comes first, so a refused enable throws [ShaderPlacementRefused] before anything changes. A link
+  /// refused for leading to a network folder throws [NetworkLinkRefused], with the mod off. A mod in
   /// [switchOff] that will not turn off stops the enable, rather than leaving two on under a switch that says one.
   ///
   /// False means the enable failed: a link could not be made or removed. Mods in [switchOff] may be off by then, so
   /// the caller reports the failure and reads the disk again.
-  static Future<bool> enableMod(String modId, {Iterable<String> switchOff = const []}) async {
+  ///
+  /// [whileWritten] is asked, after the dry run and before each mod in [switchOff] is turned off, whether that mod's
+  /// folder is being written; the caller marks it there so the write leaves it off. Such a mod's link may already be
+  /// gone, taken out by the write, so failing to remove it doesn't stop the enable.
+  static Future<bool> enableMod(
+    String modId, {
+    Iterable<String> switchOff = const [],
+    bool Function(String other)? whileWritten,
+  }) async {
     try {
       await initialize();
       await _modManager!.checkActivation(modId);
       for (final other in switchOff) {
-        if (!await _modManager!.deactivateMod(other)) return false;
+        final written = whileWritten?.call(other) ?? false;
+        if (!await _modManager!.deactivateMod(other) && !written) return false;
       }
       return await _modManager!.activateMod(modId);
     } on ShaderPlacementRefused {
+      rethrow;
+    } on NetworkLinkRefused {
       rethrow;
     } catch (e) {
       throw Exception('Could not turn the mod on: $e');
@@ -381,13 +419,6 @@ class ApiService {
     _container?.read(updateCheckOnLaunchProvider.notifier).state = enabled;
   }
 
-  /// Persists whether the reminder about mods not set up for update checking has been closed.
-  static Future<void> setTrackingNudgeDismissed(bool dismissed) async {
-    await initialize();
-    await _configService!.setTrackingNudgeDismissed(dismissed);
-    _container?.read(trackingNudgeDismissedProvider.notifier).state = dismissed;
-  }
-
   /// Persists whether the Library's character list hides the rows with no mods.
   static Future<void> setHideEmptyCharacters(bool hide) async {
     await initialize();
@@ -406,13 +437,28 @@ class ApiService {
     applyFileLogging(enabled);
   }
 
-  static Future<String> updateConfig({
+  /// Saves both paths. A changed library has the links into the old one pointed at it
+  /// ([ModManagerService.relinkLibrary]); returns the mods whose links could not be.
+  ///
+  /// Throws [LibraryOverlapsLinksFolder], saving nothing, when the library would be, be within or hold ZZMI's Mods
+  /// folder, by its path or through a link ([libraryOverlap]). [networkRefused] gets the mods among those whose link
+  /// was refused for leading to a network folder ([NetworkLinkRefused]).
+  static Future<List<String>> updateConfig({
     required String modsPath,
     required String zzmiPath,
+    Set<String>? networkRefused,
   }) async {
+    if (modsPath.isNotEmpty && zzmiPath.isNotEmpty) {
+      final overlap = await libraryOverlap(modsPath, linksFolderIn(zzmiPath));
+      if (overlap != null) throw LibraryOverlapsLinksFolder(modsPath, overlap);
+    }
     try {
       await initialize();
+      final previousLibrary = _configService!.modsPath ?? '';
       await _configService!.setPaths(modsPath, zzmiPath);
+      final notRelinked = previousLibrary.isEmpty || modsPath.isEmpty
+          ? const <String>[]
+          : await _modManager!.relinkLibrary(previousLibrary, modsPath, networkRefused: networkRefused);
       // Repointing the library has to reach the providers that derive from it,
       // or the Storage tab keeps measuring the folder that was set at launch.
       _container?.read(modsPathProvider.notifier).state = modsPath;
@@ -420,7 +466,7 @@ class ApiService {
       // An unchanged path doesn't rebuild the check, and ZZMI may have been installed into it since.
       _container?.invalidate(zzmiFoundProvider);
       _container?.invalidate(xxmiLauncherProvider);
-      return 'Конфігурацію збережено';
+      return notRelinked;
     } catch (e) {
       throw Exception('Помилка оновлення конфігурації: $e');
     }
@@ -452,12 +498,6 @@ class ApiService {
   static Future<void> invalidateKeybinds(String modId) async {
     await initialize();
     _modManager!.invalidateKeybinds(modId);
-  }
-
-  /// Clears all cached keybinds (used by manual refresh).
-  static Future<void> clearKeybindCache() async {
-    await initialize();
-    _modManager!.clearKeybindCache();
   }
 
   static Future<ConfigService> getConfigService() async {

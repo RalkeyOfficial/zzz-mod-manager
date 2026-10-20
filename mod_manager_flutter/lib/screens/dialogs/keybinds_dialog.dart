@@ -6,6 +6,7 @@ import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../models/keybind_info.dart';
 import '../../services/api_service.dart';
+import '../../services/ini_parser_service.dart';
 import '../../services/log/logger.dart';
 import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
@@ -291,17 +292,8 @@ Future<void> _saveKeybindChange(
       return;
     }
 
-    // Шукаємо INI файли
-    final iniFiles = await modDir
-        .list(recursive: true)
-        .where(
-          (entity) =>
-              entity is File && entity.path.toLowerCase().endsWith('.ini'),
-        )
-        .cast<File>()
-        .toList();
-
-    if (iniFiles.isEmpty) {
+    final result = await writeKeybind(modPath, keybind.section, newKey);
+    if (result == KeybindWrite.noIniFiles) {
       notify.error(
         loc.t('mods.keybinds.error_no_ini'),
         body: mod.name,
@@ -309,44 +301,8 @@ Future<void> _saveKeybindChange(
       );
       return;
     }
-
-    // Читаємо і оновлюємо INI файл
-    for (final iniFile in iniFiles) {
-      String content = await iniFile.readAsString();
-      final lines = content.split('\n');
-      bool inTargetSection = false;
-      bool updated = false;
-
-      for (int i = 0; i < lines.length; i++) {
-        final line = lines[i].trim();
-
-        // Перевіряємо чи це наша секція
-        if (line.toLowerCase() == '[${keybind.section.toLowerCase()}]') {
-          inTargetSection = true;
-          continue;
-        }
-
-        // Перевіряємо чи почалась нова секція
-        if (line.startsWith('[') && line.endsWith(']')) {
-          inTargetSection = false;
-        }
-
-        // Якщо ми в потрібній секції і знайшли рядок з key (key= або Key =)
-        if (inTargetSection &&
-            RegExp(r'^key\s*=', caseSensitive: false).hasMatch(line)) {
-          lines[i] = 'key = $newKey';
-          updated = true;
-          break;
-        }
-      }
-
-      if (updated) {
-        await iniFile.writeAsString(lines.join('\n'));
-        // The .ini changed — drop this mod's cached keybinds so the reload
-        // re-parses it.
-        await ApiService.invalidateKeybinds(mod.id);
-        break;
-      }
+    if (result == KeybindWrite.written) {
+      await ApiService.invalidateKeybinds(mod.id);
     }
   } catch (e) {
     Logger('mods').error('could not save a keybind', error: e);
@@ -356,4 +312,44 @@ Future<void> _saveKeybindChange(
       characterId: mod.characterId,
     );
   }
+}
+
+/// What [writeKeybind] did.
+enum KeybindWrite { written, noIniFiles, sectionNotFound }
+
+/// Sets the `key` line of [section] to [newKey] in the first `.ini` under
+/// [modPath] that has one, among the files ZZMI loads and in the order the
+/// keys are read from, so a file the game ignores is never written.
+Future<KeybindWrite> writeKeybind(
+  String modPath,
+  String section,
+  String newKey,
+) async {
+  final iniFiles = await IniParserService().findIniFiles(modPath);
+  if (iniFiles.isEmpty) return KeybindWrite.noIniFiles;
+
+  final keyLine = RegExp(r'^key\s*=', caseSensitive: false);
+  final header = '[${section.toLowerCase()}]';
+  for (final iniPath in iniFiles) {
+    final iniFile = File(iniPath);
+    final lines = (await iniFile.readAsString()).split('\n');
+    var inTargetSection = false;
+
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i].trim();
+      if (line.toLowerCase() == header) {
+        inTargetSection = true;
+        continue;
+      }
+      if (line.startsWith('[') && line.endsWith(']')) {
+        inTargetSection = false;
+      }
+      if (inTargetSection && keyLine.hasMatch(line)) {
+        lines[i] = 'key = $newKey';
+        await iniFile.writeAsString(lines.join('\n'));
+        return KeybindWrite.written;
+      }
+    }
+  }
+  return KeybindWrite.sectionNotFound;
 }

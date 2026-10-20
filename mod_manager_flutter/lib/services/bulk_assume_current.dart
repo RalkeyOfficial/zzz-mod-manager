@@ -2,16 +2,17 @@
 /// what it writes.
 ///
 /// The per-mod escape hatch ("I don't know which file — I got it around then")
-/// already exists in the resolve dialog. This is the same answer applied to a
-/// whole library in one press, and it is the cheapest way to turn a dead legacy
-/// library into a working update-notification system: it
-/// needs no network, no mod page and no knowledge from the user, and it records
-/// an honest *date* rather than a fabricated version string.
+/// already exists in the resolve dialog. This is the same answer applied to the
+/// mods ticked in the All mods table in one press, and it is the cheapest way to
+/// turn a legacy library into a working update-notification system: it needs no
+/// network, no mod page and no knowledge from the user, and it records an honest
+/// *date* rather than a fabricated version string.
 ///
 /// Two rules decide **who it may touch**, and they live here rather than in the
-/// dialog so they can be tested without one. (The other two rules the schema doc
-/// lists are the dialog's: it states its size before acting, and it reports a
-/// declined write as a decline rather than as a failure.)
+/// dialog so they can be tested without one. (The other two rules
+/// `docs/origin-tracking.md` §6 lists are the dialog's: it lists every mod it
+/// would write before acting, and it reports a declined write as a decline
+/// rather than as a failure.)
 ///
 /// - **Bulk acts only on precise handles.** A mod with no `mod_id` is excluded
 ///   outright. Identifying one means fuzzy-matching a folder name
@@ -19,14 +20,14 @@
 ///   rubber-stamped wrong match would later let an "update" overwrite a mod
 ///   with an unrelated mod's files. That is a one-at-a-time, user-confirmed
 ///   decision forever.
-/// - **It never overwrites a better answer.** Only a mod whose version is
-///   genuinely `unknown` is eligible, and the check is re-run against the block
-///   as freshly read from disk — see [bulkAssumeCurrent]. Applied blindly, this
+/// - **It never overwrites a better answer.** Only a mod whose base alone asks
+///   "Which file?" is eligible, and the check is re-run against the block as
+///   freshly read from disk — see [bulkAssumeCurrent]. Applied blindly, this
 ///   would *downgrade* a mod resolved exactly to a guess.
 /// Both are expressed as a **plan** rather than as work done, because the
 /// confirmation has to name its own size before acting: the answer is usually
-/// "nothing" or "most of the library", and a user expecting the first who gets
-/// the second has had dozens of mods rewritten on a press.
+/// "nothing" or "most of the selection", and a user expecting the first who
+/// gets the second has had dozens of mods rewritten on a press.
 library;
 
 import '../models/character_info.dart';
@@ -35,13 +36,14 @@ import '../models/origin_enums.dart';
 import 'origin_resolution.dart';
 import 'origin_status.dart';
 
-/// What one press would do, split into the three groups the confirmation has to
-/// be able to name.
+/// What one press would do, split into the groups the confirmation has to be
+/// able to name: the mods it writes, and the three kinds it leaves as they are.
 class BulkAssumeCurrentPlan {
   const BulkAssumeCurrentPlan({
     required this.eligible,
     required this.untracked,
     required this.undatable,
+    this.elsewhere = const <ModInfo>[],
   });
 
   static const BulkAssumeCurrentPlan empty = BulkAssumeCurrentPlan(
@@ -63,6 +65,10 @@ class BulkAssumeCurrentPlan {
   /// baseline is a tier that compares against nothing at all.
   final List<ModInfo> undatable;
 
+  /// Asks something a date for the base can't answer: a base mod nobody named, or which file of a patch is installed.
+  /// Settled in the tracking screen. Marking the base would turn a known file into a date and leave the question.
+  final List<ModInfo> elsewhere;
+
   bool get hasWork => eligible.isNotEmpty;
 
   /// Whether any baseline about to be written is a *derived* date rather than
@@ -73,7 +79,7 @@ class BulkAssumeCurrentPlan {
       eligible.any((m) => m.origin?.installedAtIsProxy ?? false);
 }
 
-/// Sorts [mods] into the three groups above. Pure, and deliberately over the
+/// Sorts [mods] into the groups above. Pure, and deliberately over the
 /// already-scanned list rather than the filesystem.
 ///
 /// **Nothing is probed for a missing install date**, unlike the per-mod dialog.
@@ -88,6 +94,7 @@ BulkAssumeCurrentPlan planBulkAssumeCurrent(Iterable<ModInfo> mods) {
   final eligible = <ModInfo>[];
   final untracked = <ModInfo>[];
   final undatable = <ModInfo>[];
+  final elsewhere = <ModInfo>[];
 
   for (final mod in mods) {
     switch (modOriginStatus(mod.origin)) {
@@ -105,24 +112,14 @@ BulkAssumeCurrentPlan planBulkAssumeCurrent(Iterable<ModInfo> mods) {
         continue;
       case ModOriginStatus.untracked:
         untracked.add(mod);
-      // **The badge's precedence is not this pass's.** A folder holding an
-      // unnamed patch shows `secondIdentityUnknown` because that is the louder
-      // thing to say about it, but this pass asks a narrower question — can a
-      // baseline be written for the *primary*? — and the patch half changes
-      // nothing about the answer. Reading the badge instead would quietly stop
-      // the bulk action dating mods it used to date.
-      //
-      // Guarded on the version, though, and that guard is the point: a folder
-      // whose patch we downloaded knows its file `exact`ly, and writing
-      // `assumed_latest` over that would **demote** it — trading a known file
-      // for a date, in a pass the user ran to gain information.
-      case ModOriginStatus.secondIdentityUnknown
-          when mod.origin?.base?.versionConfidence !=
-              OriginConfidence.unknown:
-        continue;
-      case ModOriginStatus.versionUnknown:
+      // A folder whose base mod nobody named is settled in the tracking
+      // dialog, not here: a date for one layer leaves it asking.
       case ModOriginStatus.secondIdentityUnknown:
-        if (mod.origin?.installedAt == null) {
+        elsewhere.add(mod);
+      case ModOriginStatus.versionUnknown:
+        if (!_onlyBaseAsks(mod.origin)) {
+          elsewhere.add(mod);
+        } else if (!bulkAssumeCurrentEligible(mod.origin)) {
           undatable.add(mod);
         } else {
           eligible.add(mod);
@@ -134,6 +131,7 @@ BulkAssumeCurrentPlan planBulkAssumeCurrent(Iterable<ModInfo> mods) {
     eligible: eligible,
     untracked: untracked,
     undatable: undatable,
+    elsewhere: elsewhere,
   );
 }
 
@@ -165,4 +163,14 @@ ModOrigin? bulkAssumeCurrent(ModOrigin? current) {
 /// write path so the count and the writes cannot describe different mods.
 bool bulkAssumeCurrentEligible(ModOrigin? origin) =>
     modOriginStatus(origin) == ModOriginStatus.versionUnknown &&
+    _onlyBaseAsks(origin) &&
     origin?.installedAt != null;
+
+/// Whether "Which file?" is asked of the base alone. It is also asked when the
+/// base's file is known and a patch's isn't, and the date this action writes
+/// is the base's: it would replace the known file and leave the question.
+bool _onlyBaseAsks(ModOrigin? origin) =>
+    origin?.base?.versionConfidence == OriginConfidence.unknown &&
+    !origin!.patches.any(
+      (patch) => patch.hasIdentity && patch.versionConfidence == OriginConfidence.unknown,
+    );

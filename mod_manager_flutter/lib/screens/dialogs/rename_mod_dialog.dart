@@ -1,15 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../services/api_service.dart';
+import '../../services/mod_manager_service.dart' show RenameFolderFailed, RenameLinkFailed, RenameRefused;
 import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
 
 /// Renames a mod (its on-disk folder). Live-validates the new name and
 /// delegates to [ApiService.renameMod], which also migrates the active link
-/// and the mod's active/favorite/category state. [onRenamed] runs after a
-/// successful rename with the new folder name so the caller can update its list.
+/// and the mod's active/favorite/category state. [onRenamed] runs with the new folder name whenever the folder has it,
+/// so the caller can update its list.
+///
+/// Refused while the mod's folder is being written ([modWritesInProgressProvider]), such as by an update or a restore.
 Future<void> showRenameModDialog(
   BuildContext context,
   WidgetRef ref,
@@ -27,12 +32,15 @@ Future<void> showRenameModDialog(
 
   return showDialog(
     context: context,
-    builder: (dialogContext) {
+    builder: (dialogContext) => Consumer(builder: (dialogContext, dialogRef, _) {
+      final writing = dialogRef.watch(modWritesInProgressProvider).contains(mod.id);
       return StatefulBuilder(
         builder: (dialogContext, setLocal) {
           final name = controller.text.trim();
           String? error;
-          if (name.isNotEmpty && name != mod.name) {
+          if (writing) {
+            error = loc.t('mods.dialog.rename_busy', params: {'name': mod.name});
+          } else if (name.isNotEmpty && name != mod.name) {
             if (RegExp(r'[\\/<>:"|?*]').hasMatch(name) ||
                 name.startsWith('.') ||
                 name.startsWith('__')) {
@@ -45,6 +53,8 @@ Future<void> showRenameModDialog(
               name.isNotEmpty && name != mod.name && error == null;
 
           Future<void> submit() async {
+            // A write may have started since the dialog was last built.
+            if (dialogRef.read(modWritesInProgressProvider).contains(mod.id)) return;
             Navigator.pop(dialogContext);
             try {
               final ok = await ApiService.renameMod(mod.id, name);
@@ -55,6 +65,39 @@ Future<void> showRenameModDialog(
                 notify.error(
                   loc.t('mods.dialog.rename_failed_title'),
                   body: loc.t('mods.dialog.rename_exists'),
+                  characterId: mod.characterId,
+                );
+              }
+            } on RenameRefused catch (refusal) {
+              if (!context.mounted) return;
+              notify.error(
+                loc.t('mods.dialog.rename_failed_title'),
+                body: loc.t('mods.dialog.rename_link_taken', params: {'name': refusal.name}),
+                characterId: mod.characterId,
+              );
+            } on RenameFolderFailed {
+              if (!context.mounted) return;
+              notify.error(
+                loc.t('mods.dialog.rename_failed_title'),
+                body: loc.t('mods.dialog.rename_folder_failed', params: {'name': mod.name}),
+                characterId: mod.characterId,
+              );
+            } on RenameLinkFailed catch (failure) {
+              if (!context.mounted) return;
+              if (failure.renamed) {
+                // The folder has its new name, so the tick and the selection follow it; the mod is off, so the page
+                // reads the disk again.
+                onRenamed(failure.name);
+                unawaited(ref.read(libraryProvider.notifier).rescan());
+                notify.error(
+                  loc.t('mods.dialog.rename_left_off_title'),
+                  body: loc.t('mods.dialog.rename_left_off_body', params: {'name': failure.name}),
+                  characterId: mod.characterId,
+                );
+              } else {
+                notify.error(
+                  loc.t('mods.dialog.rename_failed_title'),
+                  body: loc.t('mods.dialog.rename_link_failed', params: {'name': mod.name}),
                   characterId: mod.characterId,
                 );
               }
@@ -91,6 +134,7 @@ Future<void> showRenameModDialog(
                 decoration: InputDecoration(
                   labelText: loc.t('mods.dialog.rename_label'),
                   errorText: error,
+                  errorMaxLines: 3,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -110,6 +154,6 @@ Future<void> showRenameModDialog(
           );
         },
       );
-    },
+    }),
   );
 }

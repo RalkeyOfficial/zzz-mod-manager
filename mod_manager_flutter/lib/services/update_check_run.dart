@@ -1,8 +1,9 @@
 /// Running the whole-library check, and folding its answers into what is
 /// already known.
 ///
-/// Two surfaces start this pass — the Mods toolbar's *Check for updates*, and
-/// the opt-in check that runs by itself at startup — and they must not be two
+/// Two surfaces start this pass — the All mods table's *Check all for updates*
+/// (and its selection bar's check of the ticked mods), and the opt-in check
+/// that runs by itself at startup — and they must not be two
 /// implementations. What they share is not just the call: it is the cache
 /// decision below and the merge rule, both of which are wrong in a way nobody
 /// would notice if one copy drifted.

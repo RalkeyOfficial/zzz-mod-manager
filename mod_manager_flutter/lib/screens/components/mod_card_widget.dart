@@ -194,9 +194,8 @@ class _ModCardWidgetState extends ConsumerState<ModCardWidget> {
     final style = Theme.of(context).textTheme.bodySmall?.copyWith(color: palette.text3);
     final (:page, :file) = installedRecord(mod, ref.watch(knownModPagesProvider));
     final author = page?.submitter?.name;
-    // A file only worked out is not stated as the file.
-    final confirmed = mod.origin?.base?.versionConfidence.isConfirmed ?? false;
-    final uploaded = confirmed ? file?.dateAdded : null;
+    final named = mod.origin?.base?.versionConfidence.namesFile ?? false;
+    final uploaded = named ? file?.dateAdded : null;
     final added = mod.origin?.installedAt;
     final when = uploaded != null
         ? loc.t('library.card.file_from', params: {'date': formatResolveDate(uploaded)})

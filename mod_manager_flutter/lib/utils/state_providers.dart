@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -15,7 +16,6 @@ import '../models/gamebanana/gb_mod.dart';
 import '../services/gamebanana/content_filter.dart';
 import '../services/gamebanana/gamebanana_client.dart';
 import '../services/backup/snapshot_service.dart';
-import '../services/bulk_assume_current.dart';
 import '../services/bulk_update_check.dart';
 import '../services/download_names.dart';
 import '../services/installed_mods_index.dart';
@@ -28,6 +28,7 @@ import '../services/origin_write.dart';
 import '../services/platform_service.dart';
 import '../services/platform_service_factory.dart';
 import '../services/shader_fixes/zzmi_layout.dart';
+import '../services/storage/storage_scanner.dart';
 import '../services/update_check.dart';
 import 'categories.dart';
 import 'directory_size.dart';
@@ -101,8 +102,9 @@ final gameBananaClientProvider = Provider<GameBananaClient>((ref) {
 ///
 /// So the scan lives here. Anything that needs the library reads this: cached
 /// while it is good, awaited when it is cold, and refreshed by whoever changes
-/// the folder. One scan measured against a mirror of a real 23-mod / 748-file
-/// library is **4 ms warm, 12 ms cold**, so a refresh is not something to design
+/// the folder. One scan, the in-game keys check included, is **7 ms warm, 14 ms
+/// cold** over a mirror of a real 23-mod library and **26 ms warm, 54 ms cold**
+/// over a made-up one of 100 mods, so a refresh is not something to design
 /// around.
 ///
 /// The Library's character list is derived from this ([libraryGroupCountsProvider],
@@ -122,21 +124,28 @@ class LibraryNotifier extends AsyncNotifier<List<ModInfo>> {
   /// publish tears the grid down to rebuild it identically.
   Future<List<ModInfo>>? _inFlight;
 
-  /// Bumped by every publish that does not come from a scan.
+  /// Bumped by every edit ([put]) and every build.
   ///
-  /// A rename or a delete knows exactly what it did; a scan that was already
-  /// walking the folder when it happened is the **older** answer, whichever of
-  /// the two finishes last.
+  /// A rename or a delete knows exactly what it did, and a build follows an invalidate, made after a change to the
+  /// folder. A walk that was already running when either happened is the **older** answer, whichever finishes last.
   int _generation = 0;
 
   @override
-  FutureOr<List<ModInfo>> build() {
-    final generation = _generation;
-    return _track(_scan()).then((scanned) {
-      return _generation == generation
-          ? scanned
-          : state.valueOrNull ?? scanned;
-    });
+  FutureOr<List<ModInfo>> build() => _walkUntilCurrent(++_generation);
+
+  /// Walks the folder until a walk ends with no edit or build having come in since [generation], and answers with
+  /// that walk. A walk something came in during is walked again, failed or not: what came in is newer than what it
+  /// read, but may not be all that changed. Ends once the edits stop, one walk after the last.
+  Future<List<ModInfo>> _walkUntilCurrent(int generation) async {
+    while (true) {
+      try {
+        final scanned = await _track(_scan());
+        if (_generation == generation) return scanned;
+      } catch (_) {
+        if (_generation == generation) rethrow;
+      }
+      generation = _generation;
+    }
   }
 
   /// Marks [scan] as the walk in progress, and unmarks it when it ends.
@@ -151,25 +160,43 @@ class LibraryNotifier extends AsyncNotifier<List<ModInfo>> {
   /// Reads the library again.
   ///
   /// **Keeps the list it already has when the scan finds it unchanged**, so the
-  /// grid is not torn down and rebuilt by the rescan that follows every toggle,
-  /// rename and import — most of which change one mod or nothing at all. The
-  /// comparison is [ModInfo]'s own value equality, so a field is covered by
-  /// being a field: the two times this was a hand-written field list it missed
-  /// one (`origin`, then `keybinds`) and the symptom was a card showing
-  /// yesterday's answer with nothing thrown.
-  /// **A scan already in progress is this call's answer**, rather than a second
-  /// walk of the same folder — and it is awaited to the point where the answer
-  /// is *published*, because the caller's next act is to read the library.
+  /// grid is not torn down and rebuilt by a rescan that changed one mod or
+  /// nothing at all. The comparison is [ModInfo]'s own value equality, so a
+  /// field is covered by being a field: a hand-written field list misses one,
+  /// and the symptom is a card showing an old answer with nothing thrown.
+  /// **A scan already in progress is joined** rather than walked beside, and
+  /// once it is published this call walks once more, since that scan may have
+  /// read the folder before the caller's change. It returns once the answer is
+  /// *published*, because the caller's next act is to read the library.
   Future<void> rescan() async {
+    try {
+      await _rescan();
+    } finally {
+      ref.read(libraryScansProvider.notifier).state++;
+    }
+  }
+
+  Future<void> _rescan() async {
     final running = _inFlight;
     if (running != null) {
       await running.then<void>((_) {}, onError: (Object _) {});
       await future.then<void>((_) {}, onError: (Object _) {});
-      return;
+      // The walk joined may have read the folder before the caller's change, so a walk that starts after it follows:
+      // one another caller already started, or this one's own. A walk that finds nothing changed publishes nothing.
+      final later = _inFlight;
+      if (later != null) {
+        await later.then<void>((_) {}, onError: (Object _) {});
+        await future.then<void>((_) {}, onError: (Object _) {});
+        return;
+      }
     }
+    await _walk();
+  }
 
+  /// Reads the folder as it is once the edits made meanwhile stop, and publishes it when it differs.
+  Future<void> _walk() async {
     try {
-      final scanned = await _track(_scan());
+      final scanned = await _walkUntilCurrent(_generation);
       final current = state.valueOrNull;
       if (current == null || !listEquals(current, scanned)) {
         state = AsyncValue.data(scanned);
@@ -209,6 +236,9 @@ class LibraryNotifier extends AsyncNotifier<List<ModInfo>> {
   }
 }
 
+/// Bumped when a [LibraryNotifier.rescan] ends, whether or not it changed the library.
+final libraryScansProvider = StateProvider<int>((ref) => 0);
+
 /// What the local library already has, keyed by remote identity.
 ///
 /// Derived from [libraryProvider], so a mod installed from the marketplace is
@@ -223,12 +253,17 @@ final installedModsIndexProvider =
   return InstalledModsIndex.fromMods(await ref.watch(libraryProvider.future));
 });
 
-/// The pages the sidebar switches between.
-enum AppDestination { characters, browse, storage, settings }
+/// The pages the sidebar switches between. [characters] and [allMods] are the Library's two views, one page that
+/// stays mounted between them.
+enum AppDestination { characters, allMods, browse, storage, settings }
 
 /// The page the main area shows. Its pages are keyed `AnimatedSwitcher` children
 /// with no keep-alive, so the page left behind is disposed.
 final destinationProvider = StateProvider<AppDestination>((ref) => AppDestination.characters);
+
+/// Whether [destination] is one of the Library's views.
+bool isLibraryView(AppDestination destination) =>
+    destination == AppDestination.characters || destination == AppDestination.allMods;
 
 /// Every mod in the library, once each — as far as a synchronous reader is
 /// concerned.
@@ -280,9 +315,8 @@ final libraryGroupCountsProvider = Provider<Map<String, LibraryGroupCounts>>((re
 /// The row of the character list the user picked, or null before they have picked one.
 final selectedCharacterIdProvider = StateProvider<String?>((ref) => null);
 
-/// Whether [selectedCharacterIdProvider] holds the user's own click on a row, rather than a character the app chose
-/// for them (the sidebar's Updates button). A drop or paste is filed under a character only when it does
-/// (`docs/library-screen.md` §3).
+/// Whether [selectedCharacterIdProvider] holds the user's own click on a row, rather than the page the app shows
+/// before one. A drop or paste is filed under a character only when it does (`docs/library-screen.md` §3).
 final characterPickedByUserProvider = StateProvider<bool>((ref) => false);
 
 /// The character list row on screen: the one picked, or else the first agent with a mod, the first category with
@@ -319,6 +353,158 @@ final modSizeProvider = FutureProvider.autoDispose.family<DirSize?, String>((ref
   return measureDirectory(folder, excludePaths: {p.join(folder, AppConstants.modMetadataDirName)});
 });
 
+/// Every mod's own files in bytes, by folder id, from one walk of the library (`docs/library-screen.md` §16).
+///
+/// For the All mods table, which shows every mod's size and their total at once: one walk off the UI isolate
+/// rather than an isolate per mod. Walked again when a mod is added, removed or its origin changes, as an update or
+/// a restore changes it; a toggle or a favourite changes neither, so it walks nothing.
+final librarySizesProvider = FutureProvider<Map<String, int>>((ref) async {
+  ref.watch(modsProvider.select((mods) => Object.hashAll([for (final m in mods) Object.hash(m.id, m.origin)])));
+  final library = ref.watch(modsPathProvider);
+  if (library.isEmpty) return const {};
+  final sizes = await Isolate.run(() => measureLibrarySync(library));
+  return {for (final size in sizes) if (!size.isLink) size.name: size.ownBytes};
+});
+
+/// The links in ZZMI's mods folder whose target folder is missing and whose name is no mod in the library: the All
+/// mods table's Folder missing rows (`docs/library-screen.md` §16).
+///
+/// Read again after every scan, a scan that finds the library unchanged too: a drive coming back or going away changes
+/// only the links. Never written: such a link is not removed or offered for removal, since it works again once its
+/// folder is back.
+final deadModLinksProvider = FutureProvider<List<DeadModLink>>((ref) async {
+  ref.watch(libraryScansProvider);
+  final folder = ref.watch(linksFolderProvider);
+  final library = ref.watch(libraryProvider);
+  if (folder == null || !library.hasValue) return const [];
+  final names = {for (final mod in library.value!) mod.id};
+  final dead = await PlatformServiceFactory.getInstance().listDeadModLinks(folder);
+  return [for (final link in dead) if (!names.contains(link.name)) link];
+});
+
+/// What the All mods table shows. One at a time, like the chips that set it.
+enum AllModsFilter { all, active, off, updates, folderMissing, favorites, needsAttention }
+
+final allModsFilterProvider = StateProvider<AllModsFilter>((ref) => AllModsFilter.all);
+
+/// The All mods table's search text.
+final allModsSearchProvider = StateProvider<String>((ref) => '');
+
+/// The All mods table's sortable columns.
+enum AllModsColumn { name, character, status, updates, size, added }
+
+/// The column the All mods table is sorted by, and which way.
+@immutable
+class AllModsSort {
+  const AllModsSort(this.column, {required this.descending});
+
+  /// The order with no column picked: newest added first, as the character view's default sort.
+  static const AllModsSort byDefault = AllModsSort(AllModsColumn.added, descending: true);
+
+  final AllModsColumn column;
+  final bool descending;
+
+  /// Which way [column] runs when first picked: names A to Z, Active before Off, updates by need (Newer file first),
+  /// numbers and dates largest and newest first.
+  static bool startsDescending(AllModsColumn column) =>
+      !{AllModsColumn.name, AllModsColumn.character, AllModsColumn.status, AllModsColumn.updates}.contains(column);
+
+  /// What pressing [column]'s heading does to [current]: picks it in its natural direction, then reverses it, then
+  /// clears the sort.
+  static AllModsSort? next(AllModsSort? current, AllModsColumn column) {
+    final natural = startsDescending(column);
+    if (current == null || current.column != column) return AllModsSort(column, descending: natural);
+    if (current.descending == natural) return AllModsSort(column, descending: !natural);
+    return null;
+  }
+
+  @override
+  bool operator ==(Object other) => other is AllModsSort && other.column == column && other.descending == descending;
+
+  @override
+  int get hashCode => Object.hash(column, descending);
+}
+
+/// The column the user sorted the All mods table by, or null for its default order, [AllModsSort.byDefault].
+final allModsSortProvider = StateProvider<AllModsSort?>((ref) => null);
+
+/// How the All mods table groups its rows. By status is the Status column's sort.
+enum AllModsGrouping { none, character }
+
+final allModsGroupingProvider = StateProvider<AllModsGrouping>((ref) => AllModsGrouping.none);
+
+/// The All mods table's folded groups, as `<grouping>/<group id>`, for the session. A folded group's rows count as
+/// not shown, so the bulk actions leave them alone.
+final allModsCollapsedProvider = StateProvider<Set<String>>((ref) => const {});
+
+/// The mods ticked in the All mods table, by folder id. The bulk actions take only the ones the table is showing.
+final allModsSelectionProvider = StateProvider<Set<String>>((ref) => const {});
+
+/// Whether one of the selection bar's actions is running. The mods' switches and the bar are greyed out while it is
+/// set. Here rather than on the page, which is disposed on a switch to the character view while the action runs on.
+final allModsBulkRunningProvider = StateProvider<bool>((ref) => false);
+
+/// The mod switch presses not yet done, which run one at a time in the order pressed. While any are, the selection
+/// bar is greyed out; the switches stay live, so the one pressed keeps keyboard focus.
+final libraryTogglesProvider = NotifierProvider<LibraryToggles, int>(LibraryToggles.new);
+
+/// Runs switch presses in turn: under One at a time, two running together could leave two of a character's mods on.
+/// The state is how many are waiting or running.
+///
+/// A press on a mod whose folder is being written ([modWritesInProgressProvider]) waits for that write, outside the
+/// queue, so presses on other mods go ahead.
+class LibraryToggles extends Notifier<int> {
+  /// The last turn's end, or null when none is waiting or running.
+  Future<void>? _last;
+
+  @override
+  int build() => 0;
+
+  /// Runs [toggle], a press on [modId], once no write holds that mod and every press before it is done.
+  Future<void> run(String modId, Future<void> Function() toggle) {
+    state++;
+    return _whenFree(modId, toggle).whenComplete(() => state--);
+  }
+
+  Future<void> _whenFree(String modId, Future<void> Function() toggle) async {
+    while (true) {
+      await _untilWritten(modId);
+      // A write may have started while this press waited for its turn; it then waits for that one too.
+      final ran = await _turn(() async {
+        if (ref.read(modWritesInProgressProvider).contains(modId)) return false;
+        await toggle();
+        return true;
+      });
+      if (ran) return;
+    }
+  }
+
+  Future<void> _untilWritten(String modId) {
+    if (!ref.read(modWritesInProgressProvider).contains(modId)) return Future.value();
+    final free = Completer<void>();
+    late final ProviderSubscription<Set<String>> watching;
+    watching = ref.listen(modWritesInProgressProvider, (_, writing) {
+      if (writing.contains(modId) || free.isCompleted) return;
+      free.complete();
+      watching.close();
+    });
+    return free.future;
+  }
+
+  Future<T> _turn<T>(Future<T> Function() body) {
+    final previous = _last;
+    final done = previous == null ? Future.sync(body) : previous.then((_) => body());
+    final settled = _last = done.then((_) {}, onError: (_) {});
+    settled.then((_) {
+      if (identical(_last, settled)) _last = null;
+    });
+    return done;
+  }
+}
+
+/// When the last check of the whole library finished this session, or null before one has.
+final libraryCheckedAtProvider = StateProvider<DateTime?>((ref) => null);
+
 /// Which rows the character list shows.
 enum CharacterListFilter { all, active, updates }
 
@@ -330,8 +516,7 @@ final hideEmptyCharactersProvider = StateProvider<bool>((ref) => false);
 
 /// Which of the character's mods the grid shows. One at a time, like the chips that set it.
 ///
-/// [needsAttention] has no chip of its own unless something needs attention: it is what the library menu's "assume
-/// current" turns on, so the grid shows the set before it is rewritten (`docs/library-screen.md` §9).
+/// [needsAttention] has no chip of its own unless something needs attention.
 enum ModGridFilter { all, active, updates, favorites, needsAttention }
 
 final modGridFilterProvider = StateProvider<ModGridFilter>((ref) => ModGridFilter.all);
@@ -382,12 +567,23 @@ bool isOneAtATime(Map<String, bool> choices, String groupId) {
 
 /// The mods turning [mod] on turns off: with its group's One at a time on, every other mod of the group that is on.
 /// Empty when [mod] is on already, since the press turns it off.
-Set<String> modsToSwitchOff(List<ModInfo> library, ModInfo mod, Map<String, bool> oneAtATime) {
+///
+/// A mod of the group in [beingWritten] is included even when the library reads it off: its write turned it off and
+/// would turn it back on when it ends, so it must be marked to stay off (`turnOffDuringWrite`).
+Set<String> modsToSwitchOff(
+  List<ModInfo> library,
+  ModInfo mod,
+  Map<String, bool> oneAtATime, {
+  Set<String> beingWritten = const {},
+}) {
   final group = libraryGroupOf(mod.characterId);
   if (mod.isActive || !isOneAtATime(oneAtATime, group)) return const {};
   return {
     for (final other in library)
-      if (other.isActive && other.id != mod.id && libraryGroupOf(other.characterId) == group) other.id,
+      if ((other.isActive || beingWritten.contains(other.id)) &&
+          other.id != mod.id &&
+          libraryGroupOf(other.characterId) == group)
+        other.id,
   };
 }
 
@@ -581,15 +777,6 @@ final modsNeedingAttentionCountProvider = Provider<int>((ref) {
       .length;
 });
 
-/// How many mods in the whole library need attention, for the reminder above the grid.
-final untrackedModsCountProvider = Provider<int>((ref) {
-  return ref.watch(modsProvider).where(modInfoNeedsAttention).length;
-});
-
-/// Whether the user has closed the reminder that some mods are not set up for update checking.
-/// Hydrated from `config.json` in `ApiService.initialize`, written through `ApiService.setTrackingNudgeDismissed`.
-final trackingNudgeDismissedProvider = StateProvider<bool>((ref) => false);
-
 /// The current view's mods after the grid's filter and sort.
 final visibleModsProvider = Provider<List<ModInfo>>((ref) {
   final sort = ref.watch(modSortProvider);
@@ -627,30 +814,9 @@ final visibleModsProvider = Provider<List<ModInfo>>((ref) {
   return list;
 });
 
-/// What the zero-network "assume current" bulk action would do to this view.
-///
-/// Built from [visibleModsProvider] — **the list the grid actually renders** —
-/// and not from the wider list [modsNeedingAttentionCountProvider] counts. The
-/// action rewrites every mod it covers, so the one property it cannot give up
-/// is that its number describes what is on screen.
-///
-/// The eligible / untracked / undatable split is [planBulkAssumeCurrent]'s, and
-/// the confirmation names all three.
-final bulkAssumeCurrentPlanProvider = Provider<BulkAssumeCurrentPlan>((ref) {
-  return planBulkAssumeCurrent(ref.watch(visibleModsProvider));
-});
-
-/// How many mods "mark all as current" would write for the character on screen, whichever filter is on.
-///
-/// The menu's number, and not [bulkAssumeCurrentPlanProvider]'s: the action turns the Needs attention filter on
-/// before it plans, so the count has to be taken over that set, not over whatever the grid shows at the press.
-/// Every mod the plan can date needs attention, so planning over the character's mods gives the same set.
-final characterAssumeCurrentCountProvider = Provider<int>((ref) {
-  return planBulkAssumeCurrent(ref.watch(currentCharacterSkinsProvider)).eligible.length;
-});
-
-/// Whether a whole-library update check the user started is running. Read by every control that would start
-/// another, since two passes would race their results into one map. Set by `LibraryActionsHost`.
+/// Whether an update check the user started, of the whole library or of the ticked mods, is running. Read by every
+/// control that would start another, since two passes would race their results into one map. Set by
+/// `LibraryActionsHost`.
 final libraryCheckRunningProvider = StateProvider<bool>((ref) => false);
 
 // ── Update checks ───────────────────────────────────────────────────────────
@@ -670,14 +836,14 @@ final libraryCheckRunningProvider = StateProvider<bool>((ref) => false);
 final modUpdateChecksProvider =
     StateProvider<Map<String, UpdateCheck>>((ref) => const {});
 
-/// The mod pages the last check fetched, by remote mod id.
+/// The mod pages the whole-library checks fetched, by remote mod id. A check of ticked mods only refreshes the ones
+/// here; the rest of what it fetches goes to [fetchedModPagesProvider].
 ///
 /// Session-scoped for exactly the reasons [modUpdateChecksProvider] is, and
 /// kept for one reason: **the resolution screen has to be re-openable.** Built
-/// only from the outcome of a press, it could be shown once and never again —
-/// which is what the first version did, and the complaint that produced this
-/// provider. Holding the records makes reopening free, and a screen opened with
-/// none simply runs the check it would have run anyway.
+/// only from the outcome of a press, it could be shown once and never again.
+/// Holding the records makes reopening free, and a screen opened with none
+/// simply runs the check it would have run anyway.
 ///
 /// Never persisted, so a record can only ever be as old as the current session
 /// — a resolution question asked against a mod page nobody has looked at since
@@ -685,7 +851,8 @@ final modUpdateChecksProvider =
 final modUpdateRecordsProvider =
     StateProvider<Map<int, GbMod>>((ref) => const {});
 
-/// Mod pages fetched this session **outside a check**: by an install, and by the dialogs that look a mod up.
+/// Mod pages fetched this session **outside a whole-library check**: by an install, by a check of ticked mods, and
+/// by the dialogs that look a mod up.
 ///
 /// Kept apart from [modUpdateRecordsProvider] because a record there also means "the check reached this mod", which
 /// the resolution screen counts on: a page an install fetched would have it report every other mod as unreached.
@@ -698,10 +865,46 @@ final knownModPagesProvider = Provider<Map<int, GbMod>>((ref) {
 });
 
 /// Keeps [pages] in [fetchedModPagesProvider] for this session.
+///
+/// A page the whole-library check already holds is refreshed there too: the check's records win over fetched pages
+/// on display, so a newer page fetched since would otherwise show the older one's file and date. No record is added
+/// for a page the check didn't hold, since a record means the check reached that mod.
+/// In both maps a held page is kept over an older one: the whole check bypasses the response cache and a mod's page
+/// does not, so a page fetched later can still be the older read.
 void keepModPages(WidgetRef ref, Map<int, GbMod> pages) {
   if (pages.isEmpty) return;
+  bool notOlder(Map<int, GbMod> held, MapEntry<int, GbMod> page) {
+    final kept = held[page.key];
+    return kept == null || !_olderModPage(page.value, kept);
+  }
   final fetched = ref.read(fetchedModPagesProvider.notifier);
-  fetched.state = {...fetched.state, ...pages};
+  fetched.state = {
+    ...fetched.state,
+    for (final e in pages.entries)
+      if (notOlder(fetched.state, e)) e.key: e.value,
+  };
+  final records = ref.read(modUpdateRecordsProvider.notifier);
+  final held = {
+    for (final e in pages.entries)
+      if (records.state.containsKey(e.key) && notOlder(records.state, e)) e.key: e.value,
+  };
+  if (held.isNotEmpty) records.state = {...records.state, ...held};
+}
+
+/// Whether [page] is an older read of a mod page than [than]: its newest file or its last update is earlier. A date
+/// either one lacks decides nothing.
+bool _olderModPage(GbMod page, GbMod than) {
+  bool earlier(DateTime? a, DateTime? b) => a != null && b != null && a.isBefore(b);
+  return earlier(_newestFileDate(page), _newestFileDate(than)) || earlier(page.dateUpdated, than.dateUpdated);
+}
+
+DateTime? _newestFileDate(GbMod page) {
+  DateTime? newest;
+  for (final file in page.files ?? const []) {
+    final added = file.dateAdded;
+    if (added != null && (newest == null || added.isAfter(newest))) newest = added;
+  }
+  return newest;
 }
 
 /// Takes back the ignored update on [mod]'s download from mod page [subject], and rescans. Returns false when the
@@ -738,7 +941,9 @@ Future<bool> stopIgnoringUpdate(
 /// the caller's seam, the library service's write by default.
 Future<void> rememberDownloadNamesFrom(WidgetRef ref, Map<int, GbMod> pages, {OriginWriter? writer}) async {
   if (pages.isEmpty) return;
-  final mods = ref.read(modsProvider);
+  // A mod whose folder is being written is left out, with nothing said: the next page fetched names it.
+  final writing = ref.read(modWritesInProgressProvider);
+  final mods = ref.read(modsProvider).where((m) => !writing.contains(m.id));
   final library = ref.read(libraryProvider.notifier);
   final write = writer ?? originWriterFor(ref.read(modManagerServiceProvider.future));
   try {
@@ -766,13 +971,12 @@ final bulkResolutionPlanProvider = Provider<BulkResolutionPlan>((ref) {
 
 /// What a "check all" would look up.
 ///
-/// Built from the **whole library** ([modsProvider]) rather than from
-/// [visibleModsProvider], and that is a deliberate departure from where
-/// [bulkAssumeCurrentPlanProvider] gets its list. The rule those two follow is
-/// the same one: *a bulk control must act on the set the user can see*. What
-/// differs is the stake. "Assume current" **rewrites sidecars**, so acting past
-/// the edge of the grid is a silent change to mods the user never enumerated. A
-/// check writes nothing at all; its only effect is badges, and those are drawn
+/// Built from the **whole library** ([modsProvider]) rather than from what the
+/// All mods table shows, and that is a deliberate departure from where "mark as
+/// current" gets its list. The rule those two follow is the same one: *a bulk
+/// control must act on the set the user can see*. What differs is the stake.
+/// "Assume current" **rewrites sidecars**, so acting past the rows on screen is
+/// a silent change to mods the user never enumerated. A check writes nothing at all; its only effect is badges, and those are drawn
 /// across the whole library — so scoping it to one character tab would leave
 /// every other tab looking checked-and-clean when it was never asked about.
 final bulkUpdateCheckPlanProvider = Provider<BulkUpdateCheckPlan>((ref) {
@@ -857,21 +1061,54 @@ final modBackupsProvider = FutureProvider<Set<String>>((ref) async {
   return ref.read(snapshotServiceProvider).uidsWithSnapshots();
 });
 
-/// The mods, by folder id, whose folders a restore or a patch removal is changing right now. The History tab of the
-/// mod's page holds its buttons while its mod is here: nothing else on screen shows the write is running, and a second
-/// write into the same folder would snapshot it half done.
+/// The mods, by folder id, whose folders an update, a reinstall, a patch installed or taken out, or a restore is
+/// changing right now. The History tab of the mod's page holds its buttons while its mod is here: nothing else on
+/// screen shows the write is running, and a second write into the same folder would snapshot it half done. A switch
+/// press on the mod waits for it ([LibraryToggles]).
 final modWritesInProgressProvider = StateProvider<Set<String>>((ref) => const {});
+
+/// How many writes are running on each mod in [modWritesInProgressProvider], so a mod stays there until its last one
+/// ends.
+final _modWriteCountsProvider = StateProvider<Map<String, int>>((ref) => const {});
 
 /// Runs [write] with [modId] in [modWritesInProgressProvider].
 Future<T> whileWritingMod<T>(ProviderContainer container, String modId, Future<T> Function() write) async {
+  final counts = container.read(_modWriteCountsProvider.notifier);
   final busy = container.read(modWritesInProgressProvider.notifier);
-  busy.state = {...busy.state, modId};
+  void add(int delta) {
+    final count = (counts.state[modId] ?? 0) + delta;
+    counts.state = {...counts.state, modId: count}..removeWhere((_, n) => n <= 0);
+    busy.state = counts.state.keys.toSet();
+  }
+
+  add(1);
   try {
     return await write();
   } finally {
-    busy.state = {...busy.state}..remove(modId);
+    add(-1);
+    if (!busy.state.contains(modId)) {
+      final marked = container.read(_turnedOffDuringWriteProvider.notifier);
+      if (marked.state.contains(modId)) marked.state = {...marked.state}..remove(modId);
+    }
   }
 }
+
+/// The mods One at a time turned off while their folders were being written. The write leaves such a mod off when it
+/// ends rather than turning it back on, which would also place its shader files again (`docs/applying-updates.md`).
+final _turnedOffDuringWriteProvider = StateProvider<Set<String>>((ref) => const {});
+
+/// Asked as One at a time turns off [modId] to turn another of its character's mods on. When its folder is being
+/// written, marks it so the write leaves it off, and answers true.
+bool turnOffDuringWrite(ProviderContainer container, String modId) {
+  if (!container.read(modWritesInProgressProvider).contains(modId)) return false;
+  final marked = container.read(_turnedOffDuringWriteProvider.notifier);
+  marked.state = {...marked.state, modId};
+  return true;
+}
+
+/// Whether [modId] was turned off during its running write, so the write must not turn it back on.
+bool leftOffAfterWrite(ProviderContainer container, String modId) =>
+    container.read(_turnedOffDuringWriteProvider).contains(modId);
 
 /// One snapshot and the origin block its copy of the sidecar holds, which says the file the mod was at then. The
 /// origin is null when that sidecar is missing or unreadable.

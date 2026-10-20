@@ -1,26 +1,25 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/l10n/app_localizations.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
+import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/origin_write.dart';
-import 'package:mod_manager_flutter/screens/components/library_actions_host.dart';
-import 'package:mod_manager_flutter/screens/components/mods_toolbar.dart';
 import 'package:mod_manager_flutter/screens/dialogs/assume_current_dialog.dart';
 import 'package:mod_manager_flutter/services/bulk_assume_current.dart';
-import 'package:mod_manager_flutter/utils/state_providers.dart';
+import 'package:mod_manager_flutter/utils/notifications.dart';
 
-import 'support/library_override.dart';
+import 'support/all_mods_harness.dart';
 import 'support/localized_harness.dart';
 import 'support/origin_shorthand.dart';
 
 /// The bulk "assume current" surface.
 ///
 /// What is worth pinning here is not the layout but the promises: the
-/// confirmation states the size of what it is about to do *before* doing it, a
-/// dismissed dialog writes nothing, and a run that partly failed says so rather
-/// than reporting success for the half that worked.
+/// confirmation lists what it is about to write *before* writing it, an
+/// unticked mod is left out, a dismissed dialog writes nothing, and a run that
+/// partly failed says so rather than reporting success for the half that worked.
 void main() {
   final installedAt = DateTime.utc(2026, 5, 8);
 
@@ -49,7 +48,7 @@ void main() {
       );
 
   /// Mounts a button that runs the flow, and hands back what it recorded.
-  Future<({List<String> written, List<BulkAssumeCurrentOutcome> outcomes})>
+  Future<({List<String> written, List<BulkAssumeCurrentOutcome?> outcomes})>
       runFlow(
     WidgetTester tester,
     BulkAssumeCurrentPlan plan, {
@@ -58,7 +57,7 @@ void main() {
     Size surfaceSize = const Size(1200, 800),
   }) async {
     final written = <String>[];
-    final outcomes = <BulkAssumeCurrentOutcome>[];
+    final outcomes = <BulkAssumeCurrentOutcome?>[];
 
     await pumpLocalized(
       tester,
@@ -81,9 +80,9 @@ void main() {
                 return OriginWriteResult.written;
               },
             );
-            if (outcome == null) return;
+            // Null too, so a test can tell "returned null" from "never returned".
             outcomes.add(outcome);
-            if (context.mounted) showAssumeCurrentOutcome(context, outcome);
+            if (outcome != null && context.mounted) showAssumeCurrentOutcome(context.loc, context.notify, outcome);
           },
           child: const Text('run'),
         ),
@@ -95,7 +94,13 @@ void main() {
     return (written: written, outcomes: outcomes);
   }
 
-  testWidgets('the confirmation names the size before acting', (tester) async {
+  Finder confirm(String label) => find.widgetWithText(FilledButton, label);
+
+  /// A mod's own box in the list.
+  Finder boxOf(String name) =>
+      find.byWidgetPredicate((w) => w is Checkbox && w.semanticLabel == 'Mark $name as current');
+
+  testWidgets('the confirmation lists every mod it would write, and names what it leaves', (tester) async {
     final plan = planBulkAssumeCurrent([
       mod('a', origin: origin()),
       mod('b', origin: origin()),
@@ -105,45 +110,72 @@ void main() {
 
     await runFlow(tester, plan);
 
-    // Two eligible, and the two groups it is deliberately not touching are
-    // named too — "2 mods" is a very different offer from "2 of your 4".
-    expect(find.textContaining('2 mods are up to date'), findsOneWidget);
-    expect(find.textContaining('1 more mod needs attention'), findsOneWidget);
-    expect(find.textContaining('1 mod is skipped'), findsOneWidget);
-    expect(find.text('Mark 2 mods'), findsOneWidget);
+    expect(find.text('Mark 2 mods as current?'), findsOneWidget);
+    expect(find.text('2 of 2'), findsOneWidget);
+    expect(boxOf('a'), findsOneWidget);
+    expect(boxOf('b'), findsOneWidget);
+    expect(boxOf('untracked'), findsNothing);
+    expect(boxOf('undated'), findsNothing);
+    // "2 mods" is a very different offer from "2 of your 4".
+    expect(
+      find.textContaining("1 that isn't linked to GameBanana, and 1 with no date added on record."),
+      findsOneWidget,
+    );
+    expect(confirm('Mark 2 as current'), findsOneWidget);
   });
 
-  testWidgets('it says a version is not being invented', (tester) async {
-    await runFlow(
-      tester,
-      planBulkAssumeCurrent([mod('a', origin: origin())]),
+  testWidgets('a folder whose question is another layer\'s is named among what it leaves', (tester) async {
+    final baseUnknown = originFixture(
+      source: 'gamebanana',
+      modId: 1,
+      modIdConfidence: OriginConfidence.inferred,
+      installedAt: installedAt,
+      ingest: const ModIngest(patchShaped: true),
     );
-    expect(find.textContaining("No version number is invented"), findsOneWidget);
+    final plan = planBulkAssumeCurrent([
+      mod('a', origin: origin()),
+      mod('untracked'),
+      mod('undated', origin: origin(undated: true)),
+      mod('patch only', origin: baseUnknown),
+    ]);
+
+    await runFlow(tester, plan);
+
+    expect(boxOf('patch only'), findsNothing);
+    expect(
+      find.textContaining("1 that isn't linked to GameBanana, 1 with no date added on record, and 1 whose base mod "
+          'or patch file is still to be named in the tracking screen.'),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('the proxy caveat appears only for a derived date',
-      (tester) async {
-    await runFlow(
-      tester,
-      planBulkAssumeCurrent([mod('a', origin: origin(proxy: true))]),
-    );
-    expect(find.textContaining('worked out from the oldest file'),
-        findsOneWidget);
+  testWidgets('every box starts ticked', (tester) async {
+    await runFlow(tester, planBulkAssumeCurrent([mod('a', origin: origin()), mod('b', origin: origin())]));
+
+    final boxes = tester.widgetList<Checkbox>(find.byType(Checkbox));
+    expect(boxes, hasLength(3), reason: 'the header box and one per mod');
+    expect(boxes.map((b) => b.value), everyElement(isTrue));
+  });
+
+  testWidgets('it says nothing is downloaded', (tester) async {
+    await runFlow(tester, planBulkAssumeCurrent([mod('a', origin: origin())]));
+    expect(find.text('Nothing is downloaded'), findsOneWidget);
+  });
+
+  testWidgets('the proxy caveat appears only for a derived date', (tester) async {
+    await runFlow(tester, planBulkAssumeCurrent([mod('a', origin: origin(proxy: true))]));
+    expect(find.textContaining('Copied mods in from another folder?'), findsOneWidget);
 
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
 
-    await runFlow(
-      tester,
-      planBulkAssumeCurrent([mod('a', origin: origin(proxy: false))]),
-    );
-    expect(find.textContaining('worked out from the oldest file'), findsNothing);
+    await runFlow(tester, planBulkAssumeCurrent([mod('a', origin: origin(proxy: false))]));
+    expect(find.textContaining('Copied mods in from another folder?'), findsNothing);
   });
 
   testWidgets('the confirmation fits the smallest window', (tester) async {
-    // 460px of content inside an AlertDialog that only has ~400 to give. The
-    // SizedBox clamps rather than overflowing, and the body scrolls — but that
-    // is a property of how it is built, not an obvious one, so it is pinned.
+    // The app's fonts: the test font draws every glyph a full em wide.
+    await loadTableFonts(tester);
     await runFlow(
       tester,
       planBulkAssumeCurrent([
@@ -153,19 +185,18 @@ void main() {
       ]),
       surfaceSize: const Size(480, 400),
     );
-    expect(find.text('Mark 1 mod'), findsOneWidget);
+    expect(confirm('Mark 1 as current'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('cancelling writes nothing at all', (tester) async {
-    final plan = planBulkAssumeCurrent([mod('a', origin: origin())]);
-    final run = await runFlow(tester, plan);
+    final run = await runFlow(tester, planBulkAssumeCurrent([mod('a', origin: origin())]));
 
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
 
     expect(run.written, isEmpty);
-    expect(run.outcomes, isEmpty);
+    expect(run.outcomes, [isNull]);
   });
 
   testWidgets('confirming writes every eligible mod once', (tester) async {
@@ -176,16 +207,55 @@ void main() {
     ]);
     final run = await runFlow(tester, plan);
 
-    await tester.tap(find.text('Mark 2 mods'));
+    await tester.tap(confirm('Mark 2 as current'));
     await tester.pumpAndSettle();
 
     expect(run.written, ['a', 'b']);
-    expect(run.outcomes.single.written, 2);
-    expect(run.outcomes.single.failed, 0);
-    expect(
-      find.textContaining('2 mods now watch for files published'),
-      findsOneWidget,
+    expect(run.outcomes.single!.written, 2);
+    expect(run.outcomes.single!.failed, 0);
+    expect(find.textContaining('2 mods now watch for files published'), findsOneWidget);
+  });
+
+  testWidgets('an unticked mod is left out of the writes', (tester) async {
+    final plan = planBulkAssumeCurrent([
+      mod('a', origin: origin()),
+      mod('b', origin: origin()),
+      mod('c', origin: origin()),
+    ]);
+    final run = await runFlow(tester, plan);
+
+    await tester.tap(boxOf('b'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 of 3'), findsOneWidget);
+    expect(tester.widget<Checkbox>(find.byType(Checkbox).first).value, isNull, reason: 'the header box is mixed');
+
+    await tester.tap(confirm('Mark 2 as current'));
+    await tester.pumpAndSettle();
+
+    expect(run.written, ['a', 'c']);
+    expect(run.outcomes.single!.written, 2);
+  });
+
+  testWidgets('with every box unticked the confirm button is off, and the header box ticks them back',
+      (tester) async {
+    final run = await runFlow(
+      tester,
+      planBulkAssumeCurrent([mod('a', origin: origin()), mod('b', origin: origin())]),
     );
+
+    await tester.tap(find.byType(Checkbox).first);
+    await tester.pumpAndSettle();
+    expect(find.text('0 of 2'), findsOneWidget);
+    expect(tester.widget<FilledButton>(confirm('Mark 0 as current')).onPressed, isNull);
+
+    await tester.tap(find.byType(Checkbox).first);
+    await tester.pumpAndSettle();
+    expect(find.text('2 of 2'), findsOneWidget);
+    expect(tester.widget<FilledButton>(confirm('Mark 2 as current')).onPressed, isNotNull);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(run.written, isEmpty);
   });
 
   testWidgets('a partly failed run reports both halves', (tester) async {
@@ -199,34 +269,31 @@ void main() {
     ]);
     final run = await runFlow(tester, plan, failFor: {'read only'});
 
-    await tester.tap(find.text('Mark 3 mods'));
+    await tester.tap(confirm('Mark 3 as current'));
     await tester.pumpAndSettle();
 
-    expect(run.outcomes.single.written, 2);
-    expect(run.outcomes.single.failed, 1);
-    expect(find.textContaining("Couldn't save tracking data for 1"),
-        findsOneWidget);
+    expect(run.outcomes.single!.written, 2);
+    expect(run.outcomes.single!.failed, 1);
+    expect(find.textContaining("Couldn't save tracking data for 1"), findsOneWidget);
   });
 
-  testWidgets('a wholly unwritable library says so and nothing else',
-      (tester) async {
+  testWidgets('a wholly unwritable library says so and nothing else', (tester) async {
     final plan = planBulkAssumeCurrent([
       mod('a', origin: origin()),
       mod('b', origin: origin()),
     ]);
     final run = await runFlow(tester, plan, failFor: {'a', 'b'});
 
-    await tester.tap(find.text('Mark 2 mods'));
+    await tester.tap(confirm('Mark 2 as current'));
     await tester.pumpAndSettle();
 
-    expect(run.outcomes.single.written, 0);
-    expect(run.outcomes.single.failed, 2);
+    expect(run.outcomes.single!.written, 0);
+    expect(run.outcomes.single!.failed, 2);
     expect(find.text('Tracking data not saved'), findsOneWidget);
-    expect(find.textContaining('2 mods'), findsOneWidget);
+    expect(find.textContaining("2 mods' folders may be read-only."), findsOneWidget);
   });
 
-  testWidgets('a declined write is not reported as a read-only folder',
-      (tester) async {
+  testWidgets('a declined write is not reported as a read-only folder', (tester) async {
     // The guard firing is the designed behaviour. Reachable without any concurrency:
     // press the button, then press it again before the rescan has refreshed the plan.
     final plan = planBulkAssumeCurrent([
@@ -242,261 +309,13 @@ void main() {
       },
     );
 
-    await tester.tap(find.text('Mark 2 mods'));
+    await tester.tap(confirm('Mark 2 as current'));
     await tester.pumpAndSettle();
 
     expect(run.written, isEmpty);
-    expect(run.outcomes.single.skipped, 2);
-    expect(run.outcomes.single.failed, 0);
+    expect(run.outcomes.single!.skipped, 2);
+    expect(run.outcomes.single!.failed, 0);
     expect(find.textContaining('already sorted out'), findsOneWidget);
     expect(find.textContaining("Couldn't save"), findsNothing);
-  });
-
-  group('the library menu', () {
-    late ProviderContainer container;
-    late List<String> written;
-
-    Future<void> pumpToolbar(
-      WidgetTester tester,
-      List<ModInfo> mods, {
-      Size surfaceSize = const Size(1200, 800),
-      VoidCallback? onLibraryChanged,
-    }) async {
-      // Every mod is Ellen's, so she is the character on screen.
-      container = ProviderContainer(overrides: [libraryOf(mods)]);
-      addTearDown(container.dispose);
-      // Out of the way: it repeats the menu's "sort out" label, and it has its own test.
-      container.read(trackingNudgeDismissedProvider.notifier).state = true;
-      written = <String>[];
-
-      await pumpLocalized(
-        tester,
-        LibraryActionsHost(
-          updateFetcher: (_) async => throw StateError('no fetch expected'),
-          updatesFetcher: (_) async => throw StateError('no fetch expected'),
-          child: ModsToolbar(
-            onLibraryChanged: onLibraryChanged,
-            originWriter: (name, update) async {
-              written.add(name);
-              return update(mods.firstWhere((m) => m.id == name).origin) == null
-                  ? OriginWriteResult.declined
-                  : OriginWriteResult.written;
-            },
-          ),
-        ),
-        container: container,
-        surfaceSize: surfaceSize,
-      );
-      expectBuilt(ModsToolbar);
-    }
-
-    Future<void> openMenu(WidgetTester tester) async {
-      await tester.tap(find.byTooltip('Library'));
-      await tester.pumpAndSettle();
-    }
-
-    testWidgets('turns the filter on before it asks', (tester) async {
-      // The rule is unchanged — the user must have *seen* the set being
-      // rewritten — but it is now enforced by the action rather than by hiding
-      // the control until the filter happens to be on. The grid behind the
-      // confirmation shows exactly those mods.
-      await pumpToolbar(tester, [
-        mod('a', origin: origin()),
-        mod('b', origin: origin()),
-        mod('resolved', origin: origin(versionConfidence: OriginConfidence.exact)),
-      ]);
-      expect(container.read(modGridFilterProvider), ModGridFilter.all);
-
-      await openMenu(tester);
-      await tester.tap(find.text('Mark all as current'));
-      await tester.pumpAndSettle();
-
-      expect(container.read(modGridFilterProvider), ModGridFilter.needsAttention);
-      expect(container.read(visibleModsProvider).map((m) => m.id), ['a', 'b']);
-      expect(find.text('Assume 2 mods are up to date?'), findsOneWidget);
-    });
-
-    testWidgets('the count in the menu is the count that gets written',
-        (tester) async {
-      // Flipping the filter cannot change *which* mods are eligible, only which
-      // are on screen: the plan already keeps only versionUnknown mods, and
-      // needs-attention drops exactly the ones it would have skipped anyway.
-      await pumpToolbar(tester, [
-        mod('a', origin: origin()),
-        mod('b', origin: origin()),
-        mod('untracked'),
-        mod('resolved', origin: origin(versionConfidence: OriginConfidence.exact)),
-      ]);
-      await openMenu(tester);
-      expect(
-        find.descendant(
-          of: find.widgetWithText(MenuItemButton, 'Mark all as current'),
-          matching: find.text('2'),
-        ),
-        findsOneWidget,
-      );
-
-      await tester.tap(find.text('Mark all as current'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Mark 2 mods'));
-      await tester.pumpAndSettle();
-
-      expect(written, ['a', 'b']);
-    });
-
-    group('counts the set it will turn the filter to, not the grid at the press', () {
-      // The action turns Needs attention on before it plans, so a count over a narrower grid would promise less
-      // than it then offers, and a count of zero would disable an entry that has work to do.
-      final ellens = [
-        mod('a', origin: origin()).copyWith(isFavorite: true),
-        mod('b', origin: origin()),
-        mod('c', origin: origin()),
-      ];
-
-      Finder entry() => find.widgetWithText(MenuItemButton, 'Mark all as current');
-
-      Future<void> expectEntry(WidgetTester tester) async {
-        await openMenu(tester);
-        expect(find.descendant(of: entry(), matching: find.text('3')), findsOneWidget);
-        expect(tester.widget<MenuItemButton>(entry()).onPressed, isNotNull);
-      }
-
-      testWidgets('with Favorites on', (tester) async {
-        await pumpToolbar(tester, ellens);
-        container.read(modGridFilterProvider.notifier).state = ModGridFilter.favorites;
-        await tester.pumpAndSettle();
-        expect(container.read(visibleModsProvider), hasLength(1));
-
-        await expectEntry(tester);
-      });
-
-      testWidgets('with Active on and nothing active', (tester) async {
-        await pumpToolbar(tester, ellens);
-        container.read(modGridFilterProvider.notifier).state = ModGridFilter.active;
-        await tester.pumpAndSettle();
-        expect(container.read(visibleModsProvider), isEmpty);
-
-        await expectEntry(tester);
-
-        await tester.tap(entry());
-        await tester.pumpAndSettle();
-        expect(find.text('Assume 3 mods are up to date?'), findsOneWidget);
-      });
-    });
-
-    testWidgets('cancelling puts the filter back the way it was',
-        (tester) async {
-      // Turning the filter on *for* the confirmation means cancelling — the one
-      // thing a confirmation exists to allow — would otherwise leave the grid
-      // filtered behind the user's back, with nothing on screen saying why.
-      // Under the old placement the filter was a precondition, so declining
-      // changed nothing.
-      await pumpToolbar(tester, [mod('a', origin: origin())]);
-      expect(container.read(modGridFilterProvider), ModGridFilter.all);
-
-      await openMenu(tester);
-      await tester.tap(find.text('Mark all as current'));
-      await tester.pumpAndSettle();
-      expect(container.read(modGridFilterProvider), ModGridFilter.needsAttention,
-          reason: 'the grid shows the set while the confirmation is up');
-
-      await tester.tap(find.text('Cancel'));
-      await tester.pumpAndSettle();
-
-      expect(written, isEmpty);
-      expect(container.read(modGridFilterProvider), ModGridFilter.all);
-    });
-
-    testWidgets('cancelling leaves a filter the user had already set alone',
-        (tester) async {
-      await pumpToolbar(tester, [mod('a', origin: origin())]);
-      container.read(modGridFilterProvider.notifier).state = ModGridFilter.needsAttention;
-      await tester.pumpAndSettle();
-
-      await openMenu(tester);
-      await tester.tap(find.text('Mark all as current'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Cancel'));
-      await tester.pumpAndSettle();
-
-      expect(container.read(modGridFilterProvider), ModGridFilter.needsAttention,
-          reason: 'restoring means restoring, not switching off');
-    });
-
-    testWidgets('is disabled when there is nothing it can act on',
-        (tester) async {
-      // An untracked mod needs attention but may never be resolved in bulk.
-      await pumpToolbar(tester, [mod('untracked')]);
-      await openMenu(tester);
-
-      await tester.tap(find.text('Mark all as current'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('are up to date?'), findsNothing);
-      expect(container.read(modGridFilterProvider), ModGridFilter.all,
-          reason: 'a disabled entry must not flip a filter on the way to '
-              'doing nothing');
-    });
-
-    testWidgets('presses through to the writes and asks for a rescan',
-        (tester) async {
-      var rescans = 0;
-      await pumpToolbar(
-        tester,
-        [
-          mod('a', origin: origin()),
-          mod('b', origin: origin()),
-          mod('untracked'),
-        ],
-        onLibraryChanged: () => rescans++,
-      );
-
-      await openMenu(tester);
-      await tester.tap(find.text('Mark all as current'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Mark 2 mods'));
-      await tester.pumpAndSettle();
-
-      expect(written, ['a', 'b']);
-      // The status slot is drawn from `ModInfo.origin`, which only a scan
-      // refreshes — without this the marks would sit there until a tab switch.
-      expect(rescans, 1);
-      // An untracked mod is still on the list, so the filter has something left
-      // to show and stays on.
-      expect(container.read(modGridFilterProvider), ModGridFilter.needsAttention);
-    });
-
-    testWidgets('turns the filter off again when it leaves nothing behind',
-        (tester) async {
-      // Otherwise the reward for pressing is an empty grid.
-      await pumpToolbar(tester, [mod('a', origin: origin())]);
-
-      await openMenu(tester);
-      await tester.tap(find.text('Mark all as current'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Mark 1 mod'));
-      await tester.pumpAndSettle();
-
-      expect(container.read(modGridFilterProvider), ModGridFilter.all);
-    });
-
-    testWidgets('the toolbar survives a three-digit count at the minimum window',
-        (tester) async {
-      // The narrowest the toolbar can get: an 800px minimum window, less the
-      // sidebar (216) and the character list (280) beside it. Nothing in that
-      // row can ellipsise, so a Row that doesn't fit overflows rather than
-      // degrading.
-      await pumpToolbar(
-        tester,
-        [for (var i = 0; i < 120; i++) mod('mod $i', origin: origin())],
-        surfaceSize: const Size(304, 600),
-      );
-      container.read(modGridFilterProvider.notifier).state = ModGridFilter.needsAttention;
-      await tester.pumpAndSettle();
-
-      // All and Needs attention both count the 120.
-      expect(find.text('120'), findsNWidgets(2));
-      expect(find.byTooltip('Library'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
   });
 }

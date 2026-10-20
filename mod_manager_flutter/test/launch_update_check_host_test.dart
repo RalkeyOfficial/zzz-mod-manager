@@ -11,10 +11,10 @@ import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/components/launch_update_check_host.dart';
 import 'package:mod_manager_flutter/screens/components/library_actions_host.dart';
-import 'package:mod_manager_flutter/screens/components/mods_toolbar.dart';
 import 'package:mod_manager_flutter/services/origin_write.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
+import 'support/all_mods_harness.dart';
 import 'support/library_override.dart';
 import 'support/localized_harness.dart';
 import 'support/origin_shorthand.dart';
@@ -94,6 +94,7 @@ void main() {
     Future<List<GbMod>> Function(List<int>)? fetch,
     OriginWriter? originWriter,
     Widget child = const SizedBox.shrink(),
+    Size surfaceSize = const Size(1200, 800),
   }) async {
     container.read(updateCheckOnLaunchProvider.notifier).state = enabled;
     libraryLands(mods);
@@ -112,6 +113,7 @@ void main() {
         child: child,
       ),
       container: container,
+      surfaceSize: surfaceSize,
     );
     expectBuilt(LaunchUpdateCheckHost);
   }
@@ -244,7 +246,7 @@ void main() {
     expect(find.textContaining("couldn't be checked"), findsNothing);
   });
 
-  group('shares the running flag with the library menu', () {
+  group('shares the running flag with the All mods page', () {
     testWidgets('a check the user started stands in for it', (tester) async {
       container.read(libraryCheckRunningProvider.notifier).state = true;
       await mount(tester, enabled: true);
@@ -254,8 +256,9 @@ void main() {
       expect(container.read(libraryCheckRunningProvider), isTrue, reason: "the user's check is still running");
     });
 
-    testWidgets('while it runs, the library menu cannot start another', (tester) async {
+    testWidgets('while it runs, the All mods page cannot start another', (tester) async {
       final reply = Completer<List<GbMod>>();
+      await loadTableFonts(tester);
       await mount(
         tester,
         enabled: true,
@@ -263,29 +266,29 @@ void main() {
           fetchCalls++;
           return reply.future;
         },
+        surfaceSize: const Size(1400, 900),
         child: LibraryActionsHost(
           updateFetcher: (_) async => throw StateError('no fetch expected'),
           originWriter: (_, _) async => OriginWriteResult.writeFailed,
-          child: const ModsToolbar(),
+          child: allModsViewForTest(),
         ),
       );
-      IconButton libraryMenu() =>
-          tester.widget<IconButton>(find.ancestor(of: find.byTooltip('Library'), matching: find.byType(IconButton)));
-      expect(libraryMenu().onPressed, isNotNull);
+      OutlinedButton checkAll() =>
+          tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Check all for updates'));
 
-      // Pumped, not settled: the menu's spinner turns while the pass runs.
+      // Pumped, not settled: the check button's spinner turns while the pass runs.
       libraryLands([mod('Ellen', modId: 1, fileId: 10)]);
       await tester.pump();
 
       expect(fetchCalls, 1);
       expect(container.read(libraryCheckRunningProvider), isTrue);
-      expect(libraryMenu().onPressed, isNull);
+      expect(checkAll().onPressed, isNull);
 
       reply.complete([superseded(1)]);
       await tester.pumpAndSettle();
 
       expect(container.read(libraryCheckRunningProvider), isFalse);
-      expect(libraryMenu().onPressed, isNotNull);
+      expect(checkAll().onPressed, isNotNull);
     });
   });
 }

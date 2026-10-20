@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'package:path/path.dart' as p;
+import '../core/constants.dart';
 import '../models/keybind_info.dart';
 import 'log/logger.dart';
 
@@ -111,27 +113,54 @@ class IniParserService {
     return keybindSections.any((keyword) => lowerSection.contains(keyword));
   }
 
-  /// Шукає всі INI файли в вказаній директорії (рекурсивно)
+  /// The `.ini` files ZZMI loads from a mod folder, as full paths, sorted by
+  /// their path inside it so the keys and the file Change keys writes to are
+  /// the same on every scan. Empty when the folder cannot be read.
   Future<List<String>> findIniFiles(String directoryPath) async {
     try {
-      final dir = Directory(directoryPath);
-      if (!await dir.exists()) {
-        return [];
-      }
-
-      final iniFiles = <String>[];
-
-      await for (final entity in dir.list(recursive: true)) {
-        if (entity is File && entity.path.toLowerCase().endsWith('.ini')) {
-          iniFiles.add(entity.path);
-        }
-      }
-
-      return iniFiles;
+      return await listLoadedIniFiles(directoryPath);
     } catch (e) {
       return [];
     }
   }
+
+  /// [findIniFiles], but throws when the folder is missing or cannot be
+  /// listed, for a caller that must tell "no `.ini` files" from "could not look".
+  static Future<List<String>> listLoadedIniFiles(String directoryPath) async {
+    final dir = Directory(directoryPath);
+    if (!await dir.exists()) {
+      throw PathNotFoundException(directoryPath, const OSError('mod folder not found'));
+    }
+
+    final found = <({String relative, String path})>[];
+    await for (final entity in dir.list(recursive: true)) {
+      // Most of a mod is textures and buffers, so the name is checked before the path is split.
+      if (entity is! File || !entity.path.toLowerCase().endsWith('.ini')) continue;
+      final segments = p.split(p.relative(entity.path, from: directoryPath));
+      if (!_isLoadedIni(segments)) continue;
+      found.add((relative: segments.join('/'), path: entity.path));
+    }
+    found.sort((a, b) => a.relative.compareTo(b.relative));
+    return [for (final file in found) file.path];
+  }
+
+  /// Whether ZZMI loads the file at [segments] below a mod folder.
+  ///
+  /// ZZMI's `d3dx.ini` sets `exclude_recursive = DISABLED*`, which skips every
+  /// file and folder whose name starts with `DISABLED` in any letter case, and
+  /// `desktop.ini` is Windows' folder settings, never a mod's. The app's own
+  /// folder holds no part of the mod.
+  static bool _isLoadedIni(List<String> segments) {
+    final name = segments.last.toLowerCase();
+    if (!name.endsWith('.ini') || name == 'desktop.ini') return false;
+    if (segments.first == AppConstants.modMetadataDirName) return false;
+    return !segments.any((segment) => segment.toLowerCase().startsWith('disabled'));
+  }
+
+  /// The keybinds of [iniFiles], in their order, for a caller that has already listed the folder.
+  Future<List<KeybindInfo>> parseIniFiles(List<String> iniFiles) async => [
+        for (final iniFile in iniFiles) ...await parseIniFile(iniFile),
+      ];
 
   /// Парсить всі INI файли в директорії персонажа
   /// Повертає об'єкт CharacterKeybinds з усіма знайденими keybinds
@@ -145,12 +174,7 @@ class IniParserService {
         return null;
       }
 
-      final allKeybinds = <KeybindInfo>[];
-
-      for (final iniFile in iniFiles) {
-        final keybinds = await parseIniFile(iniFile);
-        allKeybinds.addAll(keybinds);
-      }
+      final allKeybinds = await parseIniFiles(iniFiles);
 
       if (allKeybinds.isEmpty) {
         return null;

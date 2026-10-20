@@ -109,6 +109,8 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     required this.panel,
     required this.artworkScrim,
     required this.onArtwork,
+    required this.toast,
+    required this.noteMissing,
   });
 
   final Brightness brightness;
@@ -234,6 +236,12 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
   /// A control drawn on [artworkScrim].
   final Color onArtwork;
 
+  /// A bar floating over the page, such as the All mods table's selection actions.
+  final TonePair toast;
+
+  /// The note that explains a missing mod folder.
+  final TonePair noteMissing;
+
   /// The accent washed into the card, behind something focused.
   Color get accentWash => Color.lerp(card, accent, 0.14)!;
 
@@ -335,6 +343,8 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       panel: const Color(0xFF0D0E10),
       artworkScrim: const Color(0xA60B0C0E),
       onArtwork: const Color(0xFFC9CCD2),
+      toast: const TonePair(Color(0xFF1E2125), Color(0xFFECEDEE), Color(0xFF353941)),
+      noteMissing: const TonePair(Color(0xFF1A0F0D), Color(0xFFE8C4BF), Color(0xFF3A2420)),
     );
   }
 
@@ -428,6 +438,8 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       panel: const Color(0xFFECE6E0),
       artworkScrim: const Color(0xA60B0C0E),
       onArtwork: const Color(0xFFC9CCD2),
+      toast: const TonePair(Color(0xFFFDFBF8), Color(0xFF1B1A18), Color(0xFFD8D0C6)),
+      noteMissing: const TonePair(Color(0xFFFBEDEA), Color(0xFF7A2A1C), Color(0xFFEDC6BE)),
     );
   }
 
@@ -481,6 +493,8 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     panel: panel,
     artworkScrim: artworkScrim,
     onArtwork: onArtwork,
+    toast: toast,
+    noteMissing: noteMissing,
   );
 
   @override
@@ -542,6 +556,8 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       panel: c(panel, other.panel),
       artworkScrim: c(artworkScrim, other.artworkScrim),
       onArtwork: c(onArtwork, other.onArtwork),
+      toast: TonePair.lerp(toast, other.toast, t),
+      noteMissing: TonePair.lerp(noteMissing, other.noteMissing, t),
     );
   }
 }

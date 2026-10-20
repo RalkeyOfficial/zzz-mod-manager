@@ -404,8 +404,8 @@ makepkg -si
    - Mods should be in individual folders
    - Each folder should contain mod files (INI, DDS, etc.)
 
-3. **Read the library again**:
-   - Choose **Read the library again** from the ⋯ menu above a character's mods, or restart the application
+3. **Changes made outside the app**:
+   - The app reads the library again each time you open the Library and each time you come back to its window, so a mod added or changed outside the app shows up then. A mod's keys follow edits to its `.ini` files the same way.
 
 ### Mods Not Activating in Game
 

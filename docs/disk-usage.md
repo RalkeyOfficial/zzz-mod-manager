@@ -36,10 +36,10 @@ The import preflight treats partial differently and more strictly: `ModManagerSe
 
 ## 4. The walk
 
-`utils/directory_size.dart` is the one recursive size walk, shared by the snapshot capture, the import preflight and this page.
+`utils/directory_size.dart` is the one recursive size walk, shared by the snapshot capture, the import preflight, this page and the Library's sizes. The All mods table takes every mod's size from one `measureLibrarySync` walk, the one this page's Mods category runs ([`library-screen.md` §16](library-screen.md#16-the-all-mods-table)).
 
 - **Catches per entity.** A folder deleted by a concurrent rescan must not end the walk and have the truncated total reported as fact.
-- **Containment is decided by resolved path, not by entity type.** `followLinks: false` yields a symlink as a `Link` and skips it, but **a Windows junction comes back as a `Directory`** and the walk would descend it. Since mods are activated by linking them into the game folder, descending one either counts a mod twice or leaves the library; one pointing at an ancestor recurses until something gives. Resolving each directory before descending catches symlinks, junctions and bind mounts alike, at one syscall per directory. `PlatformService.isModLink` cannot be used here — its Windows implementation spawns a process per call.
+- **Containment is decided by resolved path, not by entity type.** `followLinks: false` yields a symlink, and on Windows a junction or any other reparse point, as a `Link` and skips it, but a bind mount lists as a plain `Directory` and the walk would descend it. Since mods are activated by linking them into the game folder, descending a folder that leads elsewhere either counts a mod twice or leaves the library; one pointing at an ancestor recurses until something gives. Resolving each directory before descending catches all of them, at one syscall per directory.
 - **Synchronous**, so `Isolate.run` takes it unchanged. A library of a few hundred thousand files is that many `stat` calls, and the async stream makes each one a microtask on the UI isolate.
 - A mod folder that is a link contributes no bytes and is shown as "linked elsewhere", never as `0 B`.
 
@@ -71,9 +71,11 @@ The category providers are **not `autoDispose`**, and that is what makes the tab
 
 Six targets: completed archives, abandoned partials, temp extractions, legacy images, old logs, and saved-versions groups no mod claims. **The library and the sidecars are absent from the enum**, so no future edit here can reach them. `<appData>/backups` is reachable through the one target, and only for a group whose uid no mod in the library carries.
 
-**The game's mods folder is absent too, and a dead link there is never removed or offered for removal, by this or anything else in the app.** A link whose target is missing is not garbage:
+**The game's mods folder is absent too, and the app never removes a dead link there on its own or offers it for removal, by this or anything else.** A link whose target is missing is not garbage:
 the library may be on a drive that is not mounted, restored from a backup or moved back, and the link works again the moment the folder returns.
 Removing it would silently lose the fact that the mod was on, and nothing would ever put it back.
+Such a link changes only when the user turns on a mod of that name, which replaces it with the mod's own, renames a mod that is on to that name ([`library-screen.md`](library-screen.md) §10), or when it follows a change of the Mod library to a library that has that mod ([`configuration.md`](configuration.md#changing-the-mod-library)).
+The one place such a link is shown is the All mods table, as a Folder missing row with nothing to select or press ([`library-screen.md` §16](library-screen.md#16-the-all-mods-table)).
 
 ### The gate
 

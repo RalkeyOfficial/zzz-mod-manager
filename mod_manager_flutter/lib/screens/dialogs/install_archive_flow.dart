@@ -55,6 +55,7 @@ Future<InstallResult> installArchiveFlow(
   String? requestedName,
 }) async {
   final loc = context.loc;
+  final container = ProviderScope.containerOf(context, listen: false);
 
   // Only set once the archive has been unpacked and is genuinely spent. The
   // archive is a throwaway intermediate, but throwing it away *before* it has
@@ -293,9 +294,11 @@ Future<InstallResult> installArchiveFlow(
       modsPath: modsPath,
       applier: UpdateApplier(
         snapshots: ref.read(snapshotServiceProvider),
-        activation: ModManagerActivationPort(modManager),
+        activation: ModManagerActivationPort(modManager, leaveOff: (m) => leftOffAfterWrite(container, m)),
       ),
       amend: modManager.updateModOrigin,
+      onPatched: modManager.invalidateKeybinds,
+      whileWriting: (modId, write) => whileWritingMod(container, modId, write),
       // Naming what a patch patches is an instruction to install that mod into
       // the folder, not just a note about it.
       installBase: (modName, base, baseFile) => installNamedBase(

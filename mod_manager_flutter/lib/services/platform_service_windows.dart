@@ -4,11 +4,14 @@ import 'package:ffi/ffi.dart';
 import 'package:path/path.dart' as path;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:pasteboard/pasteboard.dart';
+import 'package:win32/win32.dart' show SW_SHOWNORMAL, ShellExecute;
 import '../utils/detached_starter.dart';
 import '../utils/process_probe.dart';
 import 'log/logger.dart';
 import 'log/system_report.dart';
 import 'platform_service.dart';
+import 'windows/windows_links.dart';
+import 'windows/windows_paths.dart';
 
 /// Windows-специфічна реалізація PlatformService
 /// The same two tags the Linux implementation uses, and the same event names
@@ -17,67 +20,179 @@ import 'platform_service.dart';
 final Logger _log = Logger('platform');
 final Logger _files = Logger('fileops');
 
+/// [PlatformService.listDeadModLinks] on Windows, with each target read by [readTarget]. Dart reports every reparse
+/// point, a junction as much as a symlink, as a [Link] in a listing that doesn't follow links, so a candidate is an
+/// entry that lists as one, as on Linux.
+Future<List<DeadModLink>> readWindowsDeadModLinks(
+  String linksFolder, {
+  required Future<String?> Function(String linkPath) readTarget,
+}) =>
+    readDeadModLinks(linksFolder, isLinkEntry: (entry) async => entry is Link, readTarget: readTarget);
+
 class WindowsPlatformService implements PlatformService {
-  
-  
+  /// [calls] is the seam a test replaces the Win32 calls through.
+  WindowsPlatformService({WindowsLinkCalls calls = const WindowsLinkCalls()}) : _calls = calls;
+
+  final WindowsLinkCalls _calls;
+
   @override
   Future<bool> createModLink(String sourcePath, String linkPath) async {
+    // A link already of that name, live or dead, goes through the replace, which puts it back when the new one
+    // can't be made.
+    if (await isModLink(linkPath)) return replaceModLink(linkPath, sourcePath);
     try {
-      // Спочатку видаляємо якщо вже існує
+      // An empty folder in the way is removed; removeModLink refuses one with anything in it.
       if (await Directory(linkPath).exists() || await File(linkPath).exists()) {
         await removeModLink(linkPath);
       }
 
-      // Спроба 1: Звичайний symbolic link (потребує Developer Mode або прав адміна)
-      try {
-        final link = Link(linkPath);
-        await link.create(sourcePath, recursive: false);
-        _files.info('link created', fields: {
-          'kind': 'symlink',
-          'link': linkPath,
-          'target': sourcePath,
-        });
-        return true;
-      } catch (error) {
-        // Expected without Developer Mode or admin rights, and the reason the
-        // junction below exists — a warning rather than an error, because the
-        // operation has not failed yet.
-        _files.warning('symlink refused, falling back to a junction',
-            error: error, fields: {'link': linkPath});
-      }
-
-      // Спроба 2: Directory Junction (не потребує прав адміна)
-      final result = await Process.run(
-        'cmd',
-        ['/c', 'mklink', '/J', linkPath, sourcePath],
-        runInShell: true,
-      );
-
-      if (result.exitCode == 0) {
-        _files.info('link created', fields: {
-          'kind': 'junction',
-          'link': linkPath,
-          'target': sourcePath,
-        });
-        return true;
-      } else {
-        _files.error('link failed', fields: {
-          'kind': 'junction',
-          'link': linkPath,
-          'exit': result.exitCode,
-          'stderr': result.stderr.toString().trim(),
-        });
-        return false;
-      }
+      final kind = await _makeLink(sourcePath, linkPath);
+      _files.info('link created', fields: {
+        'kind': kind,
+        'link': linkPath,
+        'target': sourcePath,
+      });
+      return true;
     } catch (error, stack) {
       _files.error('link failed', error: error, stack: stack, fields: {
         'link': linkPath,
         'target': sourcePath,
       });
+      if (error is NetworkLinkRefused) rethrow;
       return false;
     }
   }
-  
+
+  /// Makes the link as a directory symlink, or as a junction where a symlink is refused for want of rights, and
+  /// returns which. Throws when neither could be made, with the symlink's own error when it failed for another
+  /// reason, which a junction would only hide.
+  Future<String> _makeLink(String sourcePath, String linkPath) async {
+    final target = _absolute(sourcePath);
+    try {
+      _calls.createDirectorySymlink(linkPath, _symlinkTarget(target));
+      return 'symlink';
+    } on FileSystemException catch (error) {
+      if (error.osError?.errorCode != errorPrivilegeNotHeld) rethrow;
+      // Expected without Developer Mode or admin rights, and the reason the
+      // junction below exists — a warning rather than an error, because the
+      // operation has not failed yet.
+      _files.warning('symlink refused, falling back to a junction',
+          error: error, fields: {'link': linkPath});
+    }
+
+    _makeJunction(linkPath, target);
+    return 'junction';
+  }
+
+  /// [target] with a mapped network drive's letter replaced by the share it is mapped to, since the game, started
+  /// elevated through the launcher, may not see the user's drive letters. Kept as it is when the share can't be
+  /// read, which is logged.
+  String _symlinkTarget(String target) {
+    final root = driveRootOf(target);
+    if (root == null || !_calls.isOnNetworkDrive(target)) return target;
+    final remote = _calls.networkPathOf(root);
+    if (remote == null) {
+      _files.warning('mapped drive not read, linking by its letter', fields: {'target': target});
+      return target;
+    }
+    return withNetworkRoot(target, remote);
+  }
+
+  /// [path] with a mapped network drive's letter replaced by its share, as [_symlinkTarget] makes it, so a link made
+  /// to the share and a library path that uses the letter compare as one.
+  String _comparable(String path) {
+    final root = driveRootOf(path);
+    if (root == null) return path;
+    try {
+      if (!_calls.isOnNetworkDrive(path)) return path;
+      final remote = _calls.networkPathOf(root);
+      return remote == null ? path : withNetworkRoot(path, remote);
+    } catch (_) {
+      return path;
+    }
+  }
+
+  /// A junction needs no rights beyond writing the folder, but leads only to a local folder: one made to a network
+  /// folder is dead, so that is refused with nothing made ([NetworkLinkRefused]). Throws when it can't be made.
+  void _makeJunction(String linkPath, String target) {
+    if (isUncPath(target) || _calls.isOnNetworkDrive(target)) throw NetworkLinkRefused(linkPath, target);
+    _calls.createJunction(linkPath, target);
+  }
+
+  /// [target] as an absolute normalised Windows path.
+  String _absolute(String target) =>
+      path.windows.normalize(path.windows.isAbsolute(target) ? target : path.absolute(target));
+
+  /// Made under a temporary name beside the old link first ([replacementLinkName], as on Linux), so a new link that
+  /// can't be made leaves the old one untouched. A link can't be renamed over another on Windows, so the old one is
+  /// then renamed aside ([asideLinkName]), the new one into its name, and the old one deleted; a rename that fails puts the old one back by
+  /// renaming it, never by making it again. A new link refused for leading to a network folder throws
+  /// [NetworkLinkRefused]. Not yet run on Windows.
+  @override
+  Future<bool> replaceModLink(String linkPath, String newTarget) async {
+    if (!await isModLink(linkPath)) {
+      _files.warning('not a link, left alone', fields: {'path': linkPath});
+      return false;
+    }
+    final previous = await readModLinkTarget(linkPath);
+    if (previous == null) {
+      _files.warning('link target unreadable, left alone', fields: {'path': linkPath});
+      return false;
+    }
+    final fields = {'link': linkPath, 'from': previous, 'target': newTarget};
+    final folder = path.windows.dirname(linkPath);
+    final name = path.windows.basename(linkPath);
+    final fresh = path.windows.join(folder, replacementLinkName(name));
+    final aside = path.windows.join(folder, asideLinkName(name));
+
+    final String kind;
+    try {
+      // Left by a replace that stopped partway. Only these exact names, and only links.
+      await _clearTemporary(fresh);
+      await _clearTemporary(aside);
+      kind = await _makeLink(newTarget, fresh);
+    } catch (error, stack) {
+      _files.error('link replace failed', error: error, stack: stack, fields: fields);
+      if (error is NetworkLinkRefused) rethrow;
+      return false;
+    }
+
+    try {
+      await _calls.renameLink(linkPath, aside);
+    } catch (error, stack) {
+      _files.error('link replace failed', error: error, stack: stack, fields: fields);
+      await _clearTemporary(fresh);
+      return false;
+    }
+    try {
+      await _calls.renameLink(fresh, linkPath);
+    } catch (error, stack) {
+      _files.error('link replace failed', error: error, stack: stack, fields: fields);
+      try {
+        await _calls.renameLink(aside, linkPath);
+        _files.info('link restored', fields: {'link': linkPath, 'target': previous});
+      } catch (error, stack) {
+        // The old link is kept under the temporary name beside it, and the mod it points at reads off.
+        _files.error('link restore failed', error: error, stack: stack, fields: {'link': linkPath, 'kept': aside});
+      }
+      await _clearTemporary(fresh);
+      return false;
+    }
+    await _clearTemporary(aside);
+    _files.info('link replaced', fields: {'kind': kind, ...fields});
+    return true;
+  }
+
+  /// Removes the link at [linkPath], a temporary name of [replaceModLink], when there is one. Logs what it can't
+  /// remove and never throws.
+  Future<void> _clearTemporary(String linkPath) async {
+    try {
+      if (await _calls.isLink(linkPath)) await _calls.deleteLink(linkPath);
+    } catch (error) {
+      _files.warning('temporary link left behind', error: error, fields: {'path': linkPath});
+    }
+  }
+
   @override
   Future<bool> removeModLink(String linkPath) async {
     try {
@@ -100,8 +215,9 @@ class WindowsPlatformService implements PlatformService {
       // Для junction/symlink використовуємо Link
       final link = Link(linkPath);
       if (await link.exists()) {
-        await link.delete();
-        _files.info('link removed', fields: {'link': linkPath});
+        final target = await readModLinkTarget(linkPath);
+        await _calls.deleteLink(linkPath);
+        _files.info('link removed', fields: {'link': linkPath, 'target': target});
         return true;
       }
 
@@ -113,15 +229,32 @@ class WindowsPlatformService implements PlatformService {
     }
   }
   
+  /// Not yet run on Windows.
+  @override
+  Future<List<DeadModLink>> listDeadModLinks(String linksFolder) =>
+      readWindowsDeadModLinks(linksFolder, readTarget: readModLinkTarget);
+
+  /// Not yet run on Windows.
+  @override
+  Future<String?> readModLinkTarget(String linkPath) async {
+    try {
+      if (!await isModLink(linkPath)) return null;
+      return windowsLinkTarget(await _calls.readTarget(linkPath), path.windows.dirname(linkPath));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// NTFS ignores case, so two spellings of one folder are the same path, and so are a mapped drive's letter and its
+  /// share.
+  @override
+  bool samePath(String a, String b) =>
+      pathsEqual(_comparable(a), _comparable(b), ignoreCase: true, context: path.windows);
+
   @override
   Future<bool> isModLink(String linkPath) async {
     try {
-      // Перевіряємо через FileSystemEntity.isLink
-      final isLink = await FileSystemEntity.isLink(linkPath);
-      if (isLink) return true;
-      
-      // Додатково перевіряємо через Windows API для junction
-      return await _isJunction(linkPath);
+      return await _calls.isLink(linkPath);
     } catch (e) {
       return false;
     }
@@ -212,9 +345,20 @@ class WindowsPlatformService implements PlatformService {
   @override
   Future<bool> openFolderInFileManager(String folderPath) async {
     try {
-      // explorer.exe returns a non-zero exit code even on success, so treat a
-      // clean launch as success rather than checking the exit code.
-      await Process.start('explorer', [folderPath]);
+      // ShellExecute hands the path over as it is: explorer.exe given it as an argument reads a comma in it as a
+      // separator, and may open another folder. Anything at or below 32 is an error code.
+      final result = using((arena) => ShellExecute(
+            0,
+            'open'.toNativeUtf16(allocator: arena),
+            folderPath.toNativeUtf16(allocator: arena),
+            nullptr,
+            nullptr,
+            SW_SHOWNORMAL,
+          ));
+      if (result <= 32) {
+        _log.warning('could not open folder', fields: {'path': folderPath, 'code': result});
+        return false;
+      }
       _log.debug('folder opened', fields: {'path': folderPath});
       return true;
     } catch (error, stack) {
@@ -421,25 +565,6 @@ class WindowsPlatformService implements PlatformService {
     } finally {
       if (directory != null) calloc.free(directory);
       if (free != null) calloc.free(free);
-    }
-  }
-
-  // ===== Приватні методи =====
-
-
-  Future<bool> _isJunction(String dirPath) async {
-    try {
-      // Використовуємо cmd для перевірки junction
-      final result = await Process.run(
-        'cmd',
-        ['/c', 'dir', '/AL', dirPath],
-        runInShell: true,
-      );
-      
-      // Якщо це junction, у виводі буде "<JUNCTION>"
-      return result.stdout.toString().contains('JUNCTION');
-    } catch (e) {
-      return false;
     }
   }
 }

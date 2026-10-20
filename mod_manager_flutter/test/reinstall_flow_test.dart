@@ -105,6 +105,19 @@ void main() {
     expect(http.requests, isEmpty);
   });
 
+  test('is offered on a guessed page, which is the user\'s own registration', () {
+    // Decided with the user (`docs/applying-updates.md` §6): the write still waits for their yes behind a snapshot.
+    for (final version in [OriginConfidence.exact, OriginConfidence.inferred]) {
+      final guessed = originFixture(
+        modId: modId,
+        modIdConfidence: OriginConfidence.inferred,
+        fileId: 1732269,
+        versionConfidence: version,
+      );
+      expect(canReinstall(modWith(guessed)), isTrue, reason: 'file at ${version.name}');
+    }
+  });
+
   testWidgets('a page that will not load says so and changes nothing',
       (tester) async {
     // Worth telling apart from the file being gone: this one is worth retrying

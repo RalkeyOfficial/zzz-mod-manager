@@ -106,7 +106,7 @@ Future<bool> removePatchFlow(
   final snapshots = container.read(snapshotServiceProvider);
   final applier = UpdateApplier(
     snapshots: snapshots,
-    activation: ModManagerActivationPort(mods),
+    activation: ModManagerActivationPort(mods, leaveOff: (m) => leftOffAfterWrite(container, m)),
   );
   final result = await whileWritingMod(
     container,
@@ -131,6 +131,9 @@ Future<bool> removePatchFlow(
     container.invalidate(modBackupsProvider);
     await snapshots.prune();
   }
+  // Read again whatever the `.ini` stamp says, and before the success check: a removal that failed part-way may still
+  // have moved files.
+  mods.invalidateKeybinds(mod.id);
 
   if (!result.success) {
     notify.error(
@@ -153,7 +156,7 @@ Future<bool> removePatchFlow(
   // offering to update a patch that has been taken out.
   await _forget(mods, mod, patch);
 
-  // Pruning already ran with the snapshot, above.
+  // Pruning already ran with the snapshot, and the keys were dropped, above.
   container.invalidate(modBackupsProvider);
   container.invalidate(libraryProvider);
 

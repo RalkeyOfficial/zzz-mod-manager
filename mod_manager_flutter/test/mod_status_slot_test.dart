@@ -45,7 +45,6 @@ const _labels = [
   'Maybe newer',
   'Which file?',
   'Base unknown',
-  'Guessed file',
   'Dated only',
   'Not tracked',
   'Local',
@@ -109,16 +108,13 @@ void main() {
     expect(tooltipOf(tester), 'Tracked by date only — no file recorded. Click to say which file you have.');
   });
 
-  testWidgets('a worked-out file reads Guessed file, with its own tooltip', (tester) async {
+  testWidgets('a worked-out file has no badge, like a confirmed one', (tester) async {
+    // The user accepted it in the tracking screen, so it is their file.
     await pumpSlot(
       tester,
       origin(modId: 1, versionConfidence: OriginConfidence.inferred),
     );
-    expectBadge('Guessed file');
-    expect(
-      tooltipOf(tester),
-      'Which file you have was worked out, not confirmed. Click to say which file you have.',
-    );
+    expectBadge(null);
   });
 
   testWidgets("a patch dated only does not make the base's worked-out file Dated only", (tester) async {
@@ -139,7 +135,7 @@ void main() {
         ],
       ),
     );
-    expectBadge('Guessed file');
+    expectBadge(null);
   });
 
   group('a pressable badge', () {

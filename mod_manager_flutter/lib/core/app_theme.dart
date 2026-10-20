@@ -280,7 +280,8 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
         backgroundColor: WidgetStatePropertyAll(p.menu),
         surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
         elevation: const WidgetStatePropertyAll(12),
-        padding: const WidgetStatePropertyAll(EdgeInsets.all(6)),
+        // None, so an item's hover fills the menu edge to edge; the menu clips it to the rounded corners.
+        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
         shape: WidgetStatePropertyAll(rounded(12, p.menuBorder)),
       ),
     ),

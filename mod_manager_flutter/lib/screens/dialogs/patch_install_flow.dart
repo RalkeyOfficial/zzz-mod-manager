@@ -316,9 +316,8 @@ Future<PatchInstallDecision?> decidePatchInstall(
 /// ago, and a patch installed straight after the mod it patches was offered
 /// every folder in the library **except that one**.
 ///
-/// One scan, and only for an install that has something to ask: 4 ms warm, 12 ms
-/// cold over a real 23-mod library, against a path that has just unpacked an
-/// archive.
+/// One read of the library's folders, without the in-game keys a full scan adds,
+/// and only for an install that has something to ask.
 ///
 /// Empty when the library cannot be read, and the prompt says so out loud
 /// rather than falling back to an older list — being offered a folder that is
@@ -472,7 +471,8 @@ Future<({PatchWrite? write, PatchRefusal? refusal})> _planPatchWrite({
 /// the only way back. A patch that became a folder of its own is only *marked*,
 /// which is the one thing that outlives the warning.
 ///
-/// Returns what to tell the user, in the order it should be told.
+/// Returns what to tell the user, in the order it should be told. [onPatched] is told each existing mod a patch was
+/// written into, or failed to be, so its cached in-game keys are read again.
 Future<List<NotificationLines>> applyPatchInstall(
   AppLocalizations loc, {
   required PatchInstallDecision decision,
@@ -482,13 +482,19 @@ Future<List<NotificationLines>> applyPatchInstall(
   required OriginWriter amend,
   PatchIdentity? patch,
   BaseInstaller? installBase,
+  void Function(String modId)? onPatched,
+
+  /// Runs each write into an existing mod, so the app knows that mod's folder is being written
+  /// (`whileWritingMod`). Without it the write just runs.
+  Future<UpdateApplyResult> Function(String modId, Future<UpdateApplyResult> Function() write)? whileWriting,
 }) async {
   final patchedInto = <String, InstallIntoMod>{};
   final writeFailures = <String>[];
+  final guard = whileWriting ?? (_, write) => write();
 
   for (final entry in decision.writes.entries) {
     final write = entry.value;
-    final result = await applier.applyPatchInto(
+    final result = await guard(write.into.modId, () => applier.applyPatchInto(
       modName: write.into.modId,
       modFolder: Directory(path.join(modsPath, write.into.modId)),
       source: write.source,
@@ -498,7 +504,9 @@ Future<List<NotificationLines>> applyPatchInstall(
       // Keys the store of displaced base files. Null for a folder dragged off a
       // disk, which has no page and so nothing to key one by.
       patchModId: patch?.modId,
-    );
+    ));
+    // A failed copy may have changed the folder part-way, so the keys are read again either way.
+    onPatched?.call(write.into.modId);
     if (!result.success) {
       writeFailures.add(write.into.modName);
       continue;

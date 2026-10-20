@@ -198,7 +198,9 @@ class ModActiveBox extends StatelessWidget {
   const ModActiveBox({super.key, required this.mod, required this.onToggle, this.onBody, this.large = false});
 
   final ModInfo mod;
-  final VoidCallback onToggle;
+
+  /// Null greys the switch out, as while the All mods table's bulk action runs.
+  final VoidCallback? onToggle;
   final String? onBody;
 
   /// The page's box: radius 12 and 14/16 padding, where the panel's is radius 10 and 12/14.
@@ -225,7 +227,7 @@ class ModActiveBox extends StatelessWidget {
           ZenithSwitch(
             value: on,
             semanticLabel: loc.t('library.card.toggle', params: {'name': mod.name}),
-            onChanged: (_) => onToggle(),
+            onChanged: onToggle == null ? null : (_) => onToggle!(),
           ),
           Expanded(
             child: Column(
@@ -427,7 +429,7 @@ class _DownloadRow extends StatelessWidget {
     final palette = ZenithPalette.of(context);
     final text = Theme.of(context).textTheme;
     final (:page, file: recorded) = downloadRecord(download, records);
-    final file = download.versionConfidence.isConfirmed ? recorded : null;
+    final file = download.versionConfidence.namesFile ? recorded : null;
     final isBase = download.role == DownloadRole.base;
 
     final byline = [
@@ -516,9 +518,7 @@ class ModFacts extends ConsumerWidget {
     final origin = mod.origin;
     final base = origin?.base;
     final (page: _, file: recorded) = installedRecord(mod, ref.watch(knownModPagesProvider));
-    // A file only worked out is not stated as the file, here as on the card: not its name, its date or its variant.
-    final confirmed = base?.versionConfidence.isConfirmed ?? false;
-    final file = confirmed ? recorded : null;
+    final file = (base?.versionConfidence.namesFile ?? false) ? recorded : null;
     final check = ref.watch(modUpdateChecksProvider.select((checks) => checks[mod.id]));
     final size = ref.watch(modSizeProvider(mod.id)).valueOrNull;
     final baseCheck = baseUpdateCheck(mod, check);
@@ -537,7 +537,7 @@ class ModFacts extends ConsumerWidget {
     return FactRows(
       rows: [
         if (file != null) (loc.t('library.details.file'), FactValue(fileDisplayName(file), mono: true)),
-        if (base?.versionLabel case final label? when confirmed && label.isNotEmpty)
+        if (base?.versionLabel case final label? when file != null && label.isNotEmpty)
           (loc.t('library.details.variant'), FactValue(label)),
         if (uploaded != null) (loc.t('library.details.uploaded'), FactValue(uploaded)),
         (loc.t('library.details.tracking'), TrackingFact(mod: mod, onResolveOrigin: onResolveOrigin)),

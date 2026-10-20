@@ -21,9 +21,11 @@ import 'zenith_controls.dart';
 ///   overclaims for a mod whose author published a newer file under a different label.
 /// - **Blue asks for something**: identity known and the file not, or a patch whose base mod nobody has named. One
 ///   pass through the resolve dialog settles either for good.
-/// - **Grey states a fact**: a version on record by date only ("Dated only"), a file worked out rather than confirmed
-///   ("Guessed file"), a mod not tracked at all, and "Local" for one the user marked as their own.
-///   Most of an older library is untracked, and a loud mark on every card would teach the user to stop seeing it.
+/// - **Grey states a fact**: a version on record by date only ("Dated only"), a mod not tracked at all, and "Local"
+///   for one the user marked as their own. Most of an older library is untracked, and a loud mark on every card would
+///   teach the user to stop seeing it.
+/// - **A file worked out and accepted has no badge**: the user agreed to it in the tracking screen, and whether it
+///   was guessed doesn't matter to them.
 ///
 /// Every state but Local opens a dialog: the update dialog for amber, the resolve dialog for the rest.
 ///
@@ -54,7 +56,7 @@ class ModStatusSlot extends ConsumerWidget {
     }
 
     final status = modSlotStatus(mod.origin, update);
-    if (status == ModOriginStatus.none) return const SizedBox.shrink();
+    if (isQuietStatus(mod, status)) return const SizedBox.shrink();
 
     final confirmed = update?.outcome == UpdateOutcome.updateAvailable;
     final (label, tone, tooltip) = switch (status) {
@@ -75,17 +77,11 @@ class ModStatusSlot extends ConsumerWidget {
         palette.badgeInfo,
         'mods.origin.second_identity_tooltip',
       ),
-      // Two ways to a version on record that is not confirmed, said apart: "mark all as current" records a date
-      // and no file, while a worked-out file is a file.
-      ModOriginStatus.versionGuessed when _datedOnly(mod) => (
+      // "Mark as current" records a date and no file.
+      ModOriginStatus.versionGuessed => (
         'library.card.dated',
         palette.badgeNeutral,
         'mods.origin.version_guessed_tooltip',
-      ),
-      ModOriginStatus.versionGuessed => (
-        'library.card.guessed',
-        palette.badgeNeutral,
-        'library.card.guessed_tooltip',
       ),
       ModOriginStatus.untracked || ModOriginStatus.none => (
         'library.card.not_tracked',
@@ -102,8 +98,14 @@ class ModStatusSlot extends ConsumerWidget {
     );
   }
 
-  /// Whether the version on record is a date with no file. Read off the base download, the one `versionGuessed`
-  /// is decided from; a patch layer's confidence is not what the badge describes.
-  static bool _datedOnly(ModInfo mod) =>
-      mod.origin?.base?.versionConfidence == OriginConfidence.assumedLatest;
 }
+
+/// Whether [status] draws no badge on [mod]: nothing to report, or a file worked out and accepted in the tracking
+/// screen, which is the user's file and reads like a known one.
+///
+/// Dated only is the exception among `versionGuessed`: a date with no file. Read off the base download, the one
+/// `versionGuessed` is decided from; a patch layer's confidence is not what the badge describes.
+bool isQuietStatus(ModInfo mod, ModOriginStatus status) =>
+    status == ModOriginStatus.none ||
+    (status == ModOriginStatus.versionGuessed &&
+        mod.origin?.base?.versionConfidence != OriginConfidence.assumedLatest);

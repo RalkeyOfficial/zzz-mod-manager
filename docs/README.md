@@ -9,7 +9,7 @@ the root [`README.md`](../README.md).
 |---|---|
 | [`app-architecture.md`](app-architecture.md) | The **layers of `lib/`**: the service layer, the platform abstraction, our GameBanana client, and the one markdown style sheet |
 | [`marketplace.md`](marketplace.md) | The **native GameBanana browser**: the grid and detail screens, the `IndexedStack`, the card's one status slot, and what an install does on the way through |
-| [`library-screen.md`](library-screen.md) | The **Library's character view**: the character list, a character's header, the card and its status badge, the row above the grid and the library menu's bulk actions, One at a time, notes, the details panel, a mod's page with its History tab, and the dialogs reached from a mod |
+| [`library-screen.md`](library-screen.md) | The **Library's two views**: the character view (the character list, a character's header, the card and its status badge, the row above the grid, One at a time, notes, the details panel), the All mods table with its filters, Folder missing rows and bulk actions, a mod's page with its History tab, and the dialogs reached from a mod |
 | [`notifications.md`](notifications.md) | **What the app tells the user in passing**: whether to speak at all, the headline-and-subject rule, the card's leading slot, the stack and its clock |
 | [`downloads.md`](downloads.md) | **Fetching mod archives**: the spawned-isolate pump and the measurements behind it, resume policy, backpressure, the stall timeout, the background queue and the panel that shows it |
 | [`metadata-schema.md`](metadata-schema.md) | The **file format** of a mod's `metadata.json` sidecar: every field, save and round-trip semantics, schema versioning and the migration hook |

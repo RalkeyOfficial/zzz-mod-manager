@@ -73,7 +73,7 @@ No network, no filesystem, no widgets.
 | `untracked` | No remote identity at all. |
 | `trackingOff` | The user declared the mod their own. |
 | `sourceGone` | The mod page is private, trashed or withheld — read from the remote's own flags, not inferred from a status code. |
-| `indeterminate` | The response carried no current file list, or a layer's page was never fetched — or it names no page to fetch. **Silence is not evidence**: concluding "nothing newer" from a question never asked is the one way this fails invisibly. |
+| `indeterminate` | The response carried no current file list, or a layer's page was never fetched. **Silence is not evidence**: concluding "nothing newer" from a question never asked is the one way this fails invisibly. A layer that names no page is not silence, since there was nothing to ask, and is left out of the verdict instead. |
 | `tracksPatchOnly` | The folder holds a patch and nobody has said what it patches, so nothing here is a statement about the mod the folder actually contains. Distinct from `upToDate` because the patch genuinely has no newer file — that answer is true about the page asked and false about the folder. |
 
 `isObsolete` rides alongside, never folded in. `_bIsObsolete` is the author
@@ -91,10 +91,7 @@ requested and then given an answer that ignores the response.
 
 ### A folder with two identities still gets one verdict
 
-A mixed folder is checked against two mod pages
-([`origin-tracking.md` §10](origin-tracking.md#10-a-folder-that-holds-two-downloads)),
-and the card has one slot, `modUpdateChecksProvider` is keyed by folder, and the
-toolbar counts one number. So `checkForUpdate` **folds** rather than fanning out.
+A mixed folder is checked against two mod pages ([`origin-tracking.md` §10](origin-tracking.md#10-a-folder-that-holds-two-downloads)), and the card has one slot, `modUpdateChecksProvider` is keyed by folder, and the Updates chips count one number per folder. So `checkForUpdate` **folds** rather than fanning out.
 
 **The top-level fields describe whichever layer won**, and `subjectModId` names it
 by its own id. This is load-bearing: every consumer reads `candidate` and
@@ -110,17 +107,17 @@ primary's — so a folder whose patch had the update could say nothing at all ab
 the mod it patched, and a `folderOwn` field existed to smuggle it back. With a
 stack there is no privileged entry and nothing is discarded.
 
-The fold applies the file's existing asymmetry across layers — the most actionable
-verdict wins, and `upToDate` is claimed only when every layer says it. Three rules
-follow, none of them obvious:
+The fold applies the file's existing asymmetry across layers — the most actionable verdict wins, and `upToDate` is claimed only when every layer with a page says it, an ignored finding counting as up to date. Five rules follow, none of them obvious:
 
 - **A live finding beats a dismissed stronger one.** Ranking by outcome alone picks a
   dismissed `updateAvailable` and then reports `hasUpdate: false`, leaving a folder
   with a real update on another layer rendering as though it had none. A dismissal
   is per layer, so it disqualifies that layer rather than the folder.
-- **A layer whose record was never fetched is `indeterminate`**, and so is one with
-  no mod id to fetch. Claiming clean after looking at part of a folder is the false
-  clean this whole feature exists to remove.
+- **A dismissed finding counts as up to date against the other layers.** A layer that couldn't be checked, or whose page is gone, wins over it, so a folder with an ignored update on one layer and an unanswered one on the other is `indeterminate`, not clean.
+  It ranks just above a plain `upToDate`, so a folder with nothing else to say keeps the ignored finding as its subject and the dialog can still show it.
+- **A layer whose record was never fetched, or came back with no file list, is `indeterminate`.** Claiming clean after looking at part of a folder is the false clean this whole feature exists to remove.
+- **A layer with no mod id is left out**, as a patch dragged in from a local folder is: there is no page to ask, so its absence is not silence, and the folder reads what its other layers say, as a Local mod is left out of the library's checks.
+  The bulk pass doesn't request it or count it as unchecked, and the per-mod dialog fetches nothing for it and gives it no section. A folder whose bottom layer has no id is `untracked`, whatever is above it.
 - **`tracking: "off"` short-circuits before any of it.** No layer is consulted,
   which is the folder-level switch doing its job.
 
@@ -360,7 +357,7 @@ author publishes something newer. A dismissal keyed on a file id would either be
 permanent or need re-dismissing per variant, and neither is what *not this one*
 means.
 
-Six rules:
+Eight rules:
 
 - **It is written as the date of the thing being dismissed, never as "now".** A
   mod page can publish something between the check and the press, and dismissing
@@ -379,12 +376,11 @@ Six rules:
   fails twice at once: it silences nothing, because the check reads each layer's own
   field, and it stamps another mod's release date where it can hide a finding nobody
   dismissed.
-- **The verdict is kept, not rewritten.** Only `hasUpdate` — the badge — goes
-  quiet. The dialog goes on saying what is published, because "there is an
-  update and you dismissed it" and "there is nothing new" are different facts,
-  and someone reopening that dialog is usually there to change their mind. The
-  undo sits where the dismissal did, and on the History tab of the mod's page
-  ([`library-screen.md`](library-screen.md) §15).
+- **The verdict is kept, not rewritten.** Only `hasUpdate` — the badge — goes quiet.
+  The dialog goes on saying what is published, because "there is an update and you dismissed it" and "there is nothing new" are different facts, and someone reopening that dialog is usually there to change their mind.
+  The undo sits where the dismissal did, and on the History tab of the mod's page, which lists it as an Ignored update ([`library-screen.md`](library-screen.md) §15).
+- **The All mods table's Updates column reads it as Up to date.** An update is ignored because it isn't the user's file, a different variant say, so the mod is as up to date as it gets.
+  That column is a summary over the whole library; the dialog and the History tab are where the two facts stay apart ([`library-screen.md`](library-screen.md) §16).
 - **A finding with no date is never suppressed.** If a dismissal cannot be shown
   to cover it, it does not.
 - **It is dropped when the folder is rebound** to a different mod, like every
@@ -403,9 +399,9 @@ and keeps the next release loud.
 
 ## 5. Checking the whole library
 
-`services/bulk_update_check.dart`, driven from the mods toolbar. It runs **only
-when pressed** — with one opt-in exception, [§5.1](#51-checking-at-startup),
-which is off by default.
+`services/bulk_update_check.dart`, driven from the All mods table's **Check all for updates** ([`library-screen.md`](library-screen.md) §16).
+It runs **only when pressed** — with one opt-in exception, [§5.1](#51-checking-at-startup), which is off by default.
+The same pass over only the ticked mods is the table's selection bar's **Check for updates**.
 
 It runs in **two phases**. Phase one is `Mod/Multi`, which fetches many mods'
 chosen fields in one request, so an 80-mod library is two requests rather than
@@ -465,8 +461,7 @@ Two consequences shape the pass:
   another's — whichever came last silently becoming the folder's whole answer,
   computed by comparing one mod's record against another mod's page. Every record
   is banked first; each folder is folded once afterwards.
-- **`checkableCount` counts folders, `requests` counts pages.** The user counts
-  cards, so the toolbar button must not promise more work than they can see.
+- **A check's report counts folders, `requests` counts pages.** The user counts cards and rows, so a number that says how much a check did counts folders, never more work than they can see.
 
 A page the server says does not exist is banked as a record flagged missing rather
 than short-circuited to a verdict, so a *layer* whose page has gone reads as
@@ -500,14 +495,15 @@ argument for phase two.
 Every question resolution asks — which file of this mod do you have, is this really your mod — is answered by the same response the verdicts came from.
 So folding the two together costs no request, and the two halves of one screen cannot describe different states of the same mod page.
 
-**Scope: the whole library, not the current view.** This is a deliberate
-departure from where the bulk "assume current" action gets its list
-([`origin-tracking.md` §6](origin-tracking.md#6-assume-current-in-bulk)). Both
-follow the same rule — *a bulk control must act on the set the user can see* —
-but the stake differs. "Assume current" rewrites sidecars, so acting past the
-edge of the grid changes mods the user never enumerated. A check writes nothing;
-its only effect is badges, and badges are drawn on every character tab, so
-scoping it to one would leave the rest looking checked-and-clean.
+**Scope: the whole library, not the current view.** This is a deliberate departure from where the bulk "assume current" action gets its list ([`origin-tracking.md` §6](origin-tracking.md#6-assume-current-in-bulk)).
+Both follow the same rule — *a bulk control must act on the set the user can see* — but the stake differs.
+"Assume current" rewrites sidecars, so it takes only the ticked mods the table shows and lists each one before it writes.
+A check writes nothing; its only effect is badges, and badges are drawn on every character and every row, so scoping it to a view would leave the rest looking checked-and-clean.
+
+**A check of the ticked mods is the narrower door, and it does less.** It checks only the ticked mods the table shows, reports its outcome as a notification, and never opens the results screen below, which is about the whole library and has its own door.
+Its pages are kept for display (`fetchedModPagesProvider`) and add no record to the check's, which the results screen reads as "the library was checked".
+A record the check already holds is refreshed with a page fetched since, this check's or any other fetch's, unless that page is older by its newest file or its last update (`keepModPages`); a page already in `fetchedModPagesProvider` is kept over an older one the same way. A mod's page and the update dialog read through the 10-minute response cache, which the whole check bypasses, so a page fetched after the check can still be the older one, and replacing the record with it would show the old file under the update badge.
+It also leaves the table's "updates checked <ago>" alone, since that line says the whole library was checked; only a whole-library pass that ran to the end sets it, the startup check included.
 
 ### 5.1 Checking at startup
 
@@ -557,18 +553,14 @@ Four decisions, all in `services/launch_update_check.dart` (pure) and
   found updates *and* failed reports the updates: that is the actionable half.
   The card's body says the check happened *at startup*, since a notification
   nobody pressed for has to explain its own presence.
-- **It never opens the resolution screen.** The manual check does when there is
-  something to sort out ([§6](#the-results-screen)); a modal thrown over an app
-  the user has just opened is exactly the interruption that arrangement exists
-  to avoid. The screen stays reachable from *Sort out mod tracking…*, which
-  rebuilds from the records this pass leaves behind and therefore costs no
-  second request.
+- **It never opens the resolution screen.** The manual check does when there is something to sort out ([§6](#the-results-screen)); a modal thrown over an app the user has just opened is exactly the interruption that arrangement exists to avoid.
+  The screen stays reachable from **Sort these out** under the All mods table, which rebuilds from the records this pass leaves behind and therefore costs no second request.
 
 **It is hosted above the page switcher**, beside `DownloadQueueHost`, because nobody pressed anything to start it and it outlives whatever the user does next.
 The pages are keyed `AnimatedSwitcher` children with no keep-alive, so a pass owned by the Library page would die the moment the user looked at the marketplace.
 Unlike the download host it raises no dialog, so it does not need to sit below the `Navigator`.
 
-**The manual check lives above the page switcher too**, in `LibraryActionsHost`, for the same reason ([`library-screen.md`](library-screen.md) §7).
+**The manual check lives above the page switcher too**, in `LibraryActionsHost`, for the same reason ([`library-screen.md`](library-screen.md) §8).
 The two share `libraryCheckRunningProvider`: whichever pass is running, the other does not start.
 
 **Both save the titles of the pages they fetched** on each download they name (`ModDownload.name`, `rememberDownloadNamesFrom`), before the results screen opens. The update dialog's own check does the same for its mod.
@@ -612,6 +604,8 @@ The check cannot produce a verdict for it, so this is belt and braces — but th
 A `sourceGone` verdict is not written to the mod's sidecar.
 The page's own flags are read on every check, so a page that comes back is checked as if it had never gone.
 
+**The All mods table's Updates column is not the card.** It shows the verdict wherever the mod could be checked, Up to date, Not on GameBanana and Couldn't check included, and the tracking prompt where it couldn't: Which file? stays the prompt even beside an update, and an ignored update reads Up to date ([`library-screen.md`](library-screen.md) §16).
+
 The "needs attention" filter deliberately does **not** count updates. It answers
 "what have I not dealt with", which is a property of the sidecar; folding in a
 network result would make its count change whenever a check ran.
@@ -633,7 +627,7 @@ they pressed the button to see; when there are questions, raising a notification
 reading neither.
 
 **Auto-opening is not the only way in**: a screen reachable only as a side effect of a check can be seen once and, if dismissed, not again.
-*Sort out mod tracking…* in the library menu (below) reopens it from the records the check left behind.
+**Sort these out**, under the All mods table while its Can't be checked filter is on (below), reopens it from the records the check left behind.
 
 The screen itself belongs to origin tracking rather than to this document, because
 what it writes is origin data:
@@ -641,13 +635,14 @@ what it writes is origin data:
 
 ### Where the controls live
 
-The Library page's row above the grid is laid out in [`library-screen.md`](library-screen.md) §7: *Check for updates* and *Sort out mod tracking…* are in the library menu with the other bulk actions, and the **Updates** chips filter to what the last check found.
+The All mods table holds the check's controls ([`library-screen.md`](library-screen.md) §16): **Check all for updates** in its header, **Check for updates** in its selection bar for the ticked mods, and **Sort these out** under it.
+The **Updates** chips filter to what the last check found: the table's, the one above a character's mods and the one in the character list ([`library-screen.md`](library-screen.md) §7). The sidebar's Updates row is the table under its Updates filter.
 What follows are the rules that belong to the check.
 
 **Two scopes meet here, deliberately.** The *check* covers the whole library, because its badges are drawn on every character.
-The grid's *Updates filter* covers the character on screen, because that is all it can narrow; the character list's Updates chip is how the characters with an update are found.
+The grid's *Updates filter* covers the character on screen, because that is all it can narrow; the character list's Updates chip is how the characters with an update are found, and the table's Updates filter lists every mod with one.
 
-**The Updates filters switch themselves off when the library has no updates left.** Ignoring the last flagged mod would otherwise leave the grid filtered to nothing, with a control the user has to work out they need to press.
+**The character view's Updates filters switch themselves off when the library has no updates left**; the All mods table's stays on and says nothing matches. Ignoring the last flagged mod would otherwise leave the grid filtered to nothing, with a control the user has to work out they need to press.
 That is keyed on the **library**, not on the character's own count: on that count the filter would switch off whenever the user looked at someone with no updates of their own.
 So on such a character the grid *is* empty, the filter stands, and the chip stays to be switched off by hand.
 
@@ -770,11 +765,8 @@ without it the only way back is closing and reopening — so the retry sits
 **inline with the error message**, not in the action bar, which already carries
 up to three buttons in every other state.
 
-That retry bypasses the client's response cache, for the reason the
-marketplace's refresh button does: a re-check answerable from a ten-minute-old
-copy is a control that sometimes cannot do its one job, with no way for the user
-to tell which press was which. Re-checking the whole library, cache and all, is
-the toolbar button's job.
+That retry bypasses the client's response cache, for the reason the marketplace's refresh button does: a re-check answerable from a ten-minute-old copy is a control that sometimes cannot do its one job, with no way for the user to tell which press was which.
+Re-checking the whole library, cache and all, is the job of the All mods table's Check all for updates.
 
 **"Ignore this update" and its undo live here**, and the dialog is the only
 place the ignore appears — ignoring from the card would mean dismissing something
@@ -789,17 +781,11 @@ brings the badge back, so it needs no finding read first. It re-folds the
 session's verdict with the same `refoldDismissal` the dialog uses, so the badge
 speaks up without another check.
 
-The label is worth guarding. It was "Not now", which reads as a deferral, and
-this is not one: it is permanent until the author publishes something newer.
+The button's label, "Ignore this update", is worth guarding. "Not now" would read as a deferral, and this is not one: it is permanent until the author publishes something newer.
 
-**The flag is flipped on the verdict already in hand, never re-derived from a
-mod page**, and that is the fix for a bug worth remembering rather than an
-implementation detail. Opened from a card badge this dialog fetches nothing —
-the bulk pass already answered — so re-folding produced null, and a write that
-had *succeeded* left the dialog, the card badge and the toolbar count all
-showing the pre-dismissal state. The button looked dead. Nothing threw, and the
-only test covering the button used the other entry point, where a fetched record
-happens to be in hand.
+**The flag is flipped on the verdict already in hand, never re-derived from a mod page**, and that matters more than it looks.
+Opened from a card badge this dialog fetches nothing — the bulk pass already answered — so re-folding would produce null, and a write that *succeeded* would leave the dialog, the card badge and the Updates count all showing the state before the dismissal.
+The button would look dead with nothing thrown, and only the entry point that fetches a record would show it working.
 
 The dialog also names **the release** a candidate shipped in (`Version 1.5`),
 taken from the update post's `_sName`. Very often that is the only real version

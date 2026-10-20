@@ -77,7 +77,7 @@ void main() {
       ]);
 
       expect(plan.modIds, [1]);
-      expect(plan.checkableCount, 1);
+      expect(plan.checkable, hasLength(1));
       expect(plan.skipped['bare']?.outcome, UpdateOutcome.untracked);
       expect(plan.skipped['no id']?.outcome, UpdateOutcome.untracked);
       expect(plan.skipped['mine']?.outcome, UpdateOutcome.trackingOff);
@@ -92,7 +92,7 @@ void main() {
         mod('b', origin: origin(modId: 7, fileId: 11)),
       ]);
       expect(plan.modIds, [7]);
-      expect(plan.checkableCount, 2);
+      expect(plan.checkable, hasLength(2));
     });
   });
 
@@ -144,7 +144,7 @@ void main() {
         mixed('EllenBikini', modId: 222, baseId: 111),
       ]);
       expect(plan.modIds.length, 2, reason: 'two pages to ask');
-      expect(plan.checkableCount, 1, reason: 'one mod to report on');
+      expect(plan.checkable, hasLength(1), reason: 'one mod to report on');
     });
 
     test('a folder the user declared their own asks about neither half', () {
@@ -260,6 +260,28 @@ void main() {
       expect(outcome.checks['EllenBikini']?.outcome,
           isNot(UpdateOutcome.upToDate));
       expect(outcome.failed, contains('EllenBikini'));
+    });
+
+    test('a patch with no mod page is neither asked about nor missed', () async {
+      final plan = planBulkUpdateCheck([
+        mod(
+          'EllenBikini',
+          origin: origin(
+            modId: 111,
+            fileId: 10,
+            patches: [patchFixture(modId: null, modIdConfidence: OriginConfidence.unknown)],
+          ),
+        ),
+      ]);
+      expect(plan.modIds, [111]);
+
+      final outcome = await runBulkUpdateCheck(
+        plan: plan,
+        fetch: (ids) async => [for (final id in ids) record(id)],
+        batchSize: 1,
+      );
+      expect(outcome.checks['EllenBikini']?.outcome, UpdateOutcome.upToDate);
+      expect(outcome.failed, isEmpty);
     });
 
     test('the reported case: a patch folder whose base has a newer variant',

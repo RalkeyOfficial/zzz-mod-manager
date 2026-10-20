@@ -1,3 +1,5 @@
+import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
@@ -11,6 +13,9 @@ import 'package:mod_manager_flutter/services/ingest_origin_builder.dart';
 import 'package:mod_manager_flutter/services/origin_resolution.dart';
 import 'package:mod_manager_flutter/services/origin_write.dart';
 
+import 'package:mod_manager_flutter/utils/state_providers.dart';
+
+import 'support/library_override.dart';
 import 'support/origin_shorthand.dart';
 
 /// `ModDownload.name`: a display copy of a mod page's title, saved with each layer so a folder lists its downloads
@@ -149,6 +154,30 @@ void main() {
       );
       expect(wrote, isFalse);
       expect(asked, ['a', 'b']);
+    });
+
+    testWidgets("after a check, leaves a mod whose folder is being written", (tester) async {
+      final container = ProviderContainer(overrides: [
+        libraryOf([mod('a', stacked()), mod('b', stacked())]),
+      ]);
+      addTearDown(container.dispose);
+      container.read(modWritesInProgressProvider.notifier).state = {'b'};
+      late WidgetRef widgetRef;
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: Consumer(builder: (_, ref, _) {
+          widgetRef = ref;
+          return const SizedBox();
+        }),
+      ));
+
+      final asked = <String>[];
+      await rememberDownloadNamesFrom(widgetRef, pages, writer: (id, _) async {
+        asked.add(id);
+        return OriginWriteResult.declined;
+      });
+
+      expect(asked, ['a']);
     });
   });
 }

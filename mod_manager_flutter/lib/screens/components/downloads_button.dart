@@ -29,6 +29,8 @@ class DownloadsNavItem extends ConsumerWidget {
       // The panel opens against the sidebar's right edge, level with the row. The offset runs from the row's left
       // edge, which sits [AppSidebar.inset] inside the sidebar.
       alignmentOffset: const Offset(AppSidebar.width - AppSidebar.inset, -SidebarNavItem.height),
+      // A panel rather than a list of items, so it keeps a margin inside its border.
+      style: const MenuStyle(padding: WidgetStatePropertyAll(EdgeInsets.all(6))),
       menuChildren: const [DownloadsPanel()],
       builder: (context, controller, _) => SidebarNavItem(
         icon: failed && active == 0 ? Icons.error_outline_rounded : Icons.download_rounded,

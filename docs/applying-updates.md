@@ -50,23 +50,19 @@ The mod **is** still deactivated for the duration, but for **open file handles
 only** — the game's loader holds them on Windows and the delete and the copy would
 fail against them. It is put back exactly as it was afterwards, active or not.
 
+**Unless the user turned it off meanwhile.** Under One at a time, turning on another of the character's mods turns this one off at once, write or no write ([`library-screen.md`](library-screen.md) §10): turning off is only the link and the shader files coming out, and nothing about the write needs them. The mod is then marked (`turnOffDuringWrite`, beside `whileWritingMod`), and the write's turn back on, on success or failure, leaves it off and places no shader files (`ModManagerActivationPort`'s `leaveOff`). The mark ends with the write. The result then says nothing about turning it back on, so no notice claims a failure. This holds for every write that turns a mod off and back on: an update or Reinstall, a patch installed into it or taken out, and a restore.
+
 `UpdateApplier._wipe` is the delete: every entry at the folder's root except
 `.zzz-mod-manager/`, recursively. `utils/directory_copy.dart` is the copy into the
 emptied folder.
 
 ### What goes, what comes back, and the patch layer's own update
 
-**A base update takes everything.** The loader reads **every** `.ini` in the folder,
-so an old version's renamed `.ini` left beside its successor doubles the hotkeys and
-the overrides, and a shader the author dropped goes on being applied. Deciding which
-files were the old version's needs a record that most folders do not have and a set of
-exceptions for the ones that do, and every exception is a place a stale file can
-survive. So nothing is decided: the folder is emptied and the archive's contents are
-what it holds afterwards. A file the user merged in by hand, a texture they swapped,
-a `.ini` they edited — all of it goes with the old version, and the snapshot
-([§5](#5-snapshots)) is where it is. That is a trade made on purpose: a mod broken
-by a leftover is the app's fault, and a hand edit lost to an update the user pressed
-is theirs to take back from the saved copy.
+**A base update takes everything.** The loader reads **every** `.ini` in the folder but the ones its `DISABLED*` rule skips ([`library-screen.md`](library-screen.md) §12), so an old version's renamed `.ini` left beside its successor doubles the hotkeys and the overrides, and a shader the author dropped goes on being applied.
+Deciding which files were the old version's needs a record that most folders do not have and a set of exceptions for the ones that do, and every exception is a place a stale file can survive.
+So nothing is decided: the folder is emptied and the archive's contents are what it holds afterwards.
+A file the user merged in by hand, a texture they swapped, a `.ini` they edited — all of it goes with the old version, and the snapshot ([§5](#5-snapshots)) is where it is.
+That is a trade made on purpose: a mod broken by a leftover is the app's fault, and a hand edit lost to an update the user pressed is theirs to take back from the saved copy.
 
 **The one thing that comes back is a recorded patch.** `ingest.patch_files` and the
 patch layer's own `files` say which paths were the other download's; they are read
@@ -841,10 +837,10 @@ It needs its own surface because the update dialog appears when there is a *find
 and a repair is wanted precisely when there is none — a mod broken by a game patch, a
 file deleted by accident, an edit that went wrong.
 
-**It is offered only for a confirmed file on a tracked mod** (`canReinstall`), in the
-right-click menu and on the History tab of the mod's page alike. A file id that was only
-worked out would write that guess over the folder, which "guesses may inform, never
-drive" refuses, and a mod marked Local was said not to come from its page.
+**It is offered for a file on record on a tracked mod** (`canReinstall`, over `OriginConfidence.namesFile`), in the right-click menu and on the History tab of the mod's page alike.
+A file worked out in the tracking screen counts: the Library names it as the user's file everywhere, and a Reinstall button missing beside "In use" with nothing saying why reads as a fault. A wrong file is undone from the snapshot the flow takes first.
+A mod page worked out rather than confirmed (`mod_id_confidence` at `inferred`) counts too, and `canReinstall` asks nothing of it: a page parsed from the mod's source link is the user's own registration, not the app's guess at a name. The write still waits for the user's yes on the confirmation, behind the same snapshot. Decided with the user; it is kept as it is rather than asking for the page to be confirmed first.
+A date with no file ("Dated only") names nothing to download, and a mod marked Local was said not to come from its page.
 
 Two things it is not:
 

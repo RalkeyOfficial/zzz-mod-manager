@@ -35,7 +35,7 @@ import 'update_check_feedback.dart';
 /// the pass turned up mods whose tracking could be sorted out — but that screen
 /// is a modal, and one thrown over an app the user has just opened is the
 /// interruption the whole notification-or-screen arrangement exists to avoid.
-/// It stays reachable from *Sort out mod tracking…* in the library menu, which
+/// It stays reachable from *Sort these out* under the All mods table, which
 /// rebuilds itself from the records this pass leaves behind and therefore costs
 /// no second request.
 ///
@@ -139,7 +139,8 @@ class _LaunchUpdateCheckHostState extends ConsumerState<LaunchUpdateCheckHost> {
       // not something the user has to act on — and the commonest cause by far
       // is starting the app offline. A card saying "couldn't check for updates"
       // on every offline launch is what gets the setting switched off. The
-      // library menu's check is the one that reports, and it is one click away.
+      // All mods table's Check all for updates is the one that reports, and it
+      // is one click away.
       Logger('update.check').warning('startup check failed', error: e);
       return;
     } finally {
@@ -152,6 +153,7 @@ class _LaunchUpdateCheckHostState extends ConsumerState<LaunchUpdateCheckHost> {
     checks.state = mergedChecks(checks.state, outcome);
     final records = ref.read(modUpdateRecordsProvider.notifier);
     records.state = mergedRecords(records.state, outcome);
+    if (outcome.abortedBy == null) ref.read(libraryCheckedAtProvider.notifier).state = DateTime.now();
     await rememberDownloadNamesFrom(ref, outcome.records, writer: widget.originWriter);
 
     // Only when it found something. The badges carry the answer either way, and

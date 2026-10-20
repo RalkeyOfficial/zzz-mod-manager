@@ -18,12 +18,22 @@ ButtonStyle smallButtonStyle(BuildContext context, {bool iconOnly = false}) => B
 
 /// A 28px filter chip, with an optional count after its label. Selected takes [ZenithPalette.selected].
 class ZenithChip extends StatelessWidget {
-  const ZenithChip({super.key, required this.label, required this.selected, required this.onTap, this.count});
+  const ZenithChip({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.count,
+    this.countColor,
+  });
 
   final String label;
   final bool selected;
   final VoidCallback onTap;
   final int? count;
+
+  /// The count's own colour, such as blue for a count of mods that ask for something.
+  final Color? countColor;
 
   @override
   Widget build(BuildContext context) {
@@ -52,7 +62,9 @@ class ZenithChip extends StatelessWidget {
                   if (count != null)
                     Text(
                       '$count',
-                      style: ZenithType.of(context).monoSmall.copyWith(color: foreground.withValues(alpha: 0.8)),
+                      style: ZenithType.of(context).monoSmall.copyWith(
+                        color: countColor ?? foreground.withValues(alpha: 0.8),
+                      ),
                     ),
                 ],
               ),
@@ -67,7 +79,15 @@ class ZenithChip extends StatelessWidget {
 /// A 22px status badge in one of the palette's pairs: [ZenithPalette.badgeOn], `badgeUpdate`, `badgeInfo`,
 /// `badgeNeutral`, `badgeMissing`, or an element tile.
 class ZenithBadge extends StatelessWidget {
-  const ZenithBadge({super.key, required this.label, required this.tone, this.tooltip, this.onTap, this.minWidth});
+  const ZenithBadge({
+    super.key,
+    required this.label,
+    required this.tone,
+    this.tooltip,
+    this.onTap,
+    this.minWidth,
+    this.small = false,
+  });
 
   final String label;
   final TonePair tone;
@@ -77,12 +97,15 @@ class ZenithBadge extends StatelessWidget {
   /// Widens a short label, centred, so badges stacked in a column line up. A longer label still hugs its text.
   final double? minWidth;
 
+  /// 20px with tighter sides, as a badge set inline with a dialog's subtitle is drawn.
+  final bool small;
+
   @override
   Widget build(BuildContext context) {
     Widget badge = Container(
-      height: 22,
+      height: small ? 20 : 22,
       constraints: minWidth == null ? null : BoxConstraints(minWidth: minWidth!),
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: EdgeInsets.symmetric(horizontal: small ? 7 : 8),
       decoration: BoxDecoration(
         color: tone.background,
         borderRadius: BorderRadius.circular(6),

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/services/shader_fixes/shader_fixes_plan.dart';
 import 'package:mod_manager_flutter/services/shader_fixes/shader_fixes_service.dart';
 import 'package:mod_manager_flutter/services/update_apply/mod_activation_port.dart';
+import 'package:mod_manager_flutter/utils/directory_copy.dart';
 import 'package:path/path.dart' as p;
 
 import 'support/temp_library.dart';
@@ -209,6 +210,171 @@ void main() {
     expect(shader(hashA).existsSync(), isFalse);
     expect(Link(p.join(temp.saveMods.path, 'Jiggle')).existsSync(), isFalse);
   }, skip: Platform.isWindows ? 'chmod is POSIX-only' : false);
+
+  group('a copy that fails partway', () {
+    /// A service over the same record whose copy of [failing] writes a few bytes and throws, or with [touch] false,
+    /// throws before writing anything.
+    ShaderFixesService failingOn(String failing, {bool touch = true}) => ShaderFixesService(
+          recordPath: p.join(temp.root.path, 'shader_fixes.json'),
+          copyFile: (source, target) async {
+            if (p.basename(target) == failing) {
+              if (touch) File(target).writeAsStringSync('half');
+              throw FileSystemException('No space left on device', target);
+            }
+            await copyKeepingTime(source, target);
+          },
+        );
+
+    ShaderFixesRecord record() => ShaderFixesRecord.fromJson(
+        jsonDecode(File(p.join(temp.root.path, 'shader_fixes.json')).readAsStringSync()));
+
+    test('removes the file it was writing and the folder made for it, and nothing it did not place', () async {
+      installShaderMod('Jiggle', {hashA: 'shader a', 'Sub/motion.hlsl': 'include'});
+
+      await expectLater(
+        failingOn('motion.hlsl').place(
+          modDir: temp.modFolder('Jiggle').path,
+          uid: 'jiggle',
+          mod: 'Jiggle',
+          saveModsPath: temp.saveMods.path,
+        ),
+        throwsA(isA<FileSystemException>()),
+      );
+
+      expect(shader(hashA).existsSync(), isFalse);
+      expect(shader('Sub/motion.hlsl').existsSync(), isFalse);
+      expect(Directory(p.join(shaders.path, 'Sub')).existsSync(), isFalse);
+      expect(shader('Sucrose.png').readAsStringSync(), 'png');
+      expect(record().entries, isEmpty);
+    });
+
+    test("deletes the mod's own earlier version once the copy has changed it, and keeps it when it has not", () async {
+      installShaderMod('Jiggle', {hashA: 'version 1'});
+      expect(await temp.service.activateMod('Jiggle'), isTrue);
+      final uid = record().entries.single.holders.keys.single;
+      temp.write('Jiggle', 'ShaderFixes/$hashA', 'version 2');
+      Future<void> placeWith(ShaderFixesService service) => service.place(
+            modDir: temp.modFolder('Jiggle').path,
+            uid: uid,
+            mod: 'Jiggle',
+            saveModsPath: temp.saveMods.path,
+          );
+
+      await expectLater(placeWith(failingOn(hashA, touch: false)), throwsA(isA<FileSystemException>()));
+      expect(shader(hashA).readAsStringSync(), 'version 1');
+
+      await expectLater(placeWith(failingOn(hashA)), throwsA(isA<FileSystemException>()));
+      expect(shader(hashA).existsSync(), isFalse);
+      // Still held, and gone from disk, so the next disable forgets it.
+      await temp.service.deactivateMod('Jiggle');
+      expect(record().entries, isEmpty);
+    });
+  });
+
+  group('a link in the shader folder', () {
+    late Directory elsewhere;
+
+    setUp(() => elsewhere = Directory(p.join(temp.root.path, 'elsewhere'))..createSync());
+
+    Matcher refusedByLinkAt(String path) => throwsA(isA<ShaderPlacementRefused>().having(
+          (r) => [for (final c in r.conflicts) (c.path, c.owner, c.link)],
+          'conflicts',
+          [(path, null, true)],
+        ));
+
+    test('at a target refuses the enable with no owner, even with the same bytes behind it, and writes nothing',
+        () async {
+      final user = File(p.join(elsewhere.path, 'user.txt'))..writeAsStringSync('shader a');
+      Link(shader(hashA).path).createSync(user.path);
+      installShaderMod('Jiggle', {hashA: 'shader a', hashB: 'b'});
+
+      await expectLater(temp.service.activateMod('Jiggle'), refusedByLinkAt(hashA));
+
+      expect(Link(shader(hashA).path).targetSync(), user.path);
+      expect(user.readAsStringSync(), 'shader a');
+      expect(shader(hashB).existsSync(), isFalse);
+    });
+
+    test('dangling at a target refuses the enable, stays, and nothing is made where it points', () async {
+      final missing = p.join(elsewhere.path, 'missing.txt');
+      Link(shader(hashA).path).createSync(missing);
+      installShaderMod('Jiggle', {hashA: 'shader a'});
+
+      await expectLater(temp.service.activateMod('Jiggle'), refusedByLinkAt(hashA));
+
+      expect(Link(shader(hashA).path).targetSync(), missing);
+      expect(File(missing).existsSync(), isFalse);
+    });
+
+    test('as a folder on the way to a target refuses the enable', () async {
+      final runtime = Directory(p.join(elsewhere.path, 'runtime'))..createSync();
+      Link(p.join(shaders.path, 'JiggleForgeRuntime')).createSync(runtime.path);
+      installShaderMod('Jiggle', {'JiggleForgeRuntime/motion.hlsl': 'x'});
+
+      await expectLater(temp.service.activateMod('Jiggle'), refusedByLinkAt('JiggleForgeRuntime/motion.hlsl'));
+
+      expect(runtime.listSync(), isEmpty);
+    });
+
+    test('made after the plan is not written through, and the copy is undone', () async {
+      installShaderMod('Jiggle', {hashA: 'shader a', hashB: 'b'});
+      final missing = p.join(elsewhere.path, 'missing.txt');
+      final service = ShaderFixesService(
+        recordPath: p.join(temp.root.path, 'shader_fixes.json'),
+        copyFile: (source, target) async {
+          await copyKeepingTime(source, target);
+          if (p.basename(target) == hashA) Link(shader(hashB).path).createSync(missing);
+        },
+      );
+
+      await expectLater(
+        service.place(modDir: temp.modFolder('Jiggle').path, uid: 'jiggle', mod: 'Jiggle', saveModsPath: temp.saveMods.path),
+        throwsA(isA<FileSystemException>()),
+      );
+
+      expect(File(missing).existsSync(), isFalse);
+      expect(Link(shader(hashB).path).targetSync(), missing);
+      expect(shader(hashA).existsSync(), isFalse);
+    });
+
+    test('made at a target while it was copied is never removed by the clean-up', () async {
+      installShaderMod('Jiggle', {hashA: 'shader a'});
+      final missing = p.join(elsewhere.path, 'missing.txt');
+      final service = ShaderFixesService(
+        recordPath: p.join(temp.root.path, 'shader_fixes.json'),
+        copyFile: (source, target) async {
+          Link(target).createSync(missing);
+          File(target).writeAsStringSync('half');
+          throw FileSystemException('No space left on device', target);
+        },
+      );
+
+      await expectLater(
+        service.place(modDir: temp.modFolder('Jiggle').path, uid: 'jiggle', mod: 'Jiggle', saveModsPath: temp.saveMods.path),
+        throwsA(isA<FileSystemException>()),
+      );
+
+      expect(Link(shader(hashA).path).targetSync(), missing);
+    });
+
+    test('put where a placed file and its cache were is left, with what it leads to, when the mod is off', () async {
+      installShaderMod('Jiggle', {hashA: 'shader a'});
+      expect(await temp.service.activateMod('Jiggle'), isTrue);
+      shader(hashA).deleteSync();
+      final user = File(p.join(elsewhere.path, 'user.txt'))..writeAsStringSync('shader a');
+      Link(shader(hashA).path).createSync(user.path);
+      final cache = File(p.join(elsewhere.path, 'cache.bin'))..writeAsStringSync('compiled');
+      final bin = shader('1f6ab42231416fdb-vs_replace.bin').path;
+      Link(bin).createSync(cache.path);
+
+      expect(await temp.service.deactivateMod('Jiggle'), isTrue);
+
+      expect(Link(shader(hashA).path).targetSync(), user.path);
+      expect(Link(bin).targetSync(), cache.path);
+      expect(user.readAsStringSync(), 'shader a');
+      expect(cache.readAsStringSync(), 'compiled');
+    });
+  });
 
   test("an .ini the XXMI Launcher renamed goes under its new name, with no restart notice, and ZZMI's own stays",
       () async {

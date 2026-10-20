@@ -23,7 +23,9 @@ import 'mod_uid.dart';
 import 'origin_write.dart';
 import 'platform_service.dart';
 import 'platform_service_factory.dart';
+import 'shader_fixes/shader_fixes_plan.dart';
 import 'shader_fixes/shader_fixes_service.dart';
+import 'ini_files_stamp.dart';
 import 'ini_parser_service.dart';
 
 /// Головний сервіс для керування модами через symbolic links
@@ -32,6 +34,104 @@ final Logger _log = Logger('mods');
 /// Anything that changes the filesystem goes under one tag, whoever did it, so
 /// "what did this app do to my folders" is a single filter.
 final Logger _files = Logger('fileops');
+
+/// A mod's parsed keybinds and the stamp of the `.ini` files they came from.
+/// [settled] is [IniFilesStamp.settled] at the time of the parse.
+typedef _CachedKeybinds = ({IniFilesStamp stamp, List<KeybindInfo> keys, bool settled});
+
+/// A rename of a mod that is on, refused because ZZMI's Mods folder already has a [name] that is not the mod's own
+/// link: a working link into another folder, a folder or a file. Nothing was changed.
+class RenameRefused implements Exception {
+  const RenameRefused(this.name);
+  final String name;
+
+  @override
+  String toString() => 'the links folder already has a $name that is not this mod';
+}
+
+/// A rename whose folder could not be renamed, such as one holding a file another program has open on Windows.
+/// Nothing was changed: the mod keeps its name, and its link if it was on.
+class RenameFolderFailed implements Exception {
+  const RenameFolderFailed(this.mod, this.error);
+  final String mod;
+  final Object error;
+
+  @override
+  String toString() => 'the folder of $mod could not be renamed: $error';
+}
+
+/// A rename of a mod that is on whose link under the new name [name] could not be made in ZZMI's Mods folder.
+/// The folder is renamed back, so [mod] keeps its name and its link. When that fails too, [renamed] is true: the
+/// mod is [name], and off.
+class RenameLinkFailed implements Exception {
+  const RenameLinkFailed(this.mod, this.name, {this.renamed = false});
+  final String mod;
+  final String name;
+  final bool renamed;
+
+  @override
+  String toString() => 'the link of $mod under the name $name could not be made';
+}
+
+/// How a Mod library overlaps ZZMI's Mods folder, where the links go. Any overlap refuses the library.
+enum LibraryOverlap {
+  /// The library is the links folder by its path: every link there would point at itself.
+  same,
+
+  /// The library is the links folder once links are resolved.
+  leadsTo,
+
+  /// The library is within the links folder, which ZZMI reads as a whole, so every mod in it loads, on or off. One
+  /// below a folder whose name starts with `DISABLED`, in any case, or named so itself, is apart: ZZMI skips it.
+  inside,
+
+  /// The links folder is within the library, so it would read as a mod, and turning it on would make a loop.
+  contains,
+}
+
+/// How [library] overlaps [links], or null when they are apart. Compared by path, and, when both exist, once links
+/// are resolved, as a library path that is itself a link into ZZMI's Mods folder is.
+Future<LibraryOverlap?> libraryOverlap(String library, String links, {PlatformService? platform}) async {
+  final paths = platform ?? PlatformServiceFactory.getInstance();
+  final direct = _overlapOf(library, links, paths);
+  if (direct != null) return direct;
+  try {
+    if (!await Directory(library).exists() || !await Directory(links).exists()) return null;
+    final resolved = _overlapOf(
+      await Directory(library).resolveSymbolicLinks(),
+      await Directory(links).resolveSymbolicLinks(),
+      paths,
+    );
+    return resolved == LibraryOverlap.same ? LibraryOverlap.leadsTo : resolved;
+  } on FileSystemException {
+    return null;
+  }
+}
+
+LibraryOverlap? _overlapOf(String library, String links, PlatformService paths) {
+  if (paths.samePath(library, links)) return LibraryOverlap.same;
+  // The platform's own path style, so Windows compares without case as samePath does.
+  if (path.isWithin(links, library)) {
+    // ZZMI's `exclude_recursive = DISABLED*` skips a folder of that name at any depth, and all below it.
+    final skipped = path.split(path.relative(library, from: links)).any((f) => f.toLowerCase().startsWith('disabled'));
+    return skipped ? null : LibraryOverlap.inside;
+  }
+  if (path.isWithin(library, links)) return LibraryOverlap.contains;
+  return null;
+}
+
+/// Whether [a] and [b] are one folder: the same path, or, when both exist, the same folder once links are resolved,
+/// as a library path that is itself a link to ZZMI's Mods folder is.
+Future<bool> isSameFolder(String a, String b, {PlatformService? platform}) async {
+  final paths = platform ?? PlatformServiceFactory.getInstance();
+  if (paths.samePath(a, b)) return true;
+  try {
+    if (!await Directory(a).exists() || !await Directory(b).exists()) return false;
+    return paths.samePath(await Directory(a).resolveSymbolicLinks(), await Directory(b).resolveSymbolicLinks());
+  } on FileSystemException {
+    return false;
+  }
+}
 
 class ModManagerService {
   final ConfigService _configService;
@@ -43,12 +143,14 @@ class ModManagerService {
   /// decisions are testable without a configured library.
   final IngestOriginBuilder _originBuilder = IngestOriginBuilder();
 
-  /// Parsed keybinds cached per mod id. Keybinds only change when the user
-  /// edits one (or edits the .ini externally), so caching avoids re-parsing
-  /// every mod's .ini files on every reload — a metadata edit no longer pays
-  /// for a full keybind rescan. Invalidated per-mod on keybind edits and
-  /// cleared wholesale on a manual refresh.
-  final Map<String, List<KeybindInfo>> _keybindCache = {};
+  /// Parsed keybinds per mod, keyed by the mod's full folder path so another
+  /// library's same-named mod never shows these keys.
+  ///
+  /// Each entry holds the [IniFilesStamp] its keys were parsed under, and is
+  /// used only while the folder's stamp is still equal to it and settled, so
+  /// an `.ini` changed by anything (an editor, an update, a Restore) is parsed
+  /// again on the next scan while an unchanged library costs a stat per file.
+  final Map<String, _CachedKeybinds> _keybindCache = {};
 
   /// Only for `deleteMod`: a mod's saved versions go when the mod does.
   final SnapshotService _snapshots;
@@ -65,19 +167,21 @@ class ModManagerService {
   /// [snapshots] and [uids] are defaulted rather than required because they
   /// need no configuration — one reads the folder's own sidecar, the other is
   /// rooted in app-data. They are parameters at all so `deleteMod` can be
-  /// tested without reaching the developer's real `<appData>/backups`.
+  /// tested without reaching the developer's real `<appData>/backups`. [platform] lets a test make links the way
+  /// another platform does.
   ModManagerService(
     this._configService, {
     SnapshotService? snapshots,
     ModUid? uids,
     ShaderFixesService? shaderFixes,
     Future<int?> Function(String path)? freeSpace,
+    PlatformService? platform,
   })  : _snapshots = snapshots ?? SnapshotService(),
         _uids = uids ?? ModUid(),
         _shaderFixes = shaderFixes ?? ShaderFixesService(),
         _freeSpace =
             freeSpace ?? PlatformServiceFactory.getInstance().freeSpaceBytes,
-        _platformService = PlatformServiceFactory.getInstance(),
+        _platformService = platform ?? PlatformServiceFactory.getInstance(),
         _iniParser = IniParserService(),
         // modsPath is read through a closure, not captured by value: the user
         // can repoint the library in Settings at any time.
@@ -261,16 +365,22 @@ class ModManagerService {
 
   ModMetadataService get metadataService => _metadata.service;
 
+  /// Whether the link named after [modName] points at the mod's own folder in the library. A link of that name into
+  /// any other folder, or one whose target is gone, reads as off (`docs/library-screen.md` §10).
   Future<bool> isModActive(String modName) async {
     try {
-      if (saveModsPath == null) return false;
+      final links = saveModsPath;
+      final library = modsPath;
+      if (links == null || library == null) return false;
 
-      final linkPath = path.join(saveModsPath!, modName);
-      final exists = await FileSystemEntity.type(linkPath) != FileSystemEntityType.notFound;
-      if (!exists) return false;
+      final linkPath = path.join(links, modName);
+      // Follows the link, so a link whose target is gone reads as not found.
+      if (await FileSystemEntity.type(linkPath) == FileSystemEntityType.notFound) return false;
+      final target = await _platformService.readModLinkTarget(linkPath);
+      if (target == null) return false;
 
-      // Використовуємо platformService для перевірки
-      return await _platformService.isModLink(linkPath);
+      // The same folder may be reached another way, such as a library path that is itself a link.
+      return isSameFolder(target, path.join(library, modName), platform: _platformService);
     } catch (e) {
       return false;
     }
@@ -292,53 +402,91 @@ class ModManagerService {
         await saveModsDir.create(recursive: true);
       }
 
+      // The copy whose link this one replaces, such as one in a library the links still point into. Its shader files
+      // are taken out once this mod is on, so only one copy's load, unless another link still keeps it on.
+      final other = await _otherCopyAt(dstPath, srcPath);
+      final freeable = other != null && other.stillOnThrough == null;
+
       // Shader files go in before the link, so a refusal leaves the mod off.
       String? shaderUid;
       ShaderPlacementResult? shaderFiles;
+      List<ShaderEntry>? freed;
       if (await ShaderFixesService.shaderPartOf(srcPath) != null) {
-        shaderUid = await _uids.ensure(srcDir);
-        if (shaderUid == null) {
+        final uid = await _uids.ensure(srcDir);
+        if (uid == null) {
           _log.error('could not activate, no identity for its shader files',
               fields: {'mod': modName});
           return false;
         }
+        shaderUid = uid;
+        Future<ShaderPlacementResult> place() =>
+            // A copy that fails partway lets go of what it took hold of before it throws.
+            _shaderFixes.place(modDir: srcPath, uid: uid, mod: modName, saveModsPath: saveModsPath!);
         try {
-          shaderFiles = await _shaderFixes.place(
-            modDir: srcPath,
-            uid: shaderUid,
-            mod: modName,
-            saveModsPath: saveModsPath!,
-          );
-        } on ShaderPlacementRefused {
-          rethrow;
-        } catch (_) {
-          // A copy failed partway. The mod stays off and no disable will come,
-          // so what it took hold of is let go of now.
-          await _shaderFixes.remove(uid: shaderUid, mod: modName, announce: false);
-          rethrow;
+          shaderFiles = await place();
+        } on ShaderPlacementRefused catch (refusal) {
+          if (other == null) rethrow;
+          if (!freeable) throw refusal.stillOnThrough(other.uid, other.stillOnThrough!);
+          // The other copy's files may be what is in the way. Throws the refusal that remains without them, before
+          // anything changes; otherwise they go first and come back if this mod does not come on.
+          await _shaderFixes.check(
+              modDir: srcPath, uid: uid, mod: modName, saveModsPath: saveModsPath!, freeing: other.uid);
+          var taken = const <ShaderEntry>[];
+          try {
+            freed = taken = await _shaderFixes.free(uid: other.uid, mod: modName);
+            _log.info('other copy shader files taken out to make room',
+                fields: {'mod': modName, 'uid': uid, 'copy': other.folder, 'copyUid': other.uid, 'files': taken.length});
+            shaderFiles = await place();
+          } catch (_) {
+            await _restoreShaderFiles(other, modName, taken);
+            rethrow;
+          }
         }
       }
 
-      // Використовуємо platformService для створення link
-      final success = await _platformService.createModLink(srcPath, dstPath);
+      // A link already of that name, such as one whose folder is on an unplugged drive, is replaced in one step, so
+      // a link that can't be made leaves it as it was.
+      NetworkLinkRefused? networkRefusal;
+      bool success;
+      try {
+        success = await _platformService.createModLink(srcPath, dstPath);
+      } on NetworkLinkRefused catch (refusal) {
+        networkRefusal = refusal;
+        success = false;
+      }
       if (!success) {
         // The platform service already logged why; this says which mod the
         // user was trying to switch on when it happened.
         _log.error('could not activate', fields: {'mod': modName});
-        if (shaderUid != null) {
-          await _shaderFixes.remove(uid: shaderUid, mod: modName, announce: false);
+        if (shaderUid != null && shaderFiles != null) {
+          await _shaderFixes.undo(uid: shaderUid, mod: modName, placed: shaderFiles);
         }
+        if (freed != null) await _restoreShaderFiles(other!, modName, freed);
+        // Thrown once the shader files are back, so the caller can say why.
+        if (networkRefusal != null) throw networkRefusal;
         return false;
       }
 
       await _configService.addActiveMod(modName);
       if (shaderFiles != null) {
-        if (shaderFiles.copied > 0) ShaderFixesService.announce(modName);
+        if (shaderFiles.copied > 0 || freed != null) ShaderFixesService.announce(modName);
         if (shaderFiles.adopted > 0) ShaderFixesService.announceAdopted(modName, shaderFiles.adopted);
+      }
+      if (freeable && freed == null) {
+        try {
+          await _shaderFixes.remove(uid: other.uid, mod: modName);
+        } catch (error, stack) {
+          // The mod is on, and the other copy's files stay held in the record for its next disable.
+          _log.warning('other copy shader files not taken out',
+              error: error, stack: stack, fields: {'mod': modName, 'copy': other.folder, 'copyUid': other.uid});
+        }
       }
 
       return true;
-    } on ShaderPlacementRefused {
+    } on ShaderPlacementRefused catch (refusal) {
+      _logRefusal(modName, refusal);
+      rethrow;
+    } on NetworkLinkRefused {
       rethrow;
     } catch (error, stack) {
       _log.error('could not activate',
@@ -347,13 +495,13 @@ class ModManagerService {
     }
   }
 
+  /// False when the mod is not on. A link of its name into another folder is not its own, so it is left in place.
   Future<bool> deactivateMod(String modName) async {
     try {
       if (saveModsPath == null) return false;
 
       final linkPath = path.join(saveModsPath!, modName);
-      final exists = await FileSystemEntity.type(linkPath) != FileSystemEntityType.notFound;
-      if (!exists) return false;
+      if (!await isModActive(modName)) return false;
 
       // Використовуємо platformService для видалення link
       final success = await _platformService.removeModLink(linkPath);
@@ -374,6 +522,88 @@ class ModManagerService {
     }
   }
 
+  /// The other copy of a mod whose link [linkPath] holds: a folder other than [modDir] with an identity of its own.
+  /// The identity is read from the folder, or, for one that can't be read, such as one on an unplugged drive, found
+  /// by the folder path the shader record keeps. Null for no link, the mod's own, a copy with the same identity,
+  /// such as a duplicated folder, since its holds are this mod's too, or one whose identity is found neither way.
+  ///
+  /// [stillOnThrough] names another working link in the links folder that leads to that copy, which keeps it on
+  /// after this link is replaced, so its files are not taken out.
+  Future<_OtherCopy?> _otherCopyAt(String linkPath, String modDir) async {
+    final target = await _platformService.readModLinkTarget(linkPath);
+    if (target == null || _platformService.samePath(target, modDir)) return null;
+    try {
+      final uid = await _uids.read(Directory(target)) ??
+          await _shaderFixes.holderFrom(target, samePath: _platformService.samePath);
+      if (uid == null || uid == await _uids.read(Directory(modDir))) return null;
+      // Every working link's identity is read, so only for a copy with files to take out.
+      final stillOnThrough = await _shaderFixes.holdsAny(uid) ? await _otherLinkTo(uid, target, except: linkPath) : null;
+      return (folder: target, uid: uid, stillOnThrough: stillOnThrough);
+    } catch (error) {
+      _log.warning('could not read the identity of the copy the link points at', error: error, fields: {'link': linkPath});
+      return null;
+    }
+  }
+
+  /// The name of a working link in the links folder, other than [except], that leads to [folder] or to another
+  /// folder with the identity [uid], such as one made by hand. Null when there is none.
+  Future<String?> _otherLinkTo(String uid, String folder, {required String except}) async {
+    final links = saveModsPath;
+    if (links == null) return null;
+    await for (final entry in Directory(links).list(followLinks: false)) {
+      if (_platformService.samePath(entry.path, except) || isTemporaryLinkName(path.basename(entry.path))) continue;
+      try {
+        final target = await _platformService.readModLinkTarget(entry.path);
+        if (target == null) continue;
+        // Follows the link, so one whose target is gone reads as not found.
+        if (await FileSystemEntity.type(entry.path) == FileSystemEntityType.notFound) continue;
+        if (_platformService.samePath(target, folder) || await _uids.read(Directory(target)) == uid) {
+          return path.basename(entry.path);
+        }
+      } catch (error) {
+        _log.warning('could not read a link in the links folder', error: error, fields: {'link': entry.path});
+      }
+    }
+    return null;
+  }
+
+  /// Puts back the shader files of [other] that [freed] took out to make room for a mod that then did not come on,
+  /// every one that can be, and reports those that could not.
+  Future<void> _restoreShaderFiles(_OtherCopy other, String modName, List<ShaderEntry> freed) async {
+    try {
+      final missing = await _shaderFixes.restore(
+          modDir: other.folder, uid: other.uid, mod: modName, saveModsPath: saveModsPath!, freed: freed);
+      if (missing.isEmpty) return;
+      _log.error('other copy shader files not all put back',
+          fields: {'mod': modName, 'copy': other.folder, 'copyUid': other.uid, 'files': missing.length});
+      ShaderFixesService.reportShortfall(ShaderRestoreShortfall(modName, other.folder, missing));
+    } catch (error, stack) {
+      _log.error('other copy shader files not put back',
+          error: error, stack: stack, fields: {'mod': modName, 'copy': other.folder, 'copyUid': other.uid});
+      if (freed.isNotEmpty) {
+        ShaderFixesService.reportShortfall(ShaderRestoreShortfall(modName, other.folder, [for (final e in freed) e.path]));
+      }
+    }
+  }
+
+  /// Records the shader files placed from the folder [from] as placed from [to], after the folder moved, and returns
+  /// the uids it moved; with [only], just those. Never throws: a stale path only means a copy on an unplugged drive is
+  /// not recognised later.
+  Future<List<String>> _repointShaderSource(String from, String to, {Iterable<String>? only}) async {
+    try {
+      return await _shaderFixes.repoint(from: from, to: to, samePath: _platformService.samePath, only: only);
+    } catch (error) {
+      _log.warning('shader record not updated for the moved folder', error: error, fields: {'from': from, 'to': to});
+      return const [];
+    }
+  }
+
+  void _logRefusal(String modName, ShaderPlacementRefused refusal) => _log.warning('shader files refused', fields: {
+        'mod': modName,
+        'conflicts': refusal.conflicts.length,
+        if (refusal.stillOn != null) 'stillOnThrough': refusal.stillOn!.link,
+      });
+
   /// Takes out the shader files the mod placed. A mod whose folder is gone has
   /// no readable identity, so its files stay until the folder returns.
   Future<void> _removeShaderFiles(String modName) async {
@@ -386,25 +616,172 @@ class ModManagerService {
 
   /// Throws [ShaderPlacementRefused] when enabling [modName] would be refused for
   /// its shader files, and changes nothing either way. Asked before One at a time
-  /// turns the character's other mods off.
+  /// turns the character's other mods off. The files of the copy whose link the
+  /// enable replaces count as free, since the enable takes them out, unless
+  /// another link still keeps that copy on.
   Future<void> checkActivation(String modName) async {
     final mods = modsPath;
     final save = saveModsPath;
     if (mods == null || save == null) return;
     final modDir = path.join(mods, modName);
     if (await ShaderFixesService.shaderPartOf(modDir) == null) return;
-    await _shaderFixes.check(
-      modDir: modDir,
-      uid: await _uids.read(Directory(modDir)),
-      mod: modName,
-      saveModsPath: save,
-    );
+    final other = await _otherCopyAt(path.join(save, modName), modDir);
+    try {
+      await _shaderFixes.check(
+        modDir: modDir,
+        uid: await _uids.read(Directory(modDir)),
+        mod: modName,
+        saveModsPath: save,
+        freeing: other?.stillOnThrough == null ? other?.uid : null,
+      );
+    } on ShaderPlacementRefused catch (refusal) {
+      final reported = other?.stillOnThrough == null ? refusal : refusal.stillOnThrough(other!.uid, other.stillOnThrough!);
+      _logRefusal(modName, reported);
+      throw reported;
+    }
+  }
+
+  /// Points the links into the library at [oldRoot] at the library at [newRoot], after the library folder changed
+  /// (`docs/configuration.md`). Returns the names of the mods it could not re-point.
+  ///
+  /// A link is re-pointed when its target is exactly `<oldRoot>/<its own name>`, live or dead, and
+  /// `<newRoot>/<name>` is a folder. A link into the old folder for a mod the new library lacks is left alone. A mod
+  /// that fails is logged and returned, and the others still follow. Nothing is re-pointed when [newRoot] overlaps
+  /// the links folder ([libraryOverlap]). A mod whose link was refused for leading to a network folder
+  /// ([NetworkLinkRefused]) is also added to [networkRefused], so the caller can say why.
+  Future<List<String>> relinkLibrary(String oldRoot, String newRoot, {Set<String>? networkRefused}) async {
+    final links = saveModsPath;
+    if (links == null || links.isEmpty) return const [];
+    if (_platformService.samePath(oldRoot, newRoot)) return const [];
+    final overlap = await libraryOverlap(newRoot, links, platform: _platformService);
+    if (overlap != null) {
+      _log.warning('library overlaps the links folder, nothing relinked',
+          fields: {'library': newRoot, 'links': links, 'overlap': overlap.name});
+      return const [];
+    }
+
+    final List<FileSystemEntity> entries;
+    try {
+      entries = await Directory(links).list(followLinks: false).toList();
+    } on PathNotFoundException {
+      return const [];
+    } catch (error) {
+      _log.warning('could not list the links folder', error: error, fields: {'folder': links});
+      return const [];
+    }
+
+    var relinked = 0;
+    final failed = <String>[];
+    for (final entry in entries) {
+      final name = path.basename(entry.path);
+      if (name.startsWith('.') || isTemporaryLinkName(name)) continue;
+      try {
+        final target = await _platformService.readModLinkTarget(entry.path);
+        if (target == null || !_platformService.samePath(target, path.join(oldRoot, name))) continue;
+        final folder = path.join(newRoot, name);
+        if (!await Directory(folder).exists()) continue;
+        if (await _relink(name, entry.path, from: target, to: folder, links: links)) {
+          relinked++;
+        } else {
+          failed.add(name);
+        }
+      } on NetworkLinkRefused {
+        // The platform service logged it; the link is as it was.
+        failed.add(name);
+        networkRefused?.add(name);
+      } catch (error) {
+        _log.warning('could not relink', error: error, fields: {'mod': name});
+        failed.add(name);
+      }
+    }
+    _log.info('library relinked', fields: {'from': oldRoot, 'to': newRoot, 'relinked': relinked, 'failed': failed.length});
+    return failed;
+  }
+
+  /// Points the link at [linkPath] from [from] at [to], a copy of mod [name] in the new library.
+  ///
+  /// A copy with another identity than the old one, or with an old one that can't be read, places its shader files
+  /// as enabling does, first, so a refusal leaves the link as it was. Once the link follows, the old copy's shader
+  /// files are taken out as turning it off would, when its identity is known and differs, and no other link still
+  /// leads to it. An old copy that can't be read, such as one on an unplugged drive, is known by the folder path the
+  /// shader record keeps. A copy with the same identity is the same mod moved, and its files are already in place.
+  Future<bool> _relink(String name, String linkPath, {required String from, required String to, required String links}) async {
+    final previous = await _uids.read(Directory(from)) ??
+        await _shaderFixes.holderFrom(from, samePath: _platformService.samePath);
+    final current = await _uids.read(Directory(to));
+    final moved = previous != null && current == previous;
+
+    String? shaderUid;
+    ShaderPlacementResult? shaderFiles;
+    if (!moved && await ShaderFixesService.shaderPartOf(to) != null) {
+      shaderUid = await _uids.ensure(Directory(to));
+      if (shaderUid == null) {
+        _log.error('could not relink, no identity for its shader files', fields: {'mod': name});
+        return false;
+      }
+      try {
+        // A copy that fails partway lets go of what it took hold of before it throws.
+        shaderFiles = await _shaderFixes.place(modDir: to, uid: shaderUid, mod: name, saveModsPath: links);
+      } on ShaderPlacementRefused catch (refusal) {
+        _log.warning('link left as it was, shader files refused', error: refusal, fields: {'mod': name});
+        return false;
+      } catch (error, stack) {
+        _log.error('could not relink', error: error, stack: stack, fields: {'mod': name});
+        return false;
+      }
+    }
+
+    NetworkLinkRefused? networkRefusal;
+    bool replaced;
+    try {
+      replaced = await _platformService.replaceModLink(linkPath, to);
+    } on NetworkLinkRefused catch (refusal) {
+      networkRefusal = refusal;
+      replaced = false;
+    }
+    if (!replaced) {
+      if (shaderUid != null && shaderFiles != null) {
+        await _shaderFixes.undo(uid: shaderUid, mod: name, placed: shaderFiles);
+      }
+      // Thrown once the shader files are back, so the caller can say why.
+      if (networkRefusal != null) throw networkRefusal;
+      return false;
+    }
+    if (shaderFiles != null) {
+      if (shaderFiles.copied > 0) ShaderFixesService.announce(name);
+      if (shaderFiles.adopted > 0) ShaderFixesService.announceAdopted(name, shaderFiles.adopted);
+    }
+    try {
+      if (moved) {
+        await _repointShaderSource(from, to);
+      } else if (previous != null && await _shaderFixes.holdsAny(previous)) {
+        final stillOnThrough = await _otherLinkTo(previous, from, except: linkPath);
+        if (stillOnThrough == null) {
+          await _shaderFixes.remove(uid: previous, mod: name);
+        } else {
+          _log.info('old copy shader files kept, another link still leads to it',
+              fields: {'mod': name, 'copy': from, 'copyUid': previous, 'link': stillOnThrough});
+        }
+      }
+    } catch (error, stack) {
+      // The link has followed, so the relink stands, and the old copy's files stay held in the record.
+      _log.warning('old copy shader files not taken out',
+          error: error, stack: stack, fields: {'mod': name, 'copy': from, 'copyUid': previous});
+    }
+    return true;
   }
 
   /// Renames a mod's folder and migrates everything keyed to its name: the
   /// active symlink (if active) and the per-mod config (active/favorite/note/tag).
   /// The in-folder metadata travels with the folder, so it needs no migration.
   /// Returns false on collision or any failure.
+  ///
+  /// For a mod that is on, a dead link of the new name in ZZMI's Mods folder is replaced, and the shader files of the
+  /// copy it led to are taken out as turning the mod on over it would. Anything else of that name that is not the
+  /// mod's own link throws [RenameRefused] before anything changes. A folder that can't be renamed throws
+  /// [RenameFolderFailed], and the mod is as it was, its link included. A link that can't be made under the new name
+  /// renames the folder back and throws [RenameLinkFailed]; when the folder can't be renamed back either, the mod is
+  /// left off under its new name with its shader files taken out.
   Future<bool> renameMod(String oldName, String newName) async {
     try {
       if (modsPath == null) return false;
@@ -419,22 +796,53 @@ class ModManagerService {
         return false; // a file/folder with the new name already exists
       }
 
+      // No mod is on without a links folder, so [links] is set wherever it is used.
+      final links = saveModsPath ?? '';
+      final newLink = path.join(links, newName);
       final wasActive = await isModActive(oldName);
-      // Remove the old link first so renaming the source folder doesn't leave a
-      // dangling link in the game's mods folder.
-      if (wasActive && saveModsPath != null) {
-        await _platformService.removeModLink(
-          path.join(saveModsPath!, oldName),
-        );
+      if (wasActive) await _checkLinkNameFree(newLink, mod: oldName);
+      // The copy a dead link of the new name leads to, whose shader files go once this mod's link replaces it, as
+      // turning a mod on over it does.
+      final other = wasActive ? await _otherCopyAt(newLink, oldDir.path) : null;
+
+      // The folder first, so one that can't be renamed, such as one holding a file open on Windows, leaves the link.
+      try {
+        await oldDir.rename(newPath);
+      } on FileSystemException catch (error) {
+        _files.warning('rename failed, the folder could not be renamed', error: error, fields: {'mod': oldName});
+        throw RenameFolderFailed(oldName, error);
       }
+      final repointed = await _repointShaderSource(oldDir.path, newPath);
 
-      await oldDir.rename(newPath);
-
-      if (wasActive && saveModsPath != null) {
-        await _platformService.createModLink(
-          newPath,
-          path.join(saveModsPath!, newName),
-        );
+      var leftOff = false;
+      if (wasActive) {
+        // A dead link of the new name is replaced, and the line logged says where it pointed. One that can't be
+        // made is left as it was.
+        if (!await _linkOrFalse(newPath, newLink)) {
+          // Renaming the folder back makes the old link live again, so the mod is as it was.
+          try {
+            await Directory(newPath).rename(oldDir.path);
+          } on FileSystemException catch (error) {
+            _files.error('renamed mod left off, its link could not be made and its folder not renamed back',
+                error: error, fields: {'mod': newName});
+            leftOff = true;
+          }
+          if (!leftOff) {
+            await _repointShaderSource(newPath, oldDir.path, only: repointed);
+            _files.warning('rename undone, the link could not be made', fields: {'mod': oldName, 'name': newName});
+            throw RenameLinkFailed(oldName, newName);
+          }
+        } else if (other != null && other.stillOnThrough == null) {
+          try {
+            await _shaderFixes.remove(uid: other.uid, mod: newName);
+          } catch (error, stack) {
+            // The mod is on under its new name, and the other copy's files stay held in the record.
+            _log.warning('other copy shader files not taken out',
+                error: error, stack: stack, fields: {'mod': newName, 'copy': other.folder, 'copyUid': other.uid});
+          }
+        }
+        // The old link points at a folder no longer there, and would turn on a mod given the old name later.
+        await _platformService.removeModLink(path.join(links, oldName));
       }
 
       // The folder has moved, so the rename succeeded either way; what a failed write loses is the mod's state
@@ -443,12 +851,52 @@ class ModManagerService {
         _files.warning('renamed mod state not saved', fields: {'from': oldName, 'to': newName});
       }
       invalidateKeybinds(oldName);
+      if (leftOff) {
+        // Off with no link, so its shader files come out as turning it off would take them.
+        await _configService.removeActiveMod(newName);
+        try {
+          await _removeShaderFiles(newName);
+        } catch (error, stack) {
+          _log.warning('renamed mod left off, its shader files not taken out',
+              error: error, stack: stack, fields: {'mod': newName});
+        }
+        throw RenameLinkFailed(oldName, newName, renamed: true);
+      }
       return true;
+    } on RenameRefused {
+      rethrow;
+    } on RenameFolderFailed {
+      rethrow;
+    } on RenameLinkFailed {
+      rethrow;
     } catch (error, stack) {
       _files.error('rename failed',
           error: error, stack: stack, fields: {'mod': oldName});
       return false;
     }
+  }
+
+  /// [PlatformService.createModLink], with a link refused for leading to a network folder read as not made.
+  Future<bool> _linkOrFalse(String source, String linkPath) async {
+    try {
+      return await _platformService.createModLink(source, linkPath);
+    } on NetworkLinkRefused {
+      return false;
+    }
+  }
+
+  /// Throws [RenameRefused] when [linkPath] holds a working link or anything else that is not a link into [mod]'s
+  /// own folder. Nothing there, or a dead link, is free.
+  Future<void> _checkLinkNameFree(String linkPath, {required String mod}) async {
+    if (await FileSystemEntity.type(linkPath, followLinks: false) == FileSystemEntityType.notFound) return;
+    final target = await _platformService.readModLinkTarget(linkPath);
+    if (target != null) {
+      // Follows the link, so a link whose target is gone reads as not found.
+      if (await FileSystemEntity.type(linkPath) == FileSystemEntityType.notFound) return;
+      if (_platformService.samePath(target, path.join(modsPath!, mod))) return;
+    }
+    _files.warning('rename refused, the link name is taken', fields: {'mod': mod, 'link': linkPath, 'target': target});
+    throw RenameRefused(path.basename(linkPath));
   }
 
   /// Permanently deletes a mod: removes its active link (if any), deletes the
@@ -916,18 +1364,34 @@ class ModManagerService {
     }
   }
 
-  /// Завантажує keybinds для конкретного моду
-  /// modId - назва папки моду в modsPath
+  /// The keybinds of the mod whose folder in the library is [modId].
+  ///
+  /// Parsed again unless the cached entry's stamp equals the folder's and is
+  /// settled. A folder that cannot be read keeps its cached keys.
+  ///
+  /// The folder is listed once: the parse reads the files the stamp found.
   Future<List<KeybindInfo>?> getModKeybinds(String modId) async {
-    final cached = _keybindCache[modId];
-    if (cached != null) return cached;
     try {
       if (modsPath == null) return null;
       final modPath = path.join(modsPath!, modId);
-      final keybindsData = await _iniParser.parseCharacterDirectory(modId, modPath);
-      // Cache even an empty result so mods without keybinds aren't re-scanned.
-      final keybinds = keybindsData?.keybinds ?? <KeybindInfo>[];
-      _keybindCache[modId] = keybinds;
+      final cached = _keybindCache[modPath];
+
+      final before = await IniFilesStamp.take(modPath);
+      if (before == null) return cached?.keys ?? <KeybindInfo>[];
+      if (cached != null && cached.settled && cached.stamp.matches(before)) {
+        return cached.keys;
+      }
+
+      final keybinds = await _iniParser.parseIniFiles(before.paths);
+
+      // Stored only when nothing changed during the parse, so keys read
+      // before a write are never kept under the stamp of what was written.
+      // An `.ini` added meanwhile is not in either stamp, and the next scan's
+      // listing finds it.
+      final after = await before.restat();
+      if (after != null && before.matches(after)) {
+        _keybindCache[modPath] = (stamp: before, keys: keybinds, settled: before.settled);
+      }
       return keybinds;
     } catch (e) {
       return null;
@@ -935,11 +1399,10 @@ class ModManagerService {
   }
 
   /// Drops a single mod's cached keybinds (call after editing its .ini).
-  void invalidateKeybinds(String modId) => _keybindCache.remove(modId);
-
-  /// Clears all cached keybinds (e.g. on a manual refresh, to pick up .ini
-  /// files changed outside the app).
-  void clearKeybindCache() => _keybindCache.clear();
+  void invalidateKeybinds(String modId) {
+    final library = modsPath;
+    if (library != null) _keybindCache.remove(path.join(library, modId));
+  }
 
   /// Adds each mod's parsed keybinds to it, over the flat library list.
   ///
@@ -955,22 +1418,19 @@ class ModManagerService {
     try {
       // Parse concurrently rather than awaiting each in turn, which is what
       // keeps the enrich step off the critical path of a scan.
-      await Future.wait(mods.map((mod) => getModKeybinds(mod.id)));
+      final parsed = await Future.wait(mods.map((mod) => getModKeybinds(mod.id)));
 
-      final enriched = <ModInfo>[];
-      for (final mod in mods) {
-        // Cache hit after the warm-up above.
-        final keybinds = await getModKeybinds(mod.id);
-        enriched.add(
-          keybinds != null && keybinds.isNotEmpty
-              ? mod.copyWith(keybinds: keybinds)
-              : mod,
-        );
-      }
-
-      return enriched;
+      return [
+        for (var i = 0; i < mods.length; i++)
+          parsed[i] != null && parsed[i]!.isNotEmpty
+              ? mods[i].copyWith(keybinds: parsed[i])
+              : mods[i],
+      ];
     } catch (e) {
       return mods;
     }
   }
 }
+
+/// Another copy of a mod, whose link of the mod's name an enable replaces ([ModManagerService.activateMod]).
+typedef _OtherCopy = ({String folder, String uid, String? stillOnThrough});

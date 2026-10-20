@@ -93,7 +93,5 @@ void main() {
       container.read(visibleModsProvider).map((m) => m.name),
       isNot(contains('Miyabi untracked')),
     );
-    // The whole-library count, for the reminder above the grid, does see it.
-    expect(container.read(untrackedModsCountProvider), 3);
   });
 }

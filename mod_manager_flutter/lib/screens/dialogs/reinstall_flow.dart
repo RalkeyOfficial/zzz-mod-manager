@@ -14,16 +14,18 @@ import 'apply_update_flow.dart';
 
 final Logger _log = Logger('update.reinstall');
 
-/// Whether [mod] can be reinstalled: its base records the exact file it came from, confirmed rather than worked out,
-/// and it is tracked. A guessed file id would write the guess over the folder, and a mod marked Local was said not to
-/// come from its page. The right-click menu and the History tab of the mod's page both ask this.
+/// Whether [mod] can be reinstalled: its base records the file it came from, confirmed or worked out, and it is
+/// tracked. A worked-out file reads as the user's file everywhere (`OriginConfidence.namesFile`), so it is offered here
+/// too; a wrong one is undone from the snapshot taken first. A date with no file names nothing to download, and a mod
+/// marked Local was said not to come from its page. The right-click menu and the History tab of the mod's page both
+/// ask this.
 bool canReinstall(ModInfo mod) {
   final origin = mod.origin;
   final base = origin?.base;
   return base != null &&
       base.modId != null &&
       base.fileId != null &&
-      base.versionConfidence.isConfirmed &&
+      base.versionConfidence.namesFile &&
       origin!.tracking != OriginTracking.off;
 }
 
@@ -54,8 +56,8 @@ Future<bool> reinstallFlow(
   final notify = context.notify;
 
   // Both guaranteed by the menu entry, which is only offered for a folder whose
-  // bottom layer records the exact file it came from. Re-checked because this
-  // is the call that overwrites a live folder.
+  // bottom layer records the file it came from. Re-checked because this is the
+  // call that overwrites a live folder.
   final base = mod.origin?.base;
   final modId = base?.modId;
   final fileId = base?.fileId;

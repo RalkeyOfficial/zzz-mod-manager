@@ -10,9 +10,9 @@ import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/origin_write.dart';
+import 'package:mod_manager_flutter/screens/all_mods/all_mods_view.dart';
 import 'package:mod_manager_flutter/screens/components/library_actions_host.dart';
 import 'package:mod_manager_flutter/screens/components/mods_toolbar.dart';
-import 'package:mod_manager_flutter/screens/components/tracking_nudge.dart';
 import 'package:mod_manager_flutter/screens/components/zenith_controls.dart';
 import 'package:mod_manager_flutter/screens/dialogs/bulk_resolution_dialog.dart';
 import 'package:mod_manager_flutter/screens/dialogs/mod_update_dialog.dart';
@@ -22,13 +22,14 @@ import 'package:mod_manager_flutter/services/gamebanana/gamebanana_endpoints.dar
 import 'package:mod_manager_flutter/services/update_check.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
+import 'support/all_mods_harness.dart';
 import 'support/fake_http_transport.dart';
 import 'support/fixtures.dart';
 import 'support/library_override.dart';
 import 'support/localized_harness.dart';
 import 'support/origin_shorthand.dart';
 
-/// The two surfaces the update check reaches the user through: the toolbar
+/// The two surfaces the update check reaches the user through: the All mods
 /// button that checks the whole library, and the per-mod dialog.
 void main() {
   ModOrigin origin({int? modId = 531649, int? fileId, DateTime? installedAt}) =>
@@ -57,31 +58,36 @@ void main() {
         files: [GbFile(idRow: fileId, dateAdded: DateTime.utc(2026))],
       );
 
-  group('the toolbar button', () {
+  group('the library check', () {
     late ProviderContainer container;
 
-    /// [selected] is the character on screen; the first with a mod otherwise.
-    /// The library covers every character, and the view is the selected one's.
-    Future<void> pumpToolbar(
+    /// The character view's toolbar above the All mods page, so a test can start a check from the page and read
+    /// the grid's filters. [selected] is the character on screen; the first with a mod otherwise. [search] narrows
+    /// the All mods table; [toolbarOnly] leaves the page out, and [tableOnly] the toolbar, as the table replaces the
+    /// character view in the app.
+    Future<void> pumpLibrary(
       WidgetTester tester,
       List<ModInfo> mods, {
       String? selected,
+      String search = '',
       ModRecordFetcherStub? fetch,
-      Size surfaceSize = const Size(1200, 800),
       List<String>? written,
+      bool toolbarOnly = false,
+      bool tableOnly = false,
+      Size surfaceSize = const Size(1400, 900),
     }) async {
       await tester.pumpWidget(const SizedBox());
       container = ProviderContainer(overrides: [libraryOf(mods)]);
       addTearDown(container.dispose);
       container.read(selectedCharacterIdProvider.notifier).state = selected;
-      // Out of the way: it repeats the menu's "sort out" label, and it has its own test.
-      container.read(trackingNudgeDismissedProvider.notifier).state = true;
+      container.read(allModsSearchProvider.notifier).state = search;
 
       Future<OriginWriteResult> originWriter(String name, ModOrigin? Function(ModOrigin?) update) async {
         written?.add(name);
         return written != null ? OriginWriteResult.written : OriginWriteResult.writeFailed;
       }
 
+      await loadTableFonts(tester);
       await pumpLocalized(
         tester,
         LibraryActionsHost(
@@ -91,41 +97,56 @@ void main() {
           // Never the real `ApiService`: it lazily builds a `ConfigService`
           // against the developer's own `<appData>/config.json`.
           originWriter: originWriter,
-          child: ModsToolbar(originWriter: originWriter),
+          child: Column(
+            children: [
+              if (!tableOnly) const ModsToolbar(),
+              if (!toolbarOnly) Expanded(child: allModsViewForTest(originWriter: originWriter)),
+            ],
+          ),
         ),
         container: container,
         surfaceSize: surfaceSize,
       );
-      expectBuilt(ModsToolbar);
+      if (!tableOnly) expectBuilt(ModsToolbar);
+      if (!toolbarOnly) expectBuilt(AllModsView);
     }
 
-    /// Picks an entry out of the library menu, the one place the three bulk
-    /// actions live: none of them is overloaded onto a filter.
-    Future<void> runAction(WidgetTester tester, String label) async {
-      await tester.tap(find.byTooltip('Library'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text(label));
+    Finder checkAll() => find.widgetWithText(OutlinedButton, 'Check all for updates');
+
+    /// Presses the All mods page's "Check all for updates".
+    Future<void> runCheck(WidgetTester tester) async {
+      await tester.tap(checkAll());
       await tester.pumpAndSettle();
     }
 
-    Finder chip(String label) => find.widgetWithText(ZenithChip, label);
+    /// Turns on the All mods page's Can't be checked filter and presses the Sort these out line under it.
+    Future<void> sortOut(WidgetTester tester) async {
+      await tester.tap(find.descendant(
+        of: find.byType(AllModsView),
+        matching: find.widgetWithText(ZenithChip, "Can't be checked"),
+      ));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sort these out'));
+      await tester.pumpAndSettle();
+    }
+
+    /// A chip of the character view's toolbar.
+    Finder chip(String label) =>
+        find.descendant(of: find.byType(ModsToolbar), matching: find.widgetWithText(ZenithChip, label));
 
     testWidgets('nothing tracked means the check is offered but disabled',
         (tester) async {
-      // Disabled rather than hidden, because it lives in a menu: an entry
-      // reading "Check for updates  0" says why it can do nothing, where a
-      // missing entry would just look like the feature isn't there.
-      await pumpToolbar(tester, [mod('bare')]);
-      await tester.tap(find.byTooltip('Library'));
-      await tester.pumpAndSettle();
-      expect(find.text('Check for updates'), findsOneWidget);
+      // Disabled rather than hidden, so the button stays where the user
+      // looks for it instead of looking like the feature isn't there.
+      await pumpLibrary(tester, [mod('bare')]);
+      expect(checkAll(), findsOneWidget);
+      expect(tester.widget<OutlinedButton>(checkAll()).onPressed, isNull);
 
-      // Pressing it does nothing at all — the fetcher this toolbar was given
-      // throws if it is ever called, and a disabled entry leaves the menu open.
-      await tester.tap(find.text('Check for updates'));
+      // Pressing it does nothing at all — the fetcher this page was given
+      // throws if it is ever called.
+      await tester.tap(checkAll());
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      expect(find.text('Check for updates'), findsOneWidget);
     });
 
     testWidgets('the Updates chip is a filter and nothing else',
@@ -138,7 +159,7 @@ void main() {
         runs++;
         return [record(1, fileId: 10)];
       });
-      await pumpToolbar(
+      await pumpLibrary(
         tester,
         [
           mod('current', origin: origin(modId: 1, fileId: 10)),
@@ -147,7 +168,7 @@ void main() {
         fetch: fetch,
       );
 
-      await runAction(tester, 'Check for updates');
+      await runCheck(tester);
       expect(runs, 1);
 
       await tester.tap(chip('Updates'));
@@ -167,7 +188,7 @@ void main() {
         (tester) async {
       // A screen that appears only as a side effect of a check is gone once it
       // is cancelled or closed by accident. The records are session state, so
-      // reopening it from the library menu costs no request at all.
+      // reopening it from Sort these out costs no request at all.
       var runs = 0;
       final fetch = ModRecordFetcherStub((ids) async {
         runs++;
@@ -181,19 +202,19 @@ void main() {
           ),
         ];
       });
-      await pumpToolbar(
+      await pumpLibrary(
         tester,
         [mod('Ellen', origin: origin(modId: 1, installedAt: DateTime.utc(2026)))],
         fetch: fetch,
       );
 
-      await runAction(tester, 'Check for updates');
+      await runCheck(tester);
       expect(find.byType(BulkResolutionDialog), findsOneWidget);
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       expect(find.byType(BulkResolutionDialog), findsNothing);
 
-      await runAction(tester, 'Sort out mod tracking…');
+      await sortOut(tester);
       expect(find.byType(BulkResolutionDialog), findsOneWidget);
       expect(runs, 1, reason: 're-opened from the records already in hand');
     });
@@ -215,7 +236,7 @@ void main() {
             ),
         ],
       );
-      await pumpToolbar(
+      await pumpLibrary(
         tester,
         [
           mod('Ellen skin',
@@ -225,24 +246,25 @@ void main() {
               origin: origin(modId: 2, fileId: 99, installedAt: DateTime.utc(2026))),
         ],
         selected: 'ellen',
+        search: 'Ellen skin',
         fetch: fetch,
       );
 
-      // File 99 is gone from mod 2's list, so Rina — on the *other* tab — is
-      // the only mod with an update.
-      await runAction(tester, 'Check for updates');
+      // File 99 is gone from mod 2's list, so Rina — on the *other* tab and
+      // outside the search — is the only mod with an update.
+      await runCheck(tester);
       expect(find.textContaining('1 mod has an update'), findsOneWidget);
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
 
-      await runAction(tester, 'Sort out mod tracking…');
+      await sortOut(tester);
       expect(find.textContaining('1 mod has an update'), findsOneWidget,
           reason: 'the view shows none of its own, the library has one');
     });
 
     testWidgets('opening it with nothing in hand runs the check first',
         (tester) async {
-      // Otherwise the menu's most useful entry is the one greyed out on launch.
+      // Otherwise the door would be dead on launch, before any check.
       var runs = 0;
       final fetch = ModRecordFetcherStub((ids) async {
         runs++;
@@ -256,23 +278,23 @@ void main() {
           ),
         ];
       });
-      await pumpToolbar(
+      await pumpLibrary(
         tester,
         [mod('Ellen', origin: origin(modId: 1, installedAt: DateTime.utc(2026)))],
         fetch: fetch,
       );
 
-      await runAction(tester, 'Sort out mod tracking…');
+      await sortOut(tester);
       expect(runs, 1);
       expect(find.byType(BulkResolutionDialog), findsOneWidget);
     });
 
-    testWidgets('the menu lists untracked mods when no page was ever fetched',
+    testWidgets('Sort these out lists untracked mods when no page was ever fetched',
         (tester) async {
       // Nothing is tracked, so there is nothing to check and no record to wait for; the untracked rows need none.
-      await pumpToolbar(tester, [mod('handmade'), mod('my own thing')]);
+      await pumpLibrary(tester, [mod('handmade'), mod('my own thing')]);
 
-      await runAction(tester, 'Sort out mod tracking…');
+      await sortOut(tester);
       expect(find.byType(BulkResolutionDialog), findsOneWidget);
       expect(find.textContaining("2 mods aren't linked to a GameBanana page"),
           findsOneWidget);
@@ -289,9 +311,9 @@ void main() {
 
     testWidgets('a check does not open the screen for untracked mods alone',
         (tester) async {
-      // Mods that stay untracked would otherwise raise a modal after every check; the menu still reaches them.
+      // Mods that stay untracked would otherwise raise a modal after every check; Sort these out still reaches them.
       final fetch = ModRecordFetcherStub((ids) async => [record(1)]);
-      await pumpToolbar(
+      await pumpLibrary(
         tester,
         [
           mod('done', origin: origin(modId: 1, fileId: 10)),
@@ -300,17 +322,17 @@ void main() {
         fetch: fetch,
       );
 
-      await runAction(tester, 'Check for updates');
+      await runCheck(tester);
       expect(find.byType(BulkResolutionDialog), findsNothing);
       expect(find.text('No updates found'), findsOneWidget);
 
-      await runAction(tester, 'Sort out mod tracking…');
+      await sortOut(tester);
       expect(find.byType(BulkResolutionDialog), findsOneWidget);
       expect(find.textContaining("1 mod isn't linked to a GameBanana page"),
           findsOneWidget);
     });
 
-    testWidgets('the reminder checks first, then lists the untracked mods',
+    testWidgets('Sort these out checks first, then lists the untracked mods',
         (tester) async {
       // Nothing in hand and a tracked mod to look up, so it runs the check; with no question rows that check alone would end in a notification.
       var runs = 0;
@@ -318,7 +340,7 @@ void main() {
         runs++;
         return [record(1)];
       });
-      await pumpToolbar(
+      await pumpLibrary(
         tester,
         [
           mod('done', origin: origin(modId: 1, fileId: 10)),
@@ -326,14 +348,7 @@ void main() {
         ],
         fetch: fetch,
       );
-      container.read(trackingNudgeDismissedProvider.notifier).state = false;
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.descendant(
-        of: find.byType(TrackingNudge),
-        matching: find.byType(OutlinedButton),
-      ));
-      await tester.pumpAndSettle();
+      await sortOut(tester);
 
       expect(runs, 1);
       expect(find.byType(BulkResolutionDialog), findsOneWidget);
@@ -351,41 +366,43 @@ void main() {
         runs++;
         return [record(1, fileId: 10)];
       });
-      await pumpToolbar(
+      await pumpLibrary(
         tester,
         [mod('stale', origin: origin(modId: 1, fileId: 99))],
         fetch: fetch,
       );
 
-      await runAction(tester, 'Check for updates');
-      await runAction(tester, 'Check for updates');
+      await runCheck(tester);
+      await runCheck(tester);
       expect(runs, 2);
     });
 
-    testWidgets('covers the whole library, not the selected character',
+    testWidgets('covers the whole library, not the rows on screen',
         (tester) async {
-      // The deliberate departure from where the "assume current" button gets
-      // its list. That one *rewrites*, so it must not act past the edge of the
-      // grid; this one writes nothing and its badges are drawn on every tab, so
-      // scoping it to one character would leave the rest looking clean.
+      // The deliberate departure from where "mark as current" gets its list.
+      // That one *rewrites*, so it must not act past the rows shown; this one
+      // writes nothing and its badges are drawn on every tab, so scoping it to
+      // one character or one search would leave the rest looking clean.
       final asked = <int>[];
       final fetch = ModRecordFetcherStub((ids) async {
         asked.addAll(ids);
         return [for (final id in ids) record(id)];
       });
-      await pumpToolbar(
+      await pumpLibrary(
         tester,
         [
           mod('a', origin: origin(modId: 1, fileId: 10)),
           mod('b', characterId: 'rina', origin: origin(modId: 2, fileId: 10)),
         ],
         selected: 'ellen',
+        search: 'ellen',
         fetch: fetch,
       );
-      // The grid is showing Ellen's one mod.
+      // The grid is showing Ellen's one mod, and so is the table.
       expect(container.read(currentCharacterSkinsProvider), hasLength(1));
+      expect(find.descendant(of: find.byType(AllModsView), matching: find.text('b')), findsNothing);
 
-      await runAction(tester, 'Check for updates');
+      await runCheck(tester);
 
       expect(asked, [1, 2]);
     });
@@ -395,7 +412,7 @@ void main() {
         // File 99 is not among what mod 1 offers, so it has been superseded.
         (ids) async => [record(1, fileId: 10)],
       );
-      await pumpToolbar(
+      await pumpLibrary(
         tester,
         [
           mod('current', origin: origin(modId: 1, fileId: 10)),
@@ -406,7 +423,7 @@ void main() {
       // No number before a check: "0 updates" and "not checked yet" are different claims.
       expect(tester.widget<ZenithChip>(chip('Updates')).count, isNull);
 
-      await runAction(tester, 'Check for updates');
+      await runCheck(tester);
 
       expect(tester.widget<ZenithChip>(chip('Updates')).count, 1);
       expect(find.text('1 mod has an update'), findsOneWidget);
@@ -422,12 +439,12 @@ void main() {
       // same rule the button itself follows. With nothing to resolve, a modal
       // would stand between the user and the badges they pressed for.
       final fetch = ModRecordFetcherStub((ids) async => [record(1)]);
-      await pumpToolbar(
+      await pumpLibrary(
         tester,
         [mod('done', origin: origin(modId: 1, fileId: 10))],
         fetch: fetch,
       );
-      await runAction(tester, 'Check for updates');
+      await runCheck(tester);
 
       expect(find.byType(BulkResolutionDialog), findsNothing);
       expect(find.text('No updates found'), findsOneWidget);
@@ -454,13 +471,13 @@ void main() {
         ],
       );
       final written = <String>[];
-      await pumpToolbar(
+      await pumpLibrary(
         tester,
         [mod('Ellen', origin: origin(modId: 1, installedAt: DateTime.utc(2026)))],
         fetch: fetch,
         written: written,
       );
-      await runAction(tester, 'Check for updates');
+      await runCheck(tester);
 
       expect(find.byType(BulkResolutionDialog), findsOneWidget);
       // And the summary is stated *here* rather than raised behind it — two
@@ -494,7 +511,7 @@ void main() {
           const GbMod(idRow: 2, name: 'Gone', isTrashed: true),
         ],
       );
-      await pumpToolbar(
+      await pumpLibrary(
         tester,
         [
           mod('Ellen', origin: origin(modId: 1, installedAt: DateTime.utc(2026))),
@@ -502,10 +519,10 @@ void main() {
         ],
         fetch: fetch,
       );
-      await runAction(tester, 'Check for updates');
+      await runCheck(tester);
 
       expect(find.byType(BulkResolutionDialog), findsOneWidget);
-      expect(find.text('Vanished'), findsNothing);
+      expect(find.descendant(of: find.byType(BulkResolutionDialog), matching: find.text('Vanished')), findsNothing);
       expect(find.textContaining("1 mod couldn't be checked"), findsOneWidget);
     });
 
@@ -513,8 +530,9 @@ void main() {
         (tester) async {
       // Ignoring the last flagged mod would otherwise leave the grid filtered
       // to nothing, with a control the user has to work out they need to press.
+      // From the All mods table, with the character view and its toolbar not mounted.
       final target = mod('a', origin: origin(modId: 1, fileId: 99));
-      await pumpToolbar(tester, [target]);
+      await pumpLibrary(tester, [target], tableOnly: true);
       container.read(modUpdateChecksProvider.notifier).state = {
         'a': const UpdateCheck(outcome: UpdateOutcome.updateAvailable),
       };
@@ -543,7 +561,7 @@ void main() {
       // The trap in keying that on the *view* count: the filter would evaporate
       // the moment the user looked at a tab with no updates of its own.
       final flagged = mod('rina', characterId: 'rina', origin: origin(modId: 1, fileId: 99));
-      await pumpToolbar(
+      await pumpLibrary(
         tester,
         [
           flagged,
@@ -577,7 +595,7 @@ void main() {
       // Every chip carries a three-digit count: mods identified by a **banked
       // archive hash** can carry an update while their version is unrecorded,
       // so they count under both Updates and Needs attention.
-      await pumpToolbar(
+      await pumpLibrary(
         tester,
         [
           for (var i = 0; i < 120; i++)
@@ -589,6 +607,7 @@ void main() {
               ),
             ),
         ],
+        toolbarOnly: true,
         surfaceSize: const Size(304, 600),
       );
       container.read(modUpdateChecksProvider.notifier).state = {
@@ -603,7 +622,7 @@ void main() {
 
       expect(tester.widget<ZenithChip>(chip('Updates')).count, 120);
       expect(tester.widget<ZenithChip>(chip('Needs attention')).count, 120);
-      expect(find.byTooltip('Library'), findsOneWidget);
+      expect(find.byIcon(Icons.swap_vert_rounded), findsOneWidget, reason: 'the sort, last in the row');
       expect(tester.takeException(), isNull);
     });
 
@@ -614,13 +633,13 @@ void main() {
       final fetch = ModRecordFetcherStub(
         (ids) async => throw const GbNetworkException('offline'),
       );
-      await pumpToolbar(
+      await pumpLibrary(
         tester,
         [mod('a', origin: origin(modId: 1, fileId: 10))],
         fetch: fetch,
       );
 
-      await runAction(tester, 'Check for updates');
+      await runCheck(tester);
 
       expect(find.text('No updates found'), findsNothing);
       expect(find.textContaining("couldn't be checked"), findsOneWidget);
@@ -1424,6 +1443,30 @@ void main() {
         // other section quietly reading as clean on the strength of a request
         // that never landed.
         expect(find.text('The mod page listed no files'), findsOneWidget);
+        expect(find.text('This is the latest file'), findsOneWidget);
+      });
+
+      testWidgets('a patch with no mod page is left out, so the base reads alone', (tester) async {
+        await tester.pumpWidget(const SizedBox());
+        final (client, _) = mixedClient(companionReachable: false);
+        final target = mod(
+          'EllenBikini',
+          origin: origin(fileId: 1732269).copyWith(downloads: [
+            origin(fileId: 1732269).base!,
+            patchFixture(modId: null, modIdConfidence: OriginConfidence.unknown),
+          ]),
+        );
+        await pumpLocalized(
+          tester,
+          ModUpdateDialog(
+            mod: target,
+            gateway: _RecordingGateway(target.origin, <ModOrigin?>[]),
+          ),
+          overrides: [gameBananaClientProvider.overrideWithValue(client)],
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('The mod page listed no files'), findsNothing);
         expect(find.text('This is the latest file'), findsOneWidget);
       });
 

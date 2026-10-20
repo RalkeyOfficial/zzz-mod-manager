@@ -107,11 +107,14 @@ A mod whose install recorded a root shader folder as a mod of its own finds no f
   The enable fails with `ShaderPlacementRefused`, naming the mod that placed the file, or saying no mod did, and the notice lists only the files that differ.
 - What is already there comes from one listing of the folder, compared case-insensitively.
   Probing each name with `exists()` would miss a file that differs only in case on Linux, which ZZMI under Wine treats as the same file.
+- **A link is never written through.** A link in the shader folder, live or dangling, at a target or as a folder on the way to one, is a conflict no mod placed, even when the file behind it holds the same bytes: a copy would write into a file the app did not place, wherever the link points. The notice says a link is in the way.
+  Right before each file is written its path is checked for a link again, and one found then fails the copy as a copy that fails partway does.
 - **Asked before anything else changes.** An enable from the library (`ApiService.enableMod`) calls `checkActivation`, a dry run, before One at a time switches the character's other mods off,
   so a refused enable leaves the mod that was on still on.
   The dry run does not count files held by the mods about to be turned off as free, so two mods with a shader file at the same path and different contents can't be swapped by turning the second on: it is refused, naming the first. A file at the same path with the same bytes is shared, and does not stop the swap ([`library-screen.md`](library-screen.md) §10).
 - A record naming another mod for a file that is no longer there is stale and does not block. When that mod needed the same bytes, it keeps its hold on the copy put back, since the copy restores its shader too.
-- A copy that fails partway leaves the mod off, and whatever it had copied or taken hold of is let go of again, as when its link cannot be made.
+- A copy that fails partway leaves the mod off, and whatever it had copied or taken hold of is let go of again, as when its link cannot be made. What the mod's identity held before, such as a duplicated folder's files while that copy is on, stays.
+  The file being written when the copy failed is not in the record yet, so it is deleted on the spot when it is the placement's own: a file that was not there before, or the mod's own earlier version once the copy has changed its bytes. Folders the delete leaves empty are removed too, as on a disable (§4). A file the app did not place, or a link, is never touched, and an earlier version the copy did not reach stays.
 - Only targets that already exist are hashed, so an enable into an empty folder reads nothing but the mod's own files.
 - With no `d3dx.ini` in the ZZMI folder there is nowhere trustworthy to copy to, so a mod with shader files is refused. Settings warn about this when the folder is picked, but do not block it.
   Mods without any are unaffected.
@@ -134,6 +137,7 @@ A mod whose install recorded a root shader folder as a mod of its own finds no f
 - A file is forgotten only once its delete succeeded. One that could not be deleted, such as a file ZZMI holds open on Windows, stays in the record under this mod, so the next enable and disable takes it out.
   Deleting the mod forgets it anyway, since no mod is left to let go of it.
 - Folders the deleted files were in are removed once empty. The shader folder itself never is.
+- **A link is never deleted.** One put where a placed file was reads as that file gone, so the entry is forgotten and the link stays, and one where a cache or a renamed `.ini` would be is not looked at. Each delete checks its path for a link right before.
 - Nothing else is touched: ZZMI's `Sucrose.png`, shader dumps, and files copied in by hand stay.
 - With the ZZMI folder missing, nothing is removed and the record is kept, so the files are taken out once it is back.
 
@@ -145,6 +149,9 @@ It is per-install state, so it lives in app data and never in the sidecar, which
 
 - Holders are uids, so renaming a mod changes nothing. A duplicated mod folder shares its uid and therefore its holds ([`ModUid`](../mod_manager_flutter/lib/services/mod_uid.dart)):
   switching either copy off removes the shader files while the other copy is still on.
+- Each holding uid also maps to the mod folder its files were last placed from, which is how a copy whose folder can't be read, such as one on an unplugged drive, is still known by the path its link names (§6).
+  Every placement sets it, and it follows a rename of the mod and a library change that moves the mod. A holder with no folder recorded is never matched by a guessed one.
+  A duplicated folder shares its uid, so the path is the copy that placed last. A copy on an unplugged drive that was not the last to place is therefore not recognised: turning a mod on over its link takes none of the files out, and a conflict with them refuses the enable. The files are the other copy's too, and they go when that copy is turned off.
 - An entry counts only in the folder its file is in. Pointed at a second ZZMI install, a file of the same name there is not one the app knows.
 - Losing app data makes every placed file unknown. The next enable of each mod adopts those of its files still identical as external, so they stay in place from then on; one the mod has since changed refuses the enable.
 - Paths compare case-insensitively, since ZZMI runs on Windows or under Wine.
@@ -152,10 +159,24 @@ It is per-install state, so it lives in app data and never in the sidecar, which
 
 ## 6. Where it runs
 
-Every way a mod is switched on or off goes through `activateMod` / `deactivateMod`: the card and details switches, One at a time, clearing all mods,
-and updates, reinstalls and patch installs, which switch an enabled mod off before writing and back on after (`ModActivationPort`).
-A refusal on the way back on after an update leaves the mod off. The update result does not claim it was switched back on,
-and the refusal is shown as the same notice the card toggle gives, since nobody pressed anything to be told.
+Every way a mod is switched on or off goes through `activateMod` / `deactivateMod`: the card, details panel and mod page switches, the All mods table's bulk Enable and Disable, One at a time, clearing all mods, and updates, reinstalls and patch installs, which switch an enabled mod off before writing and back on after (`ModActivationPort`).
+A refusal on the way back on after an update leaves the mod off. The update result does not claim it was switched back on, and the refusal is shown as the same notice the card toggle gives, since nobody pressed anything to be told.
+
+A change of the Mod library re-points links without switching anything off. A copy in the new library with another identity than the old one places its shader files first, as an enable does, and a refusal leaves its link as it was.
+Once its link has followed, the old copy's shader files are taken out as its disable would, so only the new copy's load, unless another working link in the links folder still leads to it; a file both copies ship with the same bytes stays, held by the new copy. An old copy whose folder can't be read is known by its recorded folder (§5), and with none recorded its files stay.
+A link that can't be changed lets go only of what the new copy's placement took hold of, never of what the mod still on in the old library placed ([`configuration.md`](configuration.md#changing-the-mod-library)).
+
+Turning a mod on over a link of its name into another copy, such as one in a library the link still points into, takes that copy's shader files out as its disable would, when its identity is known and differs from this mod's. A copy with the same identity, such as a duplicated folder, shares its holds, so nothing is taken out.
+
+- **The identity is read from the copy's folder.** For one that can't be read, such as one on an unplugged drive, it is the holder whose recorded folder (§5) is the link's target, when exactly one is. A link on an unplugged drive does not load the mod, so its shader files going is what the game needs.
+- **With no identity known, nothing is taken out**, as for a copy the record keeps no folder for. A conflict with its files then refuses the enable, and since the holder has this mod's name, the notice says another copy of the mod, in a folder the app can't read, placed them.
+- **A copy another link still keeps on keeps its files.** When another working link in the links folder leads to that copy's folder, or to a folder with its identity, such as one made by hand, nothing of it is taken out. A conflict with its files refuses the enable, and the notice names that link. A library change keeps the old copy's files the same way.
+- **Renaming a mod that is on onto a dead link of the new name** takes the shader files of the copy that link led to out once the new link is made, by the same rules. A rename left off under its new name, because its link can't be made and its folder can't be renamed back, takes its own files out as turning it off would.
+
+- **Without a conflict, its files go once this mod is on**, as a library change does: this mod's are placed, the link follows, then the other copy's are taken out. The game is never left with neither set, and a file both copies ship with the same bytes stays, held by this mod.
+- **When the other copy's own files are what differ**, they have to go before this mod's can be placed. The dry run (§3) first plans the enable as if they were gone, so a refusal for any other file, such as one another mod placed, changes nothing and names only that file. Otherwise the other copy's files are taken out, this mod's placed, and the link made.
+- **If any of that fails**, this mod's placement is let go of and the other copy's files are placed again from its folder, still held by it, so the game is back to the other copy with its link as it was.
+  Each file goes back on its own. One whose place is taken, such as a file the user edited, which taking the copy's files out left where it was, is skipped rather than overwritten, and the rest still go back. A file that was taken out and could not be put back, as on a full disk or with the copy's folder unplugged, is logged and named in a warning.
 
 `ShaderRestartNoticeHost`, mounted above the tabs, says once that the game needs a restart whenever placed files changed,
 naming the mods. Changes arriving together, like an update's off-and-on, become one notice.

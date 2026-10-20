@@ -60,7 +60,10 @@ Future<bool> restoreSnapshotFlow(BuildContext context, {required ModInfo mod, re
   }
 
   final snapshots = container.read(snapshotServiceProvider);
-  final applier = UpdateApplier(snapshots: snapshots, activation: ModManagerActivationPort(mods));
+  final applier = UpdateApplier(
+    snapshots: snapshots,
+    activation: ModManagerActivationPort(mods, leaveOff: (m) => leftOffAfterWrite(container, m)),
+  );
   final result = await whileWritingMod(
     container,
     mod.id,
@@ -71,7 +74,10 @@ Future<bool> restoreSnapshotFlow(BuildContext context, {required ModInfo mod, re
   // write. Whether the restore landed or not: the copy was taken first.
   if (result.snapshot != null) await snapshots.prune();
   container.invalidate(modBackupsProvider);
-  if (result.success) await container.read(libraryProvider.notifier).rescan();
+  // Read again whatever the stamp says: a restore puts back old times, which can match what was there before.
+  mods.invalidateKeybinds(mod.id);
+  // A failed restore may still have changed the folder, so it is read again either way.
+  await container.read(libraryProvider.notifier).rescan();
 
   notify.show(
     loc.t(result.success ? 'mods.backups.restored_title' : 'mods.backups.restore_failed_title'),

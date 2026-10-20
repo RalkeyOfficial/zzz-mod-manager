@@ -1132,4 +1132,76 @@ void main() {
       expect(check.hasUpdate, isTrue);
     });
   });
+
+  group('a layer with no mod page', () {
+    // A patch dragged in from a local folder: no id, so no page to ask.
+    final pageless = patchFixture(modId: null, modIdConfidence: OriginConfidence.unknown);
+
+    test("is left out, so the folder reads its base's clean bill", () {
+      final check = checkForUpdate(
+        origin: origin(fileId: mainV77, versionLabel: 'Main file', patches: [pageless]),
+        remote: rabbitFx,
+      );
+      expect(check.outcome, UpdateOutcome.upToDate);
+    });
+
+    test("and its base's update, with no verdict of its own", () {
+      final check = checkForUpdate(
+        origin: origin(fileId: mainV74, versionLabel: 'Main file', patches: [pageless]),
+        remote: rabbitFx,
+      );
+      expect(check.outcome, UpdateOutcome.updateAvailable);
+      expect(check.hasUpdate, isTrue);
+      expect([for (final layer in check.layers) layer.download.modId], [531649]);
+    });
+
+    test('a layer with a page whose record never came still makes the folder indeterminate', () {
+      final check = checkForUpdate(
+        origin: origin(fileId: mainV77, versionLabel: 'Main file', patches: [pageless, patch(megalodonId)]),
+        remote: rabbitFx,
+      );
+      expect(check.outcome, UpdateOutcome.indeterminate);
+    });
+
+    test('and so does one whose record came back with no file list', () {
+      final check = checkForUpdate(
+        origin: origin(fileId: mainV77, versionLabel: 'Main file', patches: [pageless, patch(megalodonId)]),
+        remote: rabbitFx,
+        companionRemotes: {megalodonId: const GbMod(idRow: megalodonId)},
+      );
+      expect(check.outcome, UpdateOutcome.indeterminate);
+    });
+  });
+
+  group('an ignored update in a folder of two downloads', () {
+    test('counts as up to date, so a layer that could not be checked wins', () {
+      final check = checkForUpdate(
+        origin: origin(
+          fileId: mainV74,
+          versionLabel: 'Main file',
+          dismissedUntil: DateTime.utc(2030),
+          patches: [patch(megalodonId, fileId: megalodonOldFile)],
+        ),
+        remote: rabbitFx,
+      );
+      expect(check.outcome, UpdateOutcome.indeterminate);
+      expect(check.subjectModId, megalodonId);
+    });
+
+    test('stays the subject over a layer that is up to date', () {
+      final check = checkForUpdate(
+        origin: origin(
+          fileId: mainV74,
+          versionLabel: 'Main file',
+          dismissedUntil: DateTime.utc(2030),
+          patches: [patch(megalodonId, fileId: megalodonNewestFile)],
+        ),
+        remote: rabbitFx,
+        companionRemotes: {megalodonId: megalodon},
+      );
+      expect(check.outcome, UpdateOutcome.updateAvailable);
+      expect(check.dismissed, isTrue);
+      expect(check.subjectModId, 531649);
+    });
+  });
 }

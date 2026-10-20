@@ -21,10 +21,13 @@ enum OriginConfidence {
   /// The user told us. Trusted, but confirmed actions still get a prompt.
   user('user'),
 
-  /// Guessed from local data — a url parse, a name match, a single unambiguous
-  /// remote file. May badge and suggest; every action through it is manual and
-  /// labelled a guess, because it ultimately came from a free-form text field a
-  /// human typed and could be a wrong paste entirely.
+  /// Worked out by the app — a url parse, a name match, a single unambiguous
+  /// remote file. Its update verdicts stay capped at "possibly outdated", since
+  /// an identity here may come from a free-form text field a human typed and be
+  /// a wrong paste. A page parsed from the user's own source link is still their
+  /// registration, so Reinstall is offered on it, and writes only on their yes
+  /// behind a snapshot. A file at this tier was accepted in the tracking screen:
+  /// it is named as the user's file and may be reinstalled too.
   inferred('inferred'),
 
   /// "I don't know what I have, I got it around then." Compares against a
@@ -48,6 +51,11 @@ enum OriginConfidence {
   /// paste entirely.
   bool get isConfirmed =>
       this == OriginConfidence.exact || this == OriginConfidence.user;
+
+  /// Whether the UI names the file on record as the user's file: confirmed, or worked out and accepted in the
+  /// tracking screen. Whether it was guessed doesn't matter to the user once they agreed to it
+  /// (`docs/library-screen.md` §5). [assumedLatest] records a date and no file, so it names none.
+  bool get namesFile => isConfirmed || this == OriginConfidence.inferred;
 
   /// Parses the stored value, **degrading anything unrecognised to [unknown]**.
   ///

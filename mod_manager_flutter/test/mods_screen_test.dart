@@ -5,22 +5,33 @@ import 'package:archive/archive.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
+import 'package:mod_manager_flutter/models/installed_file.dart';
+import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/components/character_hero.dart';
 import 'package:mod_manager_flutter/screens/components/character_list.dart';
 import 'package:mod_manager_flutter/screens/components/mod_card_widget.dart';
 import 'package:mod_manager_flutter/screens/components/mod_details_panel.dart';
+import 'package:mod_manager_flutter/screens/components/mods_toolbar.dart';
 import 'package:mod_manager_flutter/screens/components/notification_overlay.dart';
-import 'package:mod_manager_flutter/screens/components/tracking_nudge.dart';
 import 'package:mod_manager_flutter/screens/components/zenith_switch.dart';
+import 'package:mod_manager_flutter/screens/mod_page/mod_page.dart';
 import 'package:mod_manager_flutter/screens/mods_screen.dart';
+import 'package:mod_manager_flutter/services/update_apply/mod_activation_port.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 import 'package:mod_manager_flutter/utils/zzz_characters.dart';
 import 'package:path/path.dart' as p;
 
+import 'support/all_mods_harness.dart';
+import 'support/library_override.dart';
+import 'support/link_fails_under.dart';
 import 'support/localized_harness.dart';
 import 'support/mods_screen_harness.dart';
+import 'support/origin_shorthand.dart';
+import 'support/recording_service.dart';
 import 'support/temp_library.dart';
 
 /// The Library page as a whole: the page's one scroll view, the details panel beside or over it, the drop tile, the
@@ -39,17 +50,15 @@ void main() {
 
   group('at the smallest window', () {
     // The window's minimum is 800×500; less the sidebar, the title bar and the status bar, the page gets 584×428.
-    testWidgets('the header, the filters and the tracking reminder scroll away to show the mods', (tester) async {
+    testWidgets('the header and the filters scroll away to show the mods', (tester) async {
       await pumpModsScreen(
         tester,
         temp,
         [for (var i = 0; i < 6; i++) mod('Ellen ${'$i'.padLeft(2, '0')}')],
         surfaceSize: const Size(584, 428),
-        showTrackingNudge: true,
       );
       expect(tester.takeException(), isNull);
-      expect(find.byType(TrackingNudge), findsOneWidget, reason: 'the reminder shows for untracked mods');
-      expect(tester.getRect(find.byType(TrackingNudge)).bottom, greaterThan(428),
+      expect(tester.getRect(find.byType(ModsToolbar)).bottom, greaterThan(428),
           reason: 'what sits above the grid is taller than the page, so held in place it would overflow');
 
       await tester.scrollUntilVisible(
@@ -296,7 +305,7 @@ void main() {
       expect(hint(tester), 'It lands on Ellen Joe automatically');
     });
 
-    testWidgets("works the character out on one the app picked, as the sidebar's Updates does", (tester) async {
+    testWidgets('works the character out on one the app picked', (tester) async {
       final container = await pumpModsScreen(
         tester,
         temp,
@@ -363,6 +372,126 @@ void main() {
     handle.dispose();
   });
 
+  testWidgets('All mods says why the library failed to load, with Retry, as the character view does', (tester) async {
+    final container = await pumpModsScreen(
+      tester,
+      temp,
+      const [],
+      library: libraryFailing(const FileSystemException('Permission denied', '/mods')),
+    );
+    for (final view in [AppDestination.characters, AppDestination.allMods]) {
+      container.read(destinationProvider.notifier).state = view;
+      await tester.pumpAndSettle();
+      expect(find.text('Try again'), findsOneWidget, reason: '$view');
+      expect(find.byType(CircularProgressIndicator), findsNothing, reason: '$view');
+    }
+  });
+
+  testWidgets('a renamed mod keeps its All mods tick under its new name', (tester) async {
+    // The menu's items are sized for the app's font, not the test font's full-em glyphs.
+    await loadTableFonts(tester);
+    temp.createMod('Winter Maid');
+    final container = await pumpModsScreen(tester, temp, [mod('Winter Maid')]);
+    container.read(allModsSelectionProvider.notifier).state = {'Winter Maid'};
+    await tester.pumpAndSettle();
+
+    await tester.tap(cardOf('Winter Maid'), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rename').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Winter Maid Blue');
+    await tester.pump();
+    await tapWithIo(tester, find.widgetWithText(FilledButton, 'Rename'));
+
+    expect(temp.modFolder('Winter Maid Blue').existsSync(), isTrue);
+    expect(container.read(allModsSelectionProvider), {'Winter Maid Blue'});
+  });
+
+  testWidgets('a rename left off under its new name moves the tick and the selection with it', (tester) async {
+    await loadTableFonts(tester);
+    final platform = LinkFailsUnder('Winter Maid Blue');
+    final left = (await tester.runAsync(() => TempLibrary.create(prefix: 'zzz_left_off_', platform: platform)))!;
+    platform.occupying = left.modFolder('Winter Maid').path;
+    left.createMod('Winter Maid');
+    expect(await tester.runAsync(() => left.service.activateMod('Winter Maid')), isTrue);
+    final container = await pumpModsScreen(tester, left, [mod('Winter Maid', isActive: true)]);
+    container.read(allModsSelectionProvider.notifier).state = {'Winter Maid'};
+    container.read(selectedModIdProvider.notifier).state = 'Winter Maid';
+    await tester.pumpAndSettle();
+
+    await tester.tap(cardOf('Winter Maid'), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rename').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Winter Maid Blue');
+    await tester.pump();
+    await tapWithIo(tester, find.widgetWithText(FilledButton, 'Rename'));
+
+    expect(left.modFolder('Winter Maid Blue').existsSync(), isTrue);
+    expect(container.read(allModsSelectionProvider), {'Winter Maid Blue'});
+    expect(container.read(selectedModIdProvider), 'Winter Maid Blue');
+  });
+
+  testWidgets('a mod whose folder is being written is not renamed, and the dialog says why', (tester) async {
+    await loadTableFonts(tester);
+    temp.createMod('Winter Maid');
+    final container = await pumpModsScreen(tester, temp, [mod('Winter Maid')]);
+    container.read(modWritesInProgressProvider.notifier).state = {'Winter Maid'};
+
+    await tester.tap(cardOf('Winter Maid'), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rename').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Winter Maid Blue');
+    await tester.pump();
+
+    expect(find.textContaining('is being changed by an update'), findsOneWidget);
+    await tapWithIo(tester, find.widgetWithText(FilledButton, 'Rename'));
+    expect(temp.modFolder('Winter Maid').existsSync(), isTrue);
+    expect(temp.modFolder('Winter Maid Blue').existsSync(), isFalse);
+  });
+
+  testWidgets('a right-click names each patch by the page the session already has', (tester) async {
+    // The menu's items are sized for the app's font, not the test font's full-em glyphs.
+    await loadTableFonts(tester);
+    temp.createMod('Winter Maid');
+    InstalledFile added(String path) => InstalledFile(path: path, role: InstalledFileRole.added);
+    final origin = originFixture(
+      modId: 100,
+      modIdConfidence: OriginConfidence.exact,
+      patches: [
+        patchFixture(modId: 1001, files: [added('a.dds')]),
+        patchFixture(modId: 1002, files: [added('b.dds')]),
+      ],
+    );
+    final container = await pumpModsScreen(tester, temp, [
+      ModInfo(id: 'Winter Maid', name: 'Winter Maid', characterId: 'ellen', isActive: false, origin: origin),
+    ]);
+    container.read(fetchedModPagesProvider.notifier).state = {1001: const GbMod(idRow: 1001, name: 'Ellen Fix')};
+    await tester.pump();
+
+    await tester.tap(cardOf('Winter Maid'), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Remove patch: Ellen Fix'), findsOneWidget);
+    expect(find.text('Remove patch: #1002'), findsOneWidget, reason: 'nothing is fetched for a menu');
+  });
+
+  testWidgets("a mod deleted from its details takes its All mods tick with it", (tester) async {
+    // Or a mod installed later under the same name comes in ticked.
+    temp.createMod('Winter Maid');
+    final container = await pumpModsScreen(tester, temp, [mod('Winter Maid')]);
+    container.read(allModsSelectionProvider.notifier).state = {'Winter Maid', 'Other'};
+    container.read(selectedModIdProvider.notifier).state = 'Winter Maid';
+    await tester.pumpAndSettle();
+
+    await tapWithIo(tester, find.byTooltip('Delete mod'));
+    await tapWithIo(tester, find.widgetWithText(FilledButton, 'Delete'));
+
+    expect(temp.modFolder('Winter Maid').existsSync(), isFalse);
+    expect(container.read(allModsSelectionProvider), {'Other'});
+  });
+
   group('a toggle that fails says so', () {
     Finder switchOf(String id) => find.descendant(of: cardOf(id), matching: find.byType(ZenithSwitch));
 
@@ -395,6 +524,255 @@ void main() {
       expect(find.text('Mod not turned on'), findsNothing);
       expect(container.read(modsProvider).single.isActive, isTrue);
       expect(Link(p.join(temp.saveMods.path, 'Winter Maid')).existsSync(), isTrue);
+    });
+
+    testWidgets('the switch is greyed out and a press ignored while a bulk action runs', (tester) async {
+      temp.createMod('Winter Maid');
+      temp.write('Winter Maid', 'Winter Maid.ini', '[TextureOverrideBody]\n');
+      final container = await pumpModsScreen(tester, temp, [mod('Winter Maid')]);
+      container.read(allModsBulkRunningProvider.notifier).state = true;
+      await tester.pump();
+
+      expect(tester.widget<ZenithSwitch>(switchOf('Winter Maid')).onChanged, isNull);
+      await tapWithIo(tester, switchOf('Winter Maid'));
+      expect(Link(p.join(temp.saveMods.path, 'Winter Maid')).existsSync(), isFalse);
+    });
+
+    testWidgets("the details panel's and the mod page's switches are greyed out while a bulk action runs",
+        (tester) async {
+      temp.createMod('Winter Maid');
+      final container = await pumpModsScreen(tester, temp, [mod('Winter Maid')]);
+      container.read(selectedModIdProvider.notifier).state = 'Winter Maid';
+      container.read(allModsBulkRunningProvider.notifier).state = true;
+      await tester.pumpAndSettle();
+
+      final panelSwitch = find.descendant(of: find.byType(ModDetailsPanel), matching: find.byType(ZenithSwitch));
+      expect(tester.widget<ZenithSwitch>(panelSwitch).onChanged, isNull);
+
+      container.read(openModPageProvider.notifier).state = const ModPageRequest('Winter Maid');
+      await tester.pumpAndSettle();
+      final pageSwitch = find.descendant(of: find.byType(LibraryModPage), matching: find.byType(ZenithSwitch));
+      expect(tester.widget<ZenithSwitch>(pageSwitch).onChanged, isNull);
+    });
+
+    testWidgets('a switch press holds the bulk actions off until it is done, and greys out no switch',
+        (tester) async {
+      temp.createMod('Winter Maid');
+      temp.write('Winter Maid', 'Winter Maid.ini', '[TextureOverrideBody]\n');
+      final container = await pumpModsScreen(tester, temp, [mod('Winter Maid')]);
+      final presses = <int>[];
+      container.listen(libraryTogglesProvider, (_, waiting) => presses.add(waiting));
+      final bulk = <bool>[];
+      container.listen(allModsBulkRunningProvider, (_, running) => bulk.add(running));
+
+      await tapWithIo(tester, switchOf('Winter Maid'));
+
+      expect(presses, [1, 0]);
+      expect(bulk, isEmpty, reason: 'that flag greys out the switches');
+      expect(container.read(modsProvider).single.isActive, isTrue);
+    });
+
+    testWidgets('a press that fails lets the bulk actions run again', (tester) async {
+      // Listed, but not on disk: the enable fails.
+      final container = await pumpModsScreen(tester, temp, [mod('Ghost')]);
+
+      await tapWithIo(tester, switchOf('Ghost'));
+
+      expect(find.text('Mod not turned on'), findsOneWidget);
+      expect(container.read(libraryTogglesProvider), 0);
+    });
+
+    group("while a mod's folder is being written", () {
+      bool linked(String id) => Link(p.join(temp.saveMods.path, id)).existsSync();
+
+      /// Holds a write on [id], as an update or a restore does, until [done] completes. Started on the real event
+      /// loop, so it can end there.
+      Future<void> holdWrite(WidgetTester tester, ProviderContainer container, String id, Completer<void> done) async {
+        await tester.runAsync(() async => unawaited(whileWritingMod(container, id, () => done.future)));
+        await tester.pump();
+      }
+
+      /// Ends the write [holdWrite] started, and lets what waited on it land.
+      Future<void> endWrite(WidgetTester tester, Completer<void> done) async {
+        await tester.runAsync(() async {
+          done.complete();
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
+        await tester.pumpAndSettle();
+      }
+
+      Future<void> pressAndWait(WidgetTester tester, String id) => tester.runAsync(() async {
+            await tester.tap(switchOf(id));
+            await Future<void>.delayed(const Duration(milliseconds: 100));
+          });
+
+      testWidgets('a press on it waits for the write, then lands', (tester) async {
+        temp.createMod('Winter Maid');
+        final container = await pumpModsScreen(tester, temp, [mod('Winter Maid')]);
+        final done = Completer<void>();
+        await holdWrite(tester, container, 'Winter Maid', done);
+
+        expect(tester.widget<ZenithSwitch>(switchOf('Winter Maid')).onChanged, isNotNull);
+        await pressAndWait(tester, 'Winter Maid');
+        expect(linked('Winter Maid'), isFalse, reason: 'the folder is still being written');
+        expect(container.read(libraryTogglesProvider), 1);
+
+        await endWrite(tester, done);
+
+        expect(linked('Winter Maid'), isTrue);
+        expect(container.read(modsProvider).single.isActive, isTrue);
+        expect(container.read(libraryTogglesProvider), 0);
+      });
+
+      testWidgets("a press on another mod doesn't wait, even behind a press that does", (tester) async {
+        temp.createMod('Winter Maid');
+        temp.createMod('Starlight');
+        final container = await pumpModsScreen(tester, temp, [mod('Winter Maid'), mod('Starlight')]);
+        // So both can be on, and the second press doesn't turn the first mod off.
+        container.read(oneAtATimeProvider.notifier).state = {'ellen': false};
+        final done = Completer<void>();
+        await holdWrite(tester, container, 'Winter Maid', done);
+
+        await pressAndWait(tester, 'Winter Maid');
+        await pressAndWait(tester, 'Starlight');
+
+        expect(linked('Starlight'), isTrue);
+        expect(linked('Winter Maid'), isFalse);
+
+        await endWrite(tester, done);
+        expect(linked('Winter Maid'), isTrue);
+      });
+
+      // Read off: a rescan during the write sees the link the write took out.
+      for (final readOff in [false, true]) {
+      testWidgets(
+          "One at a time turns it off at once for another of its character's mods, and the write leaves it off"
+          "${readOff ? ', when the library already reads it off' : ''}", (tester) async {
+        File(p.join(temp.root.path, 'd3dx.ini')).writeAsStringSync('[Rendering]\noverride_directory = ShaderFixes\n');
+        temp.createMod('Winter Maid');
+        temp.write('Winter Maid', 'ShaderFixes/abc123-ps_replace.txt', 'shader');
+        temp.createMod('Starlight');
+        await tester.runAsync(() => temp.service.activateMod('Winter Maid'));
+        final placed = File(p.join(temp.root.path, 'ShaderFixes', 'abc123-ps_replace.txt'));
+        expect(placed.existsSync(), isTrue);
+        final container = await pumpModsScreen(tester, temp, [mod('Winter Maid', isActive: true), mod('Starlight')]);
+
+        // A write's own turn-off and turn-back-on, held between the two, as an update holds them around its copy.
+        final done = Completer<void>();
+        await tester.runAsync(() async {
+          unawaited(whileWritingMod(container, 'Winter Maid', () async {
+            final port = ModManagerActivationPort(temp.service, leaveOff: (m) => leftOffAfterWrite(container, m));
+            await port.deactivate('Winter Maid');
+            await done.future;
+            await port.activate('Winter Maid');
+          }));
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+        });
+        if (readOff) container.read(libraryProvider.notifier).put([mod('Winter Maid'), mod('Starlight')]);
+        await tester.pump();
+
+        await pressAndWait(tester, 'Starlight');
+        expect(linked('Starlight'), isTrue, reason: "it doesn't wait for the other mod's write");
+
+        await endWrite(tester, done);
+        expect(linked('Starlight'), isTrue);
+        expect(linked('Winter Maid'), isFalse);
+        expect(placed.existsSync(), isFalse, reason: 'its shader files are not placed again');
+        expect(find.text('Mod not turned on'), findsNothing);
+        expect(leftOffAfterWrite(container, 'Winter Maid'), isFalse, reason: 'the mark ends with the write');
+      });
+      }
+    });
+
+    group('while a press is landing', () {
+      late RecordingService service;
+
+      setUp(() {
+        service = RecordingService(temp)
+          ..install()
+          ..holdActivation = Completer<void>();
+      });
+
+      /// Presses [id]'s switch with the key the keyboard uses, and leaves the enable held.
+      Future<void> pressWithKeyboard(WidgetTester tester, String id) async {
+        final node = Focus.of(tester.element(find.descendant(of: switchOf(id), matching: find.byType(GestureDetector))));
+        node.requestFocus();
+        await tester.pump();
+        await tester.runAsync(() async {
+          await tester.sendKeyEvent(LogicalKeyboardKey.space);
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+        });
+        await tester.pump();
+      }
+
+      Future<void> release(WidgetTester tester) async {
+        await tester.runAsync(() async {
+          service.holdActivation!.complete();
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
+        await tester.pumpAndSettle();
+      }
+
+      testWidgets('every switch stays live, and the one pressed keeps the keyboard', (tester) async {
+        temp.createMod('Winter Maid');
+        temp.createMod('Starlight');
+        final container = await pumpModsScreen(tester, temp, [mod('Winter Maid'), mod('Starlight')]);
+        container.read(selectedModIdProvider.notifier).state = 'Winter Maid';
+        await tester.pumpAndSettle();
+
+        await pressWithKeyboard(tester, 'Winter Maid');
+
+        expect(container.read(libraryTogglesProvider), 1, reason: 'the press is held mid-way');
+        for (final element in find.byType(ZenithSwitch).evaluate()) {
+          expect((element.widget as ZenithSwitch).onChanged, isNotNull);
+        }
+        final focused = FocusManager.instance.primaryFocus?.context;
+        expect(focused?.findAncestorWidgetOfExactType<ZenithSwitch>(), isNotNull,
+            reason: 'a switch greyed out mid-press drops the focus, and the next Space reaches the card');
+
+        await release(tester);
+        expect(container.read(modsProvider).firstWhere((m) => m.id == 'Winter Maid').isActive, isTrue);
+      });
+
+      testWidgets('a second switch waits its turn, so One at a time leaves one mod on', (tester) async {
+        // Ellen's mods are One at a time unless the user turned it off.
+        temp.createMod('Winter Maid');
+        temp.createMod('Starlight');
+        final container = await pumpModsScreen(tester, temp, [mod('Winter Maid'), mod('Starlight')]);
+
+        await tester.runAsync(() async {
+          await tester.tap(switchOf('Winter Maid'));
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          await tester.tap(switchOf('Starlight'));
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+        });
+        expect(container.read(libraryTogglesProvider), 2);
+        await release(tester);
+
+        expect(container.read(libraryTogglesProvider), 0);
+        expect({for (final m in container.read(modsProvider)) m.id: m.isActive}, {
+          'Winter Maid': false,
+          'Starlight': true,
+        });
+        expect(Link(p.join(temp.saveMods.path, 'Winter Maid')).existsSync(), isFalse);
+        expect(Link(p.join(temp.saveMods.path, 'Starlight')).existsSync(), isTrue);
+      });
+
+      testWidgets('pressing the same switch again asks for the same thing, not the opposite', (tester) async {
+        temp.createMod('Winter Maid');
+        final container = await pumpModsScreen(tester, temp, [mod('Winter Maid')]);
+
+        await tester.runAsync(() async {
+          await tester.tap(switchOf('Winter Maid'));
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          await tester.tap(switchOf('Winter Maid'));
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+        });
+        await release(tester);
+
+        expect(container.read(modsProvider).single.isActive, isTrue);
+        expect(Link(p.join(temp.saveMods.path, 'Winter Maid')).existsSync(), isTrue);
+      });
     });
   });
 }

@@ -217,7 +217,7 @@ Future<bool> applyUpdateFlow(
     final snapshots = ref.read(snapshotServiceProvider);
     final applier = UpdateApplier(
       snapshots: snapshots,
-      activation: ModManagerActivationPort(mods),
+      activation: ModManagerActivationPort(mods, leaveOff: (m) => leftOffAfterWrite(container, m)),
     );
 
     hold.say(loc.t('marketplace.preparing_comparing'));
@@ -349,6 +349,7 @@ Future<bool> applyUpdateFlow(
     if (chosen.length > 1 && context.mounted) progress.attach(context);
 
     final applied = await _writeAll(
+      container: container,
       progress: progress,
       applier: applier,
       snapshots: snapshots,
@@ -453,6 +454,7 @@ Future<bool> applyPatchUpdateFlow(
 }) async {
   final loc = context.loc;
   final notify = context.notify;
+  final container = ProviderScope.containerOf(context, listen: false);
   void fail(String title, String body) =>
       notify.error(title, body: body, characterId: mod.characterId);
 
@@ -532,9 +534,9 @@ Future<bool> applyPatchUpdateFlow(
     final snapshots = ref.read(snapshotServiceProvider);
     final applier = UpdateApplier(
       snapshots: snapshots,
-      activation: ModManagerActivationPort(mods),
+      activation: ModManagerActivationPort(mods, leaveOff: (m) => leftOffAfterWrite(container, m)),
     );
-    final result = await applier.applyPatchInto(
+    final result = await whileWritingMod(container, mod.id, () => applier.applyPatchInto(
       modName: mod.id,
       modFolder: modFolder,
       source: source,
@@ -555,9 +557,11 @@ Future<bool> applyPatchUpdateFlow(
       // A folder can hold two patches, and the one above this has overwritten
       // some of its files in turn — those paths are not this layer's to touch.
       claimedAbove: _recordedAbove(mod.origin, remoteModId),
-    );
+    ));
     // The write is over, so the wait is: whatever comes next is the report.
     hold.release();
+    // Before the success check, as after a base update: a failed write may still have changed the folder.
+    mods.invalidateKeybinds(mod.id);
 
     if (result.snapshot != null) {
       ref.invalidate(modBackupsProvider);
@@ -609,7 +613,7 @@ Future<bool> applyPatchUpdateFlow(
       );
     });
 
-    // Pruning already ran with the snapshot, above.
+    // Pruning already ran with the snapshot, and the keys were dropped with the write, above.
     ref.invalidate(modBackupsProvider);
     ref.invalidate(libraryProvider);
 
@@ -786,6 +790,8 @@ class _GroupProgress {
 /// own new snapshot is the one retention never prunes, so this cannot delete
 /// what it just took.
 Future<List<AppliedUpdate>> _writeAll({
+  /// Where each folder is marked as being written, so a press on its switch waits.
+  required ProviderContainer container,
   required _GroupProgress progress,
   required UpdateApplier applier,
   required SnapshotService snapshots,
@@ -812,16 +818,24 @@ Future<List<AppliedUpdate>> _writeAll({
       final target = targets[i];
       progress.step(target.mod.name, i + 1);
 
-      final result = await applier.applyBaseThenPatch(
-        modName: target.mod.id,
-        modFolder: Directory(path.join(modsPath, target.mod.id)),
-        preview: target.preview,
-        patchFiles: target.patchFiles,
-        patchModId: target.patchModId,
-        previousVersion: target.mod.origin?.base?.version,
-        previousVersionLabel: target.mod.origin?.base?.versionLabel,
+      final result = await whileWritingMod(
+        container,
+        target.mod.id,
+        () => applier.applyBaseThenPatch(
+          modName: target.mod.id,
+          modFolder: Directory(path.join(modsPath, target.mod.id)),
+          preview: target.preview,
+          patchFiles: target.patchFiles,
+          patchModId: target.patchModId,
+          previousVersion: target.mod.origin?.base?.version,
+          previousVersionLabel: target.mod.origin?.base?.versionLabel,
+        ),
       );
       applied.add(AppliedUpdate(mod: target.mod, result: result));
+      // Whether the write landed or not, and before anything below can throw: a failed write may still have changed
+      // the folder. Dropped outright rather than left to the `.ini` stamp, since a file written over one of the same
+      // size can keep its times on NTFS (`docs/library-screen.md` §12).
+      mods.invalidateKeybinds(target.mod.id);
 
       // **Before the success check, deliberately.** A snapshot exists the
       // moment `apply` got past its snapshot step, and the *failure* path is
