@@ -4,7 +4,7 @@ The working plan for rebuilding the UI to the Zenith design. It lives on the `ze
 
 ## Ground rules
 
-- **Target:** the claude.ai Design canvas "Zenith v3 UI", https://claude.ai/artifact/1Sy7dkEKL6RwurthEEpZgv. Read it with the Artifact tool (`action: "read"`, then the `project/*.dc.html` files). It has 26 artboards.
+- **Target:** the claude.ai Design canvas "Zenith v3 UI", https://claude.ai/artifact/1Sy7dkEKL6RwurthEEpZgv. Read it with the Artifact tool (`action: "read"`, then the `project/*.dc.html` files). It has 30 artboards.
 - The canvas was designed without seeing the code. It is the target; the current UI is replaced, not preserved. Everything on it gets built, including features the app lacks.
 - Where the canvas has a gap, design the missing piece in its style without asking. Where it moved something (rename is the Name field in Edit info, not a right-click dialog), the canvas placement wins. Ask only when it contradicts a decision written in `docs/`.
 - **Branch:** `zenith-ui`, cut from `development`. Never commit unless the user says so.
@@ -133,6 +133,21 @@ The memory note `v3-canvas-vs-docs-decisions` holds these. In short:
 
 Each is reviewable on its own and ends with tests green, docs and changelog updated, and the user's go-ahead.
 
+5c. **Notifications** (artboard `Notifications`), before Browse, since the Downloads panel reports through them.
+   - One card for everything `context.notify` raises: an optional icon, colour, body line, up to two text actions, a close button and a progress bar along its bottom edge. An error also tints the card's border red.
+   - A notification about one mod shows its character's portrait in place of the icon, with the kind as a small round badge on its corner (spinner, check or a red cross; none for a Note). One about several mods, or about a mod with no character (UI, Unknown, Unassigned), keeps the plain icon.
+   - Kinds, and how long each stays:
+     - Working: a spinner and the bar, until it ends; then the same card becomes its result, never a second card. With no known length the bar sweeps instead of filling.
+     - Done: the accent check, only when the result isn't already on screen; 5 seconds.
+     - Note: grey, a plain fact, such as the F10 reminder with Undo (shown only while the game runs, under "Decisions already made"); 5 seconds.
+     - Update: amber, "3 newer files" with Review opening the Updates page; 8 seconds.
+     - Needs you: blue, shown once; closing it is fine, since the Downloads badge keeps the count.
+     - Warning: the amber triangle, for something that may fail next; 8 seconds.
+     - Error: red, saying what failed and what to do next; stays until closed.
+   - Bottom right above the status bar, the newest nearest the corner. At most 3 show; older ones fold into a "+N more" pill. Hovering pauses every timer. A repeat updates its card ("3 mods installed") instead of adding one.
+   - No notification history and no countdown line on timed cards: Downloads and the badges already keep what waits for the user.
+   - The `Main` artboard still draws the F10 toast at the bottom centre in an older style; build it from the `Notifications` artboard.
+   - The card's colours replace the toast colours listed under phase 1: `#1B1D21` with a `#30333A` border, and `#1E1514` with a `#5A2620` border for an error.
 6. **Browse** (artboards `Browse`, `BrowseMod`, `Downloads`).
    - Grid restyle, carousel, character chip and type chips, Hide installed, the mature-content and sort menus, infinite scroll.
    - Mod page with Install for (a character override), multi-file pick and Turn on after installing.
