@@ -15,6 +15,7 @@ import 'package:mod_manager_flutter/screens/shell/status_bar.dart';
 import 'package:mod_manager_flutter/utils/detached_starter.dart';
 import 'package:mod_manager_flutter/utils/home_relative.dart';
 import 'package:mod_manager_flutter/utils/notifications.dart';
+import 'package:mod_manager_flutter/utils/process_probe.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 import 'package:mod_manager_flutter/utils/zzz_characters.dart';
 import 'package:path/path.dart' as p;
@@ -347,6 +348,23 @@ void main() {
       expect(await launch(tester, result: const LaunchResult(LaunchOutcome.prefixRequired)), ['Proton needs a Wine prefix']);
     });
 
+    testWidgets("a container that can't look up names warns, and the warning stays until closed", (tester) async {
+      final result = LaunchResult(LaunchOutcome.started, containerDns: Future.value(false));
+      expect(await launch(tester, result: result), ["DNS doesn't work inside umu-launcher"]);
+
+      final warning = container.read(notificationsProvider).single;
+      expect(warning.severity, NotificationSeverity.warning);
+      expect(warning.body, contains('turn off umu-launcher in Settings'));
+      expect(warning.duration, isNull);
+    });
+
+    testWidgets('a lookup that works, or one with no verdict, says nothing', (tester) async {
+      for (final verdict in [true, null]) {
+        final result = LaunchResult(LaunchOutcome.started, containerDns: Future.value(verdict));
+        expect(await launch(tester, result: result), isEmpty, reason: '$verdict');
+      }
+    });
+
     testWidgets('the umu-launcher setting reaches the launch', (tester) async {
       await launch(tester, umu: true);
       expect(platform.requests.single.useUmu, isTrue);
@@ -600,7 +618,11 @@ class _FakePlatform implements PlatformService {
   final requests = <LaunchRequest>[];
 
   @override
-  Future<LaunchResult> launchGame(LaunchRequest request, {DetachedStarter starter = const DetachedStarter()}) async {
+  Future<LaunchResult> launchGame(
+    LaunchRequest request, {
+    DetachedStarter starter = const DetachedStarter(),
+    ProcessProbe probe = const ProcessProbe(),
+  }) async {
     requests.add(request);
     return result;
   }

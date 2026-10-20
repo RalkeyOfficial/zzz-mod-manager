@@ -35,10 +35,14 @@ enum LaunchOutcome {
 
 /// The [outcome] of a launch, and for [LaunchOutcome.runnerMissing] the [program] that couldn't be run.
 class LaunchResult {
-  const LaunchResult(this.outcome, {this.program});
+  const LaunchResult(this.outcome, {this.program, this.containerDns});
 
   final LaunchOutcome outcome;
   final String? program;
+
+  /// For a game started through umu-run, whether a name can be looked up inside its container, known a moment after
+  /// the start. False means the game's anti-cheat will close the game; null, or no future, means no verdict.
+  final Future<bool?>? containerDns;
 }
 
 /// What the Launch game button starts and how. See `docs/launch-game.md`.
@@ -221,8 +225,13 @@ abstract class PlatformService {
   ///
   /// Linux runs an `.exe` under Wine or Proton and an executable script directly; Windows starts what a double-click
   /// would. [starter] is the seam a test records the command through; Windows starts through the shell and ignores
-  /// it. See `docs/launch-game.md`.
-  Future<LaunchResult> launchGame(LaunchRequest request, {DetachedStarter starter = const DetachedStarter()});
+  /// it. [probe] runs the check of name lookups inside umu-run's container, which only Linux has. See
+  /// `docs/launch-game.md`.
+  Future<LaunchResult> launchGame(
+    LaunchRequest request, {
+    DetachedStarter starter = const DetachedStarter(),
+    ProcessProbe probe = const ProcessProbe(),
+  });
 
   /// Whether Launch game runs the launcher under Wine or Proton, so Settings shows where to find them.
   bool get launchesThroughWine;

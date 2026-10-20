@@ -375,7 +375,11 @@ class WindowsPlatformService implements PlatformService {
   Future<List<WineRunner>> findWineRunners() async => const [];
 
   @override
-  Future<LaunchResult> launchGame(LaunchRequest request, {DetachedStarter starter = const DetachedStarter()}) async {
+  Future<LaunchResult> launchGame(
+    LaunchRequest request, {
+    DetachedStarter starter = const DetachedStarter(),
+    ProcessProbe probe = const ProcessProbe(),
+  }) async {
     final target = request.executable;
     final fields = {'target': target, 'arguments': request.arguments};
     Pointer<Utf16>? file;

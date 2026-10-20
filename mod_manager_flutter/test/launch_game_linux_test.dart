@@ -7,17 +7,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/services/platform_service.dart';
 import 'package:mod_manager_flutter/services/platform_service_linux.dart';
 import 'package:mod_manager_flutter/utils/detached_starter.dart';
+import 'package:mod_manager_flutter/utils/process_probe.dart';
 import 'package:path/path.dart' as p;
 
 /// What Linux starts for each kind of file, seen through a starter that records instead of starting.
 void main() {
   late Directory dir;
   late _RecordingStarter starter;
+  late _RecordingProbe probe;
 
   setUp(() async {
     dir = await Directory.systemTemp.createTemp('launch_game_');
     addTearDown(() => dir.delete(recursive: true));
     starter = _RecordingStarter();
+    probe = _RecordingProbe();
   });
 
   File write(String name, {bool executable = false, String contents = 'MZ'}) {
@@ -32,9 +35,10 @@ void main() {
     String runner = '',
     String prefix = '',
     bool useUmu = false,
-  }) => LinuxPlatformService().launchGame(
+  }) => LinuxPlatformService(environment: {'HOME': dir.path}).launchGame(
     LaunchRequest(executable: path, arguments: arguments, runner: runner, prefix: prefix, useUmu: useUmu),
     starter: starter,
+    probe: probe,
   );
 
   test('a file that is gone is reported as gone', () async {
@@ -262,6 +266,129 @@ void main() {
       });
     });
   });
+
+  group("the DNS check inside umu-run's container", () {
+    const manifest11 = '"manifest"\n{\n  "version" "2"\n  "commandline" "/proton %verb%"\n'
+        '  "require_tool_appid" "4183110"\n  "use_sessions" "1"\n  "compatmanager_layer_name" "proton"\n}\n';
+    const manifest10 = '"manifest"\n{\n  "require_tool_appid" "1628350"\n}\n';
+    const answered = ProbeResult(exitCode: 0, stdout: '3.173.161.41    sdk.hoyoverse.com\n', stderr: '');
+
+    String entryPoint(String runtime) => p.join(dir.path, '.local', 'share', 'umu', runtime, '_v2-entry-point');
+
+    // A Proton build beside its manifest, and the runtime it asks for, as umu leaves them.
+    File proton({String manifest = manifest11, String? runtime = 'steamrt4'}) {
+      final proton = write('proton', executable: true);
+      write('toolmanifest.vdf', contents: manifest);
+      if (runtime != null) {
+        File(entryPoint(runtime))
+          ..createSync(recursive: true)
+          ..writeAsStringSync('#!/bin/sh\n');
+      }
+      return proton;
+    }
+
+    test("a Proton build's manifest names the runtime folder umu runs it in", () {
+      expect(LinuxPlatformService.umuRuntimeFolder(manifest11), 'steamrt4');
+      expect(LinuxPlatformService.umuRuntimeFolder(manifest10), 'steamrt3');
+    });
+
+    test('an appid umu does not know, or none, names no runtime', () {
+      expect(LinuxPlatformService.umuRuntimeFolder('"manifest"\n{\n  "require_tool_appid" "999"\n}\n'), isNull);
+      expect(LinuxPlatformService.umuRuntimeFolder('"manifest"\n{\n  "commandline" "/proton %verb%"\n}\n'), isNull);
+    });
+
+    test("umu's data folder follows UMU_FOLDERS_PATH, then XDG_DATA_HOME, then the home folder", () {
+      expect(LinuxPlatformService.umuDataPath({'HOME': '/home/al'}), '/home/al/.local/share/umu');
+      expect(LinuxPlatformService.umuDataPath({'HOME': '/home/al', 'XDG_DATA_HOME': ''}), '/home/al/.local/share/umu');
+      expect(LinuxPlatformService.umuDataPath({'HOME': '/home/al', 'XDG_DATA_HOME': '/data'}), '/data/umu');
+      expect(
+        LinuxPlatformService.umuDataPath({'HOME': '/home/al', 'XDG_DATA_HOME': '/data', 'UMU_FOLDERS_PATH': '/f'}),
+        '/f/umu',
+      );
+      expect(LinuxPlatformService.umuDataPath(const {}), isNull);
+    });
+
+    test('the check runs getent inside the runtime through its entry point', () {
+      final command = LinuxPlatformService.containerDnsCommand('/home/al/.local/share/umu/steamrt4');
+      expect(command.executable, '/home/al/.local/share/umu/steamrt4/_v2-entry-point');
+      expect(command.arguments, ['--verb=waitforexitandrun', '--', 'getent', 'hosts', 'sdk.hoyoverse.com']);
+    });
+
+    test('an address is a working lookup; no name or no answer in time is a failed one; anything else is no verdict', () {
+      bool? verdict(int exitCode, {String stdout = '', bool timedOut = false}) => LinuxPlatformService
+          .containerDnsVerdict(ProbeResult(exitCode: exitCode, stdout: stdout, stderr: '', timedOut: timedOut));
+
+      expect(verdict(0, stdout: answered.stdout), isTrue);
+      expect(verdict(2), isFalse);
+      expect(verdict(-9, timedOut: true), isFalse);
+      expect(verdict(1), isNull);
+      expect(verdict(0), isNull);
+      expect(LinuxPlatformService.containerDnsVerdict(null), isNull, reason: 'the container could not start');
+    });
+
+    test('a launch through umu-run checks beside the game and hands over the verdict', () async {
+      final exe = write('XXMI Launcher.exe');
+      probe.answer = const ProbeResult(exitCode: 2, stdout: '', stderr: '');
+      final result = await launch(exe.path, runner: proton().path, useUmu: true);
+
+      expect(result.outcome, LaunchOutcome.started);
+      expect(starter.calls.first.executable, 'umu-run');
+      expect(await result.containerDns, isFalse);
+      expect(probe.calls.single.executable, entryPoint('steamrt4'));
+      expect(probe.calls.single.arguments.last, LinuxPlatformService.containerDnsHost);
+      expect(probe.calls.single.timeout, LinuxPlatformService.containerDnsTimeout);
+    });
+
+    test('a Proton 10 build is checked in its own runtime', () async {
+      final exe = write('XXMI Launcher.exe');
+      final result = await launch(exe.path, runner: proton(manifest: manifest10, runtime: 'steamrt3').path, useUmu: true);
+
+      expect(await result.containerDns, isTrue);
+      expect(probe.calls.single.executable, entryPoint('steamrt3'));
+    });
+
+    test('a runtime umu has not downloaded yet, or a build with no manifest, is not checked', () async {
+      final exe = write('XXMI Launcher.exe');
+      final noRuntime = await launch(exe.path, runner: proton(runtime: null).path, useUmu: true);
+      expect(await noRuntime.containerDns, isNull);
+
+      File(p.join(dir.path, 'toolmanifest.vdf')).deleteSync();
+      final noManifest = await launch(exe.path, runner: p.join(dir.path, 'proton'), useUmu: true);
+      expect(await noManifest.containerDns, isNull);
+      expect(probe.calls, isEmpty);
+    });
+
+    test('wine, Proton started directly and a script are never checked', () async {
+      final exe = write('XXMI Launcher.exe');
+      final build = proton();
+      final script = write('start.sh', executable: true);
+
+      expect((await launch(exe.path)).containerDns, isNull);
+      expect((await launch(exe.path, runner: build.path, prefix: '/prefixes/HoyoPlay')).containerDns, isNull);
+      expect((await launch(script.path, useUmu: true)).containerDns, isNull);
+      expect(probe.calls, isEmpty);
+    });
+
+    test('the real probe runs the entry point with the lookup, and a name not found is a failed lookup', () async {
+      final called = p.join(dir.path, 'called');
+      final runtime = p.join(dir.path, 'umu', 'steamrt4');
+      final command = LinuxPlatformService.containerDnsCommand(runtime);
+      File(command.executable)
+        ..createSync(recursive: true)
+        ..writeAsStringSync('#!/bin/sh\necho "\$@" > "$called"\nexit 2\n');
+      Process.runSync('chmod', ['+x', command.executable]);
+      write('toolmanifest.vdf', contents: manifest11);
+
+      final verdict = await LinuxPlatformService.containerDnsWorks(
+        p.join(dir.path, 'proton'),
+        probe: const ProcessProbe(),
+        environment: {'HOME': '/nowhere', 'UMU_FOLDERS_PATH': dir.path},
+      );
+
+      expect(verdict, isFalse);
+      expect(File(called).readAsStringSync().trim(), '--verb=waitforexitandrun -- getent hosts sdk.hoyoverse.com');
+    });
+  });
 }
 
 typedef _Call = ({String executable, List<String> arguments, String workingDirectory, Map<String, String> environment});
@@ -283,5 +410,20 @@ class _RecordingStarter implements DetachedStarter {
     final pid = 1000 + calls.length;
     calls.add((executable: executable, arguments: arguments, workingDirectory: workingDirectory, environment: environment));
     return pid;
+  }
+}
+
+class _RecordingProbe extends ProcessProbe {
+  _RecordingProbe();
+
+  final calls = <({String executable, List<String> arguments, Duration? timeout})>[];
+
+  /// What every run answers; null as if the program couldn't be started.
+  ProbeResult? answer = const ProbeResult(exitCode: 0, stdout: '3.173.161.41    sdk.hoyoverse.com\n', stderr: '');
+
+  @override
+  Future<ProbeResult?> run(String executable, List<String> arguments, {Duration? timeout}) async {
+    calls.add((executable: executable, arguments: arguments, timeout: timeout));
+    return answer;
   }
 }

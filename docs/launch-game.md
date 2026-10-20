@@ -93,6 +93,37 @@ The launch arguments are split into words without a shell:
 
 A chosen file that isn't an `.exe` is the way out for a setup these settings can't express, such as gamescope or a Flatpak runner. An executable script runs directly from its own folder with the split arguments and no Wine environment. A `.desktop` file is refused, because `gio launch` can't pass arguments and they would be silently dropped. So are `.bat`, `.cmd`, `.lnk` and `.msi`, whatever their mode: an NTFS or exFAT mount, which a dual-booting player is likely to have, marks every file executable. A file without the execute bit is refused too.
 
+## When the game closes itself under umu
+
+The symptom: through umu-run the game's window opens and closes about a second later, while Proton started directly runs it. `driverError.log` in the game folder reads `initDriver Failed: Error [4,643,0]`.
+
+The game's anti-cheat, `mhypbase`, looks up a name on the network as it starts. When the lookup works, it runs without its kernel driver, as it does under Proton started directly. When the lookup fails, it loads its kernel driver `HoYoKProtect.sys`, which Wine can't load (`ZwLoadDriver failed to create driver …\HoYoProtect: c0000355` in a Proton log), and the game exits.
+
+Name lookups that work on the desktop can fail inside the Steam Linux Runtime container umu-run starts Proton in:
+
+- The container's glibc asks the nameservers in `/etc/resolv.conf` itself. It has no `nss-resolve`, through which most desktop distributions ask systemd-resolved, so the host's own lookups say nothing about the container's.
+- glibc uses only the first three `nameserver` lines.
+
+So DNS inside the container is dead when the first three nameservers in `/etc/resolv.conf` don't answer. Two ways seen together on one machine: a systemd-resolved drop-in with `DNS=127.0.0.1` and `DNSStubListener=no`, left behind by a DNS filter that is no longer installed, so nothing listens there; and a VPN, Mullvad, that blocks the router's DNS on the local network. With the stub listener off, `/etc/resolv.conf` lists resolved's servers in an order that can change: with that same drop-in in place, a restart of systemd-resolved moved the VPN's `8.8.8.8` from fourth to second, and lookups worked again. So one setup can work one day and fail the next. The container's version makes no difference: sniper and steamrt4 both fail, in every version tried.
+
+The check, with `steamrt3` in place of `steamrt4` for a Proton 10 build:
+
+```
+~/.local/share/umu/steamrt4/_v2-entry-point --verb=waitforexitandrun -- getent hosts sdk.hoyoverse.com
+```
+
+It prints addresses when DNS works inside the container and nothing when it doesn't. The way out is either to make the first nameservers in `/etc/resolv.conf` answer, which for systemd-resolved means its stub listener on `127.0.0.53`, or to switch umu off in Settings.
+
+Launch game runs this check itself every time it starts the game through umu-run. It runs beside the game, once the game has started, so it never delays or stops the launch, and it takes about 0.4 seconds once the runtime is downloaded. When the lookup finds no name, getent's exit code 2, or takes longer than 20 seconds, a warning says DNS doesn't work inside umu-launcher, that the game's anti-cheat will close the game, and to fix the system's DNS or turn umu-launcher off in Settings. The warning is pinned, staying until it is closed, since the user is looking at the game when it arrives. A lookup that works shows nothing. The 20 seconds leave room for a first nameserver that doesn't answer, which glibc waits 5 seconds on for each query.
+
+The runtime is the one umu runs the Proton build in: the `require_tool_appid` in the `toolmanifest.vdf` beside the build's `proton` script, with umu's own table (`RUNTIME_VERSIONS` in its `umu_runtime.py`) naming the folder, such as `1628350` for `steamrt3` and `4183110` for `steamrt4`. umu's data folder is found the way umu finds it: `$UMU_FOLDERS_PATH/umu`, else `$XDG_DATA_HOME/umu` (`$HOST_XDG_DATA_HOME` inside a Flatpak), else `~/.local/share/umu`.
+
+Nothing is shown, and the check is skipped or gives no verdict, when the build has no manifest or names a runtime umu doesn't know, when the runtime's `_v2-entry-point` isn't there yet, as on umu's first run while it downloads the runtime, or when the container can't start or fails with any other exit code. Wine, Proton started directly and a chosen script are never checked. Every verdict is logged with the runtime and getent's exit code.
+
+Not the cause, each tested by a launch that still failed: the game id umu-run is given, `umu-0` and Steam's `umu-4162040` alike; the fix's `WINE_DISABLE_VULKAN_OPWR=1`; the `lsteamclient=d` override umu adds; the variables the container sets; its `os-release`. `UMU_NO_RUNTIME=1` doesn't take Proton out of the container, so a failure with it set doesn't rule the container out.
+
+Not known: which name the anti-cheat looks up, and so whether a DNS filter that blocks HoYoverse's domains stops the game under Proton started directly too. That is not yet tried.
+
 ## Keeping the screen awake
 
 On Linux, a game started from the button keeps the screen on, and keeps the computer from going to sleep on its own, for as long as the game runs, even after the app is closed. A desktop decides the user is idle from the keyboard, mouse and touch alone, so during controller play the screen would turn off, and Plasma's default of sleeping after 15 minutes on AC would put the computer to sleep mid-game. Sleep the user asks for, from the menu or by closing a laptop's lid, still works.
@@ -141,6 +172,8 @@ Not used:
 | `runnerMissing` | error: couldn't run Wine or Proton, with the program it tried |
 | `prefixRequired` | warning: Proton started directly needs a prefix, and where to choose one |
 | `failed` | error: couldn't start the game, with the file name |
+
+A game started through umu-run also has its container checked for name lookups, and when they fail a pinned warning follows a moment after the start ([When the game closes itself under umu](#when-the-game-closes-itself-under-umu)). `LaunchResult.containerDns` carries that verdict, and the button waits for it only after the launch is done.
 
 The process is started detached and never waited on: the app has no business holding the game's lifetime, and closing the app must not take the game with it.
 

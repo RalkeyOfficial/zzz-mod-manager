@@ -21,6 +21,11 @@ typedef PrefixServer = ({String server, Map<String, String> environment});
 
 /// Linux-специфічна реалізація PlatformService
 class LinuxPlatformService implements PlatformService {
+  /// [environment] is the one umu-run inherits, read for umu's data folder; a test passes its own.
+  LinuxPlatformService({Map<String, String>? environment}) : _environment = environment ?? Platform.environment;
+
+  final Map<String, String> _environment;
+
   @override
   Future<bool> createModLink(String sourcePath, String linkPath) async {
     // A link already of that name, live or dead, is replaced in one step, so a failure leaves it as it was.
@@ -283,7 +288,11 @@ class LinuxPlatformService implements PlatformService {
   }
 
   @override
-  Future<LaunchResult> launchGame(LaunchRequest request, {DetachedStarter starter = const DetachedStarter()}) async {
+  Future<LaunchResult> launchGame(
+    LaunchRequest request, {
+    DetachedStarter starter = const DetachedStarter(),
+    ProcessProbe probe = const ProcessProbe(),
+  }) async {
     final target = request.executable;
     final fields = {
       'target': target,
@@ -300,6 +309,7 @@ class LinuxPlatformService implements PlatformService {
       final workingDirectory = path.dirname(target);
       final int pid;
       final PrefixServer prefix;
+      Future<bool?>? containerDns;
       if (ext == '.exe') {
         if (request.runner.isNotEmpty && !await File(request.runner).exists()) {
           _log.warning('wine runner missing', fields: fields);
@@ -321,6 +331,10 @@ class LinuxPlatformService implements PlatformService {
           _log.warning('wine runner missing', error: error, stack: stack, fields: fields);
           return LaunchResult(LaunchOutcome.runnerMissing, program: command.executable);
         }
+        // Beside the game, after it has started, so the answer can only add a warning.
+        if (WineRunner.isProton(request.runner) && request.useUmu) {
+          containerDns = containerDnsWorks(request.runner, probe: probe, environment: _environment);
+        }
         prefix = prefixServer(request);
       } else if (_unstartableTypes.contains(ext) || !await _isExecutable(file)) {
         // Windows files are refused by name, since NTFS and exFAT mounts mark every file executable.
@@ -333,7 +347,7 @@ class LinuxPlatformService implements PlatformService {
       }
       fields['awake'] = await _keepAwake(starter, pid, prefix, workingDirectory: workingDirectory);
       _log.info('game launched', fields: fields);
-      return const LaunchResult(LaunchOutcome.started);
+      return LaunchResult(LaunchOutcome.started, containerDns: containerDns);
     } catch (error, stack) {
       _log.warning('could not launch game', error: error, stack: stack, fields: fields);
       return const LaunchResult(LaunchOutcome.failed);
@@ -440,6 +454,107 @@ class LinuxPlatformService implements PlatformService {
       }
     }
     return started;
+  }
+
+  /// A name the game itself looks up as it starts.
+  @visibleForTesting
+  static const String containerDnsHost = 'sdk.hoyoverse.com';
+
+  /// Room for a first nameserver that doesn't answer, which glibc waits 5 seconds on for each query.
+  @visibleForTesting
+  static const Duration containerDnsTimeout = Duration(seconds: 20);
+
+  /// The Steam Linux Runtime folder in umu's data folder for each `require_tool_appid` a Proton build's
+  /// `toolmanifest.vdf` can name: umu's own table, `RUNTIME_VERSIONS` in its `umu_runtime.py`.
+  @visibleForTesting
+  static const Map<String, String> umuRuntimes = {
+    '1391110': 'steamrt2',
+    '1628350': 'steamrt3',
+    '4183110': 'steamrt4',
+    '4185400': 'steamrt4-arm64',
+  };
+
+  /// The runtime folder the Proton build whose `toolmanifest.vdf` reads [manifest] runs in, or null for none umu knows.
+  @visibleForTesting
+  static String? umuRuntimeFolder(String manifest) {
+    final appid = RegExp(r'"require_tool_appid"\s+"(\d+)"').firstMatch(manifest)?.group(1);
+    return appid == null ? null : umuRuntimes[appid];
+  }
+
+  /// umu's data folder, picked from [environment] the way umu picks it, or null with no home folder.
+  @visibleForTesting
+  static String? umuDataPath(Map<String, String> environment) {
+    String? nonEmpty(String name) => (environment[name]?.isNotEmpty ?? false) ? environment[name] : null;
+    final folders = nonEmpty('UMU_FOLDERS_PATH');
+    if (folders != null) return path.posix.join(folders, 'umu');
+    final home = nonEmpty('HOME');
+    final dataHome =
+        environment['container'] == 'flatpak' ? nonEmpty('HOST_XDG_DATA_HOME') : nonEmpty('XDG_DATA_HOME');
+    if (dataHome != null) return path.posix.join(dataHome, 'umu');
+    return home == null ? null : path.posix.join(home, '.local', 'share', 'umu');
+  }
+
+  /// Looks up [containerDnsHost] inside the runtime at [runtimePath], the container umu-run starts Proton in.
+  @visibleForTesting
+  static ({String executable, List<String> arguments}) containerDnsCommand(String runtimePath) => (
+    executable: path.posix.join(runtimePath, '_v2-entry-point'),
+    arguments: const ['--verb=waitforexitandrun', '--', 'getent', 'hosts', containerDnsHost],
+  );
+
+  /// True when the lookup printed an address; false when getent found no name (exit code 2) or it ran out of time;
+  /// null when the container couldn't start or failed some other way.
+  @visibleForTesting
+  static bool? containerDnsVerdict(ProbeResult? result) {
+    if (result == null) return null;
+    if (result.timedOut) return false;
+    if (result.exitCode == 0 && result.stdout.trim().isNotEmpty) return true;
+    if (result.exitCode == 2) return false;
+    return null;
+  }
+
+  /// Whether a name can be looked up inside the container umu-run starts the Proton script [proton] in. Null, with
+  /// no check, for a build umu runs without a known runtime or one not downloaded yet. Never throws. See
+  /// `docs/launch-game.md`.
+  @visibleForTesting
+  static Future<bool?> containerDnsWorks(
+    String proton, {
+    required ProcessProbe probe,
+    required Map<String, String> environment,
+  }) async {
+    try {
+      final manifest = File(path.join(path.dirname(proton), 'toolmanifest.vdf'));
+      final runtime = await manifest.exists() ? umuRuntimeFolder(await manifest.readAsString()) : null;
+      final data = umuDataPath(environment);
+      if (runtime == null || data == null) {
+        _log.info('container dns check skipped', fields: {'reason': 'no runtime', 'manifest': manifest.path});
+        return null;
+      }
+      final command = containerDnsCommand(path.join(data, runtime));
+      if (!await File(command.executable).exists()) {
+        _log.info('container dns check skipped', fields: {'reason': 'runtime missing', 'entry_point': command.executable});
+        return null;
+      }
+      final result = await probe.run(command.executable, command.arguments, timeout: containerDnsTimeout);
+      final verdict = containerDnsVerdict(result);
+      final fields = {
+        'runtime': runtime,
+        'exit': result?.exitCode,
+        'timed_out': result?.timedOut,
+        if (verdict == null) 'stderr': result?.stderr.trim(),
+      };
+      switch (verdict) {
+        case true:
+          _log.info('container dns works', fields: fields);
+        case false:
+          _log.warning('container dns failed', fields: fields);
+        case null:
+          _log.warning('container dns check gave no verdict', fields: fields);
+      }
+      return verdict;
+    } catch (error, stack) {
+      _log.warning('container dns check gave no verdict', error: error, stack: stack, fields: {'proton': proton});
+      return null;
+    }
   }
 
   /// Files Linux can't start: Windows types, and a `.desktop` shortcut, which can't take arguments.

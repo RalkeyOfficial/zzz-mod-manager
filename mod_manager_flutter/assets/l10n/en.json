@@ -305,7 +305,9 @@
       "runner_missing_title": "Couldn't run Wine or Proton",
       "prefix_required_title": "Proton needs a Wine prefix",
       "prefix_required_body": "Choose the game's prefix in Settings, or turn on umu-launcher there.",
-      "failed_title": "Couldn't start the game"
+      "failed_title": "Couldn't start the game",
+      "container_dns_title": "DNS doesn't work inside umu-launcher",
+      "container_dns_body": "The game's anti-cheat will close the game. Fix the system's DNS, or turn off umu-launcher in Settings."
     },
     "status": {
       "zzmi": "ZZMI · {path}",

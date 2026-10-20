@@ -46,7 +46,8 @@ Future<void> writeLaunchSetting(LaunchSetting setting, String? value) => switch 
 /// Starts the game through the XXMI Launcher beside ZZMI, or the file chosen instead, asking for one when there is
 /// neither.
 ///
-/// A launch that works is its own feedback, the game opening, so only a failure is reported.
+/// A launch that works is its own feedback, the game opening, so only a failure is reported, including one the
+/// game's anti-cheat will cause when names can't be looked up inside umu-run's container.
 Future<void> launchGame(
   BuildContext context,
   WidgetRef ref, {
@@ -79,7 +80,16 @@ Future<void> launchGame(
   final file = p.basename(target);
   switch (result.outcome) {
     case LaunchOutcome.started:
-      return;
+      // Captured before the wait, so the warning still shows if the button has gone by then. Pinned, since the user
+      // is looking at the game when it arrives.
+      final notify = context.notify;
+      if (await result.containerDns == false) {
+        notify.pinned(
+          loc.t('shell.launch.container_dns_title'),
+          body: loc.t('shell.launch.container_dns_body'),
+          severity: NotificationSeverity.warning,
+        );
+      }
     case LaunchOutcome.notFound:
       context.notify.error(loc.t('shell.launch.not_found_title'), body: target);
     case LaunchOutcome.unsupported:
