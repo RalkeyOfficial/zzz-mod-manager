@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_category.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_enums.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
@@ -44,7 +45,12 @@ void main() {
     perPage: 30,
   );
 
-  List<Override> overrides({int? openMod, GbPage<GbMod>? results}) => [
+  List<Override> overrides({
+    int? openMod,
+    GbPage<GbMod>? results,
+    bool realIndex = false,
+  }) =>
+      [
         marketplaceResultsProvider.overrideWith((ref) async => results ?? page),
         rootCategoriesProvider.overrideWith(
           (ref) async => [
@@ -65,11 +71,12 @@ void main() {
             files: const <Never>[],
           ),
         ),
-        // The library snapshot. Overridden because the real one reaches
-        // `ApiService`, which needs a `SharedPreferences` binding this test has
-        // no business providing.
-        installedModsIndexProvider
-            .overrideWith((ref) async => InstalledModsIndex.empty),
+        // The library snapshot.
+        // Overridden because the real one reaches `ApiService`, which needs a `SharedPreferences` binding this test has no business providing.
+        // With [realIndex] the test overrides the library under it instead.
+        if (!realIndex)
+          installedModsIndexProvider
+              .overrideWith((ref) async => InstalledModsIndex.empty),
         if (openMod != null)
           marketplaceOpenModProvider.overrideWith((ref) => openMod),
       ];
@@ -214,4 +221,68 @@ void main() {
       );
     }
   });
+
+  testWidgets('opens from a page that watches the library without throwing',
+      (tester) async {
+    // The Library page stays mounted while it fades out, and it watches `libraryProvider`.
+    // The real `installedModsIndexProvider` is kept here, as in the app:
+    // the browse view's first build reads the library through it, so a refresh started inside that build pass marks the fading page dirty mid-build.
+    // The tests above override the index and cannot see it.
+    var libraryBuilds = 0;
+    final showMarketplace = ValueNotifier<bool>(false);
+    addTearDown(showMarketplace.dispose);
+
+    await pumpLocalized(
+      tester,
+      ValueListenableBuilder<bool>(
+        valueListenable: showMarketplace,
+        builder: (_, marketplace, __) => AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          child: marketplace
+              ? const MarketplaceScreen(key: ValueKey('marketplace'))
+              : const _LibraryPage(key: ValueKey('mods')),
+        ),
+      ),
+      overrides: [
+        ...overrides(realIndex: true),
+        libraryProvider.overrideWith(
+          () => _CountedLibrary(() => libraryBuilds++),
+        ),
+      ],
+    );
+    expectBuilt(_LibraryPage);
+    final buildsBeforeOpen = libraryBuilds;
+
+    showMarketplace.value = true;
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expectBuilt(MarketplaceScreen);
+    expect(libraryBuilds, greaterThan(buildsBeforeOpen),
+        reason: 'opening the marketplace still re-reads the library');
+  });
+}
+
+/// Stands in for the Library page, which watches the library directly.
+class _LibraryPage extends ConsumerWidget {
+  const _LibraryPage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final library = ref.watch(libraryProvider);
+    return Text('${library.valueOrNull?.length}');
+  }
+}
+
+/// An empty library that answers asynchronously, as a scan does, and reports each build.
+class _CountedLibrary extends LibraryNotifier {
+  _CountedLibrary(this._onBuild);
+
+  final void Function() _onBuild;
+
+  @override
+  Future<List<ModInfo>> build() async {
+    _onBuild();
+    return const <ModInfo>[];
+  }
 }

@@ -59,15 +59,18 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
     // the last scan, is otherwise invisible here. One scan, single-digit
     // milliseconds; see `libraryProvider`.
     //
-    // **Here and not in `initState`.** `WidgetRef.invalidate` is the one member of
-    // `ref` that resolves its container with `listen: true`, which registers an
-    // inherited-widget dependency — and doing that during `initState` throws.
-    // (`read`, `refresh` and `listenManual` use `listen: false` specifically so
-    // they *can* be called there; `invalidate` does not.) `didChangeDependencies`
-    // runs after `initState` and before the first build, so the snapshot is still
-    // refreshed before anything watches it. The flag is what keeps it to once —
-    // this also fires on a theme or locale change.
-    ref.invalidate(libraryProvider);
+    // **After the frame, not during it.**
+    // The Library page fading out under the `AnimatedSwitcher` still watches `libraryProvider`,
+    // and this screen's first build reads it through `installedModsIndexProvider`;
+    // an invalidate here makes that read rebuild the library mid-build and mark the Library dirty, which throws.
+    // The scan is async either way, so the badges show the cached library until the scan ends.
+    //
+    // `WidgetRef.invalidate` is the one member of `ref` that resolves its container with `listen: true`,
+    // which `initState` forbids, so it never runs there directly.
+    // The flag keeps it to once — this also fires on a theme or locale change.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.invalidate(libraryProvider);
+    });
   }
 
   @override

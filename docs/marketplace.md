@@ -72,15 +72,12 @@ must reset between mods, and it is keyed by mod id for the same reason.
 from focus traversal — hence the `ExcludeFocus` around the grid, without which
 tabbing on the detail view walks into an off-screen search box.
 
-**`ref.invalidate` cannot be called from `initState`, unlike the rest of `ref`.**
-`MarketplaceScreen` re-snapshots the library when it opens, and that call lives in
-`didChangeDependencies` behind a once-per-`State` flag. `WidgetRef.invalidate`
-resolves its container with `listen: true`, which registers an inherited-widget
-dependency — forbidden during `initState`, and it throws for every mount, taking
-the whole tab down. `read`, `refresh` and `listenManual` use `listen: false`
-specifically so they *can* be called there; `invalidate` does not, and nothing in
-its signature says so. `didChangeDependencies` still runs before the first build,
-so nothing observes a stale snapshot. Covered by `test/marketplace_screen_test.dart`.
+**The library is re-read after Browse's first frame, never during it.**
+`MarketplaceScreen` re-reads the library each time it opens, from a post-frame callback behind a once-per-`State` flag.
+The Library page fading out under the `AnimatedSwitcher` still watches `libraryProvider`, and the browse view's first build reads the library through `installedModsIndexProvider`, so an invalidate inside that build pass rebuilds the library mid-build and marks the fading page dirty, which throws.
+Until the re-read lands, the "in library" badges show the cached library.
+`ref.invalidate` is also never called from `initState`: unlike `read`, `refresh` and `listenManual`, it resolves its container with `listen: true`, which registers an inherited-widget dependency that `initState` forbids, and nothing in its signature says so.
+Covered by `test/marketplace_screen_test.dart`.
 
 ## 4. Where remote identity reaches the origin block
 
