@@ -81,7 +81,7 @@ Future<bool> removePatchFlow(
   if (!plan.touchesFiles && !plan.leavesPatchBehind) {
     final removed = await _forget(mods, mod, patch);
     if (!context.mounted) return removed;
-    notify.info(
+    notify.note(
       loc.t('mods.remove_patch.already_gone_title'),
       body: patchName,
       characterId: mod.characterId,
@@ -161,7 +161,7 @@ Future<bool> removePatchFlow(
   container.invalidate(libraryProvider);
 
   if (result.failed.isEmpty) {
-    notify.success(
+    notify.done(
       loc.t('mods.remove_patch.done_title'),
       body: patchName,
       characterId: mod.characterId,

@@ -1002,8 +1002,8 @@ own `origin` *is* the base), so it stops being asked.
 | Answer | What the install does |
 |---|---|
 | Its own folder, naming what it patches **and which file** | Writes `patch_shaped` and inserts that mod as the bottom layer, then **fetches that file and writes it into the folder** — base first, patch placed back over it. No warning: the folder works |
-| Its own folder, naming the mod but not the file | Writes `patch_shaped` and inserts the layer. Nothing to fetch, so the pinned warning stands |
-| Its own folder, saying nothing | Writes `patch_shaped` only, and the pinned warning stands |
+| Its own folder, naming the mod but not the file | Writes `patch_shaped` and inserts the layer. Nothing to fetch, so the warning that stays until closed stands |
+| Its own folder, saying nothing | Writes `patch_shaped` only, and the warning that stays until closed stands |
 | Into a library mod | **No new folder at all** — see below |
 | Declines | Nothing is copied. A patch with nothing to patch is a folder the user may well not want |
 
@@ -1023,12 +1023,9 @@ Two consequences worth stating:
   nothing — with the one sentence that would have said so now gone. A cancelled
   download or an unpickable file leaves as much to do as saying nothing did, so
   the warning stands.
-- **The answer is recorded before the download starts**, so a cancelled or failed
-  fetch leaves the layer the user named rather than nothing. A successful one
-  upgrades that layer to `exact` on its way past — the second route to `exact` for
-  a layer nobody identified by hand, and for the same reason as the first: we
-  fetched those bytes. The record is the *answer*, never a claim the bytes
-  arrived; the pinned warning is what says the folder still does not work.
+- **The answer is recorded before the download starts**, so a cancelled or failed fetch leaves the layer the user named rather than nothing.
+  A successful one upgrades that layer to `exact` on its way past — the second route to `exact` for a layer nobody identified by hand, and for the same reason as the first: we fetched those bytes.
+  The record is the *answer*, never a claim the bytes arrived; the warning that stays until closed is what says the folder still does not work.
 
 The second destination is not offered when the import picker already chose to
 combine several folders into one mod (different destinations), or when the library

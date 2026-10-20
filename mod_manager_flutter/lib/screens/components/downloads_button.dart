@@ -13,7 +13,7 @@ import 'sidebar_nav_item.dart';
 ///
 /// The count is the jobs still running or waiting; a finished row is history, and counting it would say the app
 /// is still busy. A failure with nothing else in flight turns the icon into a warning so it can be found and read.
-/// Overall progress is the pinned notification's job, not this row's.
+/// Overall progress is the Working notification's job, not this row's.
 class DownloadsNavItem extends ConsumerWidget {
   const DownloadsNavItem({super.key});
 

@@ -15,7 +15,7 @@ import 'own_scroll_controller.dart';
 ///
 /// Everything the app is fetching, in the order it was asked for, plus what has
 /// finished this session. It is the detail view for work that is otherwise
-/// invisible: the pinned notification says *how far along*, this says *what,
+/// invisible: the Working notification says *how far along*, this says *what,
 /// exactly, and lets the user change it*.
 ///
 /// **Finished rows stay until they are cleared.** A row that vanished on its own

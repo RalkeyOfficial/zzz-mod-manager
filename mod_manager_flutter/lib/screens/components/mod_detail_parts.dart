@@ -630,9 +630,20 @@ class TrackingFact extends StatelessWidget {
 /// Keyed by the mod, so selecting another mod disposes this one, and a note still waiting to be saved is saved on
 /// the way out.
 class ModNoteField extends ConsumerStatefulWidget {
-  const ModNoteField({super.key, required this.modId, this.writer, this.label = true, this.minLines = 2, this.maxLines = 6});
+  const ModNoteField({
+    super.key,
+    required this.modId,
+    this.characterId,
+    this.writer,
+    this.label = true,
+    this.minLines = 2,
+    this.maxLines = 6,
+  });
 
   final String modId;
+
+  /// The mod's character, whose portrait leads the card when a note could not be saved.
+  final String? characterId;
   final NoteWriter? writer;
 
   /// The caps label above the field. A page whose tab already names it leaves it out.
@@ -717,9 +728,10 @@ class _ModNoteFieldState extends ConsumerState<ModNoteField> {
     }
     final notify = _notify;
     final title = _failedTitle;
+    final characterId = widget.characterId;
     unawaited(
       (widget.writer ?? ApiService.setModNote)(widget.modId, note).then((saved) {
-        if (!saved) notify.error(title, body: widget.modId);
+        if (!saved) notify.error(title, body: modId, characterId: characterId);
       }),
     );
   }

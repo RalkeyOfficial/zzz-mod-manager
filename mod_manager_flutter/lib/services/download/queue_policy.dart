@@ -140,7 +140,7 @@ int activeJobCount(List<DownloadJob> jobs) =>
 
 /// Everything still in flight, as one figure.
 ///
-/// One aggregation, two readers — the sidebar button's ring and the pinned
+/// One aggregation, two readers — the sidebar button's ring and the Working
 /// progress notification — so the button and the card can never disagree about
 /// how far along the queue is.
 class QueueProgress {

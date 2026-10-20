@@ -2,10 +2,11 @@ import 'app_notification.dart';
 
 /// The outcome of installing an archive into the mod library.
 ///
-/// Four outcomes, not two, because "nothing was installed" is not automatically
-/// a failure: the user may have cancelled the folder-selection dialog, or every
-/// folder in the archive may already exist. Those deserve different words —
-/// silence, a note, and an error respectively.
+/// Five outcomes, not two, because "nothing was installed" is not automatically
+/// a failure: the user may have cancelled the folder-selection dialog, every
+/// folder in the archive may already exist, or the archive may hold no mod
+/// folder at all. Those deserve different words — silence, a note and a
+/// warning — and only a failure is an error.
 ///
 /// Lives here rather than inside a screen because both ingest entry points
 /// produce one and both need to render it identically.
@@ -14,7 +15,7 @@ class InstallResult {
     required this.mods,
     this.warnings = const [],
     this.failure,
-    this.failureSeverity,
+    this.failureKind,
     this.characterId,
   });
 
@@ -35,10 +36,10 @@ class InstallResult {
   /// wants a single fact: the mod arrived.
   final List<NotificationLines> warnings;
 
-  /// The message for an outcome that installed nothing, with
-  /// [failureSeverity] saying whether that is a problem or merely a note.
+  /// The message for an outcome that installed nothing, with [failureKind]
+  /// saying whether that is a problem or merely a note.
   final NotificationLines? failure;
-  final NotificationSeverity? failureSeverity;
+  final NotificationKind? failureKind;
 
   /// The character every folder in this archive was filed under, when the
   /// install knew it. One archive comes from one mod page, so a result naming
@@ -56,16 +57,24 @@ class InstallResult {
         characterId: characterId,
       );
 
+  /// Nothing installed, and nothing went wrong: every folder already exists.
+  factory InstallResult.note(String title, String body) => InstallResult._(
+        mods: const [],
+        failure: NotificationLines(title, body, kind: NotificationKind.note),
+        failureKind: NotificationKind.note,
+      );
+
+  /// Nothing installed, though nothing failed either: the archive held no mod folder.
   factory InstallResult.warning(String title, String body) => InstallResult._(
         mods: const [],
         failure: NotificationLines(title, body),
-        failureSeverity: NotificationSeverity.warning,
+        failureKind: NotificationKind.warning,
       );
 
   factory InstallResult.error(String title, String body) => InstallResult._(
         mods: const [],
-        failure: NotificationLines(title, body),
-        failureSeverity: NotificationSeverity.error,
+        failure: NotificationLines(title, body, kind: NotificationKind.error),
+        failureKind: NotificationKind.error,
       );
 
   /// No-op result (e.g. the user cancelled the folder-selection dialog):
@@ -78,15 +87,10 @@ class InstallResult {
       List<NotificationLines> warnings,
       String? characterId,
     ) success,
-    required void Function(NotificationLines lines) warning,
-    required void Function(NotificationLines lines) error,
+    required void Function(NotificationLines lines) failed,
   }) {
     if (failure case final lines?) {
-      if (failureSeverity == NotificationSeverity.error) {
-        error(lines);
-      } else {
-        warning(lines);
-      }
+      failed(lines);
       return;
     }
 

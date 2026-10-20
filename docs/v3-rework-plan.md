@@ -129,31 +129,44 @@ The memory note `v3-canvas-vs-docs-decisions` holds these. In short:
     - A rare verdict, a taken-down installed file whose page lists only files released with it, gives an update with no date to ignore up to, so nothing on the Updates page or in the dialog can silence it. The row reads "Its page changed" with Ignore off.
     - The `openModPageProvider` doc comment in `state_providers.dart` says "Null shows the character view", which has been stale since phase 5.
 
+- **Phase 5c, Notifications** (artboard `Notifications`): built, reviewed and committed (the commit after `a9703ea`). Written up in `notifications.md`.
+  - `context.notify` raises one of seven kinds (`NotificationKind`: Working, Done, Note, Update, Needs you, Warning, Error), and the kind alone picks the tile, icon, badge and clock (`notificationLook`, `kNotificationDurations`). The card is 380 wide on the new `notification` / `notificationError` tokens, with the portrait on its element tile and the kind as a badge, up to two text actions, a keycap in the body, and a bar or sweep on a Working card. Three cards show and the rest fold into "+N more"; repeats count on one card; a Working card turns into its result in place, and hiding it never hides that result.
+  - Working cards: the download queue's progress card (its fraction as the bar, a lone job's result in place, several ending in "N mods installed") and the drag onto a character row (its failure becomes the error in place). Review on the Update cards opens the Updates page. Every call site raises one of the kinds.
+  - Decided with the user:
+    - The F10 Note is built with its keycap and Undo and tested, and raised nowhere; phase 7 starts raising it.
+    - The install card has one action, Open, which shows the installed mod in the Characters view with its details panel open (`showModInCharacters`). No Turn on, since Browse's "Turn on after installing" switch decides that.
+    - A warning about a mod that won't work until the user acts stays until closed (`stays: true`); every other warning leaves after 8 seconds.
+    - The canvas is a style guide, not an exact spec: what it doesn't draw (the icons of the undrawn kinds, their badges, the sweep, the unfolded "+N more", paper colours) takes its look from its style.
+    - A warning also stays until closed when the next action will likely fail until the user fixes something: the Launch game warning that DNS is dead inside umu-launcher's container.
+  - Decided without asking:
+    - Launch game's "can't start this file" (`unsupported`) and "Proton needs a Wine prefix" (`prefixRequired`) cards are errors, since the game did not start.
+    - The stack keeps at most 20 cards, folded ones included; past that the oldest card with a clock goes.
+    - Hiding a Working card still shows its result when it arrives.
+    - A repeat counted on one card drops its portrait and actions, since both were about one mod.
+    - The stack sits 42px above the window's bottom on the first-run screen too, which has no status bar.
+    - `toast` stays for the All mods selection bar, which the `AllMods` artboard draws in those colours.
+    - The app keeps its own wording, "what happened" over "what it happened to", rather than the canvas's example copy.
+  - Checked in widget tests only, not yet in the running app in either theme.
+
 ## Phases left
 
 Each is reviewable on its own and ends with tests green, docs and changelog updated, and the user's go-ahead.
 
-5c. **Notifications** (artboard `Notifications`), before Browse, since the Downloads panel reports through them.
-   - One card for everything `context.notify` raises: an optional icon, colour, body line, up to two text actions, a close button and a progress bar along its bottom edge. An error also tints the card's border red.
-   - A notification about one mod shows its character's portrait in place of the icon, with the kind as a small round badge on its corner (spinner, check or a red cross; none for a Note). One about several mods, or about a mod with no character (UI, Unknown, Unassigned), keeps the plain icon.
-   - Kinds, and how long each stays:
-     - Working: a spinner and the bar, until it ends; then the same card becomes its result, never a second card. With no known length the bar sweeps instead of filling.
-     - Done: the accent check, only when the result isn't already on screen; 5 seconds.
-     - Note: grey, a plain fact, such as the F10 reminder with Undo (shown only while the game runs, under "Decisions already made"); 5 seconds.
-     - Update: amber, "3 newer files" with Review opening the Updates page; 8 seconds.
-     - Needs you: blue, shown once; closing it is fine, since the Downloads badge keeps the count.
-     - Warning: the amber triangle, for something that may fail next; 8 seconds.
-     - Error: red, saying what failed and what to do next; stays until closed.
-   - Bottom right above the status bar, the newest nearest the corner. At most 3 show; older ones fold into a "+N more" pill. Hovering pauses every timer. A repeat updates its card ("3 mods installed") instead of adding one.
-   - No notification history and no countdown line on timed cards: Downloads and the badges already keep what waits for the user.
-   - The `Main` artboard still draws the F10 toast at the bottom centre in an older style; build it from the `Notifications` artboard.
-   - The card's colours replace the toast colours listed under phase 1: `#1B1D21` with a `#30333A` border, and `#1E1514` with a `#5A2620` border for an error.
+5d. **Notification follow-ups**, found while building 5c and outside its scope.
+   - Closing the last card with the mouse leaves the stack hovered, so every later timed card stays until the pointer enters the stack and leaves again. With no cards the overlay returns an empty box (`notification_overlay.dart`), and its `MouseRegion` goes with it before an `onExit` can fire.
+   - Long work with no Working card: bulk Enable, Disable, Delete and Mark as current, a restore, removing a patch, the Reinstall page fetch, the drag-in import and its patch writes, and a single-folder update write.
+   - Actions the canvas suggests for events the app already has, not wired: Open folder, Copy details, Retry, Open Settings, Undo after a restore or a patch removal, and Open Downloads. Copy details fits the errors whose body is a raw exception (`mods_screen.dart`, `settings_screen.dart`, `welcome_screen.dart`, `auto_tag_section.dart`, `rename_mod_dialog.dart`, `keybinds_dialog.dart`, `delete_mod_dialog.dart`, `apply_update_flow.dart`, `url_utils.dart`).
+   - A notification's text actions show no keyboard focus ring; the canvas draws a 2px accent outline on focus (`.na:focus-visible`). Nothing else in the app draws one yet either.
+   - In a stack of mixed cards the text's left edge is ragged: a 28px icon tile sits beside a 32px portrait, as the canvas draws them.
+   - Open on the install card waits for a running rescan; if that rescan fails, Open says the mod is no longer in the library though it is (`showModInCharacters` returns false for both).
+
 6. **Browse** (artboards `Browse`, `BrowseMod`, `Downloads`).
    - Grid restyle, carousel, character chip and type chips, Hide installed, the mature-content and sort menus, infinite scroll.
    - Mod page with Install for (a character override), multi-file pick and Turn on after installing.
    - The downloads side panel, Pause, and archive passwords.
    - "Needs your attention" as the panel's first group: one amber row per waiting decision (patch, several folders, password), each with the button that opens its dialog and Don't install. The patch and folders dialogs are restyled in phase 8; until then the buttons open the current ones.
    - `DownloadsNavItem` shows the amber warning badge (triangle and count) while anything waits. The canvas draws only that state; the idle look is designed in its style.
+   - A failed download transfer raises a notification, which today it doesn't: the failure shows only in the Downloads panel.
 7. **Settings, Storage, About** (artboards `Settings`, `Storage`, `About`).
    - Section nav (General, Game & folders, Launching, Mods, GameBanana, Storage, Appearance, About), and Game & folders including Move library… (design note first). Game & folders holds only the ZZMI folder and the mod library.
      - Move library… re-points links with the rule a changed Mod library already follows ([`configuration.md`](configuration.md#changing-the-mod-library), `ModManagerService.relinkLibrary`): a link whose target is exactly `<old>/<its own name>`, live or dead, follows when the new library has that folder; a mod the new library lacks keeps its link; a refused shader placement keeps the old link and names the mod.

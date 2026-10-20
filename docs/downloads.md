@@ -399,51 +399,31 @@ into its second phase for the unpacking. That modal is the optional half: with
 no live context there is nothing to draw on, and the unpacking still has to
 happen.
 
-### The pinned progress notification
+### The Working progress notification
 
 Raised by `DownloadQueueHost` and kept in step with the queue. A backgrounded
 transfer has no modal to *be* its progress report, and a download nobody can see
 is one the user assumes failed — so the report sits in the foreground without
 blocking it.
 
-- **One card for the whole queue, never one per download.** The stack holds four
-  and drops the oldest, so a card per job turns a five-mod queue into a wall and
-  pushes off the messages that actually need reading. The card carries the
-  aggregate (`aggregateProgress`); the panel is where the per-mod breakdown is.
-- **Pinned, because the end of a download is an event rather than a moment.**
-  That is the shape `NotificationCenter.pinned` exists for: the **body** is the
-  stable subject and only the title is rewritten. It is dismissed when the queue
-  empties — what is left to say about a finished install is said by the install.
-- **A percentage, not two byte counts.** The card's title has no `maxLines`, and
-  `5.0 MB / 21.9 MB · 14 MB/s · 2m left` costs a second line on a 360px card
-  while saying less than `24%` does in a quarter of the width.
-- **The ETA is the queue's, not any one job's** — remaining bytes over the
-  *combined* rate, because the queue finishes when the last byte lands.
-- **A count-bearing card gets no portrait**, the same rule the bulk reports
-  follow: one arbitrary face would claim the message is about that mod, and
-  which mod sorted first would change between runs. One download still gets its
-  own.
-- **Closing it sticks.** Nothing this app shows may be un-dismissable, so the
-  card is *raised* only when a job it has not covered appears and merely
-  *updated* thereafter. A card re-raised on the next progress tick would
-  override the user; closing it therefore holds until they ask for something
-  else, which is itself a request to be told about it.
+- **One card for the whole queue, never one per download.** A card per job turns a five-mod queue into a wall that folds away the messages that actually need reading. The card carries the aggregate (`aggregateProgress`); the panel is where the per-mod breakdown is.
+- **A Working card, because the end of a download is an event rather than a moment.** It has no clock; its bar is the queue's `QueueProgress.fraction`, and a sweep while any job's size is unknown. The **body** is the stable subject and the title is rewritten each tick.
+- **One download's card turns into its result.** When the card covered a single job, that job's "Mod installed", saved archive or failure takes the card over in place rather than raising a second card.
+  When it covered several, it is dismissed when the queue empties, and the installs count on one card of their own: "3 mods installed".
+- **A percentage, not two byte counts.** The card's title has no `maxLines`, and `5.0 MB / 21.9 MB · 14 MB/s · 2m left` costs a second line on a 380px card while saying less than `24%` does in a quarter of the width.
+- **The ETA is the queue's, not any one job's** — remaining bytes over the *combined* rate, because the queue finishes when the last byte lands.
+- **A count-bearing card gets no portrait**, the same rule the bulk reports follow: one arbitrary face would claim the message is about that mod, and which mod sorted first would change between runs. One download still gets its own.
+- **Hiding it sticks.** Its close button reads "Hide", and the card is *raised* only when a job it has not covered appears and merely *updated* thereafter.
+  A card re-raised on the next progress tick would override the user; hiding it therefore holds until they ask for something else, which is itself a request to be told about it.
+  A hidden card covering one job still comes back as that job's result, since hiding the progress never hides the outcome.
 
-This is also why `show()` evicts the oldest **dismissable** notification rather
-than simply the oldest: an update to a pinned card that has been evicted is a
-no-op, so dropping one silently throws away the only report of the work it was
-tracking. See `notifications.md` §7.
+This is also why the stack's backstop drops the oldest card **with a clock** rather than simply the oldest: an update to a Working card that has been dropped is a no-op, so dropping one silently throws away the only report of the work it was tracking. See `notifications.md` §7.
 
 ### The panel
 
-`DownloadsNavItem`, the sidebar's **Downloads** row, opening `DownloadsPanel` in
-a `MenuAnchor` beside the sidebar. The row is always there, under Browse. Its
-count is the jobs still running or waiting, never a finished one, and with no
-job in flight a failure turns its icon into a warning so the failure can be
-found and read. A cancel does not, since it is what the user asked for. Overall
-progress is the pinned notification's job, not the row's. In the sidebar rather
-than on a page because a transfer outlives the page that started it, so it
-cannot belong to one.
+`DownloadsNavItem`, the sidebar's **Downloads** row, opening `DownloadsPanel` in a `MenuAnchor` beside the sidebar. The row is always there, under Browse.
+Its count is the jobs still running or waiting, never a finished one, and with no job in flight a failure turns its icon into a warning so the failure can be found and read. A cancel does not, since it is what the user asked for.
+Overall progress is the Working notification's job, not the row's. In the sidebar rather than on a page because a transfer outlives the page that started it, so it cannot belong to one.
 
 - **Finished rows stay until they are cleared.** A row that vanished on its own
   would take the only record of a failure with it.

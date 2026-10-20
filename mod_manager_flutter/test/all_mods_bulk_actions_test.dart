@@ -255,7 +255,7 @@ void main() {
         expect(linked('Ellen School'), isTrue, reason: 'nothing of hers was switched off');
         expect(linked('Miyabi Kimono'), isTrue, reason: 'another character is not held back');
         final notifications = container.read(notificationsProvider);
-        expect([for (final n in notifications) n.severity], [NotificationSeverity.warning]);
+        expect([for (final n in notifications) n.kind], [NotificationKind.warning]);
         expect(notifications.single.title, 'Some mods were left off');
         expect(notifications.single.body, contains('Ellen'));
         expect(container.read(libraryScansProvider), scans + 1);

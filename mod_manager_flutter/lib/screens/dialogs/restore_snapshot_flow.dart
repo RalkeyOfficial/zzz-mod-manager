@@ -80,9 +80,9 @@ Future<bool> restoreSnapshotFlow(BuildContext context, {required ModInfo mod, re
   await container.read(libraryProvider.notifier).rescan();
 
   notify.show(
+    result.success ? NotificationKind.done : NotificationKind.error,
     loc.t(result.success ? 'mods.backups.restored_title' : 'mods.backups.restore_failed_title'),
     body: mod.name,
-    severity: result.success ? NotificationSeverity.success : NotificationSeverity.error,
     characterId: mod.characterId,
   );
   return result.success;

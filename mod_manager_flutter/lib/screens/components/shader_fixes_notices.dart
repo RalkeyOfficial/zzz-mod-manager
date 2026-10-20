@@ -128,7 +128,7 @@ class _ShaderRestartNoticeHostState extends State<ShaderRestartNoticeHost> {
   void _announce() {
     if (!mounted || _pending.isEmpty) return;
     final loc = context.loc;
-    context.notify.info(
+    context.notify.note(
       loc.t('mods.shader_fixes.restart_title'),
       body: loc.t('mods.shader_fixes.restart_body', params: {'mods': _pending.join(', ')}),
     );
@@ -138,10 +138,16 @@ class _ShaderRestartNoticeHostState extends State<ShaderRestartNoticeHost> {
   void _announceAdoption(ShaderAdoption adoption) {
     if (!mounted) return;
     final loc = context.loc;
-    context.notify.info(
+    // Several in a row count on one card, which lists the mods.
+    context.notify.note(
       loc.t('mods.shader_fixes.adopted_title'),
       body: loc.plural('mods.shader_fixes.adopted_body', adoption.count,
           params: {'mod': adoption.mod, 'count': '${adoption.count}'}),
+      repeat: NotificationRepeat(
+        'shader-adopted',
+        subjects: [adoption.mod],
+        body: (count) => loc.plural('mods.shader_fixes.adopted_many', count, params: {'count': '$count'}),
+      ),
     );
   }
 

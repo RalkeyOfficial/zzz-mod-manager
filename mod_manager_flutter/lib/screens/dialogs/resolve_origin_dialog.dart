@@ -462,7 +462,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
         OriginWriteResult.written =>
           'mods.resolve.save_failed',
       };
-      context.notify.warning(
+      context.notify.error(
         loc.t('mods.resolve.save_failed_title'),
         body: loc.t(reason, params: {'mod': widget.mod.name}),
         characterId: widget.mod.characterId,

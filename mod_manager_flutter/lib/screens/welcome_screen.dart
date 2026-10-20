@@ -95,7 +95,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
     final loc = context.loc;
     
     if (_modsPathController.text.isEmpty || _zzmiController.text.isEmpty) {
-      context.notify.warning(
+      context.notify.note(
         loc.t('welcome.directories.validation_error_title'),
         body: loc.t('welcome.directories.validation_error_body'),
       );

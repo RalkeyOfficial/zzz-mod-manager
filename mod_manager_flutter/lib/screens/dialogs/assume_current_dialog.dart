@@ -107,32 +107,32 @@ void showAssumeCurrentOutcome(
 
   // Each half is pluralised on the count it is actually about: the title on
   // what was written, the body on what failed.
-  final (title, body, severity) = switch (outcome) {
+  final (title, body, kind) = switch (outcome) {
     // Nothing was written and nothing broke: every mod had already been sorted
     // out. Almost always a second press before the rescan caught up.
     BulkAssumeCurrentOutcome(written: 0, failed: 0) => (
         loc.t('mods.assume_current.nothing_to_change'),
         plural('mods.assume_current.already_done', outcome.skipped),
-        NotificationSeverity.info,
+        NotificationKind.note,
       ),
     BulkAssumeCurrentOutcome(failed: 0) => (
         plural('mods.assume_current.done_partial_title', outcome.written),
         plural('mods.assume_current.done', outcome.written),
-        NotificationSeverity.success,
+        NotificationKind.done,
       ),
     BulkAssumeCurrentOutcome(written: 0) => (
         loc.t('mods.assume_current.not_saved_title'),
         plural('mods.assume_current.failed', outcome.failed),
-        NotificationSeverity.warning,
+        NotificationKind.error,
       ),
     _ => (
         plural('mods.assume_current.done_partial_title', outcome.written),
         plural('mods.assume_current.done_partial_body', outcome.failed),
-        NotificationSeverity.warning,
+        NotificationKind.warning,
       ),
   };
   // No portrait: this is about a count across the library, not about one mod.
-  notify.show(title, body: body, severity: severity);
+  notify.show(kind, title, body: body);
 }
 
 class _AssumeCurrentConfirmation extends ConsumerStatefulWidget {

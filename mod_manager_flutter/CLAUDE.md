@@ -11,7 +11,7 @@ This file is rules and pointers only. Every subject below has a doc in [`../docs
 | [`downloads.md`](../docs/downloads.md) | Fetching archives — the isolate pump, resume, backpressure, the stall timeout, the background queue |
 | [`marketplace.md`](../docs/marketplace.md) | The native browser screens — grid, detail view, what an install does |
 | [`library-screen.md`](../docs/library-screen.md) | The Library's character view, All mods table and Updates page — character list, card, status badge, the table and its bulk actions, the coverage strip and newer files, One at a time, notes, details panel, a mod's page and its History tab, its dialogs |
-| [`notifications.md`](../docs/notifications.md) | What the app tells the user — whether to speak at all, the two levels, the card |
+| [`notifications.md`](../docs/notifications.md) | What the app tells the user — whether to speak at all, the two levels, the kinds, the card and the stack |
 | [`metadata-schema.md`](../docs/metadata-schema.md) | The sidecar file format |
 | [`migrations.md`](../docs/migrations.md) | Reading data an older version wrote — every migration and tolerance; there is no `migrations/` folder and it says why |
 | [`origin-tracking.md`](../docs/origin-tracking.md) | Where a mod came from — the folder as a stack of downloads, confidence model, backfill, resolve flow |
@@ -94,10 +94,10 @@ Claims the UI may make
 - The app never presses F10 for the user — built, measured, removed ([`mod-reload.md`](../docs/mod-reload.md)).
 
 Notifications — full rules in [`notifications.md`](../docs/notifications.md)
-- Never call `ScaffoldMessenger`. `context.notify.<severity>(…)` is the only way.
+- Never call `ScaffoldMessenger`. `context.notify.<kind>(…)` is the only way.
 - A change the user can see reports only its failure; a change they cannot see may report its success.
 - Every notification is `title` = what happened, `body` = what it happened to. Both required.
-- Severity is the only thing a call site decides — colour, icon and duration are derived from it in one place.
+- The kind is the only thing a call site decides — colour, icon and duration come from it in one place. The one exception is `stays`, which keeps a warning until it is closed.
 
 Diagnostics — full rules in [`logging.md`](../docs/logging.md)
 - Never `print` or `debugPrint`. `final _log = Logger('<tag>')` at the top of the file; `avoid_print` is on and `test/no_prints_test.dart` catches the other one.

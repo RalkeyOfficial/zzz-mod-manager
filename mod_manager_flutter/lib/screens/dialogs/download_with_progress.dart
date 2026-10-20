@@ -78,7 +78,7 @@ Future<DownloadResult?> downloadFileWithProgress(
   // somebody else and will be consumed by them.
   final inFlight = activeJobForFile(ref.read(downloadQueueProvider), file.idRow);
   if (inFlight != null && inFlight.intent != DownloadIntent.callerHandles) {
-    notify.info(
+    notify.note(
       loc.t('marketplace.download_already_queued_title'),
       body: body,
       characterId: characterId,

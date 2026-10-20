@@ -43,7 +43,7 @@ final Logger _log = Logger('origin');
 // app-wide state, and keeping it there is what stops this registry sprawling.
 //
 // The notification stack lives in `notifications.dart` for the same reason: it
-// is one subsystem with its own vocabulary (severity, pinning, handles), and
+// is one subsystem with its own vocabulary (kinds, repeats, handles), and
 // call sites reach it through `context.notify` rather than through a provider.
 
 /// The library's service: scanning, linking, importing, and the sidecar writes.
@@ -283,6 +283,29 @@ void openAllModsFiltered(WidgetRef ref, AllModsFilter filter) {
   ref.read(allModsCollapsedProvider.notifier).state = const {};
   ref.read(openModPageProvider.notifier).state = null;
   ref.read(destinationProvider.notifier).state = AppDestination.allMods;
+}
+
+/// Opens the Library's Characters view on [modId]: its character's row, with its details panel open. Returns false,
+/// and goes nowhere, when the library has no such mod, or could not be read.
+///
+/// Decided on a finished read: while a scan runs, such as the one an install starts, the list in hand predates the
+/// mod, so this waits for the scan rather than calling the mod gone. Takes a container rather than a ref, since a
+/// notification's action outlives the widget that raised it.
+Future<bool> showModInCharacters(ProviderContainer container, String modId) async {
+  final library = container.read(libraryProvider);
+  final List<ModInfo> mods;
+  try {
+    mods = library.isLoading ? await container.read(libraryProvider.future) : library.requireValue;
+  } catch (_) {
+    return false;
+  }
+  final mod = mods.where((m) => m.id == modId).firstOrNull;
+  if (mod == null) return false;
+  container.read(openModPageProvider.notifier).state = null;
+  container.read(selectedCharacterIdProvider.notifier).state = libraryGroupOf(mod.characterId);
+  container.read(selectedModIdProvider.notifier).state = modId;
+  container.read(destinationProvider.notifier).state = AppDestination.characters;
+  return true;
 }
 
 /// Every mod in the library, once each — as far as a synchronous reader is

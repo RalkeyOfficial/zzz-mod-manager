@@ -28,6 +28,7 @@ NotificationLines importFailureMessage(
         'required': formatBytes(requiredBytes),
         'available': formatBytes(availableBytes),
       }),
+      kind: NotificationKind.error,
     );
   }
 
@@ -39,5 +40,5 @@ NotificationLines importFailureMessage(
     ImportFailure.copyFailed => 'mods.import_failed.copy',
     ImportFailure.nothingUsable => 'mods.import_failed.nothing',
   };
-  return NotificationLines(loc.t('${key}_title'), loc.t('${key}_body'));
+  return NotificationLines(loc.t('${key}_title'), loc.t('${key}_body'), kind: NotificationKind.error);
 }

@@ -13,13 +13,13 @@ Future<void> launchExternalUrl(BuildContext context, String url) async {
   final notify = context.notify;
   final uri = Uri.tryParse(url);
   if (uri == null || !uri.hasScheme) {
-    // A warning rather than an error: nothing broke, the link is simply not one
+    // A note rather than an error: nothing broke, the link is simply not one
     // we can open — which is a fact about the mod's own metadata.
     //
     // No portrait on either of these, though every caller holds a mod: what
     // failed is a fact about a URL string, and a character's face would claim
     // the message is about their mod.
-    notify.warning(loc.t('mods.snackbar.invalid_url_title'), body: url);
+    notify.note(loc.t('mods.snackbar.invalid_url_title'), body: url);
     return;
   }
   try {

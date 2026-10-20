@@ -89,10 +89,12 @@ Future<void> showRenameModDialog(
                 // reads the disk again.
                 onRenamed(failure.name);
                 unawaited(ref.read(libraryProvider.notifier).rescan());
-                notify.error(
+                notify.warning(
                   loc.t('mods.dialog.rename_left_off_title'),
                   body: loc.t('mods.dialog.rename_left_off_body', params: {'name': failure.name}),
                   characterId: mod.characterId,
+                  // The mod won't load until the user turns it back on.
+                  stays: true,
                 );
               } else {
                 notify.error(

@@ -489,7 +489,7 @@ Future<List<NotificationLines>> applyPatchInstall(
   Future<UpdateApplyResult> Function(String modId, Future<UpdateApplyResult> Function() write)? whileWriting,
 }) async {
   final patchedInto = <String, InstallIntoMod>{};
-  final writeFailures = <String>[];
+  final writeFailures = <InstallIntoMod>[];
   final guard = whileWriting ?? (_, write) => write();
 
   for (final entry in decision.writes.entries) {
@@ -508,7 +508,7 @@ Future<List<NotificationLines>> applyPatchInstall(
     // A failed copy may have changed the folder part-way, so the keys are read again either way.
     onPatched?.call(write.into.modId);
     if (!result.success) {
-      writeFailures.add(write.into.modName);
+      writeFailures.add(write.into);
       continue;
     }
     patchedInto[entry.key] = write.into;
@@ -647,7 +647,7 @@ List<NotificationLines> patchInstallLines(
   required PatchInstallDecision decision,
   required Iterable<String> importedMods,
   required Map<String, InstallIntoMod> patchedInto,
-  required List<String> writeFailures,
+  required List<InstallIntoMod> writeFailures,
 
   /// Mods whose base was actually fetched and written in, so the folder works
   /// and there is nothing left to warn about.
@@ -669,18 +669,28 @@ List<NotificationLines> patchInstallLines(
     // **A change the user cannot see reports its success.** The patch went into
     // somebody else's folder, so there is no new card to look at — and the one
     // thing they need to know is that a copy was saved first.
+    // Several in a row count on one card, which lists the mods.
     for (final into in patchedInto.values)
       NotificationLines(
         loc.t('mods.snackbar.patch_applied_title'),
         loc.t('mods.snackbar.patch_applied_body',
             params: {'mod': into.modName}),
+        kind: NotificationKind.done,
+        characterId: into.characterId,
+        repeat: NotificationRepeat(
+          'patch-applied',
+          subjects: [into.modName],
+          body: (count) => loc.plural('mods.snackbar.patch_applied_many', count, params: {'count': '$count'}),
+        ),
       ),
     if (writeFailures.isNotEmpty)
       NotificationLines(
         loc.t('mods.snackbar.patch_write_failed_title'),
         loc.t('mods.snackbar.patch_write_failed_body',
-            params: {'mods': writeFailures.join(', ')}),
-        pinned: true,
+            params: {'mods': writeFailures.map((m) => m.modName).join(', ')}),
+        kind: NotificationKind.error,
+        // The target's portrait, not the download's; several targets are no one character.
+        characterId: writeFailures.length == 1 ? writeFailures.single.characterId : unknownCharacterId,
       ),
     // Each refusal names its own cause, because they ask different things of
     // the user: one is "you picked the wrong mod", the other is "that mod's
@@ -691,14 +701,14 @@ List<NotificationLines> patchInstallLines(
         loc.t('mods.snackbar.patch_wrong_mod_title'),
         loc.t('mods.snackbar.patch_wrong_mod_body',
             params: {'mods': mods.join(', ')}),
-        pinned: true,
+        stays: true,
       ),
     if (decision.refused[PatchRefusal.brokenMod] case final mods?)
       NotificationLines(
         loc.t('mods.snackbar.patch_broken_mod_title'),
         loc.t('mods.snackbar.patch_broken_mod_body',
             params: {'mods': mods.join(', ')}),
-        pinned: true,
+        stays: true,
       ),
     if (decision.refused[PatchRefusal.goneMod] case final mods?)
       NotificationLines(
@@ -706,7 +716,7 @@ List<NotificationLines> patchInstallLines(
         loc.t('mods.snackbar.patch_gone_mod_body',
             params: {'mods': mods.join(', ')}),
       ),
-    // Not pinned: this one describes a folder that is not a mod at all — a
+    // Not staying: this one describes a folder that is not a mod at all — a
     // `previews` folder installed on its own — where there is nothing to finish.
     if (scan.incomplete.where(imported.contains) case final mods
         when mods.isNotEmpty)
@@ -717,7 +727,7 @@ List<NotificationLines> patchInstallLines(
       ),
     // **Only the ones nobody answered for.** A patch whose base mod the user
     // just named in a modal has been told about already, and its card carries
-    // the mark; a pinned card repeating it is nagging.
+    // the mark; a staying card repeating it is nagging.
     if (iniPatches.isNotEmpty)
       NotificationLines(
         loc.t('mods.snackbar.import_patch_title'),
@@ -726,7 +736,7 @@ List<NotificationLines> patchInstallLines(
         // The install warnings that must not time out: the mod does not work
         // until the user acts, and this card is raised beside the success line
         // they were actually waiting for.
-        pinned: true,
+        stays: true,
       ),
     // Named separately from the `.ini` case because the evidence is different:
     // this download brought content nothing can load, rather than asking for
@@ -737,7 +747,14 @@ List<NotificationLines> patchInstallLines(
           loc.t('mods.snackbar.import_asset_patch_title'),
           loc.t('mods.snackbar.import_asset_patch_body',
               params: {'mod': name}),
-          pinned: true,
+          stays: true,
+          // Several in a row count on one card, which lists the folders.
+          repeat: NotificationRepeat(
+            'asset-patch',
+            subjects: [name],
+            body: (count) =>
+                loc.plural('mods.snackbar.import_asset_patch_many', count, params: {'count': '$count'}),
+          ),
         ),
   ];
 }

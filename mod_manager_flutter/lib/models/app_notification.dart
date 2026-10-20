@@ -1,164 +1,254 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
-/// What a notification *means*, which is the only thing a call site has to
-/// decide.
+/// What a notification *is*, which is the only thing a call site decides about how it looks.
 ///
-/// Deliberately not a colour and not an icon. Picked per call site — across ~60
-/// of them — the same kind of event looks different depending on which screen
-/// raised it, because whatever is nearest wins: `Colors.red` in one place and
-/// `colorScheme.error` in the next. The severity is the input; the look is
-/// derived from it in exactly one place (`notification_overlay.dart`).
-enum NotificationSeverity {
-  /// Something the user asked for finished. The default for "done".
-  success,
+/// Deliberately not a colour, an icon or a duration. Picked per call site, across some 150 of them, the same kind
+/// of event would look different depending on which screen raised it. The kind is the input; the look comes from it
+/// in one place (`notificationLook` in `notification_overlay.dart`) and the clock from [kNotificationDurations].
+enum NotificationKind {
+  /// Work still running, with a bar. Stays until its owner ends it or turns it into its result.
+  working,
 
-  /// Neutral progress or a statement of fact. Nothing went wrong.
-  info,
+  /// Something the user asked for finished.
+  done,
 
-  /// It worked, but not completely, or it needs attention before it will.
+  /// A plain fact with nothing at risk.
+  note,
+
+  /// Newer files were found.
+  update,
+
+  /// Something waits on a decision from the user. Stays until closed.
+  needsYou,
+
+  /// It worked, but not completely, or something needs attention.
   warning,
 
-  /// It did not work.
+  /// It did not work. Stays until closed.
   error,
 }
 
-/// A headline and its subject, for a producer that decides what to say
-/// somewhere other than where it is said.
+/// How long each kind stays. A kind that is not here stays until it is closed or its owner ends it.
 ///
-/// Deliberately *not* the shape of the `notify` methods: roughly half of all
-/// bodies are bare data the call site already holds (`mod.name`, `e.toString()`)
-/// and would gain nothing from being wrapped.
+/// Hovering the stack holds every clock, so these are floors on the unattended case rather than a race.
+const Map<NotificationKind, Duration> kNotificationDurations = {
+  NotificationKind.done: Duration(seconds: 5),
+  NotificationKind.note: Duration(seconds: 5),
+  NotificationKind.update: Duration(seconds: 8),
+  NotificationKind.warning: Duration(seconds: 8),
+};
+
+/// How many cards show before the older ones fold into "+N more".
+const int kVisibleNotifications = 3;
+
+/// The backstop on the whole stack, folded cards included: past it, the oldest card with a clock goes.
+const int kKeptNotifications = 20;
+
+/// A button on a card. Pressing it runs [onPressed] and then closes the card, unless [closes] is false.
+///
+/// The card is drawn above the `Navigator`, so [onPressed] reaches the app through what it captured where the card
+/// was raised (a `ProviderContainer`), never through a `BuildContext` of this layer.
+@immutable
+class NotificationAction {
+  const NotificationAction(this.label, this.onPressed, {this.closes = true});
+
+  final String label;
+  final VoidCallback onPressed;
+  final bool closes;
+}
+
+/// Marks a notification that is counted on one card when it comes again, such as "3 mods installed".
+///
+/// A raise whose [key] matches a card of the same kind takes that card's place, with its [subjects] added to the
+/// card's and the count raised by as many. Counting more than one subject, the card's title is [title] and its body
+/// is [body] with the subject list drawn under it, or the subject list alone when [body] is null.
+@immutable
+class NotificationRepeat {
+  const NotificationRepeat(this.key, {required this.subjects, this.title, this.body});
+
+  final String key;
+
+  /// What this raise counts, usually one: a mod's name. An install of three folders counts three.
+  final List<String> subjects;
+
+  /// The counted title, such as "3 mods installed".
+  final String Function(int count)? title;
+
+  /// The counted body, for a card whose body says more than its subject: what to do, what was kept. Null when the
+  /// body is the subject itself, which the subject list then replaces.
+  final String Function(int count)? body;
+}
+
+/// A headline and its subject, for a producer that decides what to say somewhere other than where it is said.
+///
+/// Deliberately *not* the shape of the `notify` methods: roughly half of all bodies are bare data the call site
+/// already holds (`mod.name`, `e.toString()`) and would gain nothing from being wrapped.
 @immutable
 class NotificationLines {
-  const NotificationLines(this.title, this.body, {this.pinned = false});
+  const NotificationLines(
+    this.title,
+    this.body, {
+    this.kind = NotificationKind.warning,
+    this.stays = false,
+    this.characterId,
+    this.repeat,
+  });
 
   final String title;
   final String body;
+  final NotificationKind kind;
 
-  /// Stays until dismissed instead of timing out.
-  ///
-  /// For the warning the user must not read over. An install raises up to four
-  /// cards at once and a warning clears itself in eight seconds, so the one
-  /// that says *this mod will not work until you do something* competes with
-  /// the one that says the install succeeded — and loses, because the success
-  /// is the line they were waiting for.
-  final bool pinned;
+  /// A warning that stays until it is closed. See [AppNotification.stays].
+  final bool stays;
+
+  /// Whose portrait leads the card, when the line is about a mod other than the one its producer was handed.
+  final String? characterId;
+
+  final NotificationRepeat? repeat;
 
   @override
   bool operator ==(Object other) =>
       other is NotificationLines &&
       other.title == title &&
       other.body == body &&
-      other.pinned == pinned;
+      other.kind == kind &&
+      other.stays == stays &&
+      other.characterId == characterId &&
+      other.repeat?.key == repeat?.key &&
+      listEquals(other.repeat?.subjects, repeat?.subjects);
 
   @override
-  int get hashCode => Object.hash(title, body, pinned);
+  int get hashCode =>
+      Object.hash(title, body, kind, stays, characterId, repeat?.key, Object.hashAll(repeat?.subjects ?? const []));
 }
 
 /// One message on the notification stack.
 ///
-/// Immutable and value-identified by [id]: the overlay keys its cards on it, so
-/// updating a notification in place (see `NotificationHandle.update`) keeps the
-/// same card — and therefore the same entrance animation, position in the stack
-/// and hover state — instead of replacing it with a new one that slides in from
-/// scratch.
+/// Immutable and identified by [id]: the overlay keys its cards on it, so updating a notification in place keeps
+/// the same card, with its entrance animation and hover state, instead of sliding a new one in.
 @immutable
 class AppNotification {
   AppNotification({
     required this.id,
-    required this.severity,
+    required this.kind,
     required this.title,
     required this.body,
     this.characterId,
     this.icon,
-    this.duration,
-  }) : assert(
+    this.progress,
+    this.actions = const [],
+    this.keycap,
+    this.stays = false,
+    this.repeat,
+    this.count = 1,
+    this.subjects = const [],
+  })  : assert(actions.length <= 2, 'A card has room for two actions.'),
+        assert(progress == null || kind == NotificationKind.working, 'Only a Working card has a bar.'),
+        assert(progress == null || (progress >= 0 && progress <= 1), 'Progress is a fraction, 0 to 1.'),
+        assert(!stays || kind == NotificationKind.warning, 'Only a warning is told to stay; the rest have a kind for it.'),
+        assert(
           icon == null || characterId == null,
           'An explicit icon and a character both claim the leading slot. '
           'Pass one: the icon wins, and the portrait would be dropped silently.',
         );
 
-  /// Unique and monotonic, so the newest is always last in the list.
+  /// Unique and monotonic.
   final int id;
 
-  final NotificationSeverity severity;
+  final NotificationKind kind;
 
-  /// What happened, in a few words. "Mod installed", "Couldn't extract the
-  /// archive".
+  /// What happened, in a few words. "Mod installed", "Couldn't extract the archive".
   final String title;
 
-  /// The one thing it happened to — the mod's name, the path, the reason it
-  /// failed. Where a call site has no subject in hand, the single next step the
-  /// user can take.
+  /// The one thing it happened to: the mod's name, the path, the reason it failed. Where a call site has no
+  /// subject in hand, the single next step the user can take. Holds `{key}` where [keycap] is drawn.
   ///
-  /// Required, like [title]. An optional second level is a level nobody fills
-  /// in: for the whole life of the earlier two-field version, not one call site
-  /// passed a headline.
+  /// Required, like [title]. An optional second level is a level nobody fills in.
   final String body;
 
-  /// Whose portrait leads the card, when the notification is about one mod.
-  ///
-  /// Also accepts a built-in category id; the overlay falls back to that
-  /// category's own icon. Null, `unknown` or an unrecognised id fall back to
-  /// the severity icon.
+  /// Whose portrait leads the card, when the notification is about one mod. A category, `unknown` or an
+  /// unrecognised id shows the kind's plain icon instead.
   final String? characterId;
 
-  /// Overrides the icon [severity] would otherwise choose. Mutually exclusive
-  /// with [characterId] — see the constructor's assert.
+  /// Overrides the icon the kind would choose, keeping the kind's colours. Exclusive with [characterId].
   final IconData? icon;
 
-  /// How long it stays before dismissing itself, or **null to stay until it is
-  /// dismissed** — by the user's close button, or by whoever raised it.
-  ///
-  /// Null is what makes a notification usable for something still happening: a
-  /// caller holds the handle, and calls `update` or `dismiss` when the work it
-  /// describes is done. See `NotificationCenter.show`.
-  final Duration? duration;
+  /// A Working card's share of the work done, 0 to 1. Null draws a sweep for work of unknown size.
+  final double? progress;
 
-  /// Whether this one waits for something rather than for a clock.
-  bool get isPinned => duration == null;
+  /// At most two, the first the primary one except on a Note.
+  final List<NotificationAction> actions;
 
-  /// Whether [other] is *the same thing being said again*, which is what makes
-  /// re-raising it move down the stack instead of stacking a duplicate.
+  /// The key drawn where [body] says `{key}`, such as `F10`.
+  final String? keycap;
+
+  /// A warning that stays until it is closed, instead of leaving after the kind's eight seconds.
   ///
-  /// Deliberately not full equality. [icon] and [characterId] are pictures of
-  /// what a notification says, not part of what it says, and [duration] is how
-  /// long it says it for — a second raise differing only in those is the same
-  /// sentence, and the newer one's picture is the current one.
+  /// For a warning about a mod that will not work until the user acts, or about something the next action will
+  /// likely fail on until the user fixes it, such as the DNS before a launch. An install can raise several cards at
+  /// once, and the one that says *this mod will not work until you do something* would otherwise leave beside the
+  /// one that says the install succeeded, which is the line the user was waiting for.
+  final bool stays;
+
+  final NotificationRepeat? repeat;
+
+  /// How many [subjects] this card counts, 1 without a [repeat]. Past 1 the card is drawn counted: the subject list,
+  /// no portrait and no actions.
+  final int count;
+
+  /// The [repeat] subjects so far, oldest first.
+  final List<String> subjects;
+
+  /// How long it stays before closing itself, or null to stay until it is closed or its owner ends it.
+  Duration? get duration => stays ? null : kNotificationDurations[kind];
+
+  bool get hasClock => duration != null;
+
+  /// Whether [other] is *the same thing being said again*, which makes a re-raise move the card to the newest
+  /// place instead of stacking a duplicate.
   ///
-  /// It lives here rather than inline in `show` so that the next field added to
-  /// this class has to answer the question rather than silently join the key or
-  /// silently miss it.
+  /// Not full equality: the portrait and icon are pictures of what a card says, not part of what it says. Cards
+  /// with a [repeat] are counted instead, so they never match here.
   bool saysTheSameAs(AppNotification other) =>
-      other.severity == severity &&
+      repeat == null &&
+      other.repeat == null &&
+      other.kind == kind &&
       other.title == title &&
       other.body == body;
 
   AppNotification copyWith({
-    NotificationSeverity? severity,
+    int? id,
+    NotificationKind? kind,
     String? title,
     String? body,
     String? characterId,
     IconData? icon,
-    Duration? duration,
+    double? progress,
+    List<NotificationAction>? actions,
+    String? keycap,
+    bool? stays,
+    NotificationRepeat? repeat,
+    int? count,
+    List<String>? subjects,
     bool clearCharacterId = false,
     bool clearIcon = false,
-    bool clearDuration = false,
+    bool clearProgress = false,
   }) {
     return AppNotification(
-      id: id,
-      severity: severity ?? this.severity,
+      id: id ?? this.id,
+      kind: kind ?? this.kind,
       title: title ?? this.title,
       body: body ?? this.body,
-      // `copyWith` cannot express "back to nothing" with a nullable value, and
-      // an update that turns a pinned notification into a self-dismissing one
-      // has to be able to — as does one that drops a portrait or an icon.
-      //
-      // There is no `clearTitle`/`clearBody`: neither has a "back to nothing"
-      // state, which is the point of both being required.
       characterId: clearCharacterId ? null : (characterId ?? this.characterId),
       icon: clearIcon ? null : (icon ?? this.icon),
-      duration: clearDuration ? null : (duration ?? this.duration),
+      progress: clearProgress ? null : (progress ?? this.progress),
+      actions: actions ?? this.actions,
+      keycap: keycap ?? this.keycap,
+      stays: stays ?? this.stays,
+      repeat: repeat ?? this.repeat,
+      count: count ?? this.count,
+      subjects: subjects ?? this.subjects,
     );
   }
 
@@ -166,14 +256,20 @@ class AppNotification {
   bool operator ==(Object other) =>
       other is AppNotification &&
       other.id == id &&
-      other.severity == severity &&
+      other.kind == kind &&
       other.title == title &&
       other.body == body &&
       other.characterId == characterId &&
       other.icon == icon &&
-      other.duration == duration;
+      other.progress == progress &&
+      listEquals(other.actions, actions) &&
+      other.keycap == keycap &&
+      other.stays == stays &&
+      other.repeat == repeat &&
+      other.count == count &&
+      listEquals(other.subjects, subjects);
 
   @override
-  int get hashCode =>
-      Object.hash(id, severity, title, body, characterId, icon, duration);
+  int get hashCode => Object.hash(id, kind, title, body, characterId, icon, progress, Object.hashAll(actions), keycap,
+      stays, repeat, count, Object.hashAll(subjects));
 }

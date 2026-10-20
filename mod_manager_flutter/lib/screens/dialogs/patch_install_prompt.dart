@@ -90,12 +90,15 @@ class InstallAsNewMod extends PatchDestination {
 /// `role: patch` companion — the one path to `exact` on a companion, since we
 /// downloaded those bytes ourselves.
 class InstallIntoMod extends PatchDestination {
-  const InstallIntoMod({required this.modId, required this.modName});
+  const InstallIntoMod({required this.modId, required this.modName, this.characterId});
 
   /// The library folder id, which is what the write path acts on.
   final String modId;
 
   final String modName;
+
+  /// The mod's character, whose portrait leads what the install says about it.
+  final String? characterId;
 }
 
 /// Asks where a patch goes and what it patches, **at the moment the install
@@ -487,7 +490,7 @@ class _PatchInstallPromptState extends ConsumerState<PatchInstallPrompt> {
                         ),
                   onTap: () => setState(() {
                     _chosen[subject.modName] =
-                        InstallIntoMod(modId: mod.id, modName: mod.name);
+                        InstallIntoMod(modId: mod.id, modName: mod.name, characterId: mod.characterId);
                   }),
                 );
               },

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../services/bulk_update_check.dart';
 import '../../utils/notifications.dart';
+import '../../utils/state_providers.dart';
 
 /// What a whole-library update check reports back, as one line.
 ///
@@ -41,27 +43,35 @@ void showUpdateCheckOutcome(
     (_, true) => loc.t('mods.update.bulk_none_partial'),
     _ => loc.t('mods.update.bulk_none'),
   };
-  final (body, severity) = incomplete
-      ? (
-          plural('mods.update.bulk_failed', outcome.failed.length),
-          NotificationSeverity.warning,
-        )
-      // Finding updates is not a *problem*, so it stays neutral; the badges on
-      // the cards are what the user acts on. How many mods were looked at is
-      // the half the badges cannot show, which is what the body is for.
-      : (
-          plural('mods.update.bulk_checked', outcome.checks.length),
-          NotificationSeverity.info,
-        );
+  // How many mods were looked at is the half the badges cannot show, which is
+  // what the body is for, unless some could not be.
+  final body = incomplete
+      ? plural('mods.update.bulk_failed', outcome.failed.length)
+      : plural('mods.update.bulk_checked', outcome.checks.length);
+  final kind = switch ((found, incomplete)) {
+    (> 0, _) => NotificationKind.update,
+    (_, true) => NotificationKind.warning,
+    _ => NotificationKind.note,
+  };
 
   // No portrait: this is about a count across the whole library, and one
   // arbitrary face would claim the message is about that mod.
   context.notify.show(
+    kind,
     title,
     body: body,
-    severity: severity,
-    icon: found > 0 ? Icons.system_update_alt_rounded : null,
+    actions: [if (found > 0) reviewUpdatesAction(context)],
   );
+}
+
+/// Review, which opens the Updates page, for a card that found newer files.
+NotificationAction reviewUpdatesAction(BuildContext context) {
+  final container = ProviderScope.containerOf(context, listen: false);
+  return NotificationAction(context.loc.t('notifications.actions.review'), () {
+    // A mod's page would otherwise cover the Updates page.
+    container.read(openModPageProvider.notifier).state = null;
+    container.read(destinationProvider.notifier).state = AppDestination.updates;
+  });
 }
 
 /// What the **opt-in startup check** reports, and it reports only findings.
@@ -81,11 +91,10 @@ void showLaunchUpdateCheckOutcome(
   int found,
 ) {
   final loc = context.loc;
-  context.notify.show(
+  context.notify.updateAvailable(
     _plural(loc, 'mods.update.bulk_found', found),
     body: _plural(loc, 'mods.update.launch_checked', outcome.checks.length),
-    severity: NotificationSeverity.info,
-    icon: Icons.system_update_alt_rounded,
+    actions: [reviewUpdatesAction(context)],
   );
 }
 

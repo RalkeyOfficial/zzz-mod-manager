@@ -45,7 +45,7 @@ Future<void> showEditModDialog(
   Future<void> pasteImageInto() async {
     final bytes = await Pasteboard.image;
     if (bytes == null) {
-      notify.warning(
+      notify.note(
         loc.t('mods.snackbar.clipboard_empty_title'),
         body: loc.t('mods.snackbar.clipboard_empty_body'),
       );

@@ -46,6 +46,9 @@ Future<void> pumpLocalized(
   ProviderContainer? container,
   Size surfaceSize = const Size(1200, 800),
 
+  /// The app's theme to render in: ink by default, paper with [Brightness.light].
+  Brightness brightness = Brightness.dark,
+
   /// Pass false for a tree that contains an **indeterminate** progress
   /// indicator. Those animate forever, so `pumpAndSettle` never returns and the
   /// test fails as a timeout that says nothing about the widget. A single pump
@@ -79,7 +82,7 @@ Future<void> pumpLocalized(
     ],
     supportedLocales: [locale],
     // The app's own theme, so a layout test measures the text and the controls the app renders.
-    theme: buildAppTheme(brightness: Brightness.dark, accent: AccentChoice.violet),
+    theme: buildAppTheme(brightness: brightness, accent: AccentChoice.violet),
     // Exactly how `main.dart` mounts it, so a test that triggers a notification
     // renders one — `find.text` over a message is then the same assertion in a
     // test as it is on screen. Without it every `context.notify` call in a

@@ -71,13 +71,17 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
   /// remembered.
   bool _draining = false;
 
-  /// The one pinned card describing everything in flight.
+  /// The one Working card describing everything in flight.
   NotificationHandle? _progress;
 
   /// The jobs the card has already been raised for. Its only job is to tell
   /// "the user closed this" apart from "there is nothing to show" — see
   /// [_syncProgressNotification].
   Set<int> _announced = const {};
+
+  /// Every job the card has covered since it was raised. When that is one job,
+  /// the job's result takes the card over instead of raising its own.
+  Set<int> _covered = {};
 
   @override
   void initState() {
@@ -112,29 +116,28 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
 
   // ── Saying what is happening ───────────────────────────────────────────────
 
-  /// Keeps exactly one pinned notification in step with the queue.
+  /// Keeps exactly one Working card in step with the queue, its bar the
+  /// queue's [QueueProgress.fraction] and a sweep while a size is unknown.
   ///
-  /// **One card for the whole queue, not one per download.** The stack holds
-  /// four and drops the oldest dismissable one, so a card per job turns a
-  /// five-mod queue into a wall and pushes off the messages that actually need
-  /// reading. The card carries the aggregate; the panel is where a per-mod
-  /// breakdown lives.
-  ///
-  /// Pinned, because the end of a download is an event rather than a moment —
-  /// and that is exactly the shape [NotificationCenter.pinned] exists for: the
-  /// **body** is the stable subject and only the title is rewritten.
+  /// **One card for the whole queue, not one per download.** A card per job
+  /// turns a five-mod queue into a wall that folds away the messages that
+  /// actually need reading. The card carries the aggregate; the panel is where a
+  /// per-mod breakdown lives.
   ///
   /// It is raised when a job the card has not covered yet appears, and updated
-  /// from then on. That distinction is what lets the user close it: nothing this
-  /// app shows may be un-dismissable, and a card re-raised on the next progress
-  /// tick would ignore them. Closing it therefore holds until the next time they
-  /// ask for something, which is itself a request to be told about it.
+  /// from then on. That distinction is what lets the user hide it: a card
+  /// re-raised on the next progress tick would ignore them. Hiding it holds
+  /// until the next time they ask for something, which is itself a request to
+  /// be told about it. A card that covered one job becomes that job's result;
+  /// one that covered several is dismissed when the queue empties, and the
+  /// results count on their own card.
   void _syncProgressNotification(List<DownloadJob> jobs) {
     final progress = aggregateProgress(jobs);
     if (progress.isEmpty) {
       _progress?.dismiss();
       _progress = null;
       _announced = const {};
+      _covered = {};
       return;
     }
 
@@ -150,34 +153,49 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
         : loc.t('downloads.notification_body_several',
             params: {'count': '${progress.active.length}'});
 
+    final fraction = progress.fraction;
     final handle = _progress;
-    if (handle == null || !handle.isVisible) {
+    if (handle == null || (!handle.isVisible && isNew)) {
       if (!isNew) return;
-      _progress = context.notify.pinned(
+      handle?.dismiss();
+      _covered = {...seqs};
+      _progress = context.notify.working(
         title,
         body: body,
         // A count-bearing message gets no portrait: one arbitrary face would
         // claim the card is about that mod, and which mod sorted first would
         // change between runs. Same rule the bulk reports follow.
         characterId: only?.characterId,
+        progress: fraction,
       );
       return;
     }
+    // A card the user hid takes this silently, so a lone job's result can still
+    // come back as a card.
+    _covered.addAll(seqs);
     handle.update(
       title: title,
       body: body,
       characterId: only?.characterId,
       clearCharacterId: only == null,
-      // Without this an update re-clocks nothing, but being explicit is what
-      // stops a future severity change quietly giving the card a timer.
-      pin: true,
+      progress: fraction,
+      clearProgress: fraction == null,
     );
+  }
+
+  /// The card, handed over to [job]'s result when it covered [job] alone.
+  /// The host lets go of it, so the queue emptying does not dismiss the result.
+  NotificationHandle? _takeCardFor(DownloadJob job) {
+    final handle = _progress;
+    if (handle == null || _covered.length != 1 || !_covered.contains(job.seq)) return null;
+    _progress = null;
+    return handle;
   }
 
   /// `Downloading 3 mods · 24% · 18 MB/s · 3m left`.
   ///
   /// A **percentage** rather than two byte counts, because the title has no
-  /// `maxLines` and wraps: `5.0 MB / 21.9 MB` costs a second line on a 360px
+  /// `maxLines` and wraps: `5.0 MB / 21.9 MB` costs a second line on a 380px
   /// card and says less than `24%` does. The byte figures are a row away in the
   /// panel.
   String _progressTitle(AppLocalizations loc, QueueProgress progress) {
@@ -248,11 +266,19 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
       // A file the user cannot see arriving in a folder they would have to go
       // and look at — the case the notification rules keep a *success* message
       // for. The body is the path because the path is the whole point.
-      context.notify.success(
-        context.loc.t('marketplace.download_saved_title'),
-        body: archive.path,
-        characterId: job.characterId,
-      );
+      final title = context.loc.t('marketplace.download_saved_title');
+      final card = _takeCardFor(job);
+      if (card != null) {
+        card.update(
+          kind: NotificationKind.done,
+          title: title,
+          body: archive.path,
+          characterId: job.characterId,
+          clearCharacterId: job.characterId == null,
+        );
+      } else {
+        context.notify.done(title, body: archive.path, characterId: job.characterId);
+      }
       queue.markDone(job.seq);
       return;
     }
@@ -282,19 +308,28 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
         requestedName: job.result?.requestedName,
       );
     } catch (error) {
+      // Taken before the queue changes, or the queue emptying dismisses it.
+      final card = _takeCardFor(job);
       queue.markFailed(job.seq, InstallFailure('$error'));
       if (!mounted) return;
       // The mod is new; nothing was updated — so not the update flow's wording.
-      context.notify.error(
-        context.loc.t('marketplace.install_failed_title'),
-        body: job.subject,
-        characterId: job.characterId,
-      );
+      final title = context.loc.t('marketplace.install_failed_title');
+      if (card != null) {
+        card.update(
+          kind: NotificationKind.error,
+          title: title,
+          body: job.subject,
+          characterId: job.characterId,
+          clearCharacterId: job.characterId == null,
+        );
+      } else {
+        context.notify.error(title, body: job.subject, characterId: job.characterId);
+      }
       return;
     }
 
     if (!mounted) return;
-    showInstallResult(context, result);
+    showInstallResult(context, result, into: _takeCardFor(job), characterId: job.characterId);
 
     // The library just changed, and both the Library's grid and the
     // marketplace's "in library" badges are drawn from it. Invalidate rather
@@ -305,7 +340,7 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
 
     if (result.mods.isNotEmpty) {
       queue.markDone(job.seq);
-    } else if (result.failureSeverity == NotificationSeverity.error) {
+    } else if (result.failureKind == NotificationKind.error) {
       queue.markFailed(
         job.seq,
         InstallFailure(
@@ -313,8 +348,9 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
         ),
       );
     } else if (result.failure != null) {
-      // A warning that installed nothing — every folder already existed, the
-      // archive was empty. Nothing to retry and nothing went wrong.
+      // An install that put nothing in: every folder already existed (a note),
+      // or the archive held no mod folder (a warning). Nothing to retry and
+      // nothing failed.
       queue.markDone(job.seq);
     } else {
       queue.markCancelled(job.seq);

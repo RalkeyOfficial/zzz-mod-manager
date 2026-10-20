@@ -58,8 +58,12 @@ void reportSkippedWhileWriting(AppLocalizations loc, NotificationCenter notify, 
   notify.warning(
     loc.plural('library.all.skipped_writing_title', skipped.length, params: {'count': '${skipped.length}'}),
     body: loc.t('library.all.skipped_writing_body', params: {'names': skipped.map((m) => m.name).join(', ')}),
+    characterId: _soleCharacter(skipped),
   );
 }
+
+/// The portrait for a report about [mods]: the one mod's character, and none for several.
+String? _soleCharacter(List<ModInfo> mods) => mods.length == 1 ? mods.single.characterId : null;
 
 /// Turns [selected] on, each through `ApiService.enableMod` as the switch does, so a character's other mods go off
 /// under One at a time. Reports only what didn't happen: the table shows what did.
@@ -146,6 +150,7 @@ Future<void> bulkEnable(BuildContext context, ProviderContainer container, List<
     notify.error(
       loc.plural('library.all.enable_failed_title', failed.length, params: {'count': '${failed.length}'}),
       body: failed.map((m) => m.name).join(', '),
+      characterId: _soleCharacter(failed),
     );
   }
   if (plan.leftOff.isNotEmpty) {
@@ -186,6 +191,7 @@ Future<void> bulkDisable(BuildContext context, ProviderContainer container, List
     notify.error(
       loc.plural('library.all.disable_failed_title', failed.length, params: {'count': '${failed.length}'}),
       body: failed.map((m) => m.name).join(', '),
+      characterId: _soleCharacter(failed),
     );
   }
   reportSkippedWhileWriting(loc, notify, writing);
@@ -244,6 +250,7 @@ Future<bool> bulkDelete(BuildContext context, ProviderContainer container, List<
     notify.error(
       loc.plural('library.all.delete_failed_title', failed.length, params: {'count': '${failed.length}'}),
       body: failed.map((m) => m.name).join(', '),
+      characterId: _soleCharacter(failed),
     );
   }
   reportSkippedWhileWriting(loc, notify, writing);

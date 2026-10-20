@@ -171,7 +171,12 @@ class ModDetailsPanel extends ConsumerWidget {
                 const SizedBox(height: 12),
                 _PathButton(mod: mod),
                 const SizedBox(height: 18),
-                ModNoteField(key: ValueKey('note_${mod.id}'), modId: mod.id, writer: noteWriter),
+                ModNoteField(
+                  key: ValueKey('note_${mod.id}'),
+                  modId: mod.id,
+                  characterId: mod.characterId,
+                  writer: noteWriter,
+                ),
               ],
             ),
           ),
@@ -356,7 +361,9 @@ class _PathButton extends ConsumerWidget {
           onTap: () async {
             await Clipboard.setData(ClipboardData(text: folder));
             // The clipboard can't be seen, so its success is worth saying.
-            if (context.mounted) context.notify.success(loc.t('library.details.path_copied_title'), body: folder);
+            if (context.mounted) {
+              context.notify.done(loc.t('library.details.path_copied_title'), body: folder, characterId: mod.characterId);
+            }
           },
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),

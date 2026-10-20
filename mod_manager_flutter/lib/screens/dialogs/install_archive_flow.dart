@@ -258,7 +258,7 @@ Future<InstallResult> installArchiveFlow(
     }
 
     if (importedMods.isEmpty && decision.writes.isEmpty) {
-      return InstallResult.warning(
+      return InstallResult.note(
         loc.t('marketplace.install_duplicate_title'),
         loc.t('marketplace.install_duplicate_body'),
       );

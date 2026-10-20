@@ -70,14 +70,14 @@ class _ReclaimButtonState extends ConsumerState<ReclaimButton> {
     final refusals = _refusals(loc, outcome);
 
     if (outcome.isEmpty) {
-      notify.info(
+      notify.note(
         loc.t('storage.reclaim.nothing_title'),
         body: [loc.t('storage.reclaim.nothing_body'), ...refusals].join('\n'),
       );
       return;
     }
 
-    notify.success(
+    notify.done(
       loc.t('storage.reclaim.done_title', params: {
         // What the volume actually gave back where that could be measured: on a
         // compressed or copy-on-write filesystem the sum of file lengths is not

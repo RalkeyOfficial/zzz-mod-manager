@@ -180,20 +180,29 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
   Future<void> _retag(ModInfo mod, String groupId) async {
     final notify = context.notify;
     final failedTitle = loc.t('library.card.retag_failed_title');
-    final saving = notify.pinned(
+    final saving = notify.working(
       loc.t('mods.dialog.saving_tag'),
       body: mod.name,
       characterId: isOtherType(groupId) ? null : groupId,
     );
+    // A failure turns the card into the error in place, rather than raising a second card beside it.
+    void failed() => saving.update(kind: NotificationKind.error, title: failedTitle, characterId: mod.characterId);
+    var ok = false;
     try {
       // Writes the in-folder sidecar (rename-safe) and mirrors to config.json.
       final moved = await ApiService.setModCharacter(mod.id, groupId == unknownCharacterId ? '' : groupId);
-      if (!moved) notify.error(failedTitle, body: mod.name, characterId: mod.characterId);
+      if (moved) {
+        ok = true;
+      } else {
+        failed();
+      }
       await loadMods();
     } catch (e) {
-      notify.error(failedTitle, body: mod.name, characterId: mod.characterId);
+      ok = false;
+      failed();
     } finally {
-      saving.dismiss();
+      // The card moves to its new row, which says it worked.
+      if (ok) saving.dismiss();
     }
   }
 
@@ -1057,7 +1066,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
             // count and how long it took.
           } else {
             if (mounted) {
-              context.notify.warning(
+              context.notify.error(
                 loc.t('mods.snackbar.import_error_title'),
                 body: '${archiveFile.name}: ${result.error}',
               );
@@ -1093,7 +1102,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
         // asked and answered. "No mod folders found" would be a different claim
         // entirely, and a false one.
         if (mounted && !declinedDuplicate) {
-          context.notify.warning(
+          context.notify.note(
             loc.t('mods.snackbar.import_no_folders_title'),
             body: loc.t('mods.snackbar.import_no_folders_body'),
           );
@@ -1280,7 +1289,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
             );
             context.notify.error(lines.title, body: lines.body);
           } else {
-            context.notify.warning(
+            context.notify.note(
               loc.t('mods.snackbar.import_duplicates_title'),
               body: loc.t('mods.snackbar.import_duplicates_body'),
             );
@@ -1388,8 +1397,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       );
 
       // Nothing new to report: every folder went into a mod that already
-      // exists, and the change is not visible as a card. The pinned "patch
-      // applied" notification is the report for that, and a dialog announcing
+      // exists, and the change is not visible as a card. The "patch applied"
+      // notification is the report for that, and a dialog announcing
       // "0 mods imported" over it is worse than no dialog.
       if (mounted && importedMods.isNotEmpty) {
         // Показуємо детальне повідомлення про успіх
@@ -1622,7 +1631,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
           clipboardData.text == null ||
           clipboardData.text!.isEmpty) {
         if (mounted) {
-          context.notify.warning(
+          context.notify.note(
             loc.t('clipboard.empty_title'),
             body: loc.t('clipboard.empty_body'),
           );
@@ -1639,7 +1648,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
 
       if (paths.isEmpty) {
         if (mounted) {
-          context.notify.warning(
+          context.notify.note(
             loc.t('clipboard.no_paths_title'),
             body: loc.t('clipboard.no_paths_body'),
           );
@@ -1662,7 +1671,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
 
       if (validFolders.isEmpty) {
         if (mounted) {
-          context.notify.warning(
+          context.notify.note(
             loc.t('clipboard.no_valid_title'),
             body: loc.t('clipboard.no_valid_body'),
           );

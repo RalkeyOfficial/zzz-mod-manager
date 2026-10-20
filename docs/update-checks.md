@@ -550,16 +550,10 @@ Four decisions, all in `services/launch_update_check.dart` (pure) and
   takes effect. An **unscanned** library does not close the moment, though, or
   the commonest ordering there is — the host mounts, the scan lands a moment
   later — would skip the check every time.
-- **It speaks only when it found updates.** Two silences, and neither is an
-  oversight. A "nothing new" card on every launch is noise nobody asked for,
-  and the badges carry that answer anyway. A "couldn't reach N mods" card on
-  every offline start is what gets the setting switched off — and it does not
-  break §5's rule that *"no updates"* and *"no updates among the mods we could
-  reach"* are different statements, because a silent pass asserts **neither**.
-  The manual check is still the loud one and is one click away. A pass that
-  found updates *and* failed reports the updates: that is the actionable half.
-  The card's body says the check happened *at startup*, since a notification
-  nobody pressed for has to explain its own presence.
+- **It speaks only when it found updates.** Two silences, and neither is an oversight. A "nothing new" card on every launch is noise nobody asked for, and the badges carry that answer anyway.
+  A "couldn't reach N mods" card on every offline start is what gets the setting switched off — and it does not break §5's rule that *"no updates"* and *"no updates among the mods we could reach"* are different statements, because a silent pass asserts **neither**.
+  The manual check is still the loud one and is one click away. A pass that found updates *and* failed reports the updates: that is the actionable half.
+  The card's body says the check happened *at startup*, since a notification nobody pressed for has to explain its own presence. It is an Update card with **Review**, which opens the Updates page.
 - **It never opens the resolution screen.** The manual check does when there is something to sort out ([§6](#the-results-screen)); a modal thrown over an app the user has just opened is exactly the interruption that arrangement exists to avoid.
   The screen stays reachable from the Updates page's Pick the files one by one and Sort out tracking…, and rebuilds itself from the records this pass leaves behind, so it costs no second request.
 
@@ -627,6 +621,8 @@ badges:
 |---|---|
 | nothing to resolve | the summary as a notification |
 | mods whose origin can be sorted out | the results screen, which states the summary itself |
+
+The summary is an Update card with **Review**, which opens the Updates page, when the pass found newer files; a warning when it found none and some mods could not be reached; and a note when it found none among every mod it checked.
 
 On a fully sorted-out library a modal would stand between the user and the badges
 they pressed the button to see; when there are questions, raising a notification

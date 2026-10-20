@@ -192,14 +192,14 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       return;
     }
     // A successful enqueue says nothing here. `DownloadQueueHost` raises a
-    // pinned progress notification the same turn, and that card *is* the
+    // Working progress notification the same turn, and that card *is* the
     // acknowledgement — a second "download started" beside it would be the app
     // saying the same thing twice.
     //
     // The exception is a press that changes nothing. The card is already up and
     // its count does not move, so without this the button reads as broken.
     if (duplicate) {
-      context.notify.info(
+      context.notify.note(
         loc.t('marketplace.download_already_queued_title'),
         body: subject,
         characterId: characterId,

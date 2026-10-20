@@ -111,7 +111,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
         );
       }
       if (mounted) {
-        context.notify.success(
+        context.notify.done(
           loc.t('settings.save_success_title'),
           body: loc.t('settings.save_success_body'),
         );

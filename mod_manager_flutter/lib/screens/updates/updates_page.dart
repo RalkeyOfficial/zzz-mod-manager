@@ -781,7 +781,7 @@ class _NewerFileRow extends ConsumerWidget {
     final container = ProviderScope.containerOf(context, listen: false);
     final ok = await ignoreUpdate(container, mod: mod, check: check, writer: writer);
     if (ok) return;
-    notify.warning(
+    notify.error(
       loc.t('mods.update.dismiss_failed_title'),
       body: loc.t('mods.update.dismiss_failed', params: {'mod': mod.name}),
       characterId: mod.characterId,
@@ -1267,7 +1267,9 @@ class _MarkedCardState extends ConsumerState<_MarkedCard> {
     }
     if (failed.isNotEmpty || missing.isNotEmpty) {
       final count = failed.length + missing.length;
-      notify.warning(
+      // A warning when some were put back, an error when none were.
+      notify.show(
+        undone.isEmpty ? NotificationKind.error : NotificationKind.warning,
         loc.plural('library.updates.undo_failed_title', count, params: {'count': '$count'}),
         body: [
           if (failed.isNotEmpty) loc.t('library.updates.undo_failed_write', params: {'names': failed.join(', ')}),

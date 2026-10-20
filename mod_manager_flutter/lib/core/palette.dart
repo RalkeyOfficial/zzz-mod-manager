@@ -110,6 +110,10 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     required this.artworkScrim,
     required this.onArtwork,
     required this.toast,
+    required this.notification,
+    required this.notificationError,
+    required this.notificationErrorHover,
+    required this.notificationShadow,
     required this.noteMissing,
     required this.coverageWhich,
     required this.hatch,
@@ -242,6 +246,18 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
   /// A bar floating over the page, such as the All mods table's selection actions.
   final TonePair toast;
 
+  /// A notification card.
+  final TonePair notification;
+
+  /// A notification card that reports an error.
+  final TonePair notificationError;
+
+  /// An action on an error notification under the pointer.
+  final Color notificationErrorHover;
+
+  /// The shadow a notification card casts.
+  final Color notificationShadow;
+
   /// The note that explains a missing mod folder.
   final TonePair noteMissing;
 
@@ -258,6 +274,9 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
   Color get accentWash => Color.lerp(card, accent, 0.14)!;
 
   TonePair get badgeOn => TonePair(accent, onAccent);
+
+  /// The tile behind a Done notification's icon: the accent washed into the card.
+  TonePair get notificationDoneTile => TonePair(Color.lerp(notification.background, accent, 0.16)!, accent);
 
   TonePair element(ElementTone tone) => elements[tone]!;
 
@@ -356,6 +375,10 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       artworkScrim: const Color(0xA60B0C0E),
       onArtwork: const Color(0xFFC9CCD2),
       toast: const TonePair(Color(0xFF1E2125), Color(0xFFECEDEE), Color(0xFF353941)),
+      notification: const TonePair(Color(0xFF1B1D21), Color(0xFFECEDEE), Color(0xFF30333A)),
+      notificationError: const TonePair(Color(0xFF1E1514), Color(0xFFECEDEE), Color(0xFF5A2620)),
+      notificationErrorHover: const Color(0xFF3A2220),
+      notificationShadow: const Color(0x73000000),
       noteMissing: const TonePair(Color(0xFF1A0F0D), Color(0xFFE8C4BF), Color(0xFF3A2420)),
       coverageWhich: const Color(0xFF3D7BC0),
       hatch: const TonePair(Color(0xFF16181B), Color(0xFF2A2D33)),
@@ -454,6 +477,10 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       artworkScrim: const Color(0xA60B0C0E),
       onArtwork: const Color(0xFFC9CCD2),
       toast: const TonePair(Color(0xFFFDFBF8), Color(0xFF1B1A18), Color(0xFFD8D0C6)),
+      notification: const TonePair(Color(0xFFFDFBF8), Color(0xFF1B1A18), Color(0xFFD8D0C6)),
+      notificationError: const TonePair(Color(0xFFFBEDEA), Color(0xFF1B1A18), Color(0xFFEDC6BE)),
+      notificationErrorHover: const Color(0xFFF5DBD6),
+      notificationShadow: const Color(0x6615161C),
       noteMissing: const TonePair(Color(0xFFFBEDEA), Color(0xFF7A2A1C), Color(0xFFEDC6BE)),
       coverageWhich: const Color(0xFF5B93D6),
       hatch: const TonePair(Color(0xFFF2EDE7), Color(0xFFD3CBC2)),
@@ -512,6 +539,10 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     artworkScrim: artworkScrim,
     onArtwork: onArtwork,
     toast: toast,
+    notification: notification,
+    notificationError: notificationError,
+    notificationErrorHover: notificationErrorHover,
+    notificationShadow: notificationShadow,
     noteMissing: noteMissing,
     coverageWhich: coverageWhich,
     hatch: hatch,
@@ -578,6 +609,10 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       artworkScrim: c(artworkScrim, other.artworkScrim),
       onArtwork: c(onArtwork, other.onArtwork),
       toast: TonePair.lerp(toast, other.toast, t),
+      notification: TonePair.lerp(notification, other.notification, t),
+      notificationError: TonePair.lerp(notificationError, other.notificationError, t),
+      notificationErrorHover: c(notificationErrorHover, other.notificationErrorHover),
+      notificationShadow: c(notificationShadow, other.notificationShadow),
       noteMissing: TonePair.lerp(noteMissing, other.noteMissing, t),
       coverageWhich: c(coverageWhich, other.coverageWhich),
       hatch: TonePair.lerp(hatch, other.hatch, t),

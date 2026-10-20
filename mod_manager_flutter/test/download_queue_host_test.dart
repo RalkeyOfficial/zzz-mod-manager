@@ -74,6 +74,13 @@ void main() {
     return container;
   }
 
+  /// Fixed frames rather than settling: the Working card's spinner and sweep repeat for as long as it shows.
+  Future<void> frames(WidgetTester t) async {
+    for (var i = 0; i < 10; i++) {
+      await t.pump(const Duration(milliseconds: 100));
+    }
+  }
+
   group('an install that has to ask', () {
     testWidgets('raises its dialog, from a context above the tabs', (t) async {
       final container = seeded([job(subject: 'Ellen Swimsuit')]);
@@ -88,7 +95,7 @@ void main() {
         settle: false,
       );
       // The host reconciles with the queue after its first frame.
-      await t.pumpAndSettle();
+      await frames(t);
 
       expect(find.text('Which folders?'), findsOneWidget);
     });
@@ -108,7 +115,7 @@ void main() {
         container: container,
         settle: false,
       );
-      await t.pumpAndSettle();
+      await frames(t);
 
       expect(find.text('Which folders?'), findsOneWidget);
       expect(
@@ -120,18 +127,89 @@ void main() {
 
       // Answering the first lets the second through.
       await t.tap(find.text('OK'));
-      await t.pumpAndSettle();
+      await frames(t);
       expect(find.text('Which folders?'), findsOneWidget);
       expect(container.read(downloadQueueProvider).first.state,
           DownloadJobState.done);
 
       await t.tap(find.text('OK'));
-      await t.pumpAndSettle();
+      await frames(t);
       expect(find.text('Which folders?'), findsNothing);
+    });
+
+    testWidgets('a lone job turns its Working card into the result', (t) async {
+      final container = seeded([job(subject: 'Ellen Swimsuit')]);
+
+      await pumpLocalized(
+        t,
+        DownloadQueueHost(
+          installer: _askingInstaller('Which folders?'),
+          child: const SizedBox.shrink(),
+        ),
+        container: container,
+        settle: false,
+      );
+      await frames(t);
+      final working = container.read(notificationsProvider).single;
+      expect(working.kind, NotificationKind.working);
+
+      await t.tap(find.text('OK'));
+      await frames(t);
+      final result = container.read(notificationsProvider).single;
+      expect(result.id, working.id);
+      expect(result.kind, NotificationKind.done);
+      expect(result.title, 'Mod installed');
+      await t.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('several jobs end in one counted result', (t) async {
+      final container = seeded([job(), job()]);
+
+      await pumpLocalized(
+        t,
+        DownloadQueueHost(
+          installer: _askingInstaller('Which folders?'),
+          child: const SizedBox.shrink(),
+        ),
+        container: container,
+        settle: false,
+      );
+      await frames(t);
+      await t.tap(find.text('OK'));
+      await frames(t);
+      await t.tap(find.text('OK'));
+      await frames(t);
+
+      final cards = container.read(notificationsProvider);
+      expect(cards.map((n) => n.kind), [NotificationKind.done], reason: 'the Working card goes with the queue');
+      expect(cards.single.title, '2 mods installed');
+      await t.pump(const Duration(seconds: 6));
     });
   });
 
-  group('the pinned progress notification', () {
+  testWidgets('an empty archive is a timed warning, and its download is marked done, not failed', (t) async {
+    final container = seeded([job(subject: 'Ellen Swimsuit')]);
+
+    await pumpLocalized(
+      t,
+      DownloadQueueHost(
+        installer: (context, ref, {required archiveFile, required mod, required file, knownMd5, requestedName}) async =>
+            InstallResult.warning('Nothing to install', "The archive doesn't contain any mod folders."),
+        child: const SizedBox.shrink(),
+      ),
+      container: container,
+      settle: false,
+    );
+    await frames(t);
+
+    final card = container.read(notificationsProvider).single;
+    expect(card.kind, NotificationKind.warning);
+    expect(card.hasClock, isTrue);
+    expect(container.read(downloadQueueProvider).single.state, DownloadJobState.done);
+    await t.pump(const Duration(seconds: 9));
+  });
+
+  group('the Working progress card', () {
     Future<void> pump(WidgetTester t, ProviderContainer container) async {
       await pumpLocalized(
         t,
@@ -169,19 +247,34 @@ void main() {
       await pump(t, container);
 
       // A percentage rather than two byte counts: the card's title has no
-      // maxLines and `5.0 MB / 21.9 MB` costs a second line on a 360px card.
+      // maxLines and `5.0 MB / 21.9 MB` costs a second line on a 380px card.
       expect(find.textContaining('Downloading'), findsWidgets);
       expect(find.textContaining('25%'), findsOneWidget);
       expect(find.textContaining('15.0 KB/s'), findsOneWidget);
       expect(find.textContaining('2m left'), findsOneWidget);
       expect(find.text('Ellen Swimsuit'), findsOneWidget);
+      expect(container.read(notificationsProvider).single.progress, 0.25,
+          reason: "the bar is the queue's fraction");
+    });
+
+    testWidgets('draws the sweep while a size is unknown', (t) async {
+      final container = seeded([
+        job(
+          state: DownloadJobState.running,
+          subject: 'Ellen Swimsuit',
+          progress: const DownloadProgress(state: DownloadState.downloading, received: 10),
+        ),
+      ]);
+      await pump(t, container);
+
+      expect(container.read(notificationsProvider).single.progress, isNull);
+      expect(find.byKey(const ValueKey('notification-sweep')), findsOneWidget);
     });
 
     testWidgets('is one card for the whole queue, not one per download',
         (t) async {
-      // Four cards is the cap and it drops the oldest, so a card per job turns a
-      // five-mod queue into a wall and pushes off the messages that need
-      // reading.
+      // A card per job turns a five-mod queue into a wall that folds away the
+      // messages that need reading.
       final container = seeded([
         for (var i = 0; i < 3; i++)
           job(
@@ -218,14 +311,13 @@ void main() {
       container.read(downloadQueueProvider.notifier).markDone(1);
       await t.pump();
 
-      // Pinned means "ends on a condition", and this is the condition. What is
+      // A Working card ends on a condition, and this is the condition. What is
       // left to say about a finished install is said by the install itself.
       expect(find.text('Ellen Swimsuit'), findsNothing);
     });
 
-    testWidgets('stays closed once the user closes it', (t) async {
-      // Nothing this app puts on screen may be un-dismissable, so a card
-      // re-raised on the next progress tick would override them.
+    testWidgets('stays hidden once the user hides it', (t) async {
+      // A card re-raised on the next progress tick would override them.
       final container = seeded([
         job(
           state: DownloadJobState.running,
@@ -244,7 +336,7 @@ void main() {
       // overlay's business and has its own test, and what is under examination
       // here is what the host does *after* the card is gone.
       final center = container.read(notificationsProvider.notifier);
-      center.dismiss(container.read(notificationsProvider).single.id);
+      center.close(container.read(notificationsProvider).single.id);
       await t.pump();
       expect(find.text('Ellen Swimsuit'), findsNothing);
 

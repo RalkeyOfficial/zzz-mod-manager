@@ -2,54 +2,66 @@ import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mod_manager_flutter/screens/components/character_avatar.dart';
+import 'package:mod_manager_flutter/core/palette.dart';
+import 'package:mod_manager_flutter/screens/components/character_tile.dart';
 import 'package:mod_manager_flutter/screens/components/notification_overlay.dart';
+import 'package:mod_manager_flutter/screens/shell/keycap.dart';
+import 'package:mod_manager_flutter/screens/shell/status_bar.dart';
 import 'package:mod_manager_flutter/utils/notifications.dart';
 
 import 'support/localized_harness.dart';
 
-/// The corner of the window notifications actually live in.
+/// The corner of the window notifications live in.
 ///
-/// The queue itself is `notifications_test.dart`; everything here is what only
-/// the widget can answer — that a card appears at all, that the newest is the
-/// bottom one, that the close button works, that the auto-dismiss clock runs
-/// *here* and stops while the pointer is over the card, and what the leading
-/// slot renders.
+/// The queue itself is `notifications_test.dart`; everything here is what only the widget can answer: how a card
+/// looks for each kind, where the stack sits, the fold, the actions, and the clock that runs *here* and stops while
+/// the pointer is over the stack.
+///
+/// A Working card's spinner and sweep repeat forever, so a test that shows one pumps fixed durations rather than
+/// settling.
 void main() {
   late ProviderContainer container;
-  NotificationCenter center() =>
-      container.read(notificationsProvider.notifier);
+  NotificationCenter center() => container.read(notificationsProvider.notifier);
+  final palette = ZenithPalette.dark(AccentChoice.violet);
 
   setUp(() => container = ProviderContainer());
   tearDown(() => container.dispose());
 
-  /// The overlay, mounted the way `main.dart` mounts it — above the app's own
-  /// content rather than inside it.
+  /// The overlay, mounted the way `main.dart` mounts it: above the app's own content rather than inside it.
   Future<void> pumpOverlay(
     WidgetTester tester, {
     Size surfaceSize = const Size(1200, 800),
+    Brightness brightness = Brightness.dark,
   }) async {
-    await pumpLocalized(
-      tester,
-      const Center(child: Text('app content')),
-      container: container,
-      surfaceSize: surfaceSize,
-    );
+    await pumpLocalized(tester, const Center(child: Text('app content')),
+        container: container, surfaceSize: surfaceSize, brightness: brightness);
     expectBuilt(NotificationHost);
   }
 
-  /// The bundled file a rendered portrait actually points at, or null when the
-  /// slot rendered an icon instead.
-  ///
-  /// **Asserted through the `AssetImage`, never through pixels.** `Image.asset`
-  /// resolves asynchronously and `pumpAndSettle` does not wait for real async
-  /// I/O — the same trap `localized_harness.dart` documents for localizations.
-  /// This assertion is synchronous, so it cannot pass vacuously.
+  /// Lets a card in without settling, for a stack that holds a spinner or a sweep.
+  Future<void> pumpIn(WidgetTester tester) async {
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+  }
+
+  /// The bundled file a rendered portrait points at, or null when the slot rendered an icon. Asserted through the
+  /// `AssetImage`, never through pixels, which resolve asynchronously.
   String? portraitAsset(WidgetTester tester) {
     final images = tester.widgetList<Image>(find.byType(Image));
     if (images.isEmpty) return null;
     return (images.first.image as AssetImage).assetName;
   }
+
+  BoxDecoration decorationOf(WidgetTester tester, Finder finder) =>
+      tester.widget<Container>(finder).decoration! as BoxDecoration;
+
+  /// The colour the spinner's arc is painted in. Its painter is private, so it is read dynamically.
+  Color arcColour(WidgetTester tester, Finder spinner) {
+    final paint = tester.widget<CustomPaint>(find.descendant(of: spinner, matching: find.byType(CustomPaint)).first);
+    return (paint.painter! as dynamic).color as Color;
+  }
+
+  Finder card(String title) => find.ancestor(of: find.text(title), matching: find.byKey(const ValueKey('notification-card')));
 
   testWidgets('nothing is drawn while the queue is empty', (tester) async {
     await pumpOverlay(tester);
@@ -57,345 +69,631 @@ void main() {
     expect(find.byIcon(Icons.close_rounded), findsNothing);
   });
 
-  testWidgets('both levels render', (tester) async {
-    await pumpOverlay(tester);
-    center().success('Mod installed', body: 'Ellen Swimsuit');
-    await tester.pumpAndSettle();
+  group('the card', () {
+    testWidgets('is 380 wide on the notification ground, with both levels in their roles', (tester) async {
+      await pumpOverlay(tester);
+      center().done('Mod installed', body: 'Ellen Swimsuit');
+      await tester.pumpAndSettle();
 
-    expect(find.text('Mod installed'), findsOneWidget);
-    expect(find.text('Ellen Swimsuit'), findsOneWidget);
-    expect(find.byIcon(Icons.close_rounded), findsOneWidget);
-  });
+      expect(tester.getSize(card('Mod installed')).width, 380);
+      final decoration = decorationOf(tester, card('Mod installed'));
+      expect(decoration.color, palette.notification.background);
+      expect(decoration.borderRadius, BorderRadius.circular(12));
+      expect((decoration.border! as Border).top.color, palette.notification.border);
 
-  testWidgets('each severity brings its own icon', (tester) async {
-    await pumpOverlay(tester);
-    center().success('a', body: '1');
-    center().warning('b', body: '2');
-    center().error('c', body: '3');
-    await tester.pumpAndSettle();
+      final theme = Theme.of(tester.element(find.text('Mod installed')));
+      final title = tester.widget<Text>(find.text('Mod installed')).style!;
+      expect(title.fontSize, theme.textTheme.bodyMedium!.fontSize);
+      expect(title.fontWeight, FontWeight.w600);
+      expect(title.color, palette.text);
+      final body = tester.widget<Text>(find.text('Ellen Swimsuit')).style!;
+      expect(body.fontSize, theme.textTheme.bodySmall!.fontSize);
+      expect(body.color, palette.text2);
+      await tester.pump(const Duration(seconds: 6));
+    });
 
-    expect(find.byIcon(Icons.check_circle_outline_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.error_outline_rounded), findsOneWidget);
-  });
+    testWidgets('an error card has its own ground', (tester) async {
+      await pumpOverlay(tester);
+      center().error('Couldn\'t turn on', body: 'Lab Coat');
+      await tester.pumpAndSettle();
 
-  testWidgets('an explicit icon overrides the severity default',
-      (tester) async {
-    await pumpOverlay(tester);
-    center().success('Saved', body: 'x', icon: Icons.save_alt_rounded);
-    await tester.pumpAndSettle();
+      final decoration = decorationOf(tester, card('Couldn\'t turn on'));
+      expect(decoration.color, palette.notificationError.background);
+      expect((decoration.border! as Border).top.color, palette.notificationError.border);
+    });
 
-    expect(find.byIcon(Icons.save_alt_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.check_circle_outline_rounded), findsNothing);
+    // Pinned to the palette's tokens, so a wrong mapping in `notificationLook` fails here.
+    final tiles = <NotificationKind, (Color, Color, IconData)>{
+      NotificationKind.done: (palette.notificationDoneTile.background, palette.accent, Icons.check_rounded),
+      NotificationKind.note: (palette.hover, palette.textProse, Icons.info_outline_rounded),
+      NotificationKind.update: (palette.badgeUpdate.background, palette.badgeUpdate.foreground, Icons.arrow_circle_up_outlined),
+      NotificationKind.needsYou: (palette.badgeInfo.background, palette.badgeInfo.foreground, Icons.download_rounded),
+      NotificationKind.warning: (palette.badgeUpdate.background, palette.badgeUpdate.foreground, Icons.warning_amber_rounded),
+      NotificationKind.error: (palette.badgeMissing.background, palette.badgeMissing.foreground, Icons.highlight_off_rounded),
+    };
+    for (final MapEntry(key: kind, value: (ground, ink, glyph)) in tiles.entries) {
+      testWidgets('a ${kind.name} card draws its own tile and icon', (tester) async {
+        await pumpOverlay(tester);
+        center().show(kind, 'A ${kind.name}', body: 'x');
+        await tester.pumpAndSettle();
+
+        final tile = find.byKey(const ValueKey('notification-tile'));
+        expect(decorationOf(tester, tile).color, ground);
+        final icon = tester.widget<Icon>(find.descendant(of: tile, matching: find.byType(Icon)));
+        expect(icon.icon, glyph);
+        expect(icon.color, ink);
+        center().clear();
+        await tester.pumpAndSettle();
+      });
+    }
+
+    testWidgets('a Working card draws its spinner on the hover tile', (tester) async {
+      await pumpOverlay(tester);
+      center().working('Installing', body: 'x');
+      await pumpIn(tester);
+
+      final tile = find.byKey(const ValueKey('notification-tile'));
+      expect(decorationOf(tester, tile).color, palette.hover);
+      final spinner = find.descendant(of: tile, matching: find.byKey(const ValueKey('notification-spinner')));
+      expect(spinner, findsOneWidget);
+      expect(arcColour(tester, spinner), palette.textProse);
+      center().clear();
+      await pumpIn(tester);
+    });
+
+    testWidgets('on paper, the cards take the paper tokens', (tester) async {
+      final paper = ZenithPalette.light(AccentChoice.violet);
+      await pumpOverlay(tester, brightness: Brightness.light);
+      center().done('Mod installed', body: 'Ellen Swimsuit', characterId: 'ellen');
+      center().error('Couldn\'t turn on', body: 'Lab Coat');
+      await tester.pumpAndSettle();
+
+      expect(decorationOf(tester, card('Mod installed')).color, paper.notification.background);
+      expect(decorationOf(tester, card('Couldn\'t turn on')).color, paper.notificationError.background);
+      expect(decorationOf(tester, card('Mod installed')).boxShadow!.single.color, paper.notificationShadow);
+      expect(decorationOf(tester, find.byKey(const ValueKey('notification-badge'))).color, paper.accent);
+      expect(decorationOf(tester, find.byKey(const ValueKey('notification-tile'))).color, paper.badgeMissing.background);
+      expect(tester.widget<Text>(find.text('Mod installed')).style!.color, paper.text);
+      expect(tester.takeException(), isNull);
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('an explicit icon keeps the kind\'s colours', (tester) async {
+      await pumpOverlay(tester);
+      center().done('Saved', body: 'x', icon: Icons.save_alt_rounded);
+      await tester.pumpAndSettle();
+
+      final icon = tester.widget<Icon>(find.byIcon(Icons.save_alt_rounded));
+      expect(icon.color, palette.notificationDoneTile.foreground);
+      expect(find.byIcon(Icons.check_rounded), findsNothing);
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('close is labelled Close, and Hide on a Working card', (tester) async {
+      await pumpOverlay(tester);
+      center().error('Failed', body: 'x');
+      center().working('Installing', body: 'y');
+      await pumpIn(tester);
+
+      final labels = tester.widgetList<Icon>(find.byIcon(Icons.close_rounded)).map((i) => i.semanticLabel);
+      expect(labels, ['Close', 'Hide']);
+      center().clear();
+      await pumpIn(tester);
+    });
   });
 
   group('the leading slot', () {
-    testWidgets('a known character shows their portrait instead of the icon',
-        (tester) async {
+    testWidgets('a character draws a 32px portrait tile with the kind as a badge', (tester) async {
       await pumpOverlay(tester);
-      center().success('Mod installed',
-          body: 'Ellen Swimsuit', characterId: 'ellen');
+      center().done('Mod installed', body: 'Ellen Swimsuit', characterId: 'ellen');
       await tester.pumpAndSettle();
 
       expect(portraitAsset(tester), 'assets/characters/ellen.png');
-      // The portrait *replaced* the severity glyph — that is the feature, not a
-      // decoration added beside it.
-      expect(find.byIcon(Icons.check_circle_outline_rounded), findsNothing);
-      // A failed asset load throws into the error handler rather than the test.
+      expect(tester.widget<CharacterTile>(find.byType(CharacterTile)).size, 32);
+      final badge = find.byKey(const ValueKey('notification-badge'));
+      expect(decorationOf(tester, badge).color, palette.accent);
+      expect(tester.widget<Icon>(find.descendant(of: badge, matching: find.byType(Icon))).icon, Icons.check_rounded);
+      expect(find.byKey(const ValueKey('notification-tile')), findsNothing);
       expect(tester.takeException(), isNull);
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    final badges = <NotificationKind, (Color, Color, IconData)>{
+      NotificationKind.error: (palette.red, palette.onRed, Icons.close_rounded),
+      NotificationKind.update: (palette.amber, palette.onAccent, Icons.arrow_upward_rounded),
+      NotificationKind.warning: (palette.amber, palette.onAccent, Icons.priority_high_rounded),
+      NotificationKind.needsYou: (palette.blue, palette.onAccent, Icons.arrow_downward_rounded),
+    };
+    for (final MapEntry(key: kind, value: (fill, ink, glyph)) in badges.entries) {
+      testWidgets('a ${kind.name} portrait carries its badge', (tester) async {
+        await pumpOverlay(tester);
+        center().show(kind, 'About Ellen', body: 'x', characterId: 'ellen');
+        await tester.pumpAndSettle();
+
+        final badge = find.byKey(const ValueKey('notification-badge'));
+        expect(decorationOf(tester, badge).color, fill);
+        final icon = tester.widget<Icon>(find.descendant(of: badge, matching: find.byType(Icon)));
+        expect(icon.icon, glyph);
+        expect(icon.color, ink);
+        expect(icon.size, 10);
+        // 18px across with its ring: a 14px fill.
+        expect(tester.getSize(badge), const Size.square(14));
+        center().clear();
+        await tester.pumpAndSettle();
+      });
+    }
+
+    testWidgets('a Working portrait carries the spinner as its badge', (tester) async {
+      await pumpOverlay(tester);
+      center().working('Installing', body: 'Ellen Swimsuit', characterId: 'ellen');
+      await pumpIn(tester);
+
+      final badge = find.byKey(const ValueKey('notification-badge'));
+      final spinner = find.descendant(of: badge, matching: find.byKey(const ValueKey('notification-spinner')));
+      expect(spinner, findsOneWidget);
+      expect(decorationOf(tester, badge).color, palette.line);
+      expect(arcColour(tester, spinner), palette.text);
+      center().clear();
+      await pumpIn(tester);
+    });
+
+    testWidgets('a Note portrait has no badge', (tester) async {
+      await pumpOverlay(tester);
+      center().note('Ellen Swimsuit is on', body: 'x', characterId: 'ellen');
+      await tester.pumpAndSettle();
+
+      expect(portraitAsset(tester), 'assets/characters/ellen.png');
+      expect(find.byKey(const ValueKey('notification-badge')), findsNothing);
+      await tester.pump(const Duration(seconds: 6));
     });
 
     testWidgets("the roster's asset override survives", (tester) async {
-      // The one thing a hand-built path silently loses, and the reason
-      // `assetPathFor` exists at all.
       await pumpOverlay(tester);
-      center().info('Mod enabled', body: 'Starlight Knight', characterId: 'billy');
+      center().note('Mod enabled', body: 'Starlight Knight', characterId: 'billy');
       await tester.pumpAndSettle();
 
       expect(portraitAsset(tester), 'assets/characters/billy_herinkton.png');
+      await tester.pump(const Duration(seconds: 6));
     });
 
-    for (final id in <String?>[null, '', 'unknown']) {
-      testWidgets('an unassigned character (${id ?? 'null'}) falls back to the '
-          'severity icon', (tester) async {
+    for (final id in <String?>[null, '', 'unknown', 'cat_ui', 'not-a-character']) {
+      testWidgets('${id ?? 'no character'} draws the kind\'s plain icon', (tester) async {
         await pumpOverlay(tester);
-        center().info('Something happened', body: 'x', characterId: id);
+        center().error('Something happened', body: 'x', characterId: id);
         await tester.pumpAndSettle();
 
-        expect(find.byIcon(Icons.info_outline_rounded), findsOneWidget);
+        expect(find.byKey(const ValueKey('notification-tile')), findsOneWidget);
+        expect(find.byIcon(Icons.highlight_off_rounded), findsOneWidget);
         expect(find.byType(Image), findsNothing);
         expect(tester.takeException(), isNull);
       });
     }
 
-    testWidgets('a built-in category shows that category, not a portrait',
-        (tester) async {
-      // `getCharacterAssetName` falls back to the id, so without the roster
-      // pre-check this would ask the bundle for `cat_ui.png` and hit
-      // `errorBuilder` on every notification about a category-filed mod.
+    testWidgets('a card counting several mods draws the plain icon', (tester) async {
       await pumpOverlay(tester);
-      center().info('Mod enabled', body: 'Dark HUD', characterId: 'cat_ui');
+      const repeat = NotificationRepeat('install-done', subjects: ['A']);
+      center().done('Mod installed', body: 'A', characterId: 'ellen', repeat: repeat);
+      center().done('Mod installed', body: 'B', characterId: 'ellen',
+          repeat: const NotificationRepeat('install-done', subjects: ['B']));
       await tester.pumpAndSettle();
 
-      expect(find.byIcon(Icons.web_asset), findsOneWidget);
       expect(find.byType(Image), findsNothing);
-      expect(find.byIcon(Icons.info_outline_rounded), findsNothing);
+      expect(find.byKey(const ValueKey('notification-tile')), findsOneWidget);
+      expect(find.text('A and B'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 6));
+    });
+  });
+
+  group('a Working card', () {
+    testWidgets('draws its bar at the share of the work done', (tester) async {
+      await pumpOverlay(tester);
+      final handle = center().working('Downloading', body: 'x', progress: 0.25);
+      await pumpIn(tester);
+
+      final bar = find.byKey(const ValueKey('notification-progress'));
+      expect(tester.widget<AnimatedFractionallySizedBox>(bar).widthFactor, 0.25);
+      handle.update(progress: 0.75);
+      await pumpIn(tester);
+      expect(tester.widget<AnimatedFractionallySizedBox>(bar).widthFactor, 0.75);
+      expect(find.byKey(const ValueKey('notification-sweep')), findsNothing);
+      center().clear();
+      await pumpIn(tester);
+    });
+
+    testWidgets('of unknown size draws the sweep', (tester) async {
+      await pumpOverlay(tester);
+      center().working('Downloading', body: 'x');
+      await pumpIn(tester);
+
+      expect(find.byKey(const ValueKey('notification-sweep')), findsOneWidget);
+      expect(find.byKey(const ValueKey('notification-progress')), findsNothing);
+      center().clear();
+      await pumpIn(tester);
+    });
+
+    testWidgets('holds still under reduced motion', (tester) async {
+      tester.platformDispatcher.accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(disableAnimations: true);
+      addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+      await pumpOverlay(tester);
+      center().working('Installing', body: 'x');
+      // Nothing repeats, so the stack settles.
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('notification-sweep')), findsOneWidget);
+      expect(find.byKey(const ValueKey('notification-spinner')), findsOneWidget);
+    });
+  });
+
+  group('actions', () {
+    testWidgets('the first is primary on every kind but a Note', (tester) async {
+      await pumpOverlay(tester);
+      void noop() {}
+      center().updateAvailable('3 newer files', body: 'x',
+          actions: [NotificationAction('Review', noop), NotificationAction('Later', noop)]);
+      await tester.pumpAndSettle();
+
+      Color? colourOf(String label) => DefaultTextStyle.of(tester.element(find.text(label))).style.color;
+      expect(colourOf('Review'), palette.link);
+      expect(colourOf('Later'), palette.text);
+      await tester.pump(const Duration(seconds: 9));
+    });
+
+    testWidgets('pressing one runs it and closes the card; closes: false keeps it', (tester) async {
+      await pumpOverlay(tester);
+      var pressed = 0;
+      center().error('Failed', body: 'x', actions: [
+        NotificationAction('Retry', () => pressed++, closes: false),
+        NotificationAction('Open folder', () => pressed++),
+      ]);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Retry'));
+      await tester.pumpAndSettle();
+      expect(pressed, 1);
+      expect(find.text('Failed'), findsOneWidget);
+
+      await tester.tap(find.text('Open folder'));
+      await tester.pumpAndSettle();
+      expect(pressed, 2);
+      expect(container.read(notificationsProvider), isEmpty);
+    });
+
+    testWidgets('the F10 Note draws its keycap, and its Undo is plain', (tester) async {
+      await pumpOverlay(tester);
+      var undone = false;
+      center().note(
+        'Ellen Swimsuit is on',
+        body: 'Press {key} in game to load it.',
+        keycap: 'F10',
+        characterId: 'ellen',
+        actions: [NotificationAction('Undo', () => undone = true)],
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(Keycap, 'F10'), findsOneWidget);
+      expect(DefaultTextStyle.of(tester.element(find.text('Undo'))).style.color, palette.text);
+
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(undone, isTrue);
+      expect(container.read(notificationsProvider), isEmpty);
+    });
+
+    testWidgets('Needs you draws its blue tile, tray icon and a primary action', (tester) async {
+      await pumpOverlay(tester);
+      center().needsYou('A download needs a decision', body: 'Victorian Ballgown',
+          actions: [NotificationAction('Open Downloads', () {})]);
+      await tester.pumpAndSettle();
+
+      final tile = find.byKey(const ValueKey('notification-tile'));
+      expect(decorationOf(tester, tile).color, palette.badgeInfo.background);
+      expect(find.byIcon(Icons.download_rounded), findsOneWidget);
+      expect(DefaultTextStyle.of(tester.element(find.text('Open Downloads'))).style.color, palette.link);
+    });
+  });
+
+  group('the stack', () {
+    testWidgets('stacks upwards, the newest lowest', (tester) async {
+      await pumpOverlay(tester);
+      center().error('older', body: '1');
+      center().error('newer', body: '2');
+      await tester.pumpAndSettle();
+
+      expect(tester.getCenter(find.text('newer')).dy, greaterThan(tester.getCenter(find.text('older')).dy));
+    });
+
+    testWidgets('sits 14px from the right edge and 14px above the status bar', (tester) async {
+      await pumpOverlay(tester);
+      center().error('corner', body: 'x');
+      await tester.pumpAndSettle();
+
+      final rect = tester.getRect(card('corner'));
+      expect(rect.right, 1200 - 14);
+      expect(rect.bottom, 800 - (AppStatusBar.height + 14));
+    });
+
+    testWidgets('a fourth card folds the oldest under "+1 more", which unfolds and folds', (tester) async {
+      await pumpOverlay(tester);
+      for (var i = 1; i <= 4; i++) {
+        center().error('error $i', body: 'x');
+      }
+      await tester.pumpAndSettle();
+
+      expect(find.text('error 1'), findsNothing);
+      expect(find.text('error 4'), findsOneWidget);
+      expect(find.text('+1 more'), findsOneWidget);
+
+      await tester.tap(find.text('+1 more'));
+      await tester.pumpAndSettle();
+      expect(find.text('error 1'), findsOneWidget);
+      expect(find.text('Show fewer'), findsOneWidget);
+
+      await tester.tap(find.text('Show fewer'));
+      await tester.pumpAndSettle();
+      expect(find.text('error 1'), findsNothing);
+    });
+
+    testWidgets('a folded card with a clock runs out unseen, and the pill goes with it', (tester) async {
+      await pumpOverlay(tester);
+      center().done('folded done', body: 'x');
+      for (var i = 1; i <= 3; i++) {
+        center().error('error $i', body: 'x');
+      }
+      await tester.pumpAndSettle();
+      expect(find.text('+1 more'), findsOneWidget);
+
+      await tester.pump(kNotificationDurations[NotificationKind.done]!);
+      await tester.pumpAndSettle();
+      expect(container.read(notificationsProvider).map((n) => n.title), ['error 1', 'error 2', 'error 3']);
+      expect(find.text('+1 more'), findsNothing);
+    });
+
+    testWidgets('hovering holds folded clocks too', (tester) async {
+      await pumpOverlay(tester);
+      center().done('folded done', body: 'x');
+      for (var i = 1; i <= 3; i++) {
+        center().error('error $i', body: 'x');
+      }
+      await tester.pumpAndSettle();
+
+      final pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await pointer.addPointer(location: tester.getCenter(find.text('error 3')));
+      addTearDown(pointer.removePointer);
+      await tester.pump();
+
+      await tester.pump(const Duration(seconds: 20));
+      await tester.pumpAndSettle();
+      expect(container.read(notificationsProvider), hasLength(4));
+
+      await pointer.moveTo(const Offset(10, 10));
+      await tester.pump();
+      await tester.pump(kNotificationDurations[NotificationKind.done]!);
+      await tester.pumpAndSettle();
+      expect(container.read(notificationsProvider), hasLength(3));
+    });
+
+    testWidgets('stays inside a short window', (tester) async {
+      await pumpOverlay(tester, surfaceSize: const Size(800, 600));
+      for (var i = 0; i < 6; i++) {
+        center().error(
+          'A headline for notification number $i',
+          body: 'A genuinely long body, of the kind an install produces when it '
+              'has something to say about several mods at once — number $i.',
+          characterId: 'ellen',
+        );
+      }
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('+3 more'));
+      await tester.pumpAndSettle();
+
       expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('the ring carries the severity, and only on the portrait',
-        (tester) async {
-      await pumpOverlay(tester);
-      center().error('Update failed', body: 'Ellen Swimsuit',
-          characterId: 'ellen');
-      await tester.pumpAndSettle();
-
-      final avatar = tester.widget<CharacterAvatar>(
-        find.byType(CharacterAvatar),
-      );
-      expect(
-        avatar.ring?.color,
-        notificationColor(tester.element(find.byType(CharacterAvatar)), NotificationSeverity.error),
-      );
-
-      // The icon variant gets no ring — the tinted disc and the glyph already
-      // carry the accent.
-      center().clear();
-      center().error('Update failed', body: 'no character here');
-      await tester.pumpAndSettle();
-      expect(find.byType(CharacterAvatar), findsNothing);
-    });
-
-    testWidgets('the slot is the same width whichever variant renders',
-        (tester) async {
-      // The regression guard for the fixed 46px footprint. Without it, a future
-      // "the icon looks lonely, let's shrink the slot" reintroduces a ragged
-      // left edge down the stack with no test failure.
-      await pumpOverlay(tester);
-      center().info('With a portrait', body: 'x', characterId: 'ellen');
-      center().info('Without one', body: 'y');
-      await tester.pumpAndSettle();
-
-      expect(
-        tester.getRect(find.text('With a portrait')).left,
-        tester.getRect(find.text('Without one')).left,
-      );
-    });
-
-    testWidgets('a portrait does not make the card taller', (tester) async {
-      // Pins the arithmetic the 46px slot was chosen for: two lines of card
-      // text come to 46.6px, so the avatar never drives the card's height.
-      await pumpOverlay(tester);
-      center().info('A headline', body: 'a subject');
-      await tester.pumpAndSettle();
-      final withoutPortrait =
-          tester.getRect(find.byType(NotificationOverlay)).height;
-
-      center().clear();
-      await tester.pumpAndSettle();
-      center().info('A headline', body: 'a subject', characterId: 'ellen');
-      await tester.pumpAndSettle();
-
-      expect(
-        tester.getRect(find.byType(NotificationOverlay)).height,
-        withoutPortrait,
-      );
+      // The column is taller than the window, so it scrolls inside the stack's bounds with the newest in view.
+      final scroll = find.descendant(of: find.byType(NotificationOverlay), matching: find.byType(Scrollable));
+      expect(tester.state<ScrollableState>(scroll).position.maxScrollExtent, greaterThan(0));
+      expect(tester.getRect(find.byType(NotificationOverlay)).top, greaterThanOrEqualTo(0));
+      final newest = tester.getRect(card('A headline for notification number 5'));
+      expect(newest.bottom, lessThanOrEqualTo(600 - (AppStatusBar.height + 14)));
+      expect(newest.top, greaterThanOrEqualTo(0));
     });
   });
 
-  testWidgets('they stack upwards — the newest is the lowest', (tester) async {
+  testWidgets('an action is 30px tall, 6px under the body, its label in line with the title', (tester) async {
     await pumpOverlay(tester);
-    center().info('older', body: '1');
-    center().info('newer', body: '2');
+    center().error('Failed', body: 'Lab Coat', actions: [NotificationAction('Retry', () {})]);
     await tester.pumpAndSettle();
 
-    expect(
-      tester.getCenter(find.text('newer')).dy,
-      greaterThan(tester.getCenter(find.text('older')).dy),
-    );
+    final title = tester.getRect(find.text('Failed'));
+    final body = tester.getRect(find.text('Lab Coat'));
+    final label = tester.getRect(find.text('Retry'));
+    final button = tester.getRect(find.ancestor(of: find.text('Retry'), matching: find.byType(TextButton)));
+    expect(button.top - body.bottom, 6);
+    expect(button.height, 30);
+    expect(label.left, title.left);
+    expect(label.left - button.left, 8);
+    expect(label.center.dy, closeTo(button.center.dy, 0.5));
+    // 6px of the card's 12px bottom padding, and its 1px border.
+    expect(tester.getRect(card('Failed')).bottom - button.bottom, 7);
+
+    final pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await pointer.addPointer(location: Offset(button.left + 2, button.center.dy));
+    addTearDown(pointer.removePointer);
+    await tester.pumpAndSettle();
+    final fill = tester.widget<Material>(find.descendant(of: find.byType(TextButton), matching: find.byType(Material)));
+    expect(fill.color, palette.notificationErrorHover);
   });
 
-  testWidgets('they sit in the bottom-right corner', (tester) async {
+  testWidgets('a press beside or under the label, inside the button, runs the action', (tester) async {
     await pumpOverlay(tester);
-    center().info('corner', body: 'x');
+    var pressed = 0;
+    center().warning('Low on space', body: 'x', actions: [NotificationAction('Storage', () => pressed++, closes: false)]);
     await tester.pumpAndSettle();
 
-    final card = tester.getRect(find.text('corner'));
-    expect(card.right, greaterThan(1200 * 0.6));
-    expect(card.bottom, greaterThan(800 * 0.8));
+    final label = tester.getRect(find.text('Storage'));
+    await tester.tapAt(Offset(label.left - 6, label.center.dy));
+    await tester.pumpAndSettle();
+    expect(pressed, 1);
+
+    await tester.tapAt(Offset(label.center.dx, label.bottom + 5));
+    await tester.pumpAndSettle();
+    expect(pressed, 2);
   });
 
-  testWidgets('the close button dismisses that one and only that one',
-      (tester) async {
+  testWidgets('a counted card keeps its instruction, with the subjects under it', (tester) async {
     await pumpOverlay(tester);
-    center().pinned('first', body: '1');
-    center().pinned('second', body: '2');
+    NotificationRepeat asset(String name) => NotificationRepeat('asset-patch',
+        subjects: [name], body: (n) => '$n folders need the mod they patch in the same folder.');
+    center().warning('These files need another mod', body: 'A needs its mod.', stays: true, repeat: asset('A'));
+    center().warning('These files need another mod', body: 'B needs its mod.', stays: true, repeat: asset('B'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.close_rounded).first);
-    await tester.pumpAndSettle();
+    expect(find.text('2 folders need the mod they patch in the same folder.'), findsOneWidget);
+    expect(find.text('A and B'), findsOneWidget);
+    expect(container.read(notificationsProvider).single.stays, isTrue);
+  });
 
-    expect(find.text('first'), findsNothing);
-    expect(find.text('second'), findsOneWidget);
-    expect(container.read(notificationsProvider).single.title, 'second');
+  group('news during an exit', () {
+    testWidgets('a result arriving just after Hide keeps the card', (tester) async {
+      await pumpOverlay(tester);
+      final working = center().working('Installing', body: 'Ellen Swimsuit');
+      await pumpIn(tester);
+
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pump(const Duration(milliseconds: 50));
+      working.update(kind: NotificationKind.done, title: 'Mod installed');
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(container.read(notificationsProvider).single.title, 'Mod installed');
+      expect(find.text('Mod installed'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('a repeat arriving while a card runs out keeps it, counted', (tester) async {
+      await pumpOverlay(tester);
+      center().done('Mod installed', body: 'A', repeat: const NotificationRepeat('install-done', subjects: ['A']));
+      await tester.pumpAndSettle();
+
+      await tester.pump(kNotificationDurations[NotificationKind.done]!);
+      await tester.pump(const Duration(milliseconds: 50));
+      center().done('Mod installed', body: 'B', repeat: const NotificationRepeat('install-done', subjects: ['B']));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(container.read(notificationsProvider).single.count, 2);
+      expect(find.text('A and B'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('a card folded while it leaves is removed at once', (tester) async {
+      await pumpOverlay(tester);
+      center().done('leaving', body: 'x');
+      await tester.pumpAndSettle();
+
+      await tester.pump(kNotificationDurations[NotificationKind.done]!);
+      await tester.pump(const Duration(milliseconds: 50));
+      for (var i = 1; i <= 3; i++) {
+        center().error('error $i', body: 'x');
+      }
+      await tester.pump();
+
+      expect(container.read(notificationsProvider).map((n) => n.title), ['error 1', 'error 2', 'error 3']);
+    });
   });
 
   group('the clock', () {
-    testWidgets('dismisses a notification once its duration is up',
-        (tester) async {
+    testWidgets('closes a card once its kind\'s duration is up', (tester) async {
       await pumpOverlay(tester);
-      center().info('temporary',
-          body: 'x', duration: const Duration(seconds: 3));
+      center().done('temporary', body: 'x');
       await tester.pumpAndSettle();
       expect(find.text('temporary'), findsOneWidget);
 
-      await tester.pump(const Duration(seconds: 3));
+      await tester.pump(kNotificationDurations[NotificationKind.done]!);
       await tester.pumpAndSettle();
 
       expect(find.text('temporary'), findsNothing);
       expect(container.read(notificationsProvider), isEmpty);
     });
 
-    testWidgets('a pinned notification stays until something dismisses it',
-        (tester) async {
-      // The point of pinning: it ends on a condition, not on a clock.
+    testWidgets('errors, Needs you and a staying warning are still there after a minute', (tester) async {
       await pumpOverlay(tester);
-      final handle =
-          center().pinned('Scanning the library…', body: 'your mods');
+      center().error('an error', body: 'x');
+      center().needsYou('a decision', body: 'x');
+      center().warning('a staying warning', body: 'x', stays: true);
       await tester.pumpAndSettle();
 
-      await tester.pump(const Duration(minutes: 5));
+      await tester.pump(const Duration(minutes: 1));
       await tester.pumpAndSettle();
+      expect(container.read(notificationsProvider), hasLength(3));
+    });
+
+    testWidgets('a Working card turned into its result takes that result\'s clock', (tester) async {
+      await pumpOverlay(tester);
+      final handle = center().working('Scanning the library…', body: 'your mods');
+      await pumpIn(tester);
+      await tester.pump(const Duration(minutes: 5));
       expect(find.text('Scanning the library…'), findsOneWidget);
 
-      handle.update(
-        title: 'Library scanned',
-        severity: NotificationSeverity.success,
-      );
+      handle.update(kind: NotificationKind.done, title: 'Library scanned');
       await tester.pumpAndSettle();
       expect(find.text('Library scanned'), findsOneWidget);
-      expect(find.text('your mods'), findsOneWidget,
-          reason: 'the body is the stable subject and carries over');
+      expect(find.text('your mods'), findsOneWidget, reason: 'the body is the stable subject and carries over');
 
-      // …and the update it was given *does* have a clock.
-      await tester.pump(kNotificationDurations[NotificationSeverity.success]!);
+      await tester.pump(kNotificationDurations[NotificationKind.done]!);
       await tester.pumpAndSettle();
       expect(find.text('Library scanned'), findsNothing);
     });
 
-    testWidgets('hovering pauses it, and leaving starts it again',
-        (tester) async {
-      // The complaint the whole rework answers: a message that vanishes while
-      // it is being read.
+    testWidgets('the close button closes that one and only that one', (tester) async {
       await pumpOverlay(tester);
-      center().error('a long error worth reading',
-          body: 'x', duration: const Duration(seconds: 4));
+      center().error('first', body: '1');
+      center().error('second', body: '2');
       await tester.pumpAndSettle();
 
-      final pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await pointer.addPointer(
-        location: tester.getCenter(find.text('a long error worth reading')),
-      );
-      addTearDown(pointer.removePointer);
-      await tester.pump();
-
-      await tester.pump(const Duration(seconds: 10));
+      await tester.tap(find.byIcon(Icons.close_rounded).first);
       await tester.pumpAndSettle();
-      expect(find.text('a long error worth reading'), findsOneWidget,
-          reason: 'the pointer is still on it');
 
-      await pointer.moveTo(const Offset(10, 10));
-      await tester.pump();
-      await tester.pump(const Duration(seconds: 4));
-      await tester.pumpAndSettle();
-      expect(find.text('a long error worth reading'), findsNothing);
+      expect(find.text('first'), findsNothing);
+      expect(container.read(notificationsProvider).single.title, 'second');
     });
 
-    testWidgets('hovering one notification holds every one of them',
-        (tester) async {
-      // Reading is reading. Someone resting the pointer on the first card is
-      // still working down the stack, and letting the others expire underneath
-      // them would also reflow the stack out from under the pointer.
+    testWidgets('one raised while the pointer is on the stack arrives held', (tester) async {
       await pumpOverlay(tester);
-      center().info('read me first',
-          body: '1', duration: const Duration(seconds: 4));
-      center().info('read me second',
-          body: '2', duration: const Duration(seconds: 4));
+      center().error('something to hover', body: 'x');
       await tester.pumpAndSettle();
 
       final pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await pointer.addPointer(
-        location: tester.getCenter(find.text('read me first')),
-      );
+      await pointer.addPointer(location: tester.getCenter(find.text('something to hover')));
       addTearDown(pointer.removePointer);
       await tester.pump();
 
-      await tester.pump(const Duration(seconds: 20));
+      center().done('arrived late', body: 'y');
       await tester.pumpAndSettle();
-      expect(find.text('read me first'), findsOneWidget);
-      expect(find.text('read me second'), findsOneWidget,
-          reason: 'the pointer is on the other card, not this one');
-
-      await pointer.moveTo(const Offset(10, 10));
-      await tester.pump();
-      await tester.pump(const Duration(seconds: 4));
-      await tester.pumpAndSettle();
-      expect(container.read(notificationsProvider), isEmpty);
-    });
-
-    testWidgets('one raised while the pointer is on the stack arrives held',
-        (tester) async {
-      // Otherwise a burst that lands during a read ticks away under a reader
-      // who never moved.
-      await pumpOverlay(tester);
-      center().pinned('something to hover', body: 'x');
-      await tester.pumpAndSettle();
-
-      final pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await pointer.addPointer(
-        location: tester.getCenter(find.text('something to hover')),
-      );
-      addTearDown(pointer.removePointer);
-      await tester.pump();
-
-      center().info('arrived late',
-          body: 'y', duration: const Duration(seconds: 4));
-      await tester.pumpAndSettle();
-
       await tester.pump(const Duration(seconds: 20));
       await tester.pumpAndSettle();
       expect(find.text('arrived late'), findsOneWidget);
 
       await pointer.moveTo(const Offset(10, 10));
       await tester.pump();
-      await tester.pump(const Duration(seconds: 4));
+      await tester.pump(kNotificationDurations[NotificationKind.done]!);
       await tester.pumpAndSettle();
       expect(find.text('arrived late'), findsNothing);
-      expect(find.text('something to hover'), findsOneWidget,
-          reason: 'pinned, so leaving gives it no clock either');
+      expect(find.text('something to hover'), findsOneWidget);
     });
 
-    testWidgets('leaving restarts the full duration rather than resuming',
-        (tester) async {
+    testWidgets('leaving restarts the full duration rather than resuming', (tester) async {
       await pumpOverlay(tester);
-      center().info('nearly expired',
-          body: 'x', duration: const Duration(seconds: 4));
+      center().done('nearly expired', body: 'x');
       await tester.pumpAndSettle();
 
-      // Three of its four seconds gone before the pointer arrives.
-      await tester.pump(const Duration(seconds: 3));
+      // Four of its five seconds gone before the pointer arrives.
+      await tester.pump(const Duration(seconds: 4));
 
       final pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await pointer.addPointer(
-        location: tester.getCenter(find.text('nearly expired')),
-      );
+      await pointer.addPointer(location: tester.getCenter(find.text('nearly expired')));
       addTearDown(pointer.removePointer);
       await tester.pump();
       await pointer.moveTo(const Offset(10, 10));
       await tester.pump();
 
-      // The second it had left is not what it gets back.
-      await tester.pump(const Duration(seconds: 2));
+      await tester.pump(const Duration(seconds: 3));
       await tester.pumpAndSettle();
       expect(find.text('nearly expired'), findsOneWidget);
 
@@ -403,25 +701,5 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('nearly expired'), findsNothing);
     });
-  });
-
-  testWidgets('the stack stays inside a short window', (tester) async {
-    // 800x600 is the app's minimum window size, and four cards of a paragraph
-    // each is more than it has to give — so the column scrolls rather than
-    // overflowing into a debug stripe. The 46px leading slot narrows the text
-    // column, so this wraps harder than it looks.
-    await pumpOverlay(tester, surfaceSize: const Size(800, 600));
-    for (var i = 0; i < kMaxVisibleNotifications; i++) {
-      center().pinned(
-        'A headline for notification number $i',
-        body: 'A genuinely long body, of the kind an install produces when it '
-            'has something to say about several mods at once — number $i.',
-        characterId: 'ellen',
-      );
-    }
-    await tester.pumpAndSettle();
-
-    expect(tester.takeException(), isNull);
-    expect(find.byType(SingleChildScrollView), findsWidgets);
   });
 }

@@ -40,6 +40,7 @@ NotificationLines extractFailureMessage(
         'available': formatBytes(availableBytes),
         'path': archivePath,
       }),
+      kind: NotificationKind.error,
     );
   }
 
@@ -53,5 +54,6 @@ NotificationLines extractFailureMessage(
   return NotificationLines(
     loc.t('${key}_title'),
     loc.t('${key}_body', params: {'path': archivePath}),
+    kind: NotificationKind.error,
   );
 }

@@ -21,6 +21,7 @@ import 'package:mod_manager_flutter/screens/components/zenith_switch.dart';
 import 'package:mod_manager_flutter/screens/mod_page/mod_page.dart';
 import 'package:mod_manager_flutter/screens/mods_screen.dart';
 import 'package:mod_manager_flutter/services/update_apply/mod_activation_port.dart';
+import 'package:mod_manager_flutter/utils/notifications.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 import 'package:mod_manager_flutter/utils/zzz_characters.dart';
 import 'package:path/path.dart' as p;
@@ -432,6 +433,31 @@ void main() {
     expect(container.read(selectedModIdProvider), 'Winter Maid Blue');
   });
 
+  testWidgets('a rename that leaves the mod off raises a warning that stays until closed', (tester) async {
+    // The mod won't load until it is turned back on, so the warning must not leave on its own.
+    await loadTableFonts(tester);
+    final platform = LinkFailsUnder('Winter Maid Blue');
+    final left = (await tester.runAsync(() => TempLibrary.create(prefix: 'zzz_left_off_', platform: platform)))!;
+    platform.occupying = left.modFolder('Winter Maid').path;
+    left.createMod('Winter Maid');
+    expect(await tester.runAsync(() => left.service.activateMod('Winter Maid')), isTrue);
+    final container = await pumpModsScreen(tester, left, [mod('Winter Maid', isActive: true)]);
+
+    await tester.tap(cardOf('Winter Maid'), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rename').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Winter Maid Blue');
+    await tester.pump();
+    await tapWithIo(tester, find.widgetWithText(FilledButton, 'Rename'));
+
+    final warning = container.read(notificationsProvider).single;
+    expect(warning.kind, NotificationKind.warning);
+    expect(warning.title, 'The mod is renamed, but off');
+    expect(warning.stays, isTrue);
+    expect(warning.hasClock, isFalse);
+  });
+
   testWidgets('a mod whose folder is being written is not renamed, and the dialog says why', (tester) async {
     await loadTableFonts(tester);
     temp.createMod('Winter Maid');
@@ -490,6 +516,32 @@ void main() {
 
     expect(temp.modFolder('Winter Maid').existsSync(), isFalse);
     expect(container.read(allModsSelectionProvider), {'Other'});
+  });
+
+  testWidgets('a drag onto a row that fails turns its Working card into the error, with no second card',
+      (tester) async {
+    // Listed, but not on disk: there is no sidecar to write the character into.
+    final container = await pumpModsScreen(tester, temp, [mod('Ghost')], selected: 'ellen');
+
+    final gesture = await tester.startGesture(tester.getCenter(cardOf('Ghost')));
+    await tester.pump(const Duration(milliseconds: 600));
+    await gesture.moveTo(tester.getCenter(find.byKey(const ValueKey('character_cat_ui'))));
+    await tester.pump();
+    final ids = <int>{};
+    final sub = container.listen(notificationsProvider, (_, next) => ids.addAll(next.map((n) => n.id)), fireImmediately: true);
+    addTearDown(sub.close);
+    await tester.runAsync(() async {
+      await gesture.up();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    final card = container.read(notificationsProvider).single;
+    expect(card.kind, NotificationKind.error);
+    expect(card.title, 'Mod not moved');
+    expect(ids, {card.id}, reason: 'the Working card became the error rather than raising a second card');
   });
 
   group('a toggle that fails says so', () {

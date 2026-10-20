@@ -998,10 +998,12 @@ NotificationLines _failureMessage(
       UpdateApplyFailure.snapshot => NotificationLines(
           loc.t('mods.update_apply.snapshot_failed_title'),
           loc.t('mods.update_apply.snapshot_failed', params: {'mod': mod.name}),
+          kind: NotificationKind.error,
         ),
       UpdateApplyFailure.modMissing => NotificationLines(
           loc.t('mods.update_apply.mod_missing_title'),
           loc.t('mods.update_apply.mod_missing', params: {'mod': mod.name}),
+          kind: NotificationKind.error,
         ),
       UpdateApplyFailure.copy => NotificationLines(
           loc.t('mods.update_apply.copy_failed_title'),
@@ -1009,10 +1011,12 @@ NotificationLines _failureMessage(
             'mods.update_apply.copy_failed',
             params: {'mod': mod.name, 'message': result.error ?? ''},
           ),
+          kind: NotificationKind.error,
         ),
       _ => NotificationLines(
           loc.t('mods.update_apply.layout_failed_title'),
           loc.t('mods.update_apply.layout_failed', params: {'mod': mod.name}),
+          kind: NotificationKind.error,
         ),
     };
 

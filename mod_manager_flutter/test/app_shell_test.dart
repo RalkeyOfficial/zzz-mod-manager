@@ -353,7 +353,8 @@ void main() {
       expect(await launch(tester, result: result), ["DNS doesn't work inside umu-launcher"]);
 
       final warning = container.read(notificationsProvider).single;
-      expect(warning.severity, NotificationSeverity.warning);
+      expect(warning.kind, NotificationKind.warning);
+      expect(warning.stays, isTrue);
       expect(warning.body, contains('turn off umu-launcher in Settings'));
       expect(warning.duration, isNull);
     });

@@ -179,7 +179,7 @@ class _AutoTagSettingsSectionState
       final tagged = await (widget.runner ?? _runThroughLibrary)();
       if (!mounted) return;
       if (tagged.isEmpty) {
-        context.notify.warning(
+        context.notify.note(
           loc.t('settings.auto_tag.no_mods_title'),
           body: loc.t('settings.auto_tag.no_mods_body'),
         );

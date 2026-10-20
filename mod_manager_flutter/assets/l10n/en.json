@@ -593,6 +593,8 @@
       "import_no_ini_body": "No .ini file was found in {mods}.",
       "patch_applied_title": "Patch applied",
       "patch_applied_body": "{mod} now has this patch over it. A copy of the folder was saved first, so you can put it back from the mod's backups.",
+      "patch_applied_many_single": "{count} mod now has this patch over it. A copy of its folder was saved first, so you can put it back from its backups.",
+      "patch_applied_many_plural": "{count} mods now have this patch over them. A copy of each folder was saved first, so you can put them back from their backups.",
       "patch_wrong_mod_title": "That doesn't look like the right mod",
       "patch_wrong_mod_body": "None of this patch's files exist in {mods}, so it is almost certainly for a different mod. It was installed as its own mod instead, and nothing was written to {mods}.",
       "patch_broken_mod_title": "That mod's folder needs sorting out first",
@@ -603,6 +605,8 @@
       "patch_write_failed_body": "Nothing was written to {mods}. It is exactly as it was.",
       "import_asset_patch_title": "These files need another mod",
       "import_asset_patch_body": "{mod} contains game files but no .ini to load them, so nothing will show up in the game until the mod it patches is in the same folder. Update checking will follow this download, not that mod.",
+      "import_asset_patch_many_single": "{count} folder contains game files but no .ini to load them, so nothing will show up in the game until the mod it patches is in the same folder. Update checking will follow this download, not that mod.",
+      "import_asset_patch_many_plural": "{count} folders contain game files but no .ini to load them, so nothing will show up in the game until the mod each one patches is in the same folder. Update checking will follow these downloads, not those mods.",
       "import_patch_title": "This looks like a patch",
       "import_patch_body": "{mods} needs the mod it patches installed in the same folder, or nothing will show up in the game. Update checking will follow this patch, not that mod.",
       "origin_write_failed_title": "Update tracking not saved",
@@ -678,7 +682,7 @@
       "import_ready": "Mods are ready to use!",
       "great": "Great!",
       "move_to_character": "Assign to {character}",
-      "saving_tag": "Saving tag..."
+      "saving_tag": "Saving tag…"
     },
     "context_menu": {
       "details": "Details",
@@ -1120,7 +1124,9 @@
       "not_restored_body": "{files}, from the other copy of {mod} at {folder}",
       "adopted_title": "Shader files already in place",
       "adopted_body_single": "{mod} uses {count} file that was already in ZZMI's shader folder. It stays there when the mod is off.",
-      "adopted_body_plural": "{mod} uses {count} files that were already in ZZMI's shader folder. They stay there when the mod is off."
+      "adopted_body_plural": "{mod} uses {count} files that were already in ZZMI's shader folder. They stay there when the mod is off.",
+      "adopted_many_single": "{count} mod uses files that were already in ZZMI's shader folder. They stay there when the mod is off.",
+      "adopted_many_plural": "{count} mods use files that were already in ZZMI's shader folder. They stay there when the mods are off."
     }
   },
   "clipboard": {
@@ -1282,7 +1288,24 @@
     "unknown": "Unknown"
   },
   "notifications": {
-    "dismiss": "Dismiss",
+    "close": "Close",
+    "hide": "Hide",
+    "region": "Notifications",
+    "fewer": "Show fewer",
+    "more_single": "+{count} more",
+    "more_plural": "+{count} more",
+    "subjects_two": "{first} and {second}",
+    "subjects_more_single": "{first}, {second} and {count} more",
+    "subjects_more_plural": "{first}, {second} and {count} more",
+    "repeat": {
+      "installed_single": "{count} mod installed",
+      "installed_plural": "{count} mods installed"
+    },
+    "actions": {
+      "review": "Review",
+      "open": "Open"
+    },
+    "mod_gone": "No longer in the library",
     "character_portrait": "Portrait of {name}"
   },
   "welcome": {

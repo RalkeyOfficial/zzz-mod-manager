@@ -907,7 +907,7 @@ void main() {
             decision: decision, importedMods: imported, patchedInto: const {},
             writeFailures: const []);
 
-    test('a patch nobody answered for is pinned', () async {
+    test('a patch nobody answered for stays until closed', () async {
       // The mod does not work until the user puts the mod it patches in with
       // it, and eight seconds is not long enough to find that out.
       final lines = linesFor(
@@ -919,7 +919,7 @@ void main() {
 
       expect(lines.single.title, loc.t('mods.snackbar.import_patch_title'));
       expect(lines.single.body, contains('Ellen Fix'));
-      expect(lines.single.pinned, isTrue);
+      expect(lines.single.stays, isTrue);
     });
 
     test('naming the base is not the same as having it', () async {
@@ -949,7 +949,7 @@ void main() {
 
     test('a base that was actually installed says nothing', () async {
       // The folder holds both downloads now. There is nothing to act on, and a
-      // pinned card saying otherwise is wrong rather than merely noisy.
+      // staying card saying otherwise is wrong rather than merely noisy.
       final lines = patchInstallLines(
         loc,
         decision: const PatchInstallDecision(
@@ -981,7 +981,7 @@ void main() {
       expect(lines, isEmpty);
     });
 
-    test('an asset-only patch is named separately and pinned too', () async {
+    test('an asset-only patch is named separately and stays too', () async {
       // Different evidence: this download brought content nothing can load,
       // rather than asking for content it did not bring.
       final lines = linesFor(
@@ -995,10 +995,11 @@ void main() {
 
       expect(
           lines.single.title, loc.t('mods.snackbar.import_asset_patch_title'));
-      expect(lines.single.pinned, isTrue);
+      expect(lines.single.stays, isTrue);
+      expect(lines.single.repeat?.key, 'asset-patch');
     });
 
-    test('a folder that is simply not a mod is not pinned', () async {
+    test('a folder that is simply not a mod does not stay', () async {
       // "May be incomplete" describes a `previews` folder installed on its
       // own. There is nothing for the user to finish, so it can time out.
       final lines = linesFor(
@@ -1009,7 +1010,7 @@ void main() {
       );
 
       expect(lines.single.title, loc.t('mods.snackbar.import_no_ini_title'));
-      expect(lines.single.pinned, isFalse);
+      expect(lines.single.stays, isFalse);
     });
 
     test('each refusal says which of the two it was', () async {
@@ -1035,8 +1036,8 @@ void main() {
       expect(wrong.single.title, loc.t('mods.snackbar.patch_wrong_mod_title'));
       expect(broken.single.title, loc.t('mods.snackbar.patch_broken_mod_title'));
       expect(wrong.single.title, isNot(broken.single.title));
-      expect(wrong.single.pinned, isTrue);
-      expect(broken.single.pinned, isTrue);
+      expect(wrong.single.stays, isTrue);
+      expect(broken.single.stays, isTrue);
     });
 
     test('a change with no card to look at reports its success', () async {
@@ -1046,25 +1047,28 @@ void main() {
           decision: const PatchInstallDecision(scan: PlannedPatchScan()),
           importedMods: const [],
           patchedInto: const {
-            'Ellen Fix': InstallIntoMod(modId: 'Ellen', modName: 'Ellen'),
+            'Ellen Fix': InstallIntoMod(modId: 'Ellen', modName: 'Ellen', characterId: 'ellen'),
           },
           writeFailures: const []);
 
       expect(lines.single.title, loc.t('mods.snackbar.patch_applied_title'));
       expect(lines.single.body, contains('Ellen'));
-      expect(lines.single.pinned, isFalse);
+      expect(lines.single.kind, NotificationKind.done);
+      expect(lines.single.characterId, 'ellen', reason: "the target's portrait, not the download's");
+      expect(lines.single.repeat?.key, 'patch-applied');
     });
 
-    test('a write that failed is pinned', () async {
+    test('a write that failed is an error about its target', () async {
       final lines = patchInstallLines(loc,
           decision: const PatchInstallDecision(scan: PlannedPatchScan()),
           importedMods: const [],
           patchedInto: const {},
-          writeFailures: const ['Ellen']);
+          writeFailures: const [InstallIntoMod(modId: 'Ellen', modName: 'Ellen', characterId: 'ellen')]);
 
       expect(
           lines.single.title, loc.t('mods.snackbar.patch_write_failed_title'));
-      expect(lines.single.pinned, isTrue);
+      expect(lines.single.kind, NotificationKind.error);
+      expect(lines.single.characterId, 'ellen');
     });
   });
 }

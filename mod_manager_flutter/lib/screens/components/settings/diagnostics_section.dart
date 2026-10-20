@@ -124,7 +124,7 @@ class DiagnosticsSettingsSection extends ConsumerWidget {
     // the file switched off, it cannot be slow, and the lines are already
     // censored by the same guarantee the file has.
     await write((buildDiagnostics ?? _diagnostics)());
-    notify.success(
+    notify.done(
       loc.t('settings.diagnostics.copied_title'),
       body: loc.t('settings.diagnostics.copied_body'),
     );

@@ -80,27 +80,27 @@ Future<void> launchGame(
   final file = p.basename(target);
   switch (result.outcome) {
     case LaunchOutcome.started:
-      // Captured before the wait, so the warning still shows if the button has gone by then. Pinned, since the user
-      // is looking at the game when it arrives.
+      // Captured before the wait, so the warning still shows if the button has gone by then. It stays until closed,
+      // since the user is looking at the game when it arrives.
       final notify = context.notify;
       if (await result.containerDns == false) {
-        notify.pinned(
+        notify.warning(
           loc.t('shell.launch.container_dns_title'),
           body: loc.t('shell.launch.container_dns_body'),
-          severity: NotificationSeverity.warning,
+          stays: true,
         );
       }
     case LaunchOutcome.notFound:
       context.notify.error(loc.t('shell.launch.not_found_title'), body: target);
     case LaunchOutcome.unsupported:
-      context.notify.warning(
+      context.notify.error(
         loc.t('shell.launch.unsupported_title'),
         body: loc.t('shell.launch.unsupported_body', params: {'file': file}),
       );
     case LaunchOutcome.runnerMissing:
       context.notify.error(loc.t('shell.launch.runner_missing_title'), body: result.program ?? request.runner);
     case LaunchOutcome.prefixRequired:
-      context.notify.warning(
+      context.notify.error(
         loc.t('shell.launch.prefix_required_title'),
         body: loc.t('shell.launch.prefix_required_body'),
       );

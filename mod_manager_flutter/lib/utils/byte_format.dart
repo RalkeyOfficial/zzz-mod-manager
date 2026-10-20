@@ -1,7 +1,7 @@
 /// Human-readable sizes and durations for transfer progress.
 ///
 /// Here rather than beside any one of the three surfaces that show a download —
-/// the modal dialog, the downloads panel and the pinned progress notification —
+/// the modal dialog, the downloads panel and the Working progress notification —
 /// so none of them has to import from another's file.
 library;
 

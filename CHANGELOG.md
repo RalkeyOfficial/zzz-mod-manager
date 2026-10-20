@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - A download that won't fit is refused before it starts, saying how much is needed and how much is free.
   - Downloads can be cancelled while running.
   - Downloads in the sidebar opens the list of downloads, where a failed one can be retried and finished ones cleared.
-  - One notification shows overall download progress until the last one finishes.
+  - One notification shows overall download progress with a progress bar until the last one finishes; with one download, it becomes its "Mod installed" notification.
   - A download that has landed says it's unpacking, rather than going quiet between finishing and asking where the mod goes.
 - An archive that won't fit when unpacked is refused before unpacking, saying how much is needed and how much is free. The archive is kept, so clearing space and installing again is all it takes.
 - A mod that won't fit in your mods folder is refused before anything is copied there, saying how much is needed and how much is free.
@@ -113,6 +113,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - RAR and 7z mods install with no setup: 7-Zip ships with the app, and the Arch package installs it.
 - The Arch package pulls in what "open mod page" and "open mod folder" need, and lists xdotool and ydotool as optional.
 - Claret, Phoenix, Roxy and Severian are in the character list, with portraits, and mods named after them are sorted to them on import.
+- Repeated notifications are counted on one card, such as "3 mods installed".
+- When an update check finds newer files, its notification has a Review button that opens the Updates page.
+- The notification for an installed mod has an Open button that shows it in the Library.
 
 ### Changed
 
@@ -122,8 +125,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A mod with no character saved for it is listed under Unassigned, instead of being sorted to a character guessed from its folder name every time the library is read.
 - The Default sort is **Recently added**: a character's mods are listed newest first, with mods that have no install date last.
 - Ctrl+V on the Library imports .zip, .7z and .rar archives whose paths are on the clipboard, as well as folders.
-- Notifications are small cards in the bottom-right corner. Several can show at once, any can be closed, and hovering pauses their countdowns.
-- Every notification says what happened and what it happened to, led by the character's portrait.
+- Notifications are cards in the bottom-right corner, above the status bar. Up to three show at once and older ones fold into "+N more"; any can be closed, and hovering pauses their countdowns.
+- Every notification says what happened and what it happened to. One about one mod shows its character's portrait with a small badge for what happened (none for a plain note); one about several mods shows an icon.
+- Errors stay until you close them.
 - Enabling, favouriting, renaming, retagging and deleting report only when they fail.
 - Notifications are drawn above dialogs instead of behind them.
 - Install confirmations name the mod that arrived, and anything you need to act on comes as its own warning beside it.

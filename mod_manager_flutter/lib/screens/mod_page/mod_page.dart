@@ -754,6 +754,7 @@ class _Note extends StatelessWidget {
         ModNoteField(
           key: ValueKey('note_${mod.id}'),
           modId: mod.id,
+          characterId: mod.characterId,
           writer: writer,
           label: false,
           minLines: 8,

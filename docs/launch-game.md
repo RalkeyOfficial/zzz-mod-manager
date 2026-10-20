@@ -114,7 +114,7 @@ The check, with `steamrt3` in place of `steamrt4` for a Proton 10 build:
 
 It prints addresses when DNS works inside the container and nothing when it doesn't. The way out is either to make the first nameservers in `/etc/resolv.conf` answer, which for systemd-resolved means its stub listener on `127.0.0.53`, or to switch umu off in Settings.
 
-Launch game runs this check itself every time it starts the game through umu-run. It runs beside the game, once the game has started, so it never delays or stops the launch, and it takes about 0.4 seconds once the runtime is downloaded. When the lookup finds no name, getent's exit code 2, or takes longer than 20 seconds, a warning says DNS doesn't work inside umu-launcher, that the game's anti-cheat will close the game, and to fix the system's DNS or turn umu-launcher off in Settings. The warning is pinned, staying until it is closed, since the user is looking at the game when it arrives. A lookup that works shows nothing. The 20 seconds leave room for a first nameserver that doesn't answer, which glibc waits 5 seconds on for each query.
+Launch game runs this check itself every time it starts the game through umu-run. It runs beside the game, once the game has started, so it never delays or stops the launch, and it takes about 0.4 seconds once the runtime is downloaded. When the lookup finds no name, getent's exit code 2, or takes longer than 20 seconds, a warning says DNS doesn't work inside umu-launcher, that the game's anti-cheat will close the game, and to fix the system's DNS or turn umu-launcher off in Settings. The warning stays until it is closed, since the user is looking at the game when it arrives. A lookup that works shows nothing. The 20 seconds leave room for a first nameserver that doesn't answer, which glibc waits 5 seconds on for each query.
 
 The runtime is the one umu runs the Proton build in: the `require_tool_appid` in the `toolmanifest.vdf` beside the build's `proton` script, with umu's own table (`RUNTIME_VERSIONS` in its `umu_runtime.py`) naming the folder, such as `1628350` for `steamrt3` and `4183110` for `steamrt4`. umu's data folder is found the way umu finds it: `$UMU_FOLDERS_PATH/umu`, else `$XDG_DATA_HOME/umu` (`$HOST_XDG_DATA_HOME` inside a Flatpak), else `~/.local/share/umu`.
 
@@ -168,12 +168,12 @@ Not used:
 |---|---|
 | `started` | nothing |
 | `notFound` | error: the launcher is gone, with its path |
-| `unsupported` | warning: can't start this file, and what to choose instead |
+| `unsupported` | error: can't start this file, and what to choose instead |
 | `runnerMissing` | error: couldn't run Wine or Proton, with the program it tried |
-| `prefixRequired` | warning: Proton started directly needs a prefix, and where to choose one |
+| `prefixRequired` | error: Proton started directly needs a prefix, and where to choose one |
 | `failed` | error: couldn't start the game, with the file name |
 
-A game started through umu-run also has its container checked for name lookups, and when they fail a pinned warning follows a moment after the start ([When the game closes itself under umu](#when-the-game-closes-itself-under-umu)). `LaunchResult.containerDns` carries that verdict, and the button waits for it only after the launch is done.
+A game started through umu-run also has its container checked for name lookups, and when they fail a warning that stays until closed follows a moment after the start ([When the game closes itself under umu](#when-the-game-closes-itself-under-umu)). `LaunchResult.containerDns` carries that verdict, and the button waits for it only after the launch is done.
 
 The process is started detached and never waited on: the app has no business holding the game's lifetime, and closing the app must not take the game with it.
 

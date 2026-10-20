@@ -1,118 +1,136 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/palette.dart';
 import '../../l10n/app_localizations.dart';
-import '../../utils/categories.dart';
-// `AppNotification` and `NotificationSeverity` come through here — the queue
-// re-exports its own model, so nothing has to import both.
+// `AppNotification` and `NotificationKind` come through here: the queue re-exports its own model.
 import '../../utils/notifications.dart';
 import '../../utils/zzz_characters.dart';
+import '../shell/keycap.dart';
+import '../shell/status_bar.dart';
 import 'character_avatar.dart';
-import '../../core/palette.dart';
+import 'character_tile.dart';
 
-/// Where notifications are drawn: a stack of small cards in the bottom-right
-/// corner, newest at the bottom, older ones pushed up.
+/// Where notifications are drawn: a stack of cards in the bottom-right corner, above the status bar, newest at the
+/// bottom.
 ///
-/// **Mounted through `MaterialApp.builder`, above the `Navigator`.** That is the
-/// one placement that works, and the reason is the thing the old snackbars got
-/// wrong: a `ScaffoldMessenger` bar lives *inside* the `Scaffold`, so a modal
-/// dialog's barrier covers it — and a large share of this app's messages are
-/// raised from dialogs (rename, delete, keybinds, the update flow). Sitting
-/// above the navigator, a notification is visible whatever is open.
-///
-/// It also fixes the shape of the thing. Material shows one snackbar at a time
-/// and *queues* the rest, so an install that had three things to say said them
-/// one after another across the bottom of the window, each covering the content
-/// underneath for its turn. Here everything is on screen at once, in a corner,
-/// and each can be closed.
+/// **Mounted through `MaterialApp.builder`, above the `Navigator`**, so a card shows over a modal dialog, which is
+/// where a large share of them are raised. The same placement means there is no `Overlay` above this layer, so
+/// nothing in it may use a `Tooltip`.
 class NotificationHost extends StatelessWidget {
   const NotificationHost({super.key, required this.child});
 
   final Widget child;
 
+  /// From the window's right edge and from the top of the status bar.
+  static const double margin = 14;
+
+  /// From the window's bottom edge. The first-run screen has no status bar, and its stack sits this high too.
+  static const double bottom = AppStatusBar.height + margin;
+
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        child,
-        // Anchored to the corner and sized by its content, so it covers — and
-        // intercepts pointers over — only the cards themselves. There is no
-        // full-screen layer here to swallow clicks.
-        const Positioned(
-          right: 16,
-          bottom: 16,
-          child: NotificationOverlay(),
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) => Stack(
+        children: [
+          child,
+          // Anchored to the corner and sized by its content, so it intercepts pointers only over the cards.
+          Positioned(
+            right: margin,
+            bottom: bottom,
+            child: NotificationOverlay(
+              maxWidth: math.max(0, constraints.maxWidth - 2 * margin),
+              maxHeight: math.max(0, constraints.maxHeight - bottom - margin),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-/// The stack itself. Separated from [NotificationHost] so it can be mounted
-/// alone in a test, or dropped into another layout later.
+/// The stack itself, apart from [NotificationHost] so a test can mount it alone.
 ///
-/// Stateful for one reason: **the pointer being anywhere on the stack pauses
-/// every countdown on it**, not just the one it is over. Reading is reading —
-/// someone working through four messages is still reading the fourth while the
-/// pointer rests on the first, and per-card pausing would let the others expire
-/// underneath them, reflowing the stack out from under the pointer. So "is the
-/// pointer here" is one fact, owned here, and handed down.
+/// Stateful for two facts it owns: whether the pointer is anywhere on the stack, which holds every clock on it,
+/// folded cards included; and whether the user unfolded "+N more".
 class NotificationOverlay extends ConsumerStatefulWidget {
-  const NotificationOverlay({super.key});
+  const NotificationOverlay({super.key, this.maxWidth = double.infinity, this.maxHeight = double.infinity});
 
-  /// Wide enough for a sentence and a half of body text, narrow enough that four of
-  /// them stacked don't read as a second panel.
-  static const double width = 360;
+  static const double width = 380;
+
+  final double maxWidth;
+  final double maxHeight;
 
   @override
-  ConsumerState<NotificationOverlay> createState() =>
-      _NotificationOverlayState();
+  ConsumerState<NotificationOverlay> createState() => _NotificationOverlayState();
 }
 
 class _NotificationOverlayState extends ConsumerState<NotificationOverlay> {
   bool _hovered = false;
+  bool _unfolded = false;
 
   @override
   Widget build(BuildContext context) {
     final notifications = ref.watch(notificationsProvider);
     if (notifications.isEmpty) return const SizedBox.shrink();
 
-    // Bounded and scrollable rather than trusting the cap: the cap limits the
-    // *count*, and one long message is enough to overflow a short window on its
-    // own. Reversed, so the newest is the one that stays in view.
-    final maxHeight = MediaQuery.sizeOf(context).height * 0.6;
+    final loc = context.loc;
+    final width = math.min(NotificationOverlay.width, widget.maxWidth);
+    final overflow = notifications.length - kVisibleNotifications;
+    // It folds by itself once nothing is left to fold.
+    if (overflow <= 0) _unfolded = false;
+    final folded = _unfolded ? 0 : math.max(0, overflow);
+    final center = ref.read(notificationsProvider.notifier);
 
-    return MouseRegion(
-      // One region around the whole column rather than one per card, which also
-      // makes the 8px gaps between cards part of it: moving the pointer from
-      // one notification to the next never crosses "outside", so nothing
-      // restarts halfway through being read.
-      onEnter: (_) => _setHovered(true),
-      onExit: (_) => _setHovered(false),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: NotificationOverlay.width,
-            maxHeight: maxHeight),
-        child: SingleChildScrollView(
-          reverse: true,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              for (final notification in notifications)
-                _NotificationCard(
-                  // Keyed by id, which is what makes an in-place update keep the
-                  // same card — same entrance animation, same place in the
-                  // stack, same clock — instead of sliding a new one in.
-                  key: ValueKey(notification.id),
-                  notification: notification,
-                  paused: _hovered,
-                  onDismiss: () => ref
-                      .read(notificationsProvider.notifier)
-                      .dismiss(notification.id),
-                ),
-            ],
+    return Semantics(
+      container: true,
+      label: loc.t('notifications.region'),
+      child: MouseRegion(
+        // One region around the pill and every card, so the gaps between cards are inside it: moving from one card
+        // to the next never leaves, and nothing restarts halfway through being read.
+        onEnter: (_) => _setHovered(true),
+        onExit: (_) => _setHovered(false),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: width, maxHeight: widget.maxHeight),
+          child: SingleChildScrollView(
+            // Reversed, so the newest stays in view when the column is taller than the window.
+            reverse: true,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (overflow > 0)
+                  _MorePill(
+                    label: _unfolded
+                        ? loc.t('notifications.fewer')
+                        : loc.plural('notifications.more', folded, params: {'count': '$folded'}),
+                    onPressed: () => setState(() => _unfolded = !_unfolded),
+                  ),
+                for (var i = 0; i < notifications.length; i++)
+                  // A folded card is still built, offstage, so it keeps owning its clock: a Done runs out unseen and
+                  // the count drops, while an Error waits.
+                  KeyedSubtree(
+                    key: ValueKey(notifications[i].id),
+                    child: Offstage(
+                      offstage: i < folded,
+                      child: TickerMode(
+                        enabled: i >= folded,
+                        child: _NotificationCard(
+                          notification: notifications[i],
+                          width: width,
+                          paused: _hovered,
+                          folded: i < folded,
+                          onClosed: (seen) => _leave(seen, center.close),
+                          onExpired: (seen) => _leave(seen, center.dismiss),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -123,184 +141,165 @@ class _NotificationOverlayState extends ConsumerState<NotificationOverlay> {
     if (_hovered == hovered) return;
     setState(() => _hovered = hovered);
   }
+
+  /// Takes a card off once its exit ends, unless news reached it in the same frame, before the card could see it.
+  bool _leave(AppNotification seen, void Function(int id) go) {
+    final now = ref.read(notificationsProvider).where((n) => n.id == seen.id).firstOrNull;
+    if (now != null && _isNews(seen, now)) return false;
+    go(seen.id);
+    return true;
+  }
 }
 
-/// The colour that carries a notification's meaning.
-///
-/// One function, so the palette cannot drift between the icon, the accent bar
-/// and anything added later. Success is a literal because Material has no
-/// "success" role and the v3 palette has not reached this card yet.
-Color notificationColor(BuildContext context, NotificationSeverity severity) {
-  final scheme = Theme.of(context).colorScheme;
-  return switch (severity) {
-    NotificationSeverity.success => const Color(0xFF10B981),
-    NotificationSeverity.info => scheme.primary,
-    NotificationSeverity.warning => ZenithPalette.of(context).amber,
-    NotificationSeverity.error => scheme.error,
-  };
+/// Whether [now] says something [before] did not, which keeps a card that was on its way out. A Working card's own
+/// progress is not news.
+bool _isNews(AppNotification before, AppNotification now) {
+  final progressOnly = before.kind == NotificationKind.working && now.kind == NotificationKind.working;
+  return before.kind != now.kind ||
+      before.count != now.count ||
+      (!progressOnly && (before.title != now.title || before.body != now.body));
 }
 
-/// The icon a severity gets when the call site doesn't name one.
-IconData notificationIcon(NotificationSeverity severity) {
-  return switch (severity) {
-    NotificationSeverity.success => Icons.check_circle_outline_rounded,
-    NotificationSeverity.info => Icons.info_outline_rounded,
-    NotificationSeverity.warning => Icons.warning_amber_rounded,
-    NotificationSeverity.error => Icons.error_outline_rounded,
-  };
-}
+/// Takes a card off the stack once its exit ends, returning false when news arrived and it stays.
+typedef _Leave = bool Function(AppNotification seen);
 
-/// The card's leading slot: whose mod this is about, or what kind of message it
-/// is when there is no mod.
-///
-/// **Always [_diameter] wide, whichever it renders.** The cards share a stack,
-/// and a slot that changed width would give the column a ragged left edge — the
-/// text of a portrait card starting 22px right of the card above it. One
-/// footprint, two occupants, which is the rule `ModStatusSlot` already follows.
-///
-/// [_diameter] is 46 for an arithmetic reason worth keeping: two lines of card
-/// text — a `titleSmall` headline (23px line box) plus 2 plus one `bodyMedium`
-/// line at this card's `height: 1.35` (21.6) — come to 46.6px. 46 is therefore the
-/// largest slot that never makes a card taller than its own text already did.
-/// A larger avatar would grow every two-line card in the app.
-///
-/// **Considered and rejected: a severity badge on the portrait's corner.** It
-/// sits over 60 different pieces of artwork, so it needs an opaque fill plus a
-/// card-coloured cut-out ring to stay readable — three new painted elements. At
-/// 46px outer, a badge legible at all is ≥14px, eating the chin or shoulder of
-/// every portrait. And it duplicates [notificationIcon] into a second renderer
-/// at a second size, which is the drift `notificationColor` exists to prevent.
-class _NotificationLeading extends StatelessWidget {
-  const _NotificationLeading({
-    required this.severity,
-    required this.icon,
-    required this.characterId,
-    required this.accent,
-  });
+/// How one kind looks: its icon tile, the badge it puts on a portrait, and their glyphs.
+typedef NotificationLook = ({TonePair tile, TonePair? badge, IconData icon, IconData? badgeIcon, bool spins});
 
-  final NotificationSeverity severity;
-  final IconData? icon;
-  final String? characterId;
+/// The look of each [NotificationKind], in one place so the tile, the badge and anything added later cannot drift.
+NotificationLook notificationLook(ZenithPalette p, NotificationKind kind) => switch (kind) {
+      NotificationKind.working => (
+          tile: TonePair(p.hover, p.textProse),
+          badge: TonePair(p.line, p.text),
+          icon: Icons.sync_rounded,
+          badgeIcon: null,
+          spins: true,
+        ),
+      NotificationKind.done => (
+          tile: p.notificationDoneTile,
+          badge: TonePair(p.accent, p.onAccent),
+          icon: Icons.check_rounded,
+          badgeIcon: Icons.check_rounded,
+          spins: false,
+        ),
+      NotificationKind.note => (
+          tile: TonePair(p.hover, p.textProse),
+          badge: null,
+          icon: Icons.info_outline_rounded,
+          badgeIcon: null,
+          spins: false,
+        ),
+      NotificationKind.update => (
+          tile: p.badgeUpdate,
+          badge: TonePair(p.amber, p.onAccent),
+          icon: Icons.arrow_circle_up_outlined,
+          badgeIcon: Icons.arrow_upward_rounded,
+          spins: false,
+        ),
+      NotificationKind.needsYou => (
+          tile: p.badgeInfo,
+          badge: TonePair(p.blue, p.onAccent),
+          icon: Icons.download_rounded,
+          badgeIcon: Icons.arrow_downward_rounded,
+          spins: false,
+        ),
+      NotificationKind.warning => (
+          tile: p.badgeUpdate,
+          badge: TonePair(p.amber, p.onAccent),
+          icon: Icons.warning_amber_rounded,
+          badgeIcon: Icons.priority_high_rounded,
+          spins: false,
+        ),
+      NotificationKind.error => (
+          tile: p.badgeMissing,
+          badge: TonePair(p.red, p.onRed),
+          icon: Icons.highlight_off_rounded,
+          badgeIcon: Icons.close_rounded,
+          spins: false,
+        ),
+    };
 
-  /// `notificationColor` for this severity, resolved once by the card and
-  /// passed down — so the stripe, the border and this slot are one derivation
-  /// rather than three that can drift.
-  final Color accent;
+/// The card's ground: [ZenithPalette.notificationError] for an error, [ZenithPalette.notification] otherwise.
+TonePair notificationGround(ZenithPalette p, NotificationKind kind) =>
+    kind == NotificationKind.error ? p.notificationError : p.notification;
 
-  static const double _diameter = 46;
+/// "+N more" above the stack, or "Show fewer" while it is unfolded.
+class _MorePill extends StatelessWidget {
+  const _MorePill({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final portrait = CharacterAvatar.assetPathFor(characterId);
-
-    if (icon == null && portrait != null) {
-      return Semantics(
-        image: true,
-        label: context.loc.t(
-          'notifications.character_portrait',
-          params: {'name': getCharacterDisplayName(characterId!)},
-        ),
-        child: CharacterAvatar(
-          characterId: characterId,
-          size: _diameter,
-          // The ring *is* the severity, and it appears exactly where the
-          // severity icon stopped appearing — the same `notificationColor` the
-          // stripe uses, read a third time rather than derived a second.
-          ring: BorderSide(color: accent, width: 2),
-          // Card surface between ring and artwork, so the ring's contrast is
-          // against one known colour per theme rather than against whichever
-          // pixels this character's silhouette has at the clip edge.
-          ringGap: 2,
-          background: scheme.surfaceContainerHighest,
-        ),
-      );
-    }
-
-    // A mod filed under a built-in category has no portrait but does have a
-    // subject, so the slot still says what the message is about.
-    final category =
-        characterId == null ? null : builtInCategoryById(characterId!);
-
-    return Container(
-      width: _diameter,
-      height: _diameter,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        // A tint of the one severity colour, not a second palette entry. No
-        // ring here: the disc and the glyph already carry the accent, and a
-        // third statement of one fact inside 40px is noise.
-        color: accent.withValues(alpha: 0.14),
+    final palette = ZenithPalette.of(context);
+    final ground = palette.notification;
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        minimumSize: const Size(0, 26),
+        fixedSize: const Size.fromHeight(26),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        backgroundColor: ground.background,
+        foregroundColor: palette.text2,
+        shape: StadiumBorder(side: BorderSide(color: ground.border!)),
+        textStyle: Theme.of(context).textTheme.bodySmall,
       ),
-      child: Icon(
-        icon ?? category?.icon ?? notificationIcon(severity),
-        size: 20,
-        color: accent,
-      ),
+      child: Text(label),
     );
   }
 }
 
 /// One card, and the only thing in this subsystem that owns a clock.
 ///
-/// The auto-dismiss timer is here rather than in `NotificationCenter` because it
-/// has to stop while the notifications are being read — otherwise a long error
-/// disappears mid-sentence, which is the complaint this whole rework exists to
-/// answer. The centre stays a pure list of state; time is a property of the
-/// thing on screen.
-///
-/// Whether it is being read is **not** this card's own business, though: see
-/// [paused].
+/// The clock is here rather than in `NotificationCenter` because it stops while the stack is being read, and only
+/// the widget knows that.
 class _NotificationCard extends StatefulWidget {
   const _NotificationCard({
-    super.key,
     required this.notification,
+    required this.width,
     required this.paused,
-    required this.onDismiss,
+    required this.folded,
+    required this.onClosed,
+    required this.onExpired,
   });
 
   final AppNotification notification;
+  final double width;
 
-  /// True while the pointer is anywhere on the stack — over *any* card, or in
-  /// a gap between two. Held one level up so hovering one notification holds
-  /// all of them: the pointer resting on the first while the fourth is being
-  /// read must not let the fourth expire.
-  ///
-  /// Leaving does not resume where it left off, it **restarts** the full
-  /// duration. Someone who has just moved the pointer away has not necessarily
-  /// finished, and half a second of grace is worse than none.
+  /// True while the pointer is anywhere on the stack. Leaving restarts the full duration rather than resuming: who
+  /// just moved the pointer away has not necessarily finished reading.
   final bool paused;
 
-  final VoidCallback onDismiss;
+  /// Offstage under "+N more". Its tickers are stopped, so it leaves without its exit animation.
+  final bool folded;
+
+  /// The user closed it.
+  final _Leave onClosed;
+
+  /// Its clock ran out.
+  final _Leave onExpired;
 
   @override
   State<_NotificationCard> createState() => _NotificationCardState();
 }
 
-class _NotificationCardState extends State<_NotificationCard>
-    with SingleTickerProviderStateMixin {
-  /// In and out. The exit is quicker than the entrance — an arrival wants to be
-  /// noticed, a departure wants to be out of the way.
+class _NotificationCardState extends State<_NotificationCard> with SingleTickerProviderStateMixin {
+  /// The exit is quicker than the entrance: an arrival wants to be noticed, a departure to be out of the way.
   late final AnimationController _anim = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 220),
     reverseDuration: const Duration(milliseconds: 140),
   );
 
-  /// Built once and disposed, not rebuilt in `build`: a `CurvedAnimation`
-  /// attaches to its parent, so one per frame is a listener leak that only
-  /// shows up as a slow bleed.
-  late final CurvedAnimation _curve = CurvedAnimation(
-    parent: _anim,
-    curve: Curves.easeOutCubic,
-  );
+  late final CurvedAnimation _curve = CurvedAnimation(parent: _anim, curve: Curves.easeOutCubic);
 
   Timer? _timer;
 
-  /// Set the moment the exit starts, so a hover, a second click on the close
-  /// button, or a timer that had already fired cannot start it twice.
-  bool _closing = false;
+  /// What runs once the exit ends, while one is under way. Set when the exit starts, so a second press or a clock
+  /// that already fired cannot start it twice.
+  _Leave? _leaving;
 
   @override
   void initState() {
@@ -310,23 +309,37 @@ class _NotificationCardState extends State<_NotificationCard>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) _anim.value = 1;
+  }
+
+  @override
   void didUpdateWidget(_NotificationCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Hovering stops the clock; leaving starts a fresh one.
-    if (oldWidget.paused != widget.paused) {
-      if (widget.paused) {
-        _timer?.cancel();
-      } else {
-        _restartTimer();
+    final before = oldWidget.notification;
+    final now = widget.notification;
+    final leaving = _leaving;
+    if (leaving != null) {
+      // News arriving during the exit keeps the card, since it is meant to be read: a merge, or the result of a
+      // Working card being hidden.
+      if (_isNews(before, now)) {
+        _leaving = null;
+        _anim.forward();
+      } else if (widget.folded && !oldWidget.folded) {
+        // Folded mid-exit, its tickers stop and the exit would never finish. After the frame, since the stack
+        // can't change while it is being built.
+        _leaving = null;
+        WidgetsBinding.instance.addPostFrameCallback((_) => leaving(now));
+        return;
       }
-      return;
     }
-    // An update in place re-clocks the card. This is the whole point of a
-    // pinned notification: it sits there with no timer while the work runs, and
-    // the update that reports the result is what gives it an ending.
-    if (oldWidget.notification.duration != widget.notification.duration ||
-        oldWidget.notification.title != widget.notification.title ||
-        oldWidget.notification.body != widget.notification.body) {
+    if (oldWidget.paused != widget.paused ||
+        before.duration != now.duration ||
+        before.title != now.title ||
+        before.body != now.body ||
+        before.kind != now.kind ||
+        before.count != now.count) {
       _restartTimer();
     }
   }
@@ -342,166 +355,491 @@ class _NotificationCardState extends State<_NotificationCard>
   void _restartTimer() {
     _timer?.cancel();
     final duration = widget.notification.duration;
-    // `paused` is checked here too, not only on the transition: a notification
-    // raised *while* the pointer is already on the stack must arrive stopped,
-    // or a burst would tick away under a reader who never moved.
-    if (duration == null || _closing || widget.paused) return;
-    _timer = Timer(duration, _close);
+    // A card raised while the pointer is already on the stack arrives held.
+    if (duration == null || _leaving != null || widget.paused) return;
+    _timer = Timer(duration, () => _leave(widget.onExpired));
   }
 
-  Future<void> _close() async {
-    if (_closing) return;
-    _closing = true;
+  Future<void> _leave(_Leave then) async {
+    if (_leaving != null) return;
+    _leaving = then;
     _timer?.cancel();
-    await _anim.reverse();
-    // The card can be disposed mid-exit — the stack was cleared, or the tab
-    // holding the overlay went away — in which case there is nothing left to
-    // remove.
-    if (mounted) widget.onDismiss();
+    final seen = widget.notification;
+    // A folded card's tickers are stopped, so its exit would never finish. An exit called off by news never
+    // finishes either, and leaves the callback to a later exit.
+    if (!widget.folded && !MediaQuery.disableAnimationsOf(context)) await _anim.reverse();
+    if (!mounted || !identical(_leaving, then)) return;
+    _leaving = null;
+    if (!then(seen)) {
+      _anim.forward();
+      _restartTimer();
+    }
+  }
+
+  void _press(NotificationAction action) {
+    action.onPressed();
+    if (action.closes) _leave(widget.onClosed);
   }
 
   @override
   Widget build(BuildContext context) {
+    final still = MediaQuery.disableAnimationsOf(context);
+    final card = Padding(
+      // The gap belongs to the card below it, so the stack's one `MouseRegion` covers the gaps too.
+      padding: const EdgeInsets.only(top: 8),
+      child: _card(context),
+    );
     return SizeTransition(
-      // Collapsing rather than vanishing is what makes the cards above slide
-      // down into the gap instead of jumping.
+      // Collapsing rather than vanishing makes the cards above slide down into the gap.
       sizeFactor: _curve,
       child: FadeTransition(
         opacity: _curve,
-        child: SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(0.12, 0),
-            end: Offset.zero,
-          ).animate(_curve),
-          // The gap belongs to the card above it, so the stack's single
-          // `MouseRegion` covers the spaces between cards as well as the cards.
-          child: Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: _card(context),
-          ),
-        ),
+        child: still
+            ? card
+            : SlideTransition(
+                position: Tween<Offset>(begin: const Offset(0.12, 0), end: Offset.zero).animate(_curve),
+                child: card,
+              ),
       ),
     );
   }
 
   Widget _card(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final notification = widget.notification;
-    final accent = notificationColor(context, notification.severity);
+    final palette = ZenithPalette.of(context);
+    final text = Theme.of(context).textTheme;
+    final loc = context.loc;
+    final n = widget.notification;
+    final ground = notificationGround(palette, n.kind);
+    final working = n.kind == NotificationKind.working;
 
-    return Material(
-      color: Colors.transparent,
-      child: Container(
-        width: NotificationOverlay.width,
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: accent.withValues(alpha: 0.35)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.22),
-              blurRadius: 16,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        // Clipped so the accent bar can run the full height of the card and
-        // still follow its rounded corners.
-        clipBehavior: Clip.antiAlias,
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    final bodyStyle = text.bodySmall?.copyWith(color: palette.text2);
+    final Widget body;
+    if (n.count > 1 && n.subjects.length > 1) {
+      final subjects = Text(_subjectList(loc, n.subjects), style: bodyStyle, maxLines: 3, overflow: TextOverflow.ellipsis);
+      // A body that says more than its subject keeps saying it, with the subjects under it.
+      body = n.repeat?.body == null
+          ? subjects
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(n.body, style: bodyStyle, maxLines: 8, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 2),
+                subjects,
+              ],
+            );
+    } else if (n.keycap != null) {
+      body = Text.rich(TextSpan(children: keycapSentence(context, n.body, n.keycap!)), style: bodyStyle);
+    } else {
+      // Long enough for the few bodies that carry a reason as well as a subject; past that it belongs in a dialog.
+      body = Text(n.body, style: bodyStyle, maxLines: 8, overflow: TextOverflow.ellipsis);
+    }
+
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      child: Material(
+        type: MaterialType.transparency,
+        child: Container(
+          key: const ValueKey('notification-card'),
+          width: widget.width,
+          decoration: BoxDecoration(
+            color: ground.background,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: ground.border!),
+            boxShadow: [BoxShadow(color: palette.notificationShadow, blurRadius: 40, offset: const Offset(0, 14))],
+          ),
+          // Clipped so the bar along the bottom follows the rounded corners.
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
             children: [
-              // The severity, readable before a single word is: a solid stripe
-              // is legible at a glance and at any text scale, where a tinted
-              // background would have to be so pale it stops being a colour.
-              Container(width: 4, color: accent),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _NotificationLeading(
-                        severity: notification.severity,
-                        icon: notification.icon,
-                        characterId: notification.characterId,
-                        accent: accent,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
+              Padding(
+                // An action's hit area reaches 8px left of its label and 6px into the bottom padding, and a hit
+                // outside a parent's bounds never lands, so the column and the padding give that room up instead.
+                padding: EdgeInsets.fromLTRB(12, 12, 10, n.actions.isEmpty ? 12 : 12 - _ActionButton.overhang),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _NotificationLeading(notification: n, ground: ground.background),
+                    const SizedBox(width: 12 - _ActionButton.inset),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 4),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              notification.title,
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
+                            Padding(
+                              padding: const EdgeInsets.only(left: _ActionButton.inset),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(n.title,
+                                      style:
+                                          text.bodyMedium?.copyWith(fontWeight: FontWeight.w600, color: palette.text)),
+                                  const SizedBox(height: 2),
+                                  body,
+                                ],
                               ),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              notification.body,
-                              // Long enough for the few messages that carry a
-                              // reason as well as a subject; past that it
-                              // belongs in a dialog rather than here.
-                              maxLines: 8,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                                height: 1.35,
+                            if (n.actions.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Wrap(
+                                  spacing: 2,
+                                  children: [
+                                    for (var i = 0; i < n.actions.length; i++)
+                                      _ActionButton(
+                                        action: n.actions[i],
+                                        color: i == 0 && n.kind != NotificationKind.note ? palette.link : palette.text,
+                                        hover: n.kind == NotificationKind.error
+                                            ? palette.notificationErrorHover
+                                            : palette.line,
+                                        onPressed: () => _press(n.actions[i]),
+                                      ),
+                                  ],
+                                ),
                               ),
-                            ),
                           ],
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      _CloseButton(onPressed: _close),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 12),
+                    _CloseButton(
+                      label: loc.t(working ? 'notifications.hide' : 'notifications.close'),
+                      onPressed: () => _leave(widget.onClosed),
+                    ),
+                  ],
                 ),
               ),
+              if (working)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: 3,
+                  child: _ProgressBar(progress: n.progress),
+                ),
             ],
           ),
         ),
       ),
     );
   }
+
+  static String _subjectList(AppLocalizations loc, List<String> subjects) {
+    if (subjects.length == 2) {
+      return loc.t('notifications.subjects_two', params: {'first': subjects[0], 'second': subjects[1]});
+    }
+    final more = subjects.length - 2;
+    return loc.plural('notifications.subjects_more', more,
+        params: {'first': subjects[0], 'second': subjects[1], 'count': '$more'});
+  }
 }
 
-/// The close affordance, on every notification including the pinned ones.
+/// The card's leading slot: the portrait with the kind as a badge on its corner when the card is about one
+/// character's mod, else the kind's icon on its tile.
 ///
-/// Its own widget only so the hit target can be generous while the glyph stays
-/// small enough not to compete with the message.
-///
-/// **A semantic label rather than a `Tooltip`**, and that is forced rather than
-/// chosen: a tooltip needs an `Overlay` ancestor, and this layer is mounted as a
-/// *sibling* of the `Navigator` — which is exactly what puts it above dialogs.
-/// A tooltip here throws "No Overlay widget found" the first time a notification
-/// is drawn. Nothing is lost that a ✕ doesn't already say, and the label keeps
-/// the control named for screen readers.
-class _CloseButton extends StatelessWidget {
-  const _CloseButton({required this.onPressed});
+/// A mod filed under a category, Unknown or Unassigned has no portrait and gets the plain icon, as does a card that
+/// counts several mods.
+class _NotificationLeading extends StatelessWidget {
+  const _NotificationLeading({required this.notification, required this.ground});
 
+  final AppNotification notification;
+
+  /// The card's ground, for the ring that cuts the badge out of the portrait.
+  final Color ground;
+
+  static const double _portrait = 32;
+  static const double _tile = 28;
+  static const double _badge = 18;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ZenithPalette.of(context);
+    final n = notification;
+    final look = notificationLook(palette, n.kind);
+    final characterId = n.characterId;
+    final hasPortrait =
+        n.icon == null && n.count == 1 && characterId != null && CharacterAvatar.assetPathFor(characterId) != null;
+
+    if (hasPortrait) {
+      final badge = look.badge;
+      return Semantics(
+        image: true,
+        label: context.loc.t(
+          'notifications.character_portrait',
+          params: {'name': getCharacterDisplayName(characterId)},
+        ),
+        child: SizedBox(
+          width: _portrait,
+          height: _portrait + 1,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned(
+                top: 1,
+                left: 0,
+                child: CharacterTile(groupId: characterId, size: _portrait, radius: 9),
+              ),
+              if (badge != null)
+                Positioned(
+                  right: -5,
+                  bottom: -5,
+                  // 18px across with its 2px ring in the card's ground, so a 14px fill.
+                  child: Container(
+                    width: _badge,
+                    height: _badge,
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(color: ground, shape: BoxShape.circle),
+                    child: Container(
+                      key: const ValueKey('notification-badge'),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(color: badge.background, shape: BoxShape.circle),
+                      child: look.spins
+                          ? _Spinner(size: 10, color: badge.foreground)
+                          : Icon(look.badgeIcon, size: 10, color: badge.foreground),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      key: const ValueKey('notification-tile'),
+      width: _tile,
+      height: _tile,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(color: look.tile.background, borderRadius: BorderRadius.circular(8)),
+      child: look.spins && n.icon == null
+          ? _Spinner(size: 16, color: look.tile.foreground)
+          : Icon(n.icon ?? look.icon, size: 16, color: look.tile.foreground),
+    );
+  }
+}
+
+/// A 270° arc turning once every 0.9s, standing still under reduced motion.
+class _Spinner extends StatefulWidget {
+  const _Spinner({required this.size, required this.color});
+
+  final double size;
+  final Color color;
+
+  @override
+  State<_Spinner> createState() => _SpinnerState();
+}
+
+class _SpinnerState extends State<_Spinner> with SingleTickerProviderStateMixin {
+  late final AnimationController _turn =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _turn.stop();
+    } else if (!_turn.isAnimating) {
+      _turn.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _turn.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RotationTransition(
+      key: const ValueKey('notification-spinner'),
+      turns: _turn,
+      child: CustomPaint(size: Size.square(widget.size), painter: _ArcPainter(widget.color)),
+    );
+  }
+}
+
+class _ArcPainter extends CustomPainter {
+  const _ArcPainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // The canvas draws it in a 24-unit box: radius 8.5, from the top clockwise to the left.
+    final unit = size.width / 24;
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 2.6 * unit;
+    final rect = Rect.fromCircle(center: size.center(Offset.zero), radius: 8.5 * unit);
+    canvas.drawArc(rect, -math.pi / 2, 1.5 * math.pi, false, paint);
+  }
+
+  @override
+  bool shouldRepaint(_ArcPainter oldDelegate) => oldDelegate.color != color;
+}
+
+/// A Working card's bar along its bottom edge: the share done, or a sweep for work of unknown size.
+class _ProgressBar extends StatelessWidget {
+  const _ProgressBar({required this.progress});
+
+  final double? progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ZenithPalette.of(context);
+    final still = MediaQuery.disableAnimationsOf(context);
+    final progress = this.progress;
+    return ColoredBox(
+      color: palette.line,
+      child: progress == null
+          ? _Sweep(color: palette.accent)
+          : AnimatedFractionallySizedBox(
+              key: const ValueKey('notification-progress'),
+              duration: still ? Duration.zero : const Duration(milliseconds: 200),
+              alignment: Alignment.centerLeft,
+              widthFactor: progress,
+              child: ColoredBox(color: palette.accent),
+            ),
+    );
+  }
+}
+
+/// A segment 35% of the bar's width crossing it every 1.4s, standing still under reduced motion.
+class _Sweep extends StatefulWidget {
+  const _Sweep({required this.color});
+
+  final Color color;
+
+  @override
+  State<_Sweep> createState() => _SweepState();
+}
+
+class _SweepState extends State<_Sweep> with SingleTickerProviderStateMixin {
+  late final AnimationController _run =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 1400));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _run.stop();
+    } else if (!_run.isAnimating) {
+      _run.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _run.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final still = MediaQuery.disableAnimationsOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) => AnimatedBuilder(
+        animation: _run,
+        builder: (context, _) {
+          final width = constraints.maxWidth;
+          final left = still ? 0.30 : -0.35 + 1.35 * _run.value;
+          return Stack(
+            key: const ValueKey('notification-sweep'),
+            clipBehavior: Clip.hardEdge,
+            children: [
+              Positioned(
+                left: left * width,
+                top: 0,
+                bottom: 0,
+                width: 0.35 * width,
+                child: ColoredBox(color: widget.color.withValues(alpha: 0.7)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// A flat text button, 30px tall with its label 8px in from either side, filled under the pointer.
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({required this.action, required this.color, required this.hover, required this.onPressed});
+
+  final NotificationAction action;
+  final Color color;
+  final Color hover;
+  final VoidCallback onPressed;
+
+  /// From the button's edge to its label.
+  static const double inset = 8;
+
+  /// How far the button reaches below the column of text it sits in, into the card's bottom padding.
+  static const double overhang = 6;
+
+  static const double height = 30;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = Theme.of(context).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600);
+    return TextButton(
+      onPressed: onPressed,
+      style: ButtonStyle(
+        padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: inset)),
+        minimumSize: const WidgetStatePropertyAll(Size(0, height)),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.standard,
+        shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(7))),
+        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.hovered) ? hover : Colors.transparent,
+        ),
+        foregroundColor: WidgetStatePropertyAll(color),
+        textStyle: WidgetStatePropertyAll(label),
+      ),
+      child: Text(action.label),
+    );
+  }
+}
+
+/// The close button, on every card. "Hide" on a Working card, whose result still arrives.
+///
+/// **A semantic label rather than a `Tooltip`**, which is forced: a tooltip needs an `Overlay` ancestor, and this
+/// layer is a sibling of the `Navigator`.
+class _CloseButton extends StatelessWidget {
+  const _CloseButton({required this.label, required this.onPressed});
+
+  final String label;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 28,
-      height: 28,
+    final palette = ZenithPalette.of(context);
+    return SizedBox.square(
+      dimension: 26,
       child: IconButton(
         onPressed: onPressed,
         padding: EdgeInsets.zero,
-        iconSize: 16,
-        visualDensity: VisualDensity.compact,
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-        icon: Icon(
-          Icons.close_rounded,
-          semanticLabel: context.loc.t('notifications.dismiss'),
+        iconSize: 14,
+        style: ButtonStyle(
+          minimumSize: const WidgetStatePropertyAll(Size.square(26)),
+          shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(7))),
+          overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+          backgroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.hovered) ? palette.line : Colors.transparent,
+          ),
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.hovered) ? palette.text : palette.text3,
+          ),
         ),
+        icon: Icon(Icons.close_rounded, semanticLabel: label),
       ),
     );
   }
