@@ -243,7 +243,7 @@ Three things here are decisions rather than mechanics:
   It is the user's explicit "not from GameBanana / it's my own", and the promise attached to it is permanence — it wins over everything, because an id worked out from a link that was wrong is exactly why somebody might have set it.
   The card shows it back to them as a grey "Local", the one grey badge with no press: there is nothing to settle.
 - **A page that is gone has no state of its own, and nothing about it is stored.**
-  GameBanana reports a private, trashed or withheld page on every request, and the update check says so in its verdict each time it asks.
+  GameBanana reports a private, trashed or withheld page on every request, and the update check says so in its verdict each time it asks. A softhold is the exception: its files are public, and it is checked like any other mod ([`update-checks.md`](update-checks.md#2-the-verdicts)).
   A stored mark adds nothing to that and goes stale: a privated page that comes back would keep it.
   So the card shows whatever mark the block earns, the filter counts the mod by that same state, and a page that comes back is checked as if nothing happened.
 - **Only `unknown` is actionable.** `assumed_latest` is the user having already answered "I don't know which, I got it around then", and `inferred` is a file the tracking screen worked out and the user accepted. Marking either in blue would make the dialog impossible to finish.
@@ -478,7 +478,7 @@ Order is identity → file: a row that asks about its identity is filed there wh
 | Confirm the identity | `mod_id_confidence` is weaker than `user` | `mod_id_confidence: user` |
 | Record the file | `version_confidence` is `unknown` and the page publishes files | `file_id`, `version`, `version_label`, at the tier below |
 
-A mod whose record says the page is **private, trashed or withheld gets no row**, and nothing is asked: its file list is empty, and an identity confirmed against it would be confirmed against a blank.
+A mod whose record says the page is **gone (private, trashed, or withheld by more than a softhold) gets no row**, and nothing is asked: its file list is empty, and an identity confirmed against it would be confirmed against a blank.
 It is counted on the "couldn't be checked" line, and not in `settled`, whose line tells the user the mod is already sorted out.
 Nothing is written about it either, so the next check reads the page afresh and a page that comes back is resolved like any other.
 

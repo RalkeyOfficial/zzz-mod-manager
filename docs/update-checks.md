@@ -72,7 +72,7 @@ No network, no filesystem, no widgets.
 | `versionUnknown` | Identity known, installed file not, and nothing local identifies it. The resolve dialog is the fix, not this. |
 | `untracked` | No remote identity at all. |
 | `trackingOff` | The user declared the mod their own. |
-| `sourceGone` | The mod page is private, trashed or withheld — read from the remote's own flags, not inferred from a status code. |
+| `sourceGone` | The mod page is private, trashed, or withheld by a hold stricter than a softhold — read from the remote's own flags, not inferred from a status code. A softhold is not gone; see below. |
 | `indeterminate` | The response carried no current file list, or a layer's page was never fetched. **Silence is not evidence**: concluding "nothing newer" from a question never asked is the one way this fails invisibly. A layer that names no page is not silence, since there was nothing to ask, and is left out of the verdict instead. |
 | `tracksPatchOnly` | The folder holds a patch and nobody has said what it patches, so nothing here is a statement about the mod the folder actually contains. Distinct from `upToDate` because the patch genuinely has no newer file — that answer is true about the page asked and false about the folder. |
 
@@ -80,6 +80,13 @@ No network, no filesystem, no widgets.
 flagging a mod superseded; the mod still exists, still downloads, and can be
 perfectly up to date. It is a different sentence from "your copy is old", and it
 must stay distinct from `sourceGone`.
+
+**A softhold is checked like any other mod.** GameBanana withholds a mod over a rule the author must fix, and a "softhold" (`_aWithholdNotice._sType`) keeps the page and its files public, so there is a file list to judge by and the user can download the update.
+Any other hold, or a withheld page with no notice, is `sourceGone`. None has been seen, so nobody knows what it leaves public, and an Update button over files that may not download is worse than a mod reported gone that isn't.
+`Mod/Multi` hides this: for a withheld mod it sends the name, nulls everything else, files and dates included, and says `_bIsWithheld: false` ([`gamebanana-api.md`](gamebanana-api.md#bulk--modmulti)).
+So a record with no `_tsDateAdded` that is not flagged private or trashed is that blank (`isBlankedRecord`), and both the whole-library pass and `fetchModRecord` fetch the mod's `ProfilePage` in its place, one request per withheld mod.
+A profile that can't be reached leaves the blank, which reads `indeterminate`, and the whole-library pass reports the mod unchecked, as it does a failed batch, so its summary never says "No updates found" over a request that failed.
+The app says nothing about a softhold itself; it is between GameBanana and the author, and gives the user nothing to do.
 
 ### The order the checks run in
 

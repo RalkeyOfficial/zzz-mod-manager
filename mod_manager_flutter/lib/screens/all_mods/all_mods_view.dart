@@ -1146,9 +1146,17 @@ class _ModTableRowState extends ConsumerState<_ModTableRow> {
 
     Widget badge(String label, TonePair tone, String tooltip, VoidCallback onTap) =>
         ZenithBadge(label: loc.t(label), tone: tone, tooltip: loc.t(tooltip), onTap: onTap);
+    // A dotted underline marks text with a tooltip, where a solid one is a link.
     Widget fact(String label, {String? tooltip}) {
       final text = Text(loc.t(label), maxLines: 1, overflow: TextOverflow.ellipsis, style: quiet);
-      return tooltip == null ? text : Tooltip(message: loc.t(tooltip), child: text);
+      if (tooltip == null) return text;
+      return Tooltip(
+        message: loc.t(tooltip),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.help,
+          child: CustomPaint(foregroundPainter: _DottedUnderlinePainter(palette.text3), child: text),
+        ),
+      );
     }
 
     return switch (state) {
@@ -1325,4 +1333,23 @@ class _MissingNote extends StatelessWidget {
       ),
     );
   }
+}
+
+/// One-pixel dots, two pixels apart, along the bottom of a line of text. Drawn rather than a dotted text decoration,
+/// which sits on the glyphs and blurs to nothing at 1x; the line box's leading puts these clear of the descenders.
+class _DottedUnderlinePainter extends CustomPainter {
+  _DottedUnderlinePainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    for (var x = 0.0; x < size.width; x += 2) {
+      canvas.drawRect(Rect.fromLTWH(x, size.height - 1, 1, 1), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DottedUnderlinePainter oldDelegate) => oldDelegate.color != color;
 }

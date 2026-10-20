@@ -89,8 +89,14 @@ void main() {
   /// The Sort these out line under the Can't be checked filter, pressable only as a link.
   Finder sortOutLink() => find.widgetWithText(ZenithLink, 'Sort these out');
 
+  // Dated, as every real record is: an undated one is a withheld mod's blank, and the check fetches its profile.
   void answer() => response.complete([
-    GbMod(idRow: 1, name: 'Ellen Swimsuit', files: [GbFile(idRow: 10, file: 'e.zip', dateAdded: DateTime.utc(2026))]),
+    GbMod(
+      idRow: 1,
+      name: 'Ellen Swimsuit',
+      dateAdded: DateTime.utc(2025),
+      files: [GbFile(idRow: 10, file: 'e.zip', dateAdded: DateTime.utc(2026))],
+    ),
   ]);
 
   testWidgets('a check outlives the page it was started from', (tester) async {
@@ -108,6 +114,7 @@ void main() {
 
     expect(container.read(modUpdateChecksProvider)['stale']?.outcome, UpdateOutcome.updateAvailable);
     expect(find.text('1 mod has an update'), findsOneWidget, reason: 'the report is the host\'s, not the page\'s');
+    expect(find.text('Checked 2 mods.'), findsOneWidget, reason: 'a page request no test stubbed would read "couldn\'t be checked"');
     expect(container.read(libraryCheckRunningProvider), isFalse);
   });
 

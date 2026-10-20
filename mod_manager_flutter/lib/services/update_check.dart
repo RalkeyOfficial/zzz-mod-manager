@@ -122,8 +122,9 @@ enum UpdateOutcome {
   /// dialog is the fix, not this.
   untracked,
 
-  /// The mod page is private, trashed or withheld. Read from the remote's own
-  /// flags rather than inferred from a status code.
+  /// The mod page is private, trashed, or withheld by a hold stricter than a
+  /// softhold. Read from the remote's own flags rather than inferred from a
+  /// status code.
   sourceGone,
 
   /// The response carried no current file list, so nothing may be concluded.

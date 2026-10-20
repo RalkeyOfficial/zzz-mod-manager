@@ -444,6 +444,10 @@ Four things to know, all measured rather than assumed, and the last two will bit
   from `Multi` against 6 + 8 from its profile, same ids. `_bIsArchived` is what tells
   them apart, and it is populated in both responses — so read that flag, never the key
   an entry arrived under. Losing `_aArchivedFiles` above therefore costs nothing.
+- **A withheld mod comes back blank, and not flagged.** Measured on three withheld ZZZ mods (`581980`, `586490`, `643580`, all a `softhold` with their page and files public):
+  `Multi` sends `_idRow` and `_sName`, nulls `_aFiles`, `_sVersion`, the dates and `_bIsObsolete`, and sends `_bIsWithheld: false`. Their `ProfilePage` is whole and says `_bIsWithheld: true`.
+  The content rating is not the cause: five `hide` mods that are not withheld come back whole. A trashed mod is blank too, but flagged `_bIsTrashed`.
+  The tell is the null `_tsDateAdded`, which every published mod has; the update check fetches the profile for such a record ([`update-checks.md`](update-checks.md#2-the-verdicts)).
 - **One unknown id fails the whole batch.** A `_csvRowIds` list containing a single id
   the server doesn't recognise returns `400 INPUT_ERRORS` with
   `_csvRowIds: NO_SUCH_RECORD`, and the message names only the *first* offender, so
@@ -574,7 +578,8 @@ we actually care about:
 | `_nDownloadCount` | **profile only** | **Not on listing records.** A card cannot show a download count — see below. |
 | `_bHasFiles` | list | Whether anything is downloadable. |
 | `_bIsObsolete` | both | Author flagged it superseded — **not** the same as gone. |
-| `_bIsPrivate`, `_bIsTrashed`, `_bIsWithheld` | profile | Upstream removal states. Read these instead of inferring from a 404. |
+| `_bIsPrivate`, `_bIsTrashed` | profile | Upstream removal states. Read these instead of inferring from a 404. |
+| `_bIsWithheld` | profile | GameBanana is holding the mod over a rule the author must fix. A `softhold` (`_aWithholdNotice._sType`) keeps the page and files public; no other hold type has been seen. `false` from `Mod/Multi` on every withheld mod measured, which blanks it instead. |
 | `_bHasUpdates`, `_nUpdatesCount` | profile | Whether `Mod/<id>/Updates` has anything. |
 | `_sInitialVisibility` | both | Content gating hint — [§7](#7-nsfw-and-content-ratings). |
 | `_bHasContentRatings` | list | Boolean flag. Listings carry **this and not the ratings map**. |

@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_exceptions.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/bulk_update_check.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_client.dart';
@@ -78,6 +81,66 @@ void main() {
 
     expect(check.outcome, UpdateOutcome.updateAvailable);
     expect(check.candidate?.idRow, 1732269);
+  });
+
+  test('a withheld mod is read from its profile, since Mod/Multi blanks it', () async {
+    // Both are real responses for 581980, a "softhold": the page and both files
+    // are public, and `Mod/Multi` sends the name, nulls the rest and says it is
+    // not withheld. If this blank ever comes back whole, this test still passes
+    // through the profile, but the canary below fails.
+    transport.stub(url(581980), body: loadGbFixture('mod_multi_withheld_581980'));
+    transport.stub(
+      endpoints.modProfile(581980),
+      body: loadGbFixture('mod_profile_withheld_581980'),
+    );
+
+    final record = await fetchModRecord(client(), 581980);
+
+    expect(transport.requests, [url(581980), endpoints.modProfile(581980)]);
+    expect(record.isWithheld, isTrue);
+    expect(record.isRemoteMissing, isFalse);
+    expect(record.currentFiles, hasLength(2));
+  });
+
+  test('canary: Mod/Multi blanks a withheld mod rather than flagging it', () {
+    final multi = GbMod.fromJson(
+      (jsonDecode(loadGbFixture('mod_multi_withheld_581980')) as List).single
+          as Map<String, dynamic>,
+    )!;
+    final profile = GbMod.fromJson(
+      jsonDecode(loadGbFixture('mod_profile_withheld_581980'))
+          as Map<String, dynamic>,
+    )!;
+
+    expect(multi.isWithheld, isFalse);
+    expect(multi.dateAdded, isNull);
+    expect(multi.currentFiles, isEmpty);
+    expect(isBlankedRecord(multi), isTrue);
+    expect(isBlankedRecord(profile), isFalse);
+    // Every real Mod/Multi record of a published mod carries its date.
+    expect(isBlankedRecord(GbMod.fromJson(
+      (jsonDecode(gbMultiRecordFixture(531649)) as List).single
+          as Map<String, dynamic>,
+    )!), isFalse);
+  });
+
+  test('only a softhold counts as public; any other hold reads as gone', () {
+    // No other hold has been captured, so the real softhold profile stands in
+    // with its type changed: what is unmeasured fails closed, rather than offer
+    // an update whose files may not be public.
+    Map<String, dynamic> profileJson() =>
+        jsonDecode(loadGbFixture('mod_profile_withheld_581980'))
+            as Map<String, dynamic>;
+
+    expect(GbMod.fromJson(profileJson())!.withholdType, 'softhold');
+    expect(GbMod.fromJson(profileJson())!.isRemoteMissing, isFalse);
+
+    final hardhold = profileJson();
+    (hardhold['_aWithholdNotice'] as Map<String, dynamic>)['_sType'] = 'hardhold';
+    expect(GbMod.fromJson(hardhold)!.isRemoteMissing, isTrue);
+
+    final noNotice = profileJson()..remove('_aWithholdNotice');
+    expect(GbMod.fromJson(noNotice)!.isRemoteMissing, isTrue);
   });
 
   test('a response that names another mod is an error, never an empty answer',

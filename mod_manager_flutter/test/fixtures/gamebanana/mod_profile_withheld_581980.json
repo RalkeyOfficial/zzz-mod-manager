@@ -1,0 +1,545 @@
+{
+  "_idRow": 581980,
+  "_nStatus": "6",
+  "_bIsPrivate": false,
+  "_bAccessorIsSubmitter": false,
+  "_bIsTrashed": false,
+  "_bIsWithheld": true,
+  "_aWithholdNotice": {
+    "_idRow": 37864,
+    "_tsDateWithheld": 1792013120,
+    "_sType": "softhold",
+    "_bIsInReview": false,
+    "_bHasFailedReview": false,
+    "_aRulesViolated": [
+      {
+        "_idRow": 38,
+        "_sId": "Rule.38",
+        "_sName": "Paywalled Content Violation",
+        "_sCode": "R.38: Paywalled Content Violation",
+        "_sCategoryName": "Categorization & Paywalls",
+        "_sText": "<p>Submissions that violate our <a target=\"_blank\" rel=\"noopener noreferrer nofollow\" href=\"https://gamebanana.com/wikis/2303\">Paywalled Content Policy</a> will be trashed or withheld.</p>",
+        "_sFixInstructions": "<p>Add a mirror to allow free access to the paywalled content at least 30 days after early-access window begins.</p>",
+        "_tsDateAdded": 1744161009,
+        "_tsDateModified": 0,
+        "_bIsAdminOnly": false,
+        "_bIsTrashed": false
+      }
+    ],
+    "_aWithholder": {
+      "_idRow": 1947708,
+      "_sName": "MythsList",
+      "_bIsOnline": false,
+      "_bHasRipe": false,
+      "_sProfileUrl": "https://gamebanana.com/members/1947708",
+      "_sAvatarUrl": "https://images.gamebanana.com/img/av/6a6932ae1e031.jpg",
+      "_aClearanceLevels": [
+        "FNF Manager",
+        "GD Manager",
+        "Ritz Manager",
+        "Super Moderator"
+      ],
+      "_sHdAvatarUrl": "https://images.gamebanana.com/img/av/6a6932b7aaec6.jpg",
+      "_sUpicUrl": "https://images.gamebanana.com/img/upic/684498805b9e4.png",
+      "_aSubjectShaper": {
+        "_sBorderStyle": "Stroke",
+        "_sFont": "Verdana",
+        "_sTextColor": "#ffff00",
+        "_sTextHoverColor": "#FD70E1",
+        "_sBorderColor": "#000000",
+        "_sBorderHoverColor": "#000000"
+      },
+      "_sSubjectShaperCssCode": "font-family:'Verdana';color:#ffff00;"
+    }
+  },
+  "_sName": "Soldier 0-Anby-Reverse Bunny-NSFW",
+  "_sCommentsMode": "open",
+  "_tsDateModified": 1768665739,
+  "_tsDateAdded": 1742162653,
+  "_sProfileUrl": "https://gamebanana.com/mods/581980",
+  "_aPreviewContent": {
+    "screenshots": [
+      {
+        "_sFile220": "sgi_common_thumbs_67d74e22b2cfa_220.webp",
+        "_hFile220": 137,
+        "_sFile220Sfw": "sgi_common_thumbs_67d74e22b2cfa_220_sfw.webp",
+        "_hFile220Sfw": 137,
+        "_sFile530": "sgi_common_thumbs_67d74e22b2cfa_530.webp",
+        "_hFile530": 330,
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "67d74e22b2cfa.jpg"
+      },
+      {
+        "_sFile100": "sgi_common_thumbs_67d7498fc617a_100.webp",
+        "_hFile100": 56,
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "67d7498fc617a.jpg"
+      },
+      {
+        "_sFile100": "sgi_common_thumbs_67d74a58b5e0b_100.webp",
+        "_hFile100": 56,
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "67d74a58b5e0b.jpg"
+      },
+      {
+        "_sFile100": "sgi_common_thumbs_67d748ee404b5_100.webp",
+        "_hFile100": 56,
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "67d748ee404b5.jpg"
+      },
+      {
+        "_sFile100": "sgi_common_thumbs_67d748ee6e3be_100.webp",
+        "_hFile100": 56,
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "67d748ee6e3be.jpg"
+      },
+      {
+        "_sFile100": "sgi_common_thumbs_67d748ee9db40_100.webp",
+        "_hFile100": 87,
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "67d748ee9db40.jpg"
+      },
+      {
+        "_sFile100": "sgi_common_thumbs_67d748ee260a6_100.webp",
+        "_hFile100": 102,
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "67d748ee260a6.jpg"
+      },
+      {
+        "_sFile100": "sgi_common_thumbs_67d748ed89b0f_100.webp",
+        "_hFile100": 138,
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "67d748ed89b0f.jpg"
+      },
+      {
+        "_sFile100": "sgi_common_thumbs_67d748ec5d08e_100.webp",
+        "_hFile100": 147,
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "67d748ec5d08e.jpg"
+      },
+      {
+        "_sFile100": "sgi_common_thumbs_67d748ec9581d_100.webp",
+        "_hFile100": 121,
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "67d748ec9581d.jpg"
+      },
+      {
+        "_sFile100": "sgi_common_thumbs_67d748ebc3b9f_100.webp",
+        "_hFile100": 84,
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "67d748ebc3b9f.jpg"
+      },
+      {
+        "_sFile100": "sgi_common_thumbs_67d748ec5bf00_100.webp",
+        "_hFile100": 106,
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "67d748ec5bf00.jpg"
+      },
+      {
+        "_sFile100": "sgi_common_thumbs_67d748ec5d9a9_100.webp",
+        "_hFile100": 216,
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "67d748ec5d9a9.jpg"
+      },
+      {
+        "_sFile100": "sgi_common_thumbs_67d748ec6127d_100.webp",
+        "_hFile100": 236,
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "67d748ec6127d.jpg"
+      },
+      {
+        "_sFile100": "sgi_common_thumbs_67d748ec60341_100.webp",
+        "_hFile100": 250,
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "67d748ec60341.jpg"
+      },
+      {
+        "_sFile100": "sgi_common_thumbs_67d74a9914d79_100.webp",
+        "_hFile100": 261,
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "67d74a9914d79.jpg"
+      },
+      {
+        "_sFile100": "sgi_common_thumbs_67d748ec5e546_100.webp",
+        "_hFile100": 229,
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "67d748ec5e546.jpg"
+      },
+      {
+        "_sFile100": "sgi_common_thumbs_67d74908005e9_100.webp",
+        "_hFile100": 71,
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "67d74908005e9.jpg"
+      }
+    ]
+  },
+  "_nUpdatesCount": 1,
+  "_bHasUpdates": true,
+  "_tsDateUpdated": 1750933435,
+  "_nAllTodosCount": 0,
+  "_bHasTodos": false,
+  "_nPostCount": 13,
+  "_aTags": [],
+  "_bCreatedBySubmitter": true,
+  "_bIsPorted": false,
+  "_nThanksCount": 10,
+  "_aContentRatings": {
+    "st": "Sexual Themes",
+    "sc": "Sexual Content",
+    "ps": "Flashing Lights & Patterns",
+    "sa": "Skimpy Attire",
+    "pn": "Partial Nudity",
+    "nu": "Full Nudity"
+  },
+  "_sInitialVisibility": "hide",
+  "_aMetadata": {
+    "_aConfig": {
+      "_aAiUsage": {
+        "_aAreas": {
+          "art": "Art/Visuals",
+          "code": "Code/Logic",
+          "audio": "Audio",
+          "concept": "Concept/Planning/Design",
+          "profile": "Profile Properties"
+        },
+        "_aLevels": {
+          "na": "N/A",
+          "no": "None",
+          "mi": "Minor",
+          "mo": "Moderate",
+          "ma": "Major"
+        }
+      }
+    }
+  },
+  "_sDownloadUrl": "https://gamebanana.com/mods/download/581980",
+  "_nDownloadCount": 20636,
+  "_sPayType": "free",
+  "_aFiles": [
+    {
+      "_idRow": 1401860,
+      "_sFile": "soldier_0-anby-yyzj-01.rar",
+      "_nFilesize": 24202222,
+      "_tsDateAdded": 1742158630,
+      "_nDownloadCount": 11101,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1401860",
+      "_sMd5Checksum": "2ee1b1c9e7d69ccf83934d4f4da67c3c",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": false,
+      "_bHasContents": true
+    },
+    {
+      "_idRow": 1466027,
+      "_sFile": "soldier_0-anby-yyzj-01_zzz_20.rar",
+      "_nFilesize": 24202224,
+      "_tsDateAdded": 1750933331,
+      "_nDownloadCount": 9536,
+      "_sDownloadUrl": "https://gamebanana.com/dl/1466027",
+      "_sMd5Checksum": "8d2e2df3d00f9375bc247af3dcd29ff2",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": false,
+      "_bHasContents": true,
+      "_sDescription": "ZZZ 2.0修复版本---ZZZ 2.0 fixed version"
+    }
+  ],
+  "_nSubscriberCount": 215,
+  "_aContributingStudios": [],
+  "_sLicense": "<a rel=\"license\" href=\"http://creativecommons.org/licenses/by-nc-nd/4.0/\"><img alt=\"Creative Commons License\" style=\"border-width:0\" src=\"https://i.creativecommons.org/l/by-nc-nd/4.0/88x31.png\" /></a><br />This work is licensed under a <a rel=\"license\" href=\"http://creativecommons.org/licenses/by-nc-nd/4.0/\">Creative Commons Attribution-NonCommercial-NoDerivs 4.0 Unported License</a>.",
+  "_aLicenseChecklist": {
+    "yes": [
+      "Download and install this Mod"
+    ],
+    "ask": [
+      "Redistribute this Mod on other sites",
+      "Modify this Mod and distribute the modified Mod on GameBanana",
+      "Modify this Mod and distribute the modified Mod on another site",
+      "Use parts of this Mod in another Mod and distribute the Mod on GameBanana",
+      "Use parts of this Mod in another Mod and distribute the Mod on another site",
+      "Use this Mod or components of this Mod in adult/NSFW content"
+    ],
+    "no": [
+      "Use this Mod or components of this Mod commercially"
+    ]
+  },
+  "_bGenerateTableOfContents": false,
+  "_sText": "该mod包含三个部分：<b><span class=\"GreenColor\">身体-表情-武器</span></b>。它们是独立的，你可以随意替换使用。<br>启动器推荐XXMI或者ZZMI，可以解决部分贴图错误。<br>发光武器需要安装<a href=\"https://gamebanana.com/mods/531649\">RabbitFX</a>&nbsp;<br><br><span class=\"RedColor\">已知问题暂时无法解决：</span>开启专武特效的第四下攻击动作中，某一帧一半屁股会闪一下。<br><br>这是一个基础版可以切换：<br>“6”武器发光亮度<br>“←”胸部遮挡<br>“↑”披风---项圈<br>“↓”裙子<br>“→”下遮挡<br><br>完整版还包括：手腕、鞋子切换、胸部大小(中杯--大杯--超大杯)、内衣切换、身体贴图（白丝袜--黑丝袜--淫纹--乳汁--字--白色液体）、表情、兔耳<br><br>如果你需要完整版，可以前往我的赞助频道获得：<br><br><a href=\"https://www.patreon.com/c/yyzj2025\" target=\"_blank\">Patreon</a><br><br><em><u>/////From Google Translate:<br><br></u></em>This mod contains three parts: <span class=\"GreenColor\">body - expression - weapon</span>. They are independent and you can replace them at will. The launcher recommends XXMI or ZZMI, which can solve some texture errors.<br>Glowing weapons require <a href=\"https://gamebanana.com/mods/531649\">RabbitFX</a>&nbsp;to be installed<br><br><span class=\"RedColor\">Known issues that cannot be resolved for now:</span>&nbsp;In the fourth attack action with the special weapon effect turned on, half of the buttocks will flash in a certain frame.<br><br>This is a basic version that can switch:<br><br>\"6\" weapon light brightness<br><br>\"←\" chest cover<br><br>\"↑\" cloak---collar<br><br>\"↓\" skirt<br><br><div class=\"SelectedElement\">\"→\" bottom cover</div><br>The full version also includes: wrist, shoe switching, breast size (medium cup - large cup - extra large cup), underwear switching, body mapping (white stockings - black stockings - lewd lines - milk - words - white liquid), expressions, rabbit ears<br><br>If you need the full version, you can go to my sponsor channel to get it:<br><br><a href=\"https://www.patreon.com/c/yyzj2025\" target=\"_blank\">Patreon</a><br><br>",
+  "_sLang": "en",
+  "_bIsObsolete": false,
+  "_nLikeCount": 1049,
+  "_nViewCount": 85244,
+  "_sVersion": "ZZZ-2.0",
+  "_bAcceptsDonations": false,
+  "_bShowRipePromo": true,
+  "_aEmbeddables": {
+    "_sEmbeddableImageBaseUrl": "https://gamebanana.com/mods/embeddables/581980",
+    "_aVariants": [
+      "small",
+      "small_square",
+      "medium",
+      "medium_square",
+      "medium_square_minimal",
+      "large",
+      "large_minimal",
+      "large_square",
+      "large_minimal_square",
+      "thumbnail"
+    ]
+  },
+  "_aSubmitter": {
+    "_idRow": 2902150,
+    "_sName": "-yyzj-",
+    "_sUserTitle": "Bananite",
+    "_sHonoraryTitle": "",
+    "_tsJoinDate": 1695064610,
+    "_sAvatarUrl": "https://images.gamebanana.com/img/av/67d2ba70e0a25.png",
+    "_sSigUrl": "",
+    "_sProfileUrl": "https://gamebanana.com/members/2902150",
+    "_sPointsUrl": "https://gamebanana.com/members/logs/pointslog/2902150",
+    "_sMedalsUrl": "https://gamebanana.com/members/stats/medals/2902150",
+    "_bIsOnline": false,
+    "_sLocation": "<a href=\"https://gamebanana.com\">Home</a> > <a href=\"https://gamebanana.com/members\">Members</a> > <a href=\"https://gamebanana.com/members/2902150\">-yyzj-</a> > <a href=\"/members/settings/2902150\">Control Center : -yyzj-</a> > <a href=\"https://gamebanana.com/members/cc/visibility/2902150\">Visibility : -yyzj-</a>",
+    "_sOnlineTitle": "",
+    "_sOfflineTitle": "",
+    "_nPoints": 682271,
+    "_nPointsRank": 14,
+    "_aNormalMedals": [
+      [
+        "m_age_1.png",
+        "One month a member",
+        "normal",
+        1303561
+      ],
+      [
+        "m_age_2.png",
+        "6 months a member",
+        "normal",
+        1650084
+      ],
+      [
+        "m_age_3.png",
+        "1 year a member",
+        "normal",
+        2240499
+      ],
+      [
+        "m_pr_1.png",
+        "Reached 1,000 Points",
+        "normal",
+        2870124
+      ],
+      [
+        "subscribers_1.png",
+        "Reached 10 subscribers",
+        "normal",
+        2871499
+      ],
+      [
+        "m_pr_2.png",
+        "Reached 2,500 Points",
+        "normal",
+        2873744
+      ],
+      [
+        "thanks_recvd_1.png",
+        "Received thanks 5 times",
+        "normal",
+        2901680
+      ],
+      [
+        "m_pr_3.png",
+        "Reached 7,500 Points",
+        "normal",
+        2902290
+      ],
+      [
+        "mods1.png",
+        "Submitted 5 Mods",
+        "normal",
+        2942689
+      ],
+      [
+        "m_pr_4.png",
+        "Reached 25,000 Points",
+        "normal",
+        2951410
+      ],
+      [
+        "mods2.png",
+        "Submitted 10 Mods",
+        "normal",
+        3020186
+      ],
+      [
+        "monthly_award.gif",
+        "Modder of the Month, April 2025",
+        "normal",
+        3123633
+      ],
+      [
+        "m_age_4.png",
+        "2 years a member",
+        "normal",
+        3721321
+      ],
+      [
+        "monthly_award.gif",
+        "Modder of the Month, September 2025",
+        "normal",
+        3777386
+      ]
+    ],
+    "_aRareMedals": [
+      [
+        "subscribers_2.png",
+        "Reached 50 subscribers",
+        "rare",
+        2909037
+      ],
+      [
+        "thanks_recvd_2.png",
+        "Received thanks 50 times",
+        "rare",
+        2955208
+      ],
+      [
+        "m_pr_5.png",
+        "Reached 75,000 Points",
+        "rare",
+        3010497
+      ],
+      [
+        "mods3.png",
+        "Submitted 15 Mods",
+        "rare",
+        3157651
+      ],
+      [
+        "m_pr_6.png",
+        "Reached 200,000 Points",
+        "rare",
+        3278342
+      ],
+      [
+        "mods4.png",
+        "Submitted 20 Mods",
+        "rare",
+        3377199
+      ],
+      [
+        "m_pr_7.png",
+        "Reached 500,000 Points",
+        "rare",
+        4036398
+      ]
+    ],
+    "_aLegendaryMedals": [
+      [
+        "subscribers_3.png",
+        "Reached 100 subscribers",
+        "legendary",
+        2928380
+      ],
+      [
+        "ripe_subscriber.png",
+        "Became a Ripe Supporter",
+        "legendary",
+        3129363
+      ],
+      [
+        "thanks_recvd_3.png",
+        "Received thanks 500 times",
+        "legendary",
+        3553539
+      ]
+    ],
+    "_bHasRipe": false,
+    "_nBuddyCount": 0,
+    "_nSubscriberCount": 8186,
+    "_aDonationMethods": [
+      {
+        "_sTitle": "Patreon Profile",
+        "_sValue": "https://www.patreon.com/c/yyzj2025",
+        "_sInputType": "text",
+        "_sInputPlaceholder": "Patreon Profile URL...",
+        "_sIconClasses": "MiscIcon PatreonProfileIcon",
+        "_aValidator": {
+          "_regexValidPattern": "^https?\\:\\/\\/(www\\.)?patreon\\.com\\/.+$",
+          "_sWarningMessage": "URL looks incorrect - it should look like: https://patreon.com/USERNAME"
+        },
+        "_sValueTemplate": "<a target=\"_blank\" href=\"%VALUE%\">Patreon Profile</a>",
+        "_bIsUrl": true,
+        "_sFormattedValue": "<a target=\"_blank\" href=\"https://www.patreon.com/c/yyzj2025\">Patreon Profile</a>"
+      }
+    ],
+    "_bAccessorIsBuddy": false,
+    "_bBuddyRequestExistsWithAccessor": false,
+    "_bAccessorIsSubscribed": false,
+    "_aDefaultLicenseChecklist": [
+      "yes",
+      "ask",
+      "ask",
+      "ask",
+      "ask",
+      "ask",
+      "no",
+      "ask"
+    ],
+    "_sDefaultLicense": ""
+  },
+  "_bFollowLinks": true,
+  "_aGame": {
+    "_idRow": 19567,
+    "_sName": "Zenless Zone Zero",
+    "_sAbbreviation": "ZZZ",
+    "_sProfileUrl": "https://gamebanana.com/games/19567",
+    "_sIconUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png",
+    "_sBannerUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png",
+    "_nSubscriberCount": 105213,
+    "_bHasSubmissionQueue": false,
+    "_bAccessorIsSubscribed": false
+  },
+  "_aCategory": {
+    "_idRow": 35835,
+    "_sName": "Soldier 0 Anby",
+    "_sModelName": "ModCategory",
+    "_sProfileUrl": "https://gamebanana.com/mods/cats/35835",
+    "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/688022812533e.png",
+    "_bIsObsolete": false
+  },
+  "_aSuperCategory": {
+    "_idRow": 30305,
+    "_sName": "Character Skins",
+    "_sModelName": "ModCategory",
+    "_sProfileUrl": "https://gamebanana.com/mods/cats/30305",
+    "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/66a1928c3e239.gif"
+  },
+  "_aCredits": [
+    {
+      "_sGroupName": "Key Authors",
+      "_aAuthors": [
+        {
+          "_sName": "-yyzj-"
+        }
+      ]
+    }
+  ],
+  "_bAdvancedRequirementsExist": false,
+  "_aRequirements": [
+    [
+      "ZZMI",
+      "https://gamebanana.com/tools/17467"
+    ],
+    [
+      "RabbitFX",
+      "https://gamebanana.com/mods/531649"
+    ]
+  ]
+}

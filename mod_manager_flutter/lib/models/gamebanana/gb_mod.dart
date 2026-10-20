@@ -57,6 +57,7 @@ class GbMod {
     this.isPrivate = false,
     this.isTrashed = false,
     this.isWithheld = false,
+    this.withholdType,
     this.hasFiles,
     this.gameId,
   });
@@ -171,7 +172,14 @@ class GbMod {
 
   final bool isPrivate;
   final bool isTrashed;
+
+  /// `_bIsWithheld` — GameBanana is holding the mod over a rule the author must fix. `Mod/Multi` blanks such a mod
+  /// instead of flagging it (see `isBlankedRecord`), so this is only ever true on a profile.
   final bool isWithheld;
+
+  /// `_aWithholdNotice._sType` — the kind of hold, on a profile. Only `softhold` is measured, and it keeps the page
+  /// and its files public.
+  final String? withholdType;
 
   /// `_bHasFiles` — listing records only.
   final bool? hasFiles;
@@ -179,8 +187,9 @@ class GbMod {
   /// Whether the mod is no longer publicly retrievable upstream.
   ///
   /// Read from the explicit flags rather than inferred from a 404, which is
-  /// only the crudest case. Distinct from [isObsolete].
-  bool get isRemoteMissing => isPrivate || isTrashed || isWithheld;
+  /// only the crudest case. Distinct from [isObsolete]. A softhold is not
+  /// missing; any other hold is, since nobody has seen what it leaves public.
+  bool get isRemoteMissing => isPrivate || isTrashed || (isWithheld && withholdType != 'softhold');
 
   /// The visibility to render by, **failing closed**: an absent field is
   /// treated as [GbVisibility.warn] rather than assumed safe.
@@ -256,6 +265,10 @@ class GbMod {
       isPrivate: gbBool(json['_bIsPrivate']),
       isTrashed: gbBool(json['_bIsTrashed']),
       isWithheld: gbBool(json['_bIsWithheld']),
+      withholdType: switch (json['_aWithholdNotice']) {
+        final Map<String, dynamic> notice => gbString(notice['_sType']),
+        _ => null,
+      },
       hasFiles: json.containsKey('_bHasFiles') ? gbBool(json['_bHasFiles']) : null,
       gameId: switch (json['_aGame']) {
         final Map<String, dynamic> game => gbInt(game['_idRow']),

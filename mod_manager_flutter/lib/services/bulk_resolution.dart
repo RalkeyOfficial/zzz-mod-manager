@@ -129,7 +129,7 @@ class BulkResolutionPlan {
   /// there is nothing to do to them.
   final int settled;
 
-  /// Mods there is nothing to check against: never reached, or on a page the record reports private, trashed or withheld.
+  /// Mods there is nothing to check against: never reached, or on a page the record reports gone (`isRemoteMissing`).
   /// Distinct from [settled] in exactly the way "no updates" and "no updates among the mods we could reach" are.
   final int unreachable;
 

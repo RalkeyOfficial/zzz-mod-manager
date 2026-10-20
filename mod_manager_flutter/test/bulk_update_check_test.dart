@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_exceptions.dart';
@@ -10,6 +12,7 @@ import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/bulk_update_check.dart';
 import 'package:mod_manager_flutter/services/update_check.dart';
 
+import 'support/fixtures.dart';
 import 'support/origin_shorthand.dart';
 
 /// The whole-library pass: what it asks about, how it batches, and — the part
@@ -57,6 +60,12 @@ void main() {
         idRow: modId,
         files: [GbFile(idRow: fileId, dateAdded: DateTime.utc(2026))],
       );
+
+  /// Real responses for one withheld mod, 581980: what `Mod/Multi` sends, and its `ProfilePage`.
+  GbMod withheldBlank() =>
+      GbMod.fromJson((jsonDecode(loadGbFixture('mod_multi_withheld_581980')) as List).single as Map<String, dynamic>)!;
+  GbMod withheldProfile() =>
+      GbMod.fromJson(jsonDecode(loadGbFixture('mod_profile_withheld_581980')) as Map<String, dynamic>)!;
 
   GbApiException noSuchRecord() => const GbApiException(
         "Record Mod.999 doesn't exist",
@@ -518,6 +527,49 @@ void main() {
       );
       expect(outcome.checks['a']?.outcome, UpdateOutcome.upToDate);
       expect(outcome.checks['b']?.outcome, UpdateOutcome.sourceGone);
+    });
+
+    test('a withheld mod is judged by its profile, not by the blank Mod/Multi sends', () async {
+      final profiled = <int>[];
+      final outcome = await runBulkUpdateCheck(
+        plan: planBulkUpdateCheck([
+          // The newer of the mod's two files.
+          mod('anby', origin: origin(modId: 581980, fileId: 1466027)),
+        ]),
+        fetch: (ids) async => [withheldBlank()],
+        fetchProfile: (id) async {
+          profiled.add(id);
+          return withheldProfile();
+        },
+      );
+      expect(profiled, [581980]);
+      expect(outcome.requests, 2);
+      expect(outcome.checks['anby']?.outcome, UpdateOutcome.upToDate);
+      expect(outcome.records[581980]?.isWithheld, isTrue);
+    });
+
+    test('a withheld mod whose profile can\'t be reached reads Couldn\'t check, is reported unchecked, and the pass '
+        'goes on', () async {
+      final outcome = await runBulkUpdateCheck(
+        plan: planBulkUpdateCheck([
+          mod('anby', origin: origin(modId: 581980, fileId: 1466027)),
+          mod('other', origin: origin(modId: 2, fileId: 10)),
+        ]),
+        fetch: (ids) async => [
+          for (final id in ids)
+            if (id == 581980)
+              withheldBlank()
+            else
+              GbMod(idRow: id, dateAdded: DateTime.utc(2026), files: [GbFile(idRow: 10, dateAdded: DateTime.utc(2026))]),
+        ],
+        fetchProfile: (id) async => throw const GbNetworkException('offline'),
+        batchSize: 1,
+      );
+      expect(outcome.checks['anby']?.outcome, UpdateOutcome.indeterminate);
+      expect(outcome.checks['other']?.outcome, UpdateOutcome.upToDate);
+      // What keeps the notification from saying "No updates found" over a request that failed.
+      expect(outcome.failed, {'anby'});
+      expect(outcome.abortedBy, isNull);
     });
 
     test('mods that need no request are still in the result', () async {

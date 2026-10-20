@@ -155,8 +155,8 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
   /// `source_url` was never walked by the offline backfill.
   DateTime? _installedAt;
 
-  /// The mod's `Mod/Multi` record (`fetchModRecord`) — the request and cache
-  /// entry the update dialog uses too.
+  /// The record `fetchModRecord` returns — the request and cache entry the
+  /// update dialog uses too.
   GbMod? _record;
   Object? _recordError;
   bool _loadingRecord = false;

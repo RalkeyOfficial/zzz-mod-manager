@@ -22,6 +22,17 @@ typedef ModRecordFetcher = Future<List<GbMod>> Function(List<int> modIds);
 /// Fetches one mod's release feed. Throws like the client does.
 typedef ModUpdatesFetcher = Future<List<GbUpdate>> Function(int modId);
 
+/// Fetches one mod's `ProfilePage`. Throws like the client does.
+typedef ModProfileFetcher = Future<GbMod> Function(int modId);
+
+/// Whether [record] is `Mod/Multi`'s blank for a withheld mod rather than the mod.
+///
+/// Measured on three withheld mods, all "softholds" with their page and files public: `Mod/Multi` sends the name and
+/// nulls everything else, `_aFiles` and the dates included, and says `_bIsWithheld: false`. `ProfilePage` sends the
+/// whole mod, flagged withheld. Every published mod has a `_tsDateAdded`, so a record without one that is not
+/// flagged private or trashed is the blank; a private or trashed record is blank too, but its flag is the answer.
+bool isBlankedRecord(GbMod record) => record.dateAdded == null && !record.isRemoteMissing;
+
 /// The fields `Mod/Multi` is asked for.
 ///
 /// Deliberately minimal — every extra property is bytes multiplied by the batch
@@ -174,10 +185,14 @@ BulkUpdateCheckPlan planBulkUpdateCheck(List<ModInfo> mods) {
 /// a real 17-mod library four mods flagged in phase one and two survived, so it
 /// costs four extra requests rather than seventeen. Omit it and the verdicts
 /// stand unrefined.
+/// [fetchProfile] replaces each [isBlankedRecord] with the mod's profile, one
+/// request per withheld mod. Omit it, or let it fail, and a withheld mod reads
+/// Couldn't check.
 Future<BulkUpdateCheckOutcome> runBulkUpdateCheck({
   required BulkUpdateCheckPlan plan,
   required ModRecordFetcher fetch,
   ModUpdatesFetcher? fetchUpdates,
+  ModProfileFetcher? fetchProfile,
   int batchSize = 50,
 }) async {
   final checks = <String, UpdateCheck>{...plan.skipped};
@@ -270,6 +285,21 @@ Future<BulkUpdateCheckOutcome> runBulkUpdateCheck({
       for (final id in batch)
         if (!seen.contains(id)) id,
     ]);
+
+    // A profile that can't be reached leaves the blank, so the cell reads Couldn't check, and reports the mod
+    // unchecked, as a failed batch does. One mod's page is no reason to stop the pass.
+    if (fetchProfile != null) {
+      for (final record in fetched.where(isBlankedRecord)) {
+        try {
+          requests++;
+          records[record.idRow] = await fetchProfile(record.idRow);
+        } catch (_) {
+          for (final mod in plan.byModId[record.idRow] ?? const <ModInfo>[]) {
+            failed.add(mod.id);
+          }
+        }
+      }
+    }
     return true;
   }
 

@@ -411,13 +411,14 @@ Mod (the thumbnail, the name, a star for a favourite, and the author once the pa
   | a known file, a worked-out one or a date only, with no verdict this session | "—" | nothing |
   | … with an update, confirmed or resting on a guess | Newer file or Maybe newer, amber | the update dialog |
   | … with nothing newer, or an update the user ignored | Up to date, grey text | nothing |
-  | … whose page is private, trashed or withheld | Not on GameBanana, grey text, saying why on hover | nothing |
+  | … whose page is private, trashed, or withheld by more than a softhold | Not on GameBanana, grey text, saying why on hover | nothing |
   | … whose check had nothing to judge by (`indeterminate`) | Couldn't check, grey text, saying why on hover | nothing |
 
   **Which file? is always the prompt.** The check can't judge an unknown file, so the cell asks rather than repeat a verdict about a file nobody named. Base unknown gives way to a live update because the patch's page is one the app could check.
   **Up to date is never shown without a verdict.** A mod with no check this session, a check of ticked mods that didn't cover it, or a rename since ([`update-checks.md`](update-checks.md) §6) reads "—", as the table shows any missing value. A verdict about tracking the mod no longer has, such as one from before the user said which file they have, is no verdict either.
   **An ignored update reads Up to date.** An update is ignored because it isn't the user's file, a different variant say, so the mod is as up to date as it gets; the History tab of the mod's page (§15) still lists it as an Ignored update.
   **A mod marked as current reads Up to date with a tooltip** saying it was checked by the day it was added, not by its file, since "Mark as current" records a date and no file.
+  **Grey text with a tooltip has a dotted underline** and the help cursor, so the hover text can be found. The solid underline is Not tracked's alone, since that one is a link.
   **In a folder of two downloads, the verdict is the folder's** ([`update-checks.md`](update-checks.md) §2): an ignored update on one layer counts as up to date, so a layer that couldn't be checked makes the cell Couldn't check, and a patch from a local folder, with no page to ask, is left out, so the cell reads what the mod under it says.
   Not on GameBanana and Couldn't check are grey: nothing in the app fixes either.
 - **Size** is the mod's own files, "—" until the walk returns. **Added** is the install date.

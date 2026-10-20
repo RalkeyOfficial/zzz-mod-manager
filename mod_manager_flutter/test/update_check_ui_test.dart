@@ -53,8 +53,10 @@ void main() {
         origin: origin,
       );
 
+  // Dated, as every real record is: an undated one is a withheld mod's blank, and the check fetches its profile.
   GbMod record(int modId, {int fileId = 10}) => GbMod(
         idRow: modId,
+        dateAdded: DateTime.utc(2026),
         files: [GbFile(idRow: fileId, dateAdded: DateTime.utc(2026))],
       );
 
@@ -230,6 +232,7 @@ void main() {
             GbMod(
               idRow: id,
               name: 'Mod $id',
+              dateAdded: DateTime.utc(2025),
               files: [
                 GbFile(idRow: 10, file: 'e.zip', dateAdded: DateTime.utc(2025)),
               ],
@@ -460,6 +463,7 @@ void main() {
           GbMod(
             idRow: 1,
             name: 'Ellen Swimsuit',
+            dateAdded: DateTime.utc(2025),
             files: [
               GbFile(
                 idRow: 10,
@@ -500,6 +504,8 @@ void main() {
           GbMod(
             idRow: 1,
             name: 'Ellen Swimsuit',
+            // Dated, as every real record is: an undated one is a withheld blank.
+            dateAdded: DateTime.utc(2025),
             files: [
               GbFile(
                 idRow: 10,

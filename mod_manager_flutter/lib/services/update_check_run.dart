@@ -33,6 +33,7 @@ Future<BulkUpdateCheckOutcome> runLibraryUpdateCheck({
   required GameBananaClient client,
   ModRecordFetcher? fetch,
   ModUpdatesFetcher? fetchUpdates,
+  ModProfileFetcher? fetchProfile,
 }) {
   return runBulkUpdateCheck(
     plan: plan,
@@ -44,6 +45,8 @@ Future<BulkUpdateCheckOutcome> runLibraryUpdateCheck({
             ),
     fetchUpdates:
         fetchUpdates ?? (modId) => client.modUpdates(modId, refresh: true),
+    fetchProfile:
+        fetchProfile ?? (modId) => client.modProfile(modId, refresh: true),
   );
 }
 
@@ -77,6 +80,9 @@ Future<BulkUpdateCheckOutcome> runLibraryUpdateCheck({
 /// from that inside a batch is the halving `runBulkUpdateCheck` does, and it is
 /// not worth it for the two or three ids a folder has.
 ///
+/// **A withheld mod comes back as its `ProfilePage`**, which `Mod/Multi` blanks
+/// ([isBlankedRecord]), exactly as the whole-library pass replaces it.
+///
 /// Throws like the client does.
 Future<GbMod> fetchModRecord(
   GameBananaClient client,
@@ -89,7 +95,10 @@ Future<GbMod> fetchModRecord(
     refresh: refresh,
   );
   for (final record in records) {
-    if (record.idRow == modId) return record;
+    if (record.idRow != modId) continue;
+    // A withheld mod's files are on its profile only.
+    if (isBlankedRecord(record)) return client.modProfile(modId, refresh: refresh);
+    return record;
   }
   // The endpoint errors on an unknown id rather than omitting it, so this is
   // "should not happen" — raised rather than returned as a null so it cannot be

@@ -47,8 +47,12 @@ void main() {
 
   /// The mod page as the pass sees it: the file the user installed is gone from
   /// the list, which is the strongest verdict the comparator produces.
+  ///
+  /// Dated, as every real record is: an undated one is a withheld mod's blank,
+  /// and the check fetches its profile.
   GbMod superseded(int modId) => GbMod(
         idRow: modId,
+        dateAdded: DateTime.utc(2025),
         files: [
           GbFile(
             idRow: 11,
@@ -61,6 +65,7 @@ void main() {
   /// The same page with the installed file still on it — nothing to report.
   GbMod unchanged(int modId) => GbMod(
         idRow: modId,
+        dateAdded: DateTime.utc(2025),
         files: [
           GbFile(
             idRow: 10,

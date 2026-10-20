@@ -10,7 +10,8 @@ import 'dart:io';
 /// hand-edit them to make a test pass.
 ///
 /// Captured from **apiv13** on 2026-08-15, pretty-printed for reviewability —
-/// only whitespace differs from the wire bytes.
+/// only whitespace differs from the wire bytes. The withheld pair,
+/// `mod_multi_withheld_581980` and `mod_profile_withheld_581980`, on 2026-10-20.
 ///
 /// Two things to know before re-capturing:
 ///
