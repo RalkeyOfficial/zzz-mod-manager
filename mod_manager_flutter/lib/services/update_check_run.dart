@@ -12,7 +12,9 @@
 /// written by the callers; the rules for *what* to write are here.
 library;
 
+import '../models/character_info.dart';
 import '../models/gamebanana/gamebanana.dart';
+import '../models/mod_origin.dart';
 import 'bulk_update_check.dart';
 import 'gamebanana/gamebanana_client.dart';
 import 'update_check.dart';
@@ -113,11 +115,72 @@ Future<GbMod> fetchModRecord(
 /// Merged rather than replaced: a per-mod check the user ran on a mod this pass
 /// could not reach is still the best answer available for it, and a pass that
 /// aborted early would otherwise wipe every verdict on screen.
+///
+/// The folders in [keep] keep what they have: their tracking changed while the
+/// pass ran ([UpdateCheckStart.changedSince]), so its answer is about a block
+/// that is gone.
 Map<String, UpdateCheck> mergedChecks(
   Map<String, UpdateCheck> existing,
-  BulkUpdateCheckOutcome outcome,
-) =>
-    {...existing, ...outcome.checks};
+  BulkUpdateCheckOutcome outcome, {
+  Set<String> keep = const {},
+}) =>
+    {
+      ...existing,
+      for (final MapEntry(key: id, value: check) in outcome.checks.entries)
+        if (!keep.contains(id)) id: check,
+    };
+
+/// What a pass started from, to tell at its end which folders changed under it.
+///
+/// An Ignore, an update, a marking or its Undo, the tracking screen, a patch
+/// taken out or put in can write a folder while a pass runs. The pass's answer
+/// was worked out from the block as it was, so merging it would bring back
+/// what the write took away.
+class UpdateCheckStart {
+  UpdateCheckStart({
+    required Map<String, UpdateCheck> checks,
+    required Iterable<ModInfo> mods,
+    required Map<String, int> writesStarted,
+    required Set<String> writing,
+  })  : _checks = checks,
+        _origins = {for (final mod in mods) mod.id: mod.origin},
+        _writesStarted = writesStarted,
+        _writingAtStart = writing;
+
+  final Map<String, UpdateCheck> _checks;
+  final Map<String, ModOrigin?> _origins;
+  final Map<String, int> _writesStarted;
+  final Set<String> _writingAtStart;
+
+  /// The folders whose verdict the pass must not write: one being written when
+  /// it started, written since or being written now ([writesStarted] and
+  /// [writing], both kept by `whileWritingMod`), whose session verdict was set
+  /// or dropped since, whose tracking on the last scan differs from what it
+  /// started with, or that is gone.
+  ///
+  /// The count covers every write that goes through `whileWritingMod`, ended
+  /// or not, rescanned or not. The verdict covers the update dialog's own
+  /// check, which writes nothing; the scan covers a write made some other way,
+  /// once its rescan has landed.
+  Set<String> changedSince({
+    required Map<String, UpdateCheck> checks,
+    required Iterable<ModInfo> mods,
+    required Set<String> writing,
+    required Map<String, int> writesStarted,
+  }) {
+    final now = {for (final mod in mods) mod.id: mod.origin};
+    return {
+      for (final id in _origins.keys)
+        if (_writingAtStart.contains(id) ||
+            writesStarted[id] != _writesStarted[id] ||
+            writing.contains(id) ||
+            !identical(_checks[id], checks[id]) ||
+            !now.containsKey(id) ||
+            now[id] != _origins[id])
+          id,
+    };
+  }
+}
 
 /// The fetched mod pages, merged on the same rule and for a second reason: they
 /// are what lets the bulk resolution screen be re-opened without spending

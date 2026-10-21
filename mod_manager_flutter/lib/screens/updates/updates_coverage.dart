@@ -41,15 +41,20 @@ CoverageKind? coverageOf(ModInfo mod) {
 }
 
 /// Whether [check] is an answer from the mod's page: an update, up to date, or the page gone. A verdict about
-/// tracking the mod no longer has, or a page that couldn't be compared, is not.
-bool answeredByCheck(UpdateCheck? check) => switch (check?.outcome) {
-      UpdateOutcome.updateAvailable ||
-      UpdateOutcome.possiblyOutdated ||
-      UpdateOutcome.upToDate ||
-      UpdateOutcome.sourceGone =>
-        true,
-      _ => false,
-    };
+/// tracking the mod no longer has, or a page that couldn't be compared, is not. Nor is a folder with a layer still
+/// asking which file: a base just marked as current reads that way until a check compares it by date, though a patch
+/// on it was answered.
+bool answeredByCheck(UpdateCheck? check) {
+  final answered = switch (check?.outcome) {
+    UpdateOutcome.updateAvailable ||
+    UpdateOutcome.possiblyOutdated ||
+    UpdateOutcome.upToDate ||
+    UpdateOutcome.sourceGone =>
+      true,
+    _ => false,
+  };
+  return answered && !check!.layers.any((layer) => layer.check.outcome == UpdateOutcome.versionUnknown);
+}
 
 /// The library sorted into the coverage strip's cells.
 class UpdatesCoverage {
@@ -113,32 +118,41 @@ List<CoverageKind?> coveragePills(List<CoverageKind> cells, {required int minimu
   return [...checked, for (var i = 0; i < empty; i++) null, ...questions];
 }
 
-/// The pills of [after] that show something new, each with what was in its place in [before] and that place's index
-/// there: null for an empty pill, and both null for a place the strip didn't have. Places are matched from the left
-/// up to the questions and from the right among them, so a strip that grows fills from the left and its questions
-/// keep their colours.
-List<(int, CoverageKind?, int?)> pillChanges(List<CoverageKind?> before, List<CoverageKind?> after) {
+/// Where the question pills start in [pills]: they are the strip's tail.
+int _questionsAt(List<CoverageKind?> pills) {
   bool isQuestion(CoverageKind? kind) =>
       kind == CoverageKind.whichFile || kind == CoverageKind.baseUnknown || kind == CoverageKind.notTracked;
-  int questionsAt(List<CoverageKind?> pills) {
-    var start = pills.length;
-    while (start > 0 && isQuestion(pills[start - 1])) {
-      start--;
-    }
-    return start;
+  var start = pills.length;
+  while (start > 0 && isQuestion(pills[start - 1])) {
+    start--;
   }
+  return start;
+}
 
-  final oldQuestions = questionsAt(before);
-  final newQuestions = questionsAt(after);
+/// For each place of [after], the place in [before] it was, or null for a place the strip didn't have. Places are
+/// matched from the left up to the questions and from the right among them, so a strip that grows fills from the left
+/// and its questions keep their colours.
+List<int?> pillPlacesBefore(List<CoverageKind?> before, List<CoverageKind?> after) {
+  final oldQuestions = _questionsAt(before);
+  final newQuestions = _questionsAt(after);
+  return [
+    for (var i = 0; i < after.length; i++)
+      if (i < newQuestions)
+        i < oldQuestions ? i : null
+      else if (before.length - (after.length - i) case final j when j >= oldQuestions)
+        j
+      else
+        null,
+  ];
+}
+
+/// The pills of [after] that show something new, each with what was in its place in [before] and that place's index
+/// there (`pillPlacesBefore`): null for an empty pill, and both null for a place the strip didn't have.
+List<(int, CoverageKind?, int?)> pillChanges(List<CoverageKind?> before, List<CoverageKind?> after) {
+  final places = pillPlacesBefore(before, after);
   final changes = <(int, CoverageKind?, int?)>[];
   for (var i = 0; i < after.length; i++) {
-    final int? from;
-    if (i < newQuestions) {
-      from = i < oldQuestions ? i : null;
-    } else {
-      final j = before.length - (after.length - i);
-      from = j >= oldQuestions ? j : null;
-    }
+    final from = places[i];
     final was = from == null ? null : before[from];
     if (was != after[i]) changes.add((i, was, from));
   }

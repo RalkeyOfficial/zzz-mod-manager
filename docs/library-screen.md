@@ -505,11 +505,13 @@ Before any check the line says "None of your M mods have been checked for update
 - **A mod not checked yet has no pill of its own.** The strip is a pill per checked mod and per mod that can't be checked, with empty pills between the two to make 60 (`coveragePills`). Each mod checked takes an empty pill's place, and once those run out the strip grows a pill per mod, the pills narrowing as it does. A library with fewer than 60 mods keeps the empty pills it has left.
 - **It builds as the check runs.** The check fetches pages 50 at a time and says after each batch which folders it has every page of (`libraryCheckProgressProvider`); their pills fill in then, before the verdicts land.
   The strip fills by position: a pill that changes colour fades from the colour its place shows on screen to its new one, and a place the strip didn't have fades from empty, each a moment after the one before and a batch after the batch before it, so the strip fills from the left. A Base unknown or Not tracked pill changes at once, and with reduced motion the whole strip does.
-- **The pills, in this order:** Checked, solid accent; Dated only, the accent washed out; the empty pills; Which file?, blue; Base unknown, a thin accent cap for the checked patch, a gap and a blue body for the base nobody named, its legend item's tooltip saying "The patch is checked, the mod under it isn't"; Not tracked, hatched.
+  Places are matched from the left up to the questions and from the right among them (`pillPlacesBefore`), and a fade still running moves with its place, so a question pill fading keeps fading where it went when the strip grows or shrinks.
+- **The pills, in this order:** Checked, solid accent; Dated only, the accent washed out; the empty pills; Which file?, blue; Base unknown, a thin accent cap for the patch, a gap and a blue body for the base nobody named, its legend item's tooltip saying "Only the patch can be checked, not the mod under it", which is true before a check too; Not tracked, hatched.
 - **The questions are drawn from the start.** Which file?, Base unknown and Not tracked come from the mod's tracking, so no check is needed to know them.
 - **Checked is a known file**: one the app downloaded, one the user named, or one worked out in the tracking screen and accepted there. A worked-out file is drawn as a known one, as everywhere: the user accepted it, and the difference changes nothing they do.
 - **A folder can be checked only when every layer in it can** (`modOriginStatus`): a known base under a patch whose file isn't known is Which file?.
 - **Dated only counts as checked** once a check has compared it by the day it was added. A mod just marked as current is not checked yet until Check them now or the next check.
+  That holds for a mixed folder whose patch was answered too: a folder with a layer whose verdict still asks which file isn't answered (`answeredByCheck`), and a base just marked reads that way until a check compares it.
 - **Local mods have no pill and are not in M.** The user said they are never checked, and counting them would keep the line short of all of them for good. The legend says "N Local, not counted", so M can be read against the All mods count.
 - Narrow pills lose their gaps, and a library too large for pills at all reads as a bar of segments in the same order.
 
@@ -519,12 +521,12 @@ Every mod the last check flagged (`UpdateCheck.hasUpdate`), the set the sidebar'
 
 - the thumbnail, the name, which opens the mod's page, and the character, with the author once the session holds the page;
 - **You have**: the installed file and its upload date; "Marked as current" and "the newest on <date>" when the check compared by date, with no installed file named; or "No longer on its page" when the author took the file down;
-- **Newer**, or **Maybe newer** when the verdict rests on a guess: the file the update dialog would pick, its upload date and its variant label; or "N newer files" with the newest upload date when no one file is its successor. With no newer file to name it reads "Its page changed": a mod compared by date whose page changed after that date, with "after <date>", or a taken-down file whose page lists only files released with it, with no date. An upload date shown is only ever a file's;
+- **Newer**, or **Maybe newer** when the verdict rests on a guess: the file the update dialog would pick, its upload date and its variant label; or "N newer files" with the newest upload date when no one file is its successor. With no newer file to name it reads "Its page changed": a mod compared by date whose page changed after that date, with "after <date>", or a taken-down file whose page lists only files released with it, with no date. Ignore on that one covers up to the newest file the page lists ([`update-checks.md`](update-checks.md) §4). An upload date shown is only ever a file's;
 - **Ignore** and **Update**. Update opens the update dialog.
 
 **Ignore writes what the update dialog's Ignore writes** (`ignoreUpdate`): a dismissal on the layer whose page has the update, up to the newest file the check reported, so anything uploaded after speaks up again ([`update-checks.md`](update-checks.md) §4). The row leaves the list, so only a failure is said, and Stop ignoring on the mod's History tab (§15) takes it back.
 Ignore is here and in the update dialog because both show the file you have beside the newer one, so an update is read before it is waved away; it is never on a card or a badge.
-The write goes through `whileWritingMod`. Ignore is disabled while a check runs, while the mod's folder is being written, and when the check names nothing to ignore; Update is disabled while the folder is being written.
+The write goes through `whileWritingMod`. Ignore is disabled while the mod's folder is being written and when the check names nothing to ignore; Update is disabled while the folder is being written. Both stay on while a check runs, whose results leave a folder written meanwhile as it is ([`update-checks.md`](update-checks.md) §5).
 
 With nothing flagged, the list is one line: before any check this session it says to check, and after one "No newer files since the last check."
 Below 760px a row's two files go under its name and buttons.
@@ -548,7 +550,7 @@ Ctrl+V imports as on the All mods table (§16), with each mod's character worked
 
 ### Undoing a marking
 
-After Mark all as current…, once the library is read again, a card "N mods marked as current" with the Dated only badge comes first among the cards: "Anything uploaded after the day you added one now shows under Newer files.", **Check them now**, which checks only those mods, and **Undo**, disabled while a check runs. The Which file? card is under it while any mod still asks, and gone when none does.
+After Mark all as current…, once the library is read again, a card "N mods marked as current" with the Dated only badge comes first among the cards: "Anything uploaded after the day you added one now shows under Newer files.", **Check them now**, which checks only those mods and is disabled while a check runs, and **Undo**, which isn't: a check's results leave a folder Undo wrote as it is. The Which file? card is under it while any mod still asks, and gone when none does.
 What was written shows as that card. A failure is said, the mods skipped because their folder was being written are always named, and other skips are said only when nothing was written.
 
 `lastMarkingProvider` holds the marking: each mod written, with its base download as it was and the date written. It lasts until Undo leaves nothing to undo, the next marking, or the app closing.

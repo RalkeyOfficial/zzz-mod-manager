@@ -91,7 +91,10 @@ Future<bool> showBulkResolutionDialog(
   if (answers == null || answers.isEmpty) return resolvedAny;
   if (!context.mounted) return resolvedAny;
 
-  final outcome = await _applyAnswers(answers, writer);
+  final outcome = await _applyAnswers(
+    answers,
+    (modId, update) => whileWritingMod(container, modId, () => writer(modId, update)),
+  );
   if (outcome.writtenIds.isNotEmpty) {
     // The update dialog skips its check while a verdict is stored, so a written mod's verdict is cleared.
     // A found update is kept, dismissed or not: this screen never rebinds a folder, so it is still about the right page.

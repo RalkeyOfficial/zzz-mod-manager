@@ -163,23 +163,25 @@ The memory note `v3-canvas-vs-docs-decisions` holds these. In short:
   - For a native Ukrainian speaker to check: `downloads.deck_more_*` ("Ще 21 завантажується", "Ще 2 завантажуються").
   - Checked in widget tests only, not yet in the running app.
 
+- **Phase 5e, Updates page follow-ups:** built, reviewed and committed (the commit after `1c623cb`). Written up in `update-checks.md` §4 and §5 and `library-screen.md` §17.
+  - A check's results skip every folder whose tracking changed while it ran (`UpdateCheckStart.changedSince`): a write on it running when the check started, started since or still running (`modWritesStartedProvider`, kept by `whileWritingMod`), its session verdict set or dropped since, its tracking on the last scan different, or the folder gone. The tracking screen, both markings, the update dialog's Ignore, a patch's record after Take out and a patch put into a mod now write inside `whileWritingMod` for it. So the Updates page's Ignore and Undo stay on during a check; only the controls that start a second pass are off. One case is left, written in `update-checks.md` §5: a write that ended just before the check started, whose rescan lands after its results.
+  - Not built, decided with the user after review: a dismissal keeps finding its layer by mod id. A stack never holds two layers of one mod page (`ModOrigin._stack` drops the second on read, and `withLayerOnTop` replaces it), so a patch from its base's own page can't share the base's Ignore.
+  - A running fade in the strip moves with its pill when the strip grows or shrinks (`pillPlacesBefore`).
+  - The Base unknown tooltip reads "Only the patch can be checked, not the mod under it", true before a check too. Decided without asking, over a second string for before the check.
+  - A folder with a layer still asking which file isn't answered (`answeredByCheck`), so a mixed folder just marked isn't checked until a check compares its base.
+  - A taken-down file whose page lists only files released with it can be ignored up to the newest file the page lists (`UpdateCheck.newestListed`, set only on that verdict).
+  - No CHANGELOG line: update checks and the Updates page are unreleased, and no Added line changed.
+  - Still for a native Ukrainian speaker to check: `library.updates.coverage_all_single` at 21 ("Ваш 21 мод перевірено"), `legend_base_*` keeping "основа невідома" whatever the count, and `undo_failed_write`.
+  - Checked in tests only, not yet in the running app.
+
 ## Phases left
 
 Each is reviewable on its own and ends with tests green, docs and changelog updated, and the user's go-ahead.
 
-5e. **Updates page follow-ups**, found while building 5b and outside its scope.
-   - An Ignore or an applied update from the update dialog while a check runs is overwritten when the check's results land, and All mods' Update button is enabled during checks. Check all for updates is also enabled while the Updates page's Undo or Ignore is still writing, and that check's results then bring back what they took away. One fix covers all of them: skip merging the results for folders whose tracking changed while the check ran.
-   - For a native Ukrainian speaker to check: `library.updates.coverage_all_single` at 21 ("Ваш 21 мод перевірено"), `legend_base_*` keeping "основа невідома" whatever the count, and `undo_failed_write`.
-   - `refoldDismissal` (Ignore, the update dialog) finds a layer by its mod id, so a patch from its base's own mod page shares the base's Ignore. Finding the layer by position, as Undo's `forgetBaseVerdict` does, would keep them apart.
-   - In the strip, a fade still running among the question pills can land on the neighbouring pill when the strip grows or shrinks, since fades are kept by position.
-   - The Base unknown legend tooltip says "The patch is checked" before any check has run this session.
-   - A mixed folder whose patch already had an update counts as checked, by date, the moment it is marked, where §17 says a mod just marked isn't checked until the next check.
-   - A rare verdict, a taken-down installed file whose page lists only files released with it, gives an update with no date to ignore up to, so nothing on the Updates page or in the dialog can silence it. The row reads "Its page changed" with Ignore off.
-   - The `openModPageProvider` doc comment in `state_providers.dart` says "Null shows the character view", which is no longer true now that All mods and Updates are views too.
-
-6. **Browse** (artboards `Browse`, `BrowseMod`, `Downloads`).
+6. **Browse** (artboards `Browse`, `BrowseMod`, `BrowseCreator`, `Downloads`).
    - Grid restyle, carousel, character chip and type chips, Hide installed, the mature-content and sort menus, infinite scroll.
    - Mod page with Install for (a character override), multi-file pick and Turn on after installing.
+   - Creator page (`BrowseCreator`): the author's name on a mod page opens all their Zenless Zone Zero mods, with a row of character tiles that filters them, Hide installed and Sort.
    - The downloads side panel, Pause, and archive passwords.
    - "Needs your attention" as the panel's first group: one amber row per waiting decision (patch, several folders, password), each with the button that opens its dialog and Don't install. The patch and folders dialogs are restyled in phase 8; until then the buttons open the current ones.
    - `DownloadsNavItem` shows the amber warning badge (triangle and count) while anything waits. The canvas draws only that state; the idle look is designed in its style.
@@ -226,6 +228,11 @@ Each is reviewable on its own and ends with tests green, docs and changelog upda
 - Ask the user how the keyboard reaches the notification stack (for example F6 to move between the page and the stack, as desktop apps move between panes), or whether it doesn't.
 - A notification's shadow is clipped: the card's size transition and the stack's scroll view cut it at the card's edge, leaving a darker square outside each rounded bottom corner, clearest on paper. Fixing it means changing how the stack clips its cards (`notification_overlay.dart`).
 
+- Follow-ups from phase 5e's review, outside its scope:
+  - Take out (History, the right-click menu) and a patch put into a mod you already have leave the folder's session verdict as it was, so it can name a layer that is gone until the next check. The update dialog's own Take out drops it (`mod_update_dialog.dart`); `removePatchFlow` and `applyPatchInstall` should do the same.
+  - A patch from its base's own mod page, put into that base with "Add it to a mod you already have", replaces the base's layer (`withLayerOnTop` drops the layer of the same mod id): the base's file and file list are lost, and the patch gets no History row or Take out. Phase 8's `PatchModal` and `MakePatchModal` are where to decide how that case should read.
+  - The tracking screen naming a base when one is already on file doesn't refuse the patch's own mod id (`resolve_origin_dialog.dart`, `primaryModId: null` once a base exists), so it can write two layers of one page, and the second is dropped on the next read.
+  - `download_names_test`, `all_mods_bulk_actions_test` and `mods_screen_test` fake a folder being written by setting `modWritesInProgressProvider`, which `whileWritingMod` overwrites from its own counts. A test helper that holds a real `whileWritingMod`, as `all_mods_view_test` does, would keep them meaningful if one of those flows gains a wrapped write.
 - Offer the user a correction of the keybind copy on the canvas's Edit info and Reinstall artboards.
 - The install links in `OnboardingLaunch`'s no-Proton state point at a placeholder; the user supplies the real Proton-GE, Proton-Cachy and DWProton pages. The Proton-Cachy folder name on the canvas is a guess.
 - Ask the user whether the Settings Proton dropdown also marks the recommended builds.

@@ -282,7 +282,7 @@ void main() {
     });
   });
 
-  testWidgets('while a check runs, nothing on the page can start one or write over its results', (tester) async {
+  testWidgets('while a check runs, nothing on the page can start another, and Ignore and Undo stay on', (tester) async {
     final update = UpdateCheck(
       outcome: UpdateOutcome.updateAvailable,
       newerFiles: [GbFile(idRow: 11, file: 'new.zip', dateAdded: DateTime.utc(2026, 10))],
@@ -311,11 +311,12 @@ void main() {
     container.read(libraryCheckRunningProvider.notifier).state = true;
     await tester.pump();
     expect(pressed<OutlinedButton>('Check all for updates'), isNull);
-    expect(pressed<TextButton>('Ignore'), isNull);
     expect(pressed<TextButton>('Pick the files one by one'), isNull);
     expect(pressed<OutlinedButton>('Sort out tracking…'), isNull);
     expect(pressed<FilledButton>('Check them now'), isNull);
-    expect(pressed<TextButton>('Undo'), isNull);
+    // The check leaves the verdicts of folders written while it runs as they are.
+    expect(pressed<TextButton>('Ignore'), isNotNull);
+    expect(pressed<TextButton>('Undo'), isNotNull);
   });
 
   group("can't be checked", () {
@@ -454,14 +455,14 @@ void main() {
       expect(refoldDismissal(kept, 2, true).hasUpdate, isFalse);
     });
 
-    test("the base's verdict is the bottom layer's, even with a patch from the same mod page", () {
+    test("the base's verdict is the bottom layer's", () {
       final folder = foldDownloads([
         DownloadCheck(
           download: const ModDownload(modId: 1),
           check: UpdateCheck(outcome: UpdateOutcome.upToDate, comparedAgainst: added),
         ),
         DownloadCheck(
-          download: const ModDownload(role: DownloadRole.patch, modId: 1),
+          download: const ModDownload(role: DownloadRole.patch, modId: 2),
           check: const UpdateCheck(outcome: UpdateOutcome.updateAvailable),
         ),
       ]);

@@ -182,6 +182,7 @@ class UpdateCheck {
     this.isGuess = false,
     this.isObsolete = false,
     this.comparedAgainst,
+    this.newestListed,
     this.dismissed = false,
     this.newerFiles = const <GbFile>[],
     this.candidateMatchesVariant = false,
@@ -203,6 +204,7 @@ class UpdateCheck {
         isGuess: isGuess,
         isObsolete: isObsolete,
         comparedAgainst: comparedAgainst,
+        newestListed: newestListed,
         dismissed: dismissed,
         newerFiles: newerFiles,
         candidateMatchesVariant: candidateMatchesVariant,
@@ -223,6 +225,7 @@ class UpdateCheck {
         isGuess: isGuess,
         isObsolete: isObsolete,
         comparedAgainst: comparedAgainst,
+        newestListed: newestListed,
         dismissed: dismissed,
         newerFiles: newerFiles,
         candidateMatchesVariant: candidateMatchesVariant,
@@ -297,6 +300,10 @@ class UpdateCheck {
   /// in [checkForUpdate].
   final DateTime? comparedAgainst;
 
+  /// The upload date of the newest file the mod page lists, set only where the finding has no date of its own: the
+  /// installed file was taken down and every file left shipped with it. What a dismissal covers there.
+  final DateTime? newestListed;
+
   /// **Which download the fields above describe** — the layer that won the fold.
   ///
   /// A mixed folder is checked against every mod page it holds and the card
@@ -356,7 +363,7 @@ class UpdateCheck {
       if (date == null) continue;
       if (newest == null || date.isAfter(newest)) newest = date;
     }
-    return newest ?? candidate?.dateAdded ?? comparedAgainst;
+    return newest ?? candidate?.dateAdded ?? comparedAgainst ?? newestListed;
   }
 
   /// The same verdict with [dismissed] flipped.
@@ -378,6 +385,7 @@ class UpdateCheck {
         isGuess: isGuess,
         isObsolete: isObsolete,
         comparedAgainst: comparedAgainst,
+        newestListed: newestListed,
         dismissed: value,
         subjectModId: subjectModId,
         layers: layers,
@@ -614,8 +622,7 @@ UpdateCheck refoldDismissal(UpdateCheck folded, int? subject, bool dismissed) {
 /// file instead, and the folder is folded again. Null for a folder of one layer, which has no other verdict left to
 /// show.
 ///
-/// The base is the bottom layer, by position: a patch from the base's own mod page carries the same mod id. A base
-/// whose page was found gone or couldn't be compared keeps that verdict, which no file would change, in a folder of
+/// The base is the bottom layer. A base whose page was found gone or couldn't be compared keeps that verdict, which no file would change, in a folder of
 /// one layer too.
 UpdateCheck? forgetBaseVerdict(UpdateCheck folded) {
   bool lasting(UpdateOutcome outcome) => outcome == UpdateOutcome.sourceGone || outcome == UpdateOutcome.indeterminate;
@@ -820,6 +827,7 @@ UpdateCheck _judgeAgainstFile({
     GbFile? candidate,
     List<GbFile> options = const <GbFile>[],
     bool matchesVariant = false,
+    DateTime? newestListed,
   }) =>
       UpdateCheck(
         // The cap the locked decision asks for: with a guessed identity or a
@@ -835,6 +843,7 @@ UpdateCheck _judgeAgainstFile({
         isGuess: isGuess,
         isObsolete: remote.isObsolete,
         comparedAgainst: file?.dateAdded,
+        newestListed: newestListed,
       );
 
   // Everything the author did *not* ship alongside the installed file. With no
@@ -861,6 +870,8 @@ UpdateCheck _judgeAgainstFile({
       // could be its replacement. This is the case where naming one file is
       // least defensible and showing the list matters most.
       options: offered,
+      // With nothing offered but the files released with it, no newer file dates the finding.
+      newestListed: offered.isEmpty ? _newest(current)?.dateAdded : null,
     );
   }
 

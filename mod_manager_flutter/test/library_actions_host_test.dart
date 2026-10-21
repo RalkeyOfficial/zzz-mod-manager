@@ -230,6 +230,34 @@ void main() {
     await tester.pump(const Duration(seconds: 9));
   });
 
+  testWidgets("a verdict set while the check runs isn't overwritten by its results", (tester) async {
+    // As an Ignore or an applied update does: it writes the folder, then sets or drops the session's verdict.
+    await pumpHost(tester);
+    await startCheck(tester);
+    const ignored = UpdateCheck(outcome: UpdateOutcome.updateAvailable, dismissed: true, subjectModId: 1);
+    container.read(modUpdateChecksProvider.notifier).state = {'stale': ignored};
+
+    answer();
+    await tester.pumpAndSettle();
+
+    expect(container.read(modUpdateChecksProvider)['stale'], same(ignored));
+    expect(container.read(modUpdateChecksProvider)['bare']?.outcome, UpdateOutcome.untracked, reason: 'the rest land');
+  });
+
+  testWidgets('a mod being written when the results land keeps its verdict', (tester) async {
+    await pumpHost(tester);
+    await startCheck(tester);
+    final write = Completer<void>();
+    final writing = whileWritingMod(container, 'stale', () => write.future);
+
+    answer();
+    await tester.pumpAndSettle();
+    expect(container.read(modUpdateChecksProvider).containsKey('stale'), isFalse);
+
+    write.complete();
+    await writing;
+  });
+
   testWidgets('while it runs, nothing can start another', (tester) async {
     await pumpHost(tester);
     await startCheck(tester);

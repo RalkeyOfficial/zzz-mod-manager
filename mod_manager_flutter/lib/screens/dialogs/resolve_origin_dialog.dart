@@ -417,7 +417,8 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     ResolveOriginResult outcome = const ResolveOriginResult(),
   }) async {
     setState(() => _saving = true);
-    final result = await _gateway.writeOrigin(widget.mod.id, update);
+    final container = ProviderScope.containerOf(context, listen: false);
+    final result = await whileWritingMod(container, widget.mod.id, () => _gateway.writeOrigin(widget.mod.id, update));
     final ok = result.ok;
 
     if (ok && fillMetadata && _alsoFillMetadata && _record != null) {

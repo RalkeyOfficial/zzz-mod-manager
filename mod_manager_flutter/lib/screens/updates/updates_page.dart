@@ -361,7 +361,16 @@ class _StripState extends State<_Strip> with SingleTickerProviderStateMixin {
         _now = Duration.zero;
         _fades.clear();
       }
-      _fades.removeWhere((i, _) => i >= next.length);
+      // A fade still running moves with its pill, whose place shifts among the questions as the strip grows or shrinks.
+      final places = pillPlacesBefore(_pills, next);
+      final moved = {
+        for (final (i, from) in places.indexed)
+          if (from != null)
+            if (_fades[from] case final fade?) i: fade,
+      };
+      _fades
+        ..clear()
+        ..addAll(moved);
       // A batch starts after the last fade still waiting, so a second batch doesn't overtake the first; but never
       // more than [_queueCap] ahead, so batches arriving faster than they fade don't leave the strip lagging.
       var first = _now;
@@ -628,8 +637,6 @@ class _NewerFileRow extends ConsumerWidget {
     final palette = ZenithPalette.of(context);
     final text = Theme.of(context).textTheme;
     final writing = ref.watch(modWritesInProgressProvider).contains(mod.id);
-    // A check running would overwrite the dismissal's re-folded verdict with the one it started from.
-    final checking = ref.watch(libraryCheckRunningProvider);
     final ignorable = check.subjectModId != null && check.dismissableUpTo != null;
     final author = installedRecord(mod, ref.watch(knownModPagesProvider)).page?.submitter?.name;
     final character = libraryGroupName(libraryGroupOf(mod.characterId), loc);
@@ -672,7 +679,7 @@ class _NewerFileRow extends ConsumerWidget {
       children: [
         TextButton(
           style: smallButtonStyle(context),
-          onPressed: writing || checking || !ignorable ? null : () => unawaited(_ignore(context)),
+          onPressed: writing || !ignorable ? null : () => unawaited(_ignore(context)),
           child: Text(loc.t('library.updates.ignore')),
         ),
         OutlinedButton(
@@ -1137,12 +1144,16 @@ class _WhichFileCard extends ConsumerWidget {
         }
         ModDownload? before;
         DateTime? baseline;
-        final result = await write(
+        final result = await whileWritingMod(
+          container,
           modId,
-          (current) => bulkAssumeCurrentRecorded(current, (base, date) {
-            before = base;
-            baseline = date;
-          }),
+          () => write(
+            modId,
+            (current) => bulkAssumeCurrentRecorded(current, (base, date) {
+              before = base;
+              baseline = date;
+            }),
+          ),
         );
         if (result.ok && before != null) marked.add(MarkedAsCurrent(modId: modId, before: before!, baseline: baseline));
         return result;
@@ -1214,9 +1225,8 @@ class _MarkedCardState extends ConsumerState<_MarkedCard> {
               icon: const Icon(Icons.sync_rounded),
               label: Text(loc.t('library.updates.check_them')),
             ),
-            // Not while a check runs: its results would put back the verdicts by date that Undo drops.
             TextButton(
-              onPressed: checking || _undoing ? null : () => unawaited(_undo()),
+              onPressed: _undoing ? null : () => unawaited(_undo()),
               child: Text(loc.t('library.updates.undo')),
             ),
           ],

@@ -390,6 +390,7 @@ Eight rules:
   That column is a summary over the whole library; the dialog and the History tab are where the two facts stay apart ([`library-screen.md`](library-screen.md) §16).
 - **A finding with no date is never suppressed.** If a dismissal cannot be shown
   to cover it, it does not.
+  An installed file taken down, on a page that lists only files released with it, has no newer file to date the finding by, so the dismissal covers up to the newest file the page lists (`UpdateCheck.newestListed`). A file uploaded after that is a newer file, and speaks up again.
 - **It is dropped when the folder is rebound** to a different mod, like every
   other field that describes one mod page ([`origin-tracking.md`](origin-tracking.md#3-the-offline-backfill)).
 - **Taking a file below the newest listed writes one too.** The files above the
@@ -572,6 +573,16 @@ request (including the cache bypass, for the reason the marketplace's refresh
 button has one) and the merge rule — *merge, never replace*, since a per-mod
 check the user ran on a mod this pass could not reach is still the best answer
 available for it. Two copies of that would be wrong in a way nobody notices.
+
+**A folder whose tracking changed while the pass ran keeps what it has** (`UpdateCheckStart.changedSince`). An Ignore, an update, a marking or its Undo, the tracking screen, a patch taken out or put into a mod, and the update dialog's own check can all write a folder or its verdict while a pass is out, and the pass's answer was worked out from the block as it was; merged, it would bring back the update just ignored or the verdict just taken back.
+A folder is left out of the merge when:
+- a write on it was running when the pass started, started after it did, or is still running (`modWritesStartedProvider` and `modWritesInProgressProvider`, both kept by `whileWritingMod`). This catches a write that has ended but whose rescan hasn't landed, which neither of the next two can see. Every tracking write above goes through `whileWritingMod` for this reason;
+- its session verdict was set or dropped since the pass started, as the update dialog's own check does without writing anything;
+- its tracking on the last scan differs from what the pass started with, which catches a write made some other way once its rescan has landed;
+- or it is gone.
+
+One case is left: a write that ended just before the pass started, whose rescan lands only after the pass's results. The pass started from the block before the write, and nothing above tells. Its window is a library scan, which is local and usually done long before a pass's requests come back.
+So nothing has to be disabled while a check runs to protect its results: Ignore, Undo and Update stay on, and only the controls that would start a second pass are off. A folder left out reads what its write left it; the next check answers it.
 
 ---
 

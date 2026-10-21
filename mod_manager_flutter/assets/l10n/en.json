@@ -42,7 +42,7 @@
       "legend_not_tracked_plural": "{count} not tracked",
       "legend_local_single": "{count} Local, not counted",
       "legend_local_plural": "{count} Local, not counted",
-      "base_tooltip": "The patch is checked, the mod under it isn't",
+      "base_tooltip": "Only the patch can be checked, not the mod under it",
       "newer_files": "Newer files",
       "none_yet": "Check for updates to see which of your mods have a newer file.",
       "none_found": "No newer files since the last check.",

@@ -515,6 +515,55 @@ void main() {
       expect(ungrouped.candidate?.idRow, 11);
     });
 
+    test('a file taken down, with only files released with it left, can be ignored up to the newest of them', () {
+      // File 10 is gone from both lists; 11 shipped beside it. Nothing newer names a date to ignore up to.
+      final mod = GbMod(
+        idRow: 1,
+        files: [GbFile(idRow: 11, description: 'NSFW', dateAdded: DateTime.utc(2026, 2))],
+      );
+      final groups = ReleaseGroups.fromUpdates([
+        const GbUpdate(idRow: 1, fileRowIds: {10, 11}),
+      ]);
+      final found = checkForUpdate(origin: origin(modId: 1, fileId: 10), remote: mod, releases: groups);
+      expect(found.hasUpdate, isTrue);
+      expect(found.newerFiles, isEmpty);
+      expect(found.dismissableUpTo, DateTime.utc(2026, 2));
+
+      final ignored = checkForUpdate(
+        origin: origin(modId: 1, fileId: 10, dismissedUntil: found.dismissableUpTo),
+        remote: mod,
+        releases: groups,
+      );
+      expect(ignored.hasUpdate, isFalse);
+
+      final later = GbMod(
+        idRow: 1,
+        files: [...mod.files!, GbFile(idRow: 12, dateAdded: DateTime.utc(2026, 3))],
+      );
+      final again = checkForUpdate(
+        origin: origin(modId: 1, fileId: 10, dismissedUntil: found.dismissableUpTo),
+        remote: later,
+        releases: groups,
+      );
+      expect(again.hasUpdate, isTrue, reason: 'a file uploaded later speaks up again');
+    });
+
+    test("a file on offer with no date still can't be ignored, though a file released with it has one", () {
+      final mod = GbMod(
+        idRow: 1,
+        files: [
+          GbFile(idRow: 11, dateAdded: DateTime.utc(2026, 2)),
+          const GbFile(idRow: 12),
+        ],
+      );
+      final groups = ReleaseGroups.fromUpdates([
+        const GbUpdate(idRow: 1, fileRowIds: {10, 11}),
+      ]);
+      final found = checkForUpdate(origin: origin(modId: 1, fileId: 10), remote: mod, releases: groups);
+      expect(found.hasUpdate, isTrue);
+      expect(found.dismissableUpTo, isNull);
+    });
+
     test('a single-file update post groups nothing', () {
       // `_aFileRowIds` with one entry says only "this file shipped", which is
       // never evidence that two files are siblings.

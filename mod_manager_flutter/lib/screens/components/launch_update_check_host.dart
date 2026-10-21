@@ -129,6 +129,8 @@ class _LaunchUpdateCheckHostState extends ConsumerState<LaunchUpdateCheckHost> {
     running.state = true;
     final progress = ref.read(libraryCheckProgressProvider.notifier);
     final checks = ref.read(modUpdateChecksProvider.notifier);
+    final container = ProviderScope.containerOf(context, listen: false);
+    final start = updateCheckStart(container);
     try {
       outcome = await runLibraryUpdateCheck(
         plan: plan,
@@ -138,7 +140,7 @@ class _LaunchUpdateCheckHostState extends ConsumerState<LaunchUpdateCheckHost> {
         onProgress: (reached) => progress.state = reached,
       );
       // Before the progress is cleared, so a mod the check reached never reads unchecked in between.
-      checks.state = mergedChecks(checks.state, outcome);
+      checks.state = mergedChecks(checks.state, outcome, keep: changedDuringCheck(container, start));
     } catch (e) {
       // Silent, and deliberately. Nobody asked for this pass, so a failure is
       // not something the user has to act on — and the commonest cause by far

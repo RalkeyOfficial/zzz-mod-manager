@@ -175,7 +175,7 @@ class _AllModsViewState extends ConsumerState<AllModsView> {
       plan,
       writer: (modId, update) async {
         final mod = plan.eligible.firstWhere((m) => m.id == modId);
-        if (!isBeingWritten(container, mod)) return write(modId, update);
+        if (!isBeingWritten(container, mod)) return whileWritingMod(container, modId, () => write(modId, update));
         writing.add(mod);
         return OriginWriteResult.declined;
       },

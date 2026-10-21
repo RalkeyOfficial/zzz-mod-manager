@@ -129,6 +129,13 @@ void main() {
     test('a question settled since leaves an empty pill, not a change', () {
       expect(pillChanges([c, null, w], [c, null, null]), isEmpty);
     });
+
+    test('each place is followed to where it was, so a fade keeps to its own pill', () {
+      // The strip grows by two: the questions move two places right, the rest stay.
+      expect(pillPlacesBefore([c, c, w, w], [c, c, c, c, w, w]), [0, 1, null, null, 2, 3]);
+      // And shrinks back.
+      expect(pillPlacesBefore([c, c, c, c, w, w], [c, c, w, w]), [0, 1, 4, 5]);
+    });
   });
 
   group('a mod the app can check', () {
@@ -149,6 +156,30 @@ void main() {
           reason: '$outcome',
         );
       }
+    });
+
+    test("isn't checked by date the moment it is marked, though the patch on it had an update", () {
+      final marked = mod(
+        'marked',
+        tracked(
+          versionConfidence: OriginConfidence.assumedLatest,
+          patches: [patchFixture(modId: 2, fileId: 20, versionConfidence: OriginConfidence.user)],
+        ),
+      );
+      final origin = marked.origin!;
+      // The verdict from before the marking: the base asked which file, the patch had a newer one.
+      final held = foldDownloads([
+        DownloadCheck(
+          download: origin.downloads[0],
+          check: const UpdateCheck(outcome: UpdateOutcome.versionUnknown),
+        ),
+        DownloadCheck(
+          download: origin.downloads[1],
+          check: const UpdateCheck(outcome: UpdateOutcome.updateAvailable),
+        ),
+      ]);
+      expect(coverageOf(marked), CoverageKind.datedOnly);
+      expect(coverageFor([marked], {'marked': held}).cells.single.$2, CoverageKind.unchecked);
     });
 
     test('is checked as soon as the running check reaches it', () {

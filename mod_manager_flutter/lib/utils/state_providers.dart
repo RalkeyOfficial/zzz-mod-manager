@@ -31,6 +31,7 @@ import '../services/platform_service_factory.dart';
 import '../services/shader_fixes/zzmi_layout.dart';
 import '../services/storage/storage_scanner.dart';
 import '../services/update_check.dart';
+import '../services/update_check_run.dart';
 import 'categories.dart';
 import 'directory_size.dart';
 import 'mod_sorting.dart';
@@ -610,7 +611,7 @@ class ModPageRequest {
   final String pageKey;
 }
 
-/// Null shows the character view.
+/// The mod page shown over the Library's view (Characters, All mods or Updates). Null shows the view itself.
 final openModPageProvider = StateProvider<ModPageRequest?>((ref) => null);
 
 /// The user's note on each mod, by folder id. Hydrated in `ApiService.initialize`, written through
@@ -906,6 +907,23 @@ final libraryCheckProgressProvider = StateProvider<Set<String>>((ref) => const {
 final modUpdateChecksProvider =
     StateProvider<Map<String, UpdateCheck>>((ref) => const {});
 
+/// What a check is starting from, taken as it starts, for [changedDuringCheck] at its end.
+UpdateCheckStart updateCheckStart(ProviderContainer container) => UpdateCheckStart(
+      checks: container.read(modUpdateChecksProvider),
+      mods: container.read(modsProvider),
+      writesStarted: container.read(modWritesStartedProvider),
+      writing: container.read(modWritesInProgressProvider),
+    );
+
+/// The folders whose tracking changed since [start], whose verdicts the check leaves as they are
+/// (`UpdateCheckStart.changedSince`).
+Set<String> changedDuringCheck(ProviderContainer container, UpdateCheckStart start) => start.changedSince(
+      checks: container.read(modUpdateChecksProvider),
+      mods: container.read(modsProvider),
+      writing: container.read(modWritesInProgressProvider),
+      writesStarted: container.read(modWritesStartedProvider),
+    );
+
 /// The mod pages the whole-library checks fetched, by remote mod id. A check of ticked mods only refreshes the ones
 /// here; the rest of what it fetches goes to [fetchedModPagesProvider].
 ///
@@ -1161,7 +1179,8 @@ final modBackupsProvider = FutureProvider<Set<String>>((ref) async {
 });
 
 /// The mods, by folder id, whose folders an update, a reinstall, a patch installed or taken out, or a restore is
-/// changing right now. The History tab of the mod's page holds its buttons while its mod is here: nothing else on
+/// changing right now, or whose tracking a write is changing: an Ignore, a marking or its Undo, the tracking screen.
+/// The History tab of the mod's page holds its buttons while its mod is here: nothing else on
 /// screen shows the write is running, and a second write into the same folder would snapshot it half done. A switch
 /// press on the mod waits for it ([LibraryToggles]).
 final modWritesInProgressProvider = StateProvider<Set<String>>((ref) => const {});
@@ -1170,7 +1189,11 @@ final modWritesInProgressProvider = StateProvider<Set<String>>((ref) => const {}
 /// ends.
 final _modWriteCountsProvider = StateProvider<Map<String, int>>((ref) => const {});
 
-/// Runs [write] with [modId] in [modWritesInProgressProvider].
+/// How many writes have started on each mod this session, by folder id. An update check compares it from start to
+/// end (`UpdateCheckStart`), which catches a write that ended before the results landed but whose rescan hadn't.
+final modWritesStartedProvider = StateProvider<Map<String, int>>((ref) => const {});
+
+/// Runs [write] with [modId] in [modWritesInProgressProvider], counted in [modWritesStartedProvider].
 Future<T> whileWritingMod<T>(ProviderContainer container, String modId, Future<T> Function() write) async {
   final counts = container.read(_modWriteCountsProvider.notifier);
   final busy = container.read(modWritesInProgressProvider.notifier);
@@ -1180,6 +1203,8 @@ Future<T> whileWritingMod<T>(ProviderContainer container, String modId, Future<T
     busy.state = counts.state.keys.toSet();
   }
 
+  final started = container.read(modWritesStartedProvider.notifier);
+  started.state = {...started.state, modId: (started.state[modId] ?? 0) + 1};
   add(1);
   try {
     return await write();

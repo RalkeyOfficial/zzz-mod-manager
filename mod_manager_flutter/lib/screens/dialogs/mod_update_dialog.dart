@@ -572,9 +572,13 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
 
     if (subject == null) return;
     setState(() => _writing = true);
-    final result = await _gateway.writeOrigin(
+    final result = await whileWritingMod(
+      ProviderScope.containerOf(context, listen: false),
       widget.mod.id,
-      (block) => block?.withDismissal(subject: subject, until: until),
+      () => _gateway.writeOrigin(
+        widget.mod.id,
+        (block) => block?.withDismissal(subject: subject, until: until),
+      ),
     );
     final ok = result.ok;
     if (!mounted) return;

@@ -82,7 +82,7 @@ Future<bool> removePatchFlow(
   // nothing. The record still goes, because the folder demonstrably does not
   // hold this patch any more.
   if (!plan.touchesFiles && !plan.leavesPatchBehind) {
-    final removed = await _forget(mods, mod, patch);
+    final removed = await whileWritingMod(container, mod.id, () => _forget(mods, mod, patch));
     if (!context.mounted) return removed;
     notify.note(
       loc.t('mods.remove_patch.already_gone_title'),
@@ -165,7 +165,7 @@ Future<bool> removePatchFlow(
     // is that this folder holds that patch, and after this it does not — the
     // leftovers are named on screen rather than kept as a claim that would go on
     // offering to update a patch that has been taken out.
-    await _forget(mods, mod, patch);
+    await whileWritingMod(container, mod.id, () => _forget(mods, mod, patch));
 
     // Pruning already ran with the snapshot, and the keys were dropped, above.
     container.invalidate(modBackupsProvider);

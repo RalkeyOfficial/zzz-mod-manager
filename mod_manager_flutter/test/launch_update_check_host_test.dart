@@ -161,6 +161,29 @@ void main() {
         reason: 'the verdict lands before the progress is cleared, so the mod never reads unchecked in between');
   });
 
+  testWidgets("leaves a folder written while it ran as it is, and lands the rest", (tester) async {
+    final reply = Completer<List<GbMod>>();
+    await mount(
+      tester,
+      enabled: true,
+      fetch: (_) {
+        fetchCalls++;
+        return reply.future;
+      },
+    );
+    libraryLands([mod('Ellen', modId: 1, fileId: 10), mod('Lycaon', modId: 2, fileId: 10)]);
+    await tester.pump();
+    expect(container.read(libraryCheckRunningProvider), isTrue);
+
+    // A write that ends before the results land, with its rescan still to come, as the tracking screen's does.
+    await tester.runAsync(() => whileWritingMod(container, 'Ellen', () async {}));
+    reply.complete([superseded(1), superseded(2)]);
+    await tester.pumpAndSettle();
+
+    expect(container.read(modUpdateChecksProvider).containsKey('Ellen'), isFalse);
+    expect(container.read(modUpdateChecksProvider)['Lycaon']?.hasUpdate, isTrue);
+  });
+
   testWidgets('runs against a library that was already scanned',
       (tester) async {
     // The hot-reload case: the host is rebuilt under a library scanned long

@@ -115,6 +115,8 @@ class _LibraryActionsHostState extends ConsumerState<LibraryActionsHost> impleme
     running.state = true;
     final progress = ref.read(libraryCheckProgressProvider.notifier);
     final checks = ref.read(modUpdateChecksProvider.notifier);
+    final container = ProviderScope.containerOf(context, listen: false);
+    final start = updateCheckStart(container);
     final BulkUpdateCheckOutcome outcome;
     try {
       // Shared with the opt-in startup check, so the two cannot disagree about
@@ -127,7 +129,7 @@ class _LibraryActionsHostState extends ConsumerState<LibraryActionsHost> impleme
         onProgress: (reached) => progress.state = reached,
       );
       // Before the progress is cleared, so a mod the check reached never reads unchecked in between.
-      checks.state = mergedChecks(checks.state, outcome);
+      checks.state = mergedChecks(checks.state, outcome, keep: changedDuringCheck(container, start));
     } finally {
       // Cleared **before** the results screen opens, not after it closes. The
       // spinner reports the request, and the request is over — leaving it

@@ -494,17 +494,31 @@ Future<List<NotificationLines>> applyPatchInstall(
 
   for (final entry in decision.writes.entries) {
     final write = entry.value;
-    final result = await guard(write.into.modId, () => applier.applyPatchInto(
-      modName: write.into.modId,
-      modFolder: Directory(path.join(modsPath, write.into.modId)),
-      source: write.source,
-      incoming: write.incoming,
-      existing: write.existing,
-      placement: write.placement,
-      // Keys the store of displaced base files. Null for a folder dragged off a
-      // disk, which has no page and so nothing to key one by.
-      patchModId: patch?.modId,
-    ));
+    // The record is written inside the same guard as the files, so the folder reads as being written until both are.
+    final result = await guard(write.into.modId, () async {
+      final applied = await applier.applyPatchInto(
+        modName: write.into.modId,
+        modFolder: Directory(path.join(modsPath, write.into.modId)),
+        source: write.source,
+        incoming: write.incoming,
+        existing: write.existing,
+        placement: write.placement,
+        // Keys the store of displaced base files. Null for a folder dragged off a
+        // disk, which has no page and so nothing to key one by.
+        patchModId: patch?.modId,
+      );
+      if (!applied.success) return applied;
+      // Recorded on the target with the files it actually wrote, in the target's paths.
+      // A hand-dragged folder has no mod page, so its layer has no id, but the file list is what lets a base update put it back.
+      await amend(
+        write.into.modId,
+        (current) => withAppliedPatch(
+          current,
+          (patch?.layer ?? const ModDownload()).copyWith(files: applied.writtenFiles),
+        ),
+      );
+      return applied;
+    });
     // A failed copy may have changed the folder part-way, so the keys are read again either way.
     onPatched?.call(write.into.modId);
     if (!result.success) {
@@ -512,16 +526,6 @@ Future<List<NotificationLines>> applyPatchInstall(
       continue;
     }
     patchedInto[entry.key] = write.into;
-
-    // Recorded on the target with the files it actually wrote, in the target's paths.
-    // A hand-dragged folder has no mod page, so its layer has no id, but the file list is what lets a base update put it back.
-    await amend(
-      write.into.modId,
-      (current) => withAppliedPatch(
-        current,
-        (patch?.layer ?? const ModDownload()).copyWith(files: result.writtenFiles),
-      ),
-    );
   }
 
   // The scan ran against what the install *planned*, and a folder that already

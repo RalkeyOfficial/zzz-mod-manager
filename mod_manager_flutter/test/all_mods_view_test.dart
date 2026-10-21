@@ -299,12 +299,15 @@ void main() {
           return OriginWriteResult.written;
         },
       );
-      container.read(modWritesInProgressProvider.notifier).state = {'b'};
+      final holding = Completer<void>();
+      final hold = whileWritingMod(container, 'b', () => holding.future);
       await tick(tester, ['a', 'b']);
       await tester.tap(barButton('Mark 2 as current'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, 'Mark 2 as current'));
       await tester.pumpAndSettle();
+      holding.complete();
+      await hold;
 
       expect(written, ['a']);
       final titles = [for (final n in container.read(notificationsProvider)) n.title];
