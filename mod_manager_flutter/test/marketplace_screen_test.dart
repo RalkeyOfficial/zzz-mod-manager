@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_category.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_enums.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_page.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_top_sub.dart';
@@ -11,9 +12,13 @@ import 'package:mod_manager_flutter/screens/components/marketplace/gb_browse_vie
 import 'package:mod_manager_flutter/screens/components/marketplace/gb_detail_view.dart';
 import 'package:mod_manager_flutter/screens/components/marketplace/gb_mod_card.dart';
 import 'package:mod_manager_flutter/screens/marketplace_screen.dart';
+import 'package:mod_manager_flutter/services/download/download_job.dart';
+import 'package:mod_manager_flutter/services/download/download_queue.dart';
+import 'package:mod_manager_flutter/services/download/download_request.dart';
 import 'package:mod_manager_flutter/services/gamebanana/content_filter.dart';
 import 'package:mod_manager_flutter/services/installed_mods_index.dart';
 import 'package:mod_manager_flutter/utils/marketplace_providers.dart';
+import 'package:mod_manager_flutter/utils/notifications.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
 import 'support/localized_harness.dart';
@@ -261,6 +266,80 @@ void main() {
     expect(libraryBuilds, greaterThan(buildsBeforeOpen),
         reason: 'opening the marketplace still re-reads the library');
   });
+
+  group('a download press', () {
+    const mod = GbMod(idRow: 1, name: 'First Mod', visibility: GbVisibility.show);
+    const file = GbFile(idRow: 42, file: 'first.zip');
+
+    /// Presses Download & install on [file] with [queue] as the download queue, and hands back the card it raised.
+    Future<(AppNotification, ProviderContainer)> press(WidgetTester tester, _StubQueue queue) async {
+      await pumpLocalized(
+        tester,
+        const MarketplaceScreen(),
+        overrides: [...overrides(openMod: 1), downloadQueueProvider.overrideWith(() => queue)],
+      );
+      tester.widget<GbDetailView>(find.byType(GbDetailView)).onDownload(mod, file);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Download & install'));
+      await tester.pumpAndSettle();
+      final container = ProviderScope.containerOf(tester.element(find.byType(MarketplaceScreen)));
+      return (container.read(notificationsProvider).single, container);
+    }
+
+    void expectOpensDownloads(AppNotification card, ProviderContainer container) {
+      final action = card.actions.single;
+      expect(action.label, 'Open Downloads');
+      final before = container.read(downloadsPanelRequestProvider);
+      action.onPressed();
+      expect(container.read(downloadsPanelRequestProvider), before + 1);
+    }
+
+    testWidgets('of a file already downloading says so, with Open Downloads', (tester) async {
+      final (card, container) = await press(tester, _StubQueue(initial: [_job(file, DownloadJobState.running)]));
+      expect(card.title, 'Already downloading');
+      expectOpensDownloads(card, container);
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('that fails to queue says so, with Open Downloads for its failed row', (tester) async {
+      final (card, container) = await press(tester, _StubQueue(enqueued: DownloadJobState.failed));
+      expect(card.title, 'Download failed');
+      expectOpensDownloads(card, container);
+    });
+  });
+}
+
+DownloadJob _job(GbFile file, DownloadJobState state) => DownloadJob(
+      seq: 1,
+      request: DownloadRequest(url: Uri()),
+      intent: DownloadIntent.install,
+      subject: 'First Mod',
+      file: file,
+      state: state,
+    );
+
+/// A queue that starts nothing: [initial] is what it already holds, and an enqueue hands back a job in [enqueued].
+class _StubQueue extends DownloadQueue {
+  _StubQueue({this.initial = const [], this.enqueued = DownloadJobState.running});
+
+  final List<DownloadJob> initial;
+  final DownloadJobState enqueued;
+
+  @override
+  List<DownloadJob> build() {
+    super.build();
+    return initial;
+  }
+
+  @override
+  DownloadJob enqueue({
+    required GbFile file,
+    required String subject,
+    required DownloadIntent intent,
+    GbMod? mod,
+    String? characterId,
+  }) =>
+      _job(file, enqueued);
 }
 
 /// Stands in for the Library page, which watches the library directly.

@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import '../core/constants.dart';
 import '../services/api_service.dart';
+import '../utils/notification_actions.dart';
 import '../utils/notifications.dart';
 import '../utils/state_providers.dart';
 import '../l10n/app_localizations.dart';
@@ -122,12 +123,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
         body: loc.t(refusal.bodyKey, params: {'folder': refusal.folder}),
       );
     } catch (e) {
-      if (mounted) {
-        context.notify.error(
-          loc.t('settings.errors.generic_title'),
-          body: '$e',
-        );
-      }
+      final title = loc.t('settings.errors.generic_title');
+      notify.error(title, body: '$e', actions: [copyDetailsAction(loc, notify, title: title, body: '$e')]);
     }
   }
 
@@ -403,10 +400,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProv
       await ApiService.setLanguage(languageCode);
     } catch (e) {
       if (mounted) {
-        context.notify.error(
-          context.loc.t('settings.language.error_title'),
-          body: '$e',
-        );
+        final current = context.loc;
+        final notify = context.notify;
+        final title = current.t('settings.language.error_title');
+        notify.error(title, body: '$e', actions: [copyDetailsAction(current, notify, title: title, body: '$e')]);
       }
     } finally {
       if (mounted) {

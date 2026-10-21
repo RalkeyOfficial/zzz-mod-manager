@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/core/palette.dart';
@@ -302,6 +303,30 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Auto-tagging failed'), findsOneWidget);
+    });
+
+    testWidgets('a pass that failed offers Copy details, which copies its title and error', (tester) async {
+      String? copied;
+      final messenger = tester.binding.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.setData') copied = (call.arguments as Map)['text'] as String?;
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(SystemChannels.platform, null));
+      await pumpLocalized(
+        tester,
+        AutoTagSettingsSection(runner: () async => throw Exception('read-only')),
+        container: container,
+      );
+
+      await tester.tap(find.text('Detect tags for all mods'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Copy details'));
+      await tester.pumpAndSettle();
+
+      expect(copied, 'Auto-tagging failed\nException: read-only');
+      expect(find.text('Details copied'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 6));
     });
   });
 

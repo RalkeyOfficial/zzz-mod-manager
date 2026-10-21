@@ -11,6 +11,7 @@ import '../../services/download/download_job.dart';
 import '../../services/download/download_queue.dart';
 import '../../services/download/queue_policy.dart';
 import '../../utils/byte_format.dart';
+import '../../utils/notification_actions.dart';
 import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
 import '../dialogs/install_archive_flow.dart';
@@ -28,6 +29,9 @@ typedef ArchiveInstaller = Future<InstallResult> Function(
   String? knownMd5,
   String? requestedName,
 });
+
+/// The deck every download's card is dealt into, so downloads running at once take one slot of the stack.
+const String kDownloadsDeck = 'downloads';
 
 /// Finishes what the download queue starts, and reports it while it runs.
 ///
@@ -71,17 +75,10 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
   /// remembered.
   bool _draining = false;
 
-  /// The one Working card describing everything in flight.
-  NotificationHandle? _progress;
-
-  /// The jobs the card has already been raised for. Its only job is to tell
-  /// "the user closed this" apart from "there is nothing to show" — see
-  /// [_syncProgressNotification].
-  Set<int> _announced = const {};
-
-  /// Every job the card has covered since it was raised. When that is one job,
-  /// the job's result takes the card over instead of raising its own.
-  Set<int> _covered = {};
+  /// Each download's Working card, by the job's `seq`, from the moment it is
+  /// raised until its result takes the card over or the job leaves the queue.
+  /// A card the user hid stays here, so its result still arrives.
+  final Map<int, NotificationHandle> _cards = {};
 
   @override
   void initState() {
@@ -97,7 +94,7 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final jobs = ref.read(downloadQueueProvider);
-      _syncProgressNotification(jobs);
+      _syncCards(jobs);
       unawaited(_drain());
     });
   }
@@ -108,7 +105,7 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
     // cancel and every progress tick all change what there is to do and what
     // there is to say.
     ref.listen<List<DownloadJob>>(downloadQueueProvider, (_, jobs) {
-      _syncProgressNotification(jobs);
+      _syncCards(jobs);
       unawaited(_drain());
     });
     return widget.child;
@@ -116,121 +113,135 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
 
   // ── Saying what is happening ───────────────────────────────────────────────
 
-  /// Keeps exactly one Working card in step with the queue, its bar the
-  /// queue's [QueueProgress.fraction] and a sweep while a size is unknown.
+  /// Keeps one Working card per download in step with the queue, its bar the
+  /// download's own share and a sweep while its size is unknown.
   ///
-  /// **One card for the whole queue, not one per download.** A card per job
-  /// turns a five-mod queue into a wall that folds away the messages that
-  /// actually need reading. The card carries the aggregate; the panel is where a
-  /// per-mod breakdown lives.
+  /// **One card per download, dealt into one deck.** Every card joins the
+  /// [kDownloadsDeck] deck, which the stack draws as one slot: the front card in
+  /// full, "2 more downloading" under it, and the others' edges above it. So a
+  /// five-mod queue never takes every visible slot and folds an error under
+  /// "+N more", and one download looks the same as several.
   ///
-  /// It is raised when a job the card has not covered yet appears, and updated
-  /// from then on. That distinction is what lets the user hide it: a card
-  /// re-raised on the next progress tick would ignore them. Hiding it holds
-  /// until the next time they ask for something, which is itself a request to
-  /// be told about it. A card that covered one job becomes that job's result;
-  /// one that covered several is dismissed when the queue empties, and the
-  /// results count on their own card.
-  void _syncProgressNotification(List<DownloadJob> jobs) {
-    final progress = aggregateProgress(jobs);
-    if (progress.isEmpty) {
-      _progress?.dismiss();
-      _progress = null;
-      _announced = const {};
-      _covered = {};
-      return;
-    }
+  /// A card is raised when its download becomes active and updated from then
+  /// on, so hiding it holds: a card re-raised on the next progress tick would
+  /// ignore the user. A hidden card still takes its result, which comes back as
+  /// a card. Each download's result takes its own card over the moment it
+  /// lands, without waiting for the rest of the queue.
+  void _syncCards(List<DownloadJob> jobs) {
+    _reportFailedTransfers(jobs);
 
-    final seqs = {for (final job in progress.active) job.seq};
-    final isNew = seqs.difference(_announced).isNotEmpty;
-    _announced = seqs;
+    final active = {
+      for (final job in jobs)
+        if (job.state.isActive) job.seq: job,
+    };
+    // Gone without a result: cancelled, cleared, or handed to the flow that
+    // owns it, which reports it itself.
+    for (final seq in [..._cards.keys]) {
+      if (!active.containsKey(seq)) _cards.remove(seq)!.dismiss();
+    }
 
     final loc = context.loc;
-    final title = _progressTitle(loc, progress);
-    final only = progress.only;
-    final body = only != null
-        ? only.subject
-        : loc.t('downloads.notification_body_several',
-            params: {'count': '${progress.active.length}'});
-
-    final fraction = progress.fraction;
-    final handle = _progress;
-    if (handle == null || (!handle.isVisible && isNew)) {
-      if (!isNew) return;
-      handle?.dismiss();
-      _covered = {...seqs};
-      _progress = context.notify.working(
-        title,
-        body: body,
-        // A count-bearing message gets no portrait: one arbitrary face would
-        // claim the card is about that mod, and which mod sorted first would
-        // change between runs. Same rule the bulk reports follow.
-        characterId: only?.characterId,
-        progress: fraction,
-      );
-      return;
+    final notify = context.notify;
+    for (final job in active.values) {
+      final title = _loneTitle(loc, job);
+      final body = _loneBody(loc, job);
+      final fraction = aggregateProgress([job]).fraction;
+      final card = _cards[job.seq];
+      if (card == null) {
+        _cards[job.seq] = notify.working(
+          title,
+          body: body,
+          characterId: job.characterId,
+          progress: fraction,
+          deck: NotificationDeck(
+            kDownloadsDeck,
+            more: (count) => loc.plural('downloads.deck_more', count,
+                params: {'count': '$count'}),
+          ),
+        );
+      } else {
+        card.update(
+          title: title,
+          body: body,
+          progress: fraction,
+          clearProgress: fraction == null,
+        );
+      }
     }
-    // A card the user hid takes this silently, so a lone job's result can still
-    // come back as a card.
-    _covered.addAll(seqs);
-    handle.update(
-      title: title,
-      body: body,
-      characterId: only?.characterId,
-      clearCharacterId: only == null,
-      progress: fraction,
-      clearProgress: fraction == null,
-    );
   }
 
-  /// The card, handed over to [job]'s result when it covered [job] alone.
-  /// The host lets go of it, so the queue emptying does not dismiss the result.
-  NotificationHandle? _takeCardFor(DownloadJob job) {
-    final handle = _progress;
-    if (handle == null || _covered.length != 1 || !_covered.contains(job.seq)) return null;
-    _progress = null;
-    return handle;
-  }
-
-  /// `Downloading 3 mods · 24% · 18 MB/s · 3m left`.
+  /// A transfer that failed gets a card of its own, since the panel row is
+  /// otherwise the only place it is said. The download's card becomes it, and
+  /// leaves the deck as its own card.
   ///
-  /// A **percentage** rather than two byte counts, because the title has no
-  /// `maxLines` and wraps: `5.0 MB / 21.9 MB` costs a second line on a 380px
-  /// card and says less than `24%` does. The byte figures are a row away in the
-  /// panel.
-  String _progressTitle(AppLocalizations loc, QueueProgress progress) {
-    if (!progress.transferring) {
-      return progress.installing
-          ? loc.t('downloads.installing')
-          : loc.t('downloads.queued');
+  /// Install failures are reported where the install ran, a download the
+  /// update flow owns is reported by that flow, and one that failed as it was
+  /// queued, which never had a card, by the button that queued it.
+  void _reportFailedTransfers(List<DownloadJob> jobs) {
+    for (final job in jobs) {
+      if (job.state != DownloadJobState.failed ||
+          job.error is InstallFailure ||
+          job.intent == DownloadIntent.callerHandles ||
+          !_cards.containsKey(job.seq)) {
+        continue;
+      }
+      final loc = context.loc;
+      final container = ProviderScope.containerOf(context, listen: false);
+      final actions = [
+        if (rowAction(job, jobs) == DownloadRowAction.retry)
+          retryAction(loc,
+              () => container.read(downloadQueueProvider.notifier).retry(job.seq)),
+        openDownloadsAction(loc, container),
+      ];
+      _takeCardFor(job)!.update(
+        kind: NotificationKind.error,
+        title: loc.t('downloads.failed_title'),
+        body: job.subject,
+        characterId: job.characterId,
+        clearCharacterId: job.characterId == null,
+        actions: actions,
+      );
     }
+  }
 
-    final count = progress.active.length;
-    final parts = <String>[
-      loc.plural('downloads.notification_title', count,
-          params: {'count': '$count'}),
-    ];
+  /// [job]'s card, handed over to its result. The host lets go of it, so the
+  /// job leaving the queue does not dismiss the result.
+  NotificationHandle? _takeCardFor(DownloadJob job) => _cards.remove(job.seq);
 
-    final fraction = progress.fraction;
-    if (fraction != null) {
-      parts.add('${(fraction * 100).round()}%');
-    } else if (progress.received > 0) {
-      // No total to divide by — how much has arrived is still more useful than
-      // nothing, and it is the honest answer rather than an invented percentage.
-      parts.add(formatBytes(progress.received));
-    }
+  /// `Installing Victorian Ballgown`, or `Downloading …` for a download that
+  /// installs nothing here: one kept as an archive, or one the update flow
+  /// writes. The mod stays in the title while the line under it moves on.
+  static String _loneTitle(AppLocalizations loc, DownloadJob job) =>
+      loc.t(
+        job.intent == DownloadIntent.install
+            ? 'downloads.lone_title_installing'
+            : 'downloads.lone_title_downloading',
+        params: {'mod': job.subject},
+      );
 
-    final rate = progress.bytesPerSecond;
-    if (rate != null) {
-      parts.add(loc.t('marketplace.download_rate',
-          params: {'rate': formatBytes(rate.round())}));
+  /// Where the one download is: `Waiting for a free slot`,
+  /// `Downloading · 64.0 MB of 214.0 MB`, then `Unpacking`. The bar shows
+  /// the share.
+  static String _loneBody(AppLocalizations loc, DownloadJob job) {
+    switch (job.state) {
+      case DownloadJobState.queued:
+        return loc.t('downloads.queued');
+      case DownloadJobState.running:
+        final received = job.progress?.received ?? 0;
+        final total = job.progress?.total ?? job.request.expectedSize;
+        if (received == 0) return loc.t('downloads.connecting');
+        // No total to divide by: how much has arrived is the honest answer.
+        if (total == null || total <= 0) {
+          return loc.t('downloads.stage_downloading_bytes',
+              params: {'received': formatBytes(received)});
+        }
+        return loc.t('downloads.stage_downloading', params: {
+          'received': formatBytes(received),
+          'total': formatBytes(total),
+        });
+      default:
+        return loc.t('downloads.stage_unpacking');
     }
-    final eta = progress.eta;
-    if (eta != null && eta > Duration.zero) {
-      parts.add(loc.t('marketplace.download_eta',
-          params: {'time': formatDuration(eta)}));
-    }
-    return parts.join(' · ');
   }
 
   // ── Finishing the work ─────────────────────────────────────────────────────
@@ -266,7 +277,9 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
       // A file the user cannot see arriving in a folder they would have to go
       // and look at — the case the notification rules keep a *success* message
       // for. The body is the path because the path is the whole point.
-      final title = context.loc.t('marketplace.download_saved_title');
+      final loc = context.loc;
+      final title = loc.t('marketplace.download_saved_title');
+      final actions = [openFolderAction(loc, context.notify, archive.parent.path)];
       final card = _takeCardFor(job);
       if (card != null) {
         card.update(
@@ -275,9 +288,11 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
           body: archive.path,
           characterId: job.characterId,
           clearCharacterId: job.characterId == null,
+          actions: actions,
         );
       } else {
-        context.notify.done(title, body: archive.path, characterId: job.characterId);
+        context.notify.done(title,
+            body: archive.path, characterId: job.characterId, actions: actions);
       }
       queue.markDone(job.seq);
       return;
@@ -308,12 +323,17 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
         requestedName: job.result?.requestedName,
       );
     } catch (error) {
-      // Taken before the queue changes, or the queue emptying dismisses it.
+      // Taken before the queue changes, or the job leaving it dismisses it.
       final card = _takeCardFor(job);
       queue.markFailed(job.seq, InstallFailure('$error'));
       if (!mounted) return;
       // The mod is new; nothing was updated — so not the update flow's wording.
-      final title = context.loc.t('marketplace.install_failed_title');
+      final loc = context.loc;
+      final title = loc.t('marketplace.install_failed_title');
+      // The panel's row holds what the install said went wrong.
+      final actions = [
+        openDownloadsAction(loc, ProviderScope.containerOf(context, listen: false)),
+      ];
       if (card != null) {
         card.update(
           kind: NotificationKind.error,
@@ -321,15 +341,22 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
           body: job.subject,
           characterId: job.characterId,
           clearCharacterId: job.characterId == null,
+          actions: actions,
         );
       } else {
-        context.notify.error(title, body: job.subject, characterId: job.characterId);
+        context.notify.error(title,
+            body: job.subject, characterId: job.characterId, actions: actions);
       }
       return;
     }
 
     if (!mounted) return;
-    showInstallResult(context, result, into: _takeCardFor(job), characterId: job.characterId);
+    showInstallResult(
+      context,
+      result,
+      into: _takeCardFor(job),
+      characterId: job.characterId,
+    );
 
     // The library just changed, and both the Library's grid and the
     // marketplace's "in library" badges are drawn from it. Invalidate rather

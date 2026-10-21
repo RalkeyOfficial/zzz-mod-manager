@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/l10n/app_localizations.dart';
 import 'package:mod_manager_flutter/screens/components/import_failure_message.dart';
 import 'package:mod_manager_flutter/services/import_result.dart';
+import 'package:mod_manager_flutter/utils/state_providers.dart';
 
 /// What an import failure tells the user.
 ///
@@ -45,6 +47,18 @@ void main() {
     final lines = importFailureMessage(en, ImportFailure.libraryNotConfigured);
 
     expect(lines.body.toLowerCase(), contains('settings'));
+  });
+
+  test('an unset library offers Open Settings, which opens it', () {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final lines = importFailureMessage(en, ImportFailure.libraryNotConfigured, container: container);
+
+    expect(lines.actions.map((a) => a.label), ['Open Settings']);
+    lines.actions.single.onPressed();
+    expect(container.read(destinationProvider), AppDestination.settings);
+    expect(importFailureMessage(en, ImportFailure.copyFailed, container: container).actions, isEmpty,
+        reason: 'only the setting is fixed in Settings');
   });
 
   test('no two reasons share a message', () {

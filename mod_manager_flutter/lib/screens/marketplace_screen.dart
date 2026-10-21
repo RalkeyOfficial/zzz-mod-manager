@@ -9,6 +9,7 @@ import '../services/download/queue_policy.dart';
 import '../services/gamebanana/remote_mod_metadata.dart';
 import '../services/platform_service_factory.dart';
 import '../utils/marketplace_providers.dart';
+import '../utils/notification_actions.dart';
 import '../utils/notifications.dart';
 import '../utils/state_providers.dart';
 import 'components/marketplace/gb_browse_view.dart';
@@ -183,6 +184,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         );
 
     if (!mounted) return;
+    final container = ProviderScope.containerOf(context, listen: false);
     if (job.state == DownloadJobState.failed) {
       // The one way enqueuing fails outright: a file whose download url will not
       // parse. It is already a failed row in the panel; this is what the user
@@ -191,6 +193,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         loc.t('marketplace.download_failed_title'),
         body: subject,
         characterId: characterId,
+        actions: [openDownloadsAction(loc, container)],
       );
       return;
     }
@@ -206,6 +209,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         loc.t('marketplace.download_already_queued_title'),
         body: subject,
         characterId: characterId,
+        actions: [openDownloadsAction(loc, container)],
       );
     }
   }

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,6 +9,8 @@ import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/dialogs/remove_patch_flow.dart';
 import 'package:mod_manager_flutter/services/patch_store.dart';
+import 'package:mod_manager_flutter/utils/notifications.dart';
+import 'package:path/path.dart' as p;
 
 import 'support/localized_harness.dart';
 import 'support/origin_shorthand.dart';
@@ -88,7 +92,10 @@ void main() {
 
   /// Mounts the flow behind a button, so the confirmation is reached the way the
   /// menu reaches it and the return value is the one the caller rescans on.
-  Future<void> press(WidgetTester tester, ModOrigin origin) async {
+  ///
+  /// With [container], the notifications are read back from it.
+  Future<void> press(WidgetTester tester, ModOrigin origin,
+      {ProviderContainer? container}) async {
     await pumpLocalized(
       tester,
       Consumer(
@@ -110,7 +117,8 @@ void main() {
           child: const Text('open'),
         ),
       ),
-      overrides: library.overrides,
+      overrides: container == null ? library.overrides : null,
+      container: container,
     );
     expectBuilt(ElevatedButton);
     await tapWithIo(tester, find.text('open'));
@@ -118,6 +126,113 @@ void main() {
 
   Future<void> confirm(WidgetTester tester) =>
       tapWithIo(tester, find.text('Remove patch'));
+
+  /// A container over the temp library, and every Working card its stack
+  /// raises from now on, as each first appeared.
+  ({ProviderContainer container, List<AppNotification> working}) watched() {
+    final container = ProviderContainer(overrides: library.overrides);
+    addTearDown(container.dispose);
+    final working = <AppNotification>[];
+    final listening = container.listen<List<AppNotification>>(
+        notificationsProvider, (_, next) {
+      for (final n in next) {
+        if (n.kind == NotificationKind.working &&
+            !working.any((w) => w.id == n.id)) {
+          working.add(n);
+        }
+      }
+    });
+    addTearDown(listening.close);
+    return (container: container, working: working);
+  }
+
+  /// Presses the stack's only card's Undo, on the real event loop, and waits
+  /// for the card it raises to become its result.
+  Future<AppNotification> undo(
+      WidgetTester tester, ProviderContainer container) async {
+    final card = container.read(notificationsProvider).single;
+    await tester.runAsync(() async =>
+        card.actions.singleWhere((a) => a.label == 'Undo').onPressed());
+    for (var i = 0; i < 40; i++) {
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump();
+      final now = container.read(notificationsProvider);
+      if (now.isNotEmpty &&
+          now.last.kind != NotificationKind.working &&
+          now.last.id != card.id) {
+        break;
+      }
+    }
+    return container.read(notificationsProvider).last;
+  }
+
+  testWidgets('a Working card shows while it runs and becomes the Done, with an Undo',
+      (tester) async {
+    final origin = await patchedFolder(tester);
+    final run = watched();
+    await press(tester, origin, container: run.container);
+    expect(run.working, isEmpty,
+        reason: 'nothing runs while the question is on screen');
+
+    await confirm(tester);
+
+    expect([for (final n in run.working) (n.title, n.body, n.characterId)],
+        [('Taking the patch out…', 'Ellen Fix', 'ellen')]);
+    final done = run.container.read(notificationsProvider).single;
+    expect(done.id, run.working.single.id,
+        reason: 'the same card, turned into its result');
+    expect((done.kind, done.title, done.body),
+        (NotificationKind.done, 'Patch removed', 'Ellen Fix'));
+    expect([for (final a in done.actions) a.label], ['Undo']);
+  });
+
+  testWidgets('Undo puts the patch back, its record and kept originals too',
+      (tester) async {
+    final origin = await patchedFolder(tester);
+    final run = watched();
+    await press(tester, origin, container: run.container);
+    await confirm(tester);
+    expect(library.originOf(modName)!.patches, isEmpty);
+
+    final result = await undo(tester, run.container);
+
+    expect((result.kind, result.title, result.body),
+        (NotificationKind.done, 'Patch put back', 'Ellen Fix'));
+    expect(result.actions, isEmpty, reason: 'an undo is not offered again');
+    expect(run.working.last.title, 'Putting the patch back…');
+    expect(library.read(modName, 'Ellen.ini'), 'the patch');
+    expect(library.read(modName, 'Textures/Patch.dds'), 'the patch');
+    expect(library.originOf(modName)!.patches.single.modId, patchId);
+    late Set<int> kept;
+    await tester.runAsync(() async {
+      kept = await PatchStore.idsIn(library.modFolder(modName));
+    });
+    expect(kept, {patchId},
+        reason: 'the mod\'s own files are kept again, for the next removal');
+  });
+
+  testWidgets('Undo with the copy gone says so and changes nothing',
+      (tester) async {
+    final origin = await patchedFolder(tester);
+    final run = watched();
+    await press(tester, origin, container: run.container);
+    await confirm(tester);
+    // As pruning or the list of previous versions would delete it.
+    final snapshot = Directory(p.join(library.snapshots.rootPath,
+        library.uidOf(modName)!, library.snapshotsOf(modName).single));
+    await tester.runAsync(() => snapshot.delete(recursive: true));
+
+    final result = await undo(tester, run.container);
+
+    expect((result.kind, result.title, result.body), (
+      NotificationKind.error,
+      "Couldn't put the patch back",
+      'The copy saved before the patch was taken out is no longer kept.',
+    ));
+    expect(library.read(modName, 'Ellen.ini'), 'the mod');
+    expect(library.originOf(modName)!.patches, isEmpty);
+  });
 
   testWidgets('confirming puts the mod back and takes the patch away',
       (tester) async {

@@ -359,6 +359,28 @@ void main() {
       expect(warning.duration, isNull);
     });
 
+    testWidgets('what a setting fixes offers Open Settings, which opens the Settings page', (tester) async {
+      final results = [
+        const LaunchResult(LaunchOutcome.notFound),
+        const LaunchResult(LaunchOutcome.unsupported),
+        const LaunchResult(LaunchOutcome.runnerMissing, program: 'umu-run'),
+        const LaunchResult(LaunchOutcome.prefixRequired),
+        LaunchResult(LaunchOutcome.started, containerDns: Future.value(false)),
+      ];
+      for (final result in results) {
+        await launch(tester, result: result);
+        final action = container.read(notificationsProvider).single.actions.single;
+        expect(action.label, 'Open Settings', reason: '${result.outcome}');
+        action.onPressed();
+        expect(container.read(destinationProvider), AppDestination.settings, reason: '${result.outcome}');
+      }
+    });
+
+    testWidgets('a start that failed offers no Open Settings', (tester) async {
+      await launch(tester, result: const LaunchResult(LaunchOutcome.failed));
+      expect(container.read(notificationsProvider).single.actions, isEmpty);
+    });
+
     testWidgets('a lookup that works, or one with no verdict, says nothing', (tester) async {
       for (final verdict in [true, null]) {
         final result = LaunchResult(LaunchOutcome.started, containerDns: Future.value(verdict));

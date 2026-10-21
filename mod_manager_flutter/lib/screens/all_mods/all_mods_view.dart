@@ -187,8 +187,12 @@ class _AllModsViewState extends ConsumerState<AllModsView> {
       skipped: outcome.skipped - writing.length,
       failed: outcome.failed,
     );
-    if (shown.written + shown.skipped + shown.failed > 0) showAssumeCurrentOutcome(loc, notify, shown);
     reportSkippedWhileWriting(loc, notify, writing);
+    if (shown.written + shown.skipped + shown.failed > 0) {
+      showAssumeCurrentOutcome(loc, notify, shown, into: outcome.card);
+    } else {
+      outcome.card?.dismiss();
+    }
     // Even when nothing was written: a run that only declined means the plan on screen was stale.
     await container.read(libraryProvider.notifier).rescan();
   }

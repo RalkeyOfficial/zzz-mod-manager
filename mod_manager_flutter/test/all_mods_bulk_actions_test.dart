@@ -31,6 +31,18 @@ void main() {
   void writing(ProviderContainer container, String id) =>
       container.read(modWritesInProgressProvider.notifier).state = {id};
 
+  /// Every Working card [container]'s stack raises from now on, as it first appeared.
+  List<AppNotification> workingCards(ProviderContainer container) {
+    final seen = <AppNotification>[];
+    final listening = container.listen<List<AppNotification>>(notificationsProvider, (_, next) {
+      for (final n in next) {
+        if (n.kind == NotificationKind.working && !seen.any((s) => s.id == n.id)) seen.add(n);
+      }
+    });
+    addTearDown(listening.close);
+    return seen;
+  }
+
   /// The notice naming one mod a bulk action skipped while its folder was being written.
   (String, String) skippedNotice(String name) =>
       ('1 mod skipped while its folder is being changed', '$name. Try again once the update, reinstall, patch or restore is done.');
@@ -220,6 +232,40 @@ void main() {
         expect(container.read(libraryScansProvider), scans + 1);
       });
 
+      testWidgets('shows a Working card naming the mods while it runs, and dismisses it on success', (tester) async {
+        installMod('Ellen School');
+        installMod('Miyabi Kimono');
+        final container = await pumpTable(tester, [
+          mod('Ellen School'),
+          mod('Miyabi Kimono', characterId: 'miyabi'),
+        ]);
+        await tick(tester, ['Ellen School', 'Miyabi Kimono']);
+        final working = workingCards(container);
+
+        await pressBulk(tester, container, barButton('Enable'));
+
+        expect([for (final n in working) (n.title, n.body)], [('Turning on 2 mods…', 'Ellen School and Miyabi Kimono')]);
+        expect(working.single.characterId, isNull, reason: 'a card about several mods has no portrait');
+        expect(notified(container), isEmpty);
+      });
+
+      testWidgets('a failure turns its Working card into the error', (tester) async {
+        installMod('Ellen School');
+        final container = await pumpTable(tester, [
+          mod('Ellen School'),
+          mod('Ghost', characterId: 'miyabi'),
+        ]);
+        await tick(tester, ['Ellen School', 'Ghost']);
+        final working = workingCards(container);
+
+        await pressBulk(tester, container, barButton('Enable'));
+
+        final error = container.read(notificationsProvider).single;
+        expect((error.kind, error.title, error.body), (NotificationKind.error, "Couldn't turn on 1 mod", 'Ghost'));
+        expect(error.id, working.single.id, reason: 'the same card, turned into its result');
+        expect(error.characterId, 'miyabi');
+      });
+
       testWidgets("under One at a time, turns the character's other mod off", (tester) async {
         await installActive(tester, 'Ellen School');
         installMod('Ellen Maid');
@@ -282,6 +328,7 @@ void main() {
             'Jiggle stays off: there is no d3dx.ini in your ZZMI folder, so there is nowhere to put its shader files.',
           ),
         ]);
+        expect([for (final a in container.read(notificationsProvider).single.actions) a.label], ['Open Settings']);
         expect(container.read(libraryScansProvider), scans + 1);
       });
 
@@ -303,6 +350,7 @@ void main() {
                 'files.',
           ),
         ]);
+        expect([for (final a in container.read(notificationsProvider).single.actions) a.label], ['Open Settings']);
       });
 
       testWidgets('a partial failure is reported only as the failure', (tester) async {
@@ -339,6 +387,18 @@ void main() {
         expect(temp.config.activeMods, isEmpty);
         expect(notified(container), isEmpty);
         expect(container.read(libraryScansProvider), scans + 1);
+      });
+
+      testWidgets("shows a Working card with the one mod's portrait, and dismisses it on success", (tester) async {
+        await installActive(tester, 'Ellen School');
+        final container = await pumpTable(tester, [mod('Ellen School', active: true)]);
+        await tick(tester, ['Ellen School']);
+        final working = workingCards(container);
+
+        await pressBulk(tester, container, barButton('Disable'));
+
+        expect([for (final n in working) (n.title, n.body, n.characterId)], [('Turning off 1 mod…', 'Ellen School', 'ellen')]);
+        expect(notified(container), isEmpty);
       });
 
       testWidgets('a partial failure is reported only as the failure', (tester) async {
@@ -402,6 +462,22 @@ void main() {
         expect(container.read(selectedModIdProvider), isNull, reason: 'the details panel let go of a deleted mod');
         expect(notified(container), isEmpty);
         expect(container.read(libraryScansProvider), scans + 1);
+      });
+
+      testWidgets('shows its Working card once confirmed, and dismisses it on success', (tester) async {
+        installMod('Alpha');
+        installMod('Bravo');
+        installMod('Charlie');
+        final container = await pumpTable(tester, [mod('Alpha'), mod('Bravo'), mod('Charlie')]);
+        await tick(tester, ['Alpha', 'Bravo', 'Charlie']);
+        final working = workingCards(container);
+
+        await tapWithIo(tester, barButton('Delete'));
+        expect(working, isEmpty, reason: 'nothing runs while the question is open');
+        await pressBulk(tester, container, find.widgetWithText(FilledButton, 'Delete 3 mods'));
+
+        expect([for (final n in working) (n.title, n.body)], [('Deleting 3 mods…', 'Alpha, Bravo and 1 more')]);
+        expect(notified(container), isEmpty);
       });
 
       testWidgets('a partial failure is reported only as the failure, and its tick stays', (tester) async {

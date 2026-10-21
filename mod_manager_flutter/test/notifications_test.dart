@@ -267,6 +267,42 @@ void main() {
       error.update(kind: NotificationKind.done, title: 'Done');
       expect(state(), isEmpty);
     });
+
+    test('raised twice with the same words is two cards, each with its own handle', () {
+      // Two downloads of one mod both read like this, and each owner still has a result to report.
+      final first = center().working('Installing Ellen Swimsuit', body: 'Waiting for a free slot');
+      final second = center().working('Installing Ellen Swimsuit', body: 'Waiting for a free slot');
+      expect(state().map((n) => n.id), [first.id, second.id]);
+    });
+  });
+
+  group('a deck', () {
+    final deck = NotificationDeck('downloads', more: (count) => '$count more downloading');
+    NotificationRepeat installed(String subject) => NotificationRepeat('install-done',
+        subjects: [subject], title: (count) => '$count mods installed');
+
+    test('keeps a card turned into Done, so the result is dealt on top', () {
+      final working = center().working('Installing', body: 'A', deck: deck);
+      working.update(kind: NotificationKind.done, title: 'Mod installed');
+      expect(state().single.deck, deck);
+    });
+
+    for (final kind in [NotificationKind.error, NotificationKind.warning, NotificationKind.note, NotificationKind.needsYou]) {
+      test('lets go of a card turned into a ${kind.name}, which is then a card of its own', () {
+        final working = center().working('Installing', body: 'A', deck: deck);
+        working.update(kind: kind, title: 'It went wrong');
+        expect(state().single.deck, isNull);
+      });
+    }
+
+    test('keeps a Done result that is counted on its card', () {
+      final a = center().working('Installing', body: 'A', deck: deck);
+      final b = center().working('Installing', body: 'B', deck: deck);
+      a.update(kind: NotificationKind.done, title: 'Mod installed', repeat: installed('A'));
+      b.update(kind: NotificationKind.done, title: 'Mod installed', repeat: installed('B'));
+      expect(state().single.count, 2);
+      expect(state().single.deck, deck);
+    });
   });
 
   group('handles', () {

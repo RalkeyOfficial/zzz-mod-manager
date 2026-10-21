@@ -77,7 +77,7 @@ void main() {
     // The sweep that would have caught a half-added `_few`, and that catches a
     // `_single` or `_plural` going missing from one locale.
     const bases = [
-      'downloads.notification_title',
+      'downloads.deck_more',
       'marketplace.install_success_title',
       'mods.assume_current.confirm',
       'mods.assume_current.done',

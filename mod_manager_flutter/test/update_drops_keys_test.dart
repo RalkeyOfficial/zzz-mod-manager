@@ -14,6 +14,7 @@ import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/dialogs/apply_update_flow.dart';
 import 'package:mod_manager_flutter/services/download/download_queue.dart';
 import 'package:mod_manager_flutter/services/download/download_service.dart';
+import 'package:mod_manager_flutter/utils/notifications.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 import 'package:path/path.dart' as p;
 
@@ -40,11 +41,16 @@ void main() {
   /// Every mod marked as being written while the flow ran, which is what holds a press on its switch.
   late Set<String> markedWriting;
 
+  /// The container the last flow ran in, and every card raised there in every state it was in.
+  late ProviderContainer flowContainer;
+  late List<AppNotification> raised;
+
   setUp(() async {
     temp = await TempLibrary.create(prefix: 'zzz_update_keys_');
     service = RecordingService(temp);
     transport = FakeDownloadTransport();
     markedWriting = {};
+    raised = [];
   });
 
   /// Serves a zip of [files] as file [fileId] of the mod's page.
@@ -84,7 +90,9 @@ void main() {
       ),
     ]);
     addTearDown(container.dispose);
+    flowContainer = container;
     container.listen(modWritesInProgressProvider, (_, writing) => markedWriting.addAll(writing));
+    container.listen(notificationsProvider, (_, next) => raised.addAll(next));
     await pumpLocalized(
       tester,
       Consumer(
@@ -130,6 +138,60 @@ void main() {
     expect(temp.read(modName, 'Ellen.ini'), contains('VK_2'), reason: 'the new files are in');
     expect(service.keysDropped, contains(modName));
     expect(markedWriting, {modName}, reason: "a press on the mod's switch waits for the write");
+  });
+
+  testWidgets('a write into one folder shows a Working card, which becomes its failure with Copy details',
+      (tester) async {
+    final mod = await installed(
+      tester,
+      originFixture(
+        modId: 100,
+        modIdConfidence: OriginConfidence.exact,
+        fileId: 1,
+        versionConfidence: OriginConfidence.exact,
+        ingest: const ModIngest(folders: [modName]),
+      ),
+    );
+    final file = serve(2, {'Ellen/Ellen.ini': '[KeySwap]\nkey = VK_2\n'});
+
+    await runFailingAtTheRecord(
+      tester,
+      (context, ref) => applyUpdateFlow(context, ref, mod: mod, remoteModId: 100, file: file, confirm: false),
+    );
+
+    final working = raised.where((n) => n.kind == NotificationKind.working && n.title == 'Updating…').toList();
+    expect(working, isNotEmpty);
+    expect(working.first.body, modName);
+    expect(working.first.characterId, 'ellen');
+    final card = flowContainer.read(notificationsProvider).single;
+    expect(card.id, working.first.id, reason: 'the Working card became the failure rather than raising a second card');
+    expect(card.kind, NotificationKind.error);
+    expect(card.title, 'The update failed');
+    expect(card.actions.map((a) => a.label), ['Copy details']);
+  });
+
+  testWidgets("the base a dropped patch named is written under its own title, not the update's", (tester) async {
+    final mod = await installed(
+      tester,
+      originFixture(
+        modId: 100,
+        modIdConfidence: OriginConfidence.exact,
+        fileId: 1,
+        versionConfidence: OriginConfidence.exact,
+        ingest: const ModIngest(folders: [modName]),
+      ),
+    );
+    final file = serve(2, {'Ellen/Ellen.ini': '[KeySwap]\nkey = VK_2\n'});
+
+    await runFailingAtTheRecord(
+      tester,
+      (context, ref) =>
+          applyUpdateFlow(context, ref, mod: mod, remoteModId: 100, file: file, asCompanion: true, confirm: false),
+    );
+
+    final titles = [for (final n in raised) if (n.kind == NotificationKind.working) n.title];
+    expect(titles, contains('Installing the mod it patches…'));
+    expect(titles, isNot(contains('Updating…')));
   });
 
   testWidgets("a patch update that fails after writing the folder drops the mod's keys, and marked it while writing",

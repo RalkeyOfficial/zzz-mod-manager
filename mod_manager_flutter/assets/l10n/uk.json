@@ -169,6 +169,15 @@
       "check": "Перевірити оновлення",
       "delete": "Видалити",
       "clear_selection": "Скасувати вибір",
+      "enabling_single": "Вмикаємо {count} мод…",
+      "enabling_few": "Вмикаємо {count} моди…",
+      "enabling_plural": "Вмикаємо {count} модів…",
+      "disabling_single": "Вимикаємо {count} мод…",
+      "disabling_few": "Вимикаємо {count} моди…",
+      "disabling_plural": "Вимикаємо {count} модів…",
+      "deleting_single": "Видаляємо {count} мод…",
+      "deleting_few": "Видаляємо {count} моди…",
+      "deleting_plural": "Видаляємо {count} модів…",
       "enable_failed_title_single": "Не вдалося увімкнути {count} мод",
       "enable_failed_title_few": "Не вдалося увімкнути {count} моди",
       "enable_failed_title_plural": "Не вдалося увімкнути {count} модів",
@@ -773,7 +782,12 @@
       "already_gone_title": "Цього патча більше немає в цій теці",
       "failed_title": "Не вдалося прибрати патч",
       "failed_snapshot": "Не вдалося спершу зберегти копію мода, тому нічого не змінено.",
-      "failed_missing": "Теки мода більше немає."
+      "failed_missing": "Теки мода більше немає.",
+      "taking_out_title": "Прибираємо патч…",
+      "putting_back_title": "Повертаємо патч…",
+      "put_back_title": "Патч повернуто",
+      "put_back_failed_title": "Не вдалося повернути патч",
+      "put_back_gone": "Копії, збереженої перед тим, як прибрати патч, більше немає."
     },
     "details": {
       "no_images": "Немає зображень",
@@ -797,6 +811,15 @@
       "success_single": "Додано {count} мод",
       "success_few": "Додано {count} моди",
       "success_plural": "Додано {count} модів"
+    },
+    "import_working": {
+      "unpacking_single": "Розпаковуємо {count} архів…",
+      "unpacking_few": "Розпаковуємо {count} архіви…",
+      "unpacking_plural": "Розпаковуємо {count} архівів…",
+      "applying_patch_title": "Застосовуємо патч…",
+      "applying_patch_many_single": "Застосовуємо патч до {count} мода…",
+      "applying_patch_many_few": "Застосовуємо патч до {count} модів…",
+      "applying_patch_many_plural": "Застосовуємо патч до {count} модів…"
     },
     "import_failed": {
       "no_space_title": "Недостатньо місця в теці модів",
@@ -968,7 +991,10 @@
       "already_done_plural": "Ці {count} модів вже впорядковано.",
       "not_saved_title": "Дані відстеження не збережено",
       "failed_single": "Можливо, тека {count} мода доступна лише для читання.",
-      "failed_plural": "Можливо, теки {count} модів доступні лише для читання."
+      "failed_plural": "Можливо, теки {count} модів доступні лише для читання.",
+      "marking_single": "Позначаємо {count} мод як актуальний…",
+      "marking_few": "Позначаємо {count} моди як актуальні…",
+      "marking_plural": "Позначаємо {count} модів як актуальні…"
     },
     "bulk_resolve": {
       "title": "Впорядкуйте походження цих модів",
@@ -1078,9 +1104,13 @@
       "offline_title": "Не вдалося зʼєднатися з GameBanana",
       "offline_body": "Сторінка «{mod}» не завантажилася, тож нічого не змінено. Перевірте підключення та спробуйте ще раз.",
       "unavailable_body": "GameBanana більше не пропонує файл, з якого було встановлено «{mod}», тож повернути його не вийде. Перевірте оновлення, щоб встановити поточну версію.",
-      "unavailable_title": "Цієї версії більше немає на сторінці"
+      "unavailable_title": "Цієї версії більше немає на сторінці",
+      "fetching_title": "Отримуємо сторінку мода…",
+      "writing_title": "Перевстановлюємо…"
     },
     "update_apply": {
+      "writing_title": "Оновлюємо…",
+      "writing_base_title": "Встановлюємо мод, який він виправляє…",
       "action": "Оновити",
       "title": "Оновити {mod}?",
       "installing": "Встановлюємо",
@@ -1175,7 +1205,13 @@
       "confirm_title": "Відновити цю версію?",
       "confirm_body": "«{mod}» буде повернуто до стану на {date}: тодішні файли повернуться, а все, що додано в теку відтоді, буде видалено, разом із файлами, які ви поклали туди самі. Копія поточного стану зберігається спочатку, тож це можна скасувати.",
       "restored_title": "Попередню версію відновлено",
-      "restore_failed_title": "Не вдалося відновити цю версію"
+      "restore_failed_title": "Не вдалося відновити цю версію",
+      "restoring_title": "Відновлюємо попередню версію…",
+      "undoing_title": "Скасовуємо відновлення…",
+      "undone_title": "Відновлення скасовано",
+      "undo_failed_title": "Не вдалося скасувати відновлення",
+      "undo_gone": "Копії, збереженої перед відновленням, більше немає.",
+      "undo_missing": "Теки мода більше немає."
     },
     "shader_fixes": {
       "restart_title": "Перезапустіть гру, щоб застосувати зміни шейдерів",
@@ -1383,9 +1419,18 @@
     },
     "actions": {
       "review": "Переглянути",
-      "open": "Відкрити"
+      "open": "Відкрити",
+      "open_folder": "Відкрити теку",
+      "copy_details": "Скопіювати подробиці",
+      "open_settings": "Відкрити налаштування",
+      "open_downloads": "Відкрити завантаження",
+      "retry": "Спробувати ще раз",
+      "undo": "Скасувати"
     },
     "mod_gone": "Більше немає в бібліотеці",
+    "copied_title": "Подробиці скопійовано",
+    "copy_failed_title": "Не вдалося скопіювати подробиці",
+    "open_folder_failed_title": "Не вдалося відкрити теку",
     "character_portrait": "Портрет {name}"
   },
   "welcome": {
@@ -1423,9 +1468,15 @@
     "empty": "Нічого не завантажується.",
     "clear_finished": "Очистити завершені",
     "queued": "Очікує вільного слота",
-    "notification_title_single": "Завантаження мода: {count}",
-    "notification_title_plural": "Завантаження модів: {count}",
-    "notification_body_several": "Завантажень: {count}",
+    "lone_title_installing": "Встановлення {mod}",
+    "lone_title_downloading": "Завантаження {mod}",
+    "stage_downloading": "Завантаження · {received} з {total}",
+    "stage_downloading_bytes": "Завантаження · {received}",
+    "stage_unpacking": "Розпакування",
+    "deck_more_single": "Ще {count} завантажується",
+    "deck_more_few": "Ще {count} завантажуються",
+    "deck_more_plural": "Ще {count} завантажуються",
+    "failed_title": "Не вдалося завантажити мод",
     "connecting": "З'єднання...",
     "installing": "Встановлення...",
     "done": "Встановлено",

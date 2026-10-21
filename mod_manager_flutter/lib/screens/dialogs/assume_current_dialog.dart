@@ -12,6 +12,7 @@ import '../../services/origin_write.dart';
 import '../../utils/categories.dart';
 import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
+import '../all_mods/all_mods_bulk.dart' show bulkSubjects;
 import '../components/character_tile.dart';
 import '../components/mod_thumb.dart';
 import '../components/resolve/resolve_fragments.dart';
@@ -28,6 +29,7 @@ class BulkAssumeCurrentOutcome {
     required this.written,
     required this.skipped,
     required this.failed,
+    this.card,
   });
 
   /// Sidecars actually rewritten.
@@ -38,6 +40,10 @@ class BulkAssumeCurrentOutcome {
 
   /// Mods whose sidecar could not be written.
   final int failed;
+
+  /// The Working card shown while the writes ran, still up. The caller turns it into the report
+  /// (`showAssumeCurrentOutcome(into:)`) or dismisses it where the run says nothing.
+  final NotificationHandle? card;
 }
 
 /// Confirms the bulk "assume current" action and, if the user agrees, applies it to the mods left ticked. Returns
@@ -46,42 +52,60 @@ class BulkAssumeCurrentOutcome {
 /// **The confirmation lists every mod it would write**, each with a box to untick, so the set rewritten is the set
 /// the user has seen (`docs/origin-tracking.md` §6). It also names what it leaves alone, because "12 mods" is a very
 /// different offer from "12 of your 47".
+///
+/// A Working card shows from the moment the confirmation closes,
+/// and is handed back on the outcome ([BulkAssumeCurrentOutcome.card]) for the caller to end.
 Future<BulkAssumeCurrentOutcome?> confirmAndApplyAssumeCurrent(
   BuildContext context,
   BulkAssumeCurrentPlan plan, {
   required OriginWriter writer,
 }) async {
   if (!plan.hasWork) return null;
+  final loc = context.loc;
+  final notify = context.notify;
   final chosen = await showDialog<List<ModInfo>>(
     context: context,
     builder: (context) => _AssumeCurrentConfirmation(plan: plan),
   );
   if (chosen == null || chosen.isEmpty) return null;
 
+  // No portrait, as on the report it turns into: the run is about a count.
+  final card = notify.working(
+    loc.plural('mods.assume_current.marking', chosen.length, params: {'count': '${chosen.length}'}),
+    body: bulkSubjects(loc, chosen),
+    progress: 0,
+  );
   var written = 0;
   var skipped = 0;
   var failed = 0;
-  for (final mod in chosen) {
-    // Sequential on purpose. These are small sidecar rewrites through one
-    // service, and the ordering keeps a failure attributable to a mod rather
-    // than to the batch.
-    final result = await writer(mod.id, bulkAssumeCurrent);
-    switch (result) {
-      case OriginWriteResult.written:
-        written++;
-        _log.info('marked as current', fields: {'mod': mod.id, 'baseline': mod.origin?.installedAt});
-      case OriginWriteResult.declined:
-        skipped++;
-      case OriginWriteResult.folderMissing:
-      case OriginWriteResult.writeFailed:
-        failed++;
-        _log.warning('could not mark as current', fields: {'mod': mod.id, 'result': result.name});
+  try {
+    for (final (i, mod) in chosen.indexed) {
+      // Sequential on purpose. These are small sidecar rewrites through one
+      // service, and the ordering keeps a failure attributable to a mod rather
+      // than to the batch.
+      final result = await writer(mod.id, bulkAssumeCurrent);
+      switch (result) {
+        case OriginWriteResult.written:
+          written++;
+          _log.info('marked as current', fields: {'mod': mod.id, 'baseline': mod.origin?.installedAt});
+        case OriginWriteResult.declined:
+          skipped++;
+        case OriginWriteResult.folderMissing:
+        case OriginWriteResult.writeFailed:
+          failed++;
+          _log.warning('could not mark as current', fields: {'mod': mod.id, 'result': result.name});
+      }
+      card.update(progress: (i + 1) / chosen.length);
     }
+  } catch (_) {
+    card.dismiss();
+    rethrow;
   }
   return BulkAssumeCurrentOutcome(
     written: written,
     skipped: skipped,
     failed: failed,
+    card: card,
   );
 }
 
@@ -96,12 +120,13 @@ Future<BulkAssumeCurrentOutcome?> confirmAndApplyAssumeCurrent(
 /// and must not be coloured or worded like one.
 ///
 /// Takes [loc] and [notify] rather than a context: the writes run after the confirmation closes, and the page that
-/// asked may be gone by the time they end.
+/// asked may be gone by the time they end. With [into], the run's Working card becomes the report in place.
 void showAssumeCurrentOutcome(
   AppLocalizations loc,
   NotificationCenter notify,
-  BulkAssumeCurrentOutcome outcome,
-) {
+  BulkAssumeCurrentOutcome outcome, {
+  NotificationHandle? into,
+}) {
   String plural(String key, int count) =>
       loc.plural(key, count, params: {'count': '$count'});
 
@@ -132,7 +157,11 @@ void showAssumeCurrentOutcome(
       ),
   };
   // No portrait: this is about a count across the library, not about one mod.
-  notify.show(kind, title, body: body);
+  if (into != null) {
+    into.update(kind: kind, title: title, body: body);
+  } else {
+    notify.show(kind, title, body: body);
+  }
 }
 
 class _AssumeCurrentConfirmation extends ConsumerStatefulWidget {

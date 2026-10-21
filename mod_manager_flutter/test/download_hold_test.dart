@@ -14,6 +14,7 @@ import 'package:mod_manager_flutter/services/download/download_job.dart';
 import 'package:mod_manager_flutter/services/download/download_progress.dart';
 import 'package:mod_manager_flutter/services/download/download_queue.dart';
 import 'package:mod_manager_flutter/services/download/download_request.dart';
+import 'package:mod_manager_flutter/utils/state_providers.dart';
 
 import 'support/localized_harness.dart';
 
@@ -34,6 +35,7 @@ void main() {
   Future<List<DownloadResult?>> press(
     WidgetTester tester, {
     required ProgressHold? hold,
+    List<DownloadJob> alreadyQueued = const [],
   }) async {
     final returned = <DownloadResult?>[];
     await pumpLocalized(
@@ -52,7 +54,7 @@ void main() {
           child: const Text('go'),
         ),
       ),
-      overrides: [downloadQueueProvider.overrideWith(() => queue = _StubQueue())],
+      overrides: [downloadQueueProvider.overrideWith(() => queue = _StubQueue(alreadyQueued))],
       // A progress bar animates forever, so settling never returns.
       settle: false,
     );
@@ -129,17 +131,53 @@ void main() {
     expect(find.byType(AlertDialog), findsNothing);
     hold.dispose();
   });
+
+  testWidgets('a file already downloading in the background says so, and Open Downloads opens the panel',
+      (tester) async {
+    final returned = await press(tester,
+        hold: null, alreadyQueued: [_running(file, 'Ellen', DownloadIntent.install)]);
+    // Past the card's entrance, which takes no presses.
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(returned, [null]);
+    expect(find.byType(AlertDialog), findsNothing, reason: 'nothing of its own is fetched');
+    final container = ProviderScope.containerOf(tester.element(find.text('go')));
+    final before = container.read(downloadsPanelRequestProvider);
+    await tester.tap(find.text('Open Downloads'));
+    await tester.pump();
+
+    expect(container.read(downloadsPanelRequestProvider), before + 1);
+    await tester.pump(const Duration(seconds: 6));
+  });
 }
 
-/// One queued job whose completion the test decides.
+/// A running job for [file] with [intent].
+DownloadJob _running(GbFile file, String subject, DownloadIntent intent) => DownloadJob(
+      seq: 1,
+      request: DownloadRequest(url: Uri()),
+      intent: intent,
+      subject: subject,
+      file: file,
+      state: DownloadJobState.running,
+      progress: const DownloadProgress(
+        state: DownloadState.downloading,
+        received: 10,
+        total: 100,
+      ),
+    );
+
+/// One queued job whose completion the test decides, beside the [initial] jobs already in the queue.
 class _StubQueue extends DownloadQueue {
+  _StubQueue([this.initial = const []]);
+
+  final List<DownloadJob> initial;
   final _completer = Completer<DownloadResult>();
   final _progress = StreamController<DownloadProgress>.broadcast();
 
   @override
   List<DownloadJob> build() {
     super.build();
-    return const <DownloadJob>[];
+    return initial;
   }
 
   @override
@@ -150,19 +188,7 @@ class _StubQueue extends DownloadQueue {
     GbMod? mod,
     String? characterId,
   }) =>
-      DownloadJob(
-        seq: 1,
-        request: DownloadRequest(url: Uri()),
-        intent: intent,
-        subject: subject,
-        file: file,
-        state: DownloadJobState.running,
-        progress: const DownloadProgress(
-          state: DownloadState.downloading,
-          received: 10,
-          total: 100,
-        ),
-      );
+      _running(file, subject, intent);
 
   @override
   Future<DownloadResult> completionOf(int seq) => _completer.future;

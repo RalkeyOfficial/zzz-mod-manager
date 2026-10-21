@@ -3,6 +3,7 @@ import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../services/api_service.dart';
 import '../../services/log/confirmations.dart';
+import '../../utils/notification_actions.dart';
 import '../../utils/notifications.dart';
 
 /// Confirms and permanently deletes a mod (its folder and all state). The
@@ -43,10 +44,12 @@ Future<void> showDeleteModDialog(
           }
         } catch (e) {
           if (!context.mounted) return;
+          final title = loc.t('mods.errors.generic_title');
           notify.error(
-            loc.t('mods.errors.generic_title'),
-            body: e.toString(),
+            title,
+            body: '$e',
             characterId: mod.characterId,
+            actions: [copyDetailsAction(loc, notify, title: title, body: '$e')],
           );
         }
       }

@@ -10,7 +10,9 @@ import 'package:mod_manager_flutter/screens/dialogs/restore_snapshot_flow.dart';
 import 'package:mod_manager_flutter/services/backup/snapshot_service.dart';
 import 'package:mod_manager_flutter/services/mod_uid.dart';
 import 'package:mod_manager_flutter/services/update_check.dart';
+import 'package:mod_manager_flutter/utils/notifications.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
+import 'package:path/path.dart' as p;
 
 import 'support/library_override.dart';
 import 'support/localized_harness.dart';
@@ -137,6 +139,102 @@ void main() {
     expect(temp.read(modName, 'mod.ini'), 'old');
     expect(temp.has(modName, 'added later.dds'), isFalse);
     expect(find.text('Previous version restored'), findsOneWidget);
+  });
+
+  group("a restore's card", () {
+    /// Restores a snapshot of `mod.ini` "old" over "new" plus a file added later, through the flow, and hands back
+    /// the container whose stack holds the result and every Working card the stack raised.
+    Future<({ProviderContainer container, List<AppNotification> working})> restore(WidgetTester tester) async {
+      late ModSnapshot snapshot;
+      await tester.runAsync(() async {
+        temp.write(modName, 'mod.ini', 'old');
+        await temp.writeOrigin(modName, originFixture(modId: modId, modIdConfidence: OriginConfidence.exact));
+        snapshot = await snapshotNow();
+        temp.write(modName, 'mod.ini', 'new');
+        temp.write(modName, 'added later.dds', 'x');
+      });
+      final container = ProviderContainer(overrides: [libraryOf([mod()]), ...temp.overrides]);
+      addTearDown(container.dispose);
+      final working = <AppNotification>[];
+      final listening = container.listen<List<AppNotification>>(notificationsProvider, (_, next) {
+        for (final n in next) {
+          if (n.kind == NotificationKind.working && !working.any((w) => w.id == n.id)) working.add(n);
+        }
+      });
+      addTearDown(listening.close);
+      bool? restored;
+      await pumpLocalized(
+        tester,
+        Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () async => restored = await restoreSnapshotFlow(context, mod: mod(), snapshot: snapshot),
+            child: const Text('restore'),
+          ),
+        ),
+        container: container,
+      );
+      await tapWithIo(tester, find.text('restore'));
+      await tapWithIo(tester, find.widgetWithText(FilledButton, 'Restore'));
+      for (var i = 0; i < 40 && restored == null; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await tester.pump();
+      }
+      expect(restored, isTrue);
+      expect(temp.read(modName, 'mod.ini'), 'old');
+      return (container: container, working: working);
+    }
+
+    /// Presses the stack's only card's Undo and waits for the card it raises to become its result.
+    Future<AppNotification> undo(WidgetTester tester, ProviderContainer container) async {
+      final card = container.read(notificationsProvider).single;
+      // On the real event loop, as the restore's own file work is.
+      await tester.runAsync(() async => card.actions.singleWhere((a) => a.label == 'Undo').onPressed());
+      for (var i = 0; i < 40; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await tester.pump();
+        final now = container.read(notificationsProvider);
+        if (now.isNotEmpty && now.last.kind != NotificationKind.working && now.last.id != card.id) break;
+      }
+      return container.read(notificationsProvider).last;
+    }
+
+    testWidgets('is a Working card while it copies, which becomes the Done with an Undo', (tester) async {
+      final run = await restore(tester);
+
+      expect([for (final n in run.working) (n.title, n.body, n.characterId)],
+          [('Restoring a previous version…', modName, 'ellen')]);
+      final done = run.container.read(notificationsProvider).single;
+      expect(done.id, run.working.single.id, reason: 'the same card, turned into its result');
+      expect((done.kind, done.title, done.body), (NotificationKind.done, 'Previous version restored', modName));
+      expect([for (final a in done.actions) a.label], ['Undo']);
+    });
+
+    testWidgets('Undo puts back the folder as it was before the restore', (tester) async {
+      final run = await restore(tester);
+
+      final result = await undo(tester, run.container);
+
+      expect([for (final n in run.working) n.title], ['Restoring a previous version…', 'Undoing the restore…']);
+      expect((result.kind, result.title, result.body), (NotificationKind.done, 'Restore undone', modName));
+      expect(result.actions, isEmpty, reason: 'an undo is not offered again');
+      expect(temp.read(modName, 'mod.ini'), 'new');
+      expect(temp.has(modName, 'added later.dds'), isTrue);
+      expect(run.container.read(modWritesInProgressProvider), isEmpty);
+    });
+
+    testWidgets('Undo with the copy gone says so and changes nothing', (tester) async {
+      final run = await restore(tester);
+      // The safety copy, deleted as pruning or the list of previous versions would.
+      // Named by the time it was taken, so the newest sorts last.
+      final safety = Directory(p.join(temp.snapshots.rootPath, temp.uidOf(modName)!, temp.snapshotsOf(modName).last));
+      await tester.runAsync(() => safety.delete(recursive: true));
+
+      final result = await undo(tester, run.container);
+
+      expect((result.kind, result.title, result.body),
+          (NotificationKind.error, "Couldn't undo the restore", 'The copy saved before the restore is no longer kept.'));
+      expect(temp.read(modName, 'mod.ini'), 'old');
+    });
   });
 
   testWidgets('a restore that fails still reads the library again', (tester) async {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -15,8 +16,10 @@ import '../../services/patch_removal.dart';
 import '../../services/patch_store.dart';
 import '../../services/update_apply/mod_activation_port.dart';
 import '../../services/update_apply/update_applier.dart';
+import '../../utils/notification_actions.dart';
 import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
+import 'restore_snapshot_flow.dart';
 
 /// **Taking a patch out of a mod folder**, from the question to the write.
 ///
@@ -103,78 +106,115 @@ Future<bool> removePatchFlow(
   );
   if (!accepted || !context.mounted) return false;
 
-  final snapshots = container.read(snapshotServiceProvider);
-  final applier = UpdateApplier(
-    snapshots: snapshots,
-    activation: ModManagerActivationPort(mods, leaveOff: (m) => leftOffAfterWrite(container, m)),
+  final card = notify.working(
+    loc.t('mods.remove_patch.taking_out_title'),
+    body: patchName,
+    characterId: mod.characterId,
   );
-  final result = await whileWritingMod(
-    container,
-    mod.id,
-    () => applier.removePatch(
-      modName: mod.id,
-      modFolder: modFolder,
-      patchModId: patchModId,
-      plan: plan,
-    ),
-  );
+  var ended = false;
+  try {
+    final snapshots = container.read(snapshotServiceProvider);
+    final applier = UpdateApplier(
+      snapshots: snapshots,
+      activation: ModManagerActivationPort(mods, leaveOff: (m) => leftOffAfterWrite(container, m)),
+    );
+    final result = await whileWritingMod(
+      container,
+      mod.id,
+      () => applier.removePatch(
+        modName: mod.id,
+        modFolder: modFolder,
+        patchModId: patchModId,
+        plan: plan,
+      ),
+    );
 
-  // **Before the success check**, the same as the update path: a snapshot exists
-  // the moment the capture succeeded, and the failure branch is where a user
-  // needs "Restore a previous version…" to be in the menu.
-  //
-  // Retention runs on the same condition and for the same reason: the snapshot
-  // comes before anything is moved, so a removal that failed part-way still
-  // added a whole folder to the budget — see §5 of
-  // `docs/applying-updates.md`.
-  if (result.snapshot != null) {
+    // **Before the success check**, the same as the update path: a snapshot exists
+    // the moment the capture succeeded, and the failure branch is where a user
+    // needs "Restore a previous version…" to be in the menu.
+    //
+    // Retention runs on the same condition and for the same reason: the snapshot
+    // comes before anything is moved, so a removal that failed part-way still
+    // added a whole folder to the budget — see §5 of
+    // `docs/applying-updates.md`.
+    if (result.snapshot != null) {
+      container.invalidate(modBackupsProvider);
+      await snapshots.prune();
+    }
+    // Read again whatever the `.ini` stamp says, and before the success check: a removal that failed part-way may
+    // still have moved files.
+    mods.invalidateKeybinds(mod.id);
+
+    if (!result.success) {
+      card.update(
+        kind: NotificationKind.error,
+        title: loc.t('mods.remove_patch.failed_title'),
+        body: switch (result.failure!) {
+          UpdateApplyFailure.snapshot =>
+            loc.t('mods.remove_patch.failed_snapshot'),
+          UpdateApplyFailure.modMissing =>
+            loc.t('mods.remove_patch.failed_missing'),
+          _ => mod.name,
+        },
+      );
+      ended = true;
+      return false;
+    }
+
+    // **The record goes even when some files could not be moved.** What it claims
+    // is that this folder holds that patch, and after this it does not — the
+    // leftovers are named on screen rather than kept as a claim that would go on
+    // offering to update a patch that has been taken out.
+    await _forget(mods, mod, patch);
+
+    // Pruning already ran with the snapshot, and the keys were dropped, above.
     container.invalidate(modBackupsProvider);
-    await snapshots.prune();
+    container.invalidate(libraryProvider);
+
+    // The snapshot holds the sidecar as it was, so putting it back brings the patch's record back with its files.
+    // Offered on the partial result too: its body already says restoring the previous version undoes it.
+    final snapshot = result.snapshot;
+    final undo = [
+      if (snapshot != null)
+        undoAction(
+          loc,
+          () => unawaited(undoSnapshotWrite(
+            container,
+            loc,
+            notify,
+            mod: mod,
+            snapshot: snapshot,
+            wording: UndoWording(
+              working: loc.t('mods.remove_patch.putting_back_title'),
+              done: loc.t('mods.remove_patch.put_back_title'),
+              failed: loc.t('mods.remove_patch.put_back_failed_title'),
+              gone: loc.t('mods.remove_patch.put_back_gone'),
+              missing: loc.t('mods.remove_patch.failed_missing'),
+              body: patchName,
+            ),
+          )),
+        ),
+    ];
+    if (result.failed.isEmpty) {
+      card.update(
+        kind: NotificationKind.done,
+        title: loc.t('mods.remove_patch.done_title'),
+        actions: undo,
+      );
+    } else {
+      card.update(
+        kind: NotificationKind.warning,
+        title: loc.t('mods.remove_patch.partial_title'),
+        body: _counted(
+            loc, 'mods.remove_patch.partial_body', result.failed.length),
+        actions: undo,
+      );
+    }
+    ended = true;
+    return true;
+  } finally {
+    if (!ended) card.dismiss();
   }
-  // Read again whatever the `.ini` stamp says, and before the success check: a removal that failed part-way may still
-  // have moved files.
-  mods.invalidateKeybinds(mod.id);
-
-  if (!result.success) {
-    notify.error(
-      loc.t('mods.remove_patch.failed_title'),
-      body: switch (result.failure!) {
-        UpdateApplyFailure.snapshot =>
-          loc.t('mods.remove_patch.failed_snapshot'),
-        UpdateApplyFailure.modMissing =>
-          loc.t('mods.remove_patch.failed_missing'),
-        _ => mod.name,
-      },
-      characterId: mod.characterId,
-    );
-    return false;
-  }
-
-  // **The record goes even when some files could not be moved.** What it claims
-  // is that this folder holds that patch, and after this it does not — the
-  // leftovers are named on screen rather than kept as a claim that would go on
-  // offering to update a patch that has been taken out.
-  await _forget(mods, mod, patch);
-
-  // Pruning already ran with the snapshot, and the keys were dropped, above.
-  container.invalidate(modBackupsProvider);
-  container.invalidate(libraryProvider);
-
-  if (result.failed.isEmpty) {
-    notify.done(
-      loc.t('mods.remove_patch.done_title'),
-      body: patchName,
-      characterId: mod.characterId,
-    );
-  } else {
-    notify.warning(
-      loc.t('mods.remove_patch.partial_title'),
-      body: _counted(
-          loc, 'mods.remove_patch.partial_body', result.failed.length),
-      characterId: mod.characterId,
-    );
-  }
-  return true;
 }
 
 /// Drops the layer and rebuilds the flat patch-file list from what is left.

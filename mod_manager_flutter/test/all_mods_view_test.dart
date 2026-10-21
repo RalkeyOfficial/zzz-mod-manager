@@ -308,7 +308,8 @@ void main() {
 
       expect(written, ['a']);
       final titles = [for (final n in container.read(notificationsProvider)) n.title];
-      expect(titles, ['1 mod marked as current', '1 mod skipped while its folder is being changed'],
+      // The result last, so it ends the burst.
+      expect(titles, ['1 mod skipped while its folder is being changed', '1 mod marked as current'],
           reason: "the skipped mod isn't counted with what was marked");
     });
 
@@ -349,12 +350,14 @@ void main() {
       await tester.tap(barButton('Mark 1 as current'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, 'Mark 1 as current'));
-      await tester.pumpAndSettle();
+      // Fixed pumps while the write is held: its Working card never settles.
+      await tester.pump(const Duration(milliseconds: 500));
+      expect([for (final n in container.read(notificationsProvider)) n.kind], [NotificationKind.working]);
 
       shown.value = false;
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
       shown.value = true;
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(tester.widget<OutlinedButton>(barButton('Delete')).onPressed, isNull);
 
       write.complete(OriginWriteResult.writeFailed);

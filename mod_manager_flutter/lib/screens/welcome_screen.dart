@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import '../services/api_service.dart';
+import '../utils/notification_actions.dart';
 import '../utils/notifications.dart';
 import '../utils/state_providers.dart';
 import '../l10n/app_localizations.dart';
@@ -119,10 +120,9 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> with TickerProvid
       }
     } catch (e) {
       if (mounted) {
-        context.notify.error(
-          loc.t('mods.errors.generic_title'),
-          body: e.toString(),
-        );
+        final notify = context.notify;
+        final title = loc.t('mods.errors.generic_title');
+        notify.error(title, body: '$e', actions: [copyDetailsAction(loc, notify, title: title, body: '$e')]);
       }
     }
   }

@@ -642,6 +642,9 @@ Future<bool> installNamedBase(
 /// **Only what the user has to act on**, and each as its own card rather than
 /// more text under the success: a mod that arrived broken must not read like a
 /// mod that arrived.
+///
+/// The writes' own results come first, so with one write the first line is its
+/// result: the drag/drop import turns its Working card into that line.
 List<NotificationLines> patchInstallLines(
   AppLocalizations loc, {
   required PatchInstallDecision decision,

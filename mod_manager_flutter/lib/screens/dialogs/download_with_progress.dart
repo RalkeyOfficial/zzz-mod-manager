@@ -12,6 +12,7 @@ import '../../services/download/download_progress.dart';
 import '../../services/download/download_queue.dart';
 import '../../services/download/queue_policy.dart';
 import '../../utils/byte_format.dart';
+import '../../utils/notification_actions.dart';
 import '../../utils/notifications.dart';
 import 'progress_modal.dart';
 
@@ -82,6 +83,7 @@ Future<DownloadResult?> downloadFileWithProgress(
       loc.t('marketplace.download_already_queued_title'),
       body: body,
       characterId: characterId,
+      actions: [openDownloadsAction(loc, ProviderScope.containerOf(context, listen: false))],
     );
     return null;
   }

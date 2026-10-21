@@ -30,6 +30,7 @@ import '../../services/update_apply/update_applier.dart';
 import '../../services/update_apply/update_layout.dart';
 import '../../services/update_apply/update_target.dart';
 import '../../utils/gamebanana_url.dart';
+import '../../utils/notification_actions.dart';
 import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
 import '../components/extract_failure_message.dart';
@@ -138,8 +139,8 @@ Future<bool> applyUpdateFlow(
 
   // `mod` is captured before every await, so its character is safe to read on
   // any path below — including the catch blocks.
-  void fail(String title, String body) =>
-      notify.error(title, body: body, characterId: mod.characterId);
+  void fail(String title, String body, {List<NotificationAction> actions = const []}) =>
+      notify.error(title, body: body, characterId: mod.characterId, actions: actions);
 
   final config = await ApiService.getConfig();
   final modsPath = config['mods_path'] ?? '';
@@ -147,6 +148,7 @@ Future<bool> applyUpdateFlow(
     fail(
       loc.t('marketplace.install_missing_path_title'),
       loc.t('marketplace.install_missing_path_body'),
+      actions: [openSettingsAction(loc, container)],
     );
     return false;
   }
@@ -180,6 +182,8 @@ Future<bool> applyUpdateFlow(
 
   var archiveConsumed = false;
   Directory? extractRoot;
+  // The wait for a write into one folder, which has no modal of its own.
+  NotificationHandle? writing;
   try {
     hold.say(loc.t('marketplace.preparing_unpacking'));
     final extraction = await ArchiveService.extractArchive(
@@ -195,8 +199,9 @@ Future<bool> applyUpdateFlow(
         reason: extraction.failure ?? ExtractFailure.other,
         requiredBytes: extraction.requiredBytes,
         availableBytes: extraction.availableBytes,
+        notify: notify,
       );
-      fail(lines.title, lines.body);
+      fail(lines.title, lines.body, actions: lines.actions);
       return false;
     }
     archiveConsumed = true;
@@ -347,6 +352,20 @@ Future<bool> applyUpdateFlow(
     // progress on — a dead context costs the progress bar and nothing else.
     final progress = _GroupProgress(chosen.length);
     if (chosen.length > 1 && context.mounted) progress.attach(context);
+    // A card for one folder, raised through the captured center so it ends whether or not the context lasts.
+    if (chosen.length == 1) {
+      final only = chosen.single.mod;
+      writing = notify.working(
+        loc.t(switch (()) {
+          _ when reinstall => 'mods.reinstall.writing_title',
+          // The base a dropped patch named, written under it: nothing is being updated.
+          _ when asCompanion && !confirm => 'mods.update_apply.writing_base_title',
+          _ => 'mods.update_apply.writing_title',
+        }),
+        body: only.name,
+        characterId: only.characterId,
+      );
+    }
 
     final applied = await _writeAll(
       container: container,
@@ -391,19 +410,28 @@ Future<bool> applyUpdateFlow(
     // dialog would only repeat what the notification says; with several, which
     // ones landed *is* the report, and three notifications would bury it.
     if (outcome.soleFailure case final only?) {
-      if (!context.mounted) return only.result.snapshot != null;
       // **The folder that was written, not the one the dialog was opened on.**
       // With the primary unticked the sole attempt is a sibling, and naming the
       // wrong mod sends the user to restore something never touched.
       final lines = _failureMessage(loc, only.result, only.mod);
-      notify.error(lines.title,
-          body: lines.body, characterId: only.mod.characterId);
+      final card = writing;
+      writing = null;
+      // The card is on screen already, so it becomes the error whether or not this context lasted.
+      if (card != null) {
+        card.update(
+            kind: NotificationKind.error, title: lines.title, body: lines.body, characterId: only.mod.characterId);
+      } else if (context.mounted) {
+        notify.error(lines.title, body: lines.body, characterId: only.mod.characterId);
+      }
+      if (!context.mounted) return only.result.snapshot != null;
       // A failed *copy* still moved files. Anything else left the folder alone.
       return only.result.failure == UpdateApplyFailure.copy;
     }
 
     final changed = outcome.changed;
 
+    writing?.dismiss();
+    writing = null;
     if (!context.mounted) return changed;
     await showUpdateResultDialog(
       context,
@@ -415,11 +443,19 @@ Future<bool> applyUpdateFlow(
     );
     return changed;
   } catch (e) {
-    if (context.mounted) {
-      fail(loc.t('mods.update_apply.failed_title'), '$e');
+    final title = loc.t('mods.update_apply.failed_title');
+    final body = '$e';
+    final actions = [copyDetailsAction(loc, notify, title: title, body: body)];
+    final card = writing;
+    writing = null;
+    if (card != null) {
+      card.update(kind: NotificationKind.error, title: title, body: body, actions: actions);
+    } else if (context.mounted) {
+      fail(title, body, actions: actions);
     }
     return false;
   } finally {
+    writing?.dismiss();
     // Belt and braces: every path above releases it, and a throw between the
     // download and the question would otherwise leave the modal up for good.
     hold.dispose();
@@ -455,8 +491,8 @@ Future<bool> applyPatchUpdateFlow(
   final loc = context.loc;
   final notify = context.notify;
   final container = ProviderScope.containerOf(context, listen: false);
-  void fail(String title, String body) =>
-      notify.error(title, body: body, characterId: mod.characterId);
+  void fail(String title, String body, {List<NotificationAction> actions = const []}) =>
+      notify.error(title, body: body, characterId: mod.characterId, actions: actions);
 
   final config = await ApiService.getConfig();
   final modsPath = config['mods_path'] ?? '';
@@ -502,8 +538,9 @@ Future<bool> applyPatchUpdateFlow(
         reason: extraction.failure ?? ExtractFailure.other,
         requiredBytes: extraction.requiredBytes,
         availableBytes: extraction.availableBytes,
+        notify: notify,
       );
-      fail(lines.title, lines.body);
+      fail(lines.title, lines.body, actions: lines.actions);
       return false;
     }
     archiveConsumed = true;
@@ -622,7 +659,8 @@ Future<bool> applyPatchUpdateFlow(
     return true;
   } catch (e) {
     if (context.mounted) {
-      fail(loc.t('mods.update_apply.failed_title'), '$e');
+      final title = loc.t('mods.update_apply.failed_title');
+      fail(title, '$e', actions: [copyDetailsAction(loc, notify, title: title, body: '$e')]);
     }
     return false;
   } finally {

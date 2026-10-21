@@ -6,6 +6,7 @@ import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../services/api_service.dart';
 import '../../services/mod_manager_service.dart' show RenameFolderFailed, RenameLinkFailed, RenameRefused;
+import '../../utils/notification_actions.dart';
 import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
 
@@ -105,10 +106,12 @@ Future<void> showRenameModDialog(
               }
             } catch (e) {
               if (!context.mounted) return;
+              final title = loc.t('mods.errors.generic_title');
               notify.error(
-                loc.t('mods.errors.generic_title'),
-                body: e.toString(),
+                title,
+                body: '$e',
                 characterId: mod.characterId,
+                actions: [copyDetailsAction(loc, notify, title: title, body: '$e')],
               );
             }
           }

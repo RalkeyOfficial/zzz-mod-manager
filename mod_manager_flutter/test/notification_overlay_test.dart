@@ -198,6 +198,15 @@ void main() {
       await tester.pump(const Duration(seconds: 6));
     });
 
+    testWidgets('a tile card and a portrait card start their text at the same edge', (tester) async {
+      await pumpOverlay(tester);
+      center().error('About Ellen', body: 'x', characterId: 'ellen');
+      center().error('About nobody', body: 'y');
+      await tester.pumpAndSettle();
+
+      expect(tester.getTopLeft(find.text('About Ellen')).dx, tester.getTopLeft(find.text('About nobody')).dx);
+    });
+
     final badges = <NotificationKind, (Color, Color, IconData)>{
       NotificationKind.error: (palette.red, palette.onRed, Icons.close_rounded),
       NotificationKind.update: (palette.amber, palette.onAccent, Icons.arrow_upward_rounded),
@@ -311,6 +320,23 @@ void main() {
       await pumpIn(tester);
     });
 
+    testWidgets('paints its bar the full 3px tall, along the bottom edge', (tester) async {
+      await pumpOverlay(tester);
+      center().working('Downloading', body: 'x', progress: 0.64);
+      await pumpIn(tester);
+
+      final fill = find.descendant(
+          of: find.byKey(const ValueKey('notification-progress')), matching: find.byType(ColoredBox));
+      final rect = tester.getRect(fill);
+      expect(rect.height, 3, reason: 'a fill with no height draws nothing');
+      // Inside the card's 1px border, so 378px of track and 64% of it filled.
+      expect(rect.width, closeTo(378 * 0.64, 0.01));
+      expect(rect.bottom, tester.getRect(card('Downloading')).bottom - 1);
+      expect(tester.widget<ColoredBox>(fill).color, palette.accent);
+      center().clear();
+      await pumpIn(tester);
+    });
+
     testWidgets('holds still under reduced motion', (tester) async {
       tester.platformDispatcher.accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(disableAnimations: true);
       addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
@@ -321,6 +347,232 @@ void main() {
 
       expect(find.byKey(const ValueKey('notification-sweep')), findsOneWidget);
       expect(find.byKey(const ValueKey('notification-spinner')), findsOneWidget);
+    });
+  });
+
+  group('a deck', () {
+    final deck = NotificationDeck('downloads', more: (count) => '$count more downloading');
+    NotificationHandle download(String mod, {String? characterId}) =>
+        center().working('Installing $mod', body: 'Downloading', characterId: characterId, progress: 0.5, deck: deck);
+    Finder ghost(int i) => find.byKey(ValueKey('notification-ghost-$i'));
+
+    /// The pointer resting on [finder], removed when the test ends.
+    Future<TestGesture> hover(WidgetTester tester, Finder finder) async {
+      final pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await pointer.addPointer(location: tester.getCenter(finder));
+      addTearDown(pointer.removePointer);
+      await pumpIn(tester);
+      return pointer;
+    }
+
+    testWidgets('draws its oldest card in front, with two edges peeking above it as the board does', (tester) async {
+      await pumpOverlay(tester);
+      center().error('Above the deck', body: 'x');
+      download('Victorian Ballgown', characterId: 'ellen');
+      download('Crimson Kimono');
+      download('Shark Hoodie Recolor');
+      await pumpIn(tester);
+
+      expect(find.text('Installing Victorian Ballgown'), findsOneWidget);
+      expect(find.text('Installing Crimson Kimono'), findsNothing, reason: 'behind the front card');
+      final front = tester.getRect(card('Installing Victorian Ballgown'));
+      expect(front.width, 380);
+
+      // The nearer edge: 360 wide, 7px above the front card, on `raised`.
+      final near = tester.getRect(ghost(1));
+      expect(near.size, const Size(360, 20));
+      expect(near.top, front.top - 7);
+      expect(near.center.dx, front.center.dx);
+      // The farther one: 340 wide, 14px above, on `rowHover`.
+      final far = tester.getRect(ghost(2));
+      expect(far.size, const Size(340, 20));
+      expect(far.top, front.top - 14);
+      expect(far.center.dx, front.center.dx);
+
+      BoxDecoration ghostDecoration(int i) => tester
+          .widget<DecoratedBox>(find.descendant(of: ghost(i), matching: find.byType(DecoratedBox)))
+          .decoration as BoxDecoration;
+      expect(ghostDecoration(1).color, palette.raised);
+      expect(ghostDecoration(2).color, palette.rowHover);
+      for (final i in [1, 2]) {
+        final border = ghostDecoration(i).border! as Border;
+        expect([border.top.color, border.left.color, border.right.color], List.filled(3, palette.line));
+        expect(border.bottom, BorderSide.none);
+        expect(ghostDecoration(i).borderRadius, const BorderRadius.vertical(top: Radius.circular(12)));
+      }
+      // The nearer edge is drawn over the farther one, and the front card over both.
+      final stack = find.ancestor(of: ghost(1), matching: find.byType(Stack)).first;
+      final layers = tester.widget<Stack>(stack).children;
+      expect(layers.map((w) => w.key),
+          [const ValueKey('notification-ghost-2'), const ValueKey('notification-ghost-1'), const ValueKey('notification-face')]);
+
+      // The deck's room for its edges: 14px on top of the stack's 8px gap.
+      expect(front.top - tester.getRect(card('Above the deck')).bottom, 22);
+
+      final line = tester.widget<Text>(find.text('2 more downloading'));
+      final theme = Theme.of(tester.element(find.text('2 more downloading')));
+      expect(line.style!.color, palette.text3);
+      expect(line.style!.fontSize, theme.textTheme.bodySmall!.fontSize);
+      expect(tester.getTopLeft(find.text('2 more downloading')).dx,
+          tester.getTopLeft(find.text('Installing Victorian Ballgown')).dx);
+      expect(tester.getTopLeft(find.text('2 more downloading')).dy,
+          greaterThan(tester.getBottomLeft(find.text('Downloading')).dy));
+      // The front card is the download's own card: its portrait and its own bar.
+      expect(portraitAsset(tester), 'assets/characters/ellen.png');
+      expect(find.byKey(const ValueKey('notification-progress')), findsOneWidget);
+      center().clear();
+      await pumpIn(tester);
+    });
+
+    testWidgets('of two shows one edge, and one of one is a plain card', (tester) async {
+      await pumpOverlay(tester);
+      center().error('Above the deck', body: 'x');
+      download('A');
+      await pumpIn(tester);
+      expect(ghost(1), findsNothing);
+      expect(find.byKey(const ValueKey('notification-deck-line')), findsNothing);
+      expect(tester.getRect(card('Installing A')).top - tester.getRect(card('Above the deck')).bottom, 8);
+
+      download('B');
+      await pumpIn(tester);
+      expect(ghost(1), findsOneWidget);
+      expect(ghost(2), findsNothing);
+      expect(find.text('1 more downloading'), findsOneWidget);
+      expect(tester.getRect(card('Installing A')).top - tester.getRect(card('Above the deck')).bottom, 15);
+      center().clear();
+      await pumpIn(tester);
+    });
+
+    testWidgets('takes one slot of the three', (tester) async {
+      await pumpOverlay(tester);
+      center().error('error 1', body: 'x');
+      center().error('error 2', body: 'x');
+      for (final mod in ['A', 'B', 'C', 'D', 'E']) {
+        download(mod);
+      }
+      await pumpIn(tester);
+
+      expect(find.textContaining(RegExp(r'^\+\d+ more$')), findsNothing, reason: 'the deck is one slot');
+      expect(find.text('4 more downloading'), findsOneWidget);
+      expect(find.text('error 1'), findsOneWidget);
+      expect(find.text('error 2'), findsOneWidget);
+      expect(ghost(2), findsOneWidget, reason: 'never more than two edges');
+      expect(ghost(3), findsNothing);
+
+      center().error('error 3', body: 'x');
+      await pumpIn(tester);
+      expect(find.text('+1 more'), findsOneWidget);
+      expect(find.text('error 1'), findsNothing);
+      center().clear();
+      await pumpIn(tester);
+    });
+
+    testWidgets('spreads into its full cards under the pointer, and folds back once it leaves the stack',
+        (tester) async {
+      await pumpOverlay(tester);
+      center().error('Above the deck', body: 'x');
+      download('A');
+      download('B');
+      download('C');
+      await pumpIn(tester);
+      final rest = tester.getRect(card('Installing A'));
+
+      final pointer = await hover(tester, find.text('Installing A'));
+      expect(find.text('Installing B'), findsOneWidget);
+      expect(find.text('Installing C'), findsOneWidget);
+      expect(ghost(1), findsNothing, reason: 'the edges tuck away once the cards are out');
+      // Upwards from the front card, which stays under the pointer, the farthest at the top, 8px apart.
+      expect(tester.getRect(card('Installing A')), rest);
+      final b = tester.getRect(card('Installing B'));
+      final c = tester.getRect(card('Installing C'));
+      expect(rest.top - b.bottom, 8);
+      expect(b.top - c.bottom, 8);
+      expect(b.width, 380);
+      expect(find.descendant(of: card('Installing B'), matching: find.byKey(const ValueKey('notification-deck-line'))),
+          findsNothing, reason: 'the deck line is the front card\'s');
+
+      // Over the card above, still on the stack: it stays spread, so nothing slides out from under the pointer.
+      final above = tester.getRect(card('Above the deck'));
+      await pointer.moveTo(above.center);
+      await pumpIn(tester);
+      expect(find.text('Installing C'), findsOneWidget);
+      expect(tester.getRect(card('Above the deck')), above);
+
+      await pointer.moveTo(const Offset(10, 10));
+      await pumpIn(tester);
+      expect(find.text('Installing B'), findsNothing);
+      expect(find.text('Installing C'), findsNothing);
+      expect(ghost(2), findsOneWidget);
+      expect(tester.getRect(card('Installing A')), rest);
+      center().clear();
+      await pumpIn(tester);
+    });
+
+    testWidgets('Hide on its front card hides the deck, and every result still arrives', (tester) async {
+      await pumpOverlay(tester);
+      final a = download('A');
+      final b = download('B');
+      await pumpIn(tester);
+
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await pumpIn(tester);
+      expect(container.read(notificationsProvider), isEmpty);
+
+      a.update(kind: NotificationKind.done, title: 'Mod installed', body: 'A');
+      b.update(kind: NotificationKind.error, title: "Couldn't download the mod", body: 'B');
+      await pumpIn(tester);
+      expect(find.text('Mod installed'), findsOneWidget);
+      expect(find.text("Couldn't download the mod"), findsOneWidget);
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('spread, a card\'s own close button hides that card alone', (tester) async {
+      await pumpOverlay(tester);
+      download('A');
+      final b = download('B');
+      download('C');
+      await pumpIn(tester);
+      await hover(tester, find.text('Installing A'));
+
+      await tester.tap(find.descendant(of: card('Installing B'), matching: find.byIcon(Icons.close_rounded)));
+      await pumpIn(tester);
+      expect(container.read(notificationsProvider).map((n) => n.title), ['Installing A', 'Installing C']);
+      expect(b.isVisible, isFalse);
+      center().clear();
+      await pumpIn(tester);
+    });
+
+    testWidgets('deals a result on top, which leaves on its own clock; a failure leaves as its own card',
+        (tester) async {
+      await pumpOverlay(tester);
+      download('A');
+      final b = download('B');
+      final c = download('C');
+      await pumpIn(tester);
+
+      b.update(kind: NotificationKind.done, title: 'Mod installed', body: 'B');
+      await pumpIn(tester);
+      expect(find.text('Mod installed'), findsOneWidget);
+      expect(find.text('Installing A'), findsNothing, reason: 'the result is in front of the deck');
+      expect(find.text('2 more downloading'), findsOneWidget);
+      expect(ghost(2), findsOneWidget);
+
+      c.update(kind: NotificationKind.error, title: "Couldn't download the mod", body: 'C');
+      await pumpIn(tester);
+      final failure = tester.getRect(card("Couldn't download the mod"));
+      expect(failure.top, greaterThan(tester.getRect(card('Mod installed')).bottom),
+          reason: 'below the deck, at the newest place');
+      expect(find.text('1 more downloading'), findsOneWidget);
+      expect(ghost(2), findsNothing);
+
+      await tester.pump(kNotificationDurations[NotificationKind.done]!);
+      await pumpIn(tester);
+      expect(find.text('Mod installed'), findsNothing);
+      expect(find.text('Installing A'), findsOneWidget, reason: 'the next card comes up');
+      expect(find.byKey(const ValueKey('notification-deck-line')), findsNothing);
+      expect(find.text("Couldn't download the mod"), findsOneWidget);
+      center().clear();
+      await pumpIn(tester);
     });
   });
 
@@ -336,6 +588,24 @@ void main() {
       expect(colourOf('Review'), palette.link);
       expect(colourOf('Later'), palette.text);
       await tester.pump(const Duration(seconds: 9));
+    });
+
+    testWidgets('keyboard focus draws a 2px accent ring, and a pointer\'s focus does not', (tester) async {
+      await pumpOverlay(tester);
+      center().error('Failed', body: 'x', actions: [NotificationAction('Open folder', () {})]);
+      await tester.pumpAndSettle();
+      addTearDown(() => FocusManager.instance.highlightStrategy = FocusHighlightStrategy.automatic);
+
+      final side = tester.widget<TextButton>(find.widgetWithText(TextButton, 'Open folder')).style!.side!;
+      expect(side.resolve({}), BorderSide.none);
+
+      FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTouch;
+      expect(side.resolve({WidgetState.focused}), BorderSide.none);
+
+      FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
+      final ring = side.resolve({WidgetState.focused})!;
+      expect(ring.color, palette.accent);
+      expect(ring.width, 2);
     });
 
     testWidgets('pressing one runs it and closes the card; closes: false keeps it', (tester) async {
@@ -689,6 +959,29 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('arrived late'), findsNothing);
       expect(find.text('something to hover'), findsOneWidget);
+    });
+
+    testWidgets('closing the last card under the pointer does not hold the next one', (tester) async {
+      await pumpOverlay(tester);
+      center().error('the last one', body: 'x');
+      await tester.pumpAndSettle();
+
+      final pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await pointer.addPointer(location: tester.getCenter(find.byIcon(Icons.close_rounded)));
+      addTearDown(pointer.removePointer);
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.close_rounded), kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+      expect(find.text('the last one'), findsNothing);
+
+      // Raised away from where the pointer rests, so nothing is hovering it.
+      await pointer.moveTo(const Offset(10, 10));
+      await tester.pump();
+      center().done('later', body: 'y');
+      await tester.pumpAndSettle();
+      await tester.pump(kNotificationDurations[NotificationKind.done]!);
+      await tester.pumpAndSettle();
+      expect(find.text('later'), findsNothing);
     });
 
     testWidgets('leaving restarts the full duration rather than resuming', (tester) async {

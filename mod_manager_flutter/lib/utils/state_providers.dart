@@ -262,6 +262,11 @@ enum AppDestination { characters, allMods, updates, browse, storage, settings }
 /// with no keep-alive, so the page left behind is disposed.
 final destinationProvider = StateProvider<AppDestination>((ref) => AppDestination.characters);
 
+/// Raised by one to ask the sidebar's Downloads row to open its panel, such as from a card's Open Downloads. A count
+/// rather than a flag, so asking twice opens it twice; the row is the only listener, and with no sidebar on screen
+/// nothing happens.
+final downloadsPanelRequestProvider = StateProvider<int>((ref) => 0);
+
 /// Whether [destination] is one of the Library's views.
 bool isLibraryView(AppDestination destination) =>
     destination == AppDestination.characters ||
@@ -285,27 +290,45 @@ void openAllModsFiltered(WidgetRef ref, AllModsFilter filter) {
   ref.read(destinationProvider.notifier).state = AppDestination.allMods;
 }
 
-/// Opens the Library's Characters view on [modId]: its character's row, with its details panel open. Returns false,
-/// and goes nowhere, when the library has no such mod, or could not be read.
+/// What [showModInCharacters] could do.
+enum ShowModResult {
+  /// The Characters view is on the mod, its details panel open.
+  shown,
+
+  /// The library was read and has no such mod. Nothing changed on screen.
+  notInLibrary,
+
+  /// The library couldn't be read. The Characters view is open, showing the scan's error and its Try again.
+  unreadable,
+}
+
+/// Opens the Library's Characters view on [modId]: its character's row, with its details panel open.
 ///
 /// Decided on a finished read: while a scan runs, such as the one an install starts, the list in hand predates the
-/// mod, so this waits for the scan rather than calling the mod gone. Takes a container rather than a ref, since a
-/// notification's action outlives the widget that raised it.
-Future<bool> showModInCharacters(ProviderContainer container, String modId) async {
-  final library = container.read(libraryProvider);
-  final List<ModInfo> mods;
-  try {
-    mods = library.isLoading ? await container.read(libraryProvider.future) : library.requireValue;
-  } catch (_) {
-    return false;
+/// mod, so this waits for the scan rather than calling the mod gone. A failed scan keeps the list from before it as
+/// its value, so the error is asked about before the list is: a mod missing from that list may well be there. Takes
+/// a container rather than a ref, since a notification's action outlives the widget that raised it.
+Future<ShowModResult> showModInCharacters(ProviderContainer container, String modId) async {
+  if (container.read(libraryProvider).isLoading) {
+    try {
+      await container.read(libraryProvider.future);
+    } catch (_) {
+      // Read again below, as an error.
+    }
   }
-  final mod = mods.where((m) => m.id == modId).firstOrNull;
-  if (mod == null) return false;
+  final library = container.read(libraryProvider);
+  if (library.hasError || !library.hasValue) {
+    container.read(openModPageProvider.notifier).state = null;
+    container.read(destinationProvider.notifier).state = AppDestination.characters;
+    return ShowModResult.unreadable;
+  }
+  final mod = library.requireValue.where((m) => m.id == modId).firstOrNull;
+  if (mod == null) return ShowModResult.notInLibrary;
   container.read(openModPageProvider.notifier).state = null;
   container.read(selectedCharacterIdProvider.notifier).state = libraryGroupOf(mod.characterId);
   container.read(selectedModIdProvider.notifier).state = modId;
   container.read(destinationProvider.notifier).state = AppDestination.characters;
-  return true;
+  return ShowModResult.shown;
 }
 
 /// Every mod in the library, once each — as far as a synchronous reader is

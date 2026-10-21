@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/l10n/app_localizations.dart';
 import 'package:mod_manager_flutter/screens/components/extract_failure_message.dart';
 import 'package:mod_manager_flutter/services/archive_service.dart';
+import 'package:mod_manager_flutter/utils/notifications.dart';
 
 /// What an unpack failure tells the user.
 ///
@@ -114,6 +116,18 @@ void main() {
         expect(lines.body, isNot(startsWith('marketplace.')), reason: '$reason');
       }
     }
+  });
+
+  test('every reason offers Open folder on the kept archive, given a center to report with', () {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final notify = container.read(notificationsProvider.notifier);
+    for (final reason in ExtractFailure.values) {
+      final lines = extractFailureMessage(en,
+          archivePath: archive, reason: reason, requiredBytes: 2, availableBytes: 1, notify: notify);
+      expect(lines.actions.map((a) => a.label), ['Open folder'], reason: '$reason');
+    }
+    expect(extractFailureMessage(en, archivePath: archive).actions, isEmpty);
   });
 
   test('the reason defaults to the generic one', () {

@@ -1154,9 +1154,13 @@ class _WhichFileCard extends ConsumerWidget {
       skipped: outcome.skipped - writing.length,
       failed: outcome.failed,
     );
-    // What was written shows as the marked card, so only a failure or a run that wrote nothing is said.
-    if (shown.failed > 0 || (shown.written == 0 && shown.skipped > 0)) showAssumeCurrentOutcome(loc, notify, shown);
     reportSkippedWhileWriting(loc, notify, writing);
+    // What was written shows as the marked card, so only a failure or a run that wrote nothing is said.
+    if (shown.failed > 0 || (shown.written == 0 && shown.skipped > 0)) {
+      showAssumeCurrentOutcome(loc, notify, shown, into: outcome.card);
+    } else {
+      outcome.card?.dismiss();
+    }
     await container.read(libraryProvider.notifier).rescan();
     // After the rescan, so Check them now on the card checks the mods as marked.
     if (marked.isNotEmpty) container.read(lastMarkingProvider.notifier).state = marked;

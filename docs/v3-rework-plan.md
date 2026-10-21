@@ -139,17 +139,33 @@ The memory note `v3-canvas-vs-docs-decisions` holds these. In short:
     - The app keeps its own wording, "what happened" over "what it happened to", rather than the canvas's example copy.
   - Checked in widget tests only, not yet in the running app in either theme.
 
+- **Phase 5d, notification follow-ups:** built, reviewed and committed (the commit after `099c71a`). Written up in `notifications.md` (§1, §3, §5–8), `downloads.md` §9 and `library-screen.md` §15–16.
+  - The stack no longer stays held after the last card is closed under the pointer; a tile card's text lines up with a portrait card's; an action draws a 2px accent ring on keyboard focus.
+  - Working cards on the long work that showed nothing: All mods' Enable, Disable, Delete and Mark N as current, Mark all as current, a restore, a patch taken out, Reinstall's page fetch, an update written into one folder, and a drop's unpacking and patch writes. Each becomes its report in place or goes.
+  - Actions, built once in `utils/notification_actions.dart`: Open folder, Copy details, Open Settings, Try again, Undo (on a restore and a patch taken out, the partial removal included) and Open Downloads (`downloadsPanelRequestProvider`, answered by `DownloadsNavItem`).
+  - Open on the install card tells a library that couldn't be read from a mod that's gone (`ShowModResult`), and shows the Characters view with the scan's error for the first.
+  - Downloads running together form a deck (the `Notifications` artboard's "Several at once" row; `NotificationDeck`, `notifications.md` §5–6, `downloads.md` §9).
+    - Each download has the lone download card. The cards are dealt into a deck that takes one of the three slots: the oldest download's card in front, in full, with "N more downloading" in `text3` as its last line, and at most two edges peeking above it (20px tall, 7px apart, 360 on `raised` and 340 on `rowHover`, bordered in `line`, no new palette token).
+    - Hovering the deck spreads it into its full cards, still one slot, the stack growing upwards from the front card.
+    - Each download leaves the deck on its own: its card becomes its Done card in place, dealt on top, leaves on that card's clock, and the next card comes up. Nothing waits for the rest of the queue; installs finishing in turn count on one "2 mods installed".
+    - A failure leaves the deck as its own Error card, and so does a warning or a note an install ends in; a download waiting for a decision will leave as its own Needs you card.
+    - Decided with the user: a deck looks the same as one download, so the notification doesn't change shape with the count, and each download can finish and go on its own.
+    - Decided without asking: the deck folds back when the pointer leaves the stack rather than the deck, so the cards above it don't slide out from under the pointer; at rest, Hide on a Working front card hides the whole deck (each result still arrives), and spread each card's Hide is its own; a Done front card's Close closes that card alone; the deck sits where its newest card is in the stack; its results are in front, the newest first, then its Working cards, the oldest first; "+N more" counts slots, not cards; a card coming up to the front or leaving the deck plays the entrance animation; a hidden download stays hidden when a new one starts, which raises its own card.
+    - Two downloads of one mod both read "Installing Ellen Swimsuit / Waiting for a free slot", so an identical Working card never replaces another (`saysTheSameAs`); that would orphan the first download's result.
+  - The lone download card follows the canvas's Working row: "Installing <mod>" as the title, the step and bytes under it, no speed or time left. Decided with the user, over `notifications.md` §6's body-is-the-subject rule.
+  - Decided without asking:
+    - A saved archive's Done card is dealt on top of the deck like an install's.
+    - Undo waits for a write already running in the folder rather than skipping, since a skip's warning would leave with the button; its own result has no Undo. It refuses a folder renamed or deleted since.
+    - The drop unpacks every archive before the first duplicate question, so its Working card is down before the question; the md5 the question needs comes from unpacking anyway.
+    - A whole-library check's Try again checks the whole library again; one of ticked mods checks only those it couldn't reach.
+    - Copy details copies the card's title and body and confirms with a Done card.
+  - Not built: a way for the keyboard to reach a card. Tab stays in the page or dialog in front, so the focus ring is drawn only once something focuses an action. The Needs you card waits for phase 6.
+  - For a native Ukrainian speaker to check: `downloads.deck_more_*` ("Ще 21 завантажується", "Ще 2 завантажуються").
+  - Checked in widget tests only, not yet in the running app.
+
 ## Phases left
 
 Each is reviewable on its own and ends with tests green, docs and changelog updated, and the user's go-ahead.
-
-5d. **Notification follow-ups**, found while building 5c and outside its scope.
-   - Closing the last card with the mouse leaves the stack hovered, so every later timed card stays until the pointer enters the stack and leaves again. With no cards the overlay returns an empty box (`notification_overlay.dart`), and its `MouseRegion` goes with it before an `onExit` can fire.
-   - Long work with no Working card: bulk Enable, Disable, Delete and Mark as current, a restore, removing a patch, the Reinstall page fetch, the drag-in import and its patch writes, and a single-folder update write.
-   - Actions the canvas suggests for events the app already has, not wired: Open folder, Copy details, Retry, Open Settings, Undo after a restore or a patch removal, and Open Downloads. Copy details fits the errors whose body is a raw exception (`mods_screen.dart`, `settings_screen.dart`, `welcome_screen.dart`, `auto_tag_section.dart`, `rename_mod_dialog.dart`, `keybinds_dialog.dart`, `delete_mod_dialog.dart`, `apply_update_flow.dart`, `url_utils.dart`).
-   - A notification's text actions show no keyboard focus ring; the canvas draws a 2px accent outline on focus (`.na:focus-visible`). Nothing else in the app draws one yet either.
-   - In a stack of mixed cards the text's left edge is ragged: a 28px icon tile sits beside a 32px portrait, as the canvas draws them.
-   - Open on the install card waits for a running rescan; if that rescan fails, Open says the mod is no longer in the library though it is (`showModInCharacters` returns false for both).
 
 5e. **Updates page follow-ups**, found while building 5b and outside its scope.
    - An Ignore or an applied update from the update dialog while a check runs is overwritten when the check's results land, and All mods' Update button is enabled during checks. Check all for updates is also enabled while the Updates page's Undo or Ignore is still writing, and that check's results then bring back what they took away. One fix covers all of them: skip merging the results for folders whose tracking changed while the check ran.
@@ -167,7 +183,7 @@ Each is reviewable on its own and ends with tests green, docs and changelog upda
    - The downloads side panel, Pause, and archive passwords.
    - "Needs your attention" as the panel's first group: one amber row per waiting decision (patch, several folders, password), each with the button that opens its dialog and Don't install. The patch and folders dialogs are restyled in phase 8; until then the buttons open the current ones.
    - `DownloadsNavItem` shows the amber warning badge (triangle and count) while anything waits. The canvas draws only that state; the idle look is designed in its style.
-   - A failed download transfer raises a notification, which today it doesn't: the failure shows only in the Downloads panel.
+   - A download waiting in "Needs your attention" leaves the downloads deck as its own Needs you card with Open Downloads, as the canvas's deck caption says (a Needs you result already leaves its deck; nothing in the queue waits yet).
 7. **Settings, Storage, About** (artboards `Settings`, `Storage`, `About`).
    - Section nav (General, Game & folders, Launching, Mods, GameBanana, Storage, Appearance, About), and Game & folders including Move library… (design note first). Game & folders holds only the ZZMI folder and the mod library.
      - Move library… re-points links with the rule a changed Mod library already follows ([`configuration.md`](configuration.md#changing-the-mod-library), `ModManagerService.relinkLibrary`): a link whose target is exactly `<old>/<its own name>`, live or dead, follows when the new library has that folder; a mod the new library lacks keeps its link; a refused shader placement keeps the old link and names the mod.
@@ -206,6 +222,9 @@ Each is reviewable on its own and ends with tests green, docs and changelog upda
 11. **Rename to Zenith:** the application id in its three places, the window title, and the app-data folder moved with a migration. This goes with the v3 release.
 
 ## Open items
+
+- Ask the user how the keyboard reaches the notification stack (for example F6 to move between the page and the stack, as desktop apps move between panes), or whether it doesn't.
+- A notification's shadow is clipped: the card's size transition and the stack's scroll view cut it at the card's edge, leaving a darker square outside each rounded bottom corner, clearest on paper. Fixing it means changing how the stack clips its cards (`notification_overlay.dart`).
 
 - Offer the user a correction of the keybind copy on the canvas's Edit info and Reinstall artboards.
 - The install links in `OnboardingLaunch`'s no-Proton state point at a placeholder; the user supplies the real Proton-GE, Proton-Cachy and DWProton pages. The Proton-Cachy folder name on the canvas is a guess.

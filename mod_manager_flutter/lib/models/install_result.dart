@@ -71,9 +71,11 @@ class InstallResult {
         failureKind: NotificationKind.warning,
       );
 
-  factory InstallResult.error(String title, String body) => InstallResult._(
+  /// [actions] are the error card's buttons, such as Open folder where the archive was kept.
+  factory InstallResult.error(String title, String body, {List<NotificationAction> actions = const []}) =>
+      InstallResult._(
         mods: const [],
-        failure: NotificationLines(title, body, kind: NotificationKind.error),
+        failure: NotificationLines(title, body, kind: NotificationKind.error, actions: actions),
         failureKind: NotificationKind.error,
       );
 

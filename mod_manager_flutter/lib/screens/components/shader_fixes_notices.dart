@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../services/shader_fixes/shader_fixes_service.dart';
+import '../../utils/notification_actions.dart';
 import '../../utils/notifications.dart';
 
 /// Reports why a mod stayed off because its shader files could not be placed.
@@ -12,21 +14,24 @@ void notifyShaderRefusal(
   ShaderPlacementRefused refusal, {
   String? characterId,
 }) =>
-    reportShaderRefusal(context.loc, context.notify, refusal, characterId: characterId);
+    reportShaderRefusal(context.loc, context.notify, refusal,
+        characterId: characterId, container: ProviderScope.containerOf(context, listen: false));
 
 /// [notifyShaderRefusal] for work that outlives the page it started on, which takes [loc] and [notify] before it
-/// waits.
+/// waits. With [container], a missing shader folder offers Open Settings, where the ZZMI folder is chosen.
 void reportShaderRefusal(
   AppLocalizations loc,
   NotificationCenter notify,
   ShaderPlacementRefused refusal, {
   String? characterId,
+  ProviderContainer? container,
 }) {
   if (refusal.noShaderFolder) {
     notify.error(
       loc.t('mods.shader_fixes.no_folder_title'),
       body: loc.t('mods.shader_fixes.no_folder_body', params: {'mod': refusal.mod}),
       characterId: characterId,
+      actions: [if (container != null) openSettingsAction(loc, container)],
     );
     return;
   }
@@ -118,10 +123,12 @@ class _ShaderRestartNoticeHostState extends State<ShaderRestartNoticeHost> {
   void _announceShortfall(ShaderRestoreShortfall shortfall) {
     if (!mounted) return;
     final loc = context.loc;
-    context.notify.warning(
+    final notify = context.notify;
+    notify.warning(
       loc.t('mods.shader_fixes.not_restored_title'),
       body: loc.t('mods.shader_fixes.not_restored_body',
           params: {'mod': shortfall.mod, 'folder': shortfall.folder, 'files': shortfall.files.join(', ')}),
+      actions: [openFolderAction(loc, notify, shortfall.folder)],
     );
   }
 

@@ -8,6 +8,7 @@ import '../../models/keybind_info.dart';
 import '../../services/api_service.dart';
 import '../../services/ini_parser_service.dart';
 import '../../services/log/logger.dart';
+import '../../utils/notification_actions.dart';
 import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
 
@@ -306,10 +307,12 @@ Future<void> _saveKeybindChange(
     }
   } catch (e) {
     Logger('mods').error('could not save a keybind', error: e);
+    final title = loc.t('mods.keybinds.error_save');
     notify.error(
-      loc.t('mods.keybinds.error_save'),
-      body: e.toString(),
+      title,
+      body: '$e',
       characterId: mod.characterId,
+      actions: [copyDetailsAction(loc, notify, title: title, body: '$e')],
     );
   }
 }

@@ -144,6 +144,12 @@
       "check": "Check for updates",
       "delete": "Delete",
       "clear_selection": "Clear selection",
+      "enabling_single": "Turning on {count} mod…",
+      "enabling_plural": "Turning on {count} mods…",
+      "disabling_single": "Turning off {count} mod…",
+      "disabling_plural": "Turning off {count} mods…",
+      "deleting_single": "Deleting {count} mod…",
+      "deleting_plural": "Deleting {count} mods…",
       "enable_failed_title_single": "Couldn't turn on {count} mod",
       "enable_failed_title_plural": "Couldn't turn on {count} mods",
       "enable_left_off_title": "Some mods were left off",
@@ -721,7 +727,12 @@
       "already_gone_title": "That patch is not in this folder any more",
       "failed_title": "Could not remove the patch",
       "failed_snapshot": "A copy of the mod could not be saved first, so nothing was changed.",
-      "failed_missing": "The mod folder is gone."
+      "failed_missing": "The mod folder is gone.",
+      "taking_out_title": "Taking the patch out…",
+      "putting_back_title": "Putting the patch back…",
+      "put_back_title": "Patch put back",
+      "put_back_failed_title": "Couldn't put the patch back",
+      "put_back_gone": "The copy saved before the patch was taken out is no longer kept."
     },
     "details": {
       "no_images": "No images",
@@ -743,6 +754,13 @@
       "auto_tag_and_more": "and {count} more...",
       "success_single": "Added {count} mod",
       "success_plural": "Added {count} mods"
+    },
+    "import_working": {
+      "unpacking_single": "Unpacking {count} archive…",
+      "unpacking_plural": "Unpacking {count} archives…",
+      "applying_patch_title": "Applying the patch…",
+      "applying_patch_many_single": "Applying the patch to {count} mod…",
+      "applying_patch_many_plural": "Applying the patch to {count} mods…"
     },
     "import_failed": {
       "no_space_title": "Not enough space in your mods folder",
@@ -906,7 +924,9 @@
       "already_done_plural": "Those {count} mods were already sorted out.",
       "not_saved_title": "Tracking data not saved",
       "failed_single": "One mod's folder may be read-only.",
-      "failed_plural": "{count} mods' folders may be read-only."
+      "failed_plural": "{count} mods' folders may be read-only.",
+      "marking_single": "Marking {count} mod as current…",
+      "marking_plural": "Marking {count} mods as current…"
     },
     "bulk_resolve": {
       "title": "Sort out where these mods came from",
@@ -1011,9 +1031,13 @@
       "offline_title": "Couldn't reach GameBanana",
       "offline_body": "The page for “{mod}” didn't load, so nothing was changed. Check your connection, then try again.",
       "unavailable_title": "That version isn't on the page any more",
-      "unavailable_body": "GameBanana no longer offers the file “{mod}” was installed from, so it can't be put back. Check for updates to install the current version instead."
+      "unavailable_body": "GameBanana no longer offers the file “{mod}” was installed from, so it can't be put back. Check for updates to install the current version instead.",
+      "fetching_title": "Getting the mod page…",
+      "writing_title": "Reinstalling…"
     },
     "update_apply": {
+      "writing_title": "Updating…",
+      "writing_base_title": "Installing the mod it patches…",
       "action": "Update",
       "title": "Update {mod}?",
       "installing": "Installing",
@@ -1102,7 +1126,13 @@
       "confirm_title": "Restore this version?",
       "confirm_body": "“{mod}” will be put back to how it was on {date}: its files from then come back, and anything added to the folder since is removed, files you put there yourself included. A copy of it as it is right now is saved first, so you can undo this.",
       "restored_title": "Previous version restored",
-      "restore_failed_title": "Couldn't restore that version"
+      "restore_failed_title": "Couldn't restore that version",
+      "restoring_title": "Restoring a previous version…",
+      "undoing_title": "Undoing the restore…",
+      "undone_title": "Restore undone",
+      "undo_failed_title": "Couldn't undo the restore",
+      "undo_gone": "The copy saved before the restore is no longer kept.",
+      "undo_missing": "The mod folder is gone."
     },
     "shader_fixes": {
       "restart_title": "Restart the game to apply shader changes",
@@ -1303,9 +1333,18 @@
     },
     "actions": {
       "review": "Review",
-      "open": "Open"
+      "open": "Open",
+      "open_folder": "Open folder",
+      "copy_details": "Copy details",
+      "open_settings": "Open Settings",
+      "open_downloads": "Open Downloads",
+      "retry": "Try again",
+      "undo": "Undo"
     },
     "mod_gone": "No longer in the library",
+    "copied_title": "Details copied",
+    "copy_failed_title": "Couldn't copy the details",
+    "open_folder_failed_title": "Couldn't open the folder",
     "character_portrait": "Portrait of {name}"
   },
   "welcome": {
@@ -1343,9 +1382,14 @@
     "empty": "Nothing is downloading.",
     "clear_finished": "Clear finished",
     "queued": "Waiting for a free slot",
-    "notification_title_single": "Downloading",
-    "notification_title_plural": "Downloading {count} mods",
-    "notification_body_several": "{count} downloads",
+    "lone_title_installing": "Installing {mod}",
+    "lone_title_downloading": "Downloading {mod}",
+    "stage_downloading": "Downloading · {received} of {total}",
+    "stage_downloading_bytes": "Downloading · {received}",
+    "stage_unpacking": "Unpacking",
+    "deck_more_single": "{count} more downloading",
+    "deck_more_plural": "{count} more downloading",
+    "failed_title": "Couldn't download the mod",
     "connecting": "Connecting...",
     "installing": "Installing...",
     "done": "Installed",

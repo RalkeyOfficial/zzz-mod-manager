@@ -56,6 +56,9 @@ class NotificationHost extends StatelessWidget {
 ///
 /// Stateful for two facts it owns: whether the pointer is anywhere on the stack, which holds every clock on it,
 /// folded cards included; and whether the user unfolded "+N more".
+///
+/// The stack is a column of slots, and a slot is one card or one deck: the cards that share a [NotificationDeck],
+/// drawn as one. Three slots show, so downloads running at once never take every visible place.
 class NotificationOverlay extends ConsumerStatefulWidget {
   const NotificationOverlay({super.key, this.maxWidth = double.infinity, this.maxHeight = double.infinity});
 
@@ -72,18 +75,57 @@ class _NotificationOverlayState extends ConsumerState<NotificationOverlay> {
   bool _hovered = false;
   bool _unfolded = false;
 
+  /// One key per card, so a card keeps its clock and its place in an animation as it moves between a slot of its
+  /// own and a deck's.
+  final Map<int, GlobalKey> _keys = {};
+
   @override
   Widget build(BuildContext context) {
     final notifications = ref.watch(notificationsProvider);
-    if (notifications.isEmpty) return const SizedBox.shrink();
+    if (notifications.isEmpty) {
+      // The region goes with the last card, and a region taken out of the tree never hears its `onExit`. A card
+      // raised under a pointer that is still there enters the new region and holds again.
+      _hovered = false;
+      _keys.clear();
+      return const SizedBox.shrink();
+    }
 
     final loc = context.loc;
     final width = math.min(NotificationOverlay.width, widget.maxWidth);
-    final overflow = notifications.length - kVisibleNotifications;
+    final slots = _slotsOf(notifications);
+    final overflow = slots.length - kVisibleNotifications;
     // It folds by itself once nothing is left to fold.
     if (overflow <= 0) _unfolded = false;
     final folded = _unfolded ? 0 : math.max(0, overflow);
     final center = ref.read(notificationsProvider.notifier);
+    _keys.removeWhere((id, _) => !notifications.any((n) => n.id == id));
+
+    Widget cardOf(
+      AppNotification n, {
+      required bool folded,
+      bool behind = false,
+      bool dealt = false,
+      int ghosts = 0,
+      String? line,
+      bool closesDeck = false,
+    }) =>
+        KeyedSubtree(
+          key: _keys.putIfAbsent(n.id, GlobalKey.new),
+          child: _NotificationCard(
+            notification: n,
+            width: width,
+            paused: _hovered,
+            folded: folded,
+            behind: behind,
+            dealt: dealt,
+            ghosts: ghosts,
+            line: line,
+            onClosed: closesDeck
+                ? (seen) => _leave(seen, (_) => _hideDeck(center, seen.deck!.key))
+                : (seen) => _leave(seen, center.close),
+            onExpired: (seen) => _leave(seen, center.dismiss),
+          ),
+        );
 
     return Semantics(
       container: true,
@@ -109,23 +151,23 @@ class _NotificationOverlayState extends ConsumerState<NotificationOverlay> {
                         : loc.plural('notifications.more', folded, params: {'count': '$folded'}),
                     onPressed: () => setState(() => _unfolded = !_unfolded),
                   ),
-                for (var i = 0; i < notifications.length; i++)
+                for (var i = 0; i < slots.length; i++)
                   // A folded card is still built, offstage, so it keeps owning its clock: a Done runs out unseen and
                   // the count drops, while an Error waits.
                   KeyedSubtree(
-                    key: ValueKey(notifications[i].id),
+                    key: ValueKey(slots[i].key),
                     child: Offstage(
                       offstage: i < folded,
                       child: TickerMode(
                         enabled: i >= folded,
-                        child: _NotificationCard(
-                          notification: notifications[i],
-                          width: width,
-                          paused: _hovered,
-                          folded: i < folded,
-                          onClosed: (seen) => _leave(seen, center.close),
-                          onExpired: (seen) => _leave(seen, center.dismiss),
-                        ),
+                        child: slots[i].deck == null
+                            ? cardOf(slots[i].cards.single, folded: i < folded)
+                            : _Deck(
+                                cards: slots[i].cards,
+                                stackHovered: _hovered,
+                                folded: i < folded,
+                                card: cardOf,
+                              ),
                       ),
                     ),
                   ),
@@ -148,6 +190,198 @@ class _NotificationOverlayState extends ConsumerState<NotificationOverlay> {
     if (now != null && _isNews(seen, now)) return false;
     go(seen.id);
     return true;
+  }
+
+  /// Hide on a deck's front card at rest: every Working card in the deck, each kept aside for its result.
+  void _hideDeck(NotificationCenter center, String deck) {
+    for (final n in ref.read(notificationsProvider)) {
+      if (n.deck?.key == deck && n.kind == NotificationKind.working) center.close(n.id);
+    }
+  }
+}
+
+/// One place in the stack: a card of its own, or every card of one deck, front first.
+typedef _Slot = ({String key, NotificationDeck? deck, List<AppNotification> cards});
+
+/// The stack's slots, oldest first. A deck sits where its newest card is, so a download starting or one finishing
+/// brings it down to the newest place as a card of its own would come.
+///
+/// A deck is dealt with its results in front, the newest first, since a result is the news; then its Working cards,
+/// the oldest first.
+List<_Slot> _slotsOf(List<AppNotification> all) {
+  final newest = <String, int>{};
+  for (var i = 0; i < all.length; i++) {
+    final deck = all[i].deck;
+    if (deck != null) newest[deck.key] = i;
+  }
+  final slots = <_Slot>[];
+  for (var i = 0; i < all.length; i++) {
+    final deck = all[i].deck;
+    if (deck == null) {
+      slots.add((key: 'card:${all[i].id}', deck: null, cards: [all[i]]));
+    } else if (newest[deck.key] == i) {
+      final dealt = all.where((n) => n.deck == deck);
+      slots.add((
+        key: 'deck:${deck.key}',
+        deck: deck,
+        cards: [
+          ...dealt.where((n) => n.kind != NotificationKind.working).toList().reversed,
+          ...dealt.where((n) => n.kind == NotificationKind.working),
+        ],
+      ));
+    }
+  }
+  return slots;
+}
+
+/// Builds one card of the stack, keyed so it keeps its state wherever it is drawn.
+typedef _CardBuilder = Widget Function(
+  AppNotification n, {
+  required bool folded,
+  bool behind,
+  bool dealt,
+  int ghosts,
+  String? line,
+  bool closesDeck,
+});
+
+/// The cards of one deck in one slot: the front card in full, "2 more downloading" under its body, and up to two
+/// edges of the cards behind it peeking above it.
+///
+/// Hovering it spreads it into its full cards, the stack growing upwards from the front card, and it stays spread
+/// until the pointer leaves the stack: folding back as soon as the pointer left the deck would slide the cards above
+/// it out from under the pointer. Spread, each card's close button is its own; at rest, Hide on a Working front
+/// hides the deck.
+class _Deck extends StatefulWidget {
+  const _Deck({required this.cards, required this.stackHovered, required this.folded, required this.card});
+
+  /// Front first.
+  final List<AppNotification> cards;
+
+  /// Whether the pointer is anywhere on the stack.
+  final bool stackHovered;
+
+  /// The slot is folded under "+N more".
+  final bool folded;
+
+  final _CardBuilder card;
+
+  @override
+  State<_Deck> createState() => _DeckState();
+}
+
+class _DeckState extends State<_Deck> with SingleTickerProviderStateMixin {
+  late final AnimationController _spread = AnimationController(vsync: this, duration: const Duration(milliseconds: 200));
+  late final CurvedAnimation _curve = CurvedAnimation(parent: _spread, curve: Curves.easeOutCubic);
+
+  /// The pointer came onto the deck and has not left the stack since.
+  bool _entered = false;
+
+  @override
+  void didUpdateWidget(_Deck oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_entered && !widget.stackHovered) {
+      _entered = false;
+      _spreadOut(false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _curve.dispose();
+    _spread.dispose();
+    super.dispose();
+  }
+
+  void _spreadOut(bool out) {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _spread.value = out ? 1 : 0;
+    } else if (out) {
+      _spread.forward();
+    } else {
+      // Not `animateTo(0)`, which ends as completed rather than dismissed and would leave the cards onstage.
+      _spread.reverse();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final front = widget.cards.first;
+    final behind = widget.cards.skip(1).toList();
+    final working = widget.cards.where((n) => n.kind == NotificationKind.working).length;
+    final more = front.kind == NotificationKind.working ? working - 1 : working;
+    return MouseRegion(
+      onEnter: (_) {
+        if (_entered) return;
+        setState(() => _entered = true);
+        _spreadOut(true);
+      },
+      child: AnimatedBuilder(
+        animation: _spread,
+        builder: (context, _) {
+          final open = !_spread.isDismissed;
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              // The farthest from the front at the top.
+              for (final n in behind.reversed)
+                Offstage(
+                  key: ValueKey('behind:${n.id}'),
+                  offstage: !open,
+                  child: TickerMode(
+                    enabled: open,
+                    child: SizeTransition(
+                      sizeFactor: _curve,
+                      // Out from behind the front card: its bottom edge shows first.
+                      alignment: Alignment.bottomCenter,
+                      child: FadeTransition(
+                        opacity: _curve,
+                        child: widget.card(n, folded: widget.folded || !open, behind: true, dealt: true),
+                      ),
+                    ),
+                  ),
+                ),
+              widget.card(
+                front,
+                folded: widget.folded,
+                dealt: behind.isNotEmpty,
+                ghosts: _entered ? 0 : math.min(2, behind.length),
+                line: more > 0 ? front.deck!.more(more) : null,
+                closesDeck: !open && behind.isNotEmpty && front.kind == NotificationKind.working,
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// The edge of a card behind a deck's front card: 20px tall with no bottom border, the rest hidden under the front.
+class _Ghost extends StatelessWidget {
+  const _Ghost({required this.color});
+
+  final Color color;
+
+  /// How far each edge peeks out above the one in front of it.
+  static const double step = 7;
+
+  /// How much narrower each edge is than the one in front of it.
+  static const double narrower = 20;
+
+  static const double height = 20;
+
+  @override
+  Widget build(BuildContext context) {
+    final side = BorderSide(color: ZenithPalette.of(context).line);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+        border: Border(top: side, left: side, right: side),
+      ),
+    );
   }
 }
 
@@ -263,6 +497,10 @@ class _NotificationCard extends StatefulWidget {
     required this.folded,
     required this.onClosed,
     required this.onExpired,
+    this.behind = false,
+    this.dealt = false,
+    this.ghosts = 0,
+    this.line,
   });
 
   final AppNotification notification;
@@ -272,8 +510,21 @@ class _NotificationCard extends StatefulWidget {
   /// just moved the pointer away has not necessarily finished reading.
   final bool paused;
 
-  /// Offstage under "+N more". Its tickers are stopped, so it leaves without its exit animation.
+  /// Offstage under "+N more", or behind a deck's front card at rest. Its tickers are stopped, so it leaves without
+  /// its exit animation.
   final bool folded;
+
+  /// In a deck, behind its front card.
+  final bool behind;
+
+  /// In a deck of more than one card.
+  final bool dealt;
+
+  /// How many edges of the cards behind it peek above it, at most two: it is a deck's front card at rest.
+  final int ghosts;
+
+  /// A deck's front card's last line, "2 more downloading".
+  final String? line;
 
   /// The user closed it.
   final _Leave onClosed;
@@ -304,7 +555,12 @@ class _NotificationCardState extends State<_NotificationCard> with SingleTickerP
   @override
   void initState() {
     super.initState();
-    _anim.forward();
+    // Dealt in behind a deck's front card, it has no entrance to show.
+    if (widget.folded) {
+      _anim.value = 1;
+    } else {
+      _anim.forward();
+    }
     _restartTimer();
   }
 
@@ -333,6 +589,12 @@ class _NotificationCardState extends State<_NotificationCard> with SingleTickerP
         WidgetsBinding.instance.addPostFrameCallback((_) => leaving(now));
         return;
       }
+    }
+    // Up from under a deck as its new front card, or out of one as a card of its own: it enters as a new card would.
+    final cameUp = oldWidget.behind && oldWidget.folded && !widget.behind && !widget.folded;
+    final leftDeck = oldWidget.dealt && now.deck == null;
+    if ((cameUp || leftDeck) && _leaving == null && !MediaQuery.disableAnimationsOf(context)) {
+      _anim.forward(from: 0);
     }
     if (oldWidget.paused != widget.paused ||
         before.duration != now.duration ||
@@ -384,10 +646,36 @@ class _NotificationCardState extends State<_NotificationCard> with SingleTickerP
   @override
   Widget build(BuildContext context) {
     final still = MediaQuery.disableAnimationsOf(context);
-    final card = Padding(
-      // The gap belongs to the card below it, so the stack's one `MouseRegion` covers the gaps too.
-      padding: const EdgeInsets.only(top: 8),
-      child: _card(context),
+    // Each edge a shade further back than the one in front of it.
+    final ghostColors = [ZenithPalette.of(context).raised, ZenithPalette.of(context).rowHover];
+    final card = TweenAnimationBuilder<double>(
+      // Eased rather than jumped, so a card dealt in behind slides its edge out and a spread deck tucks them away.
+      tween: Tween(end: widget.ghosts.toDouble()),
+      duration: still ? Duration.zero : const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      child: KeyedSubtree(key: const ValueKey('notification-face'), child: _card(context)),
+      builder: (context, peek, face) => Padding(
+        // The gap belongs to the card below it, so the stack's one `MouseRegion` covers the gaps too. A deck's edges
+        // peek out into room of their own above it.
+        padding: EdgeInsets.only(top: 8 + _Ghost.step * peek),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // The farthest first, so each edge is drawn under the one in front of it.
+            for (var i = 2; i >= 1; i--)
+              if (peek > i - 1)
+                Positioned(
+                  key: ValueKey('notification-ghost-$i'),
+                  top: -_Ghost.step * math.min(peek, i.toDouble()),
+                  left: _Ghost.narrower * i / 2,
+                  right: _Ghost.narrower * i / 2,
+                  height: _Ghost.height,
+                  child: _Ghost(color: ghostColors[i - 1]),
+                ),
+            face!,
+          ],
+        ),
+      ),
     );
     return SizeTransition(
       // Collapsing rather than vanishing makes the cards above slide down into the gap.
@@ -415,7 +703,7 @@ class _NotificationCardState extends State<_NotificationCard> with SingleTickerP
     final bodyStyle = text.bodySmall?.copyWith(color: palette.text2);
     final Widget body;
     if (n.count > 1 && n.subjects.length > 1) {
-      final subjects = Text(_subjectList(loc, n.subjects), style: bodyStyle, maxLines: 3, overflow: TextOverflow.ellipsis);
+      final subjects = Text(subjectList(loc, n.subjects), style: bodyStyle, maxLines: 3, overflow: TextOverflow.ellipsis);
       // A body that says more than its subject keeps saying it, with the subjects under it.
       body = n.repeat?.body == null
           ? subjects
@@ -480,6 +768,12 @@ class _NotificationCardState extends State<_NotificationCard> with SingleTickerP
                                           text.bodyMedium?.copyWith(fontWeight: FontWeight.w600, color: palette.text)),
                                   const SizedBox(height: 2),
                                   body,
+                                  if (widget.line case final line?) ...[
+                                    const SizedBox(height: 2),
+                                    Text(line,
+                                        key: const ValueKey('notification-deck-line'),
+                                        style: text.bodySmall?.copyWith(color: palette.text3)),
+                                  ],
                                 ],
                               ),
                             ),
@@ -526,15 +820,6 @@ class _NotificationCardState extends State<_NotificationCard> with SingleTickerP
         ),
       ),
     );
-  }
-
-  static String _subjectList(AppLocalizations loc, List<String> subjects) {
-    if (subjects.length == 2) {
-      return loc.t('notifications.subjects_two', params: {'first': subjects[0], 'second': subjects[1]});
-    }
-    final more = subjects.length - 2;
-    return loc.plural('notifications.subjects_more', more,
-        params: {'first': subjects[0], 'second': subjects[1], 'count': '$more'});
   }
 }
 
@@ -609,15 +894,22 @@ class _NotificationLeading extends StatelessWidget {
       );
     }
 
-    return Container(
-      key: const ValueKey('notification-tile'),
-      width: _tile,
-      height: _tile,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(color: look.tile.background, borderRadius: BorderRadius.circular(8)),
-      child: look.spins && n.icon == null
-          ? _Spinner(size: 16, color: look.tile.foreground)
-          : Icon(n.icon ?? look.icon, size: 16, color: look.tile.foreground),
+    // As wide as a portrait, so the text starts at the same edge on every card in a mixed stack.
+    return SizedBox(
+      width: _portrait,
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: Container(
+          key: const ValueKey('notification-tile'),
+          width: _tile,
+          height: _tile,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(color: look.tile.background, borderRadius: BorderRadius.circular(8)),
+          child: look.spins && n.icon == null
+              ? _Spinner(size: 16, color: look.tile.foreground)
+              : Icon(n.icon ?? look.icon, size: 16, color: look.tile.foreground),
+        ),
+      ),
     );
   }
 }
@@ -789,6 +1081,7 @@ class _ActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = Theme.of(context).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600);
+    final ring = ZenithPalette.of(context).accent;
     return TextButton(
       onPressed: onPressed,
       style: ButtonStyle(
@@ -803,6 +1096,13 @@ class _ActionButton extends StatelessWidget {
         ),
         foregroundColor: WidgetStatePropertyAll(color),
         textStyle: WidgetStatePropertyAll(label),
+        // A 2px accent ring on keyboard focus only, the way `:focus-visible` draws it, never after a click.
+        side: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.focused) &&
+                  FocusManager.instance.highlightMode == FocusHighlightMode.traditional
+              ? BorderSide(color: ring, width: 2, strokeAlign: BorderSide.strokeAlignOutside)
+              : BorderSide.none,
+        ),
       ),
       child: Text(action.label),
     );

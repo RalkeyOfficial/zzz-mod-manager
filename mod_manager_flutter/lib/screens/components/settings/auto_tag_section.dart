@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/app_localizations.dart';
+import '../../../utils/notification_actions.dart';
 import '../../../utils/notifications.dart';
 import '../../../utils/state_providers.dart';
 import '../../../utils/zzz_characters.dart';
@@ -188,7 +189,9 @@ class _AutoTagSettingsSectionState
       }
     } catch (e) {
       if (mounted) {
-        context.notify.error(loc.t('settings.auto_tag.error_title'), body: '$e');
+        final notify = context.notify;
+        final title = loc.t('settings.auto_tag.error_title');
+        notify.error(title, body: '$e', actions: [copyDetailsAction(loc, notify, title: title, body: '$e')]);
       }
     } finally {
       if (mounted) setState(() => _running = false);

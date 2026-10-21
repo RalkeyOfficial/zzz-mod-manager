@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show FileSystemException;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -192,6 +193,68 @@ void main() {
     expect(container.read(destinationProvider), AppDestination.characters);
     expect(container.read(selectedModIdProvider), 'Ellen Swimsuit');
     expect(raised(), isEmpty, reason: 'no "No longer in the library" note');
+  });
+
+  group('Open when the library could not be read', () {
+    late List<Completer<List<ModInfo>>> scans;
+
+    /// The install card raised, then the scan it starts, which [failFirst] fails before Open is pressed.
+    Future<void> raiseAndScan(WidgetTester tester, {required bool failFirst}) async {
+      scans = [];
+      container.dispose();
+      container = ProviderContainer(overrides: [libraryProvider.overrideWith(() => _ScanOnDemand(scans))]);
+      final keep = container.listen(modsProvider, (_, _) {});
+      addTearDown(keep.close);
+      scans.last.complete(const []);
+      await tester.pump();
+      container.read(destinationProvider.notifier).state = AppDestination.browse;
+
+      await pumpLocalized(
+        tester,
+        Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () {
+              showInstallResult(context, InstallResult.success(['Ellen Swimsuit'], characterId: 'ellen'));
+              container.invalidate(libraryProvider);
+            },
+            child: const Text('report'),
+          ),
+        ),
+        container: container,
+      );
+      await tester.tap(find.text('report'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      if (failFirst) {
+        scans.last.completeError(const FileSystemException('unreadable'));
+        await tester.pump();
+      }
+    }
+
+    void expectCharactersWithNoNote() {
+      expect(container.read(destinationProvider), AppDestination.characters,
+          reason: 'the Characters view shows the scan error and its Try again');
+      expect(raised(), isEmpty, reason: 'no "No longer in the library" note: the mod may well be there');
+    }
+
+    testWidgets('a scan that fails while Open waits for it', (tester) async {
+      await raiseAndScan(tester, failFirst: false);
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      scans.last.completeError(const FileSystemException('unreadable'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expectCharactersWithNoNote();
+    });
+
+    testWidgets('a scan that failed before the press, keeping the list from before the install', (tester) async {
+      await raiseAndScan(tester, failFirst: true);
+      expect(container.read(libraryProvider).hasValue, isTrue, reason: 'a failed scan keeps the earlier list');
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expectCharactersWithNoNote();
+    });
   });
 
   testWidgets('what needs acting on arrives as its own warning', (tester) async {

@@ -45,6 +45,26 @@ const int kVisibleNotifications = 3;
 /// The backstop on the whole stack, folded cards included: past it, the oldest card with a clock goes.
 const int kKeptNotifications = 20;
 
+/// Marks the cards that share one slot of the stack as a deck, such as the downloads running at once.
+///
+/// Only Working cards and the Done cards they turn into are dealt into a deck; a card turned into any other kind
+/// leaves it as its own card. Two decks are the same deck when their [key]s match.
+@immutable
+class NotificationDeck {
+  const NotificationDeck(this.key, {required this.more});
+
+  final String key;
+
+  /// The front card's last line, "2 more downloading", for the [count] Working cards behind it.
+  final String Function(int count) more;
+
+  @override
+  bool operator ==(Object other) => other is NotificationDeck && other.key == key;
+
+  @override
+  int get hashCode => key.hashCode;
+}
+
 /// A button on a card. Pressing it runs [onPressed] and then closes the card, unless [closes] is false.
 ///
 /// The card is drawn above the `Navigator`, so [onPressed] reaches the app through what it captured where the card
@@ -93,11 +113,15 @@ class NotificationLines {
     this.stays = false,
     this.characterId,
     this.repeat,
+    this.actions = const [],
   });
 
   final String title;
   final String body;
   final NotificationKind kind;
+
+  /// The card's buttons, such as Open folder on a failure that left an archive behind.
+  final List<NotificationAction> actions;
 
   /// A warning that stays until it is closed. See [AppNotification.stays].
   final bool stays;
@@ -116,11 +140,13 @@ class NotificationLines {
       other.stays == stays &&
       other.characterId == characterId &&
       other.repeat?.key == repeat?.key &&
-      listEquals(other.repeat?.subjects, repeat?.subjects);
+      listEquals(other.repeat?.subjects, repeat?.subjects) &&
+      // By label: two closures are never equal, and what a line offers is what the user reads.
+      listEquals([for (final a in other.actions) a.label], [for (final a in actions) a.label]);
 
   @override
-  int get hashCode =>
-      Object.hash(title, body, kind, stays, characterId, repeat?.key, Object.hashAll(repeat?.subjects ?? const []));
+  int get hashCode => Object.hash(title, body, kind, stays, characterId, repeat?.key,
+      Object.hashAll(repeat?.subjects ?? const []), Object.hashAll([for (final a in actions) a.label]));
 }
 
 /// One message on the notification stack.
@@ -129,7 +155,7 @@ class NotificationLines {
 /// the same card, with its entrance animation and hover state, instead of sliding a new one in.
 @immutable
 class AppNotification {
-  AppNotification({
+  const AppNotification({
     required this.id,
     required this.kind,
     required this.title,
@@ -143,8 +169,11 @@ class AppNotification {
     this.repeat,
     this.count = 1,
     this.subjects = const [],
+    this.deck,
   })  : assert(actions.length <= 2, 'A card has room for two actions.'),
         assert(progress == null || kind == NotificationKind.working, 'Only a Working card has a bar.'),
+        assert(deck == null || kind == NotificationKind.working || kind == NotificationKind.done,
+            'Only Working cards and their Done results are dealt into a deck.'),
         assert(progress == null || (progress >= 0 && progress <= 1), 'Progress is a fraction, 0 to 1.'),
         assert(!stays || kind == NotificationKind.warning, 'Only a warning is told to stay; the rest have a kind for it.'),
         assert(
@@ -200,6 +229,9 @@ class AppNotification {
   /// The [repeat] subjects so far, oldest first.
   final List<String> subjects;
 
+  /// The deck this card is dealt into, sharing one slot with the cards of the same deck.
+  final NotificationDeck? deck;
+
   /// How long it stays before closing itself, or null to stay until it is closed or its owner ends it.
   Duration? get duration => stays ? null : kNotificationDurations[kind];
 
@@ -209,10 +241,12 @@ class AppNotification {
   /// place instead of stacking a duplicate.
   ///
   /// Not full equality: the portrait and icon are pictures of what a card says, not part of what it says. Cards
-  /// with a [repeat] are counted instead, so they never match here.
+  /// with a [repeat] are counted instead, so they never match here, and neither does a Working card, whose owner
+  /// holds its handle: two downloads of one mod both read "Installing Ellen Swimsuit / Waiting for a free slot".
   bool saysTheSameAs(AppNotification other) =>
       repeat == null &&
       other.repeat == null &&
+      kind != NotificationKind.working &&
       other.kind == kind &&
       other.title == title &&
       other.body == body;
@@ -231,9 +265,11 @@ class AppNotification {
     NotificationRepeat? repeat,
     int? count,
     List<String>? subjects,
+    NotificationDeck? deck,
     bool clearCharacterId = false,
     bool clearIcon = false,
     bool clearProgress = false,
+    bool clearDeck = false,
   }) {
     return AppNotification(
       id: id ?? this.id,
@@ -249,6 +285,7 @@ class AppNotification {
       repeat: repeat ?? this.repeat,
       count: count ?? this.count,
       subjects: subjects ?? this.subjects,
+      deck: clearDeck ? null : (deck ?? this.deck),
     );
   }
 
@@ -267,9 +304,10 @@ class AppNotification {
       other.stays == stays &&
       other.repeat == repeat &&
       other.count == count &&
-      listEquals(other.subjects, subjects);
+      listEquals(other.subjects, subjects) &&
+      other.deck == deck;
 
   @override
   int get hashCode => Object.hash(id, kind, title, body, characterId, icon, progress, Object.hashAll(actions), keycap,
-      stays, repeat, count, Object.hashAll(subjects));
+      stays, repeat, count, Object.hashAll(subjects), deck);
 }

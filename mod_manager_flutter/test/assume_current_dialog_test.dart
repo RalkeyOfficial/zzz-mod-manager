@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/l10n/app_localizations.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
@@ -64,6 +65,8 @@ void main() {
       Builder(
         builder: (context) => ElevatedButton(
           onPressed: () async {
+            final loc = context.loc;
+            final notify = context.notify;
             final outcome = await confirmAndApplyAssumeCurrent(
               context,
               plan,
@@ -82,7 +85,7 @@ void main() {
             );
             // Null too, so a test can tell "returned null" from "never returned".
             outcomes.add(outcome);
-            if (outcome != null && context.mounted) showAssumeCurrentOutcome(context.loc, context.notify, outcome);
+            if (outcome != null) showAssumeCurrentOutcome(loc, notify, outcome, into: outcome.card);
           },
           child: const Text('run'),
         ),
@@ -214,6 +217,27 @@ void main() {
     expect(run.outcomes.single!.written, 2);
     expect(run.outcomes.single!.failed, 0);
     expect(find.textContaining('2 mods now watch for files published'), findsOneWidget);
+  });
+
+  testWidgets('the writes show a Working card, which becomes the report in place', (tester) async {
+    final plan = planBulkAssumeCurrent([mod('a', origin: origin()), mod('b', origin: origin())]);
+    await runFlow(tester, plan);
+    final container = ProviderScope.containerOf(tester.element(find.text('run')));
+    final working = <AppNotification>[];
+    final listening = container.listen<List<AppNotification>>(notificationsProvider, (_, next) {
+      for (final n in next) {
+        if (n.kind == NotificationKind.working && !working.any((w) => w.id == n.id)) working.add(n);
+      }
+    });
+    addTearDown(listening.close);
+
+    await tester.tap(confirm('Mark 2 as current'));
+    await tester.pumpAndSettle();
+
+    expect([for (final n in working) (n.title, n.body)], [('Marking 2 mods as current…', 'a and b')]);
+    final report = container.read(notificationsProvider).single;
+    expect(report.id, working.single.id, reason: 'the same card, turned into its result');
+    expect((report.kind, report.title), (NotificationKind.done, '2 mods marked as current'));
   });
 
   testWidgets('an unticked mod is left out of the writes', (tester) async {

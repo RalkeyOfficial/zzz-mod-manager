@@ -9,6 +9,7 @@ import 'package:mod_manager_flutter/services/download/download_job.dart';
 import 'package:mod_manager_flutter/services/download/download_progress.dart';
 import 'package:mod_manager_flutter/services/download/download_queue.dart';
 import 'package:mod_manager_flutter/services/download/download_request.dart';
+import 'package:mod_manager_flutter/utils/state_providers.dart';
 
 import 'support/localized_harness.dart';
 
@@ -230,6 +231,19 @@ void main() {
       await t.pumpAndSettle();
 
       expect(t.takeException(), isNull);
+      expect(find.text('Mod 1'), findsOneWidget);
+    });
+
+    testWidgets("a card's Open Downloads opens the panel", (t) async {
+      final container = seeded([job(state: DownloadJobState.done)]);
+      await pumpLocalized(t, const DownloadsNavItem(), container: container);
+      expectBuilt(DownloadsNavItem);
+      expect(find.byType(DownloadsPanel), findsNothing);
+
+      container.read(downloadsPanelRequestProvider.notifier).state++;
+      await t.pumpAndSettle();
+
+      expect(find.byType(DownloadsPanel), findsOneWidget);
       expect(find.text('Mod 1'), findsOneWidget);
     });
 

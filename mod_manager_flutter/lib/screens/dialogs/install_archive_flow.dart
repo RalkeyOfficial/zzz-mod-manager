@@ -18,6 +18,7 @@ import '../../services/mod_manager_service.dart';
 import '../../services/update_apply/mod_activation_port.dart';
 import '../../services/update_apply/update_applier.dart';
 import '../../utils/gamebanana_url.dart';
+import '../../utils/notification_actions.dart';
 import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
 import '../components/extract_failure_message.dart';
@@ -72,6 +73,7 @@ Future<InstallResult> installArchiveFlow(
       return InstallResult.error(
         loc.t('marketplace.install_missing_path_title'),
         loc.t('marketplace.install_missing_path_body'),
+        actions: [openSettingsAction(loc, container)],
       );
     }
 
@@ -108,8 +110,9 @@ Future<InstallResult> installArchiveFlow(
         reason: extractionResult.failure ?? ExtractFailure.other,
         requiredBytes: extractionResult.requiredBytes,
         availableBytes: extractionResult.availableBytes,
+        notify: container.read(notificationsProvider.notifier),
       );
-      return InstallResult.error(lines.title, lines.body);
+      return InstallResult.error(lines.title, lines.body, actions: lines.actions);
     }
     archiveConsumed = true;
 
@@ -253,8 +256,9 @@ Future<InstallResult> installArchiveFlow(
         failure,
         requiredBytes: importResult.requiredBytes,
         availableBytes: importResult.availableBytes,
+        container: container,
       );
-      return InstallResult.error(lines.title, lines.body);
+      return InstallResult.error(lines.title, lines.body, actions: lines.actions);
     }
 
     if (importedMods.isEmpty && decision.writes.isEmpty) {

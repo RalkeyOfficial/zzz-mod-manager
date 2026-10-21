@@ -68,46 +68,63 @@ Future<bool> reinstallFlow(
   // itself, and the profile is the one response that carries archived files as
   // their own list — which is where the version being repaired usually is by
   // now.
-  GbMod? profile;
+  // Up until the download's modal, which carries on from it; a failure to get the file turns it into that error.
+  final fetching = notify.working(
+    loc.t('mods.reinstall.fetching_title'),
+    body: mod.name,
+    characterId: mod.characterId,
+  );
+  var ended = false;
+  void fail(String title, String body) {
+    fetching.update(kind: NotificationKind.error, title: title, body: body);
+    ended = true;
+  }
+
+  final GbFile file;
+  final UpdateWriteRoute route;
   try {
-    profile = await ref.read(gameBananaClientProvider).modProfile(modId);
-  } catch (e) {
-    _log.warning('could not fetch the page to reinstall from',
-        error: e, fields: {'mod': modId, 'file': fileId});
+    GbMod? profile;
+    try {
+      profile = await ref.read(gameBananaClientProvider).modProfile(modId);
+    } catch (e) {
+      _log.warning('could not fetch the page to reinstall from',
+          error: e, fields: {'mod': modId, 'file': fileId});
+    }
+
+    if (!context.mounted) return false;
+
+    // **Two messages, because they are two different situations.** A page that
+    // would not load is worth trying again; a file that is no longer published
+    // never will be, and saying "check your connection" about it would send the
+    // user round a loop that cannot end.
+    if (profile == null) {
+      fail(
+        loc.t('mods.reinstall.offline_title'),
+        loc.t('mods.reinstall.offline_body', params: {'mod': mod.name}),
+      );
+      return false;
+    }
+
+    // GameBanana deletes file ids, so this is the ordinary outcome for a mod the
+    // author has re-uploaded — not an error in anything.
+    final published = fileWithId(profile.allFiles, fileId);
+    if (published == null) {
+      fail(
+        loc.t('mods.reinstall.unavailable_title'),
+        loc.t('mods.reinstall.unavailable_body', params: {'mod': mod.name}),
+      );
+      return false;
+    }
+    file = published;
+
+    // **The same route an update takes**, because the folder can hold a patch
+    // over this download and rewriting the bottom layer has to set it aside and
+    // place it back. Reinstalling with no route would flatten it.
+    route = updateWriteRoute(origin: mod.origin, subjectModId: modId);
+    if (route.kind != UpdateWriteKind.base) return false;
+  } finally {
+    if (!ended) fetching.dismiss();
   }
-
-  if (!context.mounted) return false;
-
-  // **Two messages, because they are two different situations.** A page that
-  // would not load is worth trying again; a file that is no longer published
-  // never will be, and saying "check your connection" about it would send the
-  // user round a loop that cannot end.
-  if (profile == null) {
-    notify.error(
-      loc.t('mods.reinstall.offline_title'),
-      body: loc.t('mods.reinstall.offline_body', params: {'mod': mod.name}),
-      characterId: mod.characterId,
-    );
-    return false;
-  }
-
-  // GameBanana deletes file ids, so this is the ordinary outcome for a mod the
-  // author has re-uploaded — not an error in anything.
-  final file = fileWithId(profile.allFiles, fileId);
-  if (file == null) {
-    notify.error(
-      loc.t('mods.reinstall.unavailable_title'),
-      body: loc.t('mods.reinstall.unavailable_body', params: {'mod': mod.name}),
-      characterId: mod.characterId,
-    );
-    return false;
-  }
-
-  // **The same route an update takes**, because the folder can hold a patch
-  // over this download and rewriting the bottom layer has to set it aside and
-  // place it back. Reinstalling with no route would flatten it.
-  final route = updateWriteRoute(origin: mod.origin, subjectModId: modId);
-  if (route.kind != UpdateWriteKind.base) return false;
 
   return applyUpdateFlow(
     context,

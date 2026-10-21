@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - A download that won't fit is refused before it starts, saying how much is needed and how much is free.
   - Downloads can be cancelled while running.
   - Downloads in the sidebar opens the list of downloads, where a failed one can be retried and finished ones cleared.
-  - One notification shows overall download progress with a progress bar until the last one finishes; with one download, it becomes its "Mod installed" notification.
+  - Each download shows its progress in a notification, "Installing Ellen Swimsuit" with how far it is, which becomes its "Mod installed" notification as it lands. Downloads running at once are stacked into one notification that reads "2 more downloading" and spreads out under the pointer; a failed one leaves the stack as its own notification.
   - A download that has landed says it's unpacking, rather than going quiet between finishing and asking where the mod goes.
 - An archive that won't fit when unpacked is refused before unpacking, saying how much is needed and how much is free. The archive is kept, so clearing space and installing again is all it takes.
 - A mod that won't fit in your mods folder is refused before anything is copied there, saying how much is needed and how much is free.
@@ -116,6 +116,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Repeated notifications are counted on one card, such as "3 mods installed".
 - When an update check finds newer files, its notification has a Review button that opens the Updates page.
 - The notification for an installed mod has an Open button that shows it in the Library.
+- Notifications offer what to do next: Open folder, Copy details on an error, Open Settings when a setting needs fixing, Try again after an update check that couldn't reach some mods, and Open Downloads.
+- Restoring a previous version and taking a patch out have an Undo on their notification.
+- Turning several mods on or off, deleting them, marking them as current, restoring a version, taking a patch out, fetching a mod page for Reinstall, writing an update, and unpacking or patching a dropped mod show a progress notification while they run.
+- A download that fails says so in a notification, with Try again.
 
 ### Changed
 

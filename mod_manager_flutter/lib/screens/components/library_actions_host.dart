@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -149,7 +151,11 @@ class _LibraryActionsHostState extends ConsumerState<LibraryActionsHost> impleme
     await rememberDownloadNamesFrom(ref, outcome.records, writer: widget.originWriter);
     if (!mounted) return;
     if (!wholeLibrary) {
-      showUpdateCheckOutcome(context, outcome);
+      // Only the mods it could not reach: the rest have their answer.
+      showUpdateCheckOutcome(context, outcome, retry: () {
+        if (!mounted) return;
+        unawaited(checkMods([for (final mod in ref.read(modsProvider)) if (outcome.failed.contains(mod.id)) mod]));
+      });
       return;
     }
 
@@ -159,7 +165,10 @@ class _LibraryActionsHostState extends ConsumerState<LibraryActionsHost> impleme
     // some would get a modal after every check.
     final resolution = ref.read(bulkResolutionPlanProvider);
     if (!(onDemand ? resolution.listsAnything : resolution.hasWork)) {
-      showUpdateCheckOutcome(context, outcome);
+      // The whole library again, so the retry counts as the library checked and can open the tracking screen.
+      showUpdateCheckOutcome(context, outcome, retry: () {
+        if (mounted) unawaited(checkForUpdates());
+      });
       return;
     }
     await _showResolution(

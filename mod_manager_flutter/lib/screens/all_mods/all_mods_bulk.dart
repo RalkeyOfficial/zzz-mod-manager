@@ -11,6 +11,7 @@ import '../../services/platform_service.dart' show NetworkLinkRefused;
 import '../../services/shader_fixes/shader_fixes_service.dart';
 import '../../utils/byte_format.dart';
 import '../../utils/categories.dart';
+import '../../utils/notification_actions.dart';
 import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
 import '../components/character_tile.dart';
@@ -65,6 +66,43 @@ void reportSkippedWhileWriting(AppLocalizations loc, NotificationCenter notify, 
 /// The portrait for a report about [mods]: the one mod's character, and none for several.
 String? _soleCharacter(List<ModInfo> mods) => mods.length == 1 ? mods.single.characterId : null;
 
+/// [mods]' names as a card's body says several subjects: "A", "A and B", or "A, B and 3 more".
+String bulkSubjects(AppLocalizations loc, List<ModInfo> mods) => subjectList(loc, [for (final m in mods) m.name]);
+
+/// The Working card a bulk action over [mods] shows while it runs, titled by the counted [key]. Null when there is
+/// nothing to act on.
+NotificationHandle? _working(AppLocalizations loc, NotificationCenter notify, String key, List<ModInfo> mods) =>
+    mods.isEmpty
+        ? null
+        : notify.working(
+            loc.plural(key, mods.length, params: {'count': '${mods.length}'}),
+            body: bulkSubjects(loc, mods),
+            characterId: _soleCharacter(mods),
+            progress: 0,
+          );
+
+/// Ends a bulk action's Working [card]: as the error naming [failed], under the counted [titleKey], or dismissed
+/// when nothing failed. Raised after the action's other notices, so the result is the newest card.
+void _endBulk(
+  AppLocalizations loc,
+  NotificationCenter notify,
+  NotificationHandle? card, {
+  required String titleKey,
+  required List<ModInfo> failed,
+}) {
+  if (failed.isEmpty) {
+    card?.dismiss();
+    return;
+  }
+  final title = loc.plural(titleKey, failed.length, params: {'count': '${failed.length}'});
+  final body = failed.map((m) => m.name).join(', ');
+  if (card == null) {
+    notify.error(title, body: body, characterId: _soleCharacter(failed));
+  } else {
+    card.update(kind: NotificationKind.error, title: title, body: body, characterId: _soleCharacter(failed));
+  }
+}
+
 /// Turns [selected] on, each through `ApiService.enableMod` as the switch does, so a character's other mods go off
 /// under One at a time. Reports only what didn't happen: the table shows what did.
 ///
@@ -85,83 +123,89 @@ Future<void> bulkEnable(BuildContext context, ProviderContainer container, List<
   final refused = <(ModInfo, ShaderPlacementRefused)>[];
   final onNetwork = <ModInfo>[];
   final writing = <ModInfo>[];
-  for (final mod in plan.enable) {
-    if (isBeingWritten(container, mod)) {
-      writing.add(mod);
-      continue;
+  final card = _working(loc, notify, 'library.all.enabling', plan.enable);
+  var ended = false;
+  try {
+    for (final (i, mod) in plan.enable.indexed) {
+      try {
+        if (isBeingWritten(container, mod)) {
+          writing.add(mod);
+          continue;
+        }
+        final switchOff = modsToSwitchOff(
+          library,
+          mod,
+          container.read(oneAtATimeProvider),
+          beingWritten: container.read(modWritesInProgressProvider),
+        );
+        bool done;
+        try {
+          // A mod being written is turned off at once all the same, and its write leaves it off.
+          done = await ApiService.enableMod(
+            mod.id,
+            switchOff: switchOff,
+            whileWritten: (other) => turnOffDuringWrite(container, other),
+          );
+        } on ShaderPlacementRefused catch (refusal) {
+          // Reported with its reason, as the switch reports it: which shader files are taken, and by whom.
+          refused.add((mod, refusal));
+          continue;
+        } on NetworkLinkRefused {
+          onNetwork.add(mod);
+          continue;
+        } catch (e, stack) {
+          _log.warning('bulk enable failed', error: e, stack: stack, fields: {'mod': mod.id});
+          done = false;
+        }
+        if (!done) {
+          failed.add(mod);
+          continue;
+        }
+        library = [
+          for (final m in library)
+            if (m.id == mod.id)
+              m.copyWith(isActive: true)
+            else if (switchOff.contains(m.id))
+              m.copyWith(isActive: false)
+            else
+              m,
+        ];
+      } finally {
+        card?.update(progress: (i + 1) / plan.enable.length);
+      }
     }
-    final switchOff = modsToSwitchOff(
-      library,
-      mod,
-      container.read(oneAtATimeProvider),
-      beingWritten: container.read(modWritesInProgressProvider),
-    );
-    bool done;
-    try {
-      // A mod being written is turned off at once all the same, and its write leaves it off.
-      done = await ApiService.enableMod(
-        mod.id,
-        switchOff: switchOff,
-        whileWritten: (other) => turnOffDuringWrite(container, other),
-      );
-    } on ShaderPlacementRefused catch (refusal) {
-      // Reported with its reason, as the switch reports it: which shader files are taken, and by whom.
-      refused.add((mod, refusal));
-      continue;
-    } on NetworkLinkRefused {
-      onNetwork.add(mod);
-      continue;
-    } catch (e, stack) {
-      _log.warning('bulk enable failed', error: e, stack: stack, fields: {'mod': mod.id});
-      done = false;
-    }
-    if (!done) {
-      failed.add(mod);
-      continue;
-    }
-    library = [
-      for (final m in library)
-        if (m.id == mod.id)
-          m.copyWith(isActive: true)
-        else if (switchOff.contains(m.id))
-          m.copyWith(isActive: false)
-        else
-          m,
-    ];
-  }
-  await container.read(libraryProvider.notifier).rescan();
+    await container.read(libraryProvider.notifier).rescan();
 
-  // One notice for every mod the missing shader folder kept off, since the reason is the same for each; a mod whose
-  // shader files are taken gets its own, naming the files and who holds them.
-  final noFolder = [for (final (mod, refusal) in refused) if (refusal.noShaderFolder) mod];
-  if (noFolder.length > 1) {
-    notify.error(
-      loc.t('mods.shader_fixes.no_folder_title'),
-      body: loc.t('mods.shader_fixes.no_folder_body_many', params: {'mods': noFolder.map((m) => m.name).join(', ')}),
-    );
+    // One notice for every mod the missing shader folder kept off, since the reason is the same for each; a mod
+    // whose shader files are taken gets its own, naming the files and who holds them.
+    final noFolder = [for (final (mod, refusal) in refused) if (refusal.noShaderFolder) mod];
+    if (noFolder.length > 1) {
+      notify.error(
+        loc.t('mods.shader_fixes.no_folder_title'),
+        body: loc.t('mods.shader_fixes.no_folder_body_many', params: {'mods': noFolder.map((m) => m.name).join(', ')}),
+        actions: [openSettingsAction(loc, container)],
+      );
+    }
+    for (final (mod, refusal) in refused) {
+      if (refusal.noShaderFolder && noFolder.length > 1) continue;
+      reportShaderRefusal(loc, notify, refusal, characterId: mod.characterId, container: container);
+    }
+    // One notice for all of them, since the reason is the same for each.
+    if (onNetwork.isNotEmpty) reportNetworkLinkRefused(loc, notify, onNetwork.map((m) => m.name));
+    if (plan.leftOff.isNotEmpty) {
+      notify.warning(
+        loc.t('library.all.enable_left_off_title'),
+        body: loc.t('library.all.enable_left_off_body', params: {
+          'names': plan.leftOff.keys.map((id) => libraryGroupName(id, loc)).join(', '),
+        }),
+      );
+    }
+    reportSkippedWhileWriting(loc, notify, writing);
+    _endBulk(loc, notify, card, titleKey: 'library.all.enable_failed_title', failed: failed);
+    ended = true;
+  } finally {
+    if (!ended) card?.dismiss();
   }
-  for (final (mod, refusal) in refused) {
-    if (refusal.noShaderFolder && noFolder.length > 1) continue;
-    reportShaderRefusal(loc, notify, refusal, characterId: mod.characterId);
-  }
-  // One notice for all of them, since the reason is the same for each.
-  if (onNetwork.isNotEmpty) reportNetworkLinkRefused(loc, notify, onNetwork.map((m) => m.name));
-  if (failed.isNotEmpty) {
-    notify.error(
-      loc.plural('library.all.enable_failed_title', failed.length, params: {'count': '${failed.length}'}),
-      body: failed.map((m) => m.name).join(', '),
-      characterId: _soleCharacter(failed),
-    );
-  }
-  if (plan.leftOff.isNotEmpty) {
-    notify.warning(
-      loc.t('library.all.enable_left_off_title'),
-      body: loc.t('library.all.enable_left_off_body', params: {
-        'names': plan.leftOff.keys.map((id) => libraryGroupName(id, loc)).join(', '),
-      }),
-    );
-  }
-  reportSkippedWhileWriting(loc, notify, writing);
 }
 
 /// Turns [selected] off. Reports only a failure.
@@ -172,29 +216,31 @@ Future<void> bulkDisable(BuildContext context, ProviderContainer container, List
   _log.info('bulk disable', fields: {'mods': on.length});
   final failed = <ModInfo>[];
   final writing = <ModInfo>[];
-  for (final mod in on) {
-    if (isBeingWritten(container, mod)) {
-      writing.add(mod);
-      continue;
+  final card = _working(loc, notify, 'library.all.disabling', on);
+  var ended = false;
+  try {
+    for (final (i, mod) in on.indexed) {
+      if (isBeingWritten(container, mod)) {
+        writing.add(mod);
+      } else {
+        bool done;
+        try {
+          done = await ApiService.disableMod(mod.id);
+        } catch (e, stack) {
+          _log.warning('bulk disable failed', error: e, stack: stack, fields: {'mod': mod.id});
+          done = false;
+        }
+        if (!done) failed.add(mod);
+      }
+      card?.update(progress: (i + 1) / on.length);
     }
-    bool done;
-    try {
-      done = await ApiService.disableMod(mod.id);
-    } catch (e, stack) {
-      _log.warning('bulk disable failed', error: e, stack: stack, fields: {'mod': mod.id});
-      done = false;
-    }
-    if (!done) failed.add(mod);
+    await container.read(libraryProvider.notifier).rescan();
+    reportSkippedWhileWriting(loc, notify, writing);
+    _endBulk(loc, notify, card, titleKey: 'library.all.disable_failed_title', failed: failed);
+    ended = true;
+  } finally {
+    if (!ended) card?.dismiss();
   }
-  await container.read(libraryProvider.notifier).rescan();
-  if (failed.isNotEmpty) {
-    notify.error(
-      loc.plural('library.all.disable_failed_title', failed.length, params: {'count': '${failed.length}'}),
-      body: failed.map((m) => m.name).join(', '),
-      characterId: _soleCharacter(failed),
-    );
-  }
-  reportSkippedWhileWriting(loc, notify, writing);
 }
 
 /// Asks, then deletes [selected] and every saved version of them, as the single delete does. Returns whether it
@@ -223,37 +269,39 @@ Future<bool> bulkDelete(BuildContext context, ProviderContainer container, List<
 
   final failed = <ModInfo>[];
   final writing = <ModInfo>[];
-  for (final mod in selected) {
-    if (isBeingWritten(container, mod)) {
-      writing.add(mod);
-      continue;
+  final card = _working(loc, notify, 'library.all.deleting', selected);
+  var ended = false;
+  try {
+    for (final (i, mod) in selected.indexed) {
+      if (isBeingWritten(container, mod)) {
+        writing.add(mod);
+      } else {
+        logConfirmation('mod.delete', accepted: true, subject: mod.id);
+        bool done;
+        try {
+          done = await ApiService.deleteMod(mod.id);
+        } catch (e, stack) {
+          _log.warning('bulk delete failed', error: e, stack: stack, fields: {'mod': mod.id});
+          done = false;
+        }
+        if (!done) failed.add(mod);
+      }
+      card?.update(progress: (i + 1) / selected.length);
     }
-    logConfirmation('mod.delete', accepted: true, subject: mod.id);
-    bool done;
-    try {
-      done = await ApiService.deleteMod(mod.id);
-    } catch (e, stack) {
-      _log.warning('bulk delete failed', error: e, stack: stack, fields: {'mod': mod.id});
-      done = false;
-    }
-    if (!done) failed.add(mod);
-  }
-  final deleted = {for (final mod in selected) if (!failed.contains(mod) && !writing.contains(mod)) mod.id};
-  final selectedMod = container.read(selectedModIdProvider.notifier);
-  if (deleted.contains(selectedMod.state)) selectedMod.state = null;
-  final selection = container.read(allModsSelectionProvider.notifier);
-  selection.state = selection.state.difference(deleted);
-  container.invalidate(modBackupsProvider);
-  await container.read(libraryProvider.notifier).rescan();
+    final deleted = {for (final mod in selected) if (!failed.contains(mod) && !writing.contains(mod)) mod.id};
+    final selectedMod = container.read(selectedModIdProvider.notifier);
+    if (deleted.contains(selectedMod.state)) selectedMod.state = null;
+    final selection = container.read(allModsSelectionProvider.notifier);
+    selection.state = selection.state.difference(deleted);
+    container.invalidate(modBackupsProvider);
+    await container.read(libraryProvider.notifier).rescan();
 
-  if (failed.isNotEmpty) {
-    notify.error(
-      loc.plural('library.all.delete_failed_title', failed.length, params: {'count': '${failed.length}'}),
-      body: failed.map((m) => m.name).join(', '),
-      characterId: _soleCharacter(failed),
-    );
+    reportSkippedWhileWriting(loc, notify, writing);
+    _endBulk(loc, notify, card, titleKey: 'library.all.delete_failed_title', failed: failed);
+    ended = true;
+  } finally {
+    if (!ended) card?.dismiss();
   }
-  reportSkippedWhileWriting(loc, notify, writing);
   return true;
 }
 

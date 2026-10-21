@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gb_exceptions.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_update.dart';
@@ -178,6 +180,54 @@ void main() {
 
     expect(container.read(knownModPagesProvider)[1]?.name, 'Ellen Swimsuit');
     expect(container.read(modUpdateRecordsProvider).keys, [1], reason: 'no record added for a page it did not hold');
+  });
+
+  testWidgets('a check that could not reach GameBanana offers Try again, which checks the library again', (tester) async {
+    await pumpHost(tester);
+    await startCheck(tester);
+    response.completeError(const SocketException('offline'));
+    await tester.pumpAndSettle();
+    expect(find.text('Try again'), findsOneWidget);
+
+    response = Completer();
+    await tester.tap(find.text('Try again'));
+    await tester.pump();
+    expect(fetches, 2);
+    expect(container.read(libraryCheckRunningProvider), isTrue);
+
+    answer();
+    await tester.pumpAndSettle();
+    expect(container.read(modUpdateChecksProvider)['stale']?.outcome, UpdateOutcome.updateAvailable);
+  });
+
+  testWidgets("Try again after checking some mods checks them again, still not as the library's check", (tester) async {
+    await pumpHost(tester);
+    final actions = LibraryActionsHost.of(tester.element(find.byType(AllModsView)));
+    unawaited(actions.checkMods([library.first]));
+    await tester.pump();
+    response.completeError(const SocketException('offline'));
+    await tester.pumpAndSettle();
+
+    response = Completer();
+    await tester.tap(find.text('Try again'));
+    await tester.pump();
+    expect(fetches, 2);
+    answer();
+    await tester.pumpAndSettle();
+
+    expect(container.read(modUpdateChecksProvider)['stale']?.outcome, UpdateOutcome.updateAvailable);
+    expect(container.read(modUpdateRecordsProvider), isEmpty);
+    expect(container.read(libraryCheckedAtProvider), isNull);
+  });
+
+  testWidgets('a check stopped by the rate limit offers no Try again', (tester) async {
+    await pumpHost(tester);
+    await startCheck(tester);
+    response.completeError(const GbRateLimitException('slow down'));
+    await tester.pumpAndSettle();
+    expect(find.text("1 mod couldn't be checked"), findsOneWidget);
+    expect(find.text('Try again'), findsNothing);
+    await tester.pump(const Duration(seconds: 9));
   });
 
   testWidgets('while it runs, nothing can start another', (tester) async {

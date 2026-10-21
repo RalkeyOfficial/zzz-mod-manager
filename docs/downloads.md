@@ -406,16 +406,19 @@ transfer has no modal to *be* its progress report, and a download nobody can see
 is one the user assumes failed — so the report sits in the foreground without
 blocking it.
 
-- **One card for the whole queue, never one per download.** A card per job turns a five-mod queue into a wall that folds away the messages that actually need reading. The card carries the aggregate (`aggregateProgress`); the panel is where the per-mod breakdown is.
-- **A Working card, because the end of a download is an event rather than a moment.** It has no clock; its bar is the queue's `QueueProgress.fraction`, and a sweep while any job's size is unknown. The **body** is the stable subject and the title is rewritten each tick.
-- **One download's card turns into its result.** When the card covered a single job, that job's "Mod installed", saved archive or failure takes the card over in place rather than raising a second card.
-  When it covered several, it is dismissed when the queue empties, and the installs count on one card of their own: "3 mods installed".
-- **A percentage, not two byte counts.** The card's title has no `maxLines`, and `5.0 MB / 21.9 MB · 14 MB/s · 2m left` costs a second line on a 380px card while saying less than `24%` does in a quarter of the width.
-- **The ETA is the queue's, not any one job's** — remaining bytes over the *combined* rate, because the queue finishes when the last byte lands.
-- **A count-bearing card gets no portrait**, the same rule the bulk reports follow: one arbitrary face would claim the message is about that mod, and which mod sorted first would change between runs. One download still gets its own.
-- **Hiding it sticks.** Its close button reads "Hide", and the card is *raised* only when a job it has not covered appears and merely *updated* thereafter.
-  A card re-raised on the next progress tick would override the user; hiding it therefore holds until they ask for something else, which is itself a request to be told about it.
-  A hidden card covering one job still comes back as that job's result, since hiding the progress never hides the outcome.
+- **One card per download, dealt into one deck.** Every download's card joins the `downloads` deck (`notifications.md` §5), which the stack draws as one slot: the oldest download's card in front, "2 more downloading" as its last line, and the edges of up to two more above it. So a five-mod queue never takes every visible slot and folds an error under "+N more", and the notification doesn't change shape with the count: one download and five look the same. Hovering the deck spreads it into every download's card; the panel keeps the per-file view, speeds included.
+- **A Working card, because the end of a download is an event rather than a moment.** It has no clock; its bar is that download's own share (`aggregateProgress` of the one job), and a sweep while its size is unknown.
+  As the canvas draws it, the **title** names the download and stays ("Installing Victorian Ballgown", "Downloading …" for one kept as an archive or written by the update flow), and the **body** says where it is: "Waiting for a free slot", "Connecting...", "Downloading · 64.0 MB of 214.0 MB", then "Unpacking". Its portrait is the download's character.
+- **Each download's card turns into its result as it lands**, without waiting for the rest of the queue. Its "Mod installed" or saved archive (with Open folder) takes the card over in place and is dealt on top of the deck, leaving on its own clock while the next card comes up; installs finishing in turn are counted on one card, "2 mods installed".
+  What an install must still say, such as a patch or a missing `.ini`, is its own card beside the deck, raised before the result.
+- **A failure leaves the deck as its own card.** The download's card becomes its Error and the stack shows it beside the deck, since a failure has to be read. A warning or a note an install ends in (an archive with no mod folder, every folder already in the library) leaves the same way, and so will a download that waits for a decision, as a Needs you card. Nothing waits yet: today an install's question is a dialog the queue stops for, and the Downloads panel's "Needs your attention" group is what will make waiting a state.
+- **A failed transfer is said on a card.** "Couldn't download the mod" with the download's name, Try again when its panel row would offer a retry, and Open Downloads for the reason, which the row holds. The download's own card becomes it.
+  Only a download that had a card: one that failed as it was queued (a link that won't parse) is reported by the button that queued it, a download the update flow owns by that flow, and an install failure, Open Downloads beside it, where the install ran.
+- **A download that leaves the queue without a result takes its card with it**: one cancelled, and one the update flow owns once its bytes are handed over, since that flow reports it.
+- **No speed or time left on the card.** The canvas puts the bytes under the title and the share in the bar; the rate and the ETA are in the panel's rows.
+- **Hiding it sticks.** Its close button reads "Hide": on the deck at rest it hides every download in the deck, and spread it hides that one. A card is *raised* when its download becomes active and merely *updated* thereafter.
+  A card re-raised on the next progress tick would override the user; hiding therefore holds for the downloads hidden, while a new download raises its own card, which is itself a request to be told about it.
+  A hidden card still comes back as its result, since hiding the progress never hides the outcome; a new download joining the deck changes nothing about the ones hidden.
 
 This is also why the stack's backstop drops the oldest card **with a clock** rather than simply the oldest: an update to a Working card that has been dropped is a no-op, so dropping one silently throws away the only report of the work it was tracking. See `notifications.md` §7.
 
@@ -423,7 +426,8 @@ This is also why the stack's backstop drops the oldest card **with a clock** rat
 
 `DownloadsNavItem`, the sidebar's **Downloads** row, opening `DownloadsPanel` in a `MenuAnchor` beside the sidebar. The row is always there, under Browse.
 Its count is the jobs still running or waiting, never a finished one, and with no job in flight a failure turns its icon into a warning so the failure can be found and read. A cancel does not, since it is what the user asked for.
-Overall progress is the Working notification's job, not the row's. In the sidebar rather than on a page because a transfer outlives the page that started it, so it cannot belong to one.
+Overall progress is the Working notifications' job, not the row's. In the sidebar rather than on a page because a transfer outlives the page that started it, so it cannot belong to one.
+A card's Open Downloads opens the panel through `downloadsPanelRequestProvider`, which the row answers. A `MenuAnchor` paints in the page's overlay, so with a dialog up the panel opens behind its barrier.
 
 - **Finished rows stay until they are cleared.** A row that vanished on its own
   would take the only record of a failure with it.

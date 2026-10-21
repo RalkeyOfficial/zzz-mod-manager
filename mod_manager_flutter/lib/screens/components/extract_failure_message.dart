@@ -1,7 +1,10 @@
+import 'package:path/path.dart' as p;
+
 import '../../l10n/app_localizations.dart';
-import '../../models/app_notification.dart';
 import '../../services/archive_service.dart';
 import '../../utils/byte_format.dart';
+import '../../utils/notification_actions.dart';
+import '../../utils/notifications.dart';
 
 /// What to say when an archive could not be unpacked.
 ///
@@ -19,13 +22,21 @@ import '../../utils/byte_format.dart';
 /// download is fine and the fix is to install a tool, which the generic wording
 /// ("the file is still at …, extract it by hand") actively steers away from by
 /// implying the app has done all it can.
+///
+/// Every wording says the archive is still where it was, so with [notify] the card offers Open folder on the folder
+/// it is in. [notify] reports that button's own failure.
 NotificationLines extractFailureMessage(
   AppLocalizations loc, {
   required String archivePath,
   ExtractFailure reason = ExtractFailure.other,
   int? requiredBytes,
   int? availableBytes,
+  NotificationCenter? notify,
 }) {
+  final actions = [
+    if (notify != null) openFolderAction(loc, notify, p.dirname(archivePath)),
+  ];
+
   // Its own branch rather than a third key in the switch: it is the one reason
   // whose body is numbers rather than the archive's path, and it says the
   // archive is still there in the same breath — nothing was written, so
@@ -41,6 +52,7 @@ NotificationLines extractFailureMessage(
         'path': archivePath,
       }),
       kind: NotificationKind.error,
+      actions: actions,
     );
   }
 
@@ -55,5 +67,6 @@ NotificationLines extractFailureMessage(
     loc.t('${key}_title'),
     loc.t('${key}_body', params: {'path': archivePath}),
     kind: NotificationKind.error,
+    actions: actions,
   );
 }

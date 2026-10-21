@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_localizations.dart';
 import '../models/character_info.dart';
 import 'gamebanana_url.dart';
+import 'notification_actions.dart';
 import 'notifications.dart';
 
 /// Opens [url] in the default external browser, validating the scheme and
@@ -25,7 +26,8 @@ Future<void> launchExternalUrl(BuildContext context, String url) async {
   try {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   } catch (e) {
-    notify.error(loc.t('mods.errors.generic_title'), body: e.toString());
+    final title = loc.t('mods.errors.generic_title');
+    notify.error(title, body: '$e', actions: [copyDetailsAction(loc, notify, title: title, body: '$e')]);
   }
 }
 

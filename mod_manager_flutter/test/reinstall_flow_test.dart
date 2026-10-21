@@ -6,6 +6,7 @@ import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/dialogs/reinstall_flow.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_client.dart';
+import 'package:mod_manager_flutter/utils/notifications.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
 import 'support/fake_http_transport.dart';
@@ -54,7 +55,19 @@ void main() {
         fileId: fileId,
       );
 
-  Future<void> press(WidgetTester tester, ModInfo mod) async {
+  /// Every card raised while the flow ran, in every state it was in.
+  late List<AppNotification> raised;
+
+  Future<ProviderContainer> press(WidgetTester tester, ModInfo mod) async {
+    final container = ProviderContainer(overrides: [
+      gameBananaClientProvider.overrideWithValue(
+        GameBananaClient(transport: http, maxRetries: 0),
+      ),
+      ...library.overrides,
+    ]);
+    addTearDown(container.dispose);
+    raised = [];
+    container.listen(notificationsProvider, (_, next) => raised.addAll(next));
     await pumpLocalized(
       tester,
       Consumer(
@@ -65,15 +78,11 @@ void main() {
           child: const Text('open'),
         ),
       ),
-      overrides: [
-        gameBananaClientProvider.overrideWithValue(
-          GameBananaClient(transport: http, maxRetries: 0),
-        ),
-        ...library.overrides,
-      ],
+      container: container,
     );
     expectBuilt(ElevatedButton);
     await tapWithIo(tester, find.text('open'));
+    return container;
   }
 
   testWidgets('a file the page no longer carries is refused, not substituted',
@@ -130,6 +139,31 @@ void main() {
     expect(changed, isFalse);
     expect(find.text("Couldn't reach GameBanana"), findsOneWidget,
         reason: 'this one is worth trying again, and the other never is');
+  });
+
+  testWidgets('getting the page shows a Working card, which becomes the error with no second card', (tester) async {
+    http = FakeHttpTransport()..enqueueError(profileUrl, const SocketFailure());
+
+    final container = await press(tester, modWith(tracked(fileId: 1732269)));
+
+    final working = raised.where((n) => n.kind == NotificationKind.working).toList();
+    expect(working.map((n) => n.title), contains('Getting the mod page…'));
+    expect(working.first.body, 'RabbitFX');
+    final card = container.read(notificationsProvider).single;
+    expect(card.kind, NotificationKind.error);
+    expect(card.title, "Couldn't reach GameBanana");
+    expect(card.id, working.first.id, reason: 'the Working card became the error');
+  });
+
+  testWidgets('the Working card is down once the update takes over', (tester) async {
+    // The page carries the file, so the flow hands it on; the folder is not on disk, which is where the update
+    // stops, before any download.
+    final container = await press(tester, modWith(tracked(fileId: 1732269)));
+
+    expect(raised.map((n) => n.title), contains('Getting the mod page…'));
+    final cards = container.read(notificationsProvider);
+    expect(cards.where((n) => n.kind == NotificationKind.working), isEmpty);
+    expect(cards.single.title, 'The mod is no longer there');
   });
 }
 

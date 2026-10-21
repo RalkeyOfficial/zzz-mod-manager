@@ -46,6 +46,7 @@ library;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_localizations.dart';
 import '../models/app_notification.dart';
 import '../services/log/log_level.dart';
 import '../services/log/logger.dart';
@@ -60,6 +61,18 @@ LogLevel _levelFor(NotificationKind kind) => switch (kind) {
       NotificationKind.warning => LogLevel.warning,
       _ => LogLevel.info,
     };
+
+/// The subjects of a card about several, "A", "A and B", "A, B and 3 more": the body of a counted card and of a
+/// Working card over several mods.
+String subjectList(AppLocalizations loc, List<String> names) {
+  if (names.length < 2) return names.join();
+  if (names.length == 2) {
+    return loc.t('notifications.subjects_two', params: {'first': names[0], 'second': names[1]});
+  }
+  final more = names.length - 2;
+  return loc.plural('notifications.subjects_more', more,
+      params: {'first': names[0], 'second': names[1], 'count': '$more'});
+}
 
 /// The notification stack, oldest first. List order is stack order: the newest is drawn at the bottom.
 final notificationsProvider = NotifierProvider<NotificationCenter, List<AppNotification>>(NotificationCenter.new);
@@ -82,7 +95,8 @@ class NotificationHandle {
   /// Rewrites it. Every parameter is optional and unspecified means unchanged.
   ///
   /// Changing [kind] turns the card into its result: the bar goes, the clock is the new kind's, and the card moves
-  /// to the newest place, so a result raised after its warnings still ends the burst.
+  /// to the newest place, so a result raised after its warnings still ends the burst. A result other than Done
+  /// leaves the card's deck.
   void update({
     NotificationKind? kind,
     String? title,
@@ -149,6 +163,7 @@ class NotificationCenter extends Notifier<List<AppNotification>> {
     String? keycap,
     bool stays = false,
     NotificationRepeat? repeat,
+    NotificationDeck? deck,
   }) {
     if (repeat != null) {
       final index = state.indexWhere((n) => n.kind == kind && n.repeat?.key == repeat.key);
@@ -166,6 +181,7 @@ class NotificationCenter extends Notifier<List<AppNotification>> {
       actions: actions,
       keycap: keycap,
       stays: stays,
+      deck: deck,
     );
     final notification = repeat == null ? raised : _counted(raised, repeat, repeat.subjects);
     _logRaise(notification);
@@ -198,6 +214,7 @@ class NotificationCenter extends Notifier<List<AppNotification>> {
       repeat: repeat,
       count: count,
       subjects: subjects,
+      deck: card.deck,
     );
   }
 
@@ -242,14 +259,16 @@ class NotificationCenter extends Notifier<List<AppNotification>> {
     return kept;
   }
 
+  /// [deck] deals it into one slot with the other Working cards of that deck, such as the downloads running at once.
   NotificationHandle working(String title,
           {required String body,
           String? characterId,
           IconData? icon,
           double? progress,
-          List<NotificationAction> actions = const []}) =>
+          List<NotificationAction> actions = const [],
+          NotificationDeck? deck}) =>
       show(NotificationKind.working, title,
-          body: body, characterId: characterId, icon: icon, progress: progress, actions: actions);
+          body: body, characterId: characterId, icon: icon, progress: progress, actions: actions, deck: deck);
 
   NotificationHandle done(String title,
           {required String body,
@@ -360,6 +379,8 @@ class NotificationCenter extends Notifier<List<AppNotification>> {
       clearCharacterId: clearCharacterId,
       clearIcon: clearIcon,
       clearProgress: clearProgress || nextKind != NotificationKind.working,
+      // A failure or a question is read on its own, so it leaves the deck as a card of its own.
+      clearDeck: nextKind != NotificationKind.working && nextKind != NotificationKind.done,
     );
 
     if (repeat != null) {

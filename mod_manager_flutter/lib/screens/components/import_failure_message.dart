@@ -1,7 +1,10 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../l10n/app_localizations.dart';
 import '../../models/app_notification.dart';
 import '../../services/import_result.dart';
 import '../../utils/byte_format.dart';
+import '../../utils/notification_actions.dart';
 
 /// What to say when an import installed nothing.
 ///
@@ -13,11 +16,14 @@ import '../../utils/byte_format.dart';
 ///
 /// Only the space case has numbers, and it needs them: "not enough space"
 /// without a figure leaves the user guessing how much to clear.
+///
+/// With [container], a library that is not set offers Open Settings, where it is chosen.
 NotificationLines importFailureMessage(
   AppLocalizations loc,
   ImportFailure failure, {
   int? requiredBytes,
   int? availableBytes,
+  ProviderContainer? container,
 }) {
   if (failure == ImportFailure.notEnoughSpace &&
       requiredBytes != null &&
@@ -40,5 +46,12 @@ NotificationLines importFailureMessage(
     ImportFailure.copyFailed => 'mods.import_failed.copy',
     ImportFailure.nothingUsable => 'mods.import_failed.nothing',
   };
-  return NotificationLines(loc.t('${key}_title'), loc.t('${key}_body'), kind: NotificationKind.error);
+  return NotificationLines(
+    loc.t('${key}_title'),
+    loc.t('${key}_body'),
+    kind: NotificationKind.error,
+    actions: [
+      if (failure == ImportFailure.libraryNotConfigured && container != null) openSettingsAction(loc, container),
+    ],
+  );
 }

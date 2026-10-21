@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gb_exceptions.dart';
 import 'package:mod_manager_flutter/screens/components/update_check_feedback.dart';
 import 'package:mod_manager_flutter/services/bulk_update_check.dart';
 import 'package:mod_manager_flutter/services/update_check.dart';
@@ -18,7 +21,12 @@ void main() {
   setUp(() => container = ProviderContainer());
   tearDown(() => container.dispose());
 
-  BulkUpdateCheckOutcome outcome({int found = 0, int upToDate = 0, Set<String> failed = const {}}) =>
+  BulkUpdateCheckOutcome outcome({
+    int found = 0,
+    int upToDate = 0,
+    Set<String> failed = const {},
+    Object? abortedBy,
+  }) =>
       BulkUpdateCheckOutcome(
         checks: {
           for (var i = 0; i < found; i++) 'new $i': const UpdateCheck(outcome: UpdateOutcome.updateAvailable),
@@ -26,14 +34,15 @@ void main() {
         },
         failed: failed,
         requests: 1,
+        abortedBy: abortedBy,
       );
 
-  Future<void> report(WidgetTester tester, BulkUpdateCheckOutcome outcome) async {
+  Future<void> report(WidgetTester tester, BulkUpdateCheckOutcome outcome, {VoidCallback? retry}) async {
     await pumpLocalized(
       tester,
       Builder(
         builder: (context) => ElevatedButton(
-          onPressed: () => showUpdateCheckOutcome(context, outcome),
+          onPressed: () => showUpdateCheckOutcome(context, outcome, retry: retry),
           child: const Text('report'),
         ),
       ),
@@ -59,6 +68,37 @@ void main() {
     await report(tester, outcome(upToDate: 3, failed: {'a'}));
     expect(raised().single.kind, NotificationKind.warning);
     expect(raised().single.actions, isEmpty);
+    await tester.pump(const Duration(seconds: 9));
+  });
+
+  testWidgets('with some mods unreached, Try again runs the check again', (tester) async {
+    var retries = 0;
+    await report(tester, outcome(upToDate: 3, failed: {'a'}, abortedBy: const SocketException('offline')),
+        retry: () => retries++);
+    expect(raised().single.actions.map((a) => a.label), ['Try again']);
+
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+    expect(retries, 1);
+  });
+
+  testWidgets('an Update card with mods unreached keeps Review first and Try again second', (tester) async {
+    await report(tester, outcome(found: 1, failed: {'a'}), retry: () {});
+    expect(raised().single.actions.map((a) => a.label), ['Review', 'Try again']);
+    await tester.pump(const Duration(seconds: 9));
+  });
+
+  testWidgets('a check stopped by the rate limit offers no Try again', (tester) async {
+    await report(tester, outcome(upToDate: 3, failed: {'a'}, abortedBy: const GbRateLimitException('slow down')),
+        retry: () {});
+    expect(raised().single.kind, NotificationKind.warning);
+    expect(raised().single.actions, isEmpty);
+    await tester.pump(const Duration(seconds: 9));
+  });
+
+  testWidgets('a check that reached every mod offers no Try again', (tester) async {
+    await report(tester, outcome(found: 1, upToDate: 2), retry: () {});
+    expect(raised().single.actions.map((a) => a.label), ['Review']);
     await tester.pump(const Duration(seconds: 9));
   });
 

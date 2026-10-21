@@ -23,6 +23,7 @@ import '../services/platform_service.dart' show NetworkLinkRefused;
 import '../services/shader_fixes/shader_fixes_service.dart';
 import '../services/update_apply/mod_activation_port.dart';
 import '../services/update_apply/update_applier.dart';
+import '../utils/notification_actions.dart';
 import '../utils/notifications.dart';
 import '../utils/state_providers.dart';
 import 'components/folder_downloads_summary.dart';
@@ -374,7 +375,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
         ]);
       }
     } on ShaderPlacementRefused catch (refusal) {
-      reportShaderRefusal(loc, notify, refusal, characterId: mod.characterId);
+      reportShaderRefusal(loc, notify, refusal, characterId: mod.characterId, container: container);
       // The dry run passed and the enable was still refused, possibly after
       // the character's other mods were turned off: the cards must show that.
       await reload();
@@ -382,7 +383,12 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       reportNetworkLinkRefused(loc, notify, [mod.name], characterId: mod.characterId);
       await reload();
     } catch (e) {
-      notify.error(loc.t('mods.errors.generic_title'), body: e.toString(), characterId: mod.characterId);
+      final title = loc.t('mods.errors.generic_title');
+      final library = container.read(modsPathProvider);
+      notify.error(title, body: e.toString(), characterId: mod.characterId, actions: [
+        if (library.isNotEmpty) openFolderAction(loc, notify, path.join(library, mod.id)),
+        copyDetailsAction(loc, notify, title: title, body: e.toString()),
+      ]);
       await reload();
     }
   }
@@ -412,10 +418,13 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        context.notify.error(
-          loc.t('mods.errors.generic_title'),
+        final notify = context.notify;
+        final title = loc.t('mods.errors.generic_title');
+        notify.error(
+          title,
           body: e.toString(),
           characterId: mod.characterId,
+          actions: [copyDetailsAction(loc, notify, title: title, body: e.toString())],
         );
       }
     }
@@ -433,10 +442,12 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       );
     } catch (e) {
       if (!mounted) return;
+      final title = loc.t('mods.errors.generic_title');
       notify.error(
-        loc.t('mods.errors.generic_title'),
+        title,
         body: e.toString(),
         characterId: mod.characterId,
+        actions: [copyDetailsAction(loc, notify, title: title, body: e.toString())],
       );
     }
   }
@@ -971,6 +982,11 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
   Future<void> _importModsFromFolders(List<XFile> files) async {
     if (_isOperationInProgress) return;
     final container = ProviderScope.containerOf(context, listen: false);
+    // Captured, so the Working cards below end even if the page is gone by then.
+    final notify = context.notify;
+    final loc = this.loc;
+    NotificationHandle? unpacking;
+    NotificationHandle? applying;
 
     setState(() {
       _isOperationInProgress = true;
@@ -988,6 +1004,27 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       final archivesToExtract = <XFile>[];
       final successfullyExtractedArchives = <String>[];
       final tempFoldersToCleanup = <String>[];
+
+      // Deletes the temp extract dirs (zzz_archive_extract_*). Every archive is
+      // unpacked before the first duplicate question, so each return after the
+      // unpacking has temp dirs to clean up, a declined duplicate's included.
+      Future<void> cleanupTempFolders() async {
+        for (final tempPath in tempFoldersToCleanup) {
+          try {
+            final tempDir = Directory(tempPath);
+            if (await tempDir.exists()) {
+              final parentDir = tempDir.parent;
+              if (parentDir.path.contains('zzz_archive_extract_')) {
+                await parentDir.delete(recursive: true);
+              }
+            }
+          } catch (e) {
+            _files.debug('temp cleanup failed',
+                fields: {'path': tempPath, 'reason': '$e'});
+          }
+        }
+      }
+
       // Extracted-folder path -> originating archive base name, used as an extra
       // character-detection hint (the character is often in the archive name).
       final detectionHints = <String, String>{};
@@ -1023,76 +1060,78 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
         _log.info('extracting dropped archives',
             fields: {'archives': archivesToExtract.length});
 
-        for (final archiveFile in archivesToExtract) {
+        // **Every archive is unpacked before any is asked about**, so the card for the wait is down before the
+        // duplicate question opens rather than over it.
+        final total = archivesToExtract.length;
+        unpacking = notify.working(
+          loc.plural('mods.import_working.unpacking', total, params: {'count': '$total'}),
+          body: subjectList(loc, [for (final archive in archivesToExtract) archive.name]),
+          progress: total == 1 ? null : 0,
+        );
+        final extracted = <(XFile, ArchiveExtractionResult)>[];
+        for (var i = 0; i < total; i++) {
+          final archiveFile = archivesToExtract[i];
           final file = File(archiveFile.path);
 
           if (!await file.exists()) {
             _log.warning('dropped file is gone',
                 fields: {'path': archiveFile.path});
-            continue;
-          }
-
-          final result = await ArchiveService.extractArchive(archiveFile: file);
-
-          if (result.success && result.extractedFolders != null) {
-            // Per archive, not per drop: one drop can mix several archives, and
-            // recognising one of them as a duplicate says nothing about the rest.
-            // Declining drops this archive's folders and leaves the others alone;
-            // its temp dir is cleaned up with the others below, since it is
-            // registered for cleanup either way.
-            if (!mounted) return;
-            tempFoldersToCleanup.addAll(result.extractedFolders!);
-            if (!await confirmArchiveNotDuplicate(
-              context,
-              ref,
-              result.archiveMd5,
-            )) {
-              declinedDuplicate = true;
-              continue;
-            }
-            folderPaths.addAll(result.extractedFolders!);
-            shaderSources.addAll(result.shaderSources);
-            successfullyExtractedArchives.add(archiveFile.path);
-            final archiveBaseName = path.basenameWithoutExtension(
-              archiveFile.path,
-            );
-            for (final folder in result.extractedFolders!) {
-              detectionHints[folder] = archiveBaseName;
-              originSeeds[folder] = ModOriginSeed.importedArchive(
-                archiveMd5: result.archiveMd5,
-              );
-            }
-            // The archive service already logged the result with the folder
-            // count and how long it took.
           } else {
-            if (mounted) {
-              context.notify.error(
-                loc.t('mods.snackbar.import_error_title'),
-                body: '${archiveFile.name}: ${result.error}',
-              );
-            }
-          }
-        }
-      }
-
-      // Deletes the temp extract dirs (zzz_archive_extract_*). Declared before
-      // the early return below, not after it: an archive the user declined as a
-      // duplicate was already extracted, so that return path has temp dirs to
-      // clean up too.
-      Future<void> cleanupTempFolders() async {
-        for (final tempPath in tempFoldersToCleanup) {
-          try {
-            final tempDir = Directory(tempPath);
-            if (await tempDir.exists()) {
-              final parentDir = tempDir.parent;
-              if (parentDir.path.contains('zzz_archive_extract_')) {
-                await parentDir.delete(recursive: true);
+            final result = await ArchiveService.extractArchive(archiveFile: file);
+            if (result.success && result.extractedFolders != null) {
+              // Registered for cleanup whatever the duplicate question answers: the folders exist from here.
+              tempFoldersToCleanup.addAll(result.extractedFolders!);
+              extracted.add((archiveFile, result));
+            } else {
+              final title = loc.t('mods.snackbar.import_error_title');
+              final body = '${archiveFile.name}: ${result.error}';
+              final actions = [copyDetailsAction(loc, notify, title: title, body: body)];
+              // One archive's card is about that archive, so it becomes the error; several keep going.
+              final card = total == 1 ? unpacking : null;
+              if (card != null) {
+                card.update(kind: NotificationKind.error, title: title, body: body, actions: actions);
+                unpacking = null;
+              } else {
+                notify.error(title, body: body, actions: actions);
               }
             }
-          } catch (e) {
-            _files.debug('temp cleanup failed',
-                fields: {'path': tempPath, 'reason': '$e'});
           }
+          if (total > 1) unpacking?.update(progress: (i + 1) / total);
+        }
+        unpacking?.dismiss();
+        unpacking = null;
+
+        for (final (archiveFile, result) in extracted) {
+          // Per archive, not per drop: one drop can mix several archives, and
+          // recognising one of them as a duplicate says nothing about the rest.
+          // Declining drops this archive's folders and leaves the others alone;
+          // its temp dir is cleaned up with the others below.
+          if (!mounted) {
+            await cleanupTempFolders();
+            return;
+          }
+          if (!await confirmArchiveNotDuplicate(
+            context,
+            ref,
+            result.archiveMd5,
+          )) {
+            declinedDuplicate = true;
+            continue;
+          }
+          folderPaths.addAll(result.extractedFolders!);
+          shaderSources.addAll(result.shaderSources);
+          successfullyExtractedArchives.add(archiveFile.path);
+          final archiveBaseName = path.basenameWithoutExtension(
+            archiveFile.path,
+          );
+          for (final folder in result.extractedFolders!) {
+            detectionHints[folder] = archiveBaseName;
+            originSeeds[folder] = ModOriginSeed.importedArchive(
+              archiveMd5: result.archiveMd5,
+            );
+          }
+          // The archive service already logged the result with the folder
+          // count and how long it took.
         }
       }
 
@@ -1286,8 +1325,9 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
               failure,
               requiredBytes: importResult.requiredBytes,
               availableBytes: importResult.availableBytes,
+              container: container,
             );
-            context.notify.error(lines.title, body: lines.body);
+            notify.error(lines.title, body: lines.body, actions: lines.actions);
           } else {
             context.notify.note(
               loc.t('mods.snackbar.import_duplicates_title'),
@@ -1307,6 +1347,17 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       // that outlives the warning. Shared with the marketplace install, so the
       // two cannot do different things with the same answer.
       if (patchDecision != null && modsPath != null) {
+        final targets = [for (final write in patchDecision.writes.values) write.into];
+        if (targets.isNotEmpty) {
+          applying = notify.working(
+            targets.length == 1
+                ? loc.t('mods.import_working.applying_patch_title')
+                : loc.plural('mods.import_working.applying_patch_many', targets.length,
+                    params: {'count': '${targets.length}'}),
+            body: subjectList(loc, [for (final target in targets) target.modName]),
+            characterId: targets.length == 1 ? targets.single.characterId : null,
+          );
+        }
         final lines = await applyPatchInstall(
           loc,
           decision: patchDecision,
@@ -1321,16 +1372,38 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
           whileWriting: (modId, write) => whileWritingMod(container, modId, write),
           // Naming what a patch patches installs that mod into the folder, the
           // same as it does for a download from the Marketplace.
-          installBase: (modName, base, baseFile) => installNamedBase(
-            context,
-            ref,
-            modName: modName,
-            modsPath: modsPath,
-            base: base,
-            file: baseFile,
-          ),
+          installBase: (modName, base, baseFile) {
+            // Down before the download's modal goes up.
+            applying?.dismiss();
+            applying = null;
+            return installNamedBase(
+              context,
+              ref,
+              modName: modName,
+              modsPath: modsPath,
+              base: base,
+              file: baseFile,
+            );
+          },
         );
-        if (mounted) showNotificationLines(context, lines);
+        // One write's own line comes first (`patchInstallLines`), and the card becomes it below the rest.
+        final card = applying;
+        applying = null;
+        if (card != null && targets.length == 1) {
+          if (mounted) showNotificationLines(context, lines.skip(1));
+          final result = lines.first;
+          card.update(
+            kind: result.kind,
+            title: result.title,
+            body: result.body,
+            characterId: result.characterId,
+            actions: result.actions,
+            repeat: result.repeat,
+          );
+        } else {
+          card?.dismiss();
+          if (mounted) showNotificationLines(context, lines);
+        }
         // The library was read before these writes, so the patched mods' files and keys are read again.
         if (mounted) await ref.read(libraryProvider.notifier).rescan();
       }
@@ -1572,12 +1645,16 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       }
 
       if (mounted) {
-        context.notify.error(
-          loc.t('mods.snackbar.import_error_title'),
+        final title = loc.t('mods.snackbar.import_error_title');
+        notify.error(
+          title,
           body: '$e',
+          actions: [copyDetailsAction(loc, notify, title: title, body: '$e')],
         );
       }
     } finally {
+      unpacking?.dismiss();
+      applying?.dismiss();
       if (mounted) {
         setState(() {
           _isOperationInProgress = false;
@@ -1683,9 +1760,12 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       await _importModsFromFolders(validFolders);
     } catch (e) {
       if (mounted) {
-        context.notify.error(
-          loc.t('mods.snackbar.paste_error_title'),
+        final notify = context.notify;
+        final title = loc.t('mods.snackbar.paste_error_title');
+        notify.error(
+          title,
           body: e.toString(),
+          actions: [copyDetailsAction(loc, notify, title: title, body: e.toString())],
         );
       }
     }

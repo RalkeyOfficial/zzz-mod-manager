@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../models/gamebanana/gb_exceptions.dart';
 import '../../services/bulk_update_check.dart';
+import '../../utils/notification_actions.dart';
 import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
 
@@ -18,10 +20,14 @@ import '../../utils/state_providers.dart';
 /// among the eleven mods we could actually reach" are different statements, and
 /// reporting the second as the first is how a network failure turns into false
 /// reassurance across a whole library.
+///
+/// [retry] runs the check again, offered when some mods could not be reached, unless the pass was stopped by
+/// GameBanana's rate limit, which an immediate second press would only run into again.
 void showUpdateCheckOutcome(
   BuildContext context,
-  BulkUpdateCheckOutcome outcome,
-) {
+  BulkUpdateCheckOutcome outcome, {
+  VoidCallback? retry,
+}) {
   final loc = context.loc;
   String plural(String key, int count) => _plural(loc, key, count);
 
@@ -60,7 +66,10 @@ void showUpdateCheckOutcome(
     kind,
     title,
     body: body,
-    actions: [if (found > 0) reviewUpdatesAction(context)],
+    actions: [
+      if (found > 0) reviewUpdatesAction(context),
+      if (incomplete && retry != null && outcome.abortedBy is! GbRateLimitException) retryAction(loc, retry),
+    ],
   );
 }
 

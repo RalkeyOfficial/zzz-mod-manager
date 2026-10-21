@@ -20,6 +20,7 @@ import 'package:mod_manager_flutter/screens/components/notification_overlay.dart
 import 'package:mod_manager_flutter/screens/components/zenith_switch.dart';
 import 'package:mod_manager_flutter/screens/mod_page/mod_page.dart';
 import 'package:mod_manager_flutter/screens/mods_screen.dart';
+import 'package:mod_manager_flutter/services/platform_service_linux.dart';
 import 'package:mod_manager_flutter/services/update_apply/mod_activation_port.dart';
 import 'package:mod_manager_flutter/utils/notifications.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
@@ -154,7 +155,9 @@ void main() {
       final ini = '[TextureOverrideBody]\n'.codeUnits;
       final archive = Archive()..addFile(ArchiveFile('Swimsuit/Swimsuit.ini', ini.length, ini));
       final zip = File(p.join(temp.root.path, 'Swimsuit.zip'))..writeAsBytesSync(ZipEncoder().encode(archive)!);
-      await pumpModsScreen(tester, temp, [mod('Winter Maid')]);
+      final container = await pumpModsScreen(tester, temp, [mod('Winter Maid')]);
+      final raised = <AppNotification>[];
+      container.listen(notificationsProvider, (_, next) => raised.addAll(next));
       clipboardHolds(tester, zip.path);
 
       await pressPaste(tester, settle: false);
@@ -170,6 +173,89 @@ void main() {
       expect(find.text(noValid), findsNothing, reason: 'an existing archive is something to import');
       expect(done, findsOneWidget);
       expect(File(p.join(temp.modFolder('Swimsuit').path, 'Swimsuit.ini')).existsSync(), isTrue);
+      final unpacking = raised.where((n) => n.kind == NotificationKind.working).toList();
+      expect(unpacking.map((n) => n.title), contains('Unpacking 1 archive…'));
+      expect(unpacking.first.body, 'Swimsuit.zip');
+      expect(container.read(notificationsProvider).where((n) => n.kind == NotificationKind.working), isEmpty,
+          reason: 'the card is down before the import goes on');
+    });
+
+    testWidgets('of a patch put into an existing mod shows a Working card, which becomes the patch applied', (tester) async {
+      temp.write('Ellen Maid', 'Ellen Maid.ini', '[TextureOverrideBody]\n');
+      temp.write('Ellen Maid', 'Textures/Body.dds', 'v1');
+      final fix = Directory(p.join(temp.root.path, 'Ellen Fix'));
+      File(p.join(fix.path, 'Textures', 'Body.dds'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync('v2');
+      final container = await pumpModsScreen(tester, temp, [mod('Ellen Maid')]);
+      final raised = <AppNotification>[];
+      container.listen(notificationsProvider, (_, next) => raised.addAll(next));
+      clipboardHolds(tester, fix.path);
+
+      Future<void> pumpUntil(Finder finder) async {
+        for (var i = 0; i < 40 && finder.evaluate().isEmpty; i++) {
+          await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        expect(finder, findsWidgets);
+      }
+
+      await pressPaste(tester, settle: false);
+      await pumpUntil(find.text('Install it into an existing mod'));
+      await tester.tap(find.text('Install it into an existing mod'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.descendant(of: find.byType(Dialog), matching: find.text('Ellen Maid')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.descendant(of: find.byType(Dialog), matching: find.text('Install')));
+      await tester.pump();
+      final applied = find.descendant(of: find.byType(NotificationOverlay), matching: find.text('Patch applied'));
+      await pumpUntil(applied);
+
+      expect(temp.read('Ellen Maid', 'Textures/Body.dds'), 'v2');
+      final working = raised.firstWhere((n) => n.kind == NotificationKind.working && n.title == 'Applying the patch…');
+      expect(working.body, 'Ellen Maid');
+      final card = container.read(notificationsProvider).single;
+      expect(card.id, working.id, reason: 'the Working card became the patch applied rather than raising a second card');
+      expect(card.kind, NotificationKind.done);
+      // Past the Done card's clock, so the test ends with nothing on one.
+      await tester.pump(const Duration(seconds: 6));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets("of an archive that can't be unpacked turns its Working card into the error, and Copy details copies it",
+        (tester) async {
+      final zip = File(p.join(temp.root.path, 'Broken.zip'))..writeAsStringSync('not a zip');
+      final container = await pumpModsScreen(tester, temp, [mod('Winter Maid')]);
+      final raised = <AppNotification>[];
+      container.listen(notificationsProvider, (_, next) => raised.addAll(next));
+      String? copied;
+      final messenger = tester.binding.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.getData') return {'text': zip.path};
+        if (call.method == 'Clipboard.setData') copied = (call.arguments as Map)['text'] as String?;
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(SystemChannels.platform, null));
+
+      await pressPaste(tester);
+
+      final working = raised.firstWhere((n) => n.kind == NotificationKind.working);
+      expect(working.title, 'Unpacking 1 archive…');
+      final error = container.read(notificationsProvider).firstWhere((n) => n.kind == NotificationKind.error);
+      expect(error.id, working.id, reason: 'the Working card became the error rather than raising a second card');
+      expect(error.title, 'Import failed');
+      expect(error.body, startsWith('Broken.zip: '));
+
+      await tester.runAsync(() async {
+        await tester.tap(find.descendant(of: find.byType(NotificationOverlay), matching: find.text('Copy details')));
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      });
+      await tester.pump();
+      expect(copied, '${error.title}\n${error.body}');
+      expect(find.text('Details copied'), findsOneWidget);
+      // Past the Done card's clock, so the test ends with nothing on one.
+      await tester.pump(const Duration(seconds: 6));
+      await tester.pumpAndSettle();
     });
 
     testWidgets("in the note is the note's paste, not an import", (tester) async {
@@ -566,6 +652,22 @@ void main() {
       expect(find.text('Mod not turned off'), findsOneWidget);
     });
 
+    testWidgets('one that throws offers Open folder on the mod first, then Copy details', (tester) async {
+      final throwing = (await tester.runAsync(
+        () => TempLibrary.create(prefix: 'zzz_toggle_throws_', platform: _LinkUnreadable()),
+      ))!;
+      // Shader files make the enable's dry run read the link, which is what throws.
+      throwing.write('Lab Coat', 'ShaderFixes/fix.txt', 'x');
+      final container = await pumpModsScreen(tester, throwing, [mod('Lab Coat')]);
+      container.read(modsPathProvider.notifier).state = throwing.mods.path;
+
+      await tapWithIo(tester, switchOf('Lab Coat'));
+
+      final card = container.read(notificationsProvider).single;
+      expect(card.kind, NotificationKind.error);
+      expect(card.actions.map((a) => a.label), ['Open folder', 'Copy details']);
+    });
+
     testWidgets('a toggle that works says nothing', (tester) async {
       temp.createMod('Winter Maid');
       temp.write('Winter Maid', 'Winter Maid.ini', '[TextureOverrideBody]\n');
@@ -827,4 +929,10 @@ void main() {
       });
     });
   });
+}
+
+/// Links as Linux makes them, except that reading one throws: a toggle that fails with an exception.
+class _LinkUnreadable extends LinuxPlatformService {
+  @override
+  Future<String?> readModLinkTarget(String linkPath) async => throw FileSystemException('unreadable', linkPath);
 }
