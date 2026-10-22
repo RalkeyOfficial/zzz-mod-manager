@@ -235,22 +235,13 @@ Future<PatchInstallDecision?> decidePatchInstall(
   final scan = await scanPlannedMods(plannedMods(plan, folders));
   if (scan.patchShaped.isEmpty) return PatchInstallDecision(scan: scan);
 
-  // **Read here rather than handed in**, and after the scan has established
-  // there is something to ask about — so an ordinary install pays nothing for
-  // it. See [_libraryNow]: what this prompt lists has to be the library as it
-  // is when the prompt opens.
-  final library = await _libraryNow();
-
-  // Only where a library destination is on offer at all: a combined install
-  // does not get that choice, so the walk would have no reader.
-  final ranked = plan.combine
-      ? const <String, List<DestinationRank>>{}
-      : await rankPatchDestinations(
-          scan: scan,
-          library: library,
-          modsPath: modsPath,
-          patchRequirements: patchRequirements,
-        );
+  final question = await preparePatchQuestion(
+    scan: scan,
+    combined: plan.combine,
+    modsPath: modsPath,
+    patchModId: patchModId,
+    patchRequirements: patchRequirements,
+  );
 
   // **Unable to ask is not the same as declined.** The scan is disk I/O and the
   // caller's context can be gone by the time it finishes. Answering "no
@@ -261,43 +252,12 @@ Future<PatchInstallDecision?> decidePatchInstall(
 
   final answered = await prompt(
     context,
-    subjects: [
-      for (final name in scan.patchShaped)
-        PatchInstallSubject(
-          modName: name,
-          patchModId: patchModId,
-          kind: scan.assetPatches.containsKey(name)
-              ? PatchKind.assets
-              : PatchKind.references,
-          destinations: ranked[name] ?? const <DestinationRank>[],
-        ),
-    ],
-    library: library,
-    combined: plan.combine,
+    subjects: question.subjects,
+    library: question.library,
+    combined: question.combined,
   );
-  if (answered == null) {
-    logConfirmation('patch.install',
-        accepted: false, subject: scan.patchShaped.join(', '));
-    return null;
-  }
-
-  // Per subject, with where it went and how the ranking had placed that folder
-  // — the only evidence that will ever accumulate about whether the ordering in
-  // `docs/patch-destinations.md` is worth having.
-  for (final entry in answered.entries) {
-    final into = entry.value;
-    final order = ranked[entry.key] ?? const <DestinationRank>[];
-    logConfirmation('patch.destination',
-        accepted: true,
-        subject: entry.key,
-        fields: {
-          'destination': into is InstallIntoMod ? into.modName : 'new folder',
-          if (into is InstallIntoMod)
-            'rank_of_choice':
-                order.indexWhere((r) => r.modId == into.modId) + 1,
-          if (into is InstallAsNewMod) 'base_named': into.base != null,
-        });
-  }
+  logPatchAnswer(question, answered);
+  if (answered == null) return null;
 
   return resolvePatchDestinations(
     scan: scan,
@@ -305,6 +265,90 @@ Future<PatchInstallDecision?> decidePatchInstall(
     folders: folders,
     modsPath: modsPath,
   );
+}
+
+/// What the patch prompt shows, read at the moment it opens.
+class PatchQuestion {
+  const PatchQuestion({
+    required this.scan,
+    required this.subjects,
+    required this.library,
+    required this.combined,
+    required this.ranked,
+  });
+
+  final PlannedPatchScan scan;
+  final List<PatchInstallSubject> subjects;
+  final List<ModInfo> library;
+  final bool combined;
+
+  /// How the ranking placed each library folder, per planned mod name, for the log of the answer.
+  final Map<String, List<DestinationRank>> ranked;
+}
+
+/// Reads what the patch prompt for [scan]'s patch-shaped mods offers: the library and each patch's likeliest
+/// destinations. Shared by the drop's import and a waiting download's answer, so the two offer the same.
+Future<PatchQuestion> preparePatchQuestion({
+  required PlannedPatchScan scan,
+  required bool combined,
+  required String modsPath,
+  int? patchModId,
+  List<GbRequirement> patchRequirements = const <GbRequirement>[],
+}) async {
+  // **Read here rather than handed in**, and after the scan has established
+  // there is something to ask about — so an ordinary install pays nothing for
+  // it. See [_libraryNow]: what this prompt lists has to be the library as it
+  // is when the prompt opens.
+  final library = await _libraryNow();
+
+  // Only where a library destination is on offer at all: a combined install
+  // does not get that choice, so the walk would have no reader.
+  final ranked = combined
+      ? const <String, List<DestinationRank>>{}
+      : await rankPatchDestinations(
+          scan: scan,
+          library: library,
+          modsPath: modsPath,
+          patchRequirements: patchRequirements,
+        );
+
+  return PatchQuestion(
+    scan: scan,
+    subjects: [
+      for (final name in scan.patchShaped)
+        PatchInstallSubject(
+          modName: name,
+          patchModId: patchModId,
+          kind: scan.assetPatches.containsKey(name) ? PatchKind.assets : PatchKind.references,
+          destinations: ranked[name] ?? const <DestinationRank>[],
+        ),
+    ],
+    library: library,
+    combined: combined,
+    ranked: ranked,
+  );
+}
+
+/// Logs the patch prompt's answer where it is consumed: a decline as loudly as an accept, and per subject where it
+/// went and how the ranking had placed that folder — the only evidence that will ever accumulate about whether the
+/// ordering in `docs/patch-destinations.md` is worth having.
+void logPatchAnswer(PatchQuestion question, Map<String, PatchDestination>? answered) {
+  if (answered == null) {
+    logConfirmation('patch.install', accepted: false, subject: question.scan.patchShaped.join(', '));
+    return;
+  }
+  for (final entry in answered.entries) {
+    final into = entry.value;
+    final order = question.ranked[entry.key] ?? const <DestinationRank>[];
+    logConfirmation('patch.destination',
+        accepted: true,
+        subject: entry.key,
+        fields: {
+          'destination': into is InstallIntoMod ? into.modName : 'new folder',
+          if (into is InstallIntoMod) 'rank_of_choice': order.indexWhere((r) => r.modId == into.modId) + 1,
+          if (into is InstallAsNewMod) 'base_named': into.base != null,
+        });
+  }
 }
 
 /// The library as it is **on disk, at the moment the prompt opens**.

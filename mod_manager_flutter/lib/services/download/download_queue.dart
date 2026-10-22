@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/gamebanana/gb_file.dart';
 import '../../models/gamebanana/gb_mod.dart';
+import '../archive_service.dart';
+import '../log/confirmations.dart';
 import 'download_exceptions.dart';
 import 'download_handle.dart';
 import 'download_job.dart';
@@ -36,6 +39,34 @@ final downloadServiceProvider = Provider<DownloadService>((ref) {
 final downloadQueueProvider =
     NotifierProvider<DownloadQueue, List<DownloadJob>>(DownloadQueue.new);
 
+/// How an update download ended, told to [DownloadQueue.endUpdate].
+sealed class UpdateEnd {
+  const UpdateEnd();
+}
+
+/// The update wrote the mod: the row is Finished with [outcome].
+class UpdateWritten extends UpdateEnd {
+  const UpdateWritten(this.outcome, {this.mods = const <String>[]});
+
+  /// [JobOutcome.updated], [JobOutcome.reinstalled] or [JobOutcome.baseInstalled].
+  final JobOutcome outcome;
+
+  /// The mod folders it wrote, the one the row's Show opens first.
+  final List<String> mods;
+}
+
+/// The user declined or cancelled the update: the row leaves the list.
+class UpdateDeclined extends UpdateEnd {
+  const UpdateDeclined();
+}
+
+/// The update failed after its bytes landed: the row is a failure with the flow's own [headline].
+class UpdateFailed extends UpdateEnd {
+  const UpdateFailed(this.headline);
+
+  final String headline;
+}
+
 /// Runs downloads with a concurrency cap, and remembers what each one was for.
 ///
 /// **The queue moves bytes and nothing else.** What happens when a transfer
@@ -52,6 +83,9 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
   final Map<int, DownloadHandle> _handles = {};
   final Map<int, StreamSubscription<DownloadProgress>> _subscriptions = {};
   final Map<int, Completer<DownloadResult>> _completions = {};
+
+  /// Paused jobs whose Resume came before the stop their pause asked for, resumed once it lands.
+  final Set<int> _resumeAfterStop = {};
   int _nextSeq = 1;
 
   @override
@@ -67,16 +101,35 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
   /// De-duplicated on the **file id** rather than the url, because that is the
   /// identity GameBanana guarantees and it is what a double-click on the same
   /// row means. Only non-terminal jobs count: pressing Download again after a
-  /// failure is a request to retry, not a duplicate.
+  /// failure is a request to retry, not a duplicate. A paused job for the file is
+  /// resumed, since the press asks for the file, and from then on does what this
+  /// press asks: its intent, its character and its Turn on.
   DownloadJob enqueue({
     required GbFile file,
     required String subject,
     required DownloadIntent intent,
     GbMod? mod,
     String? characterId,
+    bool turnOn = false,
   }) {
     final existing = activeJobForFile(state, file.idRow);
-    if (existing != null) return existing;
+    if (existing != null) {
+      if (existing.state == DownloadJobState.paused) {
+        _replace(
+          existing.seq,
+          (j) => j.pressedAgain(
+            intent: intent,
+            subject: subject,
+            mod: mod,
+            characterId: characterId,
+            turnOn: turnOn,
+          ),
+        );
+        resume(existing.seq);
+        return _jobOf(existing.seq)!;
+      }
+      return existing;
+    }
 
     final seq = _nextSeq++;
     final raw = file.downloadUrl ?? 'https://gamebanana.com/dl/${file.idRow}';
@@ -95,8 +148,10 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
         file: file,
         mod: mod,
         characterId: characterId,
+        turnOn: turnOn,
         state: DownloadJobState.failed,
         error: DownloadNetworkException('Unusable download url: $raw'),
+        finishedAt: DateTime.now(),
       );
       state = [...state, job];
       _completerFor(seq).completeError(job.error!);
@@ -119,6 +174,7 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
       file: file,
       mod: mod,
       characterId: characterId,
+      turnOn: turnOn,
     );
     state = [...state, job];
     _completerFor(seq);
@@ -138,13 +194,15 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
   Stream<DownloadProgress> progressOf(int seq) =>
       _handles[seq]?.progress ?? const Stream<DownloadProgress>.empty();
 
-  /// Stops a job, whether it has started or not.
+  /// Stops a job, whether it has started or not, and takes its row off the list.
   ///
-  /// The partial is deleted: this is an explicit user cancel, and leaving
-  /// several hundred megabytes in a folder they do not manage is the surprising
-  /// half of "stop".
+  /// What it stops is deleted: the partial of a running, paused or resumed transfer,
+  /// the archive of one whose bytes have landed, and what a waiting or answered install kept.
+  /// This is an explicit user cancel, and leaving several hundred megabytes in a folder
+  /// they do not manage is the surprising half of "stop". It records no error: the
+  /// user asked for it.
   ///
-  /// **An installing job cannot be cancelled**, and the refusal belongs here
+  /// **An installing or updating job cannot be cancelled**, and the refusal belongs here
   /// rather than only in the button that does not offer it. Between the unpack
   /// and the import there is no safe stopping point, and this method's own
   /// archive delete below would pull the file out from under a running
@@ -153,37 +211,72 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
     final job = _jobOf(seq);
     if (job == null ||
         job.isTerminal ||
-        job.state == DownloadJobState.installing) {
+        job.state == DownloadJobState.installing ||
+        job.state == DownloadJobState.updating) {
       return;
     }
+    if (job.state == DownloadJobState.waiting) return decline(seq);
 
     final handle = _handles[seq];
-    if (handle == null) {
-      // Either never started, or finished and waiting on the host. No transfer
-      // to unwind and no completer callback to wait for, so marking it here is
-      // the only thing that moves it.
-      //
-      // A job cancelled *after* the bytes landed still has an archive in
-      // `<appData>/downloads`, and nothing else will ever come for it — the
-      // install that would have consumed it is what is being called off. So it
-      // goes now, for the same reason a cancelled transfer deletes its partial.
-      final archive = job.archive;
-      if (archive != null) {
-        try {
-          if (await archive.exists()) await archive.delete();
-        } catch (_) {
-          // The sweep in `DownloadPaths` collects it later.
-        }
-      }
-      _replace(seq, (j) => j.copyWith(state: DownloadJobState.cancelled));
-      _completeError(seq, const DownloadCancelledException());
-      _pump();
+    // A paused job can still hold its handle while the stop its pause asked for comes back, and cancelling that
+    // handle again does nothing.
+    if (handle != null && job.state != DownloadJobState.paused) {
+      await handle.cancel(deletePartial: true);
       return;
     }
-    await handle.cancel(deletePartial: true);
+
+    // Not started, paused, resumed and back in line, or finished and waiting on the host. No transfer to unwind,
+    // so removing it here is the only thing that moves it.
+    //
+    // A job cancelled *after* the bytes landed still has an archive in `<appData>/downloads`, or the folders an
+    // answered question kept, and nothing else will ever come for them — the install that would have consumed them
+    // is what is being called off. So they go now, for the same reason a cancelled transfer deletes its partial.
+    _resumeAfterStop.remove(seq);
+    _completeError(seq, const DownloadCancelledException());
+    _drop(seq);
+    _pump();
+    if (handle != null) {
+      // The pause's stop, waited for so the partial is not deleted under its last write. A transfer whose last byte
+      // landed instead left an archive, which goes too.
+      final landed = await handle.done.then<File?>((result) => result.file, onError: (Object _) => null);
+      await _deleteFile(landed);
+    }
+    if (job.state == DownloadJobState.paused || job.resumed) {
+      await _service.discardPartial(job.request);
+    }
+    await _deleteFile(job.archive);
+    await ArchiveService.deleteExtraction(job.unpacked);
   }
 
-  /// Tries a failed or cancelled job again, from the beginning of its life.
+  /// Stops a running background transfer and keeps its partial, freeing its slot for the next queued job.
+  ///
+  /// Marked first, so the stop that comes back reads as the pause rather than as a cancel. A transfer whose last
+  /// byte lands as this is pressed finishes: the archive is on disk, and that wins.
+  Future<void> pause(int seq) async {
+    final job = _jobOf(seq);
+    final handle = _handles[seq];
+    if (job == null || !job.pausable || handle == null) return;
+    _replace(seq, (j) => j.copyWith(state: DownloadJobState.paused));
+    await handle.cancel(deletePartial: false);
+  }
+
+  /// Puts a paused job back in line, first of the queued ones. The service resumes from the partial under the
+  /// resume policy.
+  ///
+  /// Pressed before the stop the pause asked for has come back, it waits for that stop: a transfer started now would
+  /// write into the same `.part` as the one still stopping.
+  void resume(int seq) {
+    final job = _jobOf(seq);
+    if (job == null || job.state != DownloadJobState.paused) return;
+    if (_handles.containsKey(seq)) {
+      _resumeAfterStop.add(seq);
+      return;
+    }
+    _replace(seq, (j) => j.copyWith(state: DownloadJobState.queued, resumed: true));
+    _pump();
+  }
+
+  /// Tries a failed job again, from the beginning of its life.
   ///
   /// Keeps its `seq`, so it holds its place in the panel instead of jumping to
   /// the bottom as a stranger. A partial left on disk is still picked up — that
@@ -211,8 +304,7 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
   void remove(int seq) {
     final job = _jobOf(seq);
     if (job == null || !job.isTerminal) return;
-    _forget(seq);
-    state = [...state]..removeWhere((j) => j.seq == seq);
+    _drop(seq);
   }
 
   /// Drops every finished row, leaving whatever is still working.
@@ -233,23 +325,131 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
   DownloadJob? claimNextForHost() {
     final job = nextAwaitingHost(state);
     if (job == null) return null;
-    _replace(job.seq, (j) => j.copyWith(state: DownloadJobState.installing));
+    _replace(job.seq, (j) => j.copyWith(state: DownloadJobState.installing, installStage: InstallStage.unpacking));
     return _jobOf(job.seq);
   }
 
-  void markDone(int seq) =>
-      _replace(seq, (j) => j.copyWith(state: DownloadJobState.done));
+  /// The step an installing job is on, for its panel row.
+  void installStage(int seq, InstallStage stage) {
+    final job = _jobOf(seq);
+    if (job == null || job.state != DownloadJobState.installing) return;
+    _replace(seq, (j) => j.copyWith(installStage: stage));
+  }
 
-  /// The user backed out of the install (the duplicate-archive question, the
-  /// folder picker). Not a failure — nothing went wrong and there is nothing to
-  /// retry from, since the archive is gone with it.
-  void markCancelled(int seq) =>
-      _replace(seq, (j) => j.copyWith(state: DownloadJobState.cancelled));
+  /// An install stopped at [wait] and frees the install slot. [prepared] is what it kept, [unpacked] the folders it
+  /// holds in the temp folder. A password given for this run is dropped, whatever the outcome.
+  void markWaiting(
+    int seq,
+    InstallWait wait, {
+    Object? prepared,
+    List<String> unpacked = const <String>[],
+  }) =>
+      _replace(
+        seq,
+        (j) => j
+            .copyWith(state: DownloadJobState.waiting, prepared: prepared, unpacked: unpacked)
+            .withWait(wait),
+      );
+
+  /// The question was answered and the install goes back in line for the slot, ahead of jobs that have not waited.
+  /// [password] is held for the unpack it was given for.
+  void markAnswered(int seq, {Object? prepared, String? password}) {
+    final job = _jobOf(seq);
+    if (job == null || job.state != DownloadJobState.waiting) return;
+    _replace(
+      seq,
+      (j) => j.copyWith(state: DownloadJobState.downloaded, prepared: prepared).withWait(null, password: password),
+    );
+  }
+
+  /// The unpack a password was given for has run, so the password is dropped, whatever the unpack came to.
+  void dropPassword(int seq) {
+    final job = _jobOf(seq);
+    if (job == null || job.password == null) return;
+    _replace(seq, (j) => j.withWait(j.wait));
+  }
+
+  /// A dialog was answered in part and the install still waits, now at [wait], keeping the answers in [prepared].
+  void keepWaiting(int seq, InstallWait wait, {Object? prepared}) {
+    final job = _jobOf(seq);
+    if (job == null || job.state != DownloadJobState.waiting) return;
+    _replace(seq, (j) => j.copyWith(prepared: prepared).withWait(wait));
+  }
+
+  /// Don't install: what the waiting job kept is deleted, its archive or its unpacked folders, and the row leaves
+  /// the list.
+  Future<void> decline(int seq) async {
+    final job = _jobOf(seq);
+    if (job == null || job.state != DownloadJobState.waiting) return;
+    logConfirmation('install.question',
+        accepted: false, subject: job.subject, fields: {'question': job.wait?.question.name});
+    _completeError(seq, const DownloadCancelledException());
+    _drop(seq);
+    await _deleteFile(job.archive);
+    await ArchiveService.deleteExtraction(job.unpacked);
+  }
+
+  /// Finished: [outcome], the mod folders it [installed], where it [filedUnder], and for an install that put nothing
+  /// in, the result's [headline].
+  void markDone(
+    int seq, {
+    JobOutcome? outcome,
+    List<String> installed = const <String>[],
+    String? filedUnder,
+    String? headline,
+  }) =>
+      _replace(
+        seq,
+        (j) => j
+            .copyWith(
+              state: DownloadJobState.done,
+              outcome: outcome,
+              installed: installed,
+              filedUnder: filedUnder,
+              headline: headline,
+              unpacked: const <String>[],
+              finishedAt: DateTime.now(),
+            )
+            .withWait(null),
+      );
+
+  /// The install found nothing to do and nothing to report, so its row leaves the list as a declined one does.
+  void markGone(int seq) => _drop(seq);
 
   void markFailed(int seq, Object error) => _replace(
         seq,
-        (j) => j.copyWith(state: DownloadJobState.failed, error: error),
+        (j) => j
+            .copyWith(
+              state: DownloadJobState.failed,
+              error: error,
+              unpacked: const <String>[],
+              finishedAt: DateTime.now(),
+            )
+            .withWait(null),
       );
+
+  // ── The update flow's half ─────────────────────────────────────────────────
+
+  /// The step an update download is on, while its flow unpacks, asks and writes.
+  void updateStep(int seq, UpdateStep step) {
+    final job = _jobOf(seq);
+    if (job == null || job.state != DownloadJobState.updating) return;
+    _replace(seq, (j) => j.copyWith(updateStep: step));
+  }
+
+  /// Ends an update download, which the update flow does on every path once its bytes are handed over.
+  void endUpdate(int seq, UpdateEnd end) {
+    final job = _jobOf(seq);
+    if (job == null || job.state != DownloadJobState.updating) return;
+    switch (end) {
+      case UpdateWritten(:final outcome, :final mods):
+        markDone(seq, outcome: outcome, installed: mods, filedUnder: job.characterId);
+      case UpdateDeclined():
+        _drop(seq);
+      case UpdateFailed(:final headline):
+        markFailed(seq, InstallFailure(headline));
+    }
+  }
 
   // ── Internals ──────────────────────────────────────────────────────────────
 
@@ -266,30 +466,41 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
     final seq = job.seq;
     final handle = _service.start(job.request);
     _handles[seq] = handle;
-    _replace(seq, (j) => j.copyWith(state: DownloadJobState.running));
+    _replace(seq, (j) => j.copyWith(state: DownloadJobState.running, resumed: false));
+
+    // A handle let go of — its job cancelled while paused, or cleared — has nothing left to report to: its job may be
+    // gone, or running again on a handle of its own.
+    bool current() => identical(_handles[seq], handle);
 
     _subscriptions[seq] = handle.progress.listen(
-      (p) => _replace(seq, (j) => j.copyWith(progress: p)),
+      (p) {
+        if (current()) _replace(seq, (j) => j.copyWith(progress: p));
+      },
       // The failure is reported through `done`; this listener exists only so a
       // stream error is not raised as an unhandled one.
       onError: (Object _) {},
     );
 
     unawaited(handle.done.then(
-      (result) => _finishedTransfer(seq, result),
-      onError: (Object error) => _failedTransfer(seq, error),
+      (result) {
+        if (current()) _finishedTransfer(seq, result);
+      },
+      onError: (Object error) {
+        if (current()) _failedTransfer(seq, error);
+      },
     ));
   }
 
   void _finishedTransfer(int seq, DownloadResult result) {
     _releaseConnection(seq);
+    // The last byte landed as the pause was pressed: the archive is on disk, and that wins over the Resume.
+    _resumeAfterStop.remove(seq);
     final job = _jobOf(seq);
     if (job == null) return;
-    // `callerHandles` is done the moment the bytes land — the update flow owns
-    // everything after, and parking it in `downloaded` would leave a row the
-    // host is deliberately told to ignore sitting there forever.
+    // `callerHandles` is handed to the update flow the moment the bytes land,
+    // and stays on the panel until that flow ends it.
     final next = job.intent == DownloadIntent.callerHandles
-        ? DownloadJobState.done
+        ? DownloadJobState.updating
         : DownloadJobState.downloaded;
     _replace(seq, (j) => j.copyWith(state: next, result: result));
     _completeWith(seq, result);
@@ -298,25 +509,42 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
 
   void _failedTransfer(int seq, Object error) {
     _releaseConnection(seq);
+    final job = _jobOf(seq);
     if (error is DownloadCancelledException) {
-      // **A cancel records no error.** It is not one — the user asked for it —
-      // so `error != null` means "something went wrong" everywhere, and the
-      // other cancel path (no handle, below) agrees. `state` is the thing to
-      // ask about; [DownloadJob.error] is a detail of a failure.
-      _replace(seq, (j) => j.copyWith(state: DownloadJobState.cancelled));
+      if (job?.state == DownloadJobState.paused) {
+        // The stop the pause asked for. The partial stays, and so does the row, unless Resume came first.
+        if (_resumeAfterStop.remove(seq)) return resume(seq);
+        _pump();
+        return;
+      }
+      // **A cancel records no error and leaves the list.** It is not one — the
+      // user asked for it — so `error != null` means "something went wrong"
+      // everywhere.
+      _completeError(seq, error);
+      _drop(seq);
     } else {
       _replace(
         seq,
-        (j) => j.copyWith(state: DownloadJobState.failed, error: error),
+        (j) => j.copyWith(state: DownloadJobState.failed, error: error, finishedAt: DateTime.now()),
       );
+      _completeError(seq, error);
     }
-    _completeError(seq, error);
     _pump();
   }
 
   void _releaseConnection(int seq) {
     _subscriptions.remove(seq)?.cancel();
     _handles.remove(seq);
+  }
+
+  /// Deletes an archive a job's bytes landed as, when there is one. The file, never the shared directory.
+  static Future<void> _deleteFile(File? archive) async {
+    if (archive == null) return;
+    try {
+      if (await archive.exists()) await archive.delete();
+    } catch (_) {
+      // The launch sweep in `DownloadPaths` collects it later.
+    }
   }
 
   Completer<DownloadResult> _completerFor(int seq) =>
@@ -335,13 +563,20 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
   }
 
   void _completeError(int seq, Object error) {
-    final completer = _completerFor(seq);
-    if (!completer.isCompleted) completer.completeError(error);
+    final completer = _completions[seq];
+    if (completer != null && !completer.isCompleted) completer.completeError(error);
+  }
+
+  /// Takes a row off the list, whatever its state.
+  void _drop(int seq) {
+    _forget(seq);
+    state = [...state]..removeWhere((j) => j.seq == seq);
   }
 
   void _forget(int seq) {
     _releaseConnection(seq);
     _completions.remove(seq);
+    _resumeAfterStop.remove(seq);
   }
 
   DownloadJob? _jobOf(int seq) {

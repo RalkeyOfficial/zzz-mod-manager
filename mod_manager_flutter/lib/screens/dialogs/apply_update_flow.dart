@@ -15,6 +15,8 @@ import '../../models/mod_download.dart';
 import '../../models/origin_enums.dart';
 import '../../services/api_service.dart';
 import '../../services/archive_service.dart';
+import '../../services/download/download_job.dart';
+import '../../services/download/download_queue.dart';
 import '../../services/shader_fixes/shader_fixes_service.dart';
 import '../../services/backup/snapshot_service.dart';
 import '../../services/folder_contents.dart';
@@ -30,10 +32,12 @@ import '../../services/update_apply/update_applier.dart';
 import '../../services/update_apply/update_layout.dart';
 import '../../services/update_apply/update_target.dart';
 import '../../utils/gamebanana_url.dart';
+import '../../utils/marketplace_providers.dart';
 import '../../utils/notification_actions.dart';
 import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
 import '../components/extract_failure_message.dart';
+import 'archive_password_dialog.dart';
 import 'download_with_progress.dart';
 import 'import_selection_dialog.dart';
 import 'progress_modal.dart';
@@ -161,7 +165,12 @@ Future<bool> applyUpdateFlow(
     return false;
   }
 
+  // Over the flow's own window, so it asks only while that window's context lives.
+  Future<PasswordAnswer?> askPassword({required bool failed}) async =>
+      context.mounted ? showArchivePasswordDialog(context, modName: mod.name, failed: failed) : null;
+
   if (!context.mounted) return false;
+  final navigator = Navigator.of(context, rootNavigator: true);
   // **One window from the press to the question.** The download's modal stays
   // up through the unpacking and the two folder walks below, because closing it
   // there is the same signal the user gets when a job has finished — and on a
@@ -180,16 +189,29 @@ Future<bool> applyUpdateFlow(
     return false;
   }
 
+  // **Ended on every path**, in the `finally`: the download stays on the panel
+  // until the update ends, as written, failed, or off the list when declined.
+  final queue = container.read(downloadQueueProvider.notifier);
+  UpdateEnd end = const UpdateDeclined();
   var archiveConsumed = false;
+  var openModPage = false;
   Directory? extractRoot;
   // The wait for a write into one folder, which has no modal of its own.
   NotificationHandle? writing;
   try {
     hold.say(loc.t('marketplace.preparing_unpacking'));
-    final extraction = await ArchiveService.extractArchive(
-      archiveFile: download.file,
-      knownMd5: download.md5,
+    final extraction = await _extractAsking(
+      download: download,
+      modName: mod.name,
+      ask: askPassword,
+      openModPage: () => openModPage = true,
+      queue: queue,
     );
+    if (extraction == null) {
+      // Declined at the password: the archive has nothing left to be used for.
+      await _deleteArchive(download.file);
+      return false;
+    }
     if (!extraction.success) {
       // The archive is kept on purpose: the user can still extract it by hand,
       // and saying where it is turns a dead end into a workaround.
@@ -202,6 +224,7 @@ Future<bool> applyUpdateFlow(
         notify: notify,
       );
       fail(lines.title, lines.body, actions: lines.actions);
+      end = UpdateFailed(lines.title);
       return false;
     }
     archiveConsumed = true;
@@ -212,6 +235,7 @@ Future<bool> applyUpdateFlow(
         loc.t('marketplace.install_empty_title'),
         loc.t('marketplace.install_empty_body'),
       );
+      end = UpdateFailed(loc.t('marketplace.install_empty_title'));
       return false;
     }
     extractRoot = Directory(folders.first).parent;
@@ -250,6 +274,7 @@ Future<bool> applyUpdateFlow(
           ),
       ];
       hold.release();
+      queue.updateStep(download.seq, UpdateStep.confirming);
       if (!context.mounted) return false;
       final chosen = await pickUpdateFolders(
         context,
@@ -297,6 +322,7 @@ Future<bool> applyUpdateFlow(
     // **Down immediately before the question**, so the two never overlap and
     // there is no gap between them either.
     hold.release();
+    if (confirm) queue.updateStep(download.seq, UpdateStep.confirming);
 
     if (!context.mounted) return false;
     final choice = confirm
@@ -346,6 +372,7 @@ Future<bool> applyUpdateFlow(
               if (choice.accepted.contains(target.mod.id)) target,
           ];
     if (chosen.isEmpty) return false;
+    queue.updateStep(download.seq, UpdateStep.writing);
 
     // **The modal is optional and the write is not.** The user has consented,
     // so the copy happens whether or not there is still a context to draw
@@ -392,6 +419,16 @@ Future<bool> applyUpdateFlow(
     );
 
     final outcome = summariseGroupWrite(applied, reinstall: reinstall);
+    end = outcome.changed
+        ? UpdateWritten(
+            switch (()) {
+              _ when reinstall => JobOutcome.reinstalled,
+              _ when asCompanion && !confirm => JobOutcome.baseInstalled,
+              _ => JobOutcome.updated,
+            },
+            mods: [for (final a in applied) if (a.result.success) a.mod.id],
+          )
+        : UpdateFailed(loc.t('mods.update_apply.failed_title'));
 
     container.invalidate(modBackupsProvider);
     container.invalidate(libraryProvider);
@@ -414,6 +451,7 @@ Future<bool> applyUpdateFlow(
       // With the primary unticked the sole attempt is a sibling, and naming the
       // wrong mod sends the user to restore something never touched.
       final lines = _failureMessage(loc, only.result, only.mod);
+      end = UpdateFailed(lines.title);
       final card = writing;
       writing = null;
       // The card is on screen already, so it becomes the error whether or not this context lasted.
@@ -432,6 +470,8 @@ Future<bool> applyUpdateFlow(
 
     writing?.dismiss();
     writing = null;
+    // The row is Finished as the result opens, rather than when it is closed.
+    queue.endUpdate(download.seq, end);
     if (!context.mounted) return changed;
     await showUpdateResultDialog(
       context,
@@ -444,6 +484,7 @@ Future<bool> applyUpdateFlow(
     return changed;
   } catch (e) {
     final title = loc.t('mods.update_apply.failed_title');
+    end = UpdateFailed(title);
     final body = '$e';
     final actions = [copyDetailsAction(loc, notify, title: title, body: body)];
     final card = writing;
@@ -459,6 +500,9 @@ Future<bool> applyUpdateFlow(
     // Belt and braces: every path above releases it, and a throw between the
     // download and the question would otherwise leave the modal up for good.
     hold.dispose();
+    queue.endUpdate(download.seq, end);
+    // After the modal's own close, so the windows it closes are the ones left over the pages.
+    if (openModPage) _openInBrowse(navigator, container, remoteModId);
     await _cleanupExtract(extractRoot);
     if (archiveConsumed) await _deleteArchive(download.file);
   }
@@ -505,8 +549,12 @@ Future<bool> applyPatchUpdateFlow(
     return false;
   }
 
+  Future<PasswordAnswer?> askPassword({required bool failed}) async =>
+      context.mounted ? showArchivePasswordDialog(context, modName: mod.name, failed: failed) : null;
+
   if (!context.mounted) return false;
-  // **The whole wait, because this path asks nothing.** A patch placement has
+  final navigator = Navigator.of(context, rootNavigator: true);
+  // **The whole wait, because this path asks nothing but an archive's password.** A patch placement has
   // no confirmation between the download and the write, so the modal carries
   // on through the unpacking *and* the copy, and comes down on the result.
   final hold = ProgressHold();
@@ -523,14 +571,25 @@ Future<bool> applyPatchUpdateFlow(
     return false;
   }
 
+  // Ended on every path, in the `finally`, as [applyUpdateFlow]'s is.
+  final queue = container.read(downloadQueueProvider.notifier);
+  UpdateEnd end = const UpdateDeclined();
   var archiveConsumed = false;
+  var openModPage = false;
   Directory? extractRoot;
   try {
     hold.say(loc.t('marketplace.preparing_unpacking'));
-    final extraction = await ArchiveService.extractArchive(
-      archiveFile: download.file,
-      knownMd5: download.md5,
+    final extraction = await _extractAsking(
+      download: download,
+      modName: mod.name,
+      ask: askPassword,
+      openModPage: () => openModPage = true,
+      queue: queue,
     );
+    if (extraction == null) {
+      await _deleteArchive(download.file);
+      return false;
+    }
     if (!extraction.success) {
       final lines = extractFailureMessage(
         loc,
@@ -541,6 +600,7 @@ Future<bool> applyPatchUpdateFlow(
         notify: notify,
       );
       fail(lines.title, lines.body, actions: lines.actions);
+      end = UpdateFailed(lines.title);
       return false;
     }
     archiveConsumed = true;
@@ -551,6 +611,7 @@ Future<bool> applyPatchUpdateFlow(
         loc.t('marketplace.install_empty_title'),
         loc.t('marketplace.install_empty_body'),
       );
+      end = UpdateFailed(loc.t('marketplace.install_empty_title'));
       return false;
     }
     extractRoot = Directory(folders.first).parent;
@@ -567,6 +628,7 @@ Future<bool> applyPatchUpdateFlow(
     );
 
     hold.say(loc.t('marketplace.preparing_writing'));
+    queue.updateStep(download.seq, UpdateStep.writing);
     final mods = await ref.read(modManagerServiceProvider.future);
     final snapshots = ref.read(snapshotServiceProvider);
     final applier = UpdateApplier(
@@ -610,11 +672,13 @@ Future<bool> applyPatchUpdateFlow(
     }
 
     if (!result.success) {
-      if (!context.mounted) return result.snapshot != null;
       final lines = _failureMessage(loc, result, mod);
+      end = UpdateFailed(lines.title);
+      if (!context.mounted) return result.snapshot != null;
       fail(lines.title, lines.body);
       return result.failure == UpdateApplyFailure.copy;
     }
+    end = UpdateWritten(JobOutcome.updated, mods: [mod.id]);
 
     // **One write for whichever layer this was**, which is what the stack
     // bought: the two shapes a mixed folder comes in used to need two branches
@@ -654,19 +718,72 @@ Future<bool> applyPatchUpdateFlow(
     ref.invalidate(modBackupsProvider);
     ref.invalidate(libraryProvider);
 
+    queue.endUpdate(download.seq, end);
     if (!context.mounted) return true;
     await showUpdateResultDialog(context, mod: mod, file: file, result: result);
     return true;
   } catch (e) {
+    final title = loc.t('mods.update_apply.failed_title');
+    end = UpdateFailed(title);
     if (context.mounted) {
-      final title = loc.t('mods.update_apply.failed_title');
       fail(title, '$e', actions: [copyDetailsAction(loc, notify, title: title, body: '$e')]);
     }
     return false;
   } finally {
     hold.dispose();
+    queue.endUpdate(download.seq, end);
+    if (openModPage) _openInBrowse(navigator, container, remoteModId);
     await _cleanupExtract(extractRoot);
     if (archiveConsumed) await _deleteArchive(download.file);
+  }
+}
+
+/// Open mod page in an update's password dialog, once the update has ended: every window over the pages closes, the
+/// one the update was started from and the Downloads panel included, and the mod's page opens in Browse.
+void _openInBrowse(NavigatorState navigator, ProviderContainer container, int modId) {
+  container.read(downloadsPanelCloseRequestProvider.notifier).state++;
+  if (navigator.mounted) navigator.popUntil((route) => route.isFirst);
+  container.read(marketplaceOpenModProvider.notifier).state = modId;
+  container.read(destinationProvider.notifier).state = AppDestination.browse;
+}
+
+/// Unpacks an update's archive, asking for its password when it has one: over the flow's own window, since an update
+/// is a conversation the user is in, and again after a password that did not open it. The unpack's own listing is
+/// what says it has one, before anything is written. Null when the user declined, which is also what Open mod page
+/// is, told to [openModPage]: the update ends and the mod's page opens in Browse.
+Future<ArchiveExtractionResult?> _extractAsking({
+  required ForegroundDownload download,
+  required String modName,
+  required Future<PasswordAnswer?> Function({required bool failed}) ask,
+  required void Function() openModPage,
+  required DownloadQueue queue,
+}) async {
+  queue.updateStep(download.seq, UpdateStep.unpacking);
+  String? password;
+  while (true) {
+    final extraction = await ArchiveService.extractArchive(
+      archiveFile: download.file,
+      knownMd5: download.md5,
+      password: password,
+    );
+    final bool failed;
+    switch (extraction.failure) {
+      case ExtractFailure.wrongPassword:
+        failed = true;
+      case ExtractFailure.passwordRequired when password == null:
+        failed = false;
+      default:
+        return extraction;
+    }
+    queue.updateStep(download.seq, UpdateStep.confirming);
+    final answer = await ask(failed: failed);
+    if (answer is PasswordOpenModPage) openModPage();
+    if (answer is! PasswordGiven) {
+      logConfirmation('update.password', accepted: false, subject: modName, dismissed: answer == null);
+      return null;
+    }
+    password = answer.password;
+    queue.updateStep(download.seq, UpdateStep.unpacking);
   }
 }
 

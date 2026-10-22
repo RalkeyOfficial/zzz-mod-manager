@@ -82,7 +82,8 @@ The one place such a link is shown is the All mods table, as a Folder missing ro
 `DownloadPaths.sweepCompleted` is documented safe at launch and nowhere else, because a completed archive is indistinguishable from one an install is about to consume. On demand the question is whether anything is in flight at all:
 
 - **The queue** — a job that has finished transferring but has not been installed is still busy. Its archive is under its final name and is exactly what the sweep would take.
-- **`ArchiveActivity`** — a drag-in or file-picker install unpacks with no download job anywhere, so the queue reads idle while an archive is being consumed. The counter is held for the unpack; the copy that follows is covered by the grace below.
+- **`ArchiveActivity`** — a drag-in or file-picker install unpacks with no download job anywhere, so the queue reads idle while an archive is being consumed. The counter is held for the unpack; the copy that follows is covered by the grace below. A download installing counts as an install in progress for the whole of its install, since it can copy from folders it unpacked long before.
+- **A download waiting for an answer** holds its unpacked folders in the temp folder for as long as it waits, so the temp extractions are refused while one waits, with a skip reason of their own ([`downloads.md`](downloads.md) §10).
 
 **Filtering to "only the files no job will claim" has no correct implementation**, which is why a closed gate refuses the whole target and names it. A download's final name is chosen at the moment it lands, by collision resolution — a job that will become `mod (2).rar` is indistinguishable from one that will become `mod.rar` until it does.
 

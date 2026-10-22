@@ -1,59 +1,120 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/palette.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../models/gamebanana/gb_file.dart';
 import '../../../models/gamebanana/gb_mod.dart';
+import '../../../services/download/download_queue.dart';
 import '../../../services/gamebanana/content_filter.dart';
+import '../../../services/gamebanana/file_selection.dart';
+import '../../../services/update_check.dart';
+import '../../../utils/marketplace_providers.dart';
+import '../../../utils/notifications.dart';
 import '../../../utils/relative_time.dart';
+import '../../../utils/state_providers.dart';
+import '../../dialogs/mod_update_dialog.dart';
+import '../zenith_controls.dart';
 import 'gb_thumbnail.dart';
 
-/// One mod in the results grid: cover, name, author, stats, category badge.
+/// One mod in the results grid, as the Browse artboard's card draws it: a 4:3 cover with its badges, the name and
+/// "author · updated", likes and downloads, and one button.
 ///
-/// Stats shown are likes / views / posts and **not downloads**: listing
-/// responses do not carry `_nDownloadCount` at all, so a download count on a
-/// card could only ever render as a misleading "0". `GbMod` models that
-/// honestly — its counters are nullable, where null means "not in this
-/// response" — and this widget simply omits what it wasn't given.
-class GbModCard extends StatefulWidget {
+/// The cover and the name open the mod page; the button acts on its own. Downloads show only when the page's
+/// `Mod/Multi` enrichment carried a number: a listing has none, and "0 downloads" on a mod with 40 000 is worse than
+/// no number.
+class GbModCard extends ConsumerStatefulWidget {
   const GbModCard({
     super.key,
     required this.mod,
     required this.treatment,
     required this.onOpen,
+    this.enrichment,
     this.installedAs = const <String>[],
+    this.onInstallFile,
+    this.bylineSubject,
+    this.showCategory = true,
   });
 
   final GbMod mod;
   final ContentTreatment treatment;
+
+  /// Opens the mod page.
   final VoidCallback onOpen;
+
+  /// This mod's `Mod/Multi` record — download count, category and files — or null while it loads, when it failed,
+  /// or for a mod GameBanana blanked.
+  final GbMod? enrichment;
 
   /// Mod folders in the local library that came from this remote mod, or empty.
   ///
-  /// A list rather than a bool because one GameBanana page routinely becomes
-  /// several folders — two variants of one mod installed side by side — and the
-  /// honest badge names them instead of implying there is one. The badge is keyed
-  /// on the *mod*, not the file: which file is installed is a separate and much
-  /// less knowable question, answered per-row in the detail view's file list.
+  /// A list rather than a bool because one GameBanana page routinely becomes several folders — two variants of one
+  /// mod installed side by side. Keyed on the *mod*, not the file: which file is installed is the detail view's
+  /// question.
   final List<String> installedAs;
 
+  /// Queues [GbFile] as an install. Install calls it only when the enrichment lists exactly one current file;
+  /// otherwise it opens the mod page, since a file is never picked for the user. Null opens the mod page always.
+  final void Function(GbFile file)? onInstallFile;
+
+  /// Who or what the byline names before the date: the author by default, the character on a creator's page,
+  /// where every card has the same author.
+  final String? bylineSubject;
+
+  /// Whether the cover names the character or category at its top-right. A creator's page leaves it out, since its
+  /// byline names it.
+  final bool showCategory;
+
+  /// The height of everything under the cover, at the current text scale: the name, the byline and the button row.
+  /// Fixed, so a narrow card keeps its text and only the cover changes with the width.
+  static double textBlockHeight(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final scaler = MediaQuery.textScalerOf(context);
+    // Rounded up, as text layout rounds a line to whole pixels.
+    double line(TextStyle style) => (scaler.scale(style.fontSize!) * style.height!).ceilToDouble();
+    const top = 12.0;
+    const gap = 3.0;
+    const buttonRow = 12.0 + 30.0 + 12.0;
+    return top + line(text.titleSmall!) + gap + line(text.bodySmall!) + buttonRow;
+  }
+
+  /// The grid's tile height for a card [width] wide: a 4:3 cover inside the 1px border, and the text block.
+  static double extentFor(BuildContext context, double width) => (width - 2) * 3 / 4 + textBlockHeight(context) + 2;
+
   @override
-  State<GbModCard> createState() => _GbModCardState();
+  ConsumerState<GbModCard> createState() => _GbModCardState();
 }
 
-class _GbModCardState extends State<GbModCard> {
-  /// Reveal is per-card and deliberately **not** persisted: clicking through one
-  /// blur is consent for that mod, not a settings change. The setting is in the
-  /// toolbar for anyone who wants it permanently.
-  bool _revealed = false;
+enum _CardAction { install, queued, inLibrary, update }
+
+/// The narrowest the character badge is drawn: its padding and a few letters. Below it the badge is left out.
+const double _categoryMinWidth = 48;
+
+class _GbModCardState extends ConsumerState<GbModCard> {
   bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    final loc = context.loc;
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final palette = ZenithPalette.of(context);
     final mod = widget.mod;
-    final blurred =
-        widget.treatment == ContentTreatment.blur && !_revealed;
+    final folders = widget.installedAs;
+
+    // Selected down to a bool: the queue changes on every progress tick, and a grid of cards rebuilding for each
+    // would be the whole grid redrawn several times a second.
+    final queued =
+        ref.watch(marketplacePendingInstallsProvider.select((ids) => ids.contains(mod.idRow))) ||
+        ref.watch(downloadQueueProvider.select((jobs) => jobs.any((j) => !j.isTerminal && j.mod?.idRow == mod.idRow)));
+    final hasUpdate =
+        folders.isNotEmpty &&
+        ref.watch(modUpdateChecksProvider.select((checks) => folders.any((f) => confirmedUpdate(checks[f]))));
+
+    final action = queued
+        ? _CardAction.queued
+        : hasUpdate
+        ? _CardAction.update
+        : folders.isNotEmpty
+        ? _CardAction.inLibrary
+        : _CardAction.install;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -61,119 +122,76 @@ class _GbModCardState extends State<GbModCard> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 120),
         decoration: BoxDecoration(
-          color: scheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: _hovered
-                ? scheme.primary.withValues(alpha: 0.6)
-                : scheme.outlineVariant.withValues(alpha: 0.4),
-          ),
-          boxShadow: _hovered
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.18),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
-              : null,
+          color: palette.card,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _hovered ? palette.edge : palette.outline),
         ),
         clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          // A blurred card opens on the first click too. Making the user reveal
-          // before opening would gate the detail view — which has its own,
-          // clearer warning — behind an extra click for no benefit.
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Expanded rather than an AspectRatio: the grid sizes the tile so this is 4:3, and taking the remainder
+            // keeps a rounding pixel from overflowing the fixed text block below.
+            Expanded(child: _cover(context, palette, hasUpdate: hasUpdate)),
+            SizedBox(height: GbModCard.textBlockHeight(context), child: _textBlock(context, palette, action)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _cover(BuildContext context, ZenithPalette palette, {required bool hasUpdate}) {
+    final loc = context.loc;
+    final mod = widget.mod;
+    final blurred = widget.treatment == ContentTreatment.blur;
+    final category = widget.showCategory ? mod.displayCategory?.name ?? widget.enrichment?.category?.name : null;
+    final installed = widget.installedAs.isNotEmpty;
+
+    return Semantics(
+      link: true,
+      label: mod.name ?? loc.t('marketplace.untitled_mod'),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
           onTap: widget.onOpen,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          child: Stack(
+            fit: StackFit.expand,
             children: [
-              // Expanded, not AspectRatio(16/9). A width-derived cover height means
-              // a narrower card gets *less* room for a text block that needs the
-              // same amount, so the text overflows the bottom below ~179px — and
-              // the same squeeze happens at any width once the OS text scale grows
-              // the title. Letting the cover absorb the leftover space instead
-              // makes vertical overflow impossible: the text always gets what it
-              // needs and the cover simply gets shorter. Requires the tile to have
-              // a bounded height, which is why the grid sets `mainAxisExtent`.
-              Expanded(
-                child: Stack(
-                  fit: StackFit.expand,
+              GbThumbnail(image: mod.coverImage, treatment: widget.treatment),
+              // No reveal on the card: a click opens the mod page, whose own reveal stays.
+              if (blurred) _MatureOverlay(palette: palette),
+              // After the overlay, so they read over the blur: owning a mod, or its character, is not adult content.
+              // The badges on the left stay whole and the character takes what is left of the row, cut short or
+              // left out, so neither covers the other at any width.
+              Positioned(
+                left: 10,
+                top: 10,
+                right: 10,
+                child: Row(
+                  spacing: 6,
                   children: [
-                    GbThumbnail(
-                      image: mod.coverImage,
-                      treatment: widget.treatment,
-                      revealed: _revealed,
-                    ),
-                    if (blurred) _revealOverlay(context, loc),
+                    if (hasUpdate)
+                      ZenithBadge(label: loc.t('marketplace.badge_update'), tone: palette.badgeUpdate)
+                    else if (installed)
+                      ZenithBadge(
+                        label: loc.t('marketplace.badge_installed'),
+                        tone: palette.badgeOn,
+                        // The folders go in the tooltip: the badge has room for one word at the narrow end.
+                        tooltip: loc.t('marketplace.installed_as', params: {'mods': widget.installedAs.join(', ')}),
+                      ),
                     if (mod.isObsolete)
-                      Positioned(
-                        top: 6,
-                        left: 6,
-                        child: _badge(
-                          context,
-                          loc.t('marketplace.badge_obsolete'),
-                          scheme.tertiary,
-                        ),
-                      ),
-                    // The status slot. Last in the Stack so it paints over the
-                    // reveal overlay: whether you already own a mod is not adult
-                    // content, and making the user click through a blur to find
-                    // out would be an odd trade. Top-right, opposite `obsolete`,
-                    // because a mod can be both.
-                    if (_statusSlot(context, loc) case final slot?)
-                      Positioned(top: 6, right: 6, child: slot),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      mod.name ?? loc.t('marketplace.untitled_mod'),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleSmall
-                          ?.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      mod.submitter?.name ?? '—',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    _Dates(mod: mod),
-                    const SizedBox(height: 6),
-                    // Two equal halves with their contents pushed to the outer
-                    // edges: stats left, category badge hard right.
-                    //
-                    // The badge half is `Expanded` + `Align`, not a bare
-                    // `Flexible`. A loose `Flexible` sizes itself to the badge, so
-                    // the leftover space in that half fell to its *right* and the
-                    // badge sat against the middle of the card rather than its
-                    // right edge. `Expanded` claims the half, `Align` puts the
-                    // badge at the end of it, and the badge still shrinks (its
-                    // label is one ellipsised line) when a category name is long.
-                    Row(
-                      children: [
-                        Expanded(child: _stats(context, mod)),
-                        if (mod.displayCategory?.name case final category?)
-                          Expanded(
-                            child: Align(
-                              alignment: Alignment.centerRight,
-                              child: _badge(
-                                context,
-                                category,
-                                scheme.primary,
-                              ),
+                      ZenithBadge(label: loc.t('marketplace.badge_obsolete'), tone: palette.badgeOverArt),
+                    Expanded(
+                      child: category == null
+                          ? const SizedBox.shrink()
+                          : LayoutBuilder(
+                              builder: (context, row) => row.maxWidth < _categoryMinWidth
+                                  ? const SizedBox.shrink()
+                                  : Align(
+                                      alignment: AlignmentDirectional.centerEnd,
+                                      child: _CategoryBadge(label: category, tone: palette.badgeOverArt),
+                                    ),
                             ),
-                          ),
-                      ],
                     ),
                   ],
                 ),
@@ -185,273 +203,282 @@ class _GbModCardState extends State<GbModCard> {
     );
   }
 
-  /// The card's **single status slot**, or null when there is nothing to say.
-  ///
-  /// One slot rendering exactly one state, never a stack of badges — the same rule
-  /// the library card follows, and for the same reason: a card that can show three
-  /// things at once shows none of them.
-  ///
-  /// A filled pill rather than the alternative that was actually built and
-  /// compared: a full-width strip along the bottom of the cover, which lost a
-  /// side-by-side review. Worth recording so it isn't re-proposed as an obvious
-  /// improvement — and worth recording what it means, since the two options put
-  /// the emphasis in different places. The strip was noticeable through *shape*
-  /// (full width, bringing its own background) and paid for it by covering a slice
-  /// of the artwork; this pill is noticeable through *fill* — opaque and
-  /// saturated, which is why [_badge] has a `filled` mode at all — and occludes
-  /// almost nothing.
-  ///
-  /// "You already have this" occupies `primary` — here and on the detail view's
-  /// notice and file-row chips alike — so the marketplace never changes hue for
-  /// that meaning between screens.
-  ///
-  /// **The slot has one branch and is meant to keep one.** An "update available"
-  /// state was considered for it and refused; see
-  /// [`docs/marketplace.md`](../../../../../docs/marketplace.md) §7 for why.
-  Widget? _statusSlot(BuildContext context, AppLocalizations loc) {
-    if (widget.installedAs.isEmpty) return null;
+  Widget _textBlock(BuildContext context, ZenithPalette palette, _CardAction action) {
+    final loc = context.loc;
+    final text = Theme.of(context).textTheme;
+    final mod = widget.mod;
+    final byline = _byline(loc, mod);
 
-    return Tooltip(
-      // The folders go in the tooltip rather than inline: at the narrow end of the
-      // grid the pill has room for two or three words, and a truncated folder name
-      // is worse than none.
-      message: loc.t(
-        'marketplace.installed_as',
-        params: {'mods': widget.installedAs.join(', ')},
-      ),
-      child: _badge(
-        context,
-        loc.t('marketplace.badge_installed'),
-        Theme.of(context).colorScheme.primary,
-        filled: true,
-      ),
-    );
-  }
-
-  Widget _revealOverlay(BuildContext context, AppLocalizations loc) {
-    // Fixed white, **not** a theme colour. This sits on an always-dark scrim over
-    // an arbitrary image, so it is not the theme's surface — `onInverseSurface`
-    // resolved to dark grey and vanished against the typical dark cover. The
-    // scrim + shadow give it contrast over a light image too, which is the case a
-    // plain white label would fail.
-    const label = Color(0xFFFFFFFF);
-    const shadows = [Shadow(color: Color(0xCC000000), blurRadius: 4)];
-
-    return Positioned.fill(
-      child: Material(
-        color: Colors.black.withValues(alpha: 0.55),
-        child: InkWell(
-          onTap: () => setState(() => _revealed = true),
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  Icons.visibility_off_outlined,
-                  color: label,
-                  size: 22,
-                  shadows: shadows,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 3,
+            children: [
+              ZenithLink(
+                mod.name ?? loc.t('marketplace.untitled_mod'),
+                onTap: widget.onOpen,
+                maxLines: 1,
+                style: text.titleSmall!.copyWith(color: palette.text),
+              ),
+              Tooltip(
+                message: byline.tooltip ?? '',
+                child: Text(
+                  byline.text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: text.bodySmall!.copyWith(color: palette.text3),
                 ),
-                const SizedBox(height: 4),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Text(
-                    loc.t('marketplace.content_reveal'),
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: label,
-                      fontWeight: FontWeight.w700,
-                      shadows: shadows,
-                    ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            spacing: 12,
+            children: [
+              Expanded(
+                // Scaled down rather than clipped or overflowing: a count can reach "1.2M" and the button label
+                // is longer in Ukrainian, at the narrowest card the grid makes.
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: 12,
+                    children: [
+                      if (mod.likeCount case final likes?)
+                        GbStat(icon: Icons.favorite_border_rounded, value: compactCount(likes)),
+                      if (widget.enrichment?.downloadCount case final downloads?)
+                        GbStat(icon: Icons.download_rounded, value: compactCount(downloads)),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+              SizedBox(height: 30, child: _button(context, action)),
+            ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _stats(BuildContext context, GbMod mod) {
-    final scheme = Theme.of(context).colorScheme;
-    final style = Theme.of(context)
-        .textTheme
-        .bodySmall
-        ?.copyWith(color: scheme.onSurfaceVariant);
-    // Each entry is omitted when the response didn't carry it, rather than
-    // rendered as a zero.
-    final entries = <(IconData, int)>[
-      if (mod.likeCount case final n?) (Icons.favorite_outline, n),
-      if (mod.viewCount case final n?) (Icons.visibility_outlined, n),
-      if (mod.postCount case final n?) (Icons.mode_comment_outlined, n),
-    ];
-    if (entries.isEmpty) return const SizedBox.shrink();
-
-    // FittedBox because this row's slot is not a fixed width and its content is
-    // not a fixed length: cards reflow at a 300px max extent down to an 800px
-    // minimum window, the app has its own zoom scale, and a count can reach
-    // "1.2M". Scaling down keeps every digit readable, where clipping would hide
-    // content and a plain Row overflows — which is what it did.
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      alignment: AlignmentDirectional.centerStart,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final (index, (icon, count)) in entries.indexed) ...[
-            // Between items only. A trailing gap after the last entry pushed the
-            // row 8px wider than its content for no visual benefit.
-            if (index > 0) const SizedBox(width: 8),
-            Icon(icon, size: 12, color: scheme.onSurfaceVariant),
-            const SizedBox(width: 2),
-            Text(_compact(count), style: style),
-          ],
-        ],
-      ),
-    );
-  }
-
-  /// A small pill. [filled] paints it opaque, for a badge sitting over cover
-  /// artwork rather than a themed surface — a 15%-alpha fill is legible against
-  /// `surfaceContainerLow` and illegible against a screenshot.
-  Widget _badge(
-    BuildContext context,
-    String label,
-    Color color, {
-    bool filled = false,
-  }) {
-    final foreground =
-        filled ? Theme.of(context).colorScheme.onPrimary : color;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: filled ? color : color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: filled ? 1 : 0.4)),
-      ),
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: foreground,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-
-  /// `12.3k` / `1.2M`. Popular ZZZ mods run to six figures of views, which would
-  /// otherwise wrap the stats row.
-  static String _compact(int n) {
-    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
-    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}k';
-    return '$n';
-  }
-}
-
-/// "First released N ago · last updated N ago", the pair GameBanana shows.
-///
-/// Both dates rather than one because they routinely disagree by a lot — the
-/// captured listing has mods added in 2024 and updated last week — and which one
-/// matters depends on the question. "Is this maintained?" is the update date;
-/// "is this an old classic or brand new?" is the release date.
-class _Dates extends StatelessWidget {
-  const _Dates({required this.mod});
-
-  final GbMod mod;
-
-  @override
-  Widget build(BuildContext context) {
-    final loc = context.loc;
-    final scheme = Theme.of(context).colorScheme;
-    final style = Theme.of(context)
-        .textTheme
-        .bodySmall!
-        .copyWith(color: scheme.onSurfaceVariant);
-
-    final added = mod.dateAdded;
-    // `_tsDateUpdated` is the *content* update, and it is null on a mod that has
-    // never been updated (a zero timestamp means "never", not 1970). Treating a
-    // non-later value as absent also covers a mod whose update date merely echoes
-    // its release date, which would otherwise render the same figure twice.
-    final updated = mod.dateUpdated;
-    final hasUpdate =
-        updated != null && added != null && updated.isAfter(added);
-
-    if (added == null && !hasUpdate) return const SizedBox.shrink();
-
-    // `DateTime.now()` is read here rather than injected: this is a label that is
-    // rebuilt whenever the card is, and the arithmetic it feeds is unit-tested
-    // separately with an injected clock (`relative_time_test.dart`).
-    final now = DateTime.now().toUtc();
-
-    return Row(
-      children: [
-        Flexible(
-          child: _entry(
-            context,
-            icon: Icons.schedule,
-            label: _ago(loc, added, now),
-            tooltip: loc.t('marketplace.first_released',
-                params: {'date': _absolute(added)}),
-            style: style,
-          ),
-        ),
-        if (hasUpdate) const SizedBox(width: 10),
-        if (hasUpdate)
-          Flexible(
-            child: _entry(
-              context,
-              icon: Icons.autorenew,
-              label: _ago(loc, updated, now),
-              tooltip: loc.t('marketplace.last_updated',
-                  params: {'date': _absolute(updated)}),
-              style: style,
-            ),
-          ),
       ],
     );
   }
 
-  Widget _entry(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required String tooltip,
-    required TextStyle style,
-  }) {
-    // The tooltip carries the absolute date, so "2y" is never the only thing the
-    // user can find out.
-    return Tooltip(
-      message: tooltip,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 11, color: style.color),
-          const SizedBox(width: 3),
-          Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: style,
-            ),
-          ),
-        ],
+  Widget _button(BuildContext context, _CardAction action) {
+    final loc = context.loc;
+    final style = smallButtonStyle(context);
+    return switch (action) {
+      _CardAction.install => FilledButton(style: style, onPressed: _install, child: Text(loc.t('marketplace.install'))),
+      // Inert, as the download is already on its way and the panel is where it is followed, but drawn as the
+      // default button rather than greyed: nothing is wrong with it.
+      _CardAction.queued => OutlinedButton(
+        style: style.copyWith(foregroundColor: WidgetStatePropertyAll(ZenithPalette.of(context).text)),
+        onPressed: null,
+        child: Text(loc.t('marketplace.queued')),
       ),
-    );
+      _CardAction.inLibrary => TextButton(
+        style: style,
+        onPressed: () => showMarketplaceModInLibrary(context, ref, widget.installedAs),
+        child: Text(loc.t('marketplace.in_library')),
+      ),
+      _CardAction.update => OutlinedButton(style: style, onPressed: _update, child: Text(loc.t('marketplace.update'))),
+    };
   }
 
-  static String _ago(AppLocalizations loc, DateTime instant, DateTime now) {
-    final age = relativeAge(instant, now: now);
-    return loc.t('time.${age.unit.l10nKey}', params: {'n': '${age.count}'});
+  /// Queues the mod's one current file, or opens the mod page when there are several, none, or no file list.
+  void _install() {
+    final file = selectDefaultFile(widget.enrichment?.files).file;
+    final install = widget.onInstallFile;
+    if (file != null && install != null) {
+      install(file);
+    } else {
+      widget.onOpen();
+    }
+  }
+
+  Future<void> _update() => updateMarketplaceMod(context, ref, widget.installedAs);
+
+  ({String text, String? tooltip}) _byline(AppLocalizations loc, GbMod mod) {
+    final author = widget.bylineSubject ?? mod.submitter?.name ?? '—';
+    final added = mod.dateAdded;
+    final updated = mod.dateUpdated;
+    // `_tsDateUpdated` is null on a mod never updated, and some records echo the release date there, so a mod
+    // reads as updated only when that date is later than its release.
+    final hasUpdate = updated != null && (added == null || updated.isAfter(added));
+    final date = hasUpdate ? updated : added;
+    if (date == null) return (text: author, tooltip: null);
+    final age = relativeAgeLabel(loc, date, DateTime.now().toUtc());
+    return (
+      text: loc.t(
+        hasUpdate ? 'marketplace.card_byline_updated' : 'marketplace.card_byline_added',
+        params: {'author': author, 'age': age},
+      ),
+      tooltip: loc.t(
+        hasUpdate ? 'marketplace.last_updated' : 'marketplace.first_released',
+        params: {'date': _absolute(date)},
+      ),
+    );
   }
 
   static String _absolute(DateTime date) {
     final d = date.toLocal();
     String two(int n) => n.toString().padLeft(2, '0');
     return '${d.year}-${two(d.month)}-${two(d.day)}';
+  }
+}
+
+/// Whether [check] found a newer file. A possibly outdated mod is a guess, which Browse leaves to the Library to
+/// raise, so it reads In library here.
+bool confirmedUpdate(UpdateCheck? check) =>
+    check != null && !check.dismissed && check.outcome == UpdateOutcome.updateAvailable;
+
+/// The update dialog for the first of [folders], in library order, that has a newer file, as the Updates page opens
+/// it; the library is read again when it wrote anything. A card's Update and the mod page's.
+Future<void> updateMarketplaceMod(BuildContext context, WidgetRef ref, List<String> folders) async {
+  final checks = ref.read(modUpdateChecksProvider);
+  final target = ref.read(modsProvider).where((m) => folders.contains(m.id) && confirmedUpdate(checks[m.id])).firstOrNull;
+  if (target == null) return;
+  final container = ProviderScope.containerOf(context, listen: false);
+  if (await showModUpdateDialog(context, target)) {
+    await container.read(libraryProvider.notifier).rescan();
+  }
+}
+
+/// The character or category name at the cover's top-right, `ZenithBadge`'s geometry with a label that is cut with an
+/// ellipsis where its box ends. `ZenithBadge` hugs its label and cannot be cut.
+class _CategoryBadge extends StatelessWidget {
+  const _CategoryBadge({required this.label, required this.tone});
+
+  final String label;
+  final TonePair tone;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 22,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: tone.background,
+        borderRadius: BorderRadius.circular(6),
+        border: tone.border == null ? null : Border.all(color: tone.border!),
+      ),
+      // Placed in a box of bounded width, so the label may be flexible and hug or cut as it needs.
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(color: tone.foreground),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The blur mode's veil over a flagged cover: the crossed eye, "Mature content", and where that was set.
+class _MatureOverlay extends StatelessWidget {
+  const _MatureOverlay({required this.palette});
+
+  final ZenithPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = context.loc;
+    final text = Theme.of(context).textTheme;
+    return ColoredBox(
+      color: palette.artworkScrim,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            spacing: 4,
+            children: [
+              Icon(Icons.visibility_off_outlined, size: 20, color: palette.onArtwork),
+              Text(
+                loc.t('marketplace.mature_content'),
+                textAlign: TextAlign.center,
+                style: text.bodyMedium!.copyWith(color: palette.artworkTitle, fontWeight: FontWeight.w600),
+              ),
+              Text(
+                loc.t('marketplace.mature_blurred'),
+                textAlign: TextAlign.center,
+                style: text.labelSmall!.copyWith(
+                  color: palette.onArtwork.withValues(alpha: 0.8),
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A count with its 13px icon, the design's `.stat`: likes, downloads.
+class GbStat extends StatelessWidget {
+  const GbStat({super.key, required this.icon, required this.value, this.color});
+
+  final IconData icon;
+  final String value;
+
+  /// Defaults to the hint grey.
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = color ?? ZenithPalette.of(context).text3;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      spacing: 4,
+      children: [
+        Icon(icon, size: 13, color: foreground),
+        Text(value, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: foreground)),
+      ],
+    );
+  }
+}
+
+/// `12.3k` / `1.2M`. Popular ZZZ mods run to six figures of downloads, which would otherwise crowd the button.
+String compactCount(int n) {
+  if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+  if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}k';
+  return '$n';
+}
+
+/// How long ago [instant] was, in words: "3 days ago", "1 week ago", "just now". [relativeAge] picks the unit.
+String relativeAgeLabel(AppLocalizations loc, DateTime instant, DateTime now) {
+  final age = relativeAge(instant, now: now);
+  final params = {'count': '${age.count}'};
+  return switch (age.unit) {
+    RelativeUnit.justNow => loc.t('time.just_now'),
+    RelativeUnit.minutes => loc.plural('time.minutes_ago', age.count, params: params),
+    RelativeUnit.hours => loc.plural('time.hours_ago', age.count, params: params),
+    RelativeUnit.days => loc.plural('time.days_ago', age.count, params: params),
+    RelativeUnit.weeks => loc.plural('time.weeks_ago', age.count, params: params),
+    RelativeUnit.months => loc.plural('time.months_ago', age.count, params: params),
+    RelativeUnit.years => loc.plural('time.years_ago', age.count, params: params),
+  };
+}
+
+/// Shows the mod in the Library's Characters view with its details panel open: the first of [folders] in library
+/// order, as the install notification's Open does. A folder gone since the library was read says so.
+Future<void> showMarketplaceModInLibrary(BuildContext context, WidgetRef ref, List<String> folders) async {
+  if (folders.isEmpty) return;
+  final folder = ref.read(modsProvider).map((m) => m.id).where(folders.contains).firstOrNull ?? folders.first;
+  final container = ProviderScope.containerOf(context, listen: false);
+  final notify = context.notify;
+  final gone = context.loc.t('notifications.mod_gone');
+  if (await showModInCharacters(container, folder) == ShowModResult.notInLibrary) {
+    notify.note(gone, body: folder);
   }
 }

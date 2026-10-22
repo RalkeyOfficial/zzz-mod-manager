@@ -189,6 +189,33 @@ void main() {
     });
   });
 
+  group('deleting an unpack', () {
+    test('takes the whole extraction directory, for mods that came out a level down as well', () async {
+      final zip = _makeZip(path.join(tmp.path, 'jiggleforge.zip'), {
+        'INSTALL-en.txt': 'read me',
+        'Mods/JiggleForgeShaderFix/JiggleForge.ini': '[Constants]',
+        'ShaderFixes/1f6ab42231416fdb-vs_replace.txt': 'shader',
+      });
+      final result = await ArchiveService.extractArchive(archiveFile: zip, freeSpace: (_) async => null);
+      expect(result.success, isTrue, reason: result.error);
+      final folder = result.extractedFolders!.single;
+      final root = Directory(folder).parent.parent;
+      expect(path.basename(root.path), startsWith('zzz_archive_extract_'), reason: 'the ZZMI-root layout under test');
+
+      await ArchiveService.deleteExtraction(result.extractedFolders!);
+
+      expect(root.existsSync(), isFalse);
+    });
+
+    test('leaves a folder no unpack created alone', () async {
+      final folder = Directory(path.join(tmp.path, 'library', 'Ellen'))..createSync(recursive: true);
+
+      await ArchiveService.deleteExtraction([folder.path]);
+
+      expect(folder.existsSync(), isTrue);
+    });
+  });
+
   group('archive fingerprint', () {
     // The archive is deleted after a successful install and a zip cannot be
     // reproduced byte-for-byte from its extracted files, so this hash is the

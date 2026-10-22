@@ -44,3 +44,9 @@ int? parseSevenZipUnpackedBytes(String output) {
 
   return found ? total : null;
 }
+
+/// Whether `7z l -slt` names any entry `Encrypted = +`, which is how an archive
+/// whose files are encrypted lists without a password. A field rather than a
+/// message, so nothing depends on 7-Zip's English.
+bool sevenZipListsEncryptedEntries(String output) =>
+    RegExp(r'^Encrypted = \+\s*$', multiLine: true).hasMatch(output);

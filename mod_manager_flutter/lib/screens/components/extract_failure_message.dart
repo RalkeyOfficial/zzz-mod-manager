@@ -61,7 +61,11 @@ NotificationLines extractFailureMessage(
     // Without its two numbers there is nothing to say beyond the generic
     // wording, and the generic wording is true: the archive is where it was.
     ExtractFailure.insufficientSpace => 'marketplace.extract_failed',
-    ExtractFailure.other => 'marketplace.extract_failed',
+    // Asked about before it gets here; an archive still refused is where it was.
+    ExtractFailure.passwordRequired ||
+    ExtractFailure.wrongPassword ||
+    ExtractFailure.other =>
+      'marketplace.extract_failed',
   };
   return NotificationLines(
     loc.t('${key}_title'),

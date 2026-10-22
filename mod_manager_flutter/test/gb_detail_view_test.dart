@@ -1,31 +1,41 @@
-import 'package:flutter/gestures.dart' show PointerDeviceKind;
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/core/palette.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
-import 'package:mod_manager_flutter/models/gamebanana/gb_category.dart';
-import 'package:mod_manager_flutter/models/gamebanana/gb_enums.dart';
-import 'package:mod_manager_flutter/models/gamebanana/gb_image.dart';
-import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
-import 'package:mod_manager_flutter/models/gamebanana/gb_page.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gamebanana.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
+import 'package:mod_manager_flutter/screens/components/category_picker.dart';
 import 'package:mod_manager_flutter/screens/components/marketplace/gb_detail_view.dart';
+import 'package:mod_manager_flutter/screens/components/page_crumbs.dart';
+import 'package:mod_manager_flutter/screens/components/zenith_controls.dart';
+import 'package:mod_manager_flutter/screens/components/zenith_switch.dart';
+import 'package:mod_manager_flutter/screens/dialogs/install_archive_flow.dart';
+import 'package:mod_manager_flutter/screens/dialogs/mod_update_dialog.dart';
+import 'package:mod_manager_flutter/services/download/download_handle.dart';
+import 'package:mod_manager_flutter/services/download/download_job.dart';
+import 'package:mod_manager_flutter/services/download/download_request.dart';
 import 'package:mod_manager_flutter/services/gamebanana/content_filter.dart';
 import 'package:mod_manager_flutter/services/installed_mods_index.dart';
-import 'package:mod_manager_flutter/utils/markdown_style.dart';
+import 'package:mod_manager_flutter/services/update_check.dart';
 import 'package:mod_manager_flutter/utils/marketplace_providers.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
+import 'package:mod_manager_flutter/utils/zzz_characters.dart';
+import 'package:path/path.dart' as p;
 
+import 'support/all_mods_harness.dart' show loadTableFonts;
 import 'support/fixtures.dart';
+import 'support/library_override.dart';
 import 'support/localized_harness.dart';
 import 'support/origin_shorthand.dart';
+import 'support/temp_library.dart';
 
-/// The mod detail screen, with its gallery navigation.
-///
-/// This file exists because nothing covered this widget, and two gallery bugs went
-/// out through that gap — a stale preview on switch, and a strip that could only be
-/// moved with shift+scroll. Both are only reachable by driving the thing.
+/// A mod's page in Browse: the crumbs, the gallery, the author's update posts, and the panel that decides what an
+/// install carries, the character, the files and whether the new mods are turned on.
 void main() {
   GbImage image(String name) => GbImage.fromJson({
     '_sBaseUrl': 'https://images.gamebanana.com/img/ss/mods',
@@ -35,53 +45,80 @@ void main() {
     '_sFile800': '800-_$name.jpg',
   })!;
 
-  GbMod mod({int imageCount = 4}) => GbMod(
+  const ellen = GbCategoryRef(idRow: 30306, name: 'Ellen Joe');
+  const skins = GbCategoryRef(idRow: 30305, name: 'Character Skins');
+  const threeFiles = [
+    GbFile(idRow: 11, file: 'first.zip'),
+    GbFile(idRow: 12, file: 'second.zip'),
+    GbFile(idRow: 13, file: 'third.zip'),
+  ];
+
+  GbMod mod({
+    int imageCount = 4,
+    List<GbFile> files = threeFiles,
+    GbCategoryRef? category = ellen,
+    GbCategoryRef? superCategory = skins,
+    String? text = '<p>Some description</p>',
+    List<String> tags = const [],
+  }) => GbMod(
     idRow: 700727,
     name: 'A Mod',
-    text: 'Some description',
+    text: text,
     visibility: GbVisibility.show,
-    files: const [],
+    category: category,
+    superCategory: superCategory,
+    files: files,
+    tags: tags,
     images: [for (var i = 0; i < imageCount; i++) image('img$i')],
   );
 
-  Future<void> pumpDetail(
+  /// Every queue press, as the files, the character and the intent.
+  late List<(List<int>, String?, DownloadIntent)> queued;
+
+  setUp(() => queued = []);
+
+  Future<ProviderContainer> pumpDetail(
     WidgetTester tester, {
-    int imageCount = 4,
-    // The whole profile, for the tests that are about a field rather than about
-    // the gallery. Defaults to the shared fixture.
     GbMod? profile,
-    Size surfaceSize = const Size(1200, 800),
-    // Overridden rather than left to load: unoverridden it reaches for
-    // `ApiService`, which needs a real `SharedPreferences` and so resolves to an
-    // error — silently, as an unread `AsyncValue`. Every "no badge" assertion
-    // would then pass for the wrong reason.
+    Size surfaceSize = const Size(1400, 1400),
     InstalledModsIndex installed = InstalledModsIndex.empty,
+    Future<List<GbUpdate>> Function()? updates,
+    CharacterPicker? pickCharacter,
+    TurnOnAfterInstallWriter? turnOnWriter,
+    VoidCallback? onBack,
+    List<Override> extra = const [],
   }) async {
+    final container = ProviderContainer(overrides: [
+      modProfileProvider(700727).overrideWith((ref) async => profile ?? mod()),
+      modUpdatesProvider(700727).overrideWith((ref) => (updates ?? () async => const <GbUpdate>[])()),
+      contentFilterProvider.overrideWith((ref) => ContentFilterMode.show),
+      // Overridden rather than left to load: unoverridden it reaches for `ApiService`, which resolves to an error
+      // silently, and every "no badge" assertion would then pass for the wrong reason.
+      installedModsIndexProvider.overrideWith((ref) async => installed),
+      ...extra,
+    ]);
+    addTearDown(container.dispose);
     await pumpLocalized(
       tester,
       GbDetailView(
         modId: 700727,
-        onBack: () {},
-        onDownload: (_, __) {},
+        onBack: onBack ?? () {},
+        onQueue: (mod, files, {required characterId, required intent}) =>
+            queued.add(([for (final f in files) f.idRow], characterId, intent)),
         onOpenInBrowser: (_) {},
+        pickCharacter: pickCharacter ?? (context, {required currentId}) async => null,
+        turnOnWriter: turnOnWriter ?? (_) async {},
       ),
+      container: container,
       surfaceSize: surfaceSize,
-      overrides: [
-        modProfileProvider(
-          700727,
-        ).overrideWith((ref) async => profile ?? mod(imageCount: imageCount)),
-        contentFilterProvider.overrideWith((ref) => ContentFilterMode.show),
-        installedModsIndexProvider.overrideWith((ref) async => installed),
-      ],
     );
     expectBuilt(GbDetailView);
+    return container;
   }
 
-  /// The url the large preview is currently showing.
+  /// The url the large picture is showing: the only 800px request on screen.
   String heroUrl(WidgetTester tester) {
-    // The hero is the only 800px request on screen.
-    final images = tester.widgetList<Image>(find.byType(Image));
-    for (final img in images) {
+    for (final img in tester.widgetList<Image>(find.byType(Image))) {
       final provider = img.image;
       if (provider is ResizeImage && provider.width == 800) {
         return (provider.imageProvider as NetworkImage).url;
@@ -90,447 +127,630 @@ void main() {
     fail('no 800px hero image found');
   }
 
+  /// An icon inside the large picture, which keeps the crumbs' own back chevron out of it.
+  Finder inHero(IconData icon) =>
+      find.descendant(of: find.byKey(const ValueKey('gallery_hero')), matching: find.byIcon(icon));
+
   IconButton arrow(WidgetTester tester, IconData icon) =>
-      tester.widget<IconButton>(
-        find.ancestor(of: find.byIcon(icon), matching: find.byType(IconButton)),
-      );
+      tester.widget<IconButton>(find.ancestor(of: inHero(icon), matching: find.byType(IconButton)));
 
-  group('gallery arrows', () {
-    testWidgets('step forward and back through the previews', (tester) async {
-      await pumpDetail(tester);
-      expect(heroUrl(tester), contains('img0'));
+  Finder crumb(String label) => find.descendant(of: find.byType(PageCrumbs), matching: find.text(label));
 
-      await tester.tap(find.byIcon(Icons.chevron_right));
-      await tester.pumpAndSettle();
-      expect(heroUrl(tester), contains('img1'));
+  group('the crumbs', () {
+    testWidgets('read Browse / the category / the mod, and Browse goes back', (tester) async {
+      var wentBack = 0;
+      await pumpDetail(tester, onBack: () => wentBack++);
+      expect(crumb('Browse'), findsOneWidget);
+      expect(crumb('Ellen Joe'), findsOneWidget);
+      expect(crumb('A Mod'), findsOneWidget);
+      expect(find.descendant(of: find.byType(PageCrumbs), matching: find.text('Open on GameBanana')), findsOneWidget);
 
-      await tester.tap(find.byIcon(Icons.chevron_right));
-      await tester.pumpAndSettle();
-      expect(heroUrl(tester), contains('img2'));
-
-      await tester.tap(find.byIcon(Icons.chevron_left));
-      await tester.pumpAndSettle();
-      expect(heroUrl(tester), contains('img1'));
+      await tester.tap(crumb('Browse'));
+      expect(wentBack, 1);
+      await tester.tap(find.byTooltip('Back'));
+      expect(wentBack, 2);
     });
 
-    testWidgets('clamp at both ends rather than wrapping', (tester) async {
-      // Matches the "best of" carousel: a disabled arrow states where the list ends,
-      // where looping silently reads as a glitch.
-      await pumpDetail(tester, imageCount: 2);
-
-      expect(
-        arrow(tester, Icons.chevron_left).onPressed,
-        isNull,
-        reason: 'nothing before the first preview',
-      );
-      expect(arrow(tester, Icons.chevron_right).onPressed, isNotNull);
-
-      await tester.tap(find.byIcon(Icons.chevron_right));
-      await tester.pumpAndSettle();
-
-      expect(arrow(tester, Icons.chevron_left).onPressed, isNotNull);
-      expect(
-        arrow(tester, Icons.chevron_right).onPressed,
-        isNull,
-        reason: 'nothing after the last preview',
-      );
-    });
-
-    testWidgets('are absent for a single-image mod', (tester) async {
-      // Nothing to step through, so the arrows would only obscure the preview.
-      await pumpDetail(tester, imageCount: 1);
-      expect(find.byIcon(Icons.chevron_left), findsNothing);
-      expect(find.byIcon(Icons.chevron_right), findsNothing);
-    });
-
-    testWidgets('tapping a thumbnail still selects it', (tester) async {
-      // The arrows are additive; the existing interaction must keep working.
-      await pumpDetail(tester);
-      // Scoped to the strip: the header's back button and "open in browser" are
-      // InkWells too, so an unscoped index taps the wrong thing and this asserts
-      // nothing.
-      final thumbs = find.descendant(
-        of: find.byType(Scrollbar),
-        matching: find.byType(InkWell),
-      );
-      expect(thumbs, findsNWidgets(4));
-
-      await tester.tap(thumbs.at(2));
-      await tester.pumpAndSettle();
-      expect(heroUrl(tester), contains('img2'));
-    });
-  });
-
-  group('the thumbnail strip', () {
-    testWidgets('has a permanently visible scrollbar', (tester) async {
-      // A strip that scrolls with no indication that it scrolls is the reported
-      // problem, so hover-to-discover is not enough.
-      await pumpDetail(tester);
-      final bar = tester.widget<Scrollbar>(find.byType(Scrollbar));
-      expect(bar.thumbVisibility, isTrue);
-      expect(
-        bar.controller,
-        isNotNull,
-        reason: 'the bar and the list must share one controller',
-      );
-    });
-
-    testWidgets('accepts mouse dragging', (tester) async {
-      // Flutter's desktop scroll behaviour leaves the mouse out of `dragDevices`,
-      // which is exactly why the strip could previously only be moved with
-      // shift+scroll.
-      await pumpDetail(tester);
-
-      final config = tester.widget<ScrollConfiguration>(
-        find
-            .ancestor(
-              of: find.byType(Scrollbar),
-              matching: find.byType(ScrollConfiguration),
-            )
-            .first,
-      );
-      final devices = config.behavior.dragDevices;
-      expect(devices, contains(PointerDeviceKind.mouse));
-      expect(devices, contains(PointerDeviceKind.touch));
-    });
-
-    testWidgets('the mouse-drag override covers only the strip', (
-      tester,
-    ) async {
-      // Scoped deliberately: the page is a vertical ListView holding selectable
-      // description text, and mouse-dragging *that* would fight text selection. So
-      // the override must contain exactly one scrollable — the strip — and not the
-      // page it sits inside.
-      await pumpDetail(tester);
-
-      final override = find
-          .ancestor(
-            of: find.byType(Scrollbar),
-            matching: find.byType(ScrollConfiguration),
-          )
-          .first;
-
-      expect(
-        find.descendant(of: override, matching: find.byType(Scrollable)),
-        findsOneWidget,
-        reason: 'two would mean the page inherited the override as well',
-      );
-    });
-
-    testWidgets('a mouse drag actually moves it', (tester) async {
-      await pumpDetail(tester, imageCount: 24);
-      final strip = find.byType(Scrollbar);
-      final controller = tester.widget<Scrollbar>(strip).controller!;
-      expect(controller.offset, 0);
-
-      await tester.drag(
-        strip,
-        const Offset(-200, 0),
-        kind: PointerDeviceKind.mouse,
-      );
-      await tester.pumpAndSettle();
-
-      expect(
-        controller.offset,
-        greaterThan(100),
-        reason: 'dragging with a mouse must scroll the strip',
-      );
-    });
-
-    testWidgets('is absent for a single-image mod', (tester) async {
-      await pumpDetail(tester, imageCount: 1);
-      expect(find.byType(Scrollbar), findsNothing);
-    });
-  });
-
-  group('the description column', () {
-    testWidgets('stops at a readable measure and stays centred', (
-      tester,
-    ) async {
-      // A maximised window is far wider than anyone can comfortably read
-      // across, and GameBanana itself lays a description out in a ~522px
-      // column — so the text it was written for is this shape, not the window's.
-      await pumpDetail(tester, surfaceSize: const Size(1400, 2400));
-
-      final description = tester.getRect(find.byType(MarkdownBody));
-      expect(description.width, MarkdownScale.readingWidth);
-      expect(description.center.dx, 1400 / 2);
-    });
-
-    testWidgets('gives way on a window narrower than the cap', (tester) async {
-      // The cap is a maximum, not a width: below it the column must still fit
-      // the window rather than overflow it.
-      await pumpDetail(tester, surfaceSize: const Size(420, 2400));
-
-      final description = tester.getRect(find.byType(MarkdownBody));
-      expect(description.width, lessThan(MarkdownScale.readingWidth));
-      expect(description.left, greaterThanOrEqualTo(0));
-      expect(description.right, lessThanOrEqualTo(420));
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('the heading stays aligned with the text it labels', (
-      tester,
-    ) async {
-      await pumpDetail(tester, surfaceSize: const Size(1400, 2400));
-
-      final heading = tester.getRect(find.text('Description'));
-      final description = tester.getRect(find.byType(MarkdownBody));
-      expect(heading.left, description.left);
-    });
-  });
-
-  group('the dates', () {
-    /// The two timestamps as the api sends them, in **seconds**.
-    GbMod dated({DateTime? added, DateTime? updated}) => GbMod(
-      idRow: 700727,
-      name: 'A Mod',
-      visibility: GbVisibility.show,
-      files: const [],
-      dateAdded: added,
-      dateUpdated: updated,
-    );
-
-    testWidgets('the first release is shown', (tester) async {
-      // It was missing entirely: the screen only ever rendered one date slot.
-      await pumpDetail(
-        tester,
-        profile: dated(added: DateTime.utc(2024, 9, 12, 12)),
-      );
-      expect(find.textContaining('released 2024-09-12'), findsOneWidget);
-    });
-
-    testWidgets('a mod that has never been updated says so by omission',
-        (tester) async {
-      // `_tsDateUpdated` is null until a mod is actually updated, and the old
-      // `dateUpdated ?? dateAdded` fallback turned that null into "updated
-      // <release date>" — the one reading of these fields that states something
-      // untrue.
-      await pumpDetail(
-        tester,
-        profile: dated(added: DateTime.utc(2024, 9, 12, 12)),
-      );
-      expect(find.textContaining('updated'), findsNothing);
-    });
-
-    testWidgets('both are shown once there is an update', (tester) async {
-      await pumpDetail(
-        tester,
-        profile: dated(
-          added: DateTime.utc(2024, 9, 12, 12),
-          updated: DateTime.utc(2026, 3, 4, 12),
-        ),
-      );
-      expect(find.textContaining('released 2024-09-12'), findsOneWidget);
-      expect(find.textContaining('updated 2026-03-04'), findsOneWidget);
-    });
-  });
-
-  group('the "in your library" notice', () {
-    testWidgets('is absent for a mod the library does not have',
-        (tester) async {
-      await pumpDetail(tester);
-      expect(find.textContaining('In your library'), findsNothing);
-    });
-
-    testWidgets('names the folders, at mod level', (tester) async {
-      // Mod level on purpose: for a library that predates the origin block this
-      // is the *only* answer available — nothing local survives extraction to
-      // identify which file was installed — so the screen must be able to say
-      // "you have this mod" without pretending to know which file.
-      await pumpDetail(
-        tester,
-        installed: InstalledModsIndex.fromMods([
-          ModInfo(
-            id: 'Remielle Swim',
-            name: 'Remielle Swim',
-            characterId: 'unknown',
-            isActive: false,
-            origin: originFixture(
-              provenance: OriginProvenance.importedFolder,
-              source: 'gamebanana',
-              modId: 700727,
-              modIdConfidence: OriginConfidence.inferred,
-            ),
-          ),
-        ]),
-      );
-      expect(
-        find.text('In your library as Remielle Swim'),
-        findsOneWidget,
-      );
-    });
-  });
-
-  group('the category links to everything else under it', () {
-    /// The detail view over [category], with a container so the query it writes
-    /// can be read back.
-    Future<ProviderContainer> pumpCategory(
-      WidgetTester tester,
-      GbCategoryRef? category, {
-      GbCategoryRef? root,
-      VoidCallback? onBack,
-    }) async {
-      final container = ProviderContainer(overrides: [
-        modProfileProvider(700727).overrideWith((ref) async => GbMod(
-              idRow: 700727,
-              name: 'A Mod',
-              visibility: GbVisibility.show,
-              files: const [],
-              category: category,
-              rootCategory: root,
-            )),
-        contentFilterProvider.overrideWith((ref) => ContentFilterMode.show),
-        installedModsIndexProvider
-            .overrideWith((ref) async => InstalledModsIndex.empty),
-      ]);
-      addTearDown(container.dispose);
-
-      await pumpLocalized(
-        tester,
-        GbDetailView(
-          modId: 700727,
-          onBack: onBack ?? () {},
-          onDownload: (_, __) {},
-          onOpenInBrowser: (_) {},
-        ),
-        container: container,
-      );
-      expectBuilt(GbDetailView);
-      return container;
-    }
-
-    testWidgets('tapping it filters the grid and goes back', (tester) async {
+    testWidgets('the character crumb filters the grid by it and goes back', (tester) async {
       var wentBack = false;
-      final container = await pumpCategory(
-        tester,
-        const GbCategoryRef(idRow: 30306, name: 'Ellen Joe'),
-        root: const GbCategoryRef(idRow: 30305, name: 'Character Skins'),
-        onBack: () => wentBack = true,
-      );
+      final container = await pumpDetail(tester, onBack: () => wentBack = true);
 
-      await tester.tap(find.text('Ellen Joe'));
+      await tester.tap(crumb('Ellen Joe'));
       await tester.pumpAndSettle();
 
       final query = container.read(marketplaceQueryProvider);
-      expect(query.categoryId, 30306);
-      expect(query.page, 1, reason: 'a new filter starts at the first page');
-      expect(wentBack, isTrue, reason: 'the grid has to be on screen to see it');
+      expect(query.character, const MarketplaceCharacter(30306, 'Ellen Joe'), reason: 'a Character Skins child');
+      expect(query.typeId, 30305, reason: 'which turns Character on');
+      expect(wentBack, isTrue);
     });
 
-    testWidgets('expands the root so the selection is visible', (tester) async {
-      // The panel highlights a child only while its parent is open; without
-      // this the grid comes back filtered and the panel looks untouched.
-      final container = await pumpCategory(
+    testWidgets('a root category sets the type chip', (tester) async {
+      final container = await pumpDetail(
         tester,
-        const GbCategoryRef(idRow: 30306, name: 'Ellen Joe'),
-        root: const GbCategoryRef(idRow: 30305, name: 'Character Skins'),
+        profile: mod(category: const GbCategoryRef(idRow: 30702, name: 'Bangboo Skins'), superCategory: null),
       );
-
-      await tester.tap(find.text('Ellen Joe'));
+      await tester.tap(crumb('Bangboo Skins'));
       await tester.pumpAndSettle();
-
-      expect(container.read(expandedCategoryProvider), 30305);
+      expect(container.read(marketplaceQueryProvider).typeId, 30702);
+      expect(container.read(marketplaceQueryProvider).character, isNull);
     });
 
-    testWidgets('a root category works the same way', (tester) async {
-      // "Bangboo Skins" and the rest are reached through `displayCategory`'s
-      // fallback, so they take the identical path.
-      final container = await pumpCategory(
-        tester,
-        null,
-        root: const GbCategoryRef(idRow: 30702, name: 'Bangboo Skins'),
-      );
-
-      await tester.tap(find.text('Bangboo Skins'));
-      await tester.pumpAndSettle();
-
-      expect(container.read(marketplaceQueryProvider).categoryId, 30702);
-    });
-
-    testWidgets('is inert when the record carries no id', (tester) async {
-      // A listing's `_aRootCategory` has no `_idRow`, and the url fallback only
-      // helps when there is a url. A link that filtered by nothing would look
-      // broken rather than absent.
+    testWidgets('is plain text when the record carries no id', (tester) async {
       var wentBack = false;
-      final container = await pumpCategory(
+      final container = await pumpDetail(
         tester,
-        const GbCategoryRef(name: 'Unknown Category'),
+        profile: mod(category: const GbCategoryRef(name: 'Unknown Category'), superCategory: null),
         onBack: () => wentBack = true,
       );
-
-      expect(find.text('Unknown Category'), findsOneWidget);
-      await tester.tap(find.text('Unknown Category'));
+      expect(find.descendant(of: find.byType(PageCrumbs), matching: find.byType(ZenithLink)), findsOneWidget,
+          reason: 'Browse is the only link');
+      await tester.tap(crumb('Unknown Category'));
       await tester.pumpAndSettle();
-
       expect(wentBack, isFalse);
       expect(container.read(marketplaceQueryProvider).categoryId, isNull);
     });
+
+    test('a captured profile carries _aSuperCategory for a skin, and none for a mod filed under a root', () {
+      final skin = GbMod.fromJson(parseObject(loadGbFixture('mod_profile_rated')))!;
+      expect(skin.category?.name, 'Ellen Joe');
+      expect(skin.superCategory?.idRow, kCharacterSkinsCategoryId);
+
+      final misc = GbMod.fromJson(parseObject(loadGbFixture('mod_profile_531649')))!;
+      expect(misc.category?.name, 'Other/Misc');
+      expect(misc.superCategory, isNull);
+    });
   });
 
-  group('tags', () {
-    // `GbMod.tags` had no reader at all, which is exactly how the two-shape
-    // parse bug survived: a profile's tags came back empty and nothing showed
-    // them, so nothing looked wrong. Driving the captured profile through the
-    // widget is what makes the parse self-evidently correct rather than only
-    // test-correct.
-    testWidgets('a profile response renders its own tags', (tester) async {
-      final tagged = GbMod.fromJson(
-        parseObject(loadGbFixture('mod_profile_tagged')),
-      )!;
+  group('the gallery', () {
+    testWidgets('the arrows step forward and back, and clamp at both ends', (tester) async {
+      await pumpDetail(tester, profile: mod(imageCount: 2));
+      expect(heroUrl(tester), contains('img0'));
+      expect(arrow(tester, Icons.chevron_left_rounded).onPressed, isNull, reason: 'nothing before the first');
 
-      await pumpDetail(tester, profile: tagged);
+      await tester.tap(inHero(Icons.chevron_right_rounded));
+      await tester.pumpAndSettle();
+      expect(heroUrl(tester), contains('img1'));
+      expect(arrow(tester, Icons.chevron_right_rounded).onPressed, isNull, reason: 'nothing after the last');
+    });
 
+    testWidgets('lays the thumbnails out six to a row at 16:10, wrapping past six', (tester) async {
+      await pumpDetail(tester, profile: mod(imageCount: 8));
+      final hero = tester.getRect(find.byKey(const ValueKey('gallery_hero')));
+      final rects = [for (var i = 0; i < 8; i++) tester.getRect(find.byKey(ValueKey('gallery_thumb_$i')))];
+
+      expect(hero.width / hero.height, closeTo(16 / 9, 0.01));
+      for (final r in rects) {
+        expect(r.width / r.height, closeTo(16 / 10, 0.01));
+      }
+      expect(rects.take(6).map((r) => r.top).toSet(), hasLength(1), reason: 'the first six share a row');
+      expect(rects[6].top, greaterThan(rects[0].bottom), reason: 'the seventh starts the next');
+      expect(rects[1].left - rects[0].right, closeTo(8, 0.1));
+      expect(rects[5].right, lessThanOrEqualTo(hero.right + 0.01));
+      expect(rects[5].right, closeTo(hero.right, 1), reason: 'six cells and five gaps fill the row');
+    });
+
+    testWidgets('the picture shown carries the accent outline, the others are faded', (tester) async {
+      await pumpDetail(tester, profile: mod(imageCount: 3));
+      Opacity opacity(int i) => tester.widget<Opacity>(
+        find.descendant(of: find.byKey(ValueKey('gallery_thumb_$i')), matching: find.byType(Opacity)),
+      );
+      Decoration? outline(int i) => tester
+          .widget<Container>(
+            find.descendant(of: find.byKey(ValueKey('gallery_thumb_$i')), matching: find.byType(Container)).first,
+          )
+          .foregroundDecoration;
+
+      expect(opacity(0).opacity, 1);
+      expect(opacity(1).opacity, 0.55);
+      final border = (outline(0) as BoxDecoration).border as Border;
+      expect(border.top.color, ZenithPalette.dark(AccentChoice.violet).accent);
+      expect(border.top.width, 2);
+      expect(outline(1), isNull);
+
+      await tester.tap(find.byKey(const ValueKey('gallery_thumb_2')));
+      await tester.pumpAndSettle();
+      expect(heroUrl(tester), contains('img2'));
+      expect(opacity(2).opacity, 1);
+      expect(opacity(0).opacity, 0.55);
+    });
+
+    testWidgets('a mod with no pictures shows the empty hero alone', (tester) async {
+      await pumpDetail(tester, profile: mod(imageCount: 0));
+      expect(find.byKey(const ValueKey('gallery_hero')), findsOneWidget);
+      expect(find.byType(OutlinedInitials), findsOneWidget);
+      expect(find.byKey(const ValueKey('gallery_thumb_0')), findsNothing);
+    });
+
+    testWidgets('a single picture has no arrows and no thumbnails', (tester) async {
+      await pumpDetail(tester, profile: mod(imageCount: 1));
+      expect(inHero(Icons.chevron_left_rounded), findsNothing);
+      expect(inHero(Icons.chevron_right_rounded), findsNothing);
+      expect(find.byKey(const ValueKey('gallery_thumb_0')), findsNothing);
+    });
+  });
+
+  group('About this mod', () {
+    testWidgets('holds the description, the tags in the form the library stores, and where they came from', (
+      tester,
+    ) async {
+      await pumpDetail(tester, profile: mod(tags: const ['Software Used: Blender', 'Ellen: school uniform']));
+      expect(find.text('About this mod'), findsOneWidget);
+      expect(find.text('Software Used: Blender'), findsOneWidget);
+      expect(find.text('Ellen: school uniform'), findsOneWidget);
+      expect(find.text('Text and images come from the GameBanana page.'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Ellen: school uniform')).dy,
+        greaterThan(tester.getTopLeft(find.text('Some description')).dy),
+        reason: 'the tags sit under the description',
+      );
+    });
+
+    testWidgets('a captured profile renders its own tags', (tester) async {
+      final tagged = GbMod.fromJson(parseObject(loadGbFixture('mod_profile_tagged')))!;
+      await pumpDetail(tester, profile: tagged, surfaceSize: const Size(1400, 4000));
       expect(tagged.tags, isNotEmpty, reason: 'the fixture must carry tags');
       for (final tag in tagged.tags) {
-        // Scrolled to rather than found where it lands: the page is a lazy
-        // `ListView` and this profile's 16:9 gallery is ~650px on its own, so
-        // the tags start below the fold and are not built yet.
-        await tester.scrollUntilVisible(find.text(tag), 200,
-            scrollable: find.byType(Scrollable).first);
         expect(find.text(tag), findsOneWidget, reason: tag);
       }
     });
 
-    testWidgets('shown in the form the library stores', (tester) async {
-      // An install copies these strings straight onto the mod, so a tag has to
-      // read identically on the page and on the folder it became.
+    testWidgets('is absent for a mod with neither text nor tags', (tester) async {
+      await pumpDetail(tester, profile: mod(text: null));
+      expect(find.text('About this mod'), findsNothing);
+    });
+  });
+
+  group('Updates', () {
+    final captured = parseEnvelope(loadGbFixture('mod_updates_549029'), GbUpdate.fromJson).records;
+
+    testWidgets("lists a captured feed's posts, newest first, with their changelog one line each", (tester) async {
+      await pumpDetail(tester, updates: () async => captured.reversed.toList(), surfaceSize: const Size(1400, 2000));
+
+      expect(find.text('Updates'), findsOneWidget);
+      final newest = tester.getTopLeft(find.text('Version 1.5')).dy;
+      final older = tester.getTopLeft(find.text('Full release | SFW Variants')).dy;
+      expect(newest, lessThan(older), reason: 'sorted newest first whatever order the feed came in');
+      expect(find.text('Leotard, OG Dress and Tights added'), findsOneWidget);
+      expect(find.text('2.1 Compatible'), findsOneWidget);
+      // The older post has no changelog, so its text stands in, without its markup.
+      expect(find.text('SFW Variants finally released from Patreon, thank you all for your support~'), findsOneWidget);
+      expect(find.textContaining('<p>'), findsNothing);
+      final ages = tester.widgetList<Text>(find.textContaining(' ago')).map((t) => t.data);
+      expect(ages, contains(matches(RegExp(r'^\d+ (year|month)s? ago$'))));
+    });
+
+    testWidgets('the title column is 110 wide', (tester) async {
+      await pumpDetail(tester, updates: () async => captured);
+      expect(tester.getSize(find.ancestor(of: find.text('Version 1.5'), matching: find.byType(SizedBox)).first).width, 110);
+    });
+
+    testWidgets('is not drawn when the feed fails', (tester) async {
+      await pumpDetail(tester, updates: () async => throw const GbNetworkException('offline'));
+      expect(find.text('Updates'), findsNothing);
+      expect(find.byKey(const ValueKey('updates_section')), findsNothing);
+      expect(find.text("Couldn't reach GameBanana."), findsNothing, reason: 'no error for a section nobody asked about');
+    });
+
+    testWidgets('is not drawn for a mod with no posts', (tester) async {
+      await pumpDetail(tester);
+      expect(find.text('Updates'), findsNothing);
+    });
+  });
+
+  group('the panel', () {
+    testWidgets('badges the type and the category, and counts likes and downloads', (tester) async {
       await pumpDetail(
         tester,
         profile: GbMod(
           idRow: 700727,
           name: 'A Mod',
-          visibility: GbVisibility.show,
-          files: const [],
-          tags: const ['Software Used: Blender', 'Ellen: school uniform'],
+          category: ellen,
+          superCategory: skins,
+          likeCount: 1612,
+          downloadCount: 18000,
+          submitter: const GbSubmitter(idRow: 1, name: 'lacequeen'),
+          files: const [GbFile(idRow: 1, file: 'one.zip', filesize: 214 * 1024 * 1024)],
         ),
       );
-
-      expect(find.text('Software Used: Blender'), findsOneWidget);
-      expect(find.text('Ellen: school uniform'), findsOneWidget);
+      final panel = find.byKey(const ValueKey('install_panel'));
+      expect(find.descendant(of: panel, matching: find.widgetWithText(ZenithBadge, 'Character')), findsOneWidget);
+      expect(find.descendant(of: panel, matching: find.widgetWithText(ZenithBadge, 'Ellen Joe')), findsOneWidget);
+      expect(find.text('1.6k likes'), findsOneWidget);
+      expect(find.text('18.0k downloads'), findsOneWidget);
+      expect(find.text('by lacequeen'), findsOneWidget);
+      // The one current file's size sits with the counts, and again on its row.
+      expect(find.text('214 MB'), findsNWidgets(2));
     });
 
-    testWidgets('sits above the file list, not below the description',
-        (tester) async {
-      // Where they go is the only layout decision here: tags describe the mod,
-      // so they belong with its metadata rather than after the author's prose,
-      // which on a real profile is several screens down.
+    testWidgets('names a Bangboo mod by its type chip', (tester) async {
+      await pumpDetail(
+        tester,
+        profile: mod(
+          category: const GbCategoryRef(idRow: 30710, name: 'Eous'),
+          superCategory: const GbCategoryRef(idRow: 30702, name: 'Bangboo Skins'),
+        ),
+      );
+      expect(find.widgetWithText(ZenithBadge, 'Bangboo'), findsOneWidget);
+    });
+  });
+
+  group('Install for', () {
+    testWidgets("shows the GameBanana category's character, and the job carries it", (tester) async {
+      await pumpDetail(tester, profile: mod(files: const [GbFile(idRow: 11, file: 'only.zip')]));
+      final card = find.byKey(const ValueKey('install_for'));
+      expect(find.descendant(of: card, matching: find.text('Ellen Joe')), findsOneWidget);
+      expect(find.descendant(of: card, matching: find.text('Picked from the GameBanana category')), findsOneWidget);
+      expect(find.text('It becomes a mod under Ellen Joe.'), findsOneWidget);
+
+      await tester.tap(find.text('Install 1 file'));
+      expect(queued.single.$1, [11]);
+      expect(queued.single.$2, 'ellen');
+      expect(queued.single.$3, DownloadIntent.install);
+    });
+
+    testWidgets('Change overrides it for this page, and the job carries the pick', (tester) async {
+      String? askedWith;
+      await pumpDetail(
+        tester,
+        profile: mod(files: const [GbFile(idRow: 11, file: 'only.zip')]),
+        pickCharacter: (context, {required currentId}) async {
+          askedWith = currentId;
+          return 'anby';
+        },
+      );
+      await tester.tap(find.byKey(const ValueKey('install_for')));
+      await tester.pumpAndSettle();
+
+      expect(askedWith, 'ellen');
+      final card = find.byKey(const ValueKey('install_for'));
+      expect(find.descendant(of: card, matching: find.text('Anby Demara')), findsOneWidget);
+      expect(find.descendant(of: card, matching: find.text('Picked by you')), findsOneWidget);
+      expect(find.text('It becomes a mod under Anby Demara.'), findsOneWidget);
+
+      await tester.tap(find.text('Install 1 file'));
+      expect(queued.single.$2, 'anby');
+    });
+
+    testWidgets("picking the category's own character goes back to it", (tester) async {
+      var answer = 'anby';
+      await pumpDetail(tester, pickCharacter: (context, {required currentId}) async => answer);
+      await tester.tap(find.byKey(const ValueKey('install_for')));
+      await tester.pumpAndSettle();
+      answer = 'ellen';
+      await tester.tap(find.byKey(const ValueKey('install_for')));
+      await tester.pumpAndSettle();
+      expect(find.text('Picked from the GameBanana category'), findsOneWidget);
+    });
+
+    testWidgets('a category with no character installs under Unassigned, never a guess from the folder name', (
+      tester,
+    ) async {
+      // "Zhao Nicole" reads as Nicole to the folder-name matcher; the page says Unassigned, so the sidecar must too.
+      late TempLibrary temp;
+      late File zip;
+      await tester.runAsync(() async {
+        temp = await TempLibrary.create();
+        final downloads = Directory.systemTemp.createTempSync('zzz_detail_zip_');
+        addTearDown(() => downloads.deleteSync(recursive: true));
+        final archive = Archive();
+        final ini = '[TextureOverrideBody]\nhash = 1\n'.codeUnits;
+        archive.addFile(ArchiveFile('Zhao Nicole/mod.ini', ini.length, ini));
+        zip = File(p.join(downloads.path, 'Zhao Nicole.zip'))..writeAsBytesSync(ZipEncoder().encode(archive)!);
+      });
+      const file = GbFile(idRow: 11, file: 'Zhao Nicole.zip');
+      const page = GbMod(
+        idRow: 700727,
+        name: 'Zhao Nicole',
+        visibility: GbVisibility.show,
+        category: GbCategoryRef(idRow: 29874, name: 'Other/Misc'),
+        files: [file],
+      );
+      await pumpDetail(tester, profile: page);
+
+      final card = find.byKey(const ValueKey('install_for'));
+      expect(find.descendant(of: card, matching: find.text('No character in the GameBanana category')), findsOneWidget);
+      expect(find.descendant(of: card, matching: find.text('Unassigned')), findsOneWidget);
+      expect(find.text('It becomes a mod under Unassigned.'), findsOneWidget);
+      await tester.tap(find.text('Install 1 file'));
+      expect(queued.single.$2, unknownCharacterId, reason: 'said on the job, not left for the import to fill');
+
+      // The job, as the queue hands it to the install: the flow over the temp library.
+      late BuildContext context;
+      late WidgetRef ref;
+      await pumpLocalized(
+        tester,
+        Consumer(
+          builder: (c, r, _) {
+            context = c;
+            ref = r;
+            return const SizedBox.shrink();
+          },
+        ),
+        overrides: [...temp.overrides, libraryOf(const [])],
+      );
+      await tester.runAsync(() async {
+        await runArchiveInstall(
+          context,
+          ref,
+          DownloadJob(
+            seq: 1,
+            request: DownloadRequest(url: Uri.parse('https://gamebanana.com/dl/11')),
+            intent: DownloadIntent.install,
+            subject: 'Zhao Nicole',
+            file: file,
+            mod: page,
+            characterId: queued.single.$2,
+            state: DownloadJobState.installing,
+            result: DownloadResult(file: zip, totalBytes: zip.lengthSync()),
+          ),
+        );
+      });
+      await tester.pumpAndSettle();
+
+      final sidecar = temp.read('Zhao Nicole', '.zzz-mod-manager/metadata.json');
+      expect(sidecar, isNotNull, reason: 'the mod was installed');
+      final character = (jsonDecode(sidecar!) as Map<String, dynamic>)['character_id'] as String?;
+      expect(isUnassignedCharacterId(character), isTrue, reason: 'not $character');
+    });
+
+    testWidgets('Change offers Unassigned, and picking it on a page with a character puts the job there', (
+      tester,
+    ) async {
+      await pumpDetail(
+        tester,
+        profile: mod(files: const [GbFile(idRow: 11, file: 'only.zip')]),
+        pickCharacter: (context, {required currentId}) async => unknownCharacterId,
+      );
+      await tester.tap(find.byKey(const ValueKey('install_for')));
+      await tester.pumpAndSettle();
+      final card = find.byKey(const ValueKey('install_for'));
+      expect(find.descendant(of: card, matching: find.text('Unassigned')), findsOneWidget);
+      expect(find.descendant(of: card, matching: find.text('Picked by you')), findsOneWidget);
+      await tester.tap(find.text('Install 1 file'));
+      expect(queued.single.$2, unknownCharacterId);
+    });
+
+    testWidgets("the picker it opens lists Unassigned among the categories, and a mod's own editor does not", (
+      tester,
+    ) async {
+      String? picked;
+      await pumpLocalized(
+        tester,
+        Builder(
+          builder: (context) => Column(
+            children: [
+              TextButton(
+                onPressed: () async => picked = await pickInstallTarget(context, currentId: 'ellen'),
+                child: const Text('install'),
+              ),
+              TextButton(
+                onPressed: () => showCategoryPicker(context, currentId: 'ellen'),
+                child: const Text('edit'),
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.tap(find.text('install'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Unassigned'));
+      await tester.pumpAndSettle();
+      expect(picked, unknownCharacterId);
+
+      await tester.tap(find.text('edit'));
+      await tester.pumpAndSettle();
+      expect(find.text('Select category'), findsOneWidget);
+      expect(find.text('Unassigned'), findsNothing);
+    });
+  });
+
+  group('the files and the button', () {
+    testWidgets('nothing is picked when the mod publishes several current files', (tester) async {
+      await pumpDetail(tester);
+      final button = tester.widget<FilledButton>(find.byKey(const ValueKey('install_button')));
+      expect(button.onPressed, isNull);
+      expect(find.text('Pick a file'), findsOneWidget);
+      expect(find.textContaining('becomes'), findsNothing, reason: 'no footnote with nothing picked');
+      expect(find.text('Download without installing'), findsNothing);
+    });
+
+    testWidgets('the one file is picked when the mod publishes one', (tester) async {
+      await pumpDetail(tester, profile: mod(files: const [GbFile(idRow: 11, file: 'only.zip')]));
+      expect(find.text('Install 1 file'), findsOneWidget);
+      final button = tester.widget<FilledButton>(find.byKey(const ValueKey('install_button')));
+      expect(button.onPressed, isNotNull);
+      expect(tester.getSize(find.byKey(const ValueKey('install_button'))).height, 44);
+    });
+
+    testWidgets('several picked read as several files, each its own mod', (tester) async {
+      await pumpDetail(tester);
+      await tester.tap(find.byKey(const ValueKey('file_12')));
+      await tester.tap(find.byKey(const ValueKey('file_11')));
+      await tester.pump();
+
+      expect(find.text('Install 2 files'), findsOneWidget);
+      expect(find.text('Each file becomes its own mod under Ellen Joe.'), findsOneWidget);
+      final footnote = tester.widget<Text>(find.text('Each file becomes its own mod under Ellen Joe.'));
+      expect(footnote.textAlign, TextAlign.center);
+      expect(footnote.style?.color, ZenithPalette.dark(AccentChoice.violet).text3);
+
+      await tester.tap(find.text('Install 2 files'));
+      expect(queued.single.$1, [11, 12], reason: 'in list order');
+      expect(queued.single.$2, 'ellen');
+      expect(queued.single.$3, DownloadIntent.install);
+    });
+
+    testWidgets('an older file is pickable once shown', (tester) async {
       await pumpDetail(
         tester,
         profile: GbMod(
           idRow: 700727,
           name: 'A Mod',
-          text: 'Some description',
-          visibility: GbVisibility.show,
-          files: const [],
-          tags: const ['Ellen: school uniform'],
+          category: ellen,
+          superCategory: skins,
+          files: threeFiles,
+          archivedFiles: const [GbFile(idRow: 9, file: 'old.zip', isArchived: true)],
         ),
       );
-
-      expect(
-        tester.getTopLeft(find.text('Ellen: school uniform')).dy,
-        lessThan(tester.getTopLeft(find.text('Description')).dy),
-      );
+      await tester.tap(find.text('Show 1 older file'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('file_9')));
+      await tester.pump();
+      await tester.tap(find.text('Install 1 file'));
+      expect(queued.single.$1, [9]);
     });
+
+    testWidgets('a picked older file keeps its row when the older files are hidden, until it is let go', (
+      tester,
+    ) async {
+      await pumpDetail(
+        tester,
+        profile: GbMod(
+          idRow: 700727,
+          name: 'A Mod',
+          category: ellen,
+          superCategory: skins,
+          files: threeFiles,
+          archivedFiles: const [
+            GbFile(idRow: 9, file: 'old.zip', isArchived: true),
+            GbFile(idRow: 8, file: 'older.zip', isArchived: true),
+          ],
+        ),
+      );
+      await tester.tap(find.text('Show 2 older files'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('file_9')));
+      await tester.pump();
+      await tester.tap(find.text('Hide older files'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('file_9')), findsOneWidget, reason: 'Install counts it, so it stays in view');
+      expect(find.byKey(const ValueKey('file_8')), findsNothing);
+      expect(find.text('Install 1 file'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('file_9')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('file_9')), findsNothing);
+      expect(find.text('Pick a file'), findsOneWidget);
+    });
+
+    testWidgets('Download without installing queues the picks as archives', (tester) async {
+      await pumpDetail(tester);
+      await tester.tap(find.byKey(const ValueKey('file_13')));
+      await tester.pump();
+      await tester.tap(find.text('Download without installing'));
+      expect(queued.single.$1, [13]);
+      expect(queued.single.$2, 'ellen');
+      expect(queued.single.$3, DownloadIntent.keepArchive);
+    });
+  });
+
+  group('Turn on after installing', () {
+    testWidgets('shows the saved setting, and pressing it saves the other', (tester) async {
+      final written = <bool>[];
+      await pumpDetail(
+        tester,
+        turnOnWriter: (on) async => written.add(on),
+        extra: [marketplaceTurnOnAfterInstallProvider.overrideWith((ref) => true)],
+      );
+      expect(tester.widget<ZenithSwitch>(find.byType(ZenithSwitch)).value, isTrue);
+
+      await tester.tap(find.byType(ZenithSwitch));
+      await tester.tap(find.text('Turn on after installing'));
+      expect(written, [false, false]);
+    });
+  });
+
+  group('In your library', () {
+    ModInfo installedMod(String id) => ModInfo(
+      id: id,
+      name: id,
+      characterId: 'ellen',
+      isActive: false,
+      origin: originFixture(
+        provenance: OriginProvenance.downloaded,
+        source: 'gamebanana',
+        modId: 700727,
+        modIdConfidence: OriginConfidence.exact,
+      ),
+    );
+
+    testWidgets('is absent for a mod the library does not have', (tester) async {
+      await pumpDetail(tester);
+      expect(find.textContaining('In your library'), findsNothing);
+    });
+
+    testWidgets('names the folder, and Show opens it in the Characters view', (tester) async {
+      final mod = installedMod('Remielle Swim');
+      final container = await pumpDetail(
+        tester,
+        installed: InstalledModsIndex.fromMods([mod]),
+        extra: [libraryOf([mod])],
+      );
+      expect(find.text('In your library as Remielle Swim'), findsOneWidget);
+      expect(find.text('Update'), findsNothing, reason: 'no newer file was found this session');
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+      expect(container.read(destinationProvider), AppDestination.characters);
+      expect(container.read(selectedModIdProvider), 'Remielle Swim');
+    });
+
+    testWidgets('counts several folders', (tester) async {
+      await pumpDetail(
+        tester,
+        installed: InstalledModsIndex.fromMods([installedMod('Ellen A'), installedMod('Ellen B')]),
+      );
+      expect(find.text('In your library as 2 mods'), findsOneWidget);
+    });
+
+    testWidgets('offers Update for a folder with a confirmed newer file, opening its update dialog', (tester) async {
+      final origin = originFixture(
+        source: 'gamebanana',
+        modId: 700727,
+        modIdConfidence: OriginConfidence.user,
+        fileId: 1696178,
+        versionConfidence: OriginConfidence.user,
+        provenance: OriginProvenance.downloaded,
+      );
+      late TempLibrary temp;
+      await tester.runAsync(() async {
+        temp = await TempLibrary.create();
+        temp.createMod('Ellen');
+        await temp.writeOrigin('Ellen', origin);
+      });
+      final mod = ModInfo(id: 'Ellen', name: 'Ellen', characterId: 'ellen', isActive: false, origin: origin);
+      await pumpDetail(
+        tester,
+        installed: InstalledModsIndex.fromMods([mod]),
+        extra: [
+          ...temp.overrides,
+          libraryOf([mod]),
+          modUpdateChecksProvider.overrideWith(
+            (ref) => {
+              'Ellen': UpdateCheck(
+                outcome: UpdateOutcome.updateAvailable,
+                candidate: GbFile(idRow: 1732269, dateAdded: DateTime.utc(2026, 6, 19)),
+              ),
+            },
+          ),
+        ],
+      );
+
+      await tester.tap(find.widgetWithText(ZenithLink, 'Update'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<ModUpdateDialog>(find.byType(ModUpdateDialog)).mod.id, 'Ellen');
+    });
+  });
+
+  testWidgets('fits the 800px window, the panel under the main column', (tester) async {
+    // The app's fonts: the test font draws every glyph a full em wide, which no layout is chosen for.
+    await loadTableFonts(tester);
+    await pumpDetail(tester, surfaceSize: const Size(584, 3000), profile: mod(imageCount: 6));
+    expect(tester.takeException(), isNull);
+    final panel = tester.getRect(find.byKey(const ValueKey('install_panel')));
+    final hero = tester.getRect(find.byKey(const ValueKey('gallery_hero')));
+    expect(panel.top, greaterThan(hero.bottom));
+    expect(panel.width, 584 - 64);
   });
 }

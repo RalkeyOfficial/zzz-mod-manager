@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -29,13 +30,15 @@ import 'progress_modal.dart';
 /// It still goes through the queue, so the panel shows every transfer the app is
 /// making and the concurrency cap covers all of them. A
 /// [DownloadIntent.callerHandles] job **bypasses the cap on the way in** (see
-/// [DownloadJob.bypassesCap]): the modal barrier covers the panel, so a job
-/// parked behind two background transfers would leave the user watching "waiting
-/// for a slot" with no way to reach the thing they would have to cancel.
+/// [DownloadJob.bypassesCap]): the user is watching this modal for a file they
+/// asked for now, and parked behind two background transfers it would say
+/// "waiting for a slot" until an unrelated download ended.
 ///
 /// Returns null when the user cancelled or the transfer failed — a notification
-/// has already said which.
-Future<DownloadResult?> downloadFileWithProgress(
+/// has already said which. Otherwise the job stays on the panel as
+/// [DownloadJobState.updating], and the caller reports its steps to the queue and
+/// ends it with [DownloadQueue.endUpdate] on every path.
+Future<ForegroundDownload?> downloadFileWithProgress(
   BuildContext context,
   WidgetRef ref,
   GbFile file, {
@@ -76,9 +79,10 @@ Future<DownloadResult?> downloadFileWithProgress(
   // record in `<appData>/downloads`, appending two streams into one plausible
   // and corrupt archive. So a file already being fetched is never fetched twice
   // — and here that means declining, because the job in flight belongs to
-  // somebody else and will be consumed by them.
+  // somebody else and will be consumed by them: a background install, or another
+  // update whose flow deletes the archive when it ends.
   final inFlight = activeJobForFile(ref.read(downloadQueueProvider), file.idRow);
-  if (inFlight != null && inFlight.intent != DownloadIntent.callerHandles) {
+  if (inFlight != null) {
     notify.note(
       loc.t('marketplace.download_already_queued_title'),
       body: body,
@@ -135,7 +139,7 @@ Future<DownloadResult?> downloadFileWithProgress(
   var handedOver = false;
 
   try {
-    final result = await queue.completionOf(job.seq);
+    final result = ForegroundDownload(job.seq, await queue.completionOf(job.seq));
     // **Handed over rather than closed**, when the caller has more to do: the
     // bytes have landed but there is still nothing to ask about, and a modal
     // that closes here is the same signal the user gets when a job is done.
@@ -183,9 +187,16 @@ Future<DownloadResult?> downloadFileWithProgress(
       close();
       progress.dispose();
     }
-    // A foreground download leaves no row behind. The panel is a list of work
-    // the user cannot otherwise see, and this one they watched from start to
-    // finish inside a dialog.
-    queue.remove(job.seq);
   }
+}
+
+/// A foreground download's archive, and the queue job the caller now owns until it ends it.
+class ForegroundDownload {
+  const ForegroundDownload(this.seq, this.result);
+
+  final int seq;
+  final DownloadResult result;
+
+  File get file => result.file;
+  String? get md5 => result.md5;
 }

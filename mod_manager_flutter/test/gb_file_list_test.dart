@@ -1,11 +1,15 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/core/palette.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gb_page.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/components/marketplace/gb_file_list.dart';
 import 'package:mod_manager_flutter/services/installed_mods_index.dart';
 
+import 'support/fixtures.dart';
 import 'support/localized_harness.dart';
 import 'support/origin_shorthand.dart';
 
@@ -23,29 +27,39 @@ void main() {
 
   Future<void> pumpList(
     WidgetTester tester, {
-    required List<GbFile> files,
+    required List<GbFile>? files,
     List<GbFile> archived = const [],
     bool showArchived = false,
+    Set<int> picked = const {},
+    ValueChanged<GbFile>? onToggle,
+    VoidCallback? onToggleArchived,
     InstalledModsIndex? installed,
     Size surfaceSize = const Size(900, 700),
     double textScale = 1.0,
+    Brightness brightness = Brightness.dark,
+    DateTime? now,
   }) async {
     await pumpLocalized(
       tester,
       MediaQuery(
         data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
-        child: GbFileList(
-          files: files,
-          archivedFiles: archived,
-          showArchived: showArchived,
-          onToggleArchived: () {},
-          onDownload: (_) {},
-          matchInstalled: installed == null
-              ? null
-              : (f) => installed.matchFile(fileId: f.idRow, md5: f.md5Checksum),
+        child: SingleChildScrollView(
+          child: GbFileList(
+            files: files,
+            archivedFiles: archived,
+            showArchived: showArchived,
+            picked: picked,
+            onToggle: onToggle ?? (_) {},
+            onToggleArchived: onToggleArchived ?? () {},
+            now: now,
+            matchInstalled: installed == null
+                ? null
+                : (f) => installed.matchFile(fileId: f.idRow, md5: f.md5Checksum),
+          ),
         ),
       ),
       surfaceSize: surfaceSize,
+      brightness: brightness,
     );
     expectBuilt(GbFileList);
   }
@@ -142,17 +156,10 @@ void main() {
 
   testWidgets('a row carrying every chip survives a scaled-up narrow window',
       (tester) async {
-    // The regression this file caught while being written. Worst case: an
-    // archived row that is *also* the one you hold, with a long filename and a
-    // scan result, at roughly the width the file list gets in a minimum-size
-    // window (800px minus the sidebar and padding), at a 1.4× OS text scale.
-    //
-    // A second chip broke this at **1.3×** while the row was a `Row`: chip labels
-    // are three words with nothing to ellipsise, so the filename was the only
-    // thing that could give way, and once it had shrunk to nothing the row
-    // overflowed. As a `Wrap` the chips move to a second line instead. 1.4 rather
-    // than 1.6 deliberately — at 1.6 the row's *outer* layout (scan-result chip
-    // plus download button) overflows on its own, with or without any of this.
+    // Worst case: an archived row that is *also* the one you hold, with a long filename and a scan result that is
+    // not clean, at the side panel's width in a minimum-size window (800px minus the sidebar, the gutters and the
+    // panel's padding), at a 1.4× OS text scale. The chips sit on a line of their own under the file's text and
+    // wrap there, so only the filename gives way, with an ellipsis.
     await pumpList(
       tester,
       files: const [],
@@ -162,18 +169,133 @@ void main() {
           file: 'a-rather-long-archive-filename-v1.0.zip',
           description: 'Full Mod, white hair variant',
           md5Checksum: 'abc',
-          avResult: 'clean',
+          filesize: 214 * 1024 * 1024,
+          avResult: 'suspicious',
           isArchived: true,
         ),
       ],
       showArchived: true,
       installed: library(archiveMd5: 'abc'),
       textScale: 1.4,
-      surfaceSize: const Size(530, 900),
+      surfaceSize: const Size(480, 900),
     );
     expect(tester.takeException(), isNull);
     expect(find.text('you have this'), findsOneWidget);
     expect(find.text('older'), findsOneWidget);
+    expect(find.text('suspicious'), findsOneWidget);
+  });
+
+  group('picking', () {
+    final three = [
+      GbFile(idRow: 1, file: 'a.zip', description: 'Full dress', dateAdded: DateTime.utc(2026, 10, 16)),
+      GbFile(idRow: 2, file: 'b.7z', dateAdded: DateTime.utc(2026, 9, 30)),
+      const GbFile(idRow: 3, file: 'c.zip'),
+    ];
+
+    BoxDecoration pickBox(WidgetTester tester, int fileId) => tester
+        .widgetList<Container>(
+          find.descendant(of: find.byKey(ValueKey('file_$fileId')), matching: find.byType(Container)),
+        )
+        .map((c) => c.decoration)
+        .whereType<BoxDecoration>()
+        .firstWhere((d) => d.borderRadius == BorderRadius.circular(5));
+
+    testWidgets('a picked row fills its check with the accent; the others stay empty', (tester) async {
+      await pumpList(tester, files: three, picked: {2});
+      final palette = ZenithPalette.dark(AccentChoice.violet);
+
+      expect(pickBox(tester, 2).color, palette.accent);
+      expect(
+        find.descendant(of: find.byKey(const ValueKey('file_2')), matching: find.byIcon(Icons.check_rounded)),
+        findsOneWidget,
+      );
+      expect(pickBox(tester, 1).color, isNull);
+      expect((pickBox(tester, 1).border as Border).top.color, palette.check);
+      final ground = tester
+          .widget<Material>(find.descendant(of: find.byKey(const ValueKey('file_2')), matching: find.byType(Material)).first)
+          .color;
+      expect(ground, isNot(palette.field), reason: 'a picked row is washed with the accent');
+    });
+
+    testWidgets('pressing a row hands it to onToggle', (tester) async {
+      final toggled = <int>[];
+      await pumpList(tester, files: three, onToggle: (f) => toggled.add(f.idRow));
+      await tester.tap(find.byKey(const ValueKey('file_3')));
+      await tester.tap(find.byKey(const ValueKey('file_1')));
+      expect(toggled, [3, 1]);
+    });
+
+    testWidgets('the second line quotes the variant and says how long ago it was uploaded', (tester) async {
+      await pumpList(tester, files: three, now: DateTime.utc(2026, 10, 21));
+      expect(find.text('“Full dress” · uploaded 5 days ago'), findsOneWidget);
+      expect(find.text('no variant text · uploaded 3 weeks ago'), findsOneWidget);
+      expect(find.text('no variant text'), findsOneWidget, reason: 'a file with no date has no age');
+    });
+
+    testWidgets('a clean scan says nothing, any other result is shown', (tester) async {
+      await pumpList(tester, files: const [
+        GbFile(idRow: 1, file: 'a.zip', avResult: 'clean'),
+        GbFile(idRow: 2, file: 'b.zip', avResult: 'infected'),
+      ]);
+      expect(find.text('clean'), findsNothing);
+      expect(find.text('infected'), findsOneWidget);
+    });
+
+    testWidgets('the size is the file\'s, in mono at the right', (tester) async {
+      await pumpList(tester, files: const [GbFile(idRow: 1, file: 'a.zip', filesize: 214 * 1024 * 1024)]);
+      final size = tester.widget<Text>(find.text('214 MB'));
+      expect(size.style?.fontFamily, 'Geist Mono');
+      expect(tester.getTopRight(find.text('214 MB')).dx, greaterThan(tester.getTopRight(find.text('a.zip')).dx));
+    });
+
+    testWidgets('older files wait behind a counted link', (tester) async {
+      var toggled = 0;
+      await pumpList(
+        tester,
+        files: three,
+        archived: const [GbFile(idRow: 9, file: 'old.zip', isArchived: true)],
+        onToggleArchived: () => toggled++,
+      );
+      expect(find.text('old.zip'), findsNothing);
+      await tester.tap(find.text('Show 1 older file'));
+      expect(toggled, 1);
+    });
+
+    testWidgets('a picked older file is listed while the others are hidden', (tester) async {
+      await pumpList(
+        tester,
+        files: three,
+        archived: const [
+          GbFile(idRow: 9, file: 'old.zip', isArchived: true),
+          GbFile(idRow: 8, file: 'older.zip', isArchived: true),
+        ],
+        picked: const {9},
+      );
+      expect(find.text('old.zip'), findsOneWidget);
+      expect(find.text('older.zip'), findsNothing);
+      expect(find.text('Show 1 older file'), findsOneWidget, reason: 'counts only the files it would reveal');
+    });
+
+    testWidgets('the link is gone while every older file is picked and listed', (tester) async {
+      await pumpList(
+        tester,
+        files: three,
+        archived: const [GbFile(idRow: 9, file: 'old.zip', isArchived: true)],
+        picked: const {9},
+      );
+      expect(find.text('old.zip'), findsOneWidget);
+      expect(find.textContaining('older file'), findsNothing);
+    });
+
+    test('nothing is picked when a captured mod publishes several current files, the one when it publishes one', () {
+      final several = GbMod.fromJson(parseObject(loadGbFixture('mod_profile_rated')))!;
+      expect(several.files!.length, greaterThan(1));
+      expect(defaultPickedFiles(several.files), isEmpty);
+
+      final one = GbMod.fromJson(parseObject(loadGbFixture('mod_profile_asset_patch')))!;
+      expect(one.files, hasLength(1));
+      expect(defaultPickedFiles(one.files), {one.files!.single.idRow});
+    });
   });
 
   testWidgets('never dresses a match as verified', (tester) async {
@@ -208,7 +330,7 @@ void main() {
 
       expect(find.text('seed_extra_toenails_texture.zip'), findsOneWidget);
       expect(
-        find.text('Put it in the folder with the mod (replace it)'),
+        find.text('“Put it in the folder with the mod (replace it)”'),
         findsOneWidget,
       );
     });
@@ -221,18 +343,18 @@ void main() {
       ]);
 
       expect(find.text('v77.zip'), findsOneWidget);
-      expect(find.text('7.7 · Main file'), findsOneWidget);
+      expect(find.text('“7.7 · Main file”'), findsOneWidget);
     });
 
-    testWidgets('a file the author said nothing about gets no second line',
-        (tester) async {
-      // Null rather than empty, so no blank line is drawn.
+    testWidgets('a file the author said nothing about says so rather than drawing a blank line', (tester) async {
       await pumpList(tester, files: [
         const GbFile(idRow: 1, file: 'exce_-_seed.zip'),
       ]);
 
       expect(find.text('exce_-_seed.zip'), findsOneWidget);
+      expect(find.text('no variant text'), findsOneWidget);
       expect(find.text(''), findsNothing);
+      expect(find.text('“”'), findsNothing);
     });
   });
 }

@@ -17,6 +17,7 @@ class SidebarNavItem extends StatefulWidget {
     this.selected = false,
     this.count,
     this.hot = false,
+    this.badge,
   });
 
   static const double height = 38;
@@ -27,6 +28,9 @@ class SidebarNavItem extends StatefulWidget {
   final bool selected;
   final int? count;
   final bool hot;
+
+  /// Drawn where the count goes, in place of it: a [SidebarBadge].
+  final Widget? badge;
 
   @override
   State<SidebarNavItem> createState() => _SidebarNavItemState();
@@ -76,9 +80,54 @@ class _SidebarNavItemState extends State<SidebarNavItem> {
                     style: text.labelLarge?.copyWith(color: foreground),
                   ),
                 ),
-                if (widget.count != null) _Count(count: widget.count!, hot: widget.hot),
+                if (widget.badge case final badge?)
+                  badge
+                else if (widget.count != null)
+                  _Count(count: widget.count!, hot: widget.hot),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A pill for a sidebar row: a 12px [icon] and a [count] in [tone], such as the Downloads row's amber triangle for
+/// downloads waiting for an answer. [label] is its tooltip and what a screen reader says for it.
+class SidebarBadge extends StatelessWidget {
+  const SidebarBadge({
+    super.key,
+    required this.icon,
+    required this.count,
+    required this.tone,
+    required this.label,
+  });
+
+  final IconData icon;
+  final int count;
+  final TonePair tone;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = ZenithType.of(context).monoSmall.copyWith(fontWeight: FontWeight.w600, color: tone.foreground);
+    return Tooltip(
+      message: label,
+      excludeFromSemantics: true,
+      child: Semantics(
+        label: label,
+        excludeSemantics: true,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(5, 3, 6, 3),
+          decoration: BoxDecoration(color: tone.background, borderRadius: BorderRadius.circular(5)),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            spacing: 4,
+            children: [
+              Icon(icon, size: 12, color: tone.foreground),
+              Text('$count', style: style),
+            ],
           ),
         ),
       ),

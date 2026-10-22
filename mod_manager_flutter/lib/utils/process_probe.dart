@@ -80,6 +80,9 @@ class ProcessProbe {
     } catch (_) {
       return null;
     }
+    // **Closed at once**, since no probe writes to a child: a tool that prompts on an open stdin waits until the
+    // timeout kills it, as `7z l` does for an archive with encrypted headers. Closed, it stops at the prompt.
+    unawaited(process.stdin.close().then<void>((_) {}, onError: (Object _) {}));
 
     final out = _Collected();
     final err = _Collected();

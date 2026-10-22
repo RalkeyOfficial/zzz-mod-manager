@@ -135,8 +135,30 @@ Future<Map<String, PatchDestination>?> showPatchInstallPrompt(
   required List<PatchInstallSubject> subjects,
   required List<ModInfo> library,
   bool combined = false,
+}) async =>
+    (await askPatchInstall(context, subjects: subjects, library: library, combined: combined))?.destinations;
+
+/// What the patch prompt was answered with: the destinations, or Don't install.
+class PatchPromptAnswer {
+  const PatchPromptAnswer(this.destinations);
+
+  const PatchPromptAnswer.declined() : destinations = null;
+
+  /// Per planned mod name; null for Don't install.
+  final Map<String, PatchDestination>? destinations;
+
+  bool get declined => destinations == null;
+}
+
+/// The patch prompt, telling Don't install apart from a dialog closed without an answer (null), which leaves a
+/// waiting download waiting.
+Future<PatchPromptAnswer?> askPatchInstall(
+  BuildContext context, {
+  required List<PatchInstallSubject> subjects,
+  required List<ModInfo> library,
+  bool combined = false,
 }) {
-  return showDialog<Map<String, PatchDestination>>(
+  return showDialog<PatchPromptAnswer>(
     context: context,
     // A patch installed without an answer is a folder that does nothing until
     // the user acts, so the question is worth their attention rather than one
@@ -240,17 +262,17 @@ class _PatchInstallPromptState extends ConsumerState<PatchInstallPrompt> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.of(context).pop(const PatchPromptAnswer.declined()),
           child: Text(loc.t('mods.patch_install.decline')),
         ),
         FilledButton(
           // An incomplete answer cannot be confirmed. Falling back to a new
           // folder would quietly do the opposite of what was asked for.
           onPressed: _complete
-              ? () => Navigator.of(context).pop({
+              ? () => Navigator.of(context).pop(PatchPromptAnswer({
                     for (final subject in widget.subjects)
                       subject.modName: _destinationFor(subject.modName),
-                  })
+                  }))
               : null,
           child: Text(
             loc.t(

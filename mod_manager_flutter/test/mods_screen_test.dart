@@ -180,6 +180,29 @@ void main() {
           reason: 'the card is down before the import goes on');
     });
 
+    testWidgets("of a locked archive whose password is not given raises no Working card and says nothing", (tester) async {
+      final ini = '[TextureOverrideBody]\n'.codeUnits;
+      final archive = Archive()..addFile(ArchiveFile('Locked/Locked.ini', ini.length, ini));
+      final zip = File(p.join(temp.root.path, 'Locked.zip'))
+        ..writeAsBytesSync(ZipEncoder(password: 'SECRET').encode(archive)!);
+      final container = await pumpModsScreen(tester, temp, [mod('Winter Maid')]);
+      final raised = <AppNotification>[];
+      container.listen(notificationsProvider, (_, next) => raised.addAll(next));
+      clipboardHolds(tester, zip.path);
+
+      await pressPaste(tester);
+      expect(find.text("Don't install"), findsOneWidget, reason: 'the password is asked for first');
+      await tester.runAsync(() async {
+        await tester.tap(find.text("Don't install"));
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+      await tester.pumpAndSettle();
+
+      expect(raised.where((n) => n.kind == NotificationKind.working), isEmpty, reason: 'there is nothing to unpack');
+      expect(find.text('Nothing to import'), findsNothing, reason: 'the user was asked and answered');
+      expect(temp.modFolder('Locked').existsSync(), isFalse);
+    });
+
     testWidgets('of a patch put into an existing mod shows a Working card, which becomes the patch applied', (tester) async {
       temp.write('Ellen Maid', 'Ellen Maid.ini', '[TextureOverrideBody]\n');
       temp.write('Ellen Maid', 'Textures/Body.dds', 'v1');

@@ -189,6 +189,25 @@ class DownloadService {
     );
   }
 
+  /// Deletes the partial and its record that a stopped run of [request] kept, as a cancel of a paused download
+  /// does: no run is left to delete it on its way out.
+  Future<void> discardPartial(DownloadRequest request) async {
+    final filename = _filenameFor(request);
+    final part = _paths.partFile(filename);
+    try {
+      if (await part.exists()) await part.delete();
+    } catch (_) {
+      // The lazy sweep takes it once it is stale.
+    }
+    await PartialDownload.delete(_paths.recordFile(filename));
+  }
+
+  /// The name a run of [request] writes under, its partial included.
+  static String _filenameFor(DownloadRequest request) => DownloadPaths.sanitizeFilename(
+        request.suggestedFilename ?? path.basename(request.url.path),
+        fallback: 'mod_${request.fileId ?? 'download'}${path.extension(request.url.path)}',
+      );
+
   /// Stops everything this service owns.
   ///
   /// Fire-and-forget by necessity — `ref.onDispose` takes a `void Function()`,
@@ -250,11 +269,7 @@ class _Run {
   int _resumedFrom = 0;
   int? _total;
 
-  late final String _filename = DownloadPaths.sanitizeFilename(
-    request.suggestedFilename ?? path.basename(request.url.path),
-    fallback:
-        'mod_${request.fileId ?? 'download'}${path.extension(request.url.path)}',
-  );
+  late final String _filename = DownloadService._filenameFor(request);
 
   /// What this transfer has still to write, for the space preflight of the
   /// *next* one — bytes this volume owes but does not hold yet.

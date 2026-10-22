@@ -4,35 +4,26 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../l10n/app_localizations.dart';
 import '../models/gamebanana/gamebanana.dart';
 import '../services/download/download_job.dart';
-import '../services/download/download_queue.dart';
-import '../services/download/queue_policy.dart';
-import '../services/gamebanana/remote_mod_metadata.dart';
 import '../services/platform_service_factory.dart';
 import '../utils/marketplace_providers.dart';
-import '../utils/notification_actions.dart';
 import '../utils/notifications.dart';
 import '../utils/state_providers.dart';
 import 'components/marketplace/gb_browse_view.dart';
+import 'components/marketplace/gb_creator_view.dart';
 import 'components/marketplace/gb_detail_view.dart';
+import 'components/marketplace/marketplace_install_flow.dart';
 
 /// The marketplace: a **native** GameBanana browser, identical on Linux and
 /// Windows.
 ///
-/// It replaced an asymmetric pair of implementations — an embedded
-/// `flutter_inappwebview` on Windows, and on Linux an "open your real browser"
-/// button plus a watcher on the system Downloads folder that tried to guess when
-/// a file had finished arriving. That split is gone, and with it three problems
-/// it could not solve:
+/// Native rather than a webview or a watcher on the system Downloads folder,
+/// because only a download the app makes itself knows the mod id, file id and
+/// version before the first byte, and knows for certain when it has finished.
+/// `docs/marketplace.md` §1 has the alternatives and why each loses.
 ///
-/// - the watcher could only ever see *a file appearing*, so a mod installed that
-///   way had no remote identity at all — no mod id, no file id, no version;
-/// - "finished downloading" was inferred by polling for a stable file size,
-///   which is a guess about someone else's browser;
-/// - anything the user downloaded for unrelated reasons was a false positive.
-///
-/// Two screens only: a results grid and a mod detail view.
-/// Everything else GameBanana hosts — comments, threads, member pages — is
-/// reached through the "open in browser" escape hatch rather than rendered here.
+/// The results grid, with a stack of pages over it: a mod's page, and a creator's page, reached from the author's
+/// name on a mod page. Everything else GameBanana hosts, comments and threads, is reached through a page's "Open on
+/// GameBanana" rather than rendered here.
 class MarketplaceScreen extends ConsumerStatefulWidget {
   const MarketplaceScreen({super.key});
 
@@ -76,57 +67,77 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final openModId = ref.watch(marketplaceOpenModProvider);
+    final routes = ref.watch(marketplaceRoutesProvider);
 
-    // No ClipRRect / rounded top corners here. The rounding was inherited from the
-    // webview era, where it softened the edge of an embedded web page; on a
-    // full-bleed grid it just cuts the corners off the layout. With no radius there
-    // is nothing to clip either, so the wrapper goes entirely rather than becoming
-    // a no-op clip.
+    // No rounded top corners and no clip: on a full-bleed grid a radius only cuts
+    // the corners off the layout.
     //
-    // **An `IndexedStack`, not a conditional.** Swapping the two views out of the
-    // tree disposes the browse view, and with it the scroll position of a grid the
-    // user may have paged deep into — so opening a mod and pressing back landed
-    // them at the top of the results every time. Keeping it mounted keeps the real
-    // scroll offset rather than a remembered number, which is the only version of
-    // this that survives the grid being a different height than when it was left
+    // **An `IndexedStack`, not a conditional.** Swapping the pages out of the
+    // tree would dispose the browse view, and with it the scroll position and the
+    // loaded pages of a grid the user may have scrolled deep into, so opening a mod
+    // and pressing back would land them at the top. Keeping it mounted keeps the
+    // real scroll offset rather than a remembered number, which is the only version
+    // of this that survives the grid being a different height than when it was left
     // (a content-filter change, a library badge appearing).
     //
-    // The detail slot is the one that stays empty while unused: a `GbDetailView`
-    // holds per-mod view state (gallery index, reveal, archived files expanded),
-    // and *that* must reset between mods rather than persist.
+    // Every page in the stack stays mounted the same way, keyed by what it shows, so going back finds a page as it
+    // was left: a creator's page keeps its loaded mods, its tile and its scroll, a mod's page its picture and its
+    // picked files. A page gone back past is disposed, and a mod opened again starts afresh.
+    final navigator = ref.read(marketplaceRoutesProvider.notifier);
     return IndexedStack(
-      index: openModId == null ? 0 : 1,
-      // The children are laid out against the same constraints either way, which
-      // is what the conditional above did.
+      index: routes.length,
       sizing: StackFit.expand,
       children: [
         // `IndexedStack` hides a child from painting, hit-testing and semantics,
-        // but **not** from focus traversal — so without this, tabbing from the
-        // detail view walks into the search box of a grid that isn't on screen.
+        // but **not** from focus traversal — so without this, tabbing on the page
+        // on top walks into the search box of a grid that isn't on screen.
         ExcludeFocus(
-          excluding: openModId != null,
-          child: GbBrowseView(
-            onOpenMod: (modId) =>
-                ref.read(marketplaceOpenModProvider.notifier).state = modId,
-          ),
+          excluding: routes.isNotEmpty,
+          child: GbBrowseView(onOpenMod: navigator.openFromGrid, onInstallFile: _installFile),
         ),
-        if (openModId == null)
-          const SizedBox.shrink()
-        else
-          GbDetailView(
-            // Keyed so re-opening a *different* mod builds a fresh state rather
-            // than reusing the previous one's gallery index.
-            key: ValueKey(openModId),
-            modId: openModId,
-            onBack: () =>
-                ref.read(marketplaceOpenModProvider.notifier).state = null,
-            onDownload: _handleDownload,
-            onOpenInBrowser: _openInBrowser,
+        for (var depth = 0; depth < routes.length; depth++)
+          KeyedSubtree(
+            key: ValueKey(routes[depth]),
+            child: ExcludeFocus(
+              excluding: depth != routes.length - 1,
+              child: _page(routes[depth], depth == 0 ? null : routes[depth - 1]),
+            ),
           ),
       ],
     );
   }
+
+  /// The page for [route], with [below] the page it was opened from, or null for the grid.
+  Widget _page(MarketplaceRoute route, MarketplaceRoute? below) {
+    final navigator = ref.read(marketplaceRoutesProvider.notifier);
+    final parent = below == null ? null : (label: _crumbLabel(below), onTap: navigator.back);
+    return switch (route) {
+      MarketplaceModRoute(:final modId) => GbDetailView(
+        modId: modId,
+        onBack: navigator.back,
+        onBrowse: navigator.toGrid,
+        parent: parent,
+        onOpenCreator: (member) => navigator.open(MarketplaceCreatorRoute(member)),
+        onQueue: _queueFiles,
+        onOpenInBrowser: _openInBrowser,
+      ),
+      MarketplaceCreatorRoute(:final member) => GbCreatorView(
+        member: member,
+        onBack: navigator.back,
+        onBrowse: navigator.toGrid,
+        parent: parent,
+        onOpenMod: (modId) => navigator.open(MarketplaceModRoute(modId)),
+        onInstallFile: _installFile,
+        onOpenInBrowser: _openInBrowser,
+      ),
+    };
+  }
+
+  /// What the crumb for [route] says: the mod's name, or the member's.
+  String _crumbLabel(MarketplaceRoute route) => switch (route) {
+    MarketplaceModRoute(:final modId) => ref.watch(modProfileProvider(modId)).valueOrNull?.name ?? '#$modId',
+    MarketplaceCreatorRoute(:final member) => member.name ?? '#${member.idRow}',
+  };
 
   Future<void> _openInBrowser(String url) async {
     // Through the platform service, never a `Platform.isX` branch here.
@@ -140,12 +151,9 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
     }
   }
 
-  /// Hands one file of one mod to the download queue.
-  ///
-  /// This is where remote identity reaches the origin block: the mod id, file
-  /// id, version and variant label are all known here, before a single byte is
-  /// fetched, so the block lands at `exact` — the tier only a download or a
-  /// checksum match earns. See `docs/origin-tracking.md` §2.
+  /// The mod page's Install and Download without installing: hands each picked file to the queue as its own job, in
+  /// the list's order ([enqueueMarketplaceFile]), with the character the page shows and, for an install, the Turn on
+  /// after installing setting.
   ///
   /// **It does not wait, and it does not own what happens next.** The transfer
   /// runs in the background so the user can keep browsing: archives reach
@@ -157,94 +165,26 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   ///
   /// What this method still owns is the one thing it must: the mod page, which
   /// only exists here. It travels with the job.
-  void _handleDownload(GbMod mod, GbFile file) async {
-    final choice = await _askDownloadChoice(file);
-    if (choice == _DownloadChoice.cancel || !mounted) return;
-
-    // The mod page's own filing, so the notification below can lead with the
-    // character rather than a generic glyph. Pure and offline.
-    final characterId = RemoteModMetadata.fromMod(mod).characterId;
-    final subject = mod.name ?? file.file ?? loc.t('marketplace.unknown_file');
-
-    // Asked *before* enqueuing rather than inferred from what comes back: a
-    // freshly admitted job is started the same turn, so "did it come back
-    // queued?" answers a question about the concurrency cap, not about whether
-    // this file was already being fetched.
-    final duplicate =
-        activeJobForFile(ref.read(downloadQueueProvider), file.idRow) != null;
-
-    final job = ref.read(downloadQueueProvider.notifier).enqueue(
-          file: file,
-          subject: subject,
-          characterId: characterId,
-          mod: mod,
-          intent: choice == _DownloadChoice.downloadOnly
-              ? DownloadIntent.keepArchive
-              : DownloadIntent.install,
-        );
-
-    if (!mounted) return;
+  void _queueFiles(
+    GbMod mod,
+    List<GbFile> files, {
+    required String? characterId,
+    required DownloadIntent intent,
+  }) {
     final container = ProviderScope.containerOf(context, listen: false);
-    if (job.state == DownloadJobState.failed) {
-      // The one way enqueuing fails outright: a file whose download url will not
-      // parse. It is already a failed row in the panel; this is what the user
-      // standing at the button sees.
-      context.notify.error(
-        loc.t('marketplace.download_failed_title'),
-        body: subject,
-        characterId: characterId,
-        actions: [openDownloadsAction(loc, container)],
-      );
-      return;
-    }
-    // A successful enqueue says nothing here. `DownloadQueueHost` raises a
-    // Working progress notification the same turn, and that card *is* the
-    // acknowledgement — a second "download started" beside it would be the app
-    // saying the same thing twice.
-    //
-    // The exception is a press that changes nothing. The card is already up and
-    // its count does not move, so without this the button reads as broken.
-    if (duplicate) {
-      context.notify.note(
-        loc.t('marketplace.download_already_queued_title'),
-        body: subject,
-        characterId: characterId,
-        actions: [openDownloadsAction(loc, container)],
-      );
+    final turnOn = ref.read(marketplaceTurnOnAfterInstallProvider);
+    for (final file in files) {
+      enqueueMarketplaceFile(container, loc, mod, file, intent, characterId: characterId, turnOn: turnOn);
     }
   }
 
-  Future<_DownloadChoice> _askDownloadChoice(GbFile file) async {
-    final filename = file.file ?? loc.t('marketplace.unknown_file');
-    return await showDialog<_DownloadChoice>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text(loc.t('marketplace.download_title')),
-            content: Text(
-              loc.t('marketplace.download_message',
-                  params: {'filename': filename}),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () =>
-                    Navigator.pop(context, _DownloadChoice.cancel),
-                child: Text(loc.t('marketplace.download_cancel')),
-              ),
-              TextButton(
-                onPressed: () =>
-                    Navigator.pop(context, _DownloadChoice.downloadOnly),
-                child: Text(loc.t('marketplace.download_only')),
-              ),
-              FilledButton(
-                onPressed: () =>
-                    Navigator.pop(context, _DownloadChoice.downloadAndInstall),
-                child: Text(loc.t('marketplace.download_install')),
-              ),
-            ],
-          ),
-        ) ??
-        _DownloadChoice.cancel;
-  }
+  /// A card's or the carousel's Install. The flow runs on the app's container, so a page switch while the mod page
+  /// is fetched doesn't lose the press.
+  void _installFile(int modId, GbFile file) => installSoleFile(
+    ProviderScope.containerOf(context, listen: false),
+    loc,
+    modId: modId,
+    file: file,
+    screenMounted: () => mounted,
+  );
 }
-
-enum _DownloadChoice { cancel, downloadOnly, downloadAndInstall }

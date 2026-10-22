@@ -70,6 +70,14 @@ class RemoteModMetadata {
   /// filter bar with facts about Blender.
   static const String _creditTagTitle = 'software used';
 
+  /// The roster id a GameBanana category name stands for, or null.
+  ///
+  /// The category, not the mod's name or tags. Upstream this is where the author
+  /// actually files the mod, picked from a list, and it maps cleanly: all 60
+  /// children of Character Skins resolve to a roster id, while none of the 4 root
+  /// categories and none of the 22 Bangboo categories falsely match one.
+  static String? characterIdForCategory(String? name) => storedCharacterId(detectCharacterId(name ?? ''));
+
   /// Reads everything useful out of a mod profile.
   ///
   /// Deliberately tolerant: every field is optional upstream, so an absent one
@@ -84,15 +92,9 @@ class RemoteModMetadata {
         for (final tag in mod.tags)
           if (!_isCreditTag(tag)) tag,
       ],
-      // The category, not the name or the tags. Upstream this is where the
-      // author actually files the mod, and it maps cleanly: all 60 children of
-      // Character Skins resolve to a roster id, while none of the 4 root
-      // categories and none of the 22 Bangboo categories falsely match one.
       // `displayCategory` is most-specific-first, so this works on a listing
       // record (`_aSubCategory`) as well as a profile (`_aCategory`).
-      characterId: storedCharacterId(
-        detectCharacterId(mod.displayCategory?.name ?? ''),
-      ),
+      characterId: characterIdForCategory(mod.displayCategory?.name),
       imageUrls: [
         for (final image in mod.images.take(maxImages))
           // Full size rather than a ladder rung. Measured: 112 of 132 captured

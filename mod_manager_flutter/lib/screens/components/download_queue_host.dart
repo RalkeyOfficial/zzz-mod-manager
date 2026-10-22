@@ -1,37 +1,74 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
-import '../../models/gamebanana/gamebanana.dart';
 import '../../models/install_result.dart';
+import '../../services/api_service.dart';
 import '../../services/download/download_job.dart';
 import '../../services/download/download_queue.dart';
 import '../../services/download/queue_policy.dart';
+import '../../services/log/logger.dart';
+import '../../services/platform_service.dart';
+import '../../services/shader_fixes/shader_fixes_service.dart';
 import '../../utils/byte_format.dart';
+import '../../utils/marketplace_providers.dart';
 import '../../utils/notification_actions.dart';
 import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
 import '../dialogs/install_archive_flow.dart';
 import 'install_result_feedback.dart';
+import 'network_link_notice.dart';
+import 'shader_fixes_notices.dart';
 
-/// What turns a downloaded archive into a mod. The real one is
-/// [installArchiveFlow]; a test substitutes its own so the host's sequencing can
-/// be exercised without 7z, a mods folder or the network.
-typedef ArchiveInstaller = Future<InstallResult> Function(
-  BuildContext context,
-  WidgetRef ref, {
-  required File archiveFile,
-  required GbMod mod,
-  required GbFile file,
-  String? knownMd5,
-  String? requestedName,
+final Logger _log = Logger('install');
+
+/// Turns a mod on, as `ApiService.enableMod`: the dry run, then the mods in [switchOff], then the mod. False when a
+/// link could not be made or removed. A test substitutes its own so no link is made.
+typedef ModEnabler = Future<bool> Function(
+  String modId, {
+  Iterable<String> switchOff,
+  bool Function(String other)? whileWritten,
 });
 
 /// The deck every download's card is dealt into, so downloads running at once take one slot of the stack.
 const String kDownloadsDeck = 'downloads';
+
+/// Returns once no bulk action of the All mods table is running. An enable in the middle of one could break a
+/// character's One at a time, which the bulk action is setting mod by mod; the Library's switches are greyed out
+/// for the same reason.
+Future<void> bulkActionEnded(ProviderContainer container) async {
+  if (!container.read(allModsBulkRunningProvider)) return;
+  final ended = Completer<void>();
+  final subscription = container.listen<bool>(allModsBulkRunningProvider, (_, running) {
+    if (!running && !ended.isCompleted) ended.complete();
+  });
+  try {
+    await ended.future;
+  } finally {
+    subscription.close();
+  }
+}
+
+/// The way from a panel row to the questions [DownloadQueueHost] asks.
+///
+/// The host asks from its own context, which is below the `Navigator` and outlives the panel; the panel is a route
+/// of its own and cannot reach that context, so the host lends the two calls here while it is mounted. Without a
+/// host both do nothing.
+final downloadQuestionsProvider = Provider<DownloadQuestions>((ref) => DownloadQuestions());
+
+class DownloadQuestions {
+  Future<void> Function(int seq)? _answer;
+  void Function(int seq)? _openModPage;
+
+  /// The waiting job's own button: Enter password, Install anyway, Pick folders… or Choose…. Opens the question's
+  /// dialog, and the ones after it in the same sitting.
+  Future<void> answer(int seq) => _answer?.call(seq) ?? Future<void>.value();
+
+  /// Open mod page: the job's mod page in Browse, the job still waiting.
+  void openModPage(int seq) => _openModPage?.call(seq);
+}
 
 /// Finishes what the download queue starts, and reports it while it runs.
 ///
@@ -40,7 +77,7 @@ const String kDownloadsDeck = 'downloads';
 /// and a `Notifier` has neither. This is the half that has both.
 ///
 /// **Where it is mounted is the whole design.** It wraps the tab switcher rather
-/// than living inside a tab, because the three tabs are keyed `AnimatedSwitcher`
+/// than living inside a tab, because the tabs are keyed `AnimatedSwitcher`
 /// children with no keep-alive and are therefore *disposed* when the user moves
 /// between them — so an install owned by a tab dies on the first tab switch,
 /// silently, with the archive already downloaded.
@@ -49,20 +86,29 @@ const String kDownloadsDeck = 'downloads';
 /// ancestor, so unlike `NotificationHost` this cannot go in
 /// `MaterialApp.builder`.
 ///
-/// **One job at a time.** Installing runs `7z`, writes into the mods folder
-/// through a service held as a singleton, and can ask a question. Two of those
-/// interleaving would race on all three, and two dialogs would stack.
+/// **One install at a time**, and an install never opens a window by itself.
+/// Where it needs the user it stops, the job waits in the panel and frees the
+/// slot, and the question is asked only when the user presses the row's button
+/// ([DownloadQuestions]), from this host's context.
 class DownloadQueueHost extends ConsumerStatefulWidget {
   const DownloadQueueHost({
     super.key,
     required this.child,
-    this.installer = installArchiveFlow,
+    this.installer = runArchiveInstall,
+    this.asker = answerInstallQuestion,
+    this.enabler = ApiService.enableMod,
   });
 
   final Widget child;
 
-  /// Seam for tests. Production is [installArchiveFlow].
+  /// Seam for tests. Production is [runArchiveInstall].
   final ArchiveInstaller installer;
+
+  /// Seam for tests. Production is [answerInstallQuestion].
+  final InstallQuestionAsker asker;
+
+  /// Seam for tests. Production is `ApiService.enableMod`, the path every enable from the library takes.
+  final ModEnabler enabler;
 
   @override
   ConsumerState<DownloadQueueHost> createState() => _DownloadQueueHostState();
@@ -75,14 +121,26 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
   /// remembered.
   bool _draining = false;
 
+  /// Whether a question's dialog is open, so a second press does not stack another.
+  bool _answering = false;
+
   /// Each download's Working card, by the job's `seq`, from the moment it is
   /// raised until its result takes the card over or the job leaves the queue.
   /// A card the user hid stays here, so its result still arrives.
   final Map<int, NotificationHandle> _cards = {};
 
+  /// The one Needs you card for every waiting download, and the downloads it was last told about.
+  NotificationHandle? _needsYou;
+  Set<int> _waiting = const <int>{};
+
+  late final DownloadQuestions _questions;
+
   @override
   void initState() {
     super.initState();
+    _questions = ref.read(downloadQuestionsProvider)
+      .._answer = _answer
+      .._openModPage = _openModPage;
     // Reconcile with whatever the queue already holds, rather than waiting for
     // the next change. Nothing is in flight on a cold start, but a hot reload
     // rebuilds this host under a live queue, and reacting only to changes would
@@ -97,6 +155,16 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
       _syncCards(jobs);
       unawaited(_drain());
     });
+  }
+
+  @override
+  void dispose() {
+    if (_questions._answer == _answer) {
+      _questions
+        .._answer = null
+        .._openModPage = null;
+    }
+    super.dispose();
   }
 
   @override
@@ -127,15 +195,24 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
   /// ignore the user. A hidden card still takes its result, which comes back as
   /// a card. Each download's result takes its own card over the moment it
   /// lands, without waiting for the rest of the queue.
+  ///
+  /// A paused download has no card, since its spinner and bar would claim work that is not happening, and Resume
+  /// raises it again as a download becoming active. A waiting download is on the Needs you card instead, and an
+  /// update download's card goes once its bytes are handed over, since the update flow reports it.
   void _syncCards(List<DownloadJob> jobs) {
     _reportFailedTransfers(jobs);
+    _syncNeedsYou(jobs);
 
     final active = {
       for (final job in jobs)
-        if (job.state.isActive) job.seq: job,
+        if (job.state.isActive &&
+            job.state != DownloadJobState.paused &&
+            job.state != DownloadJobState.waiting &&
+            job.state != DownloadJobState.updating)
+          job.seq: job,
     };
-    // Gone without a result: cancelled, cleared, or handed to the flow that
-    // owns it, which reports it itself.
+    // Gone without a result: cancelled, cleared, paused, or handed to the flow
+    // that owns it, which reports it itself.
     for (final seq in [..._cards.keys]) {
       if (!active.containsKey(seq)) _cards.remove(seq)!.dismiss();
     }
@@ -170,6 +247,63 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
     }
   }
 
+  /// Keeps the one Needs you card in step with the waiting downloads (`notifications.md` §4).
+  ///
+  /// A download starting to wait is news: its Working card turns into the Needs you card, which leaves the deck and
+  /// moves to the newest place, and the card that said it before goes. A hidden Working card comes back this way,
+  /// since hiding the progress never hides what comes of it, and so does a Needs you card the user closed. A download
+  /// leaving the wait only changes the card's text, and the card goes once nothing waits.
+  void _syncNeedsYou(List<DownloadJob> jobs) {
+    final waiting = [for (final job in jobs) if (job.state == DownloadJobState.waiting) job];
+    final seqs = {for (final job in waiting) job.seq};
+    final joined = seqs.difference(_waiting);
+    _waiting = seqs;
+
+    if (waiting.isEmpty) {
+      _needsYou?.dismiss();
+      _needsYou = null;
+      return;
+    }
+
+    final loc = context.loc;
+    final one = waiting.length == 1 ? waiting.single : null;
+    final title = one != null
+        ? loc.t('downloads.needs_you')
+        : loc.plural('downloads.needs_you_many', waiting.length, params: {'count': '${waiting.length}'});
+    final body = one?.subject ?? subjectList(loc, [for (final job in waiting) job.subject]);
+    final characterId = one?.characterId;
+    // About the list rather than one mod, so it stays with several.
+    final actions = [openDownloadsAction(loc, ProviderScope.containerOf(context, listen: false))];
+
+    if (joined.isEmpty) {
+      _needsYou?.update(
+        title: title,
+        body: body,
+        characterId: characterId,
+        clearCharacterId: characterId == null,
+      );
+      return;
+    }
+
+    final newest = waiting.lastWhere((job) => joined.contains(job.seq));
+    final previous = _needsYou;
+    final card = _cards.remove(newest.seq);
+    if (card != null) {
+      card.update(
+        kind: NotificationKind.needsYou,
+        title: title,
+        body: body,
+        characterId: characterId,
+        clearCharacterId: characterId == null,
+        actions: actions,
+      );
+      _needsYou = card;
+    } else {
+      _needsYou = context.notify.needsYou(title, body: body, characterId: characterId, actions: actions);
+    }
+    if (previous != null && previous.id != _needsYou!.id) previous.dismiss();
+  }
+
   /// A transfer that failed gets a card of its own, since the panel row is
   /// otherwise the only place it is said. The download's card becomes it, and
   /// leaves the deck as its own card.
@@ -188,7 +322,7 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
       final loc = context.loc;
       final container = ProviderScope.containerOf(context, listen: false);
       final actions = [
-        if (rowAction(job, jobs) == DownloadRowAction.retry)
+        if (rowActions(job, jobs).contains(DownloadRowAction.retry))
           retryAction(loc,
               () => container.read(downloadQueueProvider.notifier).retry(job.seq)),
         openDownloadsAction(loc, container),
@@ -244,6 +378,45 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
     }
   }
 
+  // ── Asking ─────────────────────────────────────────────────────────────────
+
+  Future<void> _answer(int seq) async {
+    if (_answering || !mounted) return;
+    final queue = ref.read(downloadQueueProvider.notifier);
+    final job = ref.read(downloadQueueProvider).where((j) => j.seq == seq).firstOrNull;
+    if (job == null || job.state != DownloadJobState.waiting) return;
+
+    _answering = true;
+    try {
+      final answer = await widget.asker(context, ref, job);
+      switch (answer) {
+        case AnswerGiven(:final prepared, :final password):
+          queue.markAnswered(seq, prepared: prepared, password: password);
+        case AnswerKept(:final wait, :final prepared):
+          queue.keepWaiting(seq, wait, prepared: prepared);
+        case AnswerDeclined():
+          await queue.decline(seq);
+        case AnswerOpenModPage():
+          _openModPage(seq);
+      }
+    } catch (error, stack) {
+      // The job keeps waiting, so the question can be asked again.
+      _log.error('install question failed', error: error, stack: stack, fields: {'download': job.subject});
+    } finally {
+      _answering = false;
+    }
+  }
+
+  void _openModPage(int seq) {
+    if (!mounted) return;
+    final job = ref.read(downloadQueueProvider).where((j) => j.seq == seq).firstOrNull;
+    final modId = job?.mod?.idRow;
+    if (modId == null) return;
+    ref.read(downloadsPanelCloseRequestProvider.notifier).state++;
+    ref.read(marketplaceOpenModProvider.notifier).state = modId;
+    ref.read(destinationProvider.notifier).state = AppDestination.browse;
+  }
+
   // ── Finishing the work ─────────────────────────────────────────────────────
 
   Future<void> _drain() async {
@@ -294,34 +467,18 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
         context.notify.done(title,
             body: archive.path, characterId: job.characterId, actions: actions);
       }
-      queue.markDone(job.seq);
+      queue.markDone(job.seq, outcome: JobOutcome.saved);
       return;
     }
 
-    final mod = job.mod;
-    if (mod == null) {
+    if (job.mod == null) {
       queue.markFailed(job.seq, StateError('install job with no mod page'));
       return;
     }
 
-    InstallResult result;
+    InstallStep step;
     try {
-      result = await widget.installer(
-        context,
-        ref,
-        archiveFile: archive,
-        mod: mod,
-        file: job.file,
-        // Free during the download and unrecoverable afterwards — the archive is
-        // deleted once unpacked and a zip cannot be reproduced from its
-        // contents.
-        knownMd5: job.result?.md5,
-        // What the download asked to be called, which is not always what it
-        // ended up called: a name already taken in the downloads folder becomes
-        // `mod (2).rar`, and for an archive with no folder inside it that would
-        // become the mod's name.
-        requestedName: job.result?.requestedName,
-      );
+      step = await widget.installer(context, ref, job);
     } catch (error) {
       // Taken before the queue changes, or the job leaving it dismisses it.
       final card = _takeCardFor(job);
@@ -350,7 +507,24 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
       return;
     }
 
+    switch (step) {
+      case InstallWaits(:final wait, :final prepared):
+        // The slot frees with this; the Needs you card takes the download's card.
+        queue.markWaiting(job.seq, wait, prepared: prepared, unpacked: prepared.folders);
+        return;
+      case InstallEnds(:final result):
+        await _report(job, result);
+    }
+  }
+
+  Future<void> _report(DownloadJob job, InstallResult installed) async {
+    final queue = ref.read(downloadQueueProvider.notifier);
+    var result = installed;
     if (!mounted) return;
+    if (job.turnOn && result.mods.isNotEmpty) {
+      result = await _turnOn(result);
+      if (!mounted) return;
+    }
     showInstallResult(
       context,
       result,
@@ -366,7 +540,12 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
     ref.invalidate(libraryProvider);
 
     if (result.mods.isNotEmpty) {
-      queue.markDone(job.seq);
+      queue.markDone(
+        job.seq,
+        outcome: JobOutcome.installed,
+        installed: result.mods,
+        filedUnder: result.characterId ?? job.characterId,
+      );
     } else if (result.failureKind == NotificationKind.error) {
       queue.markFailed(
         job.seq,
@@ -378,9 +557,90 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
       // An install that put nothing in: every folder already existed (a note),
       // or the archive held no mod folder (a warning). Nothing to retry and
       // nothing failed.
-      queue.markDone(job.seq);
+      queue.markDone(job.seq, outcome: JobOutcome.nothingInstalled, headline: result.failure!.title);
     } else {
-      queue.markCancelled(job.seq);
+      queue.markGone(job.seq);
     }
+  }
+
+  /// Turns each new mod of [result] on, for an install whose page had Turn on after installing set: in turn, as the
+  /// library's switch does, so a character's One at a time applies to them as to any enable, and after a running
+  /// bulk action of the All mods table has ended. A mod that can't be turned on stays installed and off, and the
+  /// result carries a warning naming it; an enable refused for its shader files or a network folder says why instead,
+  /// as the Library does. Never throws: the install is done whatever this comes to.
+  Future<InstallResult> _turnOn(InstallResult result) async {
+    final container = ProviderScope.containerOf(context, listen: false);
+    final loc = context.loc;
+    final notify = context.notify;
+    final library = container.read(libraryProvider.notifier);
+    final leftOff = <String>[];
+    // Every mod this has come to a conclusion about, so a throw part-way leaves the rest named as left off.
+    final settled = <String>{};
+    try {
+      await bulkActionEnded(container);
+      // The new folders are not in the library until it is read again.
+      await library.rescan();
+      for (final modId in result.mods) {
+        await container.read(libraryTogglesProvider.notifier).run(modId, () async {
+          settled.add(modId);
+          final mods = container.read(modsProvider);
+          final mod = mods.where((m) => m.id == modId).firstOrNull;
+          if (mod == null) {
+            leftOff.add(modId);
+            return;
+          }
+          if (mod.isActive) return;
+          final switchOff = modsToSwitchOff(
+            mods,
+            mod,
+            container.read(oneAtATimeProvider),
+            beingWritten: container.read(modWritesInProgressProvider),
+          );
+          try {
+            final done = await widget.enabler(
+              modId,
+              switchOff: switchOff,
+              whileWritten: (other) => turnOffDuringWrite(container, other),
+            );
+            if (!done) {
+              leftOff.add(modId);
+              return;
+            }
+          } on ShaderPlacementRefused catch (refusal) {
+            reportShaderRefusal(loc, notify, refusal, characterId: mod.characterId, container: container);
+            return;
+          } on NetworkLinkRefused {
+            reportNetworkLinkRefused(loc, notify, [mod.name], characterId: mod.characterId);
+            return;
+          } catch (error) {
+            _log.warning('mod not turned on after install', error: error, fields: {'mod': modId});
+            leftOff.add(modId);
+            return;
+          }
+          // The next mod's One at a time has to see this one on.
+          library.put([
+            for (final m in container.read(modsProvider))
+              if (m.id == modId)
+                m.copyWith(isActive: true)
+              else if (switchOff.contains(m.id))
+                m.copyWith(isActive: false)
+              else
+                m,
+          ]);
+        });
+      }
+    } catch (error, stack) {
+      _log.error('new mods not turned on after install', error: error, stack: stack, fields: {'mods': result.mods});
+      leftOff.addAll(result.mods.where((m) => !settled.contains(m)));
+    }
+    if (leftOff.isEmpty) return result;
+    return InstallResult.success(
+      result.mods,
+      warnings: [
+        ...result.warnings,
+        NotificationLines(loc.t('marketplace.turn_on_failed_title'), leftOff.join(', ')),
+      ],
+      characterId: result.characterId,
+    );
   }
 }

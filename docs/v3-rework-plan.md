@@ -174,18 +174,40 @@ The memory note `v3-canvas-vs-docs-decisions` holds these. In short:
   - Still for a native Ukrainian speaker to check: `library.updates.coverage_all_single` at 21 ("Ваш 21 мод перевірено"), `legend_base_*` keeping "основа невідома" whatever the count, and `undo_failed_write`.
   - Checked in tests only, not yet in the running app.
 
+- **Phase 6, Browse** (artboards `Browse`, `BrowseMod`, `BrowseCreator`, `Downloads`): built, reviewed and committed (the commit after `b171fc4`). Written up in `marketplace.md`, `downloads.md` §8–14 and `notifications.md` §4. Checked in widget renders and tests, not yet in the running app.
+  - Decided with the user in review: a Browse card reads Update ready only for a confirmed newer file (a "Maybe newer" reads In library); a Browse page whose category names no character installs under Unassigned, never a folder-name guess, and Change can pick Unassigned. The app-wide keyboard focus ring (2px accent, 2px out) came in with this phase. The review's out-of-scope findings are in the "Review follow-ups" phase.
+  - **The grid:** grid restyle, carousel, character picker and type chips, Hide installed, the mature-content and sort menus, infinite scroll.
+    - `Mod/Multi` carries `_nDownloadCount`, `_aCategory` and `_aFiles` (measured 2026-10-21), so one request per listing page gives cards their download count and the carousel its character, and a card's Install queues a mod with one current file; a mod with several opens its page.
+    - The type chips are GameBanana's four roots (Character, Bangboo, UI, Misc); the canvas's Texture, Audio and Unknown have no GameBanana category.
+    - The character picker follows the redesigned `Browse` artboard (canvas version `1792610653-b762`): a 200px pill with the picked agent's face, opening a 720×440 popover with a "Type a name" field (Enter picks the first match), "Your characters" above "Every agent, A to Z" as portrait tiles, and an A–Z rail that filters to a letter.
+  - **The mod page:** Install for (a character override), multi-file pick (variants sharing a folder name install as `Name (variant)`), Turn on after installing, Download without installing (`marketplace.md` §5 and §9).
+  - **The creator page:** the author's name on a mod page opens all their Zenless Zone Zero mods, with character tiles that filter them, Hide installed and Sort. Browse holds a page stack (`marketplaceRoutesProvider`); `marketplaceOpenModProvider` is a thin adapter over it (`marketplace.md` §3 and §12).
+  - **Downloads:** the job model (waiting, paused and updating; cancelled, declined and removed jobs leave the list), the install split into prepare / answer / finish (`runArchiveInstall`), the four waiting questions, Pause, archive passwords (never stored or logged), one Needs you card for every waiting download, both update flows reporting to the queue, the 440px panel on the root `Navigator` and the sidebar badge.
+    - The queue isn't persisted, so a paused or waiting download doesn't survive a restart (its `.part` does). The patch and folders dialogs the waiting rows open are restyled in phase 8.
+    - The 7z start-failure logging path (`ProcessException`) has no test, for want of a seam.
+
 ## Phases left
 
 Each is reviewable on its own and ends with tests green, docs and changelog updated, and the user's go-ahead.
 
-6. **Browse** (artboards `Browse`, `BrowseMod`, `BrowseCreator`, `Downloads`).
-   - Grid restyle, carousel, character chip and type chips, Hide installed, the mature-content and sort menus, infinite scroll.
-   - Mod page with Install for (a character override), multi-file pick and Turn on after installing.
-   - Creator page (`BrowseCreator`): the author's name on a mod page opens all their Zenless Zone Zero mods, with a row of character tiles that filters them, Hide installed and Sort.
-   - The downloads side panel, Pause, and archive passwords.
-   - "Needs your attention" as the panel's first group: one amber row per waiting decision (patch, several folders, password), each with the button that opens its dialog and Don't install. The patch and folders dialogs are restyled in phase 8; until then the buttons open the current ones.
-   - `DownloadsNavItem` shows the amber warning badge (triangle and count) while anything waits. The canvas draws only that state; the idle look is designed in its style.
-   - A download waiting in "Needs your attention" leaves the downloads deck as its own Needs you card with Open Downloads, as the canvas's deck caption says (a Needs you result already leaves its deck; nothing in the queue waits yet).
+6b. **Review follow-ups** (a phase of its own, done after phase 6 is committed and before phase 7 starts): what the reviews of phases 5e and 6 found outside their scope, each reviewable and tested like any phase.
+   - From phase 5e:
+     - Take out (History, the right-click menu) and a patch put into a mod you already have leave the folder's session verdict as it was, so it can name a layer that is gone until the next check. The update dialog's own Take out drops it (`mod_update_dialog.dart`); `removePatchFlow` and `applyPatchInstall` should do the same.
+     - A patch from its base's own mod page, put into that base with "Add it to a mod you already have", replaces the base's layer (`withLayerOnTop` drops the layer of the same mod id): the base's file and file list are lost, and the patch gets no History row or Take out. How that case should read is a design call; ask the user.
+     - The tracking screen naming a base when one is already on file doesn't refuse the patch's own mod id (`resolve_origin_dialog.dart`, `primaryModId: null` once a base exists), so it can write two layers of one page, and the second is dropped on the next read.
+     - `download_names_test`, `all_mods_bulk_actions_test` and `mods_screen_test` fake a folder being written by setting `modWritesInProgressProvider`, which `whileWritingMod` overwrites from its own counts. A test helper that holds a real `whileWritingMod`, as `all_mods_view_test` does, would keep them meaningful if one of those flows gains a wrapped write.
+   - From phase 6a:
+     - Closing the update dialog with Escape or a click outside after "Ignore this update" skips the library rescan: `showModUpdateDialog` returns `?? false`, so only the dialog's own buttons report the write. Every caller.
+     - The keyboard focus ring stays on a button Tab focused after the user clicks another, since a Material button takes no focus on click.
+     - A button whose own style sets `side` (the mod page's favourite button, `IconButton.styleFrom(side:)`) loses the theme's focus ring; segmented buttons have none. The notification actions' ring sits flush, the theme's 2px out.
+   - From phases 6b–6d:
+     - Temp folders left behind: `extractArchive` keeps its temp folder after a space refusal, a non-password extraction failure, "no mod folders" and its outer catch; the update flow's `_cleanupExtract(Directory(folders.first).parent)` deletes only `Mods/` for a `Mods/<mod>` layout, leaving the root.
+     - A Bangboo or UI child category whose name holds an agent's term is taken for that agent by `RemoteModMetadata.characterIdForCategory` (the substring matcher `detectCharacterId`), on the mod page's Install for card and at install; the creator page decides the type first (`creator_cast.dart`). The canary in `creator_cast_test` checks only that each category maps to something.
+     - Browse's pages have no keyboard or mouse back: Escape, Alt+Left and the mouse back button do nothing.
+     - `logging.md` §4's tag table lacks `origin`, `patch.store`, `shaders`, `sidecar`, `storage`, `update`, `update.check` and `update.reinstall`.
+     - A drop still lists each archive twice (`needsPassword` to ask every password up front, then `extractArchive`).
+     - Edge cases: `DownloadQueueHost._report`'s `if (!mounted) return` leaves a job `installing` forever if the host is unmounted; the storage reclaim gate doesn't count an `updating` job's temp extraction.
+     - Doc nits: `IndexedStack` already keeps hidden children out of focus through `Visibility` on this SDK, so the `ExcludeFocus` reason in `marketplace.md` §3 and `marketplace_screen.dart` is out of date; history wording in older paragraphs (`marketplace.md` "which the old modal progress dialog hid", the heading "What the two screens say"; `downloads.md` "which is what the marketplace's own use wants", which has no marketplace caller).
 7. **Settings, Storage, About** (artboards `Settings`, `Storage`, `About`).
    - Section nav (General, Game & folders, Launching, Mods, GameBanana, Storage, Appearance, About), and Game & folders including Move library… (design note first). Game & folders holds only the ZZMI folder and the mod library.
      - Move library… re-points links with the rule a changed Mod library already follows ([`configuration.md`](configuration.md#changing-the-mod-library), `ModManagerService.relinkLibrary`): a link whose target is exactly `<old>/<its own name>`, live or dead, follows when the new library has that folder; a mod the new library lacks keeps its link; a refused shader placement keeps the old link and names the mod.
@@ -228,11 +250,6 @@ Each is reviewable on its own and ends with tests green, docs and changelog upda
 - Ask the user how the keyboard reaches the notification stack (for example F6 to move between the page and the stack, as desktop apps move between panes), or whether it doesn't.
 - A notification's shadow is clipped: the card's size transition and the stack's scroll view cut it at the card's edge, leaving a darker square outside each rounded bottom corner, clearest on paper. Fixing it means changing how the stack clips its cards (`notification_overlay.dart`).
 
-- Follow-ups from phase 5e's review, outside its scope:
-  - Take out (History, the right-click menu) and a patch put into a mod you already have leave the folder's session verdict as it was, so it can name a layer that is gone until the next check. The update dialog's own Take out drops it (`mod_update_dialog.dart`); `removePatchFlow` and `applyPatchInstall` should do the same.
-  - A patch from its base's own mod page, put into that base with "Add it to a mod you already have", replaces the base's layer (`withLayerOnTop` drops the layer of the same mod id): the base's file and file list are lost, and the patch gets no History row or Take out. Phase 8's `PatchModal` and `MakePatchModal` are where to decide how that case should read.
-  - The tracking screen naming a base when one is already on file doesn't refuse the patch's own mod id (`resolve_origin_dialog.dart`, `primaryModId: null` once a base exists), so it can write two layers of one page, and the second is dropped on the next read.
-  - `download_names_test`, `all_mods_bulk_actions_test` and `mods_screen_test` fake a folder being written by setting `modWritesInProgressProvider`, which `whileWritingMod` overwrites from its own counts. A test helper that holds a real `whileWritingMod`, as `all_mods_view_test` does, would keep them meaningful if one of those flows gains a wrapped write.
 - Offer the user a correction of the keybind copy on the canvas's Edit info and Reinstall artboards.
 - The install links in `OnboardingLaunch`'s no-Proton state point at a placeholder; the user supplies the real Proton-GE, Proton-Cachy and DWProton pages. The Proton-Cachy folder name on the canvas is a guess.
 - Ask the user whether the Settings Proton dropdown also marks the recommended builds.

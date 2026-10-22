@@ -101,6 +101,7 @@ class _ReclaimButtonState extends ConsumerState<ReclaimButton> {
       final key = switch (refused.refusal!) {
         ReclaimSkipReason.downloadsActive => 'storage.reclaim.skipped_downloads',
         ReclaimSkipReason.installInProgress => 'storage.reclaim.skipped_install',
+        ReclaimSkipReason.downloadWaiting => 'storage.reclaim.skipped_waiting',
         ReclaimSkipReason.libraryUnreadable => 'storage.reclaim.skipped_library',
         _ => null,
       };

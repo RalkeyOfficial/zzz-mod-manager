@@ -73,12 +73,14 @@ class ReclaimService {
     this.roots, {
     required this.downloadsBusy,
     required this.installBusy,
+    bool Function()? downloadWaiting,
     required this.modNames,
     required this.claimedSnapshotUids,
     DateTime Function()? now,
     Future<int?> Function(String path)? freeSpace,
     this.rules = const ReclaimRules(),
-  })  : _now = now ?? DateTime.now,
+  })  : downloadWaiting = downloadWaiting ?? _never,
+        _now = now ?? DateTime.now,
         _freeSpace = freeSpace;
 
   final StorageRoots roots;
@@ -89,6 +91,11 @@ class ReclaimService {
   /// Whether an archive is being unpacked or imported — including the drag-in
   /// and file-picker paths, which the download queue knows nothing about.
   final bool Function() installBusy;
+
+  /// Whether a download waits for the user's answer, holding unpacked folders in the temp folder.
+  final bool Function() downloadWaiting;
+
+  static bool _never() => false;
 
   /// The library as it is right now. Null means it could not be read, which is
   /// what stops the legacy-image sweep rather than letting it run against an
@@ -122,6 +129,7 @@ class ReclaimService {
       now: _now(),
       downloadsBusy: downloadsBusy(),
       installBusy: installBusy(),
+      downloadWaiting: downloadWaiting(),
       // Both halves have to be readable. A legacy image is reachable only when
       // its mod exists *and* keeps no sidecar, so failing to answer either
       // question leaves the sweep unable to tell dead weight from a user's only
@@ -175,9 +183,12 @@ class ReclaimService {
         freedBytes: 0,
         removedCount: 0,
         skippedCount: skipped + candidates.length,
-        refusal: downloadsBusy()
-            ? ReclaimSkipReason.downloadsActive
-            : ReclaimSkipReason.installInProgress,
+        refusal: switch (target) {
+          ReclaimTarget.tempExtracts when !installBusy() => ReclaimSkipReason.downloadWaiting,
+          ReclaimTarget.tempExtracts => ReclaimSkipReason.installInProgress,
+          _ when downloadsBusy() => ReclaimSkipReason.downloadsActive,
+          _ => ReclaimSkipReason.installInProgress,
+        },
       );
     }
 
@@ -206,7 +217,7 @@ class ReclaimService {
         ReclaimTarget.completedArchives ||
         ReclaimTarget.abandonedPartials =>
           downloadsBusy() || installBusy(),
-        ReclaimTarget.tempExtracts => installBusy(),
+        ReclaimTarget.tempExtracts => installBusy() || downloadWaiting(),
         ReclaimTarget.legacyImages ||
         ReclaimTarget.oldLogs ||
         ReclaimTarget.unclaimedSnapshots =>

@@ -63,13 +63,24 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
   WidgetStateProperty<Color?> disabledOr(Color enabled, Color disabled) =>
       WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.disabled) ? disabled : enabled);
 
+  // Keyboard focus draws a 2px accent ring 2px out from the button, the canvas's `:focus-visible` outline: the gap
+  // keeps it visible around a primary button filled in the accent. A click never focuses a button, so it draws none.
+  // Unfocused, [idle] is the button's own border, and null keeps whatever border a local shape carries.
+  final focusRing = BorderSide(color: p.accent, width: 2, strokeAlign: 3);
+  WidgetStateProperty<BorderSide?> ringOr(BorderSide? idle) => WidgetStateProperty.resolveWith(
+    (states) =>
+        states.contains(WidgetState.focused) && FocusManager.instance.highlightMode == FocusHighlightMode.traditional
+        ? focusRing
+        : idle,
+  );
+
   final secondaryButton = ButtonStyle(
     minimumSize: const WidgetStatePropertyAll(buttonSize),
     padding: const WidgetStatePropertyAll(buttonPadding),
     textStyle: buttonText,
     iconSize: iconSize,
     shape: WidgetStatePropertyAll(rounded(8)),
-    side: WidgetStatePropertyAll(BorderSide(color: p.control)),
+    side: ringOr(BorderSide(color: p.control)),
     backgroundColor: onHover(p.raised, p.hover),
     foregroundColor: disabledOr(p.text, p.text3),
     overlayColor: const WidgetStatePropertyAll(Colors.transparent),
@@ -89,6 +100,7 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
       return p.primary;
     }),
     foregroundColor: disabledOr(p.onPrimary, p.onPrimary.withValues(alpha: 0.45)),
+    side: ringOr(null),
     overlayColor: const WidgetStatePropertyAll(Colors.transparent),
     elevation: const WidgetStatePropertyAll(0),
   );
@@ -105,6 +117,7 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
       if (states.contains(WidgetState.hovered)) return p.text;
       return p.text2;
     }),
+    side: ringOr(null),
     overlayColor: const WidgetStatePropertyAll(Colors.transparent),
   );
 
@@ -158,6 +171,7 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
           if (states.contains(WidgetState.hovered)) return p.text;
           return p.text2;
         }),
+        side: ringOr(null),
         overlayColor: const WidgetStatePropertyAll(Colors.transparent),
       ),
     ),

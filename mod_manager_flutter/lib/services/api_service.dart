@@ -74,12 +74,14 @@ class ApiService {
       // degrade to `blur`, never to `show`.
       _container!.read(contentFilterProvider.notifier).state =
           ContentFilterMode.parse(_configService!.contentFilter);
-      // `byName` returns null for a value this build doesn't know, so a config
-      // written by a version offering a different sort falls back rather than
-      // failing startup.
+      // A value this build doesn't know, or a sort the menu doesn't offer, falls
+      // back rather than failing startup.
       _container!.read(marketplaceSortProvider.notifier).state =
-          GbModSort.byName(_configService!.marketplaceSort) ??
-              kDefaultMarketplaceSort;
+          parseMarketplaceSort(_configService!.marketplaceSort);
+      _container!.read(marketplaceHideInstalledProvider.notifier).state =
+          _configService!.marketplaceHideInstalled;
+      _container!.read(marketplaceTurnOnAfterInstallProvider.notifier).state =
+          _configService!.marketplaceTurnOnAfterInstall;
       // Parsed rather than looked up, for the same reason as the filter above:
       // the key predates the setting and holds a palette name in a config any
       // older build wrote.
@@ -356,6 +358,20 @@ class ApiService {
     await initialize();
     await _configService!.setMarketplaceSort(sort.name);
     _container?.read(marketplaceSortProvider.notifier).state = sort;
+  }
+
+  /// Persists Browse's Hide installed switch and applies it.
+  static Future<void> setMarketplaceHideInstalled(bool hide) async {
+    await initialize();
+    await _configService!.setMarketplaceHideInstalled(hide);
+    _container?.read(marketplaceHideInstalledProvider.notifier).state = hide;
+  }
+
+  /// Persists the mod page's Turn on after installing switch and applies it.
+  static Future<void> setMarketplaceTurnOnAfterInstall(bool turnOn) async {
+    await initialize();
+    await _configService!.setMarketplaceTurnOnAfterInstall(turnOn);
+    _container?.read(marketplaceTurnOnAfterInstallProvider.notifier).state = turnOn;
   }
 
   /// Persists the theme choice and applies it immediately.

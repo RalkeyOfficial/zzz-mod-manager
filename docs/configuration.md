@@ -46,6 +46,8 @@ App-data locations are `~/.local/share/zzz-mod-manager` (Linux) and
   "sort_mode": "added",
   "content_filter": "blur",
   "marketplace_sort": "newest",
+  "marketplace_hide_installed": false,
+  "marketplace_turn_on_after_install": false,
   "update_check_on_launch": false,
   "hide_empty_characters": false,
   "file_logging": true,
@@ -77,7 +79,9 @@ App-data locations are `~/.local/share/zzz-mod-manager` (Linux) and
 | `language` | `language` | Locale code (`en`, `uk`) |
 | `sort_mode` | `sort_mode` | The **mods library** sort. Parsed into `ModSort`; falls back to `added` |
 | `content_filter` | `content_filter` | Marketplace adult-content treatment: `blur` (default) \| `show` \| `hide`. Stored as a raw string and parsed by `ContentFilterMode.parse`, which **degrades anything unrecognised to `blur`** — the only value that is wrong in neither direction ([§3](#3-parsing-a-stored-value)) |
-| `marketplace_sort` | `marketplace_sort` | The **marketplace browse** sort, as a `GbModSort` Dart name (`newest`, `latestModified`, …). Empty until chosen ([§3](#3-parsing-a-stored-value)) |
+| `marketplace_sort` | `marketplace_sort` | The **marketplace browse** sort, as a `GbModSort` Dart name (`newest`, `latestModified`, …). Empty until chosen ([§3](#3-parsing-a-stored-value)). `latestComment`, which the Sort menu doesn't offer, reads as the default |
+| `marketplace_hide_installed` | `marketplace_hide_installed` | Bool, **default `false`**. Browse's **Hide installed** switch: whether the grid leaves out the mods already in the library ([`marketplace.md` §2](marketplace.md#2-state)). A value that is not a bool is ignored |
+| `marketplace_turn_on_after_install` | `marketplace_turn_on_after_install` | Bool, **default `false`**. The mod page's **Turn on after installing** switch: whether an install from Browse, the mod page's or a card's and the carousel's, turns its new mods on once they are in the library ([`marketplace.md` §5](marketplace.md#5-what-pressing-install-actually-does)). A value that is not a bool is ignored |
 | `update_check_on_launch` | `update_check_on_launch` | Bool, **default `false`**. Whether the whole-library update check runs by itself at startup ([`update-checks.md` §5.1](update-checks.md#51-checking-at-startup)). The default is the safety property: the standing rule is that a check never runs unpressed, and this is the only opt-in out of it. It governs *checking* — nothing here consents to an update being applied |
 | `hide_empty_characters` | `hide_empty_characters` | Bool, **default `false`**. Whether the Library's character list hides the characters and categories with no mods, the **Hide empty** switch ([`library-screen.md` §2](library-screen.md#2-the-character-list)). A value that is not a bool is ignored |
 | `file_logging` | `file_logging` | Bool, **default `true`** — the opposite call from the row above, and for the opposite reason: a log reaches nothing and costs kilobytes, and is worthless if it was switched off on the run that broke. **This is the one key read outside `ConfigService`**: `log_setup.dart` reads it straight off the file during bootstrap, because SharedPreferences does not exist until the first frame and the first lines worth keeping are written before that. Any failure to read it means `true` ([`logging.md` §9](logging.md#9-settings)) |

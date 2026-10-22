@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../utils/state_providers.dart';
 import '../archive_activity.dart';
+import '../download/download_job.dart';
 import '../download/download_queue.dart';
 import '../log/logger.dart';
 import '../platform_service_factory.dart';
@@ -104,7 +105,11 @@ class ReclaimController extends AsyncNotifier<ReclaimOutcome?> {
       ref.read(storageRootsProvider),
       downloadsBusy: () =>
           ref.read(downloadQueueProvider).any((job) => !job.state.isTerminal),
-      installBusy: () => ArchiveActivity.isBusy,
+      // A download installing holds its folders past the unpack, while the import copies from them.
+      installBusy: () =>
+          ArchiveActivity.isBusy ||
+          ref.read(downloadQueueProvider).any((job) => job.state == DownloadJobState.installing),
+      downloadWaiting: () => ref.read(downloadQueueProvider).any((job) => job.state == DownloadJobState.waiting),
       modNames: () async {
         try {
           final mods = await ref.read(libraryProvider.future);

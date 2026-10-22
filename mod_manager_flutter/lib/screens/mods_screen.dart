@@ -18,6 +18,7 @@ import '../services/api_service.dart';
 import '../services/archive_service.dart';
 import '../services/import_result.dart';
 import '../services/ingest_origin_builder.dart';
+import '../services/log/confirmations.dart';
 import '../services/log/logger.dart';
 import '../services/platform_service.dart' show NetworkLinkRefused;
 import '../services/shader_fixes/shader_fixes_service.dart';
@@ -41,6 +42,7 @@ import 'components/network_link_notice.dart';
 import 'components/shader_fixes_notices.dart';
 import 'components/zenith_controls.dart';
 import 'all_mods/all_mods_view.dart';
+import 'dialogs/archive_password_dialog.dart';
 import 'dialogs/delete_mod_dialog.dart';
 import 'dialogs/duplicate_archive_dialog.dart';
 import 'dialogs/edit_mod_dialog.dart';
@@ -1037,6 +1039,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       // user chose not to install it again. Distinguishes "you declined" from
       // "there was nothing here" once the folder list comes out empty.
       var declinedDuplicate = false;
+      // The same for an archive whose password the user did not give.
+      var declinedPassword = false;
 
       for (final file in files) {
         // Перевіряємо чи це архів
@@ -1060,14 +1064,33 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
         _log.info('extracting dropped archives',
             fields: {'archives': archivesToExtract.length});
 
+        // **Every archive is listed before any is unpacked**, and the locked ones ask for their password one at a
+        // time. A dismissed dialog ends that archive's import, since there is no row to come back to.
+        final passwords = <String, String>{};
+        for (final archiveFile in [...archivesToExtract]) {
+          final file = File(archiveFile.path);
+          if (!await file.exists() || !await ArchiveService.needsPassword(file)) continue;
+          if (!mounted) return;
+          final answer = await showArchivePasswordDialog(context, modName: archiveFile.name, offerModPage: false);
+          if (answer is PasswordGiven) {
+            passwords[archiveFile.path] = answer.password;
+          } else {
+            logConfirmation('import.password', accepted: false, subject: archiveFile.name, dismissed: answer == null);
+            archivesToExtract.remove(archiveFile);
+            declinedPassword = true;
+          }
+        }
+
         // **Every archive is unpacked before any is asked about**, so the card for the wait is down before the
-        // duplicate question opens rather than over it.
+        // duplicate question opens rather than over it. None when every archive's password was declined.
         final total = archivesToExtract.length;
-        unpacking = notify.working(
-          loc.plural('mods.import_working.unpacking', total, params: {'count': '$total'}),
-          body: subjectList(loc, [for (final archive in archivesToExtract) archive.name]),
-          progress: total == 1 ? null : 0,
-        );
+        if (total > 0) {
+          unpacking = notify.working(
+            loc.plural('mods.import_working.unpacking', total, params: {'count': '$total'}),
+            body: subjectList(loc, [for (final archive in archivesToExtract) archive.name]),
+            progress: total == 1 ? null : 0,
+          );
+        }
         final extracted = <(XFile, ArchiveExtractionResult)>[];
         for (var i = 0; i < total; i++) {
           final archiveFile = archivesToExtract[i];
@@ -1077,8 +1100,25 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
             _log.warning('dropped file is gone',
                 fields: {'path': archiveFile.path});
           } else {
-            final result = await ArchiveService.extractArchive(archiveFile: file);
-            if (result.success && result.extractedFolders != null) {
+            var result = await ArchiveService.extractArchive(archiveFile: file, password: passwords[archiveFile.path]);
+            // A password that did not open it asks again, and the archive is kept for the next try.
+            while (result.failure == ExtractFailure.wrongPassword ||
+                (result.failure == ExtractFailure.passwordRequired && passwords[archiveFile.path] == null)) {
+              if (!mounted) break;
+              final answer = await showArchivePasswordDialog(
+                context,
+                modName: archiveFile.name,
+                failed: result.failure == ExtractFailure.wrongPassword,
+                offerModPage: false,
+              );
+              if (answer is! PasswordGiven) break;
+              passwords[archiveFile.path] = answer.password;
+              result = await ArchiveService.extractArchive(archiveFile: file, password: answer.password);
+            }
+            if (result.failure == ExtractFailure.wrongPassword || result.failure == ExtractFailure.passwordRequired) {
+              logConfirmation('import.password', accepted: false, subject: archiveFile.name);
+              declinedPassword = true;
+            } else if (result.success && result.extractedFolders != null) {
               // Registered for cleanup whatever the duplicate question answers: the folders exist from here.
               tempFoldersToCleanup.addAll(result.extractedFolders!);
               extracted.add((archiveFile, result));
@@ -1137,10 +1177,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
 
       if (folderPaths.isEmpty) {
         await cleanupTempFolders();
-        // Nothing to say when the user just declined every duplicate — they were
-        // asked and answered. "No mod folders found" would be a different claim
-        // entirely, and a false one.
-        if (mounted && !declinedDuplicate) {
+        // Nothing to say when the user just declined every duplicate or every
+        // password — they were asked and answered. "No mod folders found" would
+        // be a different claim entirely, and a false one.
+        if (mounted && !declinedDuplicate && !declinedPassword) {
           context.notify.note(
             loc.t('mods.snackbar.import_no_folders_title'),
             body: loc.t('mods.snackbar.import_no_folders_body'),

@@ -1017,13 +1017,16 @@ class ModManagerService {
   /// it: guessing from a name is what this exists to avoid, and the two
   /// genuinely disagree (a Zhao skin named "Zhao Nicole" reads as Nicole,
   /// because the longest matching term wins). Same map shape as the two above,
-  /// for the same reason. An unassigned value falls back to detection, so a mod
-  /// filed under a non-character category still gets its name read.
+  /// for the same reason. An unassigned value is told too: the folder is filed
+  /// under Unassigned, and only a folder with no entry has its name read.
+  /// [targetNames] maps a source folder path to the mod folder name to install
+  /// it as, in place of the source folder's own name.
   Future<ImportResult> importMods(
     List<String> folderPaths, {
     Map<String, String>? detectionHints,
     Map<String, ModOriginSeed>? originSeeds,
     Map<String, String>? knownCharacters,
+    Map<String, String>? targetNames,
   }) async {
     try {
       final (valid, _) = await validatePaths();
@@ -1037,7 +1040,7 @@ class ModManagerService {
       final toCopy = <String>[];
       for (final folderPath in folderPaths) {
         if (!await Directory(folderPath).exists()) continue;
-        final target = Directory(path.join(modsPath!, path.basename(folderPath)));
+        final target = Directory(path.join(modsPath!, targetNames?[folderPath] ?? path.basename(folderPath)));
         if (await target.exists()) continue;
         toCopy.add(folderPath);
       }
@@ -1060,7 +1063,7 @@ class ModManagerService {
         final sourceDir = Directory(folderPath);
         if (!await sourceDir.exists()) continue;
 
-        final modName = path.basename(folderPath);
+        final modName = targetNames?[folderPath] ?? path.basename(folderPath);
         final targetPath = path.join(modsPath!, modName);
         final targetDir = Directory(targetPath);
 
@@ -1090,12 +1093,12 @@ class ModManagerService {
         // визначення під час відображення.
         final hint = detectionHints?[folderPath];
         final known = knownCharacters?[folderPath];
-        final detectedChar = isUnassignedCharacterId(known)
+        final detectedChar = known == null
             ? _detectCharacterFromName(
                 modName,
                 extraNames: [if (hint != null && hint.isNotEmpty) hint],
               )
-            : known;
+            : storedCharacterId(known);
         if (detectedChar != null) {
           await setModCharacter(modName, detectedChar);
           autoTags[modName] = detectedChar;
@@ -1217,7 +1220,8 @@ class ModManagerService {
   /// a map because this produces exactly one mod — and for the same reason it
   /// never carries a sibling group. [knownCharacter] is the same fact
   /// `importMods` takes per folder: a character the caller was told rather than
-  /// one to guess at, replacing name detection when it is set.
+  /// one to guess at, Unassigned included, replacing name detection when it is
+  /// set.
   Future<ImportResult> importCombinedMod(
     List<String> folderPaths,
     String modName, {
@@ -1292,7 +1296,7 @@ class ModManagerService {
       }
 
       final autoTags = <String, String>{};
-      final detectedChar = isUnassignedCharacterId(knownCharacter)
+      final detectedChar = knownCharacter == null
           ? _detectCharacterFromName(
               modName,
               extraNames: [
@@ -1300,7 +1304,7 @@ class ModManagerService {
                   detectionHint,
               ],
             )
-          : knownCharacter;
+          : storedCharacterId(knownCharacter);
       if (detectedChar != null) {
         await setModCharacter(modName, detectedChar);
         autoTags[modName] = detectedChar;

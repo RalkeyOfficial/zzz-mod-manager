@@ -32,12 +32,12 @@ void main() {
 
   /// Presses a button that runs one foreground download, with or without a
   /// hold, and hands back what it returned.
-  Future<List<DownloadResult?>> press(
+  Future<List<ForegroundDownload?>> press(
     WidgetTester tester, {
     required ProgressHold? hold,
     List<DownloadJob> alreadyQueued = const [],
   }) async {
-    final returned = <DownloadResult?>[];
+    final returned = <ForegroundDownload?>[];
     await pumpLocalized(
       tester,
       Consumer(
@@ -149,6 +149,21 @@ void main() {
     expect(container.read(downloadsPanelRequestProvider), before + 1);
     await tester.pump(const Duration(seconds: 6));
   });
+
+  testWidgets("a file another update is still writing is not handed to a second one, whose flow would delete it",
+      (tester) async {
+    final updating = _running(file, 'Ellen', DownloadIntent.callerHandles).copyWith(
+      state: DownloadJobState.updating,
+      result: DownloadResult(file: File('/tmp/ellen_v2.zip'), totalBytes: 100),
+    );
+    final returned = await press(tester, hold: null, alreadyQueued: [updating]);
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(returned, [null]);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.text('Already downloading'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 6));
+  });
 }
 
 /// A running job for [file] with [intent].
@@ -187,6 +202,7 @@ class _StubQueue extends DownloadQueue {
     required DownloadIntent intent,
     GbMod? mod,
     String? characterId,
+    bool turnOn = false,
   }) =>
       _running(file, subject, intent);
 

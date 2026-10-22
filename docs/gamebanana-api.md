@@ -272,7 +272,7 @@ Its entry shape is its **own**, not a subset of the mod object:
 | `_aPreviewContent.screenshot` | The cover, as the **ordinary variant ladder** ([§5](#images)) — `_sFile` is the 800px render here rather than an original upload, with `_sFile220` beside it. Under apiv11 this was two finished urls (`_sImageUrl`, `_sThumbnailUrl`) with no size to negotiate; that difference is gone |
 | `_sInitialVisibility` | Present on every entry, so the NSFW filter still applies |
 | `_aSubmitter`, `_nLikeCount`, `_nPostCount` | |
-| `_aRootCategory` | Root only — **no `_aSubCategory`**, so an entry cannot show a character name |
+| `_aRootCategory` | Root only — **no `_aSubCategory`**, so an entry cannot show a character name on its own; a `Mod/Multi` for the entries' ids asking `_aCategory` names it ([§3](#bulk--modmulti)) |
 | `_sDescription` | A short tagline, present on only a minority (3 of 21 captured) |
 
 One practical warning: for ZZZ this list skews heavily adult — **20 of 21 captured
@@ -421,10 +421,13 @@ One id with a chosen property list beats both purpose-built responses for an upd
 check: it is a quarter of `ProfilePage` and slightly smaller than `DownloadPage`
 while being the only one of the three that carries every field a comparison needs.
 
-Four things to know, all measured rather than assumed, and the last two will bite:
+Seven things to know, all measured rather than assumed:
 
 - `_csvProperties` is honoured **here but ignored by `Index`** — don't expect it to
   trim listing payloads.
+- **It carries what a listing lacks.** Measured 2026-10-21: `_csvProperties=_idRow,_nDownloadCount,_aCategory,_aFiles` returns the download count,
+  `_aCategory` with its `_idRow` (the character for a skin, the root for a mod filed directly under one — "Character Skins", "Other/Misc") and the files, for a page's ids in one request.
+  This is how Browse shows a download count and decides whether a card's Install has exactly one file to queue. A day-old mod answers `_nDownloadCount: 0`, a real zero.
 - **`_csvProperties` accepts a narrower set than a profile carries.** `_aFiles`,
   `_sVersion`, the `_ts…` dates, `_bIsObsolete` / `_bIsPrivate` / `_bIsTrashed` /
   `_bIsWithheld`, `_sProfileUrl` and `_aPreviewContent` all work. `_aArchivedFiles`
@@ -446,6 +449,7 @@ Four things to know, all measured rather than assumed, and the last two will bit
   an entry arrived under. Losing `_aArchivedFiles` above therefore costs nothing.
 - **A withheld mod comes back blank, and not flagged.** Measured on three withheld ZZZ mods (`581980`, `586490`, `643580`, all a `softhold` with their page and files public):
   `Multi` sends `_idRow` and `_sName`, nulls `_aFiles`, `_sVersion`, the dates and `_bIsObsolete`, and sends `_bIsWithheld: false`. Their `ProfilePage` is whole and says `_bIsWithheld: true`.
+  Asked for `_nDownloadCount` and `_aCategory` (2026-10-21, mod `581980`), it nulls both too.
   The content rating is not the cause: five `hide` mods that are not withheld come back whole. A trashed mod is blank too, but flagged `_bIsTrashed`.
   The tell is the null `_tsDateAdded`, which every published mod has; the update check fetches the profile for such a record ([`update-checks.md`](update-checks.md#2-the-verdicts)).
 - **One unknown id fails the whole batch.** A `_csvRowIds` list containing a single id
@@ -532,7 +536,7 @@ wasn't.
 |---|---|---|
 | `Generic_Game` | game id | `19567` for ZZZ. The one you always send. |
 | `Generic_Category` | category id | Works on **root or sub** categories; a root category **includes its subcategories**. |
-| `Generic_Submitter` | member id | Everything by one author. |
+| `Generic_Submitter` | member id | Everything by one author. Measured 2026-10-21: it combines with `Generic_Game`, `_sSort` and `_nPerpage=50`, and `_nRecordCount` is the member's count for the game. An unknown member id answers `200` with an empty page, `_nRecordCount: 0`, exactly as a member with no mods for the game does, so the two cannot be told apart; a non-numeric value is `400 INVALID_FILTER_VALUE`. The records' `_aSubmitter` carries `_sAvatarUrl` in both captured listings, `_sHdAvatarUrl` in one and `_sUpicUrl` in the other, and no `_sUserTitle`, so only `_sAvatarUrl` can be relied on. |
 | `Generic_Name` | `contains,<text>` or `equals,<text>` | The operator comes first, then a comma, then the text. A bare string, `starts,…` or an empty text is `INVALID_FILTER_VALUE`. `contains` is a case-insensitive substring of the title; surrounding spaces are matched literally, so trim. A comma inside the text splits it into terms that are **or**-ed (`contains,ZZMI,Censor` matched both). |
 
 Rejected: `Generic_Tag`, `Generic_ContentRating`, `Generic_HasFiles`,
@@ -575,7 +579,7 @@ we actually care about:
 | `_aPreviewContent` | both | Gallery — but **`screenshots` (array) on a profile and `screenshot` (one object) on a listing**. See below. |
 | `_sPayType` | both | New in v12. `free` / `freemium` (43 / 7 in a 50-record sample). Not accepted by `Mod/Multi`. |
 | `_nLikeCount`, `_nViewCount`, `_nPostCount` | both | Stats for the card. |
-| `_nDownloadCount` | **profile only** | **Not on listing records.** A card cannot show a download count — see below. |
+| `_nDownloadCount` | profile, `Multi` | **Not on listing records.** A listing alone cannot give a card a download count; one `Mod/Multi` for the page's ids can ([§3](#bulk--modmulti)) — see below. |
 | `_bHasFiles` | list | Whether anything is downloadable. |
 | `_bIsObsolete` | both | Author flagged it superseded — **not** the same as gone. |
 | `_bIsPrivate`, `_bIsTrashed` | profile | Upstream removal states. Read these instead of inferring from a 404. |
@@ -590,9 +594,8 @@ we actually care about:
 Re-checked against a live `Mod/Index` page and the captured fixtures, because getting
 this wrong shows up as a card rendering a confident zero:
 
-- **`_nDownloadCount` is profile-only.** Build cards on likes / views / posts. Model
-  the counters as nullable and omit what you weren't given — "0 downloads" on a mod
-  with 40 000 downloads is worse than no number.
+- **`_nDownloadCount` is not on a listing.** A profile carries it, and so does `Mod/Multi` when asked (measured 2026-10-21), so a card's count takes one `Multi` per page beside the listing.
+  Model the counters as nullable and omit what you weren't given — "0 downloads" on a mod with 40 000 downloads is worse than no number.
 - **`_aContentRatings` is profile-only.** A listing gets `_bHasContentRatings`, a bare
   boolean, so a **card can flag a mod but cannot say why**; only the detail view can
   name "Skimpy Attire". Don't design a card that promises the reason.
@@ -882,7 +885,7 @@ Three properties of the hint that shape any client-side filter:
 Since the API returns flagged mods regardless, any filter necessarily runs on
 already-fetched records — so `_nRecordCount` and the page count describe the **remote**
 result set, not what survives filtering. A page can legitimately render fewer items than
-the pager implies.
+it fetched, or none.
 
 ---
 
@@ -1119,9 +1122,7 @@ Collected so nobody rediscovers them:
 - **Some endpoints return a bare array** (`Multi`, `Mod/Categories`) instead of the
   `_aMetadata`/`_aRecords` envelope. Don't write one generic response parser and
   assume it fits all.
-- **Listing records omit `_nDownloadCount` and `_aContentRatings`.** Both are
-  profile-only, so a card can neither show a download count nor explain *why* a mod is
-  flagged ([§5](#5-the-mod-object)).
+- **Listing records omit `_nDownloadCount` and `_aContentRatings`.** A card's download count takes a `Mod/Multi` beside the listing, and the reason a mod is flagged is on its profile alone ([§5](#5-the-mod-object)).
 - **`_aPreviewContent` has two container spellings**: `screenshots` (array) on a
   profile, `screenshot` (single object) on every listing. Reading one key gives an
   *empty gallery*, not an error, so this fails silently ([§5](#images)).

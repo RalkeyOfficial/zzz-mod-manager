@@ -1,0 +1,499 @@
+{
+  "_aMetadata": {
+    "_nRecordCount": 9,
+    "_bIsComplete": true,
+    "_nPerpage": 50
+  },
+  "_aRecords": [
+    {
+      "_idRow": 566194,
+      "_sModelName": "Mod",
+      "_sSingularTitle": "Mod",
+      "_sIconClasses": "SubmissionType Mod",
+      "_sName": "No Caesar's Shield Effect (01.25 v1.5 Fix)",
+      "_sProfileUrl": "https://gamebanana.com/mods/566194",
+      "_tsDateAdded": 1735728621,
+      "_tsDateModified": 1770826377,
+      "_bHasFiles": true,
+      "_sPayType": "free",
+      "_aTags": [],
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sFile220": "sgi_common_thumbs_67751dba6a8d5_220.webp",
+          "_hFile220": 147,
+          "_sFile530": "sgi_common_thumbs_67751dba6a8d5_530.webp",
+          "_hFile530": 353,
+          "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+          "_sFile": "67751dba6a8d5.jpg"
+        }
+      },
+      "_aSubmitter": {
+        "_idRow": 3549585,
+        "_sName": "summersby",
+        "_bIsOnline": false,
+        "_bHasRipe": false,
+        "_sProfileUrl": "https://gamebanana.com/members/3549585",
+        "_sAvatarUrl": "https://images.gamebanana.com/img/av/66a0a78740b3a.jpg",
+        "_sHdAvatarUrl": "https://images.gamebanana.com/img/av/66c359bb3f54f.jpg"
+      },
+      "_aGame": {
+        "_idRow": 19567,
+        "_sName": "Zenless Zone Zero",
+        "_sProfileUrl": "https://gamebanana.com/games/19567",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png"
+      },
+      "_aRootCategory": {
+        "_sName": "Other/Misc",
+        "_sProfileUrl": "https://gamebanana.com/mods/cats/29874",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/6688c2aba07b5.png"
+      },
+      "_sVersion": "v2",
+      "_tsDateUpdated": 1737813303,
+      "_bIsObsolete": true,
+      "_sInitialVisibility": "show",
+      "_bHasContentRatings": false,
+      "_nLikeCount": 79,
+      "_nPostCount": 22,
+      "_bWasFeatured": false,
+      "_nViewCount": 13701,
+      "_bIsOwnedByAccessor": false
+    },
+    {
+      "_idRow": 565870,
+      "_sModelName": "Mod",
+      "_sSingularTitle": "Mod",
+      "_sIconClasses": "SubmissionType Mod",
+      "_sName": "Universal Hide UI (10.21 v3.3.0)",
+      "_sProfileUrl": "https://gamebanana.com/mods/565870",
+      "_tsDateAdded": 1735627033,
+      "_tsDateModified": 1792587375,
+      "_bHasFiles": true,
+      "_sPayType": "free",
+      "_aTags": [],
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sFile220": "sgi_common_thumbs_677390a5083bf_220.webp",
+          "_hFile220": 124,
+          "_sFile530": "sgi_common_thumbs_677390a5083bf_530.webp",
+          "_hFile530": 298,
+          "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+          "_sFile": "677390a5083bf.jpg"
+        }
+      },
+      "_aSubmitter": {
+        "_idRow": 3549585,
+        "_sName": "summersby",
+        "_bIsOnline": false,
+        "_bHasRipe": false,
+        "_sProfileUrl": "https://gamebanana.com/members/3549585",
+        "_sAvatarUrl": "https://images.gamebanana.com/img/av/66a0a78740b3a.jpg",
+        "_sHdAvatarUrl": "https://images.gamebanana.com/img/av/66c359bb3f54f.jpg"
+      },
+      "_aGame": {
+        "_idRow": 19567,
+        "_sName": "Zenless Zone Zero",
+        "_sProfileUrl": "https://gamebanana.com/games/19567",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png"
+      },
+      "_aRootCategory": {
+        "_sName": "UI",
+        "_sProfileUrl": "https://gamebanana.com/mods/cats/30395",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/6690641770738.png"
+      },
+      "_sVersion": "v3.3.0",
+      "_tsDateUpdated": 1792587403,
+      "_bIsObsolete": false,
+      "_sInitialVisibility": "show",
+      "_bHasContentRatings": false,
+      "_nLikeCount": 1050,
+      "_nPostCount": 137,
+      "_bWasFeatured": false,
+      "_nViewCount": 121760,
+      "_bIsOwnedByAccessor": false
+    },
+    {
+      "_idRow": 564555,
+      "_sModelName": "Mod",
+      "_sSingularTitle": "Mod",
+      "_sIconClasses": "SubmissionType Mod",
+      "_sName": "Custom Loading Screen (08.01 v3.1.0)",
+      "_sProfileUrl": "https://gamebanana.com/mods/564555",
+      "_tsDateAdded": 1735109646,
+      "_tsDateModified": 1785586551,
+      "_bHasFiles": true,
+      "_sPayType": "free",
+      "_aTags": [],
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sFile220": "sgi_common_thumbs_6a6d58c116e81_220.webp",
+          "_hFile220": 124,
+          "_sFile530": "sgi_common_thumbs_6a6d58c116e81_530.webp",
+          "_hFile530": 298,
+          "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+          "_sFile": "6a6d58c116e81.jpg"
+        }
+      },
+      "_aSubmitter": {
+        "_idRow": 3549585,
+        "_sName": "summersby",
+        "_bIsOnline": false,
+        "_bHasRipe": false,
+        "_sProfileUrl": "https://gamebanana.com/members/3549585",
+        "_sAvatarUrl": "https://images.gamebanana.com/img/av/66a0a78740b3a.jpg",
+        "_sHdAvatarUrl": "https://images.gamebanana.com/img/av/66c359bb3f54f.jpg"
+      },
+      "_aGame": {
+        "_idRow": 19567,
+        "_sName": "Zenless Zone Zero",
+        "_sProfileUrl": "https://gamebanana.com/games/19567",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png"
+      },
+      "_aRootCategory": {
+        "_sName": "Other/Misc",
+        "_sProfileUrl": "https://gamebanana.com/mods/cats/29874",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/6688c2aba07b5.png"
+      },
+      "_sVersion": "v3.1.0",
+      "_tsDateUpdated": 1785551187,
+      "_bIsObsolete": false,
+      "_sInitialVisibility": "show",
+      "_bHasContentRatings": false,
+      "_nLikeCount": 943,
+      "_nPostCount": 226,
+      "_bWasFeatured": false,
+      "_nViewCount": 143814,
+      "_bIsOwnedByAccessor": false
+    },
+    {
+      "_idRow": 539167,
+      "_sModelName": "Mod",
+      "_sSingularTitle": "Mod",
+      "_sIconClasses": "SubmissionType Mod",
+      "_sName": "Nekomata Tic-Tac-Toe (v2 BugFix)",
+      "_sProfileUrl": "https://gamebanana.com/mods/539167",
+      "_tsDateAdded": 1725111046,
+      "_tsDateModified": 1730991295,
+      "_bHasFiles": true,
+      "_sPayType": "free",
+      "_aTags": [],
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sFile220": "sgi_common_thumbs_66d31bdea96e7_220.webp",
+          "_hFile220": 124,
+          "_sFile530": "sgi_common_thumbs_66d31bdea96e7_530.webp",
+          "_hFile530": 298,
+          "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+          "_sFile": "66d31bdea96e7.jpg"
+        }
+      },
+      "_aSubmitter": {
+        "_idRow": 3549585,
+        "_sName": "summersby",
+        "_bIsOnline": false,
+        "_bHasRipe": false,
+        "_sProfileUrl": "https://gamebanana.com/members/3549585",
+        "_sAvatarUrl": "https://images.gamebanana.com/img/av/66a0a78740b3a.jpg",
+        "_sHdAvatarUrl": "https://images.gamebanana.com/img/av/66c359bb3f54f.jpg"
+      },
+      "_aGame": {
+        "_idRow": 19567,
+        "_sName": "Zenless Zone Zero",
+        "_sProfileUrl": "https://gamebanana.com/games/19567",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png"
+      },
+      "_aRootCategory": {
+        "_sName": "Character Skins",
+        "_sProfileUrl": "https://gamebanana.com/mods/cats/30305",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/66a1928c3e239.gif"
+      },
+      "_aSubCategory": {
+        "_sName": "Nekomiya Mana",
+        "_sProfileUrl": "https://gamebanana.com/mods/cats/30345",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/688021a8820be.png"
+      },
+      "_sVersion": "v2",
+      "_tsDateUpdated": 1725208757,
+      "_bIsObsolete": true,
+      "_sInitialVisibility": "show",
+      "_bHasContentRatings": false,
+      "_nLikeCount": 106,
+      "_nPostCount": 12,
+      "_bWasFeatured": false,
+      "_nViewCount": 20394,
+      "_bIsOwnedByAccessor": false
+    },
+    {
+      "_idRow": 530715,
+      "_sModelName": "Mod",
+      "_sSingularTitle": "Mod",
+      "_sIconClasses": "SubmissionType Mod",
+      "_sName": "Battle Assist UI (12.23 v1.4 fix)",
+      "_sProfileUrl": "https://gamebanana.com/mods/530715",
+      "_tsDateAdded": 1721965830,
+      "_tsDateModified": 1770826360,
+      "_bHasFiles": true,
+      "_sPayType": "free",
+      "_aTags": [],
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sFile220": "sgi_common_thumbs_66db1372032da_220.webp",
+          "_hFile220": 124,
+          "_sFile530": "sgi_common_thumbs_66db1372032da_530.webp",
+          "_hFile530": 298,
+          "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+          "_sFile": "66db1372032da.jpg"
+        }
+      },
+      "_aSubmitter": {
+        "_idRow": 3549585,
+        "_sName": "summersby",
+        "_bIsOnline": false,
+        "_bHasRipe": false,
+        "_sProfileUrl": "https://gamebanana.com/members/3549585",
+        "_sAvatarUrl": "https://images.gamebanana.com/img/av/66a0a78740b3a.jpg",
+        "_sHdAvatarUrl": "https://images.gamebanana.com/img/av/66c359bb3f54f.jpg"
+      },
+      "_aGame": {
+        "_idRow": 19567,
+        "_sName": "Zenless Zone Zero",
+        "_sProfileUrl": "https://gamebanana.com/games/19567",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png"
+      },
+      "_aRootCategory": {
+        "_sName": "UI",
+        "_sProfileUrl": "https://gamebanana.com/mods/cats/30395",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/6690641770738.png"
+      },
+      "_sVersion": "v14",
+      "_tsDateUpdated": 1734938576,
+      "_bIsObsolete": true,
+      "_sInitialVisibility": "show",
+      "_bHasContentRatings": false,
+      "_nLikeCount": 794,
+      "_nPostCount": 244,
+      "_bWasFeatured": false,
+      "_nViewCount": 150995,
+      "_bIsOwnedByAccessor": false
+    },
+    {
+      "_idRow": 529789,
+      "_sModelName": "Mod",
+      "_sSingularTitle": "Mod",
+      "_sIconClasses": "SubmissionType Mod",
+      "_sName": "Color Wipeout (10.21 v3.3.0)",
+      "_sProfileUrl": "https://gamebanana.com/mods/529789",
+      "_tsDateAdded": 1721634177,
+      "_tsDateModified": 1792586797,
+      "_bHasFiles": true,
+      "_sPayType": "free",
+      "_aTags": [],
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sFile220": "sgi_common_thumbs_680a3a2e84fc8_220.webp",
+          "_hFile220": 122,
+          "_sFile530": "sgi_common_thumbs_680a3a2e84fc8_530.webp",
+          "_hFile530": 294,
+          "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+          "_sFile": "680a3a2e84fc8.jpg"
+        }
+      },
+      "_aSubmitter": {
+        "_idRow": 3549585,
+        "_sName": "summersby",
+        "_bIsOnline": false,
+        "_bHasRipe": false,
+        "_sProfileUrl": "https://gamebanana.com/members/3549585",
+        "_sAvatarUrl": "https://images.gamebanana.com/img/av/66a0a78740b3a.jpg",
+        "_sHdAvatarUrl": "https://images.gamebanana.com/img/av/66c359bb3f54f.jpg"
+      },
+      "_aGame": {
+        "_idRow": 19567,
+        "_sName": "Zenless Zone Zero",
+        "_sProfileUrl": "https://gamebanana.com/games/19567",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png"
+      },
+      "_aRootCategory": {
+        "_sName": "Other/Misc",
+        "_sProfileUrl": "https://gamebanana.com/mods/cats/29874",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/6688c2aba07b5.png"
+      },
+      "_sVersion": "v3.3.0",
+      "_tsDateUpdated": 1792585030,
+      "_bIsObsolete": false,
+      "_sInitialVisibility": "show",
+      "_bHasContentRatings": false,
+      "_nLikeCount": 1970,
+      "_nPostCount": 234,
+      "_bWasFeatured": false,
+      "_nViewCount": 303747,
+      "_bIsOwnedByAccessor": false
+    },
+    {
+      "_idRow": 528128,
+      "_sModelName": "Mod",
+      "_sSingularTitle": "Mod",
+      "_sIconClasses": "SubmissionType Mod",
+      "_sName": "No Ellen sprinting afterimage (07.15 v2 Updated)",
+      "_sProfileUrl": "https://gamebanana.com/mods/528128",
+      "_tsDateAdded": 1721038465,
+      "_tsDateModified": 1785586642,
+      "_bHasFiles": true,
+      "_sPayType": "free",
+      "_aTags": [],
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sFile220": "sgi_common_thumbs_6694f541b7959_220.webp",
+          "_hFile220": 110,
+          "_sFile530": "sgi_common_thumbs_6694f541b7959_530.webp",
+          "_hFile530": 266,
+          "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+          "_sFile": "6694f541b7959.jpg",
+          "_sCaption": "skip_mode = 1 / Left : Before / Right : After"
+        }
+      },
+      "_aSubmitter": {
+        "_idRow": 3549585,
+        "_sName": "summersby",
+        "_bIsOnline": false,
+        "_bHasRipe": false,
+        "_sProfileUrl": "https://gamebanana.com/members/3549585",
+        "_sAvatarUrl": "https://images.gamebanana.com/img/av/66a0a78740b3a.jpg",
+        "_sHdAvatarUrl": "https://images.gamebanana.com/img/av/66c359bb3f54f.jpg"
+      },
+      "_aGame": {
+        "_idRow": 19567,
+        "_sName": "Zenless Zone Zero",
+        "_sProfileUrl": "https://gamebanana.com/games/19567",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png"
+      },
+      "_aRootCategory": {
+        "_sName": "Character Skins",
+        "_sProfileUrl": "https://gamebanana.com/mods/cats/30305",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/66a1928c3e239.gif"
+      },
+      "_aSubCategory": {
+        "_sName": "Ellen Joe",
+        "_sProfileUrl": "https://gamebanana.com/mods/cats/30341",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/68802045acf1f.png"
+      },
+      "_sVersion": "v2",
+      "_tsDateUpdated": 1721043035,
+      "_bIsObsolete": true,
+      "_sInitialVisibility": "show",
+      "_bHasContentRatings": false,
+      "_nLikeCount": 58,
+      "_nPostCount": 6,
+      "_bWasFeatured": false,
+      "_nViewCount": 16904,
+      "_bIsOwnedByAccessor": false
+    },
+    {
+      "_idRow": 527935,
+      "_sModelName": "Mod",
+      "_sSingularTitle": "Mod",
+      "_sIconClasses": "SubmissionType Mod",
+      "_sName": "Censor Remover & No Outlines (10.21 v3.3.0)",
+      "_sProfileUrl": "https://gamebanana.com/mods/527935",
+      "_tsDateAdded": 1720971392,
+      "_tsDateModified": 1792586779,
+      "_bHasFiles": true,
+      "_sPayType": "free",
+      "_aTags": [],
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sFile220": "sgi_common_thumbs_6693f0120d40f_220.webp",
+          "_hFile220": 110,
+          "_sFile530": "sgi_common_thumbs_6693f0120d40f_530.webp",
+          "_hFile530": 265,
+          "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+          "_sFile": "6693f0120d40f.jpg",
+          "_sCaption": "Left : Before / Right : After"
+        }
+      },
+      "_aSubmitter": {
+        "_idRow": 3549585,
+        "_sName": "summersby",
+        "_bIsOnline": false,
+        "_bHasRipe": false,
+        "_sProfileUrl": "https://gamebanana.com/members/3549585",
+        "_sAvatarUrl": "https://images.gamebanana.com/img/av/66a0a78740b3a.jpg",
+        "_sHdAvatarUrl": "https://images.gamebanana.com/img/av/66c359bb3f54f.jpg"
+      },
+      "_aGame": {
+        "_idRow": 19567,
+        "_sName": "Zenless Zone Zero",
+        "_sProfileUrl": "https://gamebanana.com/games/19567",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png"
+      },
+      "_aRootCategory": {
+        "_sName": "Other/Misc",
+        "_sProfileUrl": "https://gamebanana.com/mods/cats/29874",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/6688c2aba07b5.png"
+      },
+      "_sVersion": "v3.3.0",
+      "_tsDateUpdated": 1792586826,
+      "_bIsObsolete": false,
+      "_sInitialVisibility": "show",
+      "_bHasContentRatings": false,
+      "_nLikeCount": 7287,
+      "_nPostCount": 637,
+      "_bWasFeatured": true,
+      "_nViewCount": 1205808,
+      "_bIsOwnedByAccessor": false
+    },
+    {
+      "_idRow": 527716,
+      "_sModelName": "Mod",
+      "_sSingularTitle": "Mod",
+      "_sIconClasses": "SubmissionType Mod",
+      "_sName": "No outlines playable character (12.30 v2.5 fix)",
+      "_sProfileUrl": "https://gamebanana.com/mods/527716",
+      "_tsDateAdded": 1720880829,
+      "_tsDateModified": 1770384016,
+      "_bHasFiles": true,
+      "_sPayType": "free",
+      "_aTags": [],
+      "_aPreviewContent": {
+        "screenshot": {
+          "_sFile220": "sgi_common_thumbs_6a32dc28cd708.webp",
+          "_hFile220": 110,
+          "_sFile530": "sgi_common_thumbs_6a32dc28e5240.webp",
+          "_hFile530": 266,
+          "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+          "_sFile": "669278b35ea0d.jpg",
+          "_sCaption": "Left : Before / Right : After"
+        }
+      },
+      "_aSubmitter": {
+        "_idRow": 3549585,
+        "_sName": "summersby",
+        "_bIsOnline": false,
+        "_bHasRipe": false,
+        "_sProfileUrl": "https://gamebanana.com/members/3549585",
+        "_sAvatarUrl": "https://images.gamebanana.com/img/av/66a0a78740b3a.jpg",
+        "_sHdAvatarUrl": "https://images.gamebanana.com/img/av/66c359bb3f54f.jpg"
+      },
+      "_aGame": {
+        "_idRow": 19567,
+        "_sName": "Zenless Zone Zero",
+        "_sProfileUrl": "https://gamebanana.com/games/19567",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/games/657d72ea51567.png"
+      },
+      "_aRootCategory": {
+        "_sName": "Other/Misc",
+        "_sProfileUrl": "https://gamebanana.com/mods/cats/29874",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/6688c2aba07b5.png"
+      },
+      "_sVersion": "v14",
+      "_tsDateUpdated": 1767073159,
+      "_bIsObsolete": true,
+      "_sInitialVisibility": "show",
+      "_bHasContentRatings": false,
+      "_nLikeCount": 675,
+      "_nPostCount": 124,
+      "_bWasFeatured": false,
+      "_nViewCount": 155328,
+      "_bIsOwnedByAccessor": false
+    }
+  ]
+}

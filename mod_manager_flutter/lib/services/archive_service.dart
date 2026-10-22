@@ -17,6 +17,7 @@ import 'platform_service_factory.dart';
 import 'shader_fixes/zzmi_layout.dart';
 
 final Logger _log = Logger('archive');
+final Logger _files = Logger('fileops');
 
 /// Why an extraction failed, where the answer changes what the user does next.
 ///
@@ -31,6 +32,17 @@ enum ExtractFailure {
   /// something the user can fix, and the numbers say by how much — see
   /// [ArchiveExtractionResult.requiredBytes].
   insufficientSpace,
+
+  /// The archive is encrypted and no password was given: its listing said so
+  /// before anything was unpacked, or, for a listing that said nothing, 7-Zip
+  /// stopped at its password prompt (exit 255). The caller asks for the password
+  /// and tries again.
+  passwordRequired,
+
+  /// A password was given and did not open the archive. 7-Zip cannot tell a
+  /// wrong password from damaged encrypted data, so nothing claims more than
+  /// that. The archive is kept and the unpack's directory deleted.
+  wrongPassword,
 
   /// Everything else — a corrupt archive, a permission error, a format the
   /// tool rejected. Nothing to tell the user beyond where the file is.
@@ -162,10 +174,16 @@ class ArchiveService {
   /// (the download path), to avoid re-reading a file that can reach 1.24 GB. It
   /// is trusted verbatim and never verified: there is nothing here to verify it
   /// against, and re-reading to "check" would defeat the point of passing it.
+  ///
+  /// [password] is passed to 7-Zip as one argument, never through a shell, and
+  /// never logged (`docs/downloads.md` §12). An encrypted zip is unpacked by
+  /// 7-Zip too, since `package:archive` garbles ZipCrypto even with the right
+  /// password and fails AES.
   static Future<ArchiveExtractionResult> extractArchive({
     required File archiveFile,
     Directory? destinationDir,
     String? knownMd5,
+    String? password,
 
     /// What to call the folder invented for an archive that has none inside it,
     /// when the file on disk is not named what the download asked for.
@@ -199,14 +217,61 @@ class ArchiveService {
       _log.info('extracting', fields: {
         'archive': path.basename(archiveFile.path),
         'format': extension,
+        if (password != null) 'password': true,
       });
+
+      // A try that unpacks nothing leaves nothing behind: a zip leaves its files
+      // at 0 bytes, and the next try unpacks into a new directory.
+      Future<ArchiveExtractionResult> refusedPassword(ArchiveExtractionResult result) async {
+        if (destinationDir == null) await _deleteQuietly(tempExtractDir);
+        return result;
+      }
+
+      // **The listing first, and once.** It sizes the unpack for the preflight
+      // below, and it is where a locked archive shows before anything is
+      // written: one that needs a password and was given none, and, for one
+      // whose headers are encrypted, a wrong password.
+      final passwordMissing = ArchiveExtractionResult.failure(
+        'The archive is encrypted',
+        reason: ExtractFailure.passwordRequired,
+      );
+      int? needed;
+      var zipEncrypted = false;
+      if (extension == '.zip') {
+        final listing = _zipListing(archiveFile);
+        needed = listing?.size;
+        zipEncrypted = listing?.encrypted ?? false;
+        if (zipEncrypted && password == null) return refusedPassword(passwordMissing);
+      } else if (extension == '.rar' || extension == '.7z') {
+        ProbeResult? listing;
+        try {
+          listing = await _sevenZipListing(archiveFile, password: password);
+        } catch (error) {
+          _log.debug('could not list the archive', fields: {
+            'archive': path.basename(archiveFile.path),
+            'reason': '$error',
+          });
+        }
+        if (password == null && _listsLocked(listing)) return refusedPassword(passwordMissing);
+        if (password != null && listing != null && !listing.timedOut && listing.exitCode == 2) {
+          _log.warning('password did not open the archive', fields: {
+            'archive': path.basename(archiveFile.path),
+            'stage': 'listing',
+          });
+          return refusedPassword(ArchiveExtractionResult.failure(
+            'The password did not open the archive',
+            reason: ExtractFailure.wrongPassword,
+          ));
+        }
+        needed = _listedSize(listing);
+      }
 
       // **Before either extractor writes a byte.** An unpack that runs the
       // volume out leaves a half-written folder tree to clean up and reports an
       // I/O error that names none of it, and the destination is `/tmp` — on
       // most Linux desktops a tmpfs, so filling it fills memory.
       final shortfall = await _spaceShortfall(
-        archiveFile,
+        needed,
         tempExtractDir,
         freeSpace ?? PlatformServiceFactory.getInstance().freeSpaceBytes,
       );
@@ -224,13 +289,20 @@ class ArchiveService {
       String? extractionError;
       var failure = ExtractFailure.other;
 
-      if (extension == '.zip') {
+      if (extension == '.zip' && !zipEncrypted) {
         isExtracted = await _extractZip(archiveFile, tempExtractDir);
-      } else if (extension == '.rar' || extension == '.7z') {
-        final result = await _extractWith7Zip(archiveFile, tempExtractDir);
+      } else if (extension == '.zip' || extension == '.rar' || extension == '.7z') {
+        final result = await _extractWith7Zip(archiveFile, tempExtractDir, password: password);
         isExtracted = result.success;
         extractionError = result.error;
         failure = result.failure;
+      }
+
+      if (failure == ExtractFailure.passwordRequired || failure == ExtractFailure.wrongPassword) {
+        return refusedPassword(ArchiveExtractionResult.failure(
+          extractionError ?? 'The archive is encrypted',
+          reason: failure,
+        ));
       }
 
       if (!isExtracted) {
@@ -304,9 +376,9 @@ class ArchiveService {
   static Future<int?> unpackedSize(File archiveFile) async {
     final extension = path.extension(archiveFile.path).toLowerCase();
     try {
-      if (extension == '.zip') return _unpackedZipSize(archiveFile);
+      if (extension == '.zip') return _zipListing(archiveFile)?.size;
       if (extension == '.rar' || extension == '.7z') {
-        return await _unpackedSizeVia7Zip(archiveFile);
+        return _listedSize(await _sevenZipListing(archiveFile));
       }
     } catch (error) {
       _log.debug('could not size the archive', fields: {
@@ -317,21 +389,63 @@ class ArchiveService {
     return null;
   }
 
-  static int? _unpackedZipSize(File archiveFile) {
-    final input = InputFileStream(archiveFile.path);
+  /// Whether [archiveFile] needs a password to unpack, asked without unpacking it.
+  ///
+  /// A zip is read in-process: bit 0 of a file header's flag, from the central
+  /// directory the size listing reads. A 7z or rar is asked by 7-Zip's listing
+  /// with stdin closed: exit 0 with any `Encrypted = +` means its files are
+  /// locked, and exit 255 means 7-Zip stopped at its password prompt, which only
+  /// encrypted headers reach. Exit 2, a file it could not open, is left to the
+  /// unpack to report as the extraction failure it is. False whenever the
+  /// listing says nothing, since the unpack's exit 255 is the backstop.
+  static Future<bool> needsPassword(File archiveFile) async {
+    final extension = path.extension(archiveFile.path).toLowerCase();
     try {
-      final archive = ZipDecoder().decodeBuffer(input);
+      if (extension == '.zip') return _zipListing(archiveFile)?.encrypted ?? false;
+      if (extension == '.rar' || extension == '.7z') return _listsLocked(await _sevenZipListing(archiveFile));
+    } catch (error) {
+      _log.debug('could not list the archive', fields: {
+        'archive': path.basename(archiveFile.path),
+        'reason': '$error',
+      });
+    }
+    return false;
+  }
+
+  /// A zip's unpacked size and whether any of its files is encrypted, from its
+  /// central directory. Null when the zip cannot be read.
+  static ({int? size, bool encrypted})? _zipListing(File archiveFile) {
+    final InputFileStream input;
+    try {
+      input = InputFileStream(archiveFile.path);
+    } catch (_) {
+      return null;
+    }
+    try {
+      final decoder = ZipDecoder();
+      final archive = decoder.decodeBuffer(input);
       var total = 0;
       for (final entry in archive) {
         if (entry.isFile) total += entry.size;
       }
-      return total > 0 ? total : null;
+      final encrypted = decoder.directory.fileHeaders.any((header) => header.generalPurposeBitFlag & 1 != 0);
+      return (size: total > 0 ? total : null, encrypted: encrypted);
+    } catch (error) {
+      _log.debug('could not list the zip', fields: {
+        'archive': path.basename(archiveFile.path),
+        'reason': '$error',
+      });
+      return null;
     } finally {
       input.closeSync();
     }
   }
 
-  static Future<int?> _unpackedSizeVia7Zip(File archiveFile) async {
+  /// `7z l -slt` of [archiveFile], with stdin closed, or null with no 7-Zip.
+  ///
+  /// [password] goes as one argument, so a header-encrypted archive lists, and a
+  /// wrong one exits 2 at once rather than waiting at a prompt.
+  static Future<ProbeResult?> _sevenZipListing(File archiveFile, {String? password}) async {
     final sevenZipPath = await _locate7Zip();
     // No 7-Zip is not this method's failure to report: the extraction below
     // reports it as the one thing the user can fix, and answering "unknown"
@@ -344,14 +458,59 @@ class ArchiveService {
     // to a number that is too small. That number would say an install fits when
     // it does not, which is the failure this check exists to prevent. 32 MB is
     // past any real mod (~100k entries) and the output is our own tool's.
-    final result = await const ProcessProbe(
+    return const ProcessProbe(
       timeout: Duration(seconds: 10),
       maxBytes: 32 * 1024 * 1024,
-    ).run(sevenZipPath, ['l', '-slt', archiveFile.path]);
-    if (result == null || result.timedOut || result.exitCode != 0) return null;
-    // Past even that, the honest answer is that we do not know the size.
-    if (result.truncated) return null;
-    return parseSevenZipUnpackedBytes(result.stdout);
+    ).run(sevenZipPath, ['l', '-slt', archiveFile.path, if (password != null) '-p$password']);
+  }
+
+  /// Whether a listing taken without a password says the archive needs one, as [needsPassword] reads it.
+  static bool _listsLocked(ProbeResult? listing) {
+    if (listing == null || listing.timedOut) return false;
+    if (listing.exitCode == 255) return true;
+    return listing.exitCode == 0 && sevenZipListsEncryptedEntries(listing.stdout);
+  }
+
+  /// The unpacked size a successful, complete listing names, else null.
+  static int? _listedSize(ProbeResult? listing) {
+    if (listing == null || listing.timedOut || listing.exitCode != 0) return null;
+    // Past even the cap, the honest answer is that we do not know the size.
+    if (listing.truncated) return null;
+    return parseSevenZipUnpackedBytes(listing.stdout);
+  }
+
+  /// Deletes the `zzz_archive_extract_*` directories holding [folders], which an
+  /// unpack created, and nothing else.
+  ///
+  /// The nearest such ancestor of each folder, not only its parent: a ZZMI-root
+  /// archive's mods come out a level down, as `Mods/<mod>`.
+  static Future<void> deleteExtraction(Iterable<String> folders) async {
+    final roots = <String>{
+      for (final folder in folders)
+        if (_extractionRootOf(folder) case final root?) root,
+    };
+    for (final root in roots) {
+      await _deleteQuietly(Directory(root));
+    }
+  }
+
+  static String? _extractionRootOf(String folder) {
+    var directory = path.dirname(folder);
+    while (true) {
+      if (path.basename(directory).startsWith('zzz_archive_extract_')) return directory;
+      final parent = path.dirname(directory);
+      if (parent == directory) return null;
+      directory = parent;
+    }
+  }
+
+  static Future<void> _deleteQuietly(Directory directory) async {
+    try {
+      if (await directory.exists()) await directory.delete(recursive: true);
+    } catch (error) {
+      // Scratch we own, not the user's data: the reclaim's temp extractions take it later.
+      _files.debug('temp cleanup failed', fields: {'path': directory.path, 'reason': '$error'});
+    }
   }
 
   /// A refusal when the unpack provably will not fit, or null to carry on.
@@ -362,11 +521,10 @@ class ArchiveService {
   /// unpack that would have fit is worse than the failure this prevents — the
   /// user has an archive they cannot install and no way to tell why.
   static Future<ArchiveExtractionResult?> _spaceShortfall(
-    File archiveFile,
+    int? needed,
     Directory destination,
     Future<int?> Function(String path) freeSpace,
   ) async {
-    final needed = await unpackedSize(archiveFile);
     if (needed == null || needed <= 0) return null;
 
     final available = await freeSpace(destination.path);
@@ -430,10 +588,16 @@ class ArchiveService {
     }
   }
 
+  /// Unpacks through 7-Zip, with [password] as one `-p` argument when given.
+  ///
+  /// `Process.run` closes the child's stdin, so an encrypted archive without a
+  /// password exits 255 at the prompt rather than waiting, and a wrong password
+  /// exits 2 at once.
   static Future<_7ZipResult> _extractWith7Zip(
     File archiveFile,
-    Directory destination,
-  ) async {
+    Directory destination, {
+    String? password,
+  }) async {
     final sevenZipPath = await _locate7Zip();
     if (sevenZipPath == null) {
       return const _7ZipResult(
@@ -445,22 +609,43 @@ class ArchiveService {
 
     _log.debug('using 7-Zip', fields: {'path': sevenZipPath});
 
-    final result = await Process.run(sevenZipPath, [
-      'x',
-      archiveFile.path,
-      '-o${destination.path}',
-      '-y',
-    ]);
+    final ProcessResult result;
+    try {
+      result = await Process.run(sevenZipPath, [
+        'x',
+        archiveFile.path,
+        '-o${destination.path}',
+        '-y',
+        if (password != null) '-p$password',
+      ]);
+    } on ProcessException catch (error) {
+      // **Only its message and code.** Its text prints the whole command line,
+      // which carries the password, and the outer catch would log it as `error:`.
+      _log.error('7-Zip did not start', fields: {
+        'reason': error.message,
+        'code': error.errorCode,
+        if (password != null) 'password': true,
+      });
+      return _7ZipResult(false, '7-Zip did not start: ${error.message}');
+    }
 
     if (result.exitCode != 0) {
       final errorOutput = result.stderr.toString().trim();
+      // The exit code and stderr name files and the archive, never the password.
       _log.error('7-Zip failed', fields: {
         'exit': result.exitCode,
         'stderr': errorOutput,
+        if (password != null) 'password': true,
       });
+      final failure = switch (result.exitCode) {
+        255 when password == null => ExtractFailure.passwordRequired,
+        2 when password != null => ExtractFailure.wrongPassword,
+        _ => ExtractFailure.other,
+      };
       return _7ZipResult(
         false,
         errorOutput.isNotEmpty ? errorOutput : 'Extraction failed',
+        failure,
       );
     }
 

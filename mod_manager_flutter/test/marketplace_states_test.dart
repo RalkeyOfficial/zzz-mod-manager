@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mod_manager_flutter/models/gamebanana/gb_enums.dart';
-import 'package:mod_manager_flutter/models/gamebanana/gb_exceptions.dart';
-import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
-import 'package:mod_manager_flutter/models/gamebanana/gb_page.dart';
-import 'package:mod_manager_flutter/models/gamebanana/gb_top_sub.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gamebanana.dart';
 import 'package:mod_manager_flutter/screens/components/marketplace/gb_browse_view.dart';
 import 'package:mod_manager_flutter/screens/components/marketplace/gb_detail_view.dart';
 import 'package:mod_manager_flutter/screens/components/marketplace/gb_state_view.dart';
@@ -28,54 +24,54 @@ void main() {
   /// can only mean the wire text leaked through.
   const wireText = 'Server asked us to back off (HTTP 429)';
 
-  GbMod adultMod(int id) => GbMod(
-        idRow: id,
-        name: 'Flagged Mod $id',
-        visibility: GbVisibility.hide,
-      );
+  GbMod adultMod(int id) => GbMod(idRow: id, name: 'Flagged Mod $id', visibility: GbVisibility.hide);
 
-  Future<void> pumpBrowse(
-    WidgetTester tester, {
-    required Object? error,
-    GbPage<GbMod>? page,
+  /// Everything the browse view reads, faked, with the listing's first page coming from [firstPage]: a page, or an
+  /// error to throw.
+  List<Override> browseOverrides(Object Function() firstPage, {ContentFilterMode filter = ContentFilterMode.show}) => [
+    marketplacePageFetcherProvider.overrideWithValue((query, page, {refresh = false}) async {
+      final result = firstPage();
+      if (result is GbPage<GbMod>) return result;
+      throw result;
+    }),
+    // The chips and the carousel load independently; left alone they reach for the real client.
+    rootCategoriesProvider.overrideWith((ref) async => []),
+    categoryChildrenProvider.overrideWith((ref, id) async => []),
+    topSubsProvider.overrideWith((ref) async => <GbTopSub>[]),
+    modEnrichmentProvider.overrideWith((ref, key) async => const {}),
+    contentFilterProvider.overrideWith((ref) => filter),
+    installedModsIndexProvider.overrideWith((ref) async => InstalledModsIndex.empty),
+  ];
+
+  Future<ProviderContainer> pumpBrowse(
+    WidgetTester tester,
+    Object Function() firstPage, {
     ContentFilterMode filter = ContentFilterMode.show,
-    ContentFilterMode? Function()? writerSpy,
-    ProviderContainer? container,
-    List<Override> extra = const [],
+    void Function(ContentFilterMode)? onFilter,
+    MarketplaceQuery? query,
   }) async {
+    final container = ProviderContainer(overrides: browseOverrides(firstPage, filter: filter));
+    addTearDown(container.dispose);
+    if (query != null) container.read(marketplaceQueryProvider.notifier).state = query;
     await pumpLocalized(
       tester,
       GbBrowseView(
         onOpenMod: (_) {},
-        contentFilterWriter: (mode) async => writerSpy?.call(),
+        carouselAutoAdvance: null,
+        // The seam exists because the real writer builds a `ConfigService`
+        // against the developer's own `<appData>/config.json` — a test that
+        // pressed this button without one would rewrite their settings.
+        contentFilterWriter: (mode) async => onFilter?.call(mode),
       ),
       container: container,
-      overrides: container != null
-          ? null
-          : [
-              marketplaceResultsProvider.overrideWith(
-                (ref) async => error != null ? throw error : page!,
-              ),
-              // The panel and the carousel load independently; left alone they
-              // reach for the real client.
-              rootCategoriesProvider.overrideWith((ref) async => []),
-              topSubsProvider.overrideWith((ref) async => <GbTopSub>[]),
-              contentFilterProvider.overrideWith((ref) => filter),
-              installedModsIndexProvider
-                  .overrideWith((ref) async => InstalledModsIndex.empty),
-              ...extra,
-            ],
     );
     expectBuilt(GbBrowseView);
+    return container;
   }
 
   group('a failed listing', () {
-    testWidgets('says it could not reach GameBanana when offline',
-        (tester) async {
-      await pumpBrowse(
-        tester,
-        error: const GbNetworkException('SocketException: failed host lookup'),
-      );
+    testWidgets('says it could not reach GameBanana when offline', (tester) async {
+      await pumpBrowse(tester, () => const GbNetworkException('SocketException: failed host lookup'));
 
       expect(find.text("Couldn't reach GameBanana."), findsOneWidget);
       expect(find.text('Check your connection, then try again.'), findsOneWidget);
@@ -83,7 +79,7 @@ void main() {
     });
 
     testWidgets('tells a back-off apart from a bug', (tester) async {
-      await pumpBrowse(tester, error: const GbRateLimitException(wireText));
+      await pumpBrowse(tester, () => const GbRateLimitException(wireText));
 
       expect(find.text('GameBanana asked us to slow down.'), findsOneWidget);
       expect(
@@ -97,7 +93,7 @@ void main() {
       // `gb_exceptions.dart` states the rule: these carry codes, never
       // user-facing prose, because the API's own messages are server English
       // and cannot be localized. The grid used to print exactly this line.
-      await pumpBrowse(tester, error: const GbRateLimitException(wireText));
+      await pumpBrowse(tester, () => const GbRateLimitException(wireText));
 
       expect(find.textContaining('HTTP 429'), findsNothing);
       expect(find.textContaining('back off'), findsNothing);
@@ -105,20 +101,10 @@ void main() {
 
     testWidgets('retry re-runs the request', (tester) async {
       var attempts = 0;
-      final container = ProviderContainer(overrides: [
-        marketplaceResultsProvider.overrideWith((ref) async {
-          attempts++;
-          throw const GbNetworkException('offline');
-        }),
-        rootCategoriesProvider.overrideWith((ref) async => []),
-        topSubsProvider.overrideWith((ref) async => <GbTopSub>[]),
-        contentFilterProvider.overrideWith((ref) => ContentFilterMode.show),
-        installedModsIndexProvider
-            .overrideWith((ref) async => InstalledModsIndex.empty),
-      ]);
-      addTearDown(container.dispose);
-
-      await pumpBrowse(tester, error: null, container: container);
+      await pumpBrowse(tester, () {
+        attempts++;
+        return const GbNetworkException('offline');
+      });
       expect(attempts, 1);
 
       await tester.tap(find.text('Try again'));
@@ -135,24 +121,20 @@ void main() {
         GbDetailView(
           modId: 999999999,
           onBack: () {},
-          onDownload: (_, __) {},
+          onQueue: (_, __, {characterId, required intent}) {},
           onOpenInBrowser: (_) {},
         ),
         overrides: [
           modProfileProvider(999999999).overrideWith((ref) async => throw error),
           contentFilterProvider.overrideWith((ref) => ContentFilterMode.show),
-          installedModsIndexProvider
-              .overrideWith((ref) async => InstalledModsIndex.empty),
+          installedModsIndexProvider.overrideWith((ref) async => InstalledModsIndex.empty),
         ],
       );
       expectBuilt(GbDetailView);
     }
 
     testWidgets('offers no retry at all', (tester) async {
-      await pumpDetail(
-        tester,
-        const GbApiException('gone', code: 'NO_SUCH_RECORD', statusCode: 404),
-      );
+      await pumpDetail(tester, const GbApiException('gone', code: 'NO_SUCH_RECORD', statusCode: 404));
 
       expect(find.text('This mod is no longer on GameBanana.'), findsOneWidget);
       expect(
@@ -167,12 +149,8 @@ void main() {
       expect(find.text('Try again'), findsOneWidget);
     });
 
-    testWidgets('the header falls back to the id, never to "Loading…"',
-        (tester) async {
-      await pumpDetail(
-        tester,
-        const GbApiException('gone', code: null, statusCode: 404),
-      );
+    testWidgets('the header falls back to the id, never to "Loading…"', (tester) async {
+      await pumpDetail(tester, const GbApiException('gone', code: null, statusCode: 404));
 
       expect(
         find.text('Loading…'),
@@ -184,22 +162,14 @@ void main() {
   });
 
   group('nothing to show', () {
-    testWidgets('a fruitless search offers to clear itself', (tester) async {
-      final container = ProviderContainer(overrides: [
-        marketplaceResultsProvider.overrideWith(
-          (ref) async => const GbPage<GbMod>(records: [], recordCount: 0),
-        ),
-        rootCategoriesProvider.overrideWith((ref) async => []),
-        topSubsProvider.overrideWith((ref) async => <GbTopSub>[]),
-        contentFilterProvider.overrideWith((ref) => ContentFilterMode.show),
-        installedModsIndexProvider
-            .overrideWith((ref) async => InstalledModsIndex.empty),
-      ]);
-      addTearDown(container.dispose);
-      container.read(marketplaceQueryProvider.notifier).state =
-          const MarketplaceQuery(text: 'zzzzqqq', categoryId: 30341);
+    const empty = GbPage<GbMod>(records: [], recordCount: 0, isComplete: true);
 
-      await pumpBrowse(tester, error: null, container: container);
+    testWidgets('a fruitless search offers to clear itself, and keeps the chips', (tester) async {
+      final container = await pumpBrowse(
+        tester,
+        () => empty,
+        query: const MarketplaceQuery(text: 'zzzzqqq', typeId: 30395),
+      );
 
       expect(find.text('No mods found.'), findsOneWidget);
       await tester.tap(find.text('Clear search'));
@@ -207,48 +177,16 @@ void main() {
 
       final query = container.read(marketplaceQueryProvider);
       expect(query.text, isEmpty);
-      expect(query.categoryId, 30341,
-          reason: 'clearing the search keeps the category');
+      expect(query.categoryId, 30395, reason: 'clearing the search keeps the type');
     });
 
-    testWidgets('an empty page past the first offers a way back',
-        (tester) async {
-      final container = ProviderContainer(overrides: [
-        marketplaceResultsProvider.overrideWith(
-          (ref) async => const GbPage<GbMod>(records: [], recordCount: 0),
-        ),
-        rootCategoriesProvider.overrideWith((ref) async => []),
-        topSubsProvider.overrideWith((ref) async => <GbTopSub>[]),
-        contentFilterProvider.overrideWith((ref) => ContentFilterMode.show),
-        installedModsIndexProvider
-            .overrideWith((ref) async => InstalledModsIndex.empty),
-      ]);
-      addTearDown(container.dispose);
-      container.read(marketplaceQueryProvider.notifier).state =
-          const MarketplaceQuery(page: 7);
-
-      await pumpBrowse(tester, error: null, container: container);
-
-      await tester.tap(find.text('Back to page 1'));
-      await tester.pumpAndSettle();
-
-      expect(container.read(marketplaceQueryProvider).page, 1);
-    });
-
-    testWidgets('page 1 of an ordinary browse offers nothing, and says so',
-        (tester) async {
-      // The other half of §1's decision: only the *filtered* empty state is
-      // actionable. Inventing a button here would send the user pressing
-      // something that cannot help.
-      await pumpBrowse(
-        tester,
-        error: null,
-        page: const GbPage<GbMod>(records: [], recordCount: 0),
-      );
+    testWidgets('an ordinary browse offers nothing, and says so', (tester) async {
+      // Only the *filtered* empty states are actionable. Inventing a button here
+      // would send the user pressing something that cannot help.
+      await pumpBrowse(tester, () => empty);
 
       expect(find.text('No mods found.'), findsOneWidget);
       expect(find.text('Clear search'), findsNothing);
-      expect(find.text('Back to page 1'), findsNothing);
     });
   });
 
@@ -256,49 +194,22 @@ void main() {
     testWidgets('is a different state from an empty result', (tester) async {
       await pumpBrowse(
         tester,
-        error: null,
+        () => GbPage<GbMod>(records: [adultMod(1), adultMod(2)], recordCount: 2, isComplete: true),
         filter: ContentFilterMode.hide,
-        page: GbPage<GbMod>(
-          records: [adultMod(1), adultMod(2)],
-          recordCount: 2,
-        ),
       );
 
-      expect(
-        find.text('Every result on this page is hidden by your '
-            'adult-content filter.'),
-        findsOneWidget,
-      );
+      expect(find.text('Every result is hidden by your adult-content filter.'), findsOneWidget);
       expect(find.text('No mods found.'), findsNothing);
     });
 
     testWidgets('degrades hide to blur — never to show', (tester) async {
       ContentFilterMode? written;
-      final container = ProviderContainer(overrides: [
-        marketplaceResultsProvider.overrideWith(
-          (ref) async =>
-              GbPage<GbMod>(records: [adultMod(1)], recordCount: 1),
-        ),
-        rootCategoriesProvider.overrideWith((ref) async => []),
-        topSubsProvider.overrideWith((ref) async => <GbTopSub>[]),
-        contentFilterProvider.overrideWith((ref) => ContentFilterMode.hide),
-        installedModsIndexProvider
-            .overrideWith((ref) async => InstalledModsIndex.empty),
-      ]);
-      addTearDown(container.dispose);
-
-      await pumpLocalized(
+      final container = await pumpBrowse(
         tester,
-        GbBrowseView(
-          onOpenMod: (_) {},
-          // The seam exists because the real writer builds a `ConfigService`
-          // against the developer's own `<appData>/config.json` — a test that
-          // pressed this button without one would rewrite their settings.
-          contentFilterWriter: (mode) async => written = mode,
-        ),
-        container: container,
+        () => GbPage<GbMod>(records: [adultMod(1)], recordCount: 1, isComplete: true),
+        filter: ContentFilterMode.hide,
+        onFilter: (mode) => written = mode,
       );
-      expectBuilt(GbBrowseView);
 
       await tester.tap(find.text('Blur them instead'));
       await tester.pumpAndSettle();
@@ -315,10 +226,7 @@ void main() {
   testWidgets('the shared state view renders without an action', (tester) async {
     // The presentational half on its own: a state with nothing to do says
     // nothing rather than padding itself with a disabled button.
-    await pumpLocalized(
-      tester,
-      const GbStateView(icon: Icons.search_off, title: 'Nothing here'),
-    );
+    await pumpLocalized(tester, const GbStateView(icon: Icons.search_off, title: 'Nothing here'));
     expectBuilt(GbStateView);
 
     expect(find.text('Nothing here'), findsOneWidget);

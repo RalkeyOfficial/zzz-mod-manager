@@ -268,6 +268,10 @@ final destinationProvider = StateProvider<AppDestination>((ref) => AppDestinatio
 /// nothing happens.
 final downloadsPanelRequestProvider = StateProvider<int>((ref) => 0);
 
+/// Raised by one to ask the Downloads panel to close, such as by a waiting download's Open mod page, which shows the
+/// mod's page in Browse behind it. A count, as [downloadsPanelRequestProvider] is.
+final downloadsPanelCloseRequestProvider = StateProvider<int>((ref) => 0);
+
 /// Whether [destination] is one of the Library's views.
 bool isLibraryView(AppDestination destination) =>
     destination == AppDestination.characters ||
@@ -794,6 +798,19 @@ final contentFilterProvider =
 final marketplaceSortProvider =
     StateProvider<GbModSort>((ref) => kDefaultMarketplaceSort);
 
+/// Whether Browse leaves out the mods already in the library, the **Hide installed** switch.
+///
+/// A persisted preference like the two above: hydrated from `config.json` in `ApiService.initialize`, written
+/// through `ApiService.setMarketplaceHideInstalled`. Off by default.
+final marketplaceHideInstalledProvider = StateProvider<bool>((ref) => false);
+
+/// Whether a mod installed from Browse is turned on once it is in the library, the mod page's **Turn on after
+/// installing** switch. It applies to a card's and the carousel's Install too.
+///
+/// A persisted preference like the one above, written through `ApiService.setMarketplaceTurnOnAfterInstall`. Off by
+/// default.
+final marketplaceTurnOnAfterInstallProvider = StateProvider<bool>((ref) => false);
+
 /// Whether the whole-library update check runs on its own at startup.
 ///
 /// Hydrated from `config.json` in `ApiService.initialize` and written through
@@ -823,6 +840,14 @@ final fileLoggingProvider = StateProvider<bool>((ref) => true);
 /// surfaces updates too, so the two views differ. This only decides the *first*
 /// run, since the choice is persisted from then on.
 const GbModSort kDefaultMarketplaceSort = GbModSort.newest;
+
+/// The browse sort a stored `marketplace_sort` name reads as: [kDefaultMarketplaceSort] for one this build doesn't
+/// know, and for `latestComment`, which the Sort menu doesn't offer, so a stored one can't leave the menu with nothing
+/// ticked.
+GbModSort parseMarketplaceSort(Object? stored) => switch (GbModSort.byName(stored)) {
+  null || GbModSort.latestComment => kDefaultMarketplaceSort,
+  final sort => sort,
+};
 
 // Locale provider for localization
 final localeProvider = StateProvider<Locale>((ref) => const Locale('en'));

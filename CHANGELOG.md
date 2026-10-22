@@ -13,26 +13,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Shader fixes shipped in a folder with another name, such as "PUT THESE IN SHADERFIXES", are recognised on import and installed with the mod, and the import picker says which folder they came from.
 - "Sort out where these mods came from" lists the mods with no mod page, folded under their count, each with a button to identify it.
 - Mod covers load faster: a card-sized copy is saved beside each newly imported cover, and the mod cards read that instead of decoding the full screenshot every time. Covers added by an older version keep loading as before until they are added again through the edit dialog.
-- The Marketplace is a built-in GameBanana browser on Linux and Windows: search by mod name or paste a mod link or id, browse, filter by category or character, sort, and open a mod for its screenshots, description and file list. A search keeps the category and sort you have set.
-  - A carousel above the grid shows GameBanana's top mods across seven periods, from today to all time.
-  - Adult content can be shown, blurred until you click it, or hidden entirely.
-  - Cards show when each mod was released and last updated.
-  - A mod's page shows its author, category (which links back to the grid), tags, dates, and every file with its size, upload date and virus-scan result.
+- The Marketplace is a built-in GameBanana browser on Linux and Windows: search by mod name or paste a mod link or id, browse, filter by character and by type, sort, and open a mod for its screenshots, description and file list. A search keeps the filters and sort you have set.
+  - A carousel above the grid shows GameBanana's top mods across seven periods, from today to all time, with Install or In library and View mod on each.
+  - The character filter picks an agent from a grid of portraits, your own characters first and then every agent A to Z, with a name search and an A–Z rail.
+  - The filter bar stays at the top as you scroll, and the grid loads more mods as you reach the end.
+  - Hide installed leaves out the mods you already have, and is remembered.
+  - Adult content can be shown, blurred, or hidden entirely, from a menu in the filter bar or in Settings.
+  - Cards show the author, how long ago the mod was updated ("just now", "3 days ago"), likes and downloads.
+  - A card's Install queues a mod with one file straight away; a mod with several files opens its page to pick one. A mod you have reads In library, or Update ready, with an Update button that opens the update dialog, when this session's update check found a newer file for sure rather than a "Maybe newer" guess.
+  - A mod's page shows its screenshots with a grid of thumbnails, its description and tags, the author's update posts, and who made it, when it was updated, its likes and downloads. Its character in the crumbs at the top links back to the grid filtered to that character.
+  - The author's name on a mod's page opens the author's page: every Zenless Zone Zero mod they published, how many you have, a row of character tiles that narrows them, Hide installed and a sort of its own. Back returns to the mod you came from.
+  - On a mod's page you pick the files to install, one or several, each becoming its own mod, named after its variant when two hold a folder of the same name. Nothing is picked for you when a mod has more than one file. Each file shows its size, variant, upload age, and a virus-scan result that isn't clean.
+  - A mod's page says which character it installs for, taken from its GameBanana category, and Change picks another for that install. A mod whose category names no character installs under Unassigned, and Change can pick Unassigned too.
+  - Turn on after installing switches a mod on as soon as it is in your library, from a mod's page or a card's Install, and is remembered. It waits for a bulk action in All mods to finish first. A mod that can't be turned on stays installed and off, and a warning says so, or says why when its shader files or a network folder stopped it.
+  - Download without installing keeps the archives of the picked files instead.
+  - A mod's page says when the mod is in your library, with Show, and Update when this session's update check found a newer file.
   - The Marketplace marks which mods and which files you have already installed.
   - Marketplace installs arrive with their description, screenshots and character tag filled in from the mod page.
 - Downloads run in the background, two at a time, and install themselves as they land.
   - Downloads resume where they left off and survive the app closing.
   - A download that won't fit is refused before it starts, saying how much is needed and how much is free.
-  - Downloads can be cancelled while running.
-  - Downloads in the sidebar opens the list of downloads, where a failed one can be retried and finished ones cleared.
+  - Downloads can be paused and resumed, or cancelled. Installing a paused download again resumes it, for the character and Turn on picked this time.
+  - Downloads in the sidebar opens a panel from the right, above any open window, grouping downloads under Needs your attention, In progress, Waiting and Finished, each with its picture, its progress or result, and what can be done with it: pause, resume, cancel, answer, Turn on, Show, Try again, or clear the finished ones.
+  - The sidebar's Downloads shows an amber count while downloads wait for your answer, the number in progress otherwise, and a red count when only failed ones are left.
   - Each download shows its progress in a notification, "Installing Ellen Swimsuit" with how far it is, which becomes its "Mod installed" notification as it lands. Downloads running at once are stacked into one notification that reads "2 more downloading" and spreads out under the pointer; a failed one leaves the stack as its own notification.
-  - A download that has landed says it's unpacking, rather than going quiet between finishing and asking where the mod goes.
+  - A download that needs your answer (a password, an archive you already have, which folders to install, or where a patch goes) waits in Downloads instead of opening a window over what you're doing, and the next download installs meanwhile. One notification says how many are waiting, with Open Downloads.
+  - Password-protected archives ask for their password, whether downloaded, dropped or pasted into the Library, or fetched for an update. A wrong one asks again and keeps the archive, and the password is never saved or logged.
+  - An update's download stays in Downloads until the update is written, declined or fails.
 - An archive that won't fit when unpacked is refused before unpacking, saying how much is needed and how much is free. The archive is kept, so clearing space and installing again is all it takes.
 - A mod that won't fit in your mods folder is refused before anything is copied there, saying how much is needed and how much is free.
 - A Storage tab shows what the app is keeping on disk, as a chart broken down by kind: mods, saved versions, downloads, covers and metadata, logs, and leftovers.
   - Each category opens to list its biggest items, and free space is shown for every disk the app writes to.
   - "Free up space" deletes installed archives, abandoned downloads, leftover extraction folders, old logs, and the saved versions of mods that are no longer in your library. It never touches your mods, or the saved versions of mods you still have.
-  - It leaves your downloads alone while a transfer or install is running, and says so rather than doing it quietly.
+  - It leaves your downloads alone while a transfer or install is running or a download waits for your answer, and says so rather than doing it quietly.
 - Mods record where they came from, so they can be checked for updates.
   - Existing mods are linked back to their GameBanana page from the source URL they already carry.
   - Mod cards show how well each mod is set up for update checking: "Which file?" or "Base unknown" in blue when there is something to sort out, "Dated only" or "Not tracked" in grey, and "Local" for a mod you marked as your own. A Needs attention filter narrows a character's mods to the ones to sort out.
@@ -125,6 +138,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The app has a new look: a dark ink background with a violet accent, or a light paper theme, set in the Geist and Unbounded typefaces, with a new app and window icon.
 - The same kind of text is the same size on every screen.
+- A button reached with Tab shows an accent ring around it.
 - The "which mod is this?" search starts with the mod's name read as words, so `Ellen_Joe_Cheongsam` searches for "Ellen Joe Cheongsam".
 - A mod with no character saved for it is listed under Unassigned, instead of being sorted to a character guessed from its folder name every time the library is read.
 - The Default sort is **Recently added**: a character's mods are listed newest first, with mods that have no install date last.

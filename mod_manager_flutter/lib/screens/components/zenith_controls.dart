@@ -25,6 +25,7 @@ class ZenithChip extends StatelessWidget {
     required this.onTap,
     this.count,
     this.countColor,
+    this.trailing,
   });
 
   final String label;
@@ -34,6 +35,9 @@ class ZenithChip extends StatelessWidget {
 
   /// The count's own colour, such as blue for a count of mods that ask for something.
   final Color? countColor;
+
+  /// After the label: a chevron for a chip that opens a menu, or an × that does something of its own.
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -66,6 +70,8 @@ class ZenithChip extends StatelessWidget {
                         color: countColor ?? foreground.withValues(alpha: 0.8),
                       ),
                     ),
+                  if (trailing case final trailing?)
+                    IconTheme.merge(data: IconThemeData(color: foreground, size: 13), child: trailing),
                 ],
               ),
             ),
@@ -174,11 +180,14 @@ class _PressableBadgeState extends State<_PressableBadge> {
 /// pointer as the design's links do. Reachable with Tab and pressed with Enter or Space, with the badge's accent ring
 /// while it has keyboard focus.
 class ZenithLink extends StatefulWidget {
-  const ZenithLink(this.label, {super.key, required this.onTap, this.style});
+  const ZenithLink(this.label, {super.key, required this.onTap, this.style, this.maxLines});
 
   final String label;
   final VoidCallback onTap;
   final TextStyle? style;
+
+  /// Cuts the label to this many lines with an ellipsis, for a link in a box of fixed height.
+  final int? maxLines;
 
   @override
   State<ZenithLink> createState() => _ZenithLinkState();
@@ -211,7 +220,12 @@ class _ZenithLinkState extends State<ZenithLink> {
               borderRadius: BorderRadius.circular(4),
               border: _focused ? Border.all(color: palette.accent, width: 2) : null,
             ),
-            child: Text(widget.label, style: _hovered ? style.copyWith(color: palette.text) : style),
+            child: Text(
+              widget.label,
+              maxLines: widget.maxLines,
+              overflow: widget.maxLines == null ? null : TextOverflow.ellipsis,
+              style: _hovered ? style.copyWith(color: palette.text) : style,
+            ),
           ),
         ),
       ),

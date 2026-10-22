@@ -23,7 +23,12 @@ class GbThumbnail extends StatelessWidget {
     this.fit = BoxFit.cover,
     this.revealed = false,
     this.placeholderMinWidth,
+    this.placeholder,
   });
+
+  /// Drawn where there is no image and in place of one that failed to load. Null draws the "no image" icon on a
+  /// neutral ground.
+  final Widget? placeholder;
 
   /// Null renders the placeholder — a mod with no gallery is normal.
   final GbImage? image;
@@ -171,6 +176,7 @@ class GbThumbnail extends StatelessWidget {
   }
 
   Widget _placeholder(BuildContext context) {
+    if (placeholder case final own?) return SizedBox(width: width, height: height, child: own);
     final scheme = Theme.of(context).colorScheme;
     return Container(
       width: width,

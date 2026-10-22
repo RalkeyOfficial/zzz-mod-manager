@@ -93,6 +93,7 @@ than which file noticed it.
 | `download` | Resume decisions, stalls, collisions |
 | `download.pump` / `download.worker` | The isolate arm, and lines relayed from inside it (§8) |
 | `archive` | Extraction, 7-Zip, unsafe entries |
+| `install` | A Browse download's install: its questions, Turn on after installing, the mod page a card's Install fetches |
 | `update.apply` | The applier's phases |
 | `snapshot` | Capture, restore, retention |
 | `metadata` | Sidecars, origins, autofill |
@@ -103,6 +104,7 @@ than which file noticed it.
 | `fileops` | **Every mutation of the filesystem**, whoever made it |
 | `ui.notify` | Every notification raised |
 | `ui.confirm` | Every answer to a destructive prompt |
+| `ui.downloads` | What the Downloads panel's buttons do, such as a Turn on that failed |
 | `log` | The logger talking about itself |
 
 `fileops` deliberately cuts across the others: symlinks are the central act of
@@ -141,8 +143,8 @@ GameBanana display name, a drive label — all still there. Anyone publishing a 
 should still read it. Saying so is better than implying a guarantee this cannot
 make.
 
-Two things must therefore **never be logged**: an environment dump, and
-`PlatformService.osUserName` itself.
+Three things must therefore **never be logged**: an environment dump, `PlatformService.osUserName` itself, and an archive's password.
+Redaction cannot recognise a password, so the guard is at the call: the argument list that carries one is never logged, a `ProcessException` from that call is logged by its message and error code only, since its text prints the command line, and a line about it says `password: true` rather than what it was ([`downloads.md`](downloads.md) §12).
 
 ## 6. Volume — the rules that keep it readable
 

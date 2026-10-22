@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../l10n/app_localizations.dart';
 import '../../../services/gamebanana/gb_failure.dart';
+import '../zenith_controls.dart';
 
 /// What either browser screen shows in place of content: an icon, a line saying
 /// what happened, a line saying what to do about it, and — when there is
@@ -77,14 +78,61 @@ class GbStateView extends StatelessWidget {
   }
 }
 
+/// Hide installed dropped every mod there is to show, with Show installed, which turns it off. Browse and a creator's
+/// page.
+class GbAllInstalledState extends StatelessWidget {
+  const GbAllInstalledState({super.key, required this.onShowInstalled});
+
+  final VoidCallback onShowInstalled;
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = context.loc;
+    return GbStateView(
+      icon: Icons.check_circle_outline,
+      title: loc.t('marketplace.empty_all_installed'),
+      action: OutlinedButton(
+        style: smallButtonStyle(context),
+        onPressed: onShowInstalled,
+        child: Text(loc.t('marketplace.show_installed')),
+      ),
+    );
+  }
+}
+
+/// The content filter dropped at least one mod and nothing is left; with [alsoInstalled], Hide installed dropped
+/// the rest, and the title names both. Browse and a creator's page.
+///
+/// The action degrades `hide` to **`blur`**, never to `show` — the same rule the resolve dialog follows
+/// (`docs/library-screen.md` §14). `blur` is the mode where the cards are on screen and each mod page can still be
+/// opened, so it answers the complaint without turning a deliberate choice into its opposite. Only `hide` can
+/// produce this state, so there is one transition to offer and no branch.
+class GbAllFilteredState extends StatelessWidget {
+  const GbAllFilteredState({super.key, required this.alsoInstalled, required this.onBlur});
+
+  final bool alsoInstalled;
+  final VoidCallback onBlur;
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = context.loc;
+    return GbStateView(
+      icon: Icons.visibility_off_outlined,
+      title: loc.t(alsoInstalled ? 'marketplace.empty_filtered_and_installed' : 'marketplace.empty_filtered'),
+      action: FilledButton.icon(
+        onPressed: onBlur,
+        icon: const Icon(Icons.blur_on, size: 16),
+        label: Text(loc.t('marketplace.empty_filtered_action')),
+      ),
+    );
+  }
+}
+
 /// A failed request, rendered from [describeGbFailure]'s answer.
 ///
 /// **Nothing from the wire is drawn.** `GbException.message` is server English
-/// that cannot be localized and is marked "not for display" on the model itself;
-/// the grid used to print it verbatim, so a back-off read as
-/// `Server asked us to back off (HTTP 429)`. It goes to [debugPrint] instead,
-/// which keeps the detail for a developer running from a terminal and keeps it
-/// off the screen.
+/// that cannot be localized and is marked "not for display" on the model itself.
+/// The client logs the failed request with its detail; this widget shows only the kind.
 ///
 /// [onRetry] is injected rather than read from a provider, so the grid can
 /// invalidate the results and the detail view its own profile, and so a test can

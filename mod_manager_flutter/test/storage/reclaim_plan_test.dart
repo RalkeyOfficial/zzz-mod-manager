@@ -24,6 +24,7 @@ ReclaimPlan plan(
   List<ReclaimCandidate> inventory, {
   bool downloadsBusy = false,
   bool installBusy = false,
+  bool downloadWaiting = false,
   bool libraryReadable = true,
   Set<String> reachable = const <String>{},
   Set<String>? claimed = const <String>{},
@@ -34,6 +35,7 @@ ReclaimPlan plan(
       now: now,
       downloadsBusy: downloadsBusy,
       installBusy: installBusy,
+      downloadWaiting: downloadWaiting,
       libraryReadable: libraryReadable,
       reachableLegacyImages: reachable,
       claimedSnapshotUids: claimed,
@@ -135,6 +137,21 @@ void main() {
 
       expect(result.remove, isEmpty);
       expect(result.skip.single.reason, ReclaimSkipReason.installInProgress);
+    });
+
+    test('a download waiting for an answer keeps even an old one, with a reason of its own', () {
+      // A waiting job's unpacked folders can be older than the grace, and so can the folder its finish copies from.
+      final result = plan(
+        [
+          candidate(ReclaimTarget.tempExtracts, 'zzz_archive_extract_a',
+              age: const Duration(days: 2), isDirectory: true),
+        ],
+        downloadWaiting: true,
+      );
+
+      expect(result.remove, isEmpty);
+      expect(result.skip.single.reason, ReclaimSkipReason.downloadWaiting);
+      expect(result.refusalFor(ReclaimTarget.tempExtracts), ReclaimSkipReason.downloadWaiting);
     });
 
     test('a busy download queue does not hold up temp extractions', () {

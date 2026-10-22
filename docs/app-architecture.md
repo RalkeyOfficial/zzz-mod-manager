@@ -41,6 +41,8 @@ doc. This file is the map; the rules that must never be missed are in the
   `ZenithPalette` holds the dark ink and light paper grounds, the four accents, amber for updates, red for missing and
   destructive, blue for information, the badge pairs and one portrait tile per element. It is a `ThemeExtension`, so a widget
   needing a colour Material has no slot for reads `ZenithPalette.of(context)` rather than writing a literal.
+  The colours drawn over a mod's cover art are the same on both grounds, since the art under them is: `artworkScrim`, `onArtwork`, `artworkLine` for a badge's border, `artworkTitle` for a heading such as the mature veil's, and the `badgeOverArt` badge built from them.
+  Every primary, default, ghost and icon button draws a 2px accent ring 2px out from its edge on keyboard focus, the canvas's `:focus-visible`, and never after a click; the gap keeps the ring visible around a button filled in the accent.
   `buildAppTheme` maps it onto the Material colour scheme and sets the component themes (buttons, fields, chips, checkboxes, dialogs, menus) to the design's sizes; on paper the primary button is ink and the accent is darkened to read.
   The *Paper* accent fills only the primary button and a selected chip, and keeps violet for everything else the accent marks (configuration.md, Appearance).
   The switch is `ZenithSwitch` (`screens/components/zenith_switch.dart`), because Material's switch track is a fixed 52×32 and the design's is 38×22.
@@ -241,7 +243,7 @@ Read-only client for `apiv13` — browse, search, mod detail, category tree. Rea
   un-blur adult content on a corrupt setting, `hide` would silently empty the grid.
   `ContentFilterMode.parse` degrades anything unrecognised to `blur` for that
   reason. Applied to already-fetched records, so toggling re-filters without a
-  request — and the pager therefore counts *remote* records, not visible ones.
+  request — and a page of the grid can therefore add fewer cards than it fetched.
 - **`file_selection.dart`** — preselects a download **only when the mod publishes
   exactly one file**; anything else returns no default with a reason the UI shows.
   Not laziness: [`gamebanana-api.md`](gamebanana-api.md) §6 measured that

@@ -4,19 +4,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/app_localizations.dart';
 import '../../utils/state_providers.dart';
 
-/// The gate every ingest path runs before installing an archive: **false means
-/// don't install it.**
+/// The gate the Library's drop and paste import runs before installing an
+/// archive: **false means don't install it.** A Browse download asks the same
+/// question as a waiting row in the Downloads panel instead, tested with
+/// [installsOfArchiveNow].
 ///
 /// True when the archive's hash is new to the library, when there is no hash to
 /// check (null-or-exact — a miss costs nothing and teaches nothing), or when the
 /// user chose to install a known duplicate anyway.
 ///
-/// Shared so the check cannot drift between the marketplace and the Library, and
-/// so both get the same freshness guarantee: the library snapshot is invalidated
-/// first, because a stale one would name a folder the user has since deleted —
-/// and being told you already own something you don't is worse than not being
-/// told at all. One extra scan per import, single-digit milliseconds, against an
-/// operation that just unpacked an archive.
+/// The lookup is shared so the check cannot drift between the marketplace and
+/// the Library, and so both get the same freshness guarantee: the library
+/// snapshot is invalidated first, because a stale one would name a folder the
+/// user has since deleted — and being told you already own something you don't
+/// is worse than not being told at all. One extra scan per import, single-digit
+/// milliseconds, against an operation that just unpacked an archive.
 ///
 /// Worth knowing what this can and cannot catch. It matches only archives *this
 /// build* ingested, since the hash is banked at ingest and cannot be recovered
@@ -31,23 +33,30 @@ Future<bool> confirmArchiveNotDuplicate(
 ) async {
   if (archiveMd5 == null) return true;
 
-  // The library rather than the index built over it: the index is derived, so
-  // invalidating only the index would rebuild it from the same cached scan and
-  // answer for the library as it was before this install's siblings landed.
-  ref.invalidate(libraryProvider);
-  final index = await ref.read(installedModsIndexProvider.future);
-  final installedAs = index.installsOfArchive(archiveMd5);
+  final installedAs = await installsOfArchiveNow(ref, archiveMd5);
   if (installedAs.isEmpty) return true;
 
   if (!context.mounted) return false;
   return confirmDuplicateArchive(context, installedAs);
 }
 
-/// Asks whether to install an archive that is byte-identical to one already in
-/// the library. Returns true to go ahead.
+/// The library mods an archive of [archiveMd5] was installed as, read from the library as it is now. Empty when
+/// none, or when there is no hash to look up.
 ///
-/// Shared by both ingest paths — the marketplace install and the Library's
-/// drop and paste import — so the two cannot word the same fact differently.
+/// The library rather than the index built over it is invalidated: the index is derived, so invalidating only the
+/// index would rebuild it from the same cached scan and answer for the library as it was before this install's
+/// siblings landed.
+Future<List<String>> installsOfArchiveNow(WidgetRef ref, String? archiveMd5) async {
+  if (archiveMd5 == null) return const <String>[];
+  ref.invalidate(libraryProvider);
+  final index = await ref.read(installedModsIndexProvider.future);
+  return index.installsOfArchive(archiveMd5);
+}
+
+/// Asks whether to install an archive that is byte-identical to one already in
+/// the library, for the Library's drop and paste import. Returns true to go
+/// ahead. A Browse download says it on its waiting row, in its own words, and
+/// the row's Install anyway answers it.
 ///
 /// **The wording is the whole point.** A hash match is a *matching key*, never an
 /// integrity or authenticity claim: it says these bytes are the bytes you already

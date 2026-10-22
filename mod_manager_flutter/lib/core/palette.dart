@@ -109,12 +109,19 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     required this.panel,
     required this.artworkScrim,
     required this.onArtwork,
+    required this.artworkLine,
+    required this.artworkTitle,
+    required this.artworkBadge,
     required this.toast,
     required this.notification,
     required this.notificationError,
     required this.notificationErrorHover,
     required this.notificationShadow,
+    required this.downloadsScrim,
+    required this.downloadsShadow,
     required this.noteMissing,
+    required this.attention,
+    required this.attentionTile,
     required this.coverageWhich,
     required this.hatch,
     required this.infoWash,
@@ -243,6 +250,18 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
   /// A control drawn on [artworkScrim].
   final Color onArtwork;
 
+  /// The border of a badge drawn on [artworkScrim]: the design's `.b-off`.
+  final Color artworkLine;
+
+  /// A heading drawn on [artworkScrim], such as the mature veil's "Mature content".
+  final Color artworkTitle;
+
+  /// The ground of a badge over cover art: the design's `.b-off`, a shade denser than [artworkScrim].
+  final Color artworkBadge;
+
+  /// A badge over cover art, the same in both themes since the art under it is.
+  TonePair get badgeOverArt => TonePair(artworkBadge, onArtwork, artworkLine);
+
   /// A bar floating over the page, such as the All mods table's selection actions.
   final TonePair toast;
 
@@ -258,8 +277,21 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
   /// The shadow a notification card casts.
   final Color notificationShadow;
 
+  /// The scrim over the page behind the Downloads panel, lighter than a dialog's [overlay].
+  final Color downloadsScrim;
+
+  /// The shadow the Downloads panel casts over the page to its left.
+  final Color downloadsShadow;
+
   /// The note that explains a missing mod folder.
   final TonePair noteMissing;
+
+  /// A row that waits for the user's answer, such as a download in the Downloads panel's Needs your attention group:
+  /// its ground, the warm text that says why, and its border.
+  final TonePair attention;
+
+  /// The tile leading an [attention] row, behind its icon.
+  final TonePair attentionTile;
 
   /// A coverage cell for a mod asking "Which file?".
   final Color coverageWhich;
@@ -274,6 +306,11 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
   Color get accentWash => Color.lerp(card, accent, 0.14)!;
 
   TonePair get badgeOn => TonePair(accent, onAccent);
+
+  /// Accent text on the ink ground whatever the accent: the accent mixed 70% into white. The Paper accent's
+  /// [selected] is ink on a paper fill, so its foreground cannot be used where there is no fill. Meant for the dark
+  /// palette, such as the name on a creator page's tile that is on.
+  Color get accentOnInk => Color.lerp(accent, Colors.white, 0.3)!;
 
   /// The tile behind a Done notification's icon: the accent washed into the card.
   TonePair get notificationDoneTile => TonePair(Color.lerp(notification.background, accent, 0.16)!, accent);
@@ -374,12 +411,19 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       panel: const Color(0xFF0D0E10),
       artworkScrim: const Color(0xA60B0C0E),
       onArtwork: const Color(0xFFC9CCD2),
+      artworkLine: const Color(0xFF2A2D33),
+      artworkTitle: const Color(0xFFECEDEE),
+      artworkBadge: const Color(0xBF0B0C0E),
       toast: const TonePair(Color(0xFF1E2125), Color(0xFFECEDEE), Color(0xFF353941)),
       notification: const TonePair(Color(0xFF1B1D21), Color(0xFFECEDEE), Color(0xFF30333A)),
       notificationError: const TonePair(Color(0xFF1E1514), Color(0xFFECEDEE), Color(0xFF5A2620)),
       notificationErrorHover: const Color(0xFF3A2220),
       notificationShadow: const Color(0x73000000),
+      downloadsScrim: const Color(0x99040506),
+      downloadsShadow: const Color(0x80000000),
       noteMissing: const TonePair(Color(0xFF1A0F0D), Color(0xFFE8C4BF), Color(0xFF3A2420)),
+      attention: const TonePair(Color(0xFF17120A), Color(0xFFE6D3B3), Color(0xFF5A4215)),
+      attentionTile: const TonePair(Color(0xFF2A1F0A), Color(0xFFFFC870)),
       coverageWhich: const Color(0xFF3D7BC0),
       hatch: const TonePair(Color(0xFF16181B), Color(0xFF2A2D33)),
       infoWash: const Color(0xFF0D1926),
@@ -476,12 +520,19 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       panel: const Color(0xFFECE6E0),
       artworkScrim: const Color(0xA60B0C0E),
       onArtwork: const Color(0xFFC9CCD2),
+      artworkLine: const Color(0xFF2A2D33),
+      artworkTitle: const Color(0xFFECEDEE),
+      artworkBadge: const Color(0xBF0B0C0E),
       toast: const TonePair(Color(0xFFFDFBF8), Color(0xFF1B1A18), Color(0xFFD8D0C6)),
       notification: const TonePair(Color(0xFFFDFBF8), Color(0xFF1B1A18), Color(0xFFD8D0C6)),
       notificationError: const TonePair(Color(0xFFFBEDEA), Color(0xFF1B1A18), Color(0xFFEDC6BE)),
       notificationErrorHover: const Color(0xFFECC4BC),
       notificationShadow: const Color(0x6615161C),
+      downloadsScrim: const Color(0x6615161C),
+      downloadsShadow: const Color(0x6615161C),
       noteMissing: const TonePair(Color(0xFFFBEDEA), Color(0xFF7A2A1C), Color(0xFFEDC6BE)),
+      attention: const TonePair(Color(0xFFFBF1DF), Color(0xFF6B4510), Color(0xFFE8C98E)),
+      attentionTile: const TonePair(Color(0xFFF4E0B8), Color(0xFF7A4600)),
       coverageWhich: const Color(0xFF5B93D6),
       hatch: const TonePair(Color(0xFFF2EDE7), Color(0xFFD3CBC2)),
       infoWash: const Color(0xFFE4EDF8),
@@ -538,12 +589,19 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     panel: panel,
     artworkScrim: artworkScrim,
     onArtwork: onArtwork,
+    artworkLine: artworkLine,
+    artworkTitle: artworkTitle,
+    artworkBadge: artworkBadge,
     toast: toast,
     notification: notification,
     notificationError: notificationError,
     notificationErrorHover: notificationErrorHover,
     notificationShadow: notificationShadow,
+    downloadsScrim: downloadsScrim,
+    downloadsShadow: downloadsShadow,
     noteMissing: noteMissing,
+    attention: attention,
+    attentionTile: attentionTile,
     coverageWhich: coverageWhich,
     hatch: hatch,
     infoWash: infoWash,
@@ -608,12 +666,19 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       panel: c(panel, other.panel),
       artworkScrim: c(artworkScrim, other.artworkScrim),
       onArtwork: c(onArtwork, other.onArtwork),
+      artworkLine: c(artworkLine, other.artworkLine),
+      artworkTitle: c(artworkTitle, other.artworkTitle),
+      artworkBadge: c(artworkBadge, other.artworkBadge),
       toast: TonePair.lerp(toast, other.toast, t),
       notification: TonePair.lerp(notification, other.notification, t),
       notificationError: TonePair.lerp(notificationError, other.notificationError, t),
       notificationErrorHover: c(notificationErrorHover, other.notificationErrorHover),
       notificationShadow: c(notificationShadow, other.notificationShadow),
+      downloadsScrim: c(downloadsScrim, other.downloadsScrim),
+      downloadsShadow: c(downloadsShadow, other.downloadsShadow),
       noteMissing: TonePair.lerp(noteMissing, other.noteMissing, t),
+      attention: TonePair.lerp(attention, other.attention, t),
+      attentionTile: TonePair.lerp(attentionTile, other.attentionTile, t),
       coverageWhich: c(coverageWhich, other.coverageWhich),
       hatch: TonePair.lerp(hatch, other.hatch, t),
       infoWash: c(infoWash, other.infoWash),

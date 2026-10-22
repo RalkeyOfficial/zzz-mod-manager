@@ -8,8 +8,8 @@ This file is rules and pointers only. Every subject below has a doc in [`../docs
 |---|---|
 | [`app-architecture.md`](../docs/app-architecture.md) | The layers of `lib/` — service layer, platform abstraction, the GameBanana client, markdown rendering |
 | [`gamebanana-api.md`](../docs/gamebanana-api.md) | GameBanana's remote protocol. Read before writing any request — the surface is undocumented upstream, so guessing costs more than looking |
-| [`downloads.md`](../docs/downloads.md) | Fetching archives — the isolate pump, resume, backpressure, the stall timeout, the background queue |
-| [`marketplace.md`](../docs/marketplace.md) | The native browser screens — grid, detail view, what an install does |
+| [`downloads.md`](../docs/downloads.md) | Fetching archives — the isolate pump, resume, backpressure, the stall timeout, the background queue, Pause, the install questions that wait in Downloads, archive passwords, the Downloads panel and its sidebar badge |
+| [`marketplace.md`](../docs/marketplace.md) | The native browser screens — grid, mod page, creator page, the page stack, what an install does |
 | [`library-screen.md`](../docs/library-screen.md) | The Library's character view, All mods table and Updates page — character list, card, status badge, the table and its bulk actions, the coverage strip and newer files, One at a time, notes, details panel, a mod's page and its History tab, its dialogs |
 | [`notifications.md`](../docs/notifications.md) | What the app tells the user — whether to speak at all, the two levels, the kinds, the card and the stack |
 | [`metadata-schema.md`](../docs/metadata-schema.md) | The sidecar file format |

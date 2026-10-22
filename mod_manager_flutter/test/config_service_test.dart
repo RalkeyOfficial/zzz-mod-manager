@@ -228,6 +228,8 @@ void main() {
     await service.setMarketplaceSort('mostDownloaded');
     await service.setUpdateCheckOnLaunch(true);
     await service.setHideEmptyCharacters(true);
+    await service.setMarketplaceHideInstalled(true);
+    await service.setMarketplaceTurnOnAfterInstall(true);
     await service.addActiveMod('SomeMod');
     await service.addFavoriteMod('SomeMod');
     await service.setModCharacterTag('SomeMod', 'ellen');
@@ -256,6 +258,8 @@ void main() {
       'marketplace_sort': next.marketplaceSort,
       'update_check_on_launch': next.updateCheckOnLaunch,
       'hide_empty_characters': next.hideEmptyCharacters,
+      'marketplace_hide_installed': next.marketplaceHideInstalled,
+      'marketplace_turn_on_after_install': next.marketplaceTurnOnAfterInstall,
       'file_logging': next.fileLogging,
       'active_mods': next.activeMods,
       'favorite_mods': next.favoriteMods,
@@ -280,6 +284,29 @@ void main() {
         reason: 'update_check_on_launch did not survive the restart');
     expect(next.wineUseUmu, isFalse, reason: 'wine_use_umu did not survive the restart');
     expect(next.hideEmptyCharacters, isTrue, reason: 'hide_empty_characters did not survive the restart');
+    expect(next.marketplaceHideInstalled, isTrue, reason: 'marketplace_hide_installed did not survive the restart');
+    expect(next.marketplaceTurnOnAfterInstall, isTrue,
+        reason: 'marketplace_turn_on_after_install did not survive the restart');
+  });
+
+  test('Turn on after installing is off until switched on, and a value that is not a bool is ignored', () async {
+    expect((await build()).marketplaceTurnOnAfterInstall, isFalse);
+
+    await configFile().writeAsString(jsonEncode({'marketplace_turn_on_after_install': 1, 'file_logging': false}));
+    final service = await build();
+    expect(await service.loadFromFile(), isTrue);
+    expect(service.marketplaceTurnOnAfterInstall, isFalse);
+    expect(service.fileLogging, isFalse);
+  });
+
+  test('Hide installed is off until switched on, and a value that is not a bool is ignored', () async {
+    expect((await build()).marketplaceHideInstalled, isFalse);
+
+    await configFile().writeAsString(jsonEncode({'marketplace_hide_installed': 'yes', 'file_logging': false}));
+    final service = await build();
+    expect(await service.loadFromFile(), isTrue);
+    expect(service.marketplaceHideInstalled, isFalse);
+    expect(service.fileLogging, isFalse);
   });
 
   test('a Hide empty that is not a bool is ignored, and the settings after it still load', () async {

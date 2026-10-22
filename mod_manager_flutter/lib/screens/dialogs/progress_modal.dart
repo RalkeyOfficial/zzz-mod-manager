@@ -197,33 +197,3 @@ class ProgressHold {
     message.dispose();
   }
 }
-
-/// Puts the modal straight into its preparing phase, for a caller whose
-/// download already finished somewhere the user could not watch it.
-///
-/// The install path: the transfer ran in the background queue and the user was
-/// told it arrived, so what is left is the unpacking — and that is the whole of
-/// the wait they would otherwise spend looking at nothing.
-ProgressHold showPreparingModal(BuildContext context, {String? message}) {
-  final hold = ProgressHold();
-  if (message != null) hold.say(message);
-  final navigator = Navigator.of(context, rootNavigator: true);
-  var closed = false;
-  hold.handOver(() {
-    if (closed) return;
-    closed = true;
-    navigator.pop();
-  });
-  showDialog<void>(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => ProgressModal(
-      progress: ValueNotifier(
-        const DownloadProgress(state: DownloadState.completed),
-      ),
-      onCancel: () {},
-      hold: hold,
-    ),
-  ).ignore();
-  return hold;
-}

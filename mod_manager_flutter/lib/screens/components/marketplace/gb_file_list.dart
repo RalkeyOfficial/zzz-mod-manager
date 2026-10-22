@@ -1,26 +1,36 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/palette.dart';
+import '../../../core/type_scale.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../models/gamebanana/gb_file.dart';
 import '../../../services/gamebanana/file_selection.dart';
 import '../../../services/installed_mods_index.dart';
+import '../../../utils/byte_format.dart';
+import '../mod_detail_parts.dart' show SectionHeading;
+import '../zenith_controls.dart';
+import 'gb_mod_card.dart' show relativeAgeLabel;
 
-/// The mod detail screen's file list: one row per downloadable file, each with
-/// its label, upload date, size, scan result and a download button.
+/// The files picked when a mod page opens: its one current file, or none when it publishes several, since which one
+/// the user wants can't be told from what GameBanana publishes (`selectDefaultFile`).
+Set<int> defaultPickedFiles(List<GbFile>? files) => {?selectDefaultFile(files).file?.idRow};
+
+/// The mod page's Files: one row per current file, each picked or not with its square check, and the older files
+/// behind a link under them, pickable too.
 ///
-/// The selection rule is not implemented here — it lives in
-/// `services/gamebanana/file_selection.dart` so it can be unit-tested against
-/// real captured profiles. This widget only *renders* the outcome, including
-/// saying out loud when the user has to choose.
+/// The selection rule is not implemented here, it lives in `services/gamebanana/file_selection.dart` so it can be
+/// unit-tested against real captured profiles; this widget renders the picks it is handed.
 class GbFileList extends StatelessWidget {
   const GbFileList({
     super.key,
     required this.files,
     required this.archivedFiles,
-    required this.onDownload,
+    required this.picked,
+    required this.onToggle,
     this.showArchived = false,
     this.onToggleArchived,
     this.matchInstalled,
+    this.now,
   });
 
   /// Current files. Null means the response never carried a list.
@@ -29,313 +39,226 @@ class GbFileList extends StatelessWidget {
   /// Superseded but still downloadable files.
   final List<GbFile>? archivedFiles;
 
-  final void Function(GbFile file) onDownload;
+  /// The ids of the files picked.
+  final Set<int> picked;
+
+  final ValueChanged<GbFile> onToggle;
 
   final bool showArchived;
   final VoidCallback? onToggleArchived;
 
-  /// What the local library already has for one file. Null means "don't say" —
-  /// which is what tests and any caller without a library snapshot get.
+  /// What the local library already has for one file. Null means "don't say", which is what a caller without a
+  /// library snapshot gets.
   final InstalledFileMatch Function(GbFile file)? matchInstalled;
+
+  /// What an upload's age is measured from; the clock when null.
+  final DateTime? now;
 
   @override
   Widget build(BuildContext context) {
     final loc = context.loc;
-    final theme = Theme.of(context);
-    final defaultChoice = selectDefaultFile(files);
+    final palette = ZenithPalette.of(context);
     final current = files ?? const <GbFile>[];
     final archived = archivedFiles ?? const <GbFile>[];
+    final at = now ?? DateTime.now().toUtc();
 
-    if (defaultChoice.reason == FileDefaultReason.noFiles && archived.isEmpty) {
-      return _notice(context, loc.t('marketplace.no_files'), Icons.block);
-    }
-    if (defaultChoice.reason == FileDefaultReason.notLoaded) {
-      return _notice(context, loc.t('marketplace.files_not_loaded'), Icons.help_outline);
-    }
+    Widget row(GbFile file) => GbFileRow(
+      key: ValueKey('file_${file.idRow}'),
+      file: file,
+      picked: picked.contains(file.idRow),
+      installed: matchInstalled?.call(file) ?? InstalledFileMatch.none,
+      onTap: () => onToggle(file),
+      now: at,
+    );
+
+    // What Show would reveal: the older files not already listed for being picked.
+    final hidden = showArchived ? 0 : archived.where((file) => !picked.contains(file.idRow)).length;
+
+    final String? notice = files == null
+        ? loc.t('marketplace.files_not_loaded')
+        : current.isEmpty && archived.isEmpty
+        ? loc.t('marketplace.no_files')
+        : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 8,
       children: [
-        Row(
-          children: [
-            Text(
-              loc.t('marketplace.files_title'),
-              style: theme.textTheme.titleSmall
-                  ?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const Spacer(),
-            if (archived.isNotEmpty && onToggleArchived != null)
-              TextButton.icon(
-                onPressed: onToggleArchived,
-                icon: Icon(
-                  showArchived ? Icons.expand_less : Icons.history,
-                  size: 16,
-                ),
-                label: Text(
-                  loc.t(
-                    showArchived
-                        ? 'marketplace.hide_archived'
-                        : 'marketplace.show_archived',
-                    params: {'count': '${archived.length}'},
-                  ),
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        // Told, not implied. When several files exist the app genuinely cannot
-        // tell which one the user wants — see selectDefaultFile for why that is
-        // a property of the data, not a missing feature — so it says so instead
-        // of preselecting one and hoping.
-        if (defaultChoice.reason == FileDefaultReason.ambiguous)
-          _notice(
-            context,
-            loc.t('marketplace.pick_a_file'),
-            Icons.info_outline,
-          ),
-        const SizedBox(height: 4),
-        for (final file in current)
-          _FileRow(
-            file: file,
-            isDefault: defaultChoice.file?.idRow == file.idRow,
-            installed: matchInstalled?.call(file) ?? InstalledFileMatch.none,
-            onDownload: () => onDownload(file),
-          ),
-        if (showArchived)
+        SectionHeading(loc.t('marketplace.files_title')),
+        if (notice != null)
+          Text(notice, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: palette.text3))
+        else ...[
+          for (final file in current) row(file),
+          // A picked older file keeps its row while hidden: Install counts and queues it, so it stays where it can be
+          // seen and let go.
           for (final file in archived)
-            _FileRow(
-              file: file,
-              isDefault: false,
-              installed: matchInstalled?.call(file) ?? InstalledFileMatch.none,
-              onDownload: () => onDownload(file),
-            ),
-      ],
-    );
-  }
-
-  Widget _notice(BuildContext context, String message, IconData icon) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 15, color: scheme.onSurfaceVariant),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              message,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
+            if (showArchived || picked.contains(file.idRow)) row(file),
+          if ((showArchived ? archived.isNotEmpty : hidden > 0) && onToggleArchived != null)
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: ZenithLink(
+                showArchived
+                    ? loc.t('marketplace.hide_archived')
+                    : loc.plural('marketplace.show_archived', hidden, params: {'count': '$hidden'}),
+                onTap: onToggleArchived!,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: palette.link),
               ),
             ),
-          ),
         ],
-      ),
+      ],
     );
   }
 }
 
-class _FileRow extends StatelessWidget {
-  const _FileRow({
+/// One file as the design's `.file` row: the square check, the file name in mono, its variant text and upload age
+/// under it, and its size at the right. Pressing the row picks it or lets it go.
+class GbFileRow extends StatelessWidget {
+  const GbFileRow({
+    super.key,
     required this.file,
-    required this.isDefault,
+    required this.picked,
     required this.installed,
-    required this.onDownload,
+    required this.onTap,
+    required this.now,
   });
 
   final GbFile file;
-  final bool isDefault;
+  final bool picked;
   final InstalledFileMatch installed;
-  final VoidCallback onDownload;
+  final VoidCallback onTap;
+  final DateTime now;
 
   @override
   Widget build(BuildContext context) {
     final loc = context.loc;
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final palette = ZenithPalette.of(context);
+    final text = Theme.of(context).textTheme;
+    final type = ZenithType.of(context);
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(10),
+      side: BorderSide(color: picked ? pickedBorder(palette) : palette.line),
+    );
+    final chips = [
+      if (file.isArchived) ZenithBadge(label: loc.t('marketplace.badge_archived'), tone: palette.badgeNeutral, small: true),
+      ?_installedChip(loc, palette),
+      // `_sAvResult` is a real safety signal, unlike an md5 match, so a result other than clean is shown verbatim.
+      if (file.avResult case final av? when av.isNotEmpty && av.toLowerCase() != 'clean')
+        ZenithBadge(label: av, tone: palette.badgeUpdate, small: true),
+    ];
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: isDefault
-              ? scheme.primary.withValues(alpha: 0.5)
-              : scheme.outlineVariant.withValues(alpha: 0.4),
-        ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
+    return Semantics(
+      checked: picked,
+      child: Material(
+        color: picked ? pickedGround(palette) : palette.field,
+        shape: shape,
+        child: InkWell(
+          customBorder: shape,
+          hoverColor: palette.rowHover,
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 12,
               children: [
-                // A `Wrap`, not a `Row`, and that is load-bearing since the
-                // second chip landed here. The chips are fixed-width — their
-                // labels are three words, so there is nothing to ellipsise — so
-                // in a `Row` the only thing that could give way was the
-                // filename, and once it had shrunk to nothing the row simply
-                // overflowed. Measured: with only the `older` chip it survived a
-                // 2× OS text scale, with an installed chip beside it it broke at
-                // **1.3×** in a minimum-width window. `Wrap` gives the label the
-                // full width to ellipsise within and moves the chips to a second
-                // line when they no longer fit beside it, so overflow is not
-                // expressible — and the row has no fixed height, so growing is
-                // free.
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 2,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(
-                      fileDisplayName(file),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium
-                          ?.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                    if (file.isArchived)
-                      _chip(context, loc.t('marketplace.badge_archived'),
-                          scheme.onSurfaceVariant),
-                    if (_installedChip(context, loc) case final chip?) chip,
-                  ],
-                ),
-                // The author's own words get their own line, above the hard
-                // facts. It is free text and frequently a whole sentence — one
-                // captured file's is an instruction, "Put it in the folder with
-                // the mod (replace it)" — so appending it to the metadata line
-                // would push the size and date off the end.
-                if (fileDisplayDetail(file) case final detail?) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    detail,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 2),
-                Text(
-                  _subtitle(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
+                Padding(padding: const EdgeInsets.only(top: 1), child: _PickBox(on: picked)),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        fileDisplayName(file),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: type.mono.copyWith(color: palette.text),
+                      ),
+                      Text(
+                        _detail(loc),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: text.bodySmall?.copyWith(color: palette.text3),
+                      ),
+                      if (chips.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Wrap(spacing: 6, runSpacing: 4, children: chips),
+                        ),
+                    ],
                   ),
                 ),
+                if (file.filesize case final bytes?)
+                  Text(formatBytes(bytes), style: type.monoSmall.copyWith(color: palette.text3, height: 1.45)),
               ],
             ),
           ),
-          const SizedBox(width: 8),
-          // `_sAvResult` is shown verbatim because, unlike an md5 match, it
-          // genuinely is a safety signal.
-          if (file.avResult case final av? when av.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: _chip(
-                context,
-                av,
-                av.toLowerCase() == 'clean' ? Colors.green : scheme.tertiary,
-              ),
-            ),
-          FilledButton.icon(
-            onPressed: onDownload,
-            icon: const Icon(Icons.download, size: 16),
-            label: Text(loc.t('marketplace.download')),
-          ),
-        ],
+        ),
       ),
     );
+  }
+
+  /// "“Full dress” · uploaded 5 days ago", or "no variant text · uploaded …" when the author gave the file none.
+  String _detail(AppLocalizations loc) {
+    final variant = fileDisplayDetail(file);
+    return [
+      if (variant != null)
+        loc.t('marketplace.file_variant', params: {'variant': variant})
+      else
+        loc.t('marketplace.file_no_variant'),
+      if (file.dateAdded case final date?)
+        loc.t('marketplace.file_uploaded', params: {'age': relativeAgeLabel(loc, date, now)}),
+    ].join(' · ');
   }
 
   /// "installed" or "you have this", or null when the library says nothing.
   ///
-  /// The two are separate labels on purpose, and the difference is not cosmetic.
-  /// A `file_id` match means *we installed this file* — a direct record. A hash
-  /// match means the archive on the way in was **byte-identical** to this
-  /// published file, which is a statement about bytes and not an identity we
-  /// recorded, so it is worded as one. Neither is a safety or integrity claim:
-  /// md5 is a matching key only, so there is no checkmark and no shield here.
-  ///
-  /// Both use `primary`, the same colour as the card's badge and the detail view's
-  /// notice — one colour per meaning across the marketplace, so "you already have
-  /// this" doesn't change hue depending on which screen you are looking at.
-  Widget? _installedChip(BuildContext context, AppLocalizations loc) {
-    final colour = Theme.of(context).colorScheme.primary;
+  /// The two are separate labels on purpose. A `file_id` match means *we installed this file*, a direct record. A
+  /// hash match means the archive on the way in was **byte-identical** to this published file, a statement about
+  /// bytes and not an identity we recorded. Neither is a safety or integrity claim: md5 is a matching key only, so
+  /// there is no checkmark and no shield here.
+  Widget? _installedChip(AppLocalizations loc, ZenithPalette palette) {
     final mods = installed.folders.join(', ');
     return switch (installed.evidence) {
       InstalledFileEvidence.none => null,
-      InstalledFileEvidence.fileId => Tooltip(
-          message: loc.t('marketplace.file_installed_as',
-              params: {'mods': mods}),
-          child: _chip(
-            context,
-            loc.t('marketplace.badge_file_installed'),
-            colour,
-          ),
-        ),
-      InstalledFileEvidence.archiveHash => Tooltip(
-          message: loc.t('marketplace.file_same_as', params: {'mods': mods}),
-          child: _chip(
-            context,
-            loc.t('marketplace.badge_file_same'),
-            colour,
-          ),
-        ),
+      InstalledFileEvidence.fileId => ZenithBadge(
+        label: loc.t('marketplace.badge_file_installed'),
+        tone: palette.badgeOn,
+        small: true,
+        tooltip: loc.t('marketplace.file_installed_as', params: {'mods': mods}),
+      ),
+      InstalledFileEvidence.archiveHash => ZenithBadge(
+        label: loc.t('marketplace.badge_file_same'),
+        tone: palette.badgeOn,
+        small: true,
+        tooltip: loc.t('marketplace.file_same_as', params: {'mods': mods}),
+      ),
     };
   }
+}
 
-  /// Filename · size · upload date, skipping whatever the response omitted.
-  /// The hard facts, under whatever the author had to say. The filename is not
-  /// repeated here — it is the row's title now.
-  String _subtitle() {
-    final parts = <String>[
-      if (file.filesize case final bytes?) _size(bytes),
-      if (file.dateAdded case final date?) _date(date),
-    ];
-    return parts.isEmpty ? '#${file.idRow}' : parts.join(' · ');
-  }
+/// The border of a picked row or card: the accent mixed 60% into the line, the design's `.file.on`.
+Color pickedBorder(ZenithPalette palette) => Color.lerp(palette.line, palette.accent, 0.6)!;
 
-  Widget _chip(BuildContext context, String label, Color color) {
+/// The ground of a picked row or card: the accent washed 7% into the field.
+Color pickedGround(ZenithPalette palette) => Color.lerp(palette.field, palette.accent, 0.07)!;
+
+/// The design's `.rad`: an 18px square check, filled with the accent and ticked when on.
+class _PickBox extends StatelessWidget {
+  const _PickBox({required this.on});
+
+  final bool on;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ZenithPalette.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      width: 18,
+      height: 18,
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(6),
+        color: on ? palette.accent : null,
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(color: on ? palette.accent : palette.check, width: 1.5),
       ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: color,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
+      child: on ? Icon(Icons.check_rounded, size: 12, color: palette.onAccent) : null,
     );
-  }
-
-  static String _size(int bytes) {
-    if (bytes >= 1024 * 1024 * 1024) {
-      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
-    }
-    if (bytes >= 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    }
-    if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
-    return '$bytes B';
-  }
-
-  static String _date(DateTime date) {
-    final d = date.toLocal();
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${d.year}-${two(d.month)}-${two(d.day)}';
   }
 }

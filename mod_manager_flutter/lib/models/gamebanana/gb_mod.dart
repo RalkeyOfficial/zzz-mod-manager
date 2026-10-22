@@ -44,6 +44,7 @@ class GbMod {
     this.submitter,
     this.category,
     this.subCategory,
+    this.superCategory,
     this.rootCategory,
     this.tags = const [],
     this.requirements = const [],
@@ -117,6 +118,10 @@ class GbMod {
   /// Absent on mods filed directly under a root category, so it is not a
   /// replacement for [rootCategory] — see [displayCategory].
   final GbCategoryRef? subCategory;
+
+  /// `_aSuperCategory` — the parent of [category] on a **profile**, with its `_idRow`: Character Skins for a skin.
+  /// Absent for a mod filed directly under a root, whose [category] is the root itself.
+  final GbCategoryRef? superCategory;
 
   /// `_aRootCategory` — the top-level category. Listing responses.
   final GbCategoryRef? rootCategory;
@@ -244,6 +249,7 @@ class GbMod {
       submitter: GbSubmitter.fromJson(json['_aSubmitter']),
       category: GbCategoryRef.fromJson(json['_aCategory']),
       subCategory: GbCategoryRef.fromJson(json['_aSubCategory']),
+      superCategory: GbCategoryRef.fromJson(json['_aSuperCategory']),
       rootCategory: GbCategoryRef.fromJson(json['_aRootCategory']),
       tags: gbTags(json['_aTags']),
       requirements: GbRequirement.listFrom(json['_aRequirements']),

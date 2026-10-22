@@ -99,11 +99,6 @@ void main() {
     });
   });
 
-  test('every unit has a distinct l10n key', () {
-    final keys = RelativeUnit.values.map((u) => u.l10nKey).toSet();
-    expect(keys.length, RelativeUnit.values.length);
-  });
-
   group('against real captured timestamps', () {
     test('a mod added in 2024 and updated in 2026 reads years vs days', () {
       // Mirrors the first record of the captured Mod/Index page: added

@@ -53,7 +53,7 @@ description still gets a gallery.
 | Field | Source | Notes |
 |---|---|---|
 | `description` | `_sText`, converted | HTML upstream, markdown here, through `utils/html_to_markdown.dart` — shared with the editors' paste-as-markdown so the two conversions can't drift. |
-| `character_id` | the **category** name | Not the mod name, not the tags. Under Character Skins the category is the character's full in-world name, picked from a list; `detectCharacterId()` resolves it. On a marketplace install it is passed *into* the import and replaces folder-name detection — see below. |
+| `character_id` | the **category** name | Not the mod name, not the tags. Under Character Skins the category is the character's full in-world name, picked from a list; `detectCharacterId()` resolves it. On a marketplace install it is passed *into* the import and replaces folder-name detection — see below — and the user's pick under the mod page's Install for replaces the category ([`marketplace.md`](marketplace.md) §5). |
 | `tags` | `_aTags`, flattened | All-or-nothing: a non-empty local list is a curation, and merging into it would produce a set nobody chose. |
 | `images` | `_aPreviewContent`, fetched | The only field that needs the network, because our `images` are paths inside the mod folder. Comes from the mod's **profile**, which is what carries the full gallery — a listing record holds only the cover. |
 
@@ -88,9 +88,9 @@ Five decisions inside that are load-bearing rather than arbitrary:
   never told one — notably the resolve dialog, which runs against a mod that was
   installed long ago.
 
-  Two consequences worth stating. An **unassigned** value falls back to detection, so a mod filed under `Other/Misc` still gets its name read.
+  Two consequences worth stating. **Unassigned is told too**, for a page whose category names no character, such as one filed under `Other/Misc`: the mod is filed under Unassigned, stored as absence, and its folder name is never read. Only an import given no character, a drag-and-drop or a paste with none picked, reads the name.
   And the told character is one fact for the whole archive, so an archive that became several mods files them all under the page's character — which is what a mod page filed under one character is asserting.
-  A genuinely mixed pack cannot be filed under a character upstream, so it arrives with no told character and every folder is detected separately.
+  A genuinely mixed pack cannot be filed under a character upstream, so every folder of it goes under Unassigned unless the user picks a character under Install for.
 - **`Software Used` tags are dropped.** Each tag is a badge on the Library's details panel, read as a fact about the mod, so noise there costs more than a noisy sentence in a description does.
   And this is not a marginal family: 3 of the 6 distinct tag values across the captured listings are it.
 - **A shipped `Preview.png` keeps the cover slot.** When the gallery is imported, an

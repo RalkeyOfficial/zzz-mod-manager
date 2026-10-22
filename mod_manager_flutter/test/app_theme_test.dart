@@ -1,4 +1,6 @@
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/core/app_theme.dart';
 import 'package:mod_manager_flutter/core/palette.dart';
@@ -37,6 +39,24 @@ void main() {
       expect(light.selected.background, const Color(0xFF15161C));
       expect(light.accent, ZenithPalette.light(AccentChoice.violet).accent);
       expect(light.link, const Color(0xFF5A35C8));
+    });
+
+    test("the Downloads panel's scrim and shadow and a badge over art take the artboards' values", () {
+      final dark = ZenithPalette.dark(AccentChoice.violet);
+      // `Downloads`: rgba(4,5,6,.6) behind the panel, rgba(0,0,0,.5) for its shadow.
+      expect(dark.downloadsScrim, const Color(0x99040506));
+      expect(dark.downloadsShadow, const Color(0x80000000));
+      // `.b-off` on Browse and BrowseCreator: rgba(11,12,14,.75), the same over art in either theme.
+      for (final palette in [dark, ZenithPalette.light(AccentChoice.violet)]) {
+        expect(palette.badgeOverArt.background, const Color(0xBF0B0C0E));
+      }
+      expect(dark.overlay, const Color(0xB3060708), reason: "a dialog's scrim is not the panel's");
+      expect(dark.artworkScrim, const Color(0xA60B0C0E), reason: 'the veil and the arrows over art keep theirs');
+    });
+
+    test('accent text on ink is the accent mixed 70% into white, violet with the Paper accent', () {
+      expect(ZenithPalette.dark(AccentChoice.teal).accentOnInk, ZenithPalette.dark(AccentChoice.teal).selected.foreground);
+      expect(ZenithPalette.dark(AccentChoice.paper).accentOnInk, ZenithPalette.dark(AccentChoice.violet).accentOnInk);
     });
 
     test('the primary button changes under the pointer for every accent on both grounds', () {
@@ -119,6 +139,66 @@ void main() {
       );
       for (final field in find.byType(TextField).evaluate()) {
         expect(tester.getSize(find.byWidget(field.widget)).height, 36);
+      }
+    });
+
+    group('keyboard focus draws the accent ring on every button, a click none', () {
+      for (final brightness in Brightness.values) {
+        testWidgets(brightness.name, (tester) async {
+          final palette = ZenithPalette.forBrightness(brightness, AccentChoice.violet);
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: buildAppTheme(brightness: brightness, accent: AccentChoice.violet),
+              home: Scaffold(
+                body: Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FilledButton(onPressed: () {}, child: const Text('Primary')),
+                      OutlinedButton(onPressed: () {}, child: const Text('Default')),
+                      TextButton(onPressed: () {}, child: const Text('Ghost')),
+                      IconButton(onPressed: () {}, icon: const Icon(Icons.close)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+          BorderSide side(Finder button) =>
+              (tester.widget<Material>(find.descendant(of: button, matching: find.byType(Material)).first).shape!
+                      as OutlinedBorder)
+                  .side;
+          final buttons = [
+            find.byType(FilledButton),
+            find.byType(OutlinedButton),
+            find.byType(TextButton),
+            find.byType(IconButton),
+          ];
+          final idle = [for (final button in buttons) side(button)];
+          expect(idle[1].color, palette.control, reason: 'the default button keeps its border');
+
+          // A mouse click leaves the pointer's highlight mode on, and still draws no ring.
+          for (final button in buttons) {
+            await tester.tap(button, kind: PointerDeviceKind.mouse);
+            await tester.pumpAndSettle();
+          }
+          expect(FocusManager.instance.highlightMode, FocusHighlightMode.traditional);
+          for (final (i, button) in buttons.indexed) {
+            expect(side(button), idle[i], reason: 'a click left a ring on $button');
+          }
+
+          for (final (i, button) in buttons.indexed) {
+            await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+            await tester.pumpAndSettle();
+            final ring = side(button);
+            expect(ring.color, palette.accent, reason: '$button focused');
+            expect(ring.width, 2);
+            expect(ring.strokeOutset, 4, reason: 'a 2px ring 2px out from the button');
+            for (final (j, other) in buttons.indexed) {
+              if (j != i) expect(side(other), idle[j], reason: 'only the focused button draws the ring');
+            }
+          }
+        });
       }
     });
   });

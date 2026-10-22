@@ -37,6 +37,8 @@ class ConfigService implements ModCharacterTagStore {
   static const String _keyMarketplaceSort = 'marketplace_sort';
   static const String _keyUpdateCheckOnLaunch = 'update_check_on_launch';
   static const String _keyHideEmptyCharacters = 'hide_empty_characters';
+  static const String _keyMarketplaceHideInstalled = 'marketplace_hide_installed';
+  static const String _keyMarketplaceTurnOnAfterInstall = 'marketplace_turn_on_after_install';
 
   /// Mirrored by `services/log/log_setup.dart`, which reads the same key
   /// straight off `config.json` during bootstrap — `SharedPreferences` does not
@@ -185,6 +187,12 @@ class ConfigService implements ModCharacterTagStore {
 
   /// Whether the Library's character list hides the characters and categories with no mods.
   bool get hideEmptyCharacters => _prefs.getBool(_keyHideEmptyCharacters) ?? false;
+
+  /// Whether Browse leaves out the mods already in the library.
+  bool get marketplaceHideInstalled => _prefs.getBool(_keyMarketplaceHideInstalled) ?? false;
+
+  /// Whether a mod installed from Browse is turned on once it is in the library.
+  bool get marketplaceTurnOnAfterInstall => _prefs.getBool(_keyMarketplaceTurnOnAfterInstall) ?? false;
 
   /// Whether each run writes a log file.
   ///
@@ -570,6 +578,26 @@ class ConfigService implements ModCharacterTagStore {
     }
   }
 
+  Future<bool> setMarketplaceHideInstalled(bool hide) async {
+    try {
+      await _prefs.setBool(_keyMarketplaceHideInstalled, hide);
+      await _saveToFile();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> setMarketplaceTurnOnAfterInstall(bool turnOn) async {
+    try {
+      await _prefs.setBool(_keyMarketplaceTurnOnAfterInstall, turnOn);
+      await _saveToFile();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<bool> setFileLogging(bool enabled) async {
     try {
       await _prefs.setBool(_keyFileLogging, enabled);
@@ -670,6 +698,12 @@ class ConfigService implements ModCharacterTagStore {
       if (config['hide_empty_characters'] is bool) {
         await _prefs.setBool(_keyHideEmptyCharacters, config['hide_empty_characters']);
       }
+      if (config['marketplace_hide_installed'] is bool) {
+        await _prefs.setBool(_keyMarketplaceHideInstalled, config['marketplace_hide_installed']);
+      }
+      if (config['marketplace_turn_on_after_install'] is bool) {
+        await _prefs.setBool(_keyMarketplaceTurnOnAfterInstall, config['marketplace_turn_on_after_install']);
+      }
       if (config.containsKey('file_logging')) {
         await _prefs.setBool(_keyFileLogging, config['file_logging']);
       }
@@ -707,6 +741,8 @@ class ConfigService implements ModCharacterTagStore {
         'sort_mode': sortMode,
         'content_filter': contentFilter,
         'marketplace_sort': marketplaceSort,
+        'marketplace_hide_installed': marketplaceHideInstalled,
+        'marketplace_turn_on_after_install': marketplaceTurnOnAfterInstall,
         'update_check_on_launch': updateCheckOnLaunch,
         'hide_empty_characters': hideEmptyCharacters,
         'file_logging': fileLogging,

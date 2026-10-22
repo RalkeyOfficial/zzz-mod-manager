@@ -9,21 +9,31 @@ import '../../utils/zzz_characters.dart';
 ///
 /// Returns the chosen id (a character id or a built-in category id), or `null`
 /// if the picker was dismissed without choosing (caller keeps the current
-/// value). A category is required, so there is no "clear" option.
+/// value). There is no "clear" option unless [offerUnassigned] adds Unassigned
+/// to the categories, which returns [unknownCharacterId].
 Future<String?> showCategoryPicker(
   BuildContext context, {
   required String currentId,
+  bool offerUnassigned = false,
 }) {
   return showDialog<String>(
     context: context,
-    builder: (_) => _CategoryPickerDialog(currentId: currentId),
+    builder: (_) => _CategoryPickerDialog(currentId: currentId, offerUnassigned: offerUnassigned),
   );
 }
 
+/// Unassigned, as the picker offers it among the categories.
+const CategoryData _unassigned = CategoryData(
+  id: unknownCharacterId,
+  labelKey: 'library.list.unassigned',
+  icon: Icons.help_outline_rounded,
+);
+
 class _CategoryPickerDialog extends StatefulWidget {
-  const _CategoryPickerDialog({required this.currentId});
+  const _CategoryPickerDialog({required this.currentId, required this.offerUnassigned});
 
   final String currentId;
+  final bool offerUnassigned;
 
   @override
   State<_CategoryPickerDialog> createState() => _CategoryPickerDialogState();
@@ -52,7 +62,7 @@ class _CategoryPickerDialogState extends State<_CategoryPickerDialog> {
     final height = (media.size.height * 0.7).clamp(320.0, 620.0);
 
     final categories = [
-      for (final cat in builtInCategories)
+      for (final cat in [...builtInCategories, if (widget.offerUnassigned) _unassigned])
         if (_matches(loc.t(cat.labelKey))) cat,
     ];
     final characterIds = [

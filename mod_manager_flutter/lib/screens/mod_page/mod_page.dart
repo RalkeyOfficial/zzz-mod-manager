@@ -28,6 +28,7 @@ import '../components/character_tile.dart';
 import '../components/mod_details_panel.dart' show canCheckForUpdate;
 import '../components/mod_detail_parts.dart';
 import '../components/mod_status_slot.dart';
+import '../components/page_crumbs.dart';
 import '../components/resolve/resolve_fragments.dart' show formatResolveDate;
 import '../components/shader_part_summary.dart';
 import '../components/zenith_controls.dart';
@@ -270,41 +271,16 @@ class _Crumbs extends ConsumerWidget {
       _ => null,
     };
     final loc = context.loc;
-    final palette = ZenithPalette.of(context);
-    final style = Theme.of(context).textTheme.bodySmall;
-    final crumb = style?.copyWith(color: palette.text3);
-    final slash = Text('/', style: style?.copyWith(color: palette.check));
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: LibraryModPage._gutter, vertical: 14),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: palette.divider)),
-      ),
-      child: Row(
-        spacing: 8,
-        children: [
-          IconButton(
-            style: smallButtonStyle(context, iconOnly: true),
-            tooltip: loc.t('library.page.back'),
-            onPressed: onBack,
-            icon: const Icon(Icons.chevron_left_rounded),
-          ),
-          if (view != null)
-            ZenithLink(loc.t(view), onTap: onBack, style: crumb)
-          else ...[
-            ZenithLink(loc.t('navigation.characters'), onTap: onBack, style: crumb),
-            slash,
-            ZenithLink(libraryGroupName(libraryGroupOf(mod.characterId), loc), onTap: onBack, style: crumb),
-          ],
-          slash,
-          Flexible(
-            child: Text(
-              mod.name,
-              overflow: TextOverflow.ellipsis,
-              style: style?.copyWith(color: palette.text),
-            ),
-          ),
-        ],
-      ),
+    return PageCrumbs(
+      backTooltip: loc.t('library.page.back'),
+      onBack: onBack,
+      trail: view != null
+          ? [(label: loc.t(view), onTap: onBack)]
+          : [
+              (label: loc.t('navigation.characters'), onTap: onBack),
+              (label: libraryGroupName(libraryGroupOf(mod.characterId), loc), onTap: onBack),
+            ],
+      current: mod.name,
     );
   }
 }

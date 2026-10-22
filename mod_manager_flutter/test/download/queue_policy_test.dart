@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/services/download/download_job.dart';
 import 'package:mod_manager_flutter/services/download/download_progress.dart';
 import 'package:mod_manager_flutter/services/download/download_request.dart';
@@ -22,6 +23,12 @@ void main() {
     int? total,
     double? rate,
     Object? error,
+    bool resumed = false,
+    Object? prepared,
+    InstallWait? wait,
+    GbMod? mod,
+    JobOutcome? outcome,
+    List<String> installed = const [],
   }) {
     final seq = ++nextSeq;
     return DownloadJob(
@@ -33,8 +40,14 @@ void main() {
       intent: intent,
       subject: 'mod $seq',
       file: GbFile(idRow: fileId ?? seq),
+      mod: mod,
       state: state,
       error: error,
+      resumed: resumed,
+      prepared: prepared,
+      wait: wait,
+      outcome: outcome,
+      installed: installed,
       progress: received == null && rate == null
           ? null
           : DownloadProgress(
@@ -100,10 +113,20 @@ void main() {
       final jobs = [
         job(state: DownloadJobState.done),
         job(state: DownloadJobState.failed),
-        job(state: DownloadJobState.cancelled),
         job(),
       ];
-      expect(admissions(jobs, concurrency: 2).map((j) => j.seq), [4]);
+      expect(admissions(jobs, concurrency: 2).map((j) => j.seq), [3]);
+    });
+
+    test('a paused job holds no slot and is never started by itself', () {
+      final jobs = [job(state: DownloadJobState.paused), job(state: DownloadJobState.running), job()];
+      expect(admissions(jobs, concurrency: 2).map((j) => j.seq), [3]);
+    });
+
+    test('a resumed job goes first of the queued ones', () {
+      // A retry keeps its seq, so a queued job can be older than the one the user paused and resumed.
+      final jobs = [job(), job(), job(resumed: true)];
+      expect(admissions(jobs, concurrency: 1).map((j) => j.seq), [3]);
     });
 
     test('order is the order they were asked for', () {
@@ -154,6 +177,22 @@ void main() {
       expect(nextAwaitingHost(jobs), isNull);
     });
 
+    test('a job that has waited goes ahead of jobs that have not', () {
+      final jobs = [
+        job(state: DownloadJobState.downloaded),
+        job(state: DownloadJobState.downloaded, prepared: Object()),
+      ];
+      expect(nextAwaitingHost(jobs)?.seq, 2);
+    });
+
+    test('a waiting job does not hold the slot', () {
+      final jobs = [
+        job(state: DownloadJobState.waiting, wait: const InstallWait(InstallQuestion.patch)),
+        job(state: DownloadJobState.downloaded),
+      ];
+      expect(nextAwaitingHost(jobs)?.seq, 2);
+    });
+
     test('never a job whose caller owns what happens next', () {
       final jobs = [
         job(
@@ -165,28 +204,58 @@ void main() {
     });
   });
 
-  group('rowAction', () {
-    test('offers a retry only for a failure', () {
-      final failed = job(state: DownloadJobState.failed);
-      expect(rowAction(failed, [failed]), DownloadRowAction.retry);
+  group('rowActions', () {
+    List<DownloadRowAction> of(DownloadJob j, [List<DownloadJob>? all]) => rowActions(j, all ?? [j]);
 
-      final cancelled = job(state: DownloadJobState.cancelled);
-      expect(rowAction(cancelled, [cancelled]), DownloadRowAction.dismiss);
-
-      final done = job(state: DownloadJobState.done);
-      expect(rowAction(done, [done]), DownloadRowAction.dismiss);
+    test('a running background transfer pauses or cancels, an update download only cancels', () {
+      expect(of(job(state: DownloadJobState.running)), [DownloadRowAction.pause, DownloadRowAction.cancel]);
+      expect(of(job(state: DownloadJobState.running, intent: DownloadIntent.callerHandles)), [DownloadRowAction.cancel]);
     });
 
-    test('offers nothing mid-install', () {
+    test('a paused one resumes or cancels, a queued one is removed from the queue', () {
+      expect(of(job(state: DownloadJobState.paused)), [DownloadRowAction.resume, DownloadRowAction.cancel]);
+      expect(of(job()), [DownloadRowAction.removeFromQueue]);
+    });
+
+    test("a waiting one offers its question's button and Don't install, or Open mod page for a password", () {
+      expect(
+        of(job(state: DownloadJobState.waiting, wait: const InstallWait(InstallQuestion.severalFolders))),
+        [DownloadRowAction.answer, DownloadRowAction.dontInstall],
+      );
+      expect(
+        of(job(state: DownloadJobState.waiting, wait: const InstallWait(InstallQuestion.password), mod: const GbMod(idRow: 1))),
+        [DownloadRowAction.answer, DownloadRowAction.openModPage],
+      );
+    });
+
+    test('offers nothing mid-install or while an update is written', () {
       // Between the unpack and the import there is no safe stopping point, so
       // there is no button that could honestly be offered.
-      final installing = job(state: DownloadJobState.installing);
-      expect(rowAction(installing, [installing]), DownloadRowAction.none);
+      expect(of(job(state: DownloadJobState.installing)), isEmpty);
+      expect(of(job(state: DownloadJobState.updating, intent: DownloadIntent.callerHandles)), isEmpty);
     });
 
     test('a job whose bytes have landed can still be called off', () {
-      final downloaded = job(state: DownloadJobState.downloaded);
-      expect(rowAction(downloaded, [downloaded]), DownloadRowAction.cancel);
+      expect(of(job(state: DownloadJobState.downloaded)), [DownloadRowAction.cancel]);
+    });
+
+    test('a finished install of one mod offers Turn on while it is off, Show once it is on, and nothing while it is written', () {
+      final done = job(state: DownloadJobState.done, outcome: JobOutcome.installed, installed: const ['Ellen A']);
+      expect(rowActions(done, [done], modIsOn: (_) => false), [DownloadRowAction.turnOn]);
+      expect(rowActions(done, [done], modIsOn: (_) => true), [DownloadRowAction.show]);
+      expect(rowActions(done, [done], modIsOn: (_) => false, modBeingWritten: (_) => true), isEmpty);
+      final several = job(state: DownloadJobState.done, outcome: JobOutcome.installed, installed: const ['A', 'B']);
+      expect(of(several), isEmpty);
+    });
+
+    test('an update or a saved archive offers Show, an install that put nothing in nothing', () {
+      expect(of(job(state: DownloadJobState.done, outcome: JobOutcome.updated)), [DownloadRowAction.show]);
+      expect(of(job(state: DownloadJobState.done, outcome: JobOutcome.saved)), [DownloadRowAction.show]);
+      expect(of(job(state: DownloadJobState.done, outcome: JobOutcome.nothingInstalled)), isEmpty);
+    });
+
+    test('offers a retry for a failed transfer', () {
+      expect(of(job(state: DownloadJobState.failed)), [DownloadRowAction.retry]);
     });
 
     test('no retry while another job is already fetching that file', () {
@@ -197,19 +266,20 @@ void main() {
       // as history.
       final stale = job(fileId: 7, state: DownloadJobState.failed);
       final fresh = job(fileId: 7, state: DownloadJobState.running);
-      expect(rowAction(stale, [stale, fresh]), DownloadRowAction.dismiss);
+      expect(of(stale, [stale, fresh]), [DownloadRowAction.dismiss]);
       // …and it comes back once that job is over.
-      expect(rowAction(stale, [stale]), DownloadRowAction.retry);
+      expect(of(stale), [DownloadRowAction.retry]);
     });
 
-    test('no retry for an install failure — the bytes were fine', () {
+    test('no retry for an install failure — the bytes were fine — nor for an update', () {
       // Re-fetching two hundred megabytes to hit the same `7z` error is not a
       // fix, so the row is one to read rather than to press.
       final broken = job(
         state: DownloadJobState.failed,
         error: const InstallFailure("Couldn't extract the archive"),
       );
-      expect(rowAction(broken, [broken]), DownloadRowAction.dismiss);
+      expect(of(broken), [DownloadRowAction.dismiss]);
+      expect(of(job(state: DownloadJobState.failed, intent: DownloadIntent.callerHandles)), [DownloadRowAction.dismiss]);
     });
   });
 
@@ -292,6 +362,25 @@ void main() {
       expect(aggregateProgress([job(), job()]).only, isNull);
     });
 
+    test('leaves out a paused and a waiting job, as nothing of either is moving', () {
+      final jobs = [
+        job(state: DownloadJobState.paused, received: 50, total: 100),
+        job(state: DownloadJobState.waiting, expectedSize: 100),
+        job(state: DownloadJobState.running, received: 25, total: 100),
+      ];
+      final progress = aggregateProgress(jobs);
+      expect(progress.active.map((j) => j.seq), [3]);
+      expect(progress.fraction, 0.25);
+    });
+
+    test('counts an update download as whole once its bytes are handed over', () {
+      final progress = aggregateProgress([
+        job(state: DownloadJobState.updating, intent: DownloadIntent.callerHandles, expectedSize: 10),
+      ]);
+      expect(progress.fraction, 1);
+      expect(progress.installing, isTrue);
+    });
+
     test('separates "bytes are moving" from "an archive is unpacking"', () {
       final unpacking = aggregateProgress([
         job(state: DownloadJobState.installing, expectedSize: 10),
@@ -301,16 +390,29 @@ void main() {
     });
   });
 
-  test('activeJobCount counts everything not finished', () {
+  test('the counts: in progress or queued with paused included, waiting, and failed', () {
     final jobs = [
       job(),
       job(state: DownloadJobState.running),
+      job(state: DownloadJobState.paused),
       job(state: DownloadJobState.downloaded),
       job(state: DownloadJobState.installing),
+      job(state: DownloadJobState.updating),
+      job(state: DownloadJobState.waiting),
+      job(state: DownloadJobState.waiting),
       job(state: DownloadJobState.done),
       job(state: DownloadJobState.failed),
-      job(state: DownloadJobState.cancelled),
     ];
-    expect(activeJobCount(jobs), 4);
+    expect(activeJobCount(jobs), 6);
+    expect(waitingJobCount(jobs), 2);
+    expect(failedJobCount(jobs), 1);
+  });
+
+  test('the states: only running holds a connection, only done and failed are terminal', () {
+    for (final state in DownloadJobState.values) {
+      expect(state.holdsConnection, state == DownloadJobState.running, reason: state.name);
+      expect(state.isTerminal, state == DownloadJobState.done || state == DownloadJobState.failed, reason: state.name);
+      expect(state.isActive, !state.isTerminal, reason: state.name);
+    }
   });
 }

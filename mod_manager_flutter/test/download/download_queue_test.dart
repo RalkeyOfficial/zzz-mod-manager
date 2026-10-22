@@ -37,6 +37,9 @@ void main() {
 
   DownloadJob jobOf(int seq) => jobs().firstWhere((j) => j.seq == seq);
 
+  /// Whether the row left the list, as a cancelled or declined one does.
+  bool gone(int seq) => jobs().every((j) => j.seq != seq);
+
   /// Waits for a state the queue reaches on its own.
   ///
   /// Polled rather than pumped a fixed number of turns: the transport is
@@ -185,15 +188,46 @@ void main() {
       expect(job.archive!.readAsBytesSync(), body);
     });
 
-    test('a caller-owned job is finished the moment they land', () async {
+    test('a caller-owned job is handed to its update flow, which ends it', () async {
       transport.enqueue(urlFor(1), body: body);
       final job = enqueue(1, intent: DownloadIntent.callerHandles);
       final result = await queue().completionOf(job.seq);
 
       expect(result.file.readAsBytesSync(), body);
-      // Never `downloaded`: the host is told to ignore these, so parking one
-      // there would leave a row nothing ever comes for.
+      // Never `downloaded`: the host is told to ignore these. It stays on the
+      // panel until the flow ends it.
+      expect(jobOf(1).state, DownloadJobState.updating);
+      queue().updateStep(1, UpdateStep.writing);
+      expect(jobOf(1).updateStep, UpdateStep.writing);
+      queue().endUpdate(1, const UpdateWritten(JobOutcome.updated));
       expect(jobOf(1).state, DownloadJobState.done);
+      expect(jobOf(1).outcome, JobOutcome.updated);
+      expect(jobOf(1).finishedAt, isNotNull);
+    });
+
+    test('an update declined leaves the list, one that failed is a failure with no retry', () async {
+      transport.enqueue(urlFor(1), body: body);
+      transport.enqueue(urlFor(2), body: body);
+      final declined = enqueue(1, intent: DownloadIntent.callerHandles);
+      final failed = enqueue(2, intent: DownloadIntent.callerHandles);
+      await queue().completionOf(declined.seq);
+      await queue().completionOf(failed.seq);
+
+      queue().endUpdate(declined.seq, const UpdateDeclined());
+      queue().endUpdate(failed.seq, const UpdateFailed('Update failed'));
+
+      expect(gone(declined.seq), isTrue);
+      expect(jobOf(failed.seq).state, DownloadJobState.failed);
+      expect(jobOf(failed.seq).error, isA<InstallFailure>());
+      expect('${jobOf(failed.seq).error}', 'Update failed');
+    });
+
+    test('an updating job cannot be cancelled', () async {
+      transport.enqueue(urlFor(1), body: body);
+      final job = enqueue(1, intent: DownloadIntent.callerHandles);
+      await queue().completionOf(job.seq);
+      await queue().cancel(job.seq);
+      expect(jobOf(job.seq).state, DownloadJobState.updating);
     });
   });
 
@@ -233,7 +267,7 @@ void main() {
       await settle();
 
       await queue().cancel(3);
-      expect(jobOf(3).state, DownloadJobState.cancelled);
+      expect(gone(3), isTrue);
       expect(transport.callCount, 2);
       closeAll(controllers);
     });
@@ -257,43 +291,25 @@ void main() {
         'the freed slot to be taken by the next job',
       );
 
-      expect(jobOf(1).state, DownloadJobState.cancelled);
+      expect(gone(1), isTrue);
       closeAll(controllers);
     });
 
-    test('a cancel leaves no error behind on the row', () async {
-      // `error != null` has to mean "something went wrong" — the title-bar
-      // button reads it to decide whether to turn red, and a cancel is the user
-      // getting what they asked for. Both cancel paths must agree, so this
-      // covers the running one and the queued one below it.
+    test('a cancelled transfer leaves the list and takes its partial with it', () async {
+      // Nothing to read on a row the user asked to stop, and no failure the
+      // sidebar should count.
       final controller = StreamController<List<int>>();
       transport.enqueueControlled(urlFor(1), controller,
           contentLength: body.length);
       enqueue(1);
       await settle();
-
-      await queue().cancel(1);
-      expect(jobOf(1).state, DownloadJobState.cancelled);
-      expect(jobOf(1).error, isNull);
-      closeAll([controller]);
-    });
-
-    test('and neither does one that never started', () async {
-      final controllers = [
-        for (var i = 0; i < 3; i++) StreamController<List<int>>()
-      ];
-      for (var i = 0; i < 3; i++) {
-        transport.enqueueControlled(urlFor(i + 1), controllers[i],
-            contentLength: body.length);
-      }
-      for (var i = 1; i <= 3; i++) {
-        enqueue(i);
-      }
+      controller.add(body.sublist(0, 50));
       await settle();
 
-      await queue().cancel(3);
-      expect(jobOf(3).error, isNull);
-      closeAll(controllers);
+      await queue().cancel(1);
+      await waitUntil(() => gone(1), 'the row to leave');
+      expect(temp.listSync().whereType<File>().where((f) => f.path.endsWith('.part')), isEmpty);
+      closeAll([controller]);
     });
 
     test('an installing job cannot be cancelled', () async {
@@ -333,8 +349,299 @@ void main() {
       expect(archive.existsSync(), isTrue);
 
       await queue().cancel(1);
-      expect(jobOf(1).state, DownloadJobState.cancelled);
+      expect(gone(1), isTrue);
       expect(archive.existsSync(), isFalse);
+    });
+  });
+
+  group('pause', () {
+    test('keeps the partial, frees the slot for the next job, and Resume puts it first in line', () async {
+      final first = StreamController<List<int>>();
+      final second = StreamController<List<int>>();
+      final third = StreamController<List<int>>();
+      transport.enqueueControlled(urlFor(1), first, contentLength: body.length);
+      transport.enqueueControlled(urlFor(2), second, contentLength: body.length);
+      transport.enqueueControlled(urlFor(3), third, contentLength: body.length);
+      for (var i = 1; i <= 3; i++) {
+        enqueue(i);
+      }
+      await settle();
+      first.add(body.sublist(0, 80));
+      await waitUntil(() => (jobOf(1).progress?.received ?? 0) == 80, 'bytes to arrive');
+
+      await queue().pause(1);
+      await waitUntil(() => jobOf(3).state == DownloadJobState.running, 'the freed slot to go to the next job');
+      expect(jobOf(1).state, DownloadJobState.paused);
+      expect(jobOf(1).error, isNull);
+      final part = File('${temp.path}/mod1.rar.part');
+      expect(part.existsSync(), isTrue, reason: 'the partial is what Resume picks up from');
+      expect(part.lengthSync(), 80);
+
+      // A free slot: the resumed job takes it, ahead of any queued job.
+      queue().resume(1);
+      expect(jobOf(1).state, DownloadJobState.queued);
+      expect(jobOf(1).resumed, isTrue);
+      // A 200 to the ranged request starts over, under the resume policy; either way the archive is whole.
+      transport.enqueue(urlFor(1), body: body);
+      second.add(body);
+      unawaited(second.close());
+      await waitUntil(() => jobOf(1).state == DownloadJobState.downloaded, 'the resumed transfer to finish');
+      expect(jobOf(1).archive!.readAsBytesSync(), body);
+      closeAll([first, second, third]);
+    });
+
+    test('a second Install of a paused file resumes it rather than starting another', () async {
+      final controller = StreamController<List<int>>();
+      transport.enqueueControlled(urlFor(1), controller, contentLength: body.length);
+      final job = enqueue(1);
+      await settle();
+      await queue().pause(1);
+      await waitUntil(() => jobOf(1).state == DownloadJobState.paused, 'the pause');
+
+      final controller2 = StreamController<List<int>>();
+      transport.enqueueControlled(urlFor(1), controller2, contentLength: body.length);
+      final again = enqueue(1);
+      expect(again.seq, job.seq);
+      expect(jobs(), hasLength(1));
+      await waitUntil(() => jobOf(1).state == DownloadJobState.running, 'the resume');
+      closeAll([controller, controller2]);
+    });
+
+    test('cancelling a paused job deletes its partial and leaves the list', () async {
+      final controller = StreamController<List<int>>();
+      transport.enqueueControlled(urlFor(1), controller, contentLength: body.length);
+      enqueue(1);
+      await settle();
+      controller.add(body.sublist(0, 40));
+      await waitUntil(() => (jobOf(1).progress?.received ?? 0) == 40, 'bytes to arrive');
+      await queue().pause(1);
+      await waitUntil(() => jobOf(1).state == DownloadJobState.paused, 'the pause');
+      expect(File('${temp.path}/mod1.rar.part').existsSync(), isTrue);
+
+      await queue().cancel(1);
+      expect(gone(1), isTrue);
+      expect(File('${temp.path}/mod1.rar.part').existsSync(), isFalse);
+      expect(File('${temp.path}/mod1.rar.part.json').existsSync(), isFalse);
+      closeAll([controller]);
+    });
+
+    test('Resume pressed before the pause has stopped the transfer waits for the stop, and the row keeps going',
+        () async {
+      final first = StreamController<List<int>>();
+      transport.enqueueControlled(urlFor(1), first, contentLength: body.length);
+      enqueue(1);
+      await settle();
+      first.add(body.sublist(0, 80));
+      await waitUntil(() => (jobOf(1).progress?.received ?? 0) == 80, 'bytes to arrive');
+
+      transport.enqueue(urlFor(1), body: body);
+      // In the same turn: the stop the pause asked for has not come back yet.
+      final paused = queue().pause(1);
+      queue().resume(1);
+      expect(jobOf(1).state, DownloadJobState.paused, reason: 'a second transfer now would share the .part');
+      expect(transport.requests, hasLength(1));
+
+      await paused;
+      await waitUntil(() => jobOf(1).state == DownloadJobState.downloaded, 'the resumed transfer to finish');
+      expect(jobs(), hasLength(1));
+      expect(transport.requests, hasLength(2));
+      expect(jobOf(1).archive!.readAsBytesSync(), body);
+      closeAll([first]);
+    });
+
+    test('Cancel pressed before the pause has stopped the transfer still takes the row and the partial', () async {
+      final controller = StreamController<List<int>>();
+      transport.enqueueControlled(urlFor(1), controller, contentLength: body.length);
+      enqueue(1);
+      await settle();
+      controller.add(body.sublist(0, 40));
+      await waitUntil(() => (jobOf(1).progress?.received ?? 0) == 40, 'bytes to arrive');
+
+      final paused = queue().pause(1);
+      await queue().cancel(1);
+      await paused;
+      await settle();
+
+      expect(gone(1), isTrue);
+      expect(File('${temp.path}/mod1.rar.part').existsSync(), isFalse);
+      closeAll([controller]);
+    });
+
+    test('Remove from queue on a resumed download takes its partial too', () async {
+      final first = StreamController<List<int>>();
+      final second = StreamController<List<int>>();
+      final third = StreamController<List<int>>();
+      transport.enqueueControlled(urlFor(1), first, contentLength: body.length);
+      transport.enqueueControlled(urlFor(2), second, contentLength: body.length);
+      transport.enqueueControlled(urlFor(3), third, contentLength: body.length);
+      for (var i = 1; i <= 3; i++) {
+        enqueue(i);
+      }
+      await settle();
+      first.add(body.sublist(0, 40));
+      await waitUntil(() => (jobOf(1).progress?.received ?? 0) == 40, 'bytes to arrive');
+      await queue().pause(1);
+      await waitUntil(() => jobOf(3).state == DownloadJobState.running, 'the freed slot to go to the next job');
+
+      // Both slots are taken, so the resumed download waits in line.
+      queue().resume(1);
+      expect(jobOf(1).state, DownloadJobState.queued);
+      expect(jobOf(1).resumed, isTrue);
+      expect(File('${temp.path}/mod1.rar.part').existsSync(), isTrue);
+
+      await queue().cancel(1);
+      expect(gone(1), isTrue);
+      expect(File('${temp.path}/mod1.rar.part').existsSync(), isFalse);
+      expect(File('${temp.path}/mod1.rar.part.json').existsSync(), isFalse);
+      closeAll([first, second, third]);
+    });
+
+    test('a new press on a paused file takes over what happens once it lands', () async {
+      final controller = StreamController<List<int>>();
+      transport.enqueueControlled(urlFor(1), controller, contentLength: body.length);
+      queue().enqueue(file: fileFor(1), subject: 'mod 1', intent: DownloadIntent.keepArchive);
+      await settle();
+      await queue().pause(1);
+      await waitUntil(() => jobOf(1).state == DownloadJobState.paused, 'the pause');
+
+      final controller2 = StreamController<List<int>>();
+      transport.enqueueControlled(urlFor(1), controller2, contentLength: body.length);
+      queue().enqueue(
+        file: fileFor(1),
+        subject: 'Mod One',
+        intent: DownloadIntent.install,
+        characterId: 'anby',
+        turnOn: true,
+      );
+
+      final job = jobOf(1);
+      expect(jobs(), hasLength(1));
+      expect(job.intent, DownloadIntent.install);
+      expect(job.characterId, 'anby');
+      expect(job.turnOn, isTrue);
+      expect(job.subject, 'Mod One');
+      await waitUntil(() => jobOf(1).state == DownloadJobState.running, 'the resume');
+      closeAll([controller, controller2]);
+    });
+
+    test('an update download does not pause', () async {
+      final controller = StreamController<List<int>>();
+      transport.enqueueControlled(urlFor(1), controller, contentLength: body.length);
+      enqueue(1, intent: DownloadIntent.callerHandles);
+      await settle();
+      await queue().pause(1);
+      expect(jobOf(1).state, DownloadJobState.running);
+      closeAll([controller]);
+    });
+  });
+
+  group('waiting for the user', () {
+    Future<void> landed(int fileId) async {
+      transport.enqueue(urlFor(fileId), body: body);
+      enqueue(fileId);
+      await waitUntil(() => jobs().any((j) => j.file.idRow == fileId && j.state == DownloadJobState.downloaded),
+          'the transfer to land');
+    }
+
+    test('a waiting job frees the install slot, and once answered goes ahead of jobs that have not waited', () async {
+      await landed(1);
+      await landed(2);
+      await landed(3);
+      expect(queue().claimNextForHost()?.seq, 1);
+      queue().markWaiting(1, const InstallWait(InstallQuestion.severalFolders, folderCount: 3), prepared: 'kept');
+      expect(jobOf(1).state, DownloadJobState.waiting);
+      expect(jobOf(1).wait?.folderCount, 3);
+
+      // The slot is free: the next job installs while the first waits.
+      expect(queue().claimNextForHost()?.seq, 2);
+      queue().markDone(2, outcome: JobOutcome.installed, installed: const ['B']);
+
+      queue().markAnswered(1, prepared: 'answered');
+      expect(jobOf(1).state, DownloadJobState.downloaded);
+      expect(jobOf(1).wait, isNull);
+      expect(queue().claimNextForHost()?.seq, 1, reason: 'answered, so ahead of job 3');
+      expect(jobOf(1).prepared, 'answered');
+    });
+
+    test("Don't install deletes the archive and the unpacked folders, and the row leaves the list", () async {
+      await landed(1);
+      final archive = jobOf(1).archive!;
+      final extract = Directory.systemTemp.createTempSync('zzz_archive_extract_');
+      final folder = Directory('${extract.path}/Mod')..createSync();
+      queue().claimNextForHost();
+      queue().markWaiting(1, const InstallWait(InstallQuestion.patch), unpacked: [folder.path]);
+
+      await queue().decline(1);
+
+      expect(gone(1), isTrue);
+      expect(archive.existsSync(), isFalse);
+      expect(extract.existsSync(), isFalse);
+    });
+
+    test('Cancel on an answered download waiting for the slot deletes the folders it unpacked', () async {
+      await landed(1);
+      final extract = Directory.systemTemp.createTempSync('zzz_archive_extract_');
+      final folder = Directory('${extract.path}/Mod')..createSync();
+      queue().claimNextForHost();
+      queue().markWaiting(1, const InstallWait(InstallQuestion.severalFolders, folderCount: 2), unpacked: [folder.path]);
+      queue().markAnswered(1, prepared: 'answered');
+      expect(jobOf(1).state, DownloadJobState.downloaded);
+
+      await queue().cancel(1);
+
+      expect(gone(1), isTrue);
+      expect(extract.existsSync(), isFalse);
+    });
+
+    test('the password goes once the unpack it was given for has run', () async {
+      await landed(1);
+      queue().claimNextForHost();
+      queue().markWaiting(1, const InstallWait(InstallQuestion.password));
+      queue().markAnswered(1, password: 'SECRET');
+      queue().claimNextForHost();
+      queue().dropPassword(1);
+      expect(jobOf(1).password, isNull);
+      expect(jobOf(1).state, DownloadJobState.installing);
+    });
+
+    test('a password is held until the run it was given for, then dropped', () async {
+      await landed(1);
+      queue().claimNextForHost();
+      queue().markWaiting(1, const InstallWait(InstallQuestion.password));
+      queue().markAnswered(1, password: 'SECRET');
+      expect(jobOf(1).password, 'SECRET');
+      queue().claimNextForHost();
+      expect(jobOf(1).password, 'SECRET');
+      queue().markWaiting(1, const InstallWait(InstallQuestion.password, passwordFailed: true));
+      expect(jobOf(1).password, isNull);
+      expect(jobOf(1).wait?.passwordFailed, isTrue);
+    });
+  });
+
+  group('what a job carries', () {
+    test('the character and Turn on after installing travel with it, through a retry', () async {
+      transport.enqueueError(urlFor(1), const SocketException('no route'));
+      queue().enqueue(
+        file: fileFor(1),
+        subject: 'mod 1',
+        intent: DownloadIntent.install,
+        characterId: 'anby',
+        turnOn: true,
+      );
+      expect(jobOf(1).characterId, 'anby');
+      expect(jobOf(1).turnOn, isTrue);
+      await waitUntil(() => jobOf(1).state == DownloadJobState.failed, 'the transfer to fail');
+
+      transport.enqueue(urlFor(1), body: body);
+      queue().retry(1);
+      await waitUntil(() => jobOf(1).state == DownloadJobState.downloaded, 'the retry to finish');
+      expect(jobOf(1).characterId, 'anby');
+      expect(jobOf(1).turnOn, isTrue);
+    });
+
+    test('a job turns nothing on unless asked', () {
+      transport.enqueue(urlFor(1), body: body);
+      expect(enqueue(1).turnOn, isFalse);
     });
   });
 
@@ -424,6 +731,7 @@ void main() {
       final finished = enqueue(1, intent: DownloadIntent.callerHandles);
       enqueue(2);
       await queue().completionOf(finished.seq);
+      queue().endUpdate(finished.seq, const UpdateWritten(JobOutcome.updated));
 
       queue().clearFinished();
       expect(jobs().map((j) => j.seq), [2]);

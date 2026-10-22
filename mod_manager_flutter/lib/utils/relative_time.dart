@@ -8,17 +8,14 @@ library;
 
 /// The coarsest unit that still reads sensibly for a given distance in time.
 enum RelativeUnit {
-  /// Under a minute — rendered as a phrase, with no count.
+  /// Under a minute, or in the future: "just now", with no count.
   justNow,
   minutes,
   hours,
   days,
   weeks,
   months,
-  years;
-
-  /// Suffix of the l10n key (`time.<key>`).
-  String get l10nKey => name;
+  years,
 }
 
 /// A count and its unit. [count] is 0 only for [RelativeUnit.justNow].
@@ -63,9 +60,8 @@ RelativeAge relativeAge(DateTime instant, {required DateTime now}) {
   final months = days ~/ _daysPerMonth;
   if (months < 12) return (count: months, unit: RelativeUnit.months);
 
-  // Guarded with a floor of 1: at 364 days the month bucket already reads 12,
-  // which must become "1y" rather than "0y" even though 364 / 365 truncates to
-  // zero. Without this the card would claim a year-old mod is "0y" old.
+  // Floored at 1: at 360 to 364 days the month bucket already reads 12, so the
+  // year bucket starts there, while days / 365 still truncates to zero.
   final years = days ~/ _daysPerYear;
   return (count: years < 1 ? 1 : years, unit: RelativeUnit.years);
 }

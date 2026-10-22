@@ -66,11 +66,14 @@ class ZenithType extends ThemeExtension<ZenithType> {
     required this.monoSmall,
     required this.wordmark,
     required this.pageTitle,
+    required this.panelTitle,
     required this.lead,
     required this.watermark,
     required this.watermarkMedium,
     required this.watermarkLarge,
     required this.initials,
+    required this.initialsSmall,
+    required this.initialsLarge,
   });
 
   /// A section label such as LIBRARY or IN-GAME KEYS. The widget upper-cases the text; the style only tracks it out.
@@ -88,6 +91,9 @@ class ZenithType extends ThemeExtension<ZenithType> {
   /// A mod's name at the top of its page.
   final TextStyle pageTitle;
 
+  /// The heading of a panel that slides over the page, such as Downloads.
+  final TextStyle panelTitle;
+
   /// The one sentence a section leads with, such as the Updates page's coverage line.
   final TextStyle lead;
 
@@ -102,6 +108,12 @@ class ZenithType extends ThemeExtension<ZenithType> {
 
   /// A character's initials on a small tile with no portrait.
   final TextStyle initials;
+
+  /// The same on the 22px face inside the Browse character chip.
+  final TextStyle initialsSmall;
+
+  /// The same on a 60px tile of the Browse character picker.
+  final TextStyle initialsLarge;
 
   static final ZenithType standard = ZenithType(
     caps: const TextStyle(
@@ -126,6 +138,13 @@ class ZenithType extends ThemeExtension<ZenithType> {
       fontWeight: FontWeight.w700,
       height: 1.1,
       letterSpacing: 30 * -0.01,
+    ),
+    panelTitle: const TextStyle(
+      fontFamily: kDisplayFont,
+      fontSize: 18,
+      fontWeight: FontWeight.w700,
+      height: 1.25,
+      letterSpacing: 18 * -0.01,
     ),
     lead: const TextStyle(
       fontFamily: kUiFont,
@@ -156,6 +175,8 @@ class ZenithType extends ThemeExtension<ZenithType> {
       letterSpacing: 168 * -0.01,
     ),
     initials: const TextStyle(fontFamily: kDisplayFont, fontSize: 11, fontWeight: FontWeight.w700, height: 1),
+    initialsSmall: const TextStyle(fontFamily: kDisplayFont, fontSize: 8, fontWeight: FontWeight.w700, height: 1),
+    initialsLarge: const TextStyle(fontFamily: kDisplayFont, fontSize: 14, fontWeight: FontWeight.w700, height: 1),
   );
 
   static ZenithType of(BuildContext context) => Theme.of(context).extension<ZenithType>() ?? standard;
@@ -167,22 +188,28 @@ class ZenithType extends ThemeExtension<ZenithType> {
     TextStyle? monoSmall,
     TextStyle? wordmark,
     TextStyle? pageTitle,
+    TextStyle? panelTitle,
     TextStyle? lead,
     TextStyle? watermark,
     TextStyle? watermarkMedium,
     TextStyle? watermarkLarge,
     TextStyle? initials,
+    TextStyle? initialsSmall,
+    TextStyle? initialsLarge,
   }) => ZenithType(
     caps: caps ?? this.caps,
     mono: mono ?? this.mono,
     monoSmall: monoSmall ?? this.monoSmall,
     wordmark: wordmark ?? this.wordmark,
     pageTitle: pageTitle ?? this.pageTitle,
+    panelTitle: panelTitle ?? this.panelTitle,
     lead: lead ?? this.lead,
     watermark: watermark ?? this.watermark,
     watermarkMedium: watermarkMedium ?? this.watermarkMedium,
     watermarkLarge: watermarkLarge ?? this.watermarkLarge,
     initials: initials ?? this.initials,
+    initialsSmall: initialsSmall ?? this.initialsSmall,
+    initialsLarge: initialsLarge ?? this.initialsLarge,
   );
 
   @override

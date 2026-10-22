@@ -1,12 +1,10 @@
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mod_manager_flutter/models/gamebanana/gb_enums.dart';
-import 'package:mod_manager_flutter/models/gamebanana/gb_image.dart';
-import 'package:mod_manager_flutter/models/gamebanana/gb_page.dart';
-import 'package:mod_manager_flutter/models/gamebanana/gb_submitter.dart';
-import 'package:mod_manager_flutter/models/gamebanana/gb_top_sub.dart';
+import 'package:mod_manager_flutter/core/palette.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gamebanana.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/components/marketplace/gb_top_subs_carousel.dart';
@@ -16,6 +14,7 @@ import 'package:mod_manager_flutter/utils/marketplace_providers.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
 import 'support/fixtures.dart';
+import 'support/library_override.dart';
 import 'support/localized_harness.dart';
 import 'support/origin_shorthand.dart';
 
@@ -60,22 +59,36 @@ void main() {
     // error — silently, as an unread `AsyncValue`. Every "no badge" assertion
     // below would then pass for the wrong reason.
     InstalledModsIndex installed = InstalledModsIndex.empty,
+    Map<int, GbMod> enrichment = const {},
+    void Function(int, GbFile)? onInstallFile,
+    List<Override> extra = const [],
+    double? width,
   }) async {
+    // Auto-advance off by default: it would walk the carousel forward while
+    // `pumpAndSettle` settles, so "the first card is showing" would be racing a
+    // timer. The auto-advance group below opts back in explicitly.
+    final carousel = GbTopSubsCarousel(
+      onOpenMod: onOpenMod ?? (_) {},
+      onInstallFile: onInstallFile,
+      autoAdvanceInterval: autoAdvance,
+    );
     await pumpLocalized(
       tester,
-      // Auto-advance off by default: it would walk the carousel forward while
-      // `pumpAndSettle` settles, so "the first card is showing" would be racing a
-      // timer. The auto-advance group below opts back in explicitly.
-      GbTopSubsCarousel(
-        onOpenMod: onOpenMod ?? (_) {},
-        autoAdvanceInterval: autoAdvance,
-      ),
+      width == null
+          ? carousel
+          : Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(width: width, child: carousel),
+            ),
       overrides: [
         topSubsProvider.overrideWith((ref) async => subs ?? captured),
         contentFilterProvider.overrideWith((ref) => filter),
         installedModsIndexProvider.overrideWith((ref) async => installed),
+        modEnrichmentProvider.overrideWith((ref, key) async => enrichment),
+        ...extra,
       ],
     );
+    expectBuilt(GbTopSubsCarousel);
   }
 
   group('one card at a time', () {
@@ -138,35 +151,38 @@ void main() {
       expect(find.text('1 / 2'), findsOneWidget);
     });
 
-    testWidgets('the ends disable rather than wrap', (tester) async {
-      // Clamped on purpose: a disabled arrow says "this is the end", where looping
-      // silently back to the start reads as a glitch.
+    testWidgets('wrap around at both ends', (tester) async {
       await pump(
         tester,
         filter: ContentFilterMode.show,
         subs: [
           sub(1, GbTopSubPeriod.today, name: 'First'),
           sub(2, GbTopSubPeriod.week, name: 'Second'),
+          sub(3, GbTopSubPeriod.month, name: 'Third'),
         ],
       );
 
-      IconButton button(IconData icon) => tester.widget<IconButton>(
-            find.ancestor(
-              of: find.byIcon(icon),
-              matching: find.byType(IconButton),
-            ),
-          );
-
-      expect(button(Icons.chevron_left).onPressed, isNull,
-          reason: 'no previous on the first card');
-      expect(button(Icons.chevron_right).onPressed, isNotNull);
+      await tester.tap(find.byTooltip('Previous'));
+      await tester.pumpAndSettle();
+      expect(find.text('Third'), findsOneWidget, reason: 'previous from the first slide is the last');
+      expect(find.text('3 / 3'), findsOneWidget);
 
       await tester.tap(find.byTooltip('Next'));
       await tester.pumpAndSettle();
+      expect(find.text('First'), findsOneWidget, reason: 'next from the last slide is the first');
+    });
 
-      expect(button(Icons.chevron_left).onPressed, isNotNull);
-      expect(button(Icons.chevron_right).onPressed, isNull,
-          reason: 'no next on the last card');
+    testWidgets('are 36px, at the edges', (tester) async {
+      await pump(
+        tester,
+        filter: ContentFilterMode.show,
+        subs: [sub(1, GbTopSubPeriod.today), sub(2, GbTopSubPeriod.week)],
+      );
+      final slide = tester.getRect(find.byType(PageView));
+      final previous = tester.getRect(find.byTooltip('Previous'));
+      expect(previous.size, const Size(36, 36));
+      expect(previous.left - slide.left, moreOrLessEquals(14, epsilon: 1.5));
+      expect(slide.right - tester.getRect(find.byTooltip('Next')).right, moreOrLessEquals(14, epsilon: 1.5));
     });
 
     testWidgets('steps through every captured entry without error',
@@ -285,6 +301,8 @@ void main() {
         overrides: [
           topSubsProvider.overrideWith((ref) async => three()),
           contentFilterProvider.overrideWith((ref) => ContentFilterMode.show),
+          installedModsIndexProvider.overrideWith((ref) async => InstalledModsIndex.empty),
+          modEnrichmentProvider.overrideWith((ref, key) async => const {}),
         ],
       );
       addTearDown(container.dispose);
@@ -440,21 +458,133 @@ void main() {
     });
   });
 
-  testWidgets('tapping the card opens that mod id', (tester) async {
-    int? opened;
-    await pump(
-      tester,
-      subs: [sub(4242, GbTopSubPeriod.today, name: 'Target')],
-      filter: ContentFilterMode.show,
-      onOpenMod: (id) => opened = id,
-    );
-    await tester.tap(find.text('Target'));
-    await tester.pumpAndSettle();
-    expect(opened, 4242,
-        reason: 'a top-sub id is a normal mod id and opens the detail view');
+  group('opening the mod', () {
+    testWidgets('View mod opens that mod id', (tester) async {
+      int? opened;
+      await pump(
+        tester,
+        subs: [sub(4242, GbTopSubPeriod.today, name: 'Target')],
+        filter: ContentFilterMode.show,
+        onOpenMod: (id) => opened = id,
+      );
+      await tester.tap(find.text('View mod'));
+      await tester.pumpAndSettle();
+      expect(opened, 4242, reason: 'a top-sub id is a normal mod id and opens the detail view');
+    });
+
+    testWidgets('so does the cover outside the box', (tester) async {
+      int? opened;
+      await pump(
+        tester,
+        subs: [sub(4242, GbTopSubPeriod.today, name: 'Target')],
+        filter: ContentFilterMode.show,
+        onOpenMod: (id) => opened = id,
+      );
+      final slide = tester.getRect(find.byType(PageView));
+      await tester.tapAt(slide.topCenter + const Offset(0, 30));
+      await tester.pumpAndSettle();
+      expect(opened, 4242);
+    });
   });
 
-  group('"in your library" badge', () {
+  group('the info box', () {
+    testWidgets('is drawn as designed: 460 at most, on the dark ground', (tester) async {
+      await pump(tester, subs: [sub(1, GbTopSubPeriod.today, name: 'Target')], filter: ContentFilterMode.show);
+      final title = tester.widget<Text>(find.text('Target'));
+      expect(title.style?.fontFamily, 'Unbounded');
+      final box = find.ancestor(of: find.text('Target'), matching: find.byType(Container)).first;
+      expect(tester.getSize(box).width, lessThanOrEqualTo(460));
+      final ground = (tester.widget<Container>(box).decoration! as BoxDecoration).color!;
+      expect(ground.a, moreOrLessEquals(0.86, epsilon: 0.01));
+      expect(tester.getSize(find.byType(PageView)).height, moreOrLessEquals(278, epsilon: 0.5));
+    });
+
+    final root = GbTopSub(
+      idRow: 533785,
+      period: GbTopSubPeriod.today,
+      name: 'Target',
+      visibility: GbVisibility.show,
+      likeCount: 1234,
+      rootCategory: const GbCategoryRef(name: 'Character Skins'),
+    );
+
+    testWidgets('names the root until the enrichment answers, and leaves downloads out', (tester) async {
+      await pump(tester, subs: [root], filter: ContentFilterMode.show);
+      expect(find.text('Character Skins'), findsOneWidget);
+      expect(find.byIcon(Icons.download_rounded), findsNothing);
+    });
+
+    testWidgets('then names the character, with downloads', (tester) async {
+      final enriched = enrichmentByMod(parseBareList(loadGbFixture('mod_multi_enrich_p1'), GbMod.fromJson));
+      await pump(tester, subs: [root], filter: ContentFilterMode.show, enrichment: enriched);
+      expect(find.text('Ellen Joe'), findsOneWidget);
+      expect(find.text('Character Skins'), findsNothing);
+      expect(find.text('151.1k'), findsOneWidget);
+    });
+
+    testWidgets('Install queues the one current file, as a card does', (tester) async {
+      final enriched = enrichmentByMod(parseBareList(loadGbFixture('mod_multi_enrich_newest'), GbMod.fromJson));
+      (int, GbFile)? queued;
+      await pump(
+        tester,
+        subs: [sub(730505, GbTopSubPeriod.today, name: 'Target')],
+        filter: ContentFilterMode.show,
+        enrichment: enriched,
+        onInstallFile: (id, file) => queued = (id, file),
+      );
+      await tester.tap(find.text('Install'));
+      await tester.pumpAndSettle();
+      expect(queued?.$1, 730505);
+      expect(queued?.$2.idRow, 1858310);
+    });
+
+    testWidgets('Install opens the mod page when there are several files', (tester) async {
+      final enriched = enrichmentByMod(parseBareList(loadGbFixture('mod_multi_enrich_p1'), GbMod.fromJson));
+      int? opened;
+      await pump(
+        tester,
+        subs: [sub(541825, GbTopSubPeriod.today, name: 'Target')],
+        filter: ContentFilterMode.show,
+        enrichment: enriched,
+        onOpenMod: (id) => opened = id,
+        onInstallFile: (_, _) => fail('a file is never picked for the user'),
+      );
+      await tester.tap(find.text('Install'));
+      await tester.pumpAndSettle();
+      expect(opened, 541825);
+    });
+  });
+
+  group('the position pill', () {
+    testWidgets("dots the current period's entries, the current one wide in the accent", (tester) async {
+      await pump(
+        tester,
+        filter: ContentFilterMode.show,
+        subs: [
+          sub(1, GbTopSubPeriod.today),
+          sub(2, GbTopSubPeriod.today),
+          sub(3, GbTopSubPeriod.today),
+          sub(4, GbTopSubPeriod.week),
+        ],
+      );
+      Size dot(int i) => tester.getSize(find.byKey(ValueKey('carousel-dot-$i')));
+      expect(dot(0), const Size(22, 8));
+      expect(dot(1), const Size(8, 8));
+      expect(dot(2), const Size(8, 8));
+      expect(find.byKey(const ValueKey('carousel-dot-3')), findsNothing, reason: 'another period');
+      final fill = tester.widget<AnimatedContainer>(
+        find.descendant(of: find.byKey(const ValueKey('carousel-dot-0')), matching: find.byType(AnimatedContainer)),
+      );
+      expect((fill.decoration! as BoxDecoration).color, ZenithPalette.dark(AccentChoice.violet).accent);
+
+      await tester.tap(find.byKey(const ValueKey('carousel-dot-2')));
+      await tester.pumpAndSettle();
+      expect(find.text('3 / 4'), findsOneWidget);
+      expect(dot(2), const Size(22, 8));
+    });
+  });
+
+  group('a mod in the library', () {
     InstalledModsIndex libraryWith(int modId, String folder) =>
         InstalledModsIndex.fromMods([
           ModInfo(
@@ -471,7 +601,7 @@ void main() {
           ),
         ]);
 
-    testWidgets('marks a featured mod already in the library', (tester) async {
+    testWidgets('offers In library in place of Install', (tester) async {
       await pump(
         tester,
         subs: [sub(4242, GbTopSubPeriod.today, name: 'Target')],
@@ -479,11 +609,11 @@ void main() {
         installed: libraryWith(4242, 'Target Folder'),
       );
 
-      expect(find.text('In library'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'In library'), findsOneWidget);
+      expect(find.text('Install'), findsNothing);
     });
 
-    testWidgets('says nothing about a mod the library does not have',
-        (tester) async {
+    testWidgets('a mod the library does not have offers Install, filled', (tester) async {
       await pump(
         tester,
         subs: [sub(4242, GbTopSubPeriod.today, name: 'Target')],
@@ -492,15 +622,36 @@ void main() {
       );
 
       expect(find.text('In library'), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Install'), findsOneWidget);
     });
 
-    testWidgets('is still shown on a card that is blurred', (tester) async {
-      // Owning a mod is not adult content, so the badge is not gated on the
-      // card having been revealed. That it also *paints over* the scrim is a
-      // matter of Stack order and is not asserted here: unlike the grid card,
-      // both orders behave identically under a tap, so the only test available
-      // would be one about traversal order — brittle, and the consequence of
-      // getting it wrong is a dimmed pill rather than a wrong answer.
+    testWidgets('In library shows the mod in the Characters view', (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          topSubsProvider.overrideWith((ref) async => [sub(4242, GbTopSubPeriod.today, name: 'Target')]),
+          contentFilterProvider.overrideWith((ref) => ContentFilterMode.show),
+          installedModsIndexProvider.overrideWith((ref) async => libraryWith(4242, 'Target Folder')),
+          modEnrichmentProvider.overrideWith((ref, key) async => const {}),
+          libraryOf([ModInfo(id: 'Target Folder', name: 'Target Folder', characterId: 'ellen', isActive: false)]),
+        ],
+      );
+      addTearDown(container.dispose);
+      await pumpLocalized(
+        tester,
+        GbTopSubsCarousel(onOpenMod: (_) {}, autoAdvanceInterval: null),
+        container: container,
+      );
+
+      await tester.tap(find.text('In library'));
+      await tester.pumpAndSettle();
+
+      expect(container.read(destinationProvider), AppDestination.characters);
+      expect(container.read(selectedModIdProvider), 'Target Folder');
+    });
+
+    testWidgets('is still said on a slide that is blurred', (tester) async {
+      // Owning a mod is not adult content, so the box is not gated on the
+      // slide having been revealed.
       await pump(
         tester,
         subs: [
@@ -512,56 +663,111 @@ void main() {
       );
 
       expect(find.text('Click to reveal'), findsOneWidget,
-          reason: 'the card is meant to still be blurred here');
+          reason: 'the slide is meant to still be blurred here');
       expect(find.text('In library'), findsOneWidget);
     });
+  });
 
-    testWidgets('sits beside the period badge, not in a corner of its own',
-        (tester) async {
-      await pump(
-        tester,
-        subs: [sub(4242, GbTopSubPeriod.today, name: 'Target')],
-        filter: ContentFilterMode.show,
-        installed: libraryWith(4242, 'Target Folder'),
-      );
+  group('nothing on the slide covers the info box', () {
+    // Long enough to wrap to two lines in the box at every width, which is what makes the box tall.
+    const longName = 'Victorian Ballgown with Lace Gloves and a Parasol Variant Pack';
+    Rect boxOf(WidgetTester tester, String name) =>
+        tester.getRect(find.ancestor(of: find.text(name), matching: find.byType(Container)).first);
 
-      final period = tester.getRect(find.text('Best of today'));
-      final badge = tester.getRect(find.text('In library'));
+    for (final width in <double>[560, 646, 800, 1000, 1200]) {
+      testWidgets('the position pill, ${width.toInt()}px', (tester) async {
+        await pump(tester, filter: ContentFilterMode.show, width: width);
+        final name = captured.first.name!;
+        final pill = tester.getRect(find.ancestor(of: find.text('1 / 21'), matching: find.byType(Container)).first);
+        expect(boxOf(tester, name).overlaps(pill), isFalse);
+        expect(tester.takeException(), isNull);
+      });
 
-      expect(badge.left, greaterThan(period.right),
-          reason: 'the badge should follow the period badge, not overlap it');
-      expect(
-        badge.center.dy,
-        moreOrLessEquals(period.center.dy, epsilon: 1.0),
-        reason: 'the two pills should share a baseline',
-      );
-      // Left-hand cluster, so it stays clear of the position counter.
-      final counter = tester.getRect(find.text('1 / 1'));
-      expect(badge.right, lessThan(counter.left));
-    });
+      testWidgets('the reveal label, ${width.toInt()}px', (tester) async {
+        await pump(
+          tester,
+          subs: [sub(1, GbTopSubPeriod.today, name: longName, visibility: GbVisibility.warn)],
+          width: width,
+        );
+        final box = boxOf(tester, longName);
+        for (final label in ['Mature content', 'Click to reveal']) {
+          final rect = tester.getRect(find.text(label));
+          expect(rect.height, greaterThan(0));
+          expect(rect.overlaps(box), isFalse, reason: '"$label" is behind the info box');
+        }
+        expect(tester.takeException(), isNull);
+      });
+    }
+  });
 
-    testWidgets('does not carve a dead zone out of the card', (tester) async {
-      // The badge is an overlay above the card's tap layer rather than inside
-      // it, so anything up there that absorbs a hit steals it — which is the
-      // bug the title and the period badge already had to be `IgnorePointer`ed
-      // to fix.
+  group('the keyboard', () {
+    /// Tabs until [isTarget] holds for the focused node, and fails if it never does.
+    Future<void> tabTo(WidgetTester tester, bool Function(Semantics semantics) isTarget) async {
+      for (var i = 0; i < 20; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pumpAndSettle();
+        final semantics = FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<Semantics>();
+        if (semantics != null && isTarget(semantics)) return;
+      }
+      fail('Tab never reached it');
+    }
+
+    testWidgets('reaches the reveal, and Enter reveals', (tester) async {
       int? opened;
       await pump(
         tester,
-        subs: [sub(4242, GbTopSubPeriod.today, name: 'Target')],
-        filter: ContentFilterMode.show,
+        subs: [sub(7, GbTopSubPeriod.today, visibility: GbVisibility.warn)],
         onOpenMod: (id) => opened = id,
-        installed: libraryWith(4242, 'Target Folder'),
+      );
+      await tabTo(tester, (s) => s.properties.hint == 'Click to reveal');
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(find.text('Click to reveal'), findsNothing);
+      expect(opened, isNull, reason: 'revealing is not opening');
+    });
+
+    testWidgets('the dots are buttons named for their slide, and Space goes to one', (tester) async {
+      final handle = tester.ensureSemantics();
+      await pump(
+        tester,
+        filter: ContentFilterMode.show,
+        subs: [
+          sub(1, GbTopSubPeriod.today, name: 'First'),
+          sub(2, GbTopSubPeriod.today, name: 'Second'),
+        ],
+      );
+      expect(
+        tester.getSemantics(find.byKey(const ValueKey('carousel-dot-1'))),
+        isSemantics(label: 'Second', isButton: true, isSelected: false),
+      );
+      expect(
+        tester.getSemantics(find.byKey(const ValueKey('carousel-dot-0'))),
+        isSemantics(label: 'First', isButton: true, isSelected: true),
       );
 
-      // `tapAt` the badge's position rather than `tap` on the badge: the point
-      // is that a click *there* reaches the card underneath, and `tap` would
-      // warn that the widget it found never received the hit — which is the
-      // pass condition, not a problem.
-      await tester.tapAt(tester.getCenter(find.text('In library')));
+      await tabTo(tester, (s) => s.properties.label == 'Second');
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
       await tester.pumpAndSettle();
-
-      expect(opened, 4242, reason: 'the badge swallowed the click');
+      expect(find.text('2 / 2'), findsOneWidget);
+      handle.dispose();
     });
+  });
+
+  testWidgets('an arrow fills under the pointer, as any button does', (tester) async {
+    await pump(
+      tester,
+      filter: ContentFilterMode.show,
+      subs: [sub(1, GbTopSubPeriod.today), sub(2, GbTopSubPeriod.week)],
+    );
+    Color? fill() => tester
+        .widget<Material>(find.descendant(of: find.byTooltip('Next'), matching: find.byType(Material)).first)
+        .color;
+    final idle = fill();
+
+    final pointer = TestPointer(1, PointerDeviceKind.mouse);
+    await tester.sendEventToBinding(pointer.hover(tester.getCenter(find.byTooltip('Next'))));
+    await tester.pumpAndSettle();
+    expect(fill(), ZenithPalette.dark(AccentChoice.violet).hover);
+    expect(fill(), isNot(idle));
   });
 }

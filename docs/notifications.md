@@ -109,7 +109,12 @@ Picking a kind: a fact with nothing at risk is a Note even where it reads like a
 A "warning" that reports an outright failure is an Error ("tracking not saved", "the game did not start"). An error after which the change partly happened is a Warning ("renamed, but left off").
 An archive that held no mod folder is a Warning: the download worked, but nothing came of it.
 
-**An Error stays until it is closed.** It is text the user has to read and possibly act on, and a run of them folds into "+N more" (§5) rather than filling the corner. Needs you stays for the same reason. Nothing raises Needs you yet; the Downloads panel's decisions will.
+**An Error stays until it is closed.** It is text the user has to read and possibly act on, and a run of them folds into "+N more" (§5) rather than filling the corner. Needs you stays for the same reason.
+
+**Needs you is a download waiting for an answer, and one card says it for all of them** ([`downloads.md`](downloads.md) §10).
+The first waiting download's Working card turns into it and leaves the deck, and `DownloadQueueHost` keeps it in step with the panel's Needs your attention group: "Waiting for your answer" over that download's name and portrait, and with several "3 downloads are waiting for your answer" over their names ("A, B and 1 more") with no portrait (§3). A download joining it is news, so the card moves to the newest place.
+Its one action is Open Downloads, kept with several since it is about the list rather than one mod. The question is never asked from the card: its sentence and its two buttons need the row's room.
+It goes once nothing waits. Closed while downloads still wait, it comes back when another starts waiting; a download whose Working card was hidden raises it too, since hiding the progress never hides what comes of it. Answering a download takes it off the card, and the install that follows raises its own Working card.
 
 ## 5. The stack and the clock
 
@@ -193,7 +198,7 @@ The ones several kinds of card carry are built in `utils/notification_actions.da
 - **Review** on an Update card from a library check or the startup check: clears any open mod page and opens the Updates page.
 - **Open** on the install card for one folder: shows the installed mod in the Library's Characters view, its character's row selected and its details panel open (`showModInCharacters`).
   A mod removed or renamed since is not shown; a Note says it is no longer in the library. A library that couldn't be read is not that: a failed scan keeps the list from before the install as its value, so the error is asked about first, and Open shows the Characters view with the scan's error and its Try again rather than calling the mod gone.
-  There is no "Turn on": Browse's "Turn on after installing" switch decides that before the install.
+  There is no "Turn on": whether an install is turned on belongs where the install is started, the mod page's Turn on after installing switch, not on the card that reports it. A mod that switch couldn't turn on is said beside the card as a warning, "Installed, but not turned on", since the mod arrived; one refused for its shader files or for a network folder gets the Library's own card for that refusal instead.
 
 **Keyboard focus draws a 2px accent ring** on an action, as the canvas's `:focus-visible` does, and never after a click. No key reaches a card yet: Tab moves within the page or dialog in front, and this layer is outside both.
 

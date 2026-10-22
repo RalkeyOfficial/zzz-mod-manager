@@ -41,6 +41,9 @@ enum ReclaimSkipReason {
   /// An archive is being unpacked or imported right now.
   installInProgress,
 
+  /// A download waits for the user's answer in Downloads, holding its unpacked folders.
+  downloadWaiting,
+
   /// Written too recently to be sure it is finished with.
   tooRecent,
 
@@ -115,6 +118,7 @@ class ReclaimPlan {
       if (entry.candidate.target == target &&
           (entry.reason == ReclaimSkipReason.downloadsActive ||
               entry.reason == ReclaimSkipReason.installInProgress ||
+              entry.reason == ReclaimSkipReason.downloadWaiting ||
               entry.reason == ReclaimSkipReason.libraryUnreadable)) {
         return entry.reason;
       }
@@ -178,6 +182,7 @@ ReclaimPlan planReclaim(
   required DateTime now,
   required bool downloadsBusy,
   required bool installBusy,
+  bool downloadWaiting = false,
   required bool libraryReadable,
   required Set<String> reachableLegacyImages,
 
@@ -220,6 +225,10 @@ ReclaimPlan planReclaim(
       case ReclaimTarget.tempExtracts:
         if (installBusy) {
           refuse(candidate, ReclaimSkipReason.installInProgress);
+        } else if (downloadWaiting) {
+          // A waiting download's folders can be older than the grace below, and so can the folder its finish copies
+          // from after a long wait.
+          refuse(candidate, ReclaimSkipReason.downloadWaiting);
         } else if (now.difference(candidate.modified) < rules.tempGrace) {
           refuse(candidate, ReclaimSkipReason.tooRecent);
         } else {

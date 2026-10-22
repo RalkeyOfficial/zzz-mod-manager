@@ -146,17 +146,43 @@ void main() {
       expect(result.autoTags, {'Zhao Nicole': 'nicole'});
     });
 
-    test('an unassigned value falls back to detection', () async {
-      // A mod filed under "Other/Misc" upstream yields no character at all, and
-      // must not lose the one its name would have given it.
-      final folder = await sourceFolder('Ellen Swimsuit');
+    test('Unassigned is told too: the mod is filed there, not under what its name reads as', () async {
+      // A mod page filed under "Other/Misc" upstream names no character, and says the mod goes under Unassigned.
+      final folder = await sourceFolder('Zhao Nicole');
 
       final result = await service.importMods(
         [folder],
-        knownCharacters: {folder: ''},
+        detectionHints: {folder: 'Zhao Nicole.zip'},
+        knownCharacters: {folder: 'unknown'},
+      );
+
+      expect(result.imported, ['Zhao Nicole']);
+      expect(result.autoTags, isEmpty);
+      expect(await sidecarCharacter('Zhao Nicole'), isNull, reason: 'Unassigned is stored as absence');
+    });
+
+    test('a folder with no character told has its name read', () async {
+      final told = await sourceFolder('Zhao Nicole');
+      final untold = await sourceFolder('Ellen Swimsuit');
+
+      final result = await service.importMods(
+        [told, untold],
+        knownCharacters: {told: 'unknown'},
       );
 
       expect(result.autoTags, {'Ellen Swimsuit': 'ellen'});
+    });
+
+    test('a target name installs the folder under that name', () async {
+      final folder = await sourceFolder('Ellen');
+
+      final result = await service.importMods(
+        [folder],
+        targetNames: {folder: 'Ellen (white hair ver)'},
+      );
+
+      expect(result.imported, ['Ellen (white hair ver)']);
+      expect(await sidecarUid('Ellen (white hair ver)'), isNotNull);
     });
 
     test('is per folder, like the hints and the seeds beside it', () async {
@@ -191,7 +217,7 @@ void main() {
       expect(await sidecarCharacter('Zhao Nicole'), 'zhao');
     });
 
-    test('an unassigned value falls back to detection', () async {
+    test('none told falls back to detection', () async {
       final folder = await sourceFolder('Ellen Swimsuit');
 
       final result = await service.importCombinedMod(
@@ -201,6 +227,20 @@ void main() {
       );
 
       expect(result.autoTags, {'Ellen Swimsuit': 'ellen'});
+    });
+
+    test('Unassigned told is honoured', () async {
+      final folder = await sourceFolder('Zhao Nicole');
+
+      final result = await service.importCombinedMod(
+        [folder],
+        'Zhao Nicole',
+        detectionHint: 'Zhao Nicole.zip',
+        knownCharacter: 'unknown',
+      );
+
+      expect(result.autoTags, isEmpty);
+      expect(await sidecarCharacter('Zhao Nicole'), isNull);
     });
   });
 }

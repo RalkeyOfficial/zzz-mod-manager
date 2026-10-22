@@ -12,6 +12,13 @@ import 'dart:io';
 /// Captured from **apiv13** on 2026-08-15, pretty-printed for reviewability —
 /// only whitespace differs from the wire bytes. The withheld pair,
 /// `mod_multi_withheld_581980` and `mod_profile_withheld_581980`, on 2026-10-20.
+/// The Browse enrichment pair on 2026-10-21, both `Mod/Multi` with
+/// `_csvProperties=_idRow,_nDownloadCount,_aCategory,_aFiles`: `mod_multi_enrich_p1`
+/// for the ids of `mod_index_p1`, and `mod_multi_enrich_newest` for a page of
+/// `Generic_Newest` plus the withheld mod 581980. The creator page's pair on 2026-10-21, both `Mod/Index` with
+/// `_aFilters[Generic_Submitter]`, `_sSort=Generic_Newest&_nPerpage=50&_nPage=1`: `mod_index_submitter_2307694`
+/// (Exce, 24 mods across 20 characters and two Bangboo skins) and `mod_index_submitter_3549585` (summersby, UI and
+/// Other/Misc mods filed directly under the root).
 ///
 /// Two things to know before re-capturing:
 ///
