@@ -191,6 +191,9 @@ The memory note `v3-canvas-vs-docs-decisions` holds these. In short:
 Each is reviewable on its own and ends with tests green, docs and changelog updated, and the user's go-ahead.
 
 6b. **Review follow-ups** (a phase of its own, done after phase 6 is committed and before phase 7 starts): what the reviews of phases 5e and 6 found outside their scope, each reviewable and tested like any phase.
+   - Needs the designer first (a canvas change before any code):
+     - The Downloads panel names only the mod, not which file or variant is downloading. Two variants of one mod read the same ("Victorian Ballgown" twice), so a row can't be told from another. The canvas's rule elsewhere is variant text as grey text under the file name, never a tag; the `Downloads` artboard's rows have no place for it yet.
+     - Buttons give no feedback on the button itself when pressed: only a button whose label changes afterwards (Turn on → Show) shows anything. Every button theme in `app_theme.dart` sets `overlayColor` to transparent, so a press draws nothing; hover is the only state. The canvas needs a pressed state (and whether a button shows working while its action runs) for the primary, default, ghost and icon buttons, in both themes and every accent.
    - From phase 5e:
      - Take out (History, the right-click menu) and a patch put into a mod you already have leave the folder's session verdict as it was, so it can name a layer that is gone until the next check. The update dialog's own Take out drops it (`mod_update_dialog.dart`); `removePatchFlow` and `applyPatchInstall` should do the same.
      - A patch from its base's own mod page, put into that base with "Add it to a mod you already have", replaces the base's layer (`withLayerOnTop` drops the layer of the same mod id): the base's file and file list are lost, and the patch gets no History row or Take out. How that case should read is a design call; ask the user.
