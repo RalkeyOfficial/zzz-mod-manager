@@ -181,7 +181,7 @@ class _PressableBadgeState extends State<_PressableBadge> {
 /// pointer as the design's links do. Reachable with Tab and pressed with Enter or Space, with the badge's accent ring
 /// while it has keyboard focus.
 class ZenithLink extends StatefulWidget {
-  const ZenithLink(this.label, {super.key, required this.onTap, this.style, this.maxLines});
+  const ZenithLink(this.label, {super.key, required this.onTap, this.style, this.maxLines, this.strutStyle});
 
   final String label;
   final VoidCallback onTap;
@@ -189,6 +189,9 @@ class ZenithLink extends StatefulWidget {
 
   /// Cuts the label to this many lines with an ellipsis, for a link in a box of fixed height.
   final int? maxLines;
+
+  /// The label's line height, for a box of fixed height that a fallback font's taller line must not outgrow.
+  final StrutStyle? strutStyle;
 
   @override
   State<ZenithLink> createState() => _ZenithLinkState();
@@ -225,6 +228,7 @@ class _ZenithLinkState extends State<ZenithLink> {
               widget.label,
               maxLines: widget.maxLines,
               overflow: widget.maxLines == null ? null : TextOverflow.ellipsis,
+              strutStyle: widget.strutStyle,
               style: _hovered ? style.copyWith(color: palette.text) : style,
             ),
           ),

@@ -222,6 +222,7 @@ An aspect ratio makes the tile *shorter as it gets narrower* while the text bloc
 `GbCardGridDelegate` lays out auto-fill columns of at least 230px with 18px gaps and sets each tile's extent from the column width:
 the 4:3 cover (width × 3/4) plus the text block, whose height is fixed and computed from the type roles at the current text scale (`GbModCard.textBlockHeight`).
 So the text always gets its room and the cover stays 4:3 at any width. Covered by `test/gb_mod_card_test.dart` at 230 to 400px.
+The name and byline force their style's line height with a strut, which that computation counts on: a glyph Geist lacks, such as a Chinese title or author, is drawn from a fallback font whose taller ascent would otherwise grow the line a pixel and overflow the block (`test/gb_mod_card_fallback_font_test.dart`).
 
 **The grid scrolls forever rather than paging.** `marketplaceFeedProvider` holds the pages loaded so far; the next `Mod/Index` page is asked for when the scroll comes within one viewport of the end, and appended.
 A mod already loaded is left out of a later page, since a listing shifts while it is read (new mods arrive at the top of Newest).

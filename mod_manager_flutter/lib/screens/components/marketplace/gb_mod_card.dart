@@ -208,6 +208,9 @@ class _GbModCardState extends ConsumerState<GbModCard> {
     final text = Theme.of(context).textTheme;
     final mod = widget.mod;
     final byline = _byline(loc, mod);
+    // Each line is held to its style's height, which [GbModCard.textBlockHeight] counts on. A glyph Geist lacks, such
+    // as a Chinese title or author, is drawn from a fallback font whose taller ascent would otherwise grow the line.
+    StrutStyle line(TextStyle style) => StrutStyle.fromTextStyle(style, forceStrutHeight: true);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -223,6 +226,7 @@ class _GbModCardState extends ConsumerState<GbModCard> {
                 onTap: widget.onOpen,
                 maxLines: 1,
                 style: text.titleSmall!.copyWith(color: palette.text),
+                strutStyle: line(text.titleSmall!),
               ),
               Tooltip(
                 message: byline.tooltip ?? '',
@@ -231,6 +235,7 @@ class _GbModCardState extends ConsumerState<GbModCard> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: text.bodySmall!.copyWith(color: palette.text3),
+                  strutStyle: line(text.bodySmall!),
                 ),
               ),
             ],
