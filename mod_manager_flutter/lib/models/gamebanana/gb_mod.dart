@@ -207,6 +207,18 @@ class GbMod {
   /// render a record from either without knowing where it came from.
   GbCategoryRef? get displayCategory => category ?? subCategory ?? rootCategory;
 
+  /// The id of the root category the mod is filed under, which is its type.
+  ///
+  /// A listing names the root in [rootCategory] and a profile in [superCategory]. A profile filed directly under a
+  /// root has no parent, and its [category] is the root, if it is one of [kRootCategoryIds]. Null when the record
+  /// names no root id.
+  int? get typeCategoryId {
+    final parent = rootCategory?.idRow ?? superCategory?.idRow;
+    if (parent != null) return parent;
+    final own = displayCategory?.idRow;
+    return kRootCategoryIds.contains(own) ? own : null;
+  }
+
   /// The cover image, if the response carried a gallery.
   GbImage? get coverImage => images.isEmpty ? null : images.first;
 

@@ -33,7 +33,7 @@ void main() {
     onOpenFolder: () {},
     onCheckForUpdate: () {},
     onResolveOrigin: () {},
-    onDelete: () {},
+    onDelete: (_) async {},
     noteWriter: (modId, note) {
       writes.add((modId, note));
       return saved();

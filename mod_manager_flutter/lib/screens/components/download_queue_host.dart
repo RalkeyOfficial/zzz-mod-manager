@@ -436,6 +436,10 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
   }
 
   Future<void> _handle(DownloadJob job) async {
+    // Taken while mounted, as [_drain] only calls this then: the install's end settles the job through them even if
+    // the host is gone by the time it comes.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final loc = context.loc;
     final queue = ref.read(downloadQueueProvider.notifier);
     final archive = job.archive;
     if (archive == null) {
@@ -450,7 +454,6 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
       // A file the user cannot see arriving in a folder they would have to go
       // and look at — the case the notification rules keep a *success* message
       // for. The body is the path because the path is the whole point.
-      final loc = context.loc;
       final title = loc.t('marketplace.download_saved_title');
       final actions = [openFolderAction(loc, context.notify, archive.parent.path)];
       final card = _takeCardFor(job);
@@ -483,9 +486,12 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
       // Taken before the queue changes, or the job leaving it dismisses it.
       final card = _takeCardFor(job);
       queue.markFailed(job.seq, InstallFailure('$error'));
-      if (!mounted) return;
+      if (!mounted) {
+        // Nothing is left to turn the Working card into its result, so it goes rather than spinning on.
+        card?.dismiss();
+        return;
+      }
       // The mod is new; nothing was updated — so not the update flow's wording.
-      final loc = context.loc;
       final title = loc.t('marketplace.install_failed_title');
       // The panel's row holds what the install said went wrong.
       final actions = [
@@ -513,31 +519,43 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
         queue.markWaiting(job.seq, wait, prepared: prepared, unpacked: prepared.folders);
         return;
       case InstallEnds(:final result):
-        await _report(job, result);
+        await _report(job, result, container: container, loc: loc);
     }
   }
 
-  Future<void> _report(DownloadJob job, InstallResult installed) async {
-    final queue = ref.read(downloadQueueProvider.notifier);
+  /// Settles [job] from what its install came to, through [container] and [loc] rather than this host's `ref` and
+  /// `context`: the queue outlives the host, and a job left `installing` would hold the install slot and the
+  /// Storage reclaim's gate for good. Only what needs the host is skipped once it is gone, Turn on after installing
+  /// and the result's card, which leaves new mods installed and off; the job's Working card is dismissed instead.
+  Future<void> _report(
+    DownloadJob job,
+    InstallResult installed, {
+    required ProviderContainer container,
+    required AppLocalizations loc,
+  }) async {
+    final queue = container.read(downloadQueueProvider.notifier);
     var result = installed;
-    if (!mounted) return;
-    if (job.turnOn && result.mods.isNotEmpty) {
+    if (mounted && job.turnOn && result.mods.isNotEmpty) {
       result = await _turnOn(result);
-      if (!mounted) return;
     }
-    showInstallResult(
-      context,
-      result,
-      into: _takeCardFor(job),
-      characterId: job.characterId,
-    );
+    if (mounted) {
+      showInstallResult(
+        context,
+        result,
+        into: _takeCardFor(job),
+        characterId: job.characterId,
+      );
+    } else {
+      // Nothing is left to turn the Working card into the result, so it goes rather than spinning on.
+      _takeCardFor(job)?.dismiss();
+    }
 
     // The library just changed, and both the Library's grid and the
     // marketplace's "in library" badges are drawn from it. Invalidate rather
     // than patch: the mod folder's final name is decided by the import (dedup,
     // the combined-name dialog), so re-reading is the only way to be right
     // about it.
-    ref.invalidate(libraryProvider);
+    container.invalidate(libraryProvider);
 
     if (result.mods.isNotEmpty) {
       queue.markDone(
@@ -550,7 +568,7 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
       queue.markFailed(
         job.seq,
         InstallFailure(
-          result.failure?.title ?? context.loc.t('downloads.failed_install'),
+          result.failure?.title ?? loc.t('downloads.failed_install'),
         ),
       );
     } else if (result.failure != null) {

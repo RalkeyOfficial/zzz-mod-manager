@@ -158,10 +158,11 @@ BulkUpdateCheckPlan planBulkUpdateCheck(List<ModInfo> mods) {
     }
     final origin = mod.origin!;
     checkable.add(mod);
-    // Every layer that names a page. A folder appears under each of them, and a
-    // page shared by two folders is fetched once.
+    // Every layer that names a page. A folder appears under each of them once,
+    // and a page shared by two folders, or by two layers of one, is fetched once.
     for (final download in origin.trackable) {
-      byModId.putIfAbsent(download.modId!, () => <ModInfo>[]).add(mod);
+      final folders = byModId.putIfAbsent(download.modId!, () => <ModInfo>[]);
+      if (!folders.contains(mod)) folders.add(mod);
     }
   }
 

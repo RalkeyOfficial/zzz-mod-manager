@@ -416,4 +416,47 @@ void main() {
       );
     });
   });
+
+  group("a patch from the base's own page", () {
+    // A backfilled base with no file on record, and the page's fix put into it
+    // from Browse: `[P/? base, P/B patch]`. Recorded on the base too, B would be
+    // in the stack twice and a read would drop the patch with its record.
+    const fix = 1732269; // RabbitFX v77, standing in for the fix file
+    ModOrigin samePage() => originFixture(
+          source: 'gamebanana',
+          modId: 531649,
+          modIdConfidence: OriginConfidence.user,
+          provenance: OriginProvenance.importedFolder,
+          patches: [
+            patchFixture(modId: 531649, fileId: fix, versionConfidence: OriginConfidence.exact),
+          ],
+        );
+    final fixFile = rabbitFx.allFiles!.firstWhere((file) => file.idRow == fix);
+
+    test("Which file? greys the patch's file and never offers it", () {
+      final row = planBulkResolution(
+        mods: [mod('Ellen', origin: samePage())],
+        records: {531649: rabbitFx},
+      ).rows.single;
+
+      expect(row.candidates.map((c) => c.file.idRow), isNot(contains(fix)));
+      expect(row.suggestion?.file.idRow, isNot(fix));
+      expect(row.heldFiles.map((file) => file.idRow), [fix]);
+    });
+
+    test("picking the patch's file for the base writes nothing", () {
+      for (final tier in [OriginConfidence.user, OriginConfidence.inferred]) {
+        expect(
+          applyBulkResolution(
+            samePage(),
+            BulkResolutionAnswer(modId: 531649, file: fixFile, fileConfidence: tier),
+          ),
+          isNull,
+          reason: tier.wire,
+        );
+      }
+      expect(OriginResolution.pickFile(samePage(), modId: 531649, file: fixFile, exact: false), isNull);
+      expect(OriginResolution.inferFile(samePage(), modId: 531649, file: fixFile), isNull);
+    });
+  });
 }

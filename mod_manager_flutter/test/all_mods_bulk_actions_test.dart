@@ -13,6 +13,7 @@ import 'package:mod_manager_flutter/utils/state_providers.dart';
 import 'package:path/path.dart' as p;
 
 import 'support/all_mods_harness.dart';
+import 'support/held_write.dart';
 import 'support/localized_harness.dart';
 import 'support/temp_library.dart';
 
@@ -27,9 +28,9 @@ void main() {
 
   Finder dialogText(String text) => find.descendant(of: find.byType(AlertDialog), matching: find.text(text));
 
-  /// Marks [id] as having its folder written, as an update or a restore does while it runs.
-  void writing(ProviderContainer container, String id) =>
-      container.read(modWritesInProgressProvider.notifier).state = {id};
+  /// Holds [id]'s folder as being written, as an update or a restore does while it runs. Never released: the test
+  /// ends with the write still running.
+  void writing(ProviderContainer container, String id) => holdWrite(container, id);
 
   /// Every Working card [container]'s stack raises from now on, as it first appeared.
   List<AppNotification> workingCards(ProviderContainer container) {

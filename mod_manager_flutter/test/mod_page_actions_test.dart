@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
+import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/dialogs/restore_snapshot_flow.dart';
 import 'package:mod_manager_flutter/services/backup/snapshot_service.dart';
@@ -75,14 +78,58 @@ void main() {
     final container = ProviderContainer(overrides: [libraryOf([mod()]), ...temp.overrides]);
     addTearDown(container.dispose);
     container.read(modUpdateChecksProvider.notifier).state = {
-      modName: const UpdateCheck(outcome: UpdateOutcome.updateAvailable, dismissed: true, subjectModId: modId),
+      modName: const UpdateCheck(outcome: UpdateOutcome.updateAvailable, dismissed: true, subject: DownloadKey.base(modId)),
     };
 
-    expect(await stopIgnoringUpdate(container, mod: mod(), subject: modId), isTrue);
+    expect(await stopIgnoringUpdate(container, mod: mod(), subject: const DownloadKey.base(modId)), isTrue);
 
     expect(temp.originOf(modName)?.base?.updatesDismissedUntil, isNull);
     expect(container.read(modUpdateChecksProvider)[modName]?.hasUpdate, isTrue, reason: 'the badge reads this verdict');
     expect(container.read(modWritesInProgressProvider), isEmpty);
+  });
+
+  test("the folder's Ignore silences a newer file listed under both layers of one page with one press", () async {
+    // A base and its page's fix both list a newer file nobody labelled. Dismissed on the winner alone, the other
+    // layer would win the re-fold with the same file and Ignore would look dead.
+    temp.write(modName, 'mod.ini', 'x');
+    await temp.writeOrigin(
+      modName,
+      originFixture(
+        modId: modId,
+        modIdConfidence: OriginConfidence.exact,
+        fileId: 1,
+        versionLabel: 'Main file',
+        versionConfidence: OriginConfidence.exact,
+        patches: [
+          patchFixture(
+            modId: modId,
+            fileId: 2,
+            versionLabel: 'Hair fix',
+            versionConfidence: OriginConfidence.exact,
+          ),
+        ],
+      ),
+    );
+    final origin = temp.originOf(modName)!;
+    final check = checkForUpdate(
+      origin: origin,
+      remote: GbMod(idRow: modId, files: [
+        GbFile(idRow: 1, description: 'Main file', dateAdded: DateTime.utc(2026, 1)),
+        GbFile(idRow: 2, description: 'Hair fix', dateAdded: DateTime.utc(2026, 2)),
+        GbFile(idRow: 3, dateAdded: DateTime.utc(2026, 3)),
+      ]),
+    );
+    expect(check.layers.where((layer) => layer.check.hasUpdate), hasLength(2), reason: 'listed under both');
+    final container = ProviderContainer(overrides: [libraryOf([mod()]), ...temp.overrides]);
+    addTearDown(container.dispose);
+    container.read(modUpdateChecksProvider.notifier).state = {modName: check};
+
+    expect(await ignoreUpdate(container, mod: mod(), check: check), isTrue);
+
+    final written = temp.originOf(modName)!;
+    expect(written.base!.updatesDismissedUntil, DateTime.utc(2026, 3));
+    expect(written.patches.single.updatesDismissedUntil, DateTime.utc(2026, 3));
+    expect(container.read(modUpdateChecksProvider)[modName]?.hasUpdate, isFalse, reason: 'one press is enough');
   });
 
   test('a mod stays marked as being written until its last write ends', () async {

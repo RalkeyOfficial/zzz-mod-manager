@@ -163,6 +163,7 @@ Not used:
 ## What the button reports
 
 `PlatformService.launchGame` answers with a `LaunchOutcome`, and the button reports only a failure: a game that starts is its own feedback ([`notifications.md`](notifications.md)).
+While the launcher is being started the button shows it working, once the start has taken 200 ms, and ignores a press, so a slow Proton start can't be started twice. The question for a launcher before it and the container's check after it are not part of that.
 
 | Outcome | Shown |
 |---|---|

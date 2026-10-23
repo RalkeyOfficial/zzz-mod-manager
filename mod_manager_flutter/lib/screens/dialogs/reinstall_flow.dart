@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/button_working.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../models/gamebanana/gamebanana.dart';
+import '../../models/mod_download.dart';
 import '../../models/origin_enums.dart';
 import '../../services/gamebanana/file_selection.dart';
 import '../../services/log/logger.dart';
@@ -47,10 +49,13 @@ bool canReinstall(ModInfo mod) {
 /// by a game patch, a file deleted by accident, an edit that went wrong.
 ///
 /// Returns true when the mod folder changed, so the caller rescans.
+///
+/// [work] shows the fetch of the mod page on the button that asked; the update window that follows shows its own.
 Future<bool> reinstallFlow(
   BuildContext context,
   WidgetRef ref, {
   required ModInfo mod,
+  WorkSpan work = noWorkSpan,
 }) async {
   final loc = context.loc;
   final notify = context.notify;
@@ -85,7 +90,8 @@ Future<bool> reinstallFlow(
   try {
     GbMod? profile;
     try {
-      profile = await ref.read(gameBananaClientProvider).modProfile(modId);
+      final client = ref.read(gameBananaClientProvider);
+      profile = await work(() => client.modProfile(modId));
     } catch (e) {
       _log.warning('could not fetch the page to reinstall from',
           error: e, fields: {'mod': modId, 'file': fileId});
@@ -120,7 +126,7 @@ Future<bool> reinstallFlow(
     // **The same route an update takes**, because the folder can hold a patch
     // over this download and rewriting the bottom layer has to set it aside and
     // place it back. Reinstalling with no route would flatten it.
-    route = updateWriteRoute(origin: mod.origin, subjectModId: modId);
+    route = updateWriteRoute(origin: mod.origin, subject: DownloadKey.base(modId));
     if (route.kind != UpdateWriteKind.base) return false;
   } finally {
     if (!ended) fetching.dismiss();

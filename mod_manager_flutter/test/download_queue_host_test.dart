@@ -369,6 +369,29 @@ void main() {
       expect(container.read(notificationsProvider).map((n) => n.title), ['Installing Ellen Maid', '2 mods installed']);
       await t.pump(const Duration(seconds: 6));
     });
+
+    for (final (outcome, step, state) in [
+      ('installed', installed(), DownloadJobState.done),
+      ('failed', InstallEnds(InstallResult.error('Could not install', 'Mod 1')), DownloadJobState.failed),
+    ]) {
+      testWidgets('settles its job as $outcome when the host is gone by the time it ends, and takes its card down',
+          (t) async {
+        final container = seeded([job(turnOn: true)]);
+        await host(t, container);
+        expect(jobOf(container, 1).state, DownloadJobState.installing);
+        expect(container.read(notificationsProvider).single.kind, NotificationKind.working);
+
+        await t.pumpWidget(UncontrolledProviderScope(container: container, child: const SizedBox.shrink()));
+        gate.release(step);
+        await frames(t);
+
+        expect(container.read(notificationsProvider), isEmpty,
+            reason: 'nothing is left to turn the Working card into the result, so it would spin forever');
+        expect(jobOf(container, 1).state, state, reason: 'left installing, it would hold the slot and the reclaim');
+        if (state == DownloadJobState.done) expect(jobOf(container, 1).installed, ['Installed Mod']);
+        if (state == DownloadJobState.failed) expect(jobOf(container, 1).error, isA<InstallFailure>());
+      });
+    }
   });
 
   testWidgets('an empty archive is a timed warning, and its download is marked done, not failed', (t) async {

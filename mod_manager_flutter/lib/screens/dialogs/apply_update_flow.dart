@@ -228,6 +228,8 @@ Future<bool> applyUpdateFlow(
       return false;
     }
     archiveConsumed = true;
+    // The directory the unpack made, never one guessed from a folder: a `Mods/<mod>` layout is a level deeper.
+    extractRoot = switch (extraction.extractionRoot) { final root? => Directory(root), null => null };
 
     final folders = extraction.extractedFolders ?? const <String>[];
     if (folders.isEmpty) {
@@ -238,7 +240,6 @@ Future<bool> applyUpdateFlow(
       end = UpdateFailed(loc.t('marketplace.install_empty_title'));
       return false;
     }
-    extractRoot = Directory(folders.first).parent;
 
     final mods = await container.read(modManagerServiceProvider.future);
     // Read once, before anything is written: retention is a disk operation and
@@ -548,6 +549,7 @@ Future<bool> applyPatchUpdateFlow(
     );
     return false;
   }
+  final layer = _layerKey(remoteModId, asCompanion: asCompanion);
 
   Future<PasswordAnswer?> askPassword({required bool failed}) async =>
       context.mounted ? showArchivePasswordDialog(context, modName: mod.name, failed: failed) : null;
@@ -604,6 +606,8 @@ Future<bool> applyPatchUpdateFlow(
       return false;
     }
     archiveConsumed = true;
+    // The directory the unpack made, never one guessed from a folder: a `Mods/<mod>` layout is a level deeper.
+    extractRoot = switch (extraction.extractionRoot) { final root? => Directory(root), null => null };
 
     final folders = extraction.extractedFolders ?? const <String>[];
     if (folders.isEmpty) {
@@ -614,7 +618,6 @@ Future<bool> applyPatchUpdateFlow(
       end = UpdateFailed(loc.t('marketplace.install_empty_title'));
       return false;
     }
-    extractRoot = Directory(folders.first).parent;
 
     hold.say(loc.t('marketplace.preparing_comparing'));
     // One folder's contents, never the folder itself — an extraction wrapper
@@ -651,11 +654,11 @@ Future<bool> applyPatchUpdateFlow(
       // **This layer's own last version**, so what it no longer places is taken
       // back out: the mod's file returns where this patch had written over one,
       // and the patch's own additions go.
-      recorded: mod.origin?.downloadOf(remoteModId)?.files ??
+      recorded: mod.origin?.downloadOf(layer)?.files ??
           const <InstalledFile>[],
       // A folder can hold two patches, and the one above this has overwritten
       // some of its files in turn — those paths are not this layer's to touch.
-      claimedAbove: _recordedAbove(mod.origin, remoteModId),
+      claimedAbove: _recordedAbove(mod.origin, layer),
     ));
     // The write is over, so the wait is: whatever comes next is the report.
     hold.release();
@@ -692,7 +695,7 @@ Future<bool> applyPatchUpdateFlow(
       if (current == null) return null;
       final updated = withDownloadUpdatedTo(
         current,
-        modId: remoteModId,
+        layer: layer,
         fileId: file.idRow,
         version: file.version,
         versionLabel: file.description,
@@ -706,7 +709,7 @@ Future<bool> applyPatchUpdateFlow(
       // The **folder's** facts only when what the folder *is* was written. A
       // patch arriving on top does not re-date the folder or re-describe how it
       // got here.
-      if (current.base?.modId != remoteModId) return updated;
+      if (current.indexOf(layer) != 0) return updated;
       return updated.copyWith(
         source: gameBananaSource,
         provenance: OriginProvenance.downloaded,
@@ -1040,16 +1043,21 @@ Future<List<AppliedUpdate>> _writeAll({
   return applied;
 }
 
-/// Every path recorded by a layer sitting **over** [modId] in this folder.
+/// The layer a write of [modId] is about: a patch for a companion, else the
+/// base. A page can be both in one folder, so the id alone does not say which.
+DownloadKey _layerKey(int modId, {required bool asCompanion}) =>
+    asCompanion ? DownloadKey.patch(modId) : DownloadKey.base(modId);
+
+/// Every path recorded by a layer sitting **over** [layer] in this folder.
 ///
-/// What a write to [modId] must not remove: the layers above it overwrote some
+/// What a write to [layer] must not remove: the layers above it overwrote some
 /// of its files by design, so the file at such a path is theirs. Upward only —
 /// a layer *under* it records the same path precisely because this one wrote
 /// over it, and reading that as a claim would make every displacement
 /// untouchable.
-List<String> _recordedAbove(ModOrigin? origin, int modId) {
+List<String> _recordedAbove(ModOrigin? origin, DownloadKey layer) {
   if (origin == null) return const <String>[];
-  final index = origin.indexOf(modId);
+  final index = origin.indexOf(layer);
   if (index < 0) return const <String>[];
   return [
     for (final layer in origin.downloads.skip(index + 1))
@@ -1107,13 +1115,16 @@ Future<void> _recordOrigin({
           files: files,
           updatesDismissedUntil: dismissUntil,
         );
-    final written = block.downloadOf(remoteModId);
+    // This write is always the bottom layer's (`applyBaseThenPatch`), whatever
+    // [asCompanion] says about the wording; a page can also be a patch on top.
+    final layer = DownloadKey.base(remoteModId);
+    final written = block.downloadOf(layer);
     block = written == null
         // Not on record at all — a mod the app updated without ever having a
         // block for it, which is most of a library that predates origin
         // tracking. The layer it wrote is what the folder now is.
         ? block.withBase(record)
-        : block.withDownload(remoteModId, record);
+        : block.withDownload(layer, record);
 
     // The layers above moved onto the new base's layout, so their records are
     // rewritten too. One write, not two: they are layers of one stack.
@@ -1132,7 +1143,7 @@ Future<void> _recordOrigin({
 
     // **Only when what the folder *is* was written.** A patch arriving on top
     // does not re-date the folder or re-describe how it got here.
-    if (block.base?.modId != remoteModId) return withRebuiltPatchFiles(block);
+    if (block.indexOf(layer) != 0) return withRebuiltPatchFiles(block);
     return withRebuiltPatchFiles(block.copyWith(
       provenance: OriginProvenance.downloaded,
       installedAt: now,

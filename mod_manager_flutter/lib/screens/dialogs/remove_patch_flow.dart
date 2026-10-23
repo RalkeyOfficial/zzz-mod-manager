@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
 
+import '../../core/button_working.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../models/mod_download.dart';
@@ -39,11 +40,14 @@ import 'restore_snapshot_flow.dart';
 /// mod's page nothing holds the user on the page while files move, so what
 /// reached the disk has to reach the library and the snapshot list after they
 /// have left; a `ref` dies with its widget. The outcome is reported either way.
+///
+/// [work] shows the write on the button that asked, after the question.
 Future<bool> removePatchFlow(
   BuildContext context, {
   required ModInfo mod,
   required ModDownload patch,
   required String patchName,
+  WorkSpan work = noWorkSpan,
 }) async {
   final loc = context.loc;
   final notify = context.notify;
@@ -83,6 +87,7 @@ Future<bool> removePatchFlow(
   // hold this patch any more.
   if (!plan.touchesFiles && !plan.leavesPatchBehind) {
     final removed = await whileWritingMod(container, mod.id, () => _forget(mods, mod, patch));
+    if (removed) forgetUpdateCheck(container, mod.id);
     if (!context.mounted) return removed;
     notify.note(
       loc.t('mods.remove_patch.already_gone_title'),
@@ -118,14 +123,16 @@ Future<bool> removePatchFlow(
       snapshots: snapshots,
       activation: ModManagerActivationPort(mods, leaveOff: (m) => leftOffAfterWrite(container, m)),
     );
-    final result = await whileWritingMod(
-      container,
-      mod.id,
-      () => applier.removePatch(
-        modName: mod.id,
-        modFolder: modFolder,
-        patchModId: patchModId,
-        plan: plan,
+    final result = await work(
+      () => whileWritingMod(
+        container,
+        mod.id,
+        () => applier.removePatch(
+          modName: mod.id,
+          modFolder: modFolder,
+          patchModId: patchModId,
+          plan: plan,
+        ),
       ),
     );
 
@@ -166,6 +173,8 @@ Future<bool> removePatchFlow(
     // leftovers are named on screen rather than kept as a claim that would go on
     // offering to update a patch that has been taken out.
     await whileWritingMod(container, mod.id, () => _forget(mods, mod, patch));
+    // The folder's verdict can name the patch's layer, which is gone.
+    forgetUpdateCheck(container, mod.id);
 
     // Pruning already ran with the snapshot, and the keys were dropped, above.
     container.invalidate(modBackupsProvider);
@@ -230,7 +239,8 @@ Future<bool> _forget(
     mod.id,
     (current) => current == null
         ? null
-        : withRebuiltPatchFiles(current.withoutDownload(patch.modId!)),
+        // The patch of that page, never its base: one page can be both.
+        : withRebuiltPatchFiles(current.withoutDownload(DownloadKey.patch(patch.modId!))),
   );
   return result.ok;
 }

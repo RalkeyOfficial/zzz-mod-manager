@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/models/installed_file.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
@@ -23,11 +24,13 @@ import 'package:mod_manager_flutter/screens/mods_screen.dart';
 import 'package:mod_manager_flutter/services/platform_service_linux.dart';
 import 'package:mod_manager_flutter/services/update_apply/mod_activation_port.dart';
 import 'package:mod_manager_flutter/utils/notifications.dart';
+import 'package:mod_manager_flutter/services/update_check.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 import 'package:mod_manager_flutter/utils/zzz_characters.dart';
 import 'package:path/path.dart' as p;
 
 import 'support/all_mods_harness.dart';
+import 'support/held_write.dart';
 import 'support/library_override.dart';
 import 'support/link_fails_under.dart';
 import 'support/localized_harness.dart';
@@ -241,6 +244,45 @@ void main() {
       expect(card.id, working.id, reason: 'the Working card became the patch applied rather than raising a second card');
       expect(card.kind, NotificationKind.done);
       // Past the Done card's clock, so the test ends with nothing on one.
+      await tester.pump(const Duration(seconds: 6));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets("of a patch put into an existing mod drops that mod's update verdict, and only its", (tester) async {
+      // The verdict names the folder's layers, and the patch is a new one.
+      temp.write('Ellen Maid', 'Ellen Maid.ini', '[TextureOverrideBody]\n');
+      temp.write('Ellen Maid', 'Textures/Body.dds', 'v1');
+      temp.createMod('Winter Maid');
+      final fix = Directory(p.join(temp.root.path, 'Ellen Fix'));
+      File(p.join(fix.path, 'Textures', 'Body.dds'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync('v2');
+      final container = await pumpModsScreen(tester, temp, [mod('Ellen Maid'), mod('Winter Maid')]);
+      container.read(modUpdateChecksProvider.notifier).state = {
+        'Ellen Maid': const UpdateCheck(outcome: UpdateOutcome.upToDate),
+        'Winter Maid': const UpdateCheck(outcome: UpdateOutcome.upToDate),
+      };
+      clipboardHolds(tester, fix.path);
+
+      Future<void> pumpUntil(Finder finder) async {
+        for (var i = 0; i < 40 && finder.evaluate().isEmpty; i++) {
+          await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        expect(finder, findsWidgets);
+      }
+
+      await pressPaste(tester, settle: false);
+      await pumpUntil(find.text('Install it into an existing mod'));
+      await tester.tap(find.text('Install it into an existing mod'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.descendant(of: find.byType(Dialog), matching: find.text('Ellen Maid')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.descendant(of: find.byType(Dialog), matching: find.text('Install')));
+      await tester.pump();
+      await pumpUntil(find.descendant(of: find.byType(NotificationOverlay), matching: find.text('Patch applied')));
+
+      expect(container.read(modUpdateChecksProvider).keys, ['Winter Maid']);
       await tester.pump(const Duration(seconds: 6));
       await tester.pumpAndSettle();
     });
@@ -571,7 +613,8 @@ void main() {
     await loadTableFonts(tester);
     temp.createMod('Winter Maid');
     final container = await pumpModsScreen(tester, temp, [mod('Winter Maid')]);
-    container.read(modWritesInProgressProvider.notifier).state = {'Winter Maid'};
+    // Never released: the test ends with the write still running.
+    holdWrite(container, 'Winter Maid');
 
     await tester.tap(cardOf('Winter Maid'), buttons: kSecondaryButton);
     await tester.pumpAndSettle();
@@ -610,6 +653,56 @@ void main() {
 
     expect(find.text('Remove patch: Ellen Fix'), findsOneWidget);
     expect(find.text('Remove patch: #1002'), findsOneWidget, reason: 'nothing is fetched for a menu');
+  });
+
+  testWidgets('an Ignore still written after the page is left still has the library read again', (tester) async {
+    // The update dialog answers once its writes end, and by then the screen that opened it can be gone.
+    await loadTableFonts(tester);
+    temp.createMod('Winter Maid');
+    final origin = originFixture(
+      modId: 100,
+      modIdConfidence: OriginConfidence.exact,
+      fileId: 10,
+      versionConfidence: OriginConfidence.exact,
+    );
+    await tester.runAsync(() => temp.writeOrigin('Winter Maid', origin));
+    final service = RecordingService(temp)..holdOriginWrites = Completer<void>();
+    final container = await pumpModsScreen(
+      tester,
+      temp,
+      [ModInfo(id: 'Winter Maid', name: 'Winter Maid', characterId: 'ellen', isActive: false, origin: origin)],
+      services: service.overrides,
+    );
+    container.read(modUpdateChecksProvider.notifier).state = {
+      'Winter Maid': UpdateCheck(
+        outcome: UpdateOutcome.updateAvailable,
+        candidate: GbFile(idRow: 11, dateAdded: DateTime.utc(2026, 6, 19)),
+      ),
+    };
+    await tester.pump();
+
+    await tester.tap(cardOf('Winter Maid'), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Check for updates…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ignore this update'));
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    // Another page in the screen's place, so the screen that opened the dialog is gone.
+    await pumpLocalized(tester, const SizedBox(), container: container);
+    expect(find.byType(ModsScreen), findsNothing);
+    final scans = container.read(libraryScansProvider);
+
+    // The write reaches the disk, so frames and real time take turns until the rescan lands.
+    service.holdOriginWrites!.complete();
+    for (var i = 0; i < 40 && container.read(libraryScansProvider) == scans; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
+      await tester.pump();
+    }
+
+    expect(container.read(libraryScansProvider), scans + 1);
+    expect(container.read(modUpdateChecksProvider)['Winter Maid']?.dismissed, isTrue);
   });
 
   testWidgets("a mod deleted from its details takes its All mods tick with it", (tester) async {

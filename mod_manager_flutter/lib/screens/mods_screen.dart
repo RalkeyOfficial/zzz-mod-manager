@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
 
 import '../core/constants.dart';
+import '../core/button_working.dart';
 import '../core/palette.dart';
 import '../l10n/app_localizations.dart';
 import '../models/character_info.dart';
@@ -479,9 +480,16 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
 
   /// Opens the update dialog and rescans if it wrote anything — dismissing an
   /// update lands in the origin block, which only a scan re-reads.
+  ///
+  /// The answer waits for a write still running when the dialog closed, which can be an update the user has left
+  /// this page during, so the library rescans through the app's container once this screen is gone.
   Future<void> _checkForUpdate(ModInfo mod) async {
-    if (await showModUpdateDialog(context, mod)) {
+    final container = ProviderScope.containerOf(context, listen: false);
+    if (!await showModUpdateDialog(context, mod)) return;
+    if (mounted) {
       await loadMods();
+    } else {
+      await container.read(libraryProvider.notifier).rescan();
     }
   }
 
@@ -491,7 +499,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
   /// the mod's own group, and the confirmation must say how much history the
   /// delete takes with it — the only place the user could otherwise find that
   /// out is the entry that stops existing.
-  Future<void> _deleteMod(ModInfo mod) async {
+  Future<void> _deleteMod(ModInfo mod, {WorkSpan work = noWorkSpan}) async {
     final saved =
         (await ref.read(snapshotServiceProvider).list(mod.uid)).length;
     if (!mounted) return;
@@ -499,6 +507,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       context,
       mod,
       savedVersions: saved,
+      work: work,
       onDeleted: () {
         _onModDeleted(mod.id);
         // The group is gone with the mod, so the cached set of uids that have
@@ -511,8 +520,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
 
   /// Writes the version already installed over the folder again, and rescans:
   /// the files change even though the recorded version does not.
-  Future<void> _reinstall(ModInfo mod) async {
-    if (await reinstallFlow(context, ref, mod: mod)) {
+  Future<void> _reinstall(ModInfo mod, {WorkSpan work = noWorkSpan}) async {
+    if (await reinstallFlow(context, ref, mod: mod, work: work)) {
       await loadMods();
     }
   }
@@ -528,7 +537,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
   /// Takes back an ignored update on one of the folder's downloads (`stopIgnoringUpdate`). Ignoring is in the update
   /// dialog and on the Updates page's rows, where the finding is read before it is waved away (update-checks.md §6).
   Future<void> _stopIgnoring(ModInfo mod, ModDownload download) async {
-    final subject = download.modId;
+    // The layer itself, not its page: a page can be the folder's base and a patch on it at once.
+    final subject = mod.origin?.keyOf(download);
     if (subject == null) return;
     final notify = context.notify;
     final failedTitle = loc.t('library.history.stop_ignoring_failed_title');
@@ -544,12 +554,15 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
   /// The name comes from what the session already fetched or the layer saved,
   /// falling back to the id: a page fetch on the way into a confirmation would
   /// be a request the user did not ask for.
-  Future<void> _removePatch(ModInfo mod, ModDownload patch) async {
-    final name = downloadName(context.loc, patch,
-        folderName: mod.name,
-        fetched: ref.read(knownModPagesProvider)[patch.modId]?.name);
+  Future<void> _removePatch(ModInfo mod, ModDownload patch, {WorkSpan work = noWorkSpan}) async {
+    final page = ref.read(knownModPagesProvider)[patch.modId];
+    // One line, so a patch from its base's own page reads "<page> · <file>".
+    final name = layerLine(
+      downloadName(context.loc, patch, folderName: mod.name, fetched: page?.name),
+      sharedPageFile(mod.origin, patch, page: page),
+    );
     // The flow reaches the library itself; this rescan is only for a page still showing.
-    if (await removePatchFlow(context, mod: mod, patch: patch, patchName: name) && mounted) {
+    if (await removePatchFlow(context, mod: mod, patch: patch, patchName: name, work: work) && mounted) {
       await loadMods();
     }
   }
@@ -709,10 +722,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
               onOpenFolder: () => _openModFolder(pageMod),
               onCheckForUpdate: () => unawaited(_checkForUpdate(pageMod)),
               onResolveOrigin: () => unawaited(_resolveOrigin(pageMod)),
-              onDelete: () => unawaited(_deleteMod(pageMod)),
-              onReinstall: () => unawaited(_reinstall(pageMod)),
-              onRestore: (snapshot) => unawaited(restoreSnapshotFlow(context, mod: pageMod, snapshot: snapshot)),
-              onTakeOut: (patch) => unawaited(_removePatch(pageMod, patch)),
+              onDelete: (work) => _deleteMod(pageMod, work: work),
+              onReinstall: (work) => _reinstall(pageMod, work: work),
+              onRestore: (snapshot, work) => restoreSnapshotFlow(context, mod: pageMod, snapshot: snapshot, work: work),
+              onTakeOut: (patch, work) => _removePatch(pageMod, patch, work: work),
               onStopIgnoring: (download) => unawaited(_stopIgnoring(pageMod, download)),
             ),
         ],
@@ -762,7 +775,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
                         onOpenFolder: () => _openModFolder(selected),
                         onCheckForUpdate: () => unawaited(_checkForUpdate(selected)),
                         onResolveOrigin: () => unawaited(_resolveOrigin(selected)),
-                        onDelete: () => unawaited(_deleteMod(selected)),
+                        onDelete: (work) => _deleteMod(selected, work: work),
                       );
                 // Beside the mods while there is room for a column of cards next to it; over them otherwise.
                 const minGrid = 420.0;
@@ -1007,25 +1020,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       final successfullyExtractedArchives = <String>[];
       final tempFoldersToCleanup = <String>[];
 
-      // Deletes the temp extract dirs (zzz_archive_extract_*). Every archive is
-      // unpacked before the first duplicate question, so each return after the
-      // unpacking has temp dirs to clean up, a declined duplicate's included.
-      Future<void> cleanupTempFolders() async {
-        for (final tempPath in tempFoldersToCleanup) {
-          try {
-            final tempDir = Directory(tempPath);
-            if (await tempDir.exists()) {
-              final parentDir = tempDir.parent;
-              if (parentDir.path.contains('zzz_archive_extract_')) {
-                await parentDir.delete(recursive: true);
-              }
-            }
-          } catch (e) {
-            _files.debug('temp cleanup failed',
-                fields: {'path': tempPath, 'reason': '$e'});
-          }
-        }
-      }
+      // Deletes the temp extract dirs (zzz_archive_extract_*), the whole of each, for an archive whose mods came out
+      // a level down as `Mods/<mod>` too. Every archive is unpacked before the first duplicate question, so each
+      // return after the unpacking has temp dirs to clean up, a declined duplicate's included.
+      Future<void> cleanupTempFolders() => ArchiveService.deleteExtraction(tempFoldersToCleanup);
 
       // Extracted-folder path -> originating archive base name, used as an extra
       // character-detection hint (the character is often in the archive name).
@@ -1065,11 +1063,15 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
             fields: {'archives': archivesToExtract.length});
 
         // **Every archive is listed before any is unpacked**, and the locked ones ask for their password one at a
-        // time. A dismissed dialog ends that archive's import, since there is no row to come back to.
+        // time. A dismissed dialog ends that archive's import, since there is no row to come back to. Each listing
+        // goes on to its unpack, which then does not list the archive again.
         final passwords = <String, String>{};
+        final listings = <String, ArchiveListing>{};
         for (final archiveFile in [...archivesToExtract]) {
           final file = File(archiveFile.path);
-          if (!await file.exists() || !await ArchiveService.needsPassword(file)) continue;
+          if (!await file.exists()) continue;
+          final listing = listings[archiveFile.path] = await ArchiveService.listArchive(file);
+          if (!listing.needsPassword) continue;
           if (!mounted) return;
           final answer = await showArchivePasswordDialog(context, modName: archiveFile.name, offerModPage: false);
           if (answer is PasswordGiven) {
@@ -1100,7 +1102,12 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
             _log.warning('dropped file is gone',
                 fields: {'path': archiveFile.path});
           } else {
-            var result = await ArchiveService.extractArchive(archiveFile: file, password: passwords[archiveFile.path]);
+            final listing = listings[archiveFile.path];
+            var result = await ArchiveService.extractArchive(
+              archiveFile: file,
+              password: passwords[archiveFile.path],
+              listing: listing,
+            );
             // A password that did not open it asks again, and the archive is kept for the next try.
             while (result.failure == ExtractFailure.wrongPassword ||
                 (result.failure == ExtractFailure.passwordRequired && passwords[archiveFile.path] == null)) {
@@ -1113,7 +1120,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
               );
               if (answer is! PasswordGiven) break;
               passwords[archiveFile.path] = answer.password;
-              result = await ArchiveService.extractArchive(archiveFile: file, password: answer.password);
+              result = await ArchiveService.extractArchive(archiveFile: file, password: answer.password, listing: listing);
             }
             if (result.failure == ExtractFailure.wrongPassword || result.failure == ExtractFailure.passwordRequired) {
               logConfirmation('import.password', accepted: false, subject: archiveFile.name);
@@ -1200,7 +1207,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       // When more than one folder would be installed, let the user choose which
       // ones — and whether each becomes its own mod or they combine into one.
       // Shared with the marketplace auto-install via resolveImportSelection.
-      if (!mounted) return;
+      if (!mounted) {
+        await cleanupTempFolders();
+        return;
+      }
       final plan = await resolveImportSelection(
         context,
         folderPaths,
@@ -1235,7 +1245,10 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       // about where they came from. Nothing else about the two flows differs.
       PatchInstallDecision? patchDecision;
       if (modsPath != null) {
-        if (!mounted) return;
+        if (!mounted) {
+          await cleanupTempFolders();
+          return;
+        }
         patchDecision = await decidePatchInstall(
           context,
           plan: plan,
@@ -1340,20 +1353,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
         if (tempFoldersToCleanup.isNotEmpty) {
           _files.debug('cleaning up after a failed import',
               fields: {'folders': tempFoldersToCleanup.length});
-          for (final tempPath in tempFoldersToCleanup) {
-            try {
-              final tempDir = Directory(tempPath);
-              if (await tempDir.exists()) {
-                final parentDir = tempDir.parent;
-                if (parentDir.path.contains('zzz_archive_extract_')) {
-                  await parentDir.delete(recursive: true);
-                }
-              }
-            } catch (e) {
-              _files.debug('temp cleanup failed',
-                  fields: {'path': tempPath, 'reason': '$e'});
-            }
-          }
+          await cleanupTempFolders();
         }
 
         if (mounted) {
@@ -1409,6 +1409,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
           ),
           amend: modManagerService.updateModOrigin,
           onPatched: modManagerService.invalidateKeybinds,
+          onPatchedInto: (modId) => forgetUpdateCheck(container, modId),
           whileWriting: (modId, write) => whileWritingMod(container, modId, write),
           // Naming what a patch patches installs that mod into the folder, the
           // same as it does for a download from the Marketplace.
@@ -1483,21 +1484,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       if (tempFoldersToCleanup.isNotEmpty) {
         _files.debug('cleaning up after an import',
             fields: {'folders': tempFoldersToCleanup.length});
-        for (final tempPath in tempFoldersToCleanup) {
-          try {
-            final tempDir = Directory(tempPath);
-            if (await tempDir.exists()) {
-              // Отримуємо батьківську директорію (zzz_archive_extract_*)
-              final parentDir = tempDir.parent;
-              if (parentDir.path.contains('zzz_archive_extract_')) {
-                await parentDir.delete(recursive: true);
-              }
-            }
-          } catch (e) {
-            _files.debug('temp cleanup failed',
-                fields: {'path': tempPath, 'reason': '$e'});
-          }
-        }
+        await cleanupTempFolders();
       }
 
       // **What the user asked for, and what they got instead.** A refusal means

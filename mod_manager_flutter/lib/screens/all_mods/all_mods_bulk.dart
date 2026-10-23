@@ -381,7 +381,12 @@ class _BulkDeleteDialog extends StatelessWidget {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context, false), child: Text(loc.t('mods.dialog.cancel'))),
         FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: palette.red, foregroundColor: palette.onRed),
+          // A transparent overlay, so the theme's press is drawn rather than Material's ink for the foreground.
+          style: FilledButton.styleFrom(
+            backgroundColor: palette.red,
+            foregroundColor: palette.onRed,
+            overlayColor: Colors.transparent,
+          ),
           onPressed: () => Navigator.pop(context, true),
           child: Text(loc.plural('library.all.delete_confirm', count, params: {'count': '$count'})),
         ),

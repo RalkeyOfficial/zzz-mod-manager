@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/core/button_feedback.dart';
+import 'package:mod_manager_flutter/core/button_working.dart';
+import 'package:mod_manager_flutter/core/palette.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/installed_file.dart';
 import 'package:mod_manager_flutter/models/mod_download.dart';
@@ -84,6 +88,8 @@ void main() {
     List<SnapshotEntry> snapshots = const [],
     ModPageTab tab = ModPageTab.history,
     Size surfaceSize = const Size(1400, 2400),
+    WorkingCallback? onDelete,
+    Future<void> Function(ModSnapshot snapshot, WorkSpan work)? onRestore,
   }) async {
     await pumpLocalized(
       tester,
@@ -98,10 +104,10 @@ void main() {
         onOpenFolder: () {},
         onCheckForUpdate: () {},
         onResolveOrigin: () {},
-        onDelete: () {},
-        onReinstall: () {},
-        onRestore: restored.add,
-        onTakeOut: takenOut.add,
+        onDelete: onDelete ?? (_) async {},
+        onReinstall: (_) async {},
+        onRestore: onRestore ?? (snapshot, _) async => restored.add(snapshot),
+        onTakeOut: (patch, _) async => takenOut.add(patch),
         onStopIgnoring: unignored.add,
         noteWriter: (_, _) async => true,
       ),
@@ -147,6 +153,29 @@ void main() {
     expect(find.text('Reinstall'), findsNothing);
   });
 
+  testWidgets('the favourite button keeps its frame and draws the keyboard focus ring over it', (tester) async {
+    addTearDown(() => FocusManager.instance.highlightStrategy = FocusHighlightStrategy.automatic);
+    await open(tester, modWith(null));
+    final palette = ZenithPalette.dark(AccentChoice.violet);
+    final star = find.ancestor(of: find.byIcon(Icons.star_outline_rounded), matching: find.byType(IconButton));
+    expect(tester.renderObject(star), paints..drrect(color: palette.control), reason: 'framed at rest');
+
+    FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
+    Focus.of(tester.element(find.byIcon(Icons.star_outline_rounded))).requestFocus();
+    await tester.pump();
+    await tester.pump();
+    final ring = find.descendant(of: find.byType(ButtonFocusRing), matching: find.byType(CustomPaint));
+    final at = tester.getTopLeft(star);
+    final edge = RRect.fromRectAndRadius(Offset.zero & tester.getSize(star), const Radius.circular(8));
+    expect(
+      tester.renderObject(ring),
+      paints
+        ..transform(matrix4: equals(Matrix4.translationValues(at.dx, at.dy, 0).storage))
+        ..drrect(outer: edge.inflate(4), inner: edge.inflate(2), color: palette.accent),
+    );
+    expect(tester.renderObject(star), paints..drrect(color: palette.control), reason: 'its frame stays');
+  });
+
   testWidgets('a mod marked Local fetches nothing and offers no reinstall', (tester) async {
     await open(tester, modWith(tracked(tracking: OriginTracking.off)));
 
@@ -163,6 +192,56 @@ void main() {
     expect(find.textContaining('before an update'), findsOneWidget);
     await tester.tap(find.text('Restore'));
     expect(restored, [snapshot]);
+  });
+
+  testWidgets('Restore shows the copy working after its question, and a press meanwhile asks nothing again',
+      (tester) async {
+    final snapshot = snapshotAt(DateTime(2026, 10, 2, 14, 5));
+    var asked = 0;
+    final copy = Completer<void>();
+    await open(
+      tester,
+      modWith(tracked(tracking: OriginTracking.off)),
+      snapshots: [(snapshot: snapshot, origin: null)],
+      // The question first, outside the wait; then the copy, inside it.
+      onRestore: (snapshot, work) async {
+        asked++;
+        await work(() => copy.future);
+      },
+    );
+    final restore = find.widgetWithText(OutlinedButton, 'Restore');
+    await tester.tap(restore);
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.descendant(of: restore, matching: find.byType(ZenithSpinner)), findsOneWidget);
+    await tester.tap(restore);
+    await tester.pump();
+    expect(asked, 1);
+    copy.complete();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.byType(ZenithSpinner), findsNothing);
+  });
+
+  testWidgets('Delete shows the delete working, and a press meanwhile asks nothing again', (tester) async {
+    var asked = 0;
+    final delete = Completer<void>();
+    await open(
+      tester,
+      modWith(null),
+      tab: ModPageTab.overview,
+      onDelete: (work) async {
+        asked++;
+        await work(() => delete.future);
+      },
+    );
+    final button = find.ancestor(of: find.byIcon(Icons.delete_outline_rounded), matching: find.byType(OutlinedButton));
+    await tester.tap(button);
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.descendant(of: button, matching: find.byType(ZenithSpinner)), findsOneWidget);
+    await tester.tap(button);
+    await tester.pump();
+    expect(asked, 1);
+    delete.complete();
+    await tester.pump(const Duration(milliseconds: 600));
   });
 
   testWidgets('a snapshot whose sidecar names a file this session holds is named by that file', (tester) async {
@@ -208,6 +287,32 @@ void main() {
     expect(unignored.single.modId, modId);
   });
 
+  testWidgets("a patch from its base's own page is listed by its file, with Take out and its own ignored update", (
+    tester,
+  ) async {
+    // Both layers carry the page's name, so each row names its file.
+    final fix = patchFixture(
+      modId: modId,
+      fileId: 1492636,
+      versionLabel: 'Glow demo',
+      versionConfidence: OriginConfidence.exact,
+      updatesDismissedUntil: DateTime(2026, 9, 30),
+      files: const [InstalledFile(path: 'glow.ini')],
+    );
+    await open(tester, modWith(tracked(tracking: OriginTracking.off, patches: [fix])));
+
+    expect(find.text('Take out'), findsOneWidget);
+    final names = find.text('Glow demo');
+    expect(names, findsNWidgets(2), reason: 'on the patch row and on its ignored update');
+    expect(find.text('RabbitFX Fixer EXE Version'), findsNothing, reason: "the base's file is not this patch's");
+    expect(find.text('IGNORED UPDATE'), findsOneWidget);
+
+    await tester.tap(find.text('Take out'));
+    expect(takenOut.single.fileId, 1492636);
+    await tester.tap(find.text('Stop ignoring'));
+    expect(unignored.single.fileId, 1492636, reason: 'the patch layer, not the base of the same page');
+  });
+
   testWidgets('the install date reads the same however it was worked out', (tester) async {
     ModOrigin dated({required bool proxy}) => originFixture(
       source: null,
@@ -243,10 +348,10 @@ void main() {
           onOpenFolder: () {},
           onCheckForUpdate: () {},
           onResolveOrigin: () {},
-          onDelete: () {},
-          onReinstall: () {},
-          onRestore: (_) {},
-          onTakeOut: (_) {},
+          onDelete: (_) async {},
+          onReinstall: (_) async {},
+          onRestore: (_, _) async {},
+          onTakeOut: (_, _) async {},
           onStopIgnoring: (_) {},
         ),
       ),

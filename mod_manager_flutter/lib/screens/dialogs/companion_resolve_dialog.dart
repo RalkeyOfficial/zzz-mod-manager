@@ -64,22 +64,21 @@ class CompanionRemoved extends CompanionOutcome {
 ///   the user is telling us what they put in the folder. `user` is the honest
 ///   ceiling, and the one path that beats it is an install that writes the
 ///   files itself.
-/// - **The folder's own mod is refused**, when it has one. It is the same mod
-///   said twice, and recording it would have the update check ask one page twice
-///   and report two verdicts for one folder. A folder with no identity of its
-///   own — dragged off a disk — has nothing to collide with, so nothing is
-///   refused.
+/// - **A file already in the folder is refused** ([heldFileIds]), never a page.
+///   A patch from its base's own page is a patch like any other, so the
+///   patch's own page may be named as its base; what may not is the very file
+///   another layer records, which would be one download recorded twice.
 Future<CompanionOutcome?> showCompanionResolveDialog(
   BuildContext context, {
   required String modName,
-  required int? primaryModId,
+  Set<int> heldFileIds = const <int>{},
   ModDownload? existing,
 }) {
   return showDialog<CompanionOutcome>(
     context: context,
     builder: (_) => CompanionResolveDialog(
       modName: modName,
-      primaryModId: primaryModId,
+      heldFileIds: heldFileIds,
       existing: existing,
     ),
   );
@@ -157,7 +156,7 @@ class CompanionResolveDialog extends ConsumerStatefulWidget {
   const CompanionResolveDialog({
     super.key,
     required this.modName,
-    required this.primaryModId,
+    this.heldFileIds = const <int>{},
     this.existing,
   });
 
@@ -166,9 +165,10 @@ class CompanionResolveDialog extends ConsumerStatefulWidget {
   /// patches, and the user edits it either way.
   final String modName;
 
-  /// The identity the folder already carries, refused as a companion. Null when
-  /// it carries none, where there is nothing to refuse.
-  final int? primaryModId;
+  /// The files the folder's other layers record, greyed in the file picker
+  /// with "Already in this folder" under them. Not the base on file's own: it
+  /// is the layer the answer replaces.
+  final Set<int> heldFileIds;
 
   /// **No role is asked for and none is stored here.** This step names the mod
   /// that goes *underneath* — the folder is recorded as patch-shaped, so the
@@ -208,9 +208,6 @@ class _CompanionResolveDialogState
   }
 
   AppLocalizations get loc => context.loc;
-
-  bool get _isSelf =>
-      widget.primaryModId != null && _modId == widget.primaryModId;
 
   Future<void> _loadRecord(int modId) async {
     setState(() {
@@ -257,7 +254,7 @@ class _CompanionResolveDialogState
 
   void _add() {
     final modId = _modId;
-    if (modId == null || _isSelf) return;
+    if (modId == null) return;
     final file = _selectedFile;
     // Read here rather than when the tile was tapped, so it can only ever be
     // the date of the mod being written.
@@ -305,7 +302,7 @@ class _CompanionResolveDialogState
                   heading: loc.t('mods.resolve.companion_heading'),
                   onPicked: (id) {
                     setState(() => _modId = id);
-                    if (id != widget.primaryModId) _loadRecord(id);
+                    _loadRecord(id);
                   },
                 )
               else
@@ -324,7 +321,7 @@ class _CompanionResolveDialogState
           child: Text(loc.t('mods.resolve.cancel')),
         ),
         FilledButton(
-          onPressed: _modId == null || _isSelf || _loading ? null : _add,
+          onPressed: _modId == null || _loading ? null : _add,
           child: Text(loc.t('mods.resolve.companion_add')),
         ),
       ],
@@ -336,10 +333,7 @@ class _CompanionResolveDialogState
     return [
       _identityCard(modId),
       const SizedBox(height: 12),
-      if (_isSelf)
-        resolveNotice(
-            context, loc.t('mods.resolve.companion_is_self'), Icons.block)
-      else if (_loading)
+      if (_loading)
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 24),
           child: Center(child: CircularProgressIndicator()),
@@ -360,6 +354,7 @@ class _CompanionResolveDialogState
           resolution: _resolution,
           heading: loc.t('mods.resolve.file_heading'),
           recordedFileId: widget.existing?.fileId,
+          heldFileIds: widget.heldFileIds,
           selectedFileId: _selectedFile?.idRow,
           // `isExact` is discarded: a banked-hash match is a fact about the
           // archive *this folder's primary* was extracted from, and it says

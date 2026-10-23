@@ -54,11 +54,9 @@ filters, the `_nPerpage` cap, the error envelope, `DownloadPage`, `Mod/Categorie
 | `_aPreviewMedia` | ✅ | ✅ | ❌ removed |
 | `_aPreviewContent` | ❌ | ✅ | ✅ |
 | `_sPayType` | ❌ | ✅ | ✅ |
-| `cache-control` | `max-age=600` | **none** | **none** |
 
 **Skip v12**: it is the transitional version that carries *both* image shapes, and
-offers nothing v13 doesn't. The image change is [§5](#images); the missing
-`cache-control` is [§2](#caching-and-rate-limits).
+offers nothing v13 doesn't. The image change is [§5](#images). Caching headers do not differ between versions ([§2](#caching-and-rate-limits)).
 
 ### No authentication, for anything we do
 
@@ -164,18 +162,19 @@ Two consequences for any client:
   `Unexpected end of input`, which reads as "the API changed shape" and is exactly
   the wrong conclusion. There is no `Retry-After` to honour — the server never
   admits a problem — so reactive backoff is all there is.
-- **Never cache it.** With no `cache-control` to mirror (below), a client TTL of
+- **Never cache it.** With no dependable `cache-control` to mirror (below), a client TTL of
   ten minutes turns one hiccup into a mod page that stays broken for ten minutes
   while the user retries, because every retry is served from memory. The general
   form of that rule: **a body that could not be parsed must not be kept**.
 
 ### Caching and rate limits
 
-- **apiv13 sends no `cache-control` at all**, where apiv11 answered every request
-  with `public, max-age=600`. There is nothing to mirror, so a client cache has to
-  pick its own number — 10 minutes is a defensible one, inherited from what v11
-  advertised, but it is a choice rather than the server's instruction. Honour a
-  `max-age` if one reappears.
+- **The caching headers come from Cloudflare's edge, not from the route or the API version.**
+  Measured on 2026-10-23 on apiv13 `Mod/<id>/ProfilePage`, `/DownloadPage`, `/Updates`, `Mod/Index`, `Mod/Multi`, `Mod/Categories`, `Game/<id>/ProfilePage`, `Subfeed`, `TopSubs` and `Wip/<id>/ProfilePage`, and on apiv11 and apiv12 alike.
+  The first one or two requests for a url are `cf-cache-status: BYPASS`: `content-type: application/json; charset=UTF-8` and **no `cache-control`**, straight from the origin.
+  After that the edge keeps a copy and answers `MISS`, then `HIT` with an `age`, carrying `cache-control: public, max-age=600` and **`content-type: text/html; charset=UTF-8`** around the same JSON body.
+  So one url can answer with either set of headers, and both name UTF-8. Parse the body as JSON whatever `content-type` says, and give a client cache its own TTL — 10 minutes matches the edge's copy — rather than one read from a response that may not carry it.
+  The app decodes the body bytes as UTF-8 whatever the header says (`PackageHttpTransport`, `lib/services/http/package_http_transport.dart`), so a cached reply cannot be misread.
 - **No published rate limit** — no `RateLimit-*`, no `Retry-After` on normal
   responses. 30 concurrent requests in a burst all returned `200` with no throttling.
   That is *not* a licence to hammer it: treat backoff as reactive (on `429`/`503`),
@@ -239,7 +238,7 @@ name on a single word is the point.
 ### 3.1 Top submissions — `Game/<id>/TopSubs`
 
 Undocumented even by the standards of the rest of apiv13 — it appears in no field
-list and was found by probing route names. It is the **only** way to get
+list, and only probing route names turns it up. It is the **only** way to get
 period-ranked "best of" data, and worth knowing about before anyone tries to
 synthesise it:
 
@@ -248,7 +247,7 @@ curl 'https://gamebanana.com/apiv13/Game/19567/TopSubs'
 ```
 
 Returns a **bare array** of exactly **21 entries: three for each of seven windows**,
-each tagged with `_sPeriod`:
+each tagged with `_sPeriod`. They are submissions, not only mods (see `_sModelName` below):
 
 `today` · `week` · `month` · `3month` · `6month` · `year` · `alltime`
 
@@ -258,15 +257,14 @@ each tagged with `_sPeriod`:
 - **This cannot be built from `Mod/Index`.** There is no date-window filter, and
   the like counts everywhere else are *lifetime* totals, so "best of this week" is
   not derivable from any other endpoint.
-- `cache-control: public, max-age=600`, same as everything else.
-- **`content-type: text/html`** despite the body being JSON. Parse by content, not
-  by header.
+- Its `cache-control` and `content-type` come and go with the edge cache like every other route's, so it can arrive as `text/html; charset=UTF-8` with JSON inside. Parse by content, not by header ([§2](#caching-and-rate-limits)).
 
 Its entry shape is its **own**, not a subset of the mod object:
 
 | Field | Notes |
 |---|---|
-| `_idRow` | A normal mod id — opens through `Mod/<id>/ProfilePage` like anything else |
+| `_sModelName` | **Not always `Mod`.** The list ranks every submission type, so a WIP can win a window ([§3.2](#32-wips--wip)) |
+| `_idRow` | An id of `_sModelName`'s model, meaningless without it: ids are per model, so only a `Mod` row's id opens through `Mod/<id>/ProfilePage` ([§3.2](#32-wips--wip)) |
 | `_sPeriod` | The window this entry won |
 | `_sName`, `_sProfileUrl` | |
 | `_aPreviewContent.screenshot` | The cover, as the **ordinary variant ladder** ([§5](#images)) — `_sFile` is the 800px render here rather than an original upload, with `_sFile220` beside it. Under apiv11 this was two finished urls (`_sImageUrl`, `_sThumbnailUrl`) with no size to negotiate; that difference is gone |
@@ -278,6 +276,32 @@ Its entry shape is its **own**, not a subset of the mod object:
 One practical warning: for ZZZ this list skews heavily adult — **20 of 21 captured
 entries were `warn`/`hide`**. A client that omits flagged mods will show almost
 nothing here, so it needs to collapse gracefully rather than render empty headings.
+
+### 3.2 WIPs — `Wip`
+
+A WIP (work in progress; `_sModelName: "Wip"`, titled "WiP" on the site) is a creator's progress post: screenshots, a development state, and only sometimes a file.
+It is a model of its own beside `Mod`, with its own routes, its own profile url (`https://gamebanana.com/wips/<id>`) and its own id space.
+The app calls no WIP route; a WIP reaches it only as a `TopSubs` row ([§3.1](#31-top-submissions--gameidtopsubs)).
+
+Measured on 2026-10-23 against ZZZ:
+
+```bash
+curl 'https://gamebanana.com/apiv13/Wip/Index?_aFilters%5BGeneric_Game%5D=19567&_nPerpage=50'
+curl 'https://gamebanana.com/apiv13/Wip/104523/ProfilePage'
+curl 'https://gamebanana.com/apiv13/Wip/Multi?_csvRowIds=104523,104264&_csvProperties=_idRow,_aFiles'
+```
+
+- **The mod routes exist under `Wip/`.** `Wip/Index` takes `_aFilters[Generic_Game]` and answers in the `_aMetadata`/`_aRecords` envelope (224 ZZZ WIPs); `Wip/<id>/ProfilePage`, `Wip/<id>/DownloadPage` and `Wip/Multi` answer like their `Mod/` counterparts, on apiv11 and apiv13 alike. A missing id is `404` + `NO_SUCH_RECORD`, "This WiP doesn't exist".
+- **The profile is a mod profile minus the install fields.** It carries `_sName`, `_aSubmitter`, `_aGame`, `_aTags`, `_aPreviewContent.screenshots` (images under `img/ss/wips`), `_sInitialVisibility` and the usual counters. It has no `_sVersion`, `_tsDateUpdated`, `_aRequirements` or `_aContentRatings`.
+- **WIP-only fields:** `_sDevelopmentState` (`In Development`, `Completed`, `On Hold`, `Canceled`) with its key in `_akDevelopmentState` (`indev`, `comp`, `onhold`, `cancel`), and `_iCompletionPercentage`.
+- **The category is a `WipCategory`, not a mod category.** ZZZ has two, `Skins` (`2389`) and `Other/Misc` (`2383`), so a WIP has no character subcategory to name.
+- **Most WIPs have nothing to install.** 37 of the 224 carry `_aFiles` (61 files, ordinary `/dl/<fileId>` links); the rest answer `_aFiles: null` on `Wip/Multi`, and their `ProfilePage` and `DownloadPage` leave the key out. The listing's `_bHasFiles` is `true` on all 224, so it says nothing.
+- **A finished WIP links to what it became.** `_aFinishedWork._aFinishedWorksOnGameBanana` lists those submissions with `_sName`, `_sModelName` and `_sProfileUrl` but no `_idRow`, so the id is the url's last path segment; 63 of the 224 had one (61 Mods, 2 Tools). `_aRemoteFinishedWorkUrls` holds off-site links instead.
+
+**Ids are per model, so an id is never used without its model.** Wip 104523 is the ZZZ WIP "Void Hunter Eldreda"; Mod 104523 is the Counter-Strike: Source map "de_urbanwarfare". A WIP's id sent to `Mod/<id>/ProfilePage` returns `200` with whichever mod holds that number, so nothing in the response flags the mistake. The other direction currently fails loudly (`Wip/698834/ProfilePage` is a `404`) only because WIP ids run lower, topping out at 104523 for ZZZ.
+
+**What the app does with them:** Browse's top-submissions carousel keeps only rows whose `_sModelName` is `Mod`, and drops a row that has no `_sModelName` as well. The app has no page for a WIP, most WIPs have nothing to install, and a WIP's id opened as a mod shows an unrelated mod.
+On 2026-10-23, 1 of `TopSubs`' 21 rows was a WIP (104523, the `today` window); the other 20 were `Mod`, and no other model appeared.
 
 ### Search — `Util/Search/Results`
 
@@ -1128,8 +1152,7 @@ Collected so nobody rediscovers them:
   *empty gallery*, not an error, so this fails silently ([§5](#images)).
 - **A listing carries only the cover on apiv13** — 50 images across 50 records, where
   apiv11 sent 420. The gallery is profile-only now.
-- **apiv13 sends no `cache-control`.** apiv11 sent `max-age=600`. A client TTL is now
-  the client's own invention ([§2](#caching-and-rate-limits)).
+- **One url answers with two sets of headers.** Fresh from the origin it is `application/json; charset=UTF-8` with no `cache-control`; from Cloudflare's edge copy it is `text/html; charset=UTF-8` with `public, max-age=600`, on every route and API version. Parse by content and keep a client TTL of the client's own ([§2](#caching-and-rate-limits)).
 - **An unknown *route* returns `200` + HTML on apiv13**, not `404` + `NO_SUCH_ROUTE`
   JSON, so it reaches a JSON client as a parse error. A missing *mod id* is
   unchanged (`404` + `NO_SUCH_RECORD`) ([§2](#errors)).
@@ -1157,6 +1180,7 @@ Collected so nobody rediscovers them:
   `_sProfileUrl` is the broken `gamebanana.com//<id>`. A pasted `/dl/` link is only
   resolvable once you already know the mod
   ([§6](#a-file-id-cannot-be-turned-back-into-a-mod-id)).
+- **An id means nothing without its model.** Wip 104523 and Mod 104523 are unrelated submissions, and asking `Mod/` for a WIP's id returns `200` with the wrong mod rather than an error. `TopSubs` mixes models, so read `_sModelName` before `_idRow` ([§3.2](#32-wips--wip)).
 - **`_sText` is HTML**, while our own sidecar descriptions are markdown. Convert on
   import; don't dump raw HTML into a markdown widget.
 - **`_aTags` is strings on a listing and `{_sTitle, _sValue}` objects on a profile.**

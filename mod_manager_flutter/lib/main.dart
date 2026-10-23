@@ -8,6 +8,7 @@ import 'dart:io';
 import 'core/app_theme.dart';
 import 'core/constants.dart';
 import 'core/font_licenses.dart';
+import 'core/keyboard_focus.dart';
 import 'screens/mods_screen.dart';
 import 'screens/components/download_queue_host.dart';
 import 'screens/components/launch_update_check_host.dart';
@@ -200,11 +201,15 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       // delete, keybinds, the whole update flow), and the `ScaffoldMessenger`
       // bars they replaced were drawn inside the `Scaffold` — behind the
       // barrier, where the user never saw them.
-      builder: (context, child) => Column(
-        children: [
-          const ZenithTitleBar(),
-          Expanded(child: NotificationHost(child: child!)),
-        ],
+      //
+      // The focus ring follows the keyboard: a click hides it, a key brings it back.
+      builder: (context, child) => KeyboardFocusHighlight(
+        child: Column(
+          children: [
+            const ZenithTitleBar(),
+            Expanded(child: NotificationHost(child: child!)),
+          ],
+        ),
       ),
       home: _isLoading
           ? const Scaffold(body: Center(child: CircularProgressIndicator()))

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/button_feedback.dart';
 import '../../core/palette.dart';
 import '../../core/type_scale.dart';
 import '../../l10n/app_localizations.dart';
@@ -24,7 +25,7 @@ import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
 import '../../utils/url_utils.dart';
 import '../shell/keycap.dart';
-import 'folder_downloads_summary.dart' show downloadName;
+import 'folder_downloads_summary.dart' show LayerFile, downloadName, sharedPageFile;
 import 'resolve/resolve_fragments.dart' show formatResolveDate;
 import 'zenith_controls.dart';
 import 'zenith_switch.dart';
@@ -178,7 +179,7 @@ class _ModDescriptionState extends State<ModDescription> {
                   padding: const WidgetStatePropertyAll(
                     EdgeInsets.symmetric(horizontal: _morePadding, vertical: 3),
                   ),
-                  shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),
+                  shape: pressShape(RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
                 onPressed: () => setState(() => _expanded = !_expanded),
@@ -398,6 +399,7 @@ class ModMadeOf extends ConsumerWidget {
               for (final (i, download) in downloads.indexed)
                 _DownloadRow(
                   download: download,
+                  shared: sharedPageFile(mod.origin, download, page: records[download.modId]),
                   folderName: mod.name,
                   records: records,
                   last: i == downloads.length - 1,
@@ -416,9 +418,18 @@ class ModMadeOf extends ConsumerWidget {
 }
 
 class _DownloadRow extends StatelessWidget {
-  const _DownloadRow({required this.download, required this.folderName, required this.records, required this.last});
+  const _DownloadRow({
+    required this.download,
+    required this.shared,
+    required this.folderName,
+    required this.records,
+    required this.last,
+  });
 
   final ModDownload download;
+
+  /// Which file this layer is, when another layer shares its page and so its name.
+  final LayerFile? shared;
   final String folderName;
   final Map<int, GbMod> records;
   final bool last;
@@ -458,7 +469,12 @@ class _DownloadRow extends StatelessWidget {
               spacing: 1,
               children: [
                 DownloadTitle(download: download, folderName: folderName, page: page),
-                if (file != null)
+                if (shared case final shared?)
+                  LayerFileText(
+                    shared,
+                    nameStyle: ZenithType.of(context).monoSmall.copyWith(color: palette.text2, height: 1.4),
+                  )
+                else if (file != null)
                   Text(
                     fileDisplayName(file),
                     style: ZenithType.of(context).monoSmall.copyWith(color: palette.text2, height: 1.4),
@@ -470,6 +486,29 @@ class _DownloadRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Which file a layer is, under its name, where another layer of the folder shares its page and so its name: the
+/// filename, with its variant text in grey beneath (`docs/update-checks.md` §7), never a tag.
+class LayerFileText extends StatelessWidget {
+  const LayerFileText(this.file, {super.key, required this.nameStyle});
+
+  final LayerFile file;
+  final TextStyle nameStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ZenithPalette.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(file.name, style: nameStyle),
+        if (file.detail case final detail?)
+          Text(detail, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: palette.text3)),
+      ],
     );
   }
 }
@@ -502,7 +541,10 @@ class DownloadTitle extends StatelessWidget {
 UpdateCheck? baseUpdateCheck(ModInfo mod, UpdateCheck? check) {
   if (check == null) return null;
   if (check.layers.isNotEmpty) return check.layers.first.check;
-  return check.subjectModId == mod.origin?.base?.modId ? check : null;
+  // By layer: the base's page can also be a patch on it, whose verdict this is not.
+  final origin = mod.origin;
+  if (origin == null || origin.downloads.isEmpty) return null;
+  return check.subject == origin.keyAt(0) ? check : null;
 }
 
 /// File, variant, upload date, tracking, when it was added, and its size.

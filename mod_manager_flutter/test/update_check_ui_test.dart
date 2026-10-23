@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
@@ -7,6 +10,7 @@ import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/models/installed_file.dart';
 import 'package:mod_manager_flutter/models/mod_ingest.dart';
+import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/origin_write.dart';
@@ -943,6 +947,106 @@ void main() {
       expect(written.last?.updatesDismissedUntil, isNull);
     });
 
+    for (final (how, close) in <(String, Future<void> Function(WidgetTester))>[
+      ('Escape', (tester) => tester.sendKeyEvent(LogicalKeyboardKey.escape)),
+      ('a click outside', (tester) => tester.tapAt(const Offset(8, 8))),
+    ]) {
+      /// Opens the dialog the way the library does, from the card badge with an update on record, and hands back
+      /// what [showModUpdateDialog] answered once it has: null while it hasn't. The app's container is [container].
+      late ProviderContainer container;
+      Future<bool? Function()> openFromBadge(WidgetTester tester, {Future<void>? hold}) async {
+        await tester.pumpWidget(const SizedBox());
+        final (client, _) = fakeClient();
+        final target = mod('Ellen', origin: origin(fileId: 1696178));
+        container = ProviderContainer(overrides: [
+          gameBananaClientProvider.overrideWithValue(client),
+        ]);
+        addTearDown(container.dispose);
+        container.read(modUpdateChecksProvider.notifier).state = {
+          'Ellen': UpdateCheck(
+            outcome: UpdateOutcome.updateAvailable,
+            candidate: GbFile(idRow: 1732269, dateAdded: DateTime.utc(2026, 6, 19)),
+          ),
+        };
+        bool? reported;
+        await pumpLocalized(
+          tester,
+          Builder(
+            builder: (context) => TextButton(
+              onPressed: () async => reported = await showModUpdateDialog(
+                context,
+                target,
+                gateway: _RecordingGateway(target.origin, <ModOrigin?>[], hold: hold),
+              ),
+              child: const Text('open'),
+            ),
+          ),
+          container: container,
+        );
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+        return () => reported;
+      }
+
+      testWidgets('closing with $how after ignoring reports the write', (tester) async {
+        // The caller rescans only on true, and the dismissal lives in the sidecar the library reads.
+        final reported = await openFromBadge(tester);
+        await tester.tap(find.text('Ignore this update'));
+        await tester.pumpAndSettle();
+
+        await close(tester);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(ModUpdateDialog), findsNothing);
+        expect(reported(), isTrue);
+      });
+
+      testWidgets('closing with $how while ignoring still writes reports it once written', (tester) async {
+        final write = Completer<void>();
+        final reported = await openFromBadge(tester, hold: write.future);
+        await tester.tap(find.text('Ignore this update'));
+        await tester.pump();
+
+        await close(tester);
+        await tester.pumpAndSettle();
+        expect(find.byType(ModUpdateDialog), findsNothing);
+        expect(reported(), isNull, reason: 'the answer waits for the write, so the rescan comes after it');
+
+        write.complete();
+        await tester.pumpAndSettle();
+        expect(reported(), isTrue);
+      });
+
+      testWidgets('closing with $how while ignoring still writes leaves the badge ignored', (tester) async {
+        // As it is when the dialog stays open: the card badge, the toolbar count and the Updates page read this map.
+        final write = Completer<void>();
+        await openFromBadge(tester, hold: write.future);
+        await tester.tap(find.text('Ignore this update'));
+        await tester.pump();
+        await close(tester);
+        await tester.pumpAndSettle();
+        expect(container.read(modUpdateChecksProvider)['Ellen']?.hasUpdate, isTrue,
+            reason: 'nothing is written yet');
+
+        write.complete();
+        await tester.pumpAndSettle();
+
+        final verdict = container.read(modUpdateChecksProvider)['Ellen'];
+        expect(verdict?.dismissed, isTrue);
+        expect(verdict?.hasUpdate, isFalse);
+      });
+
+      testWidgets('closing with $how after nothing reports no write', (tester) async {
+        final reported = await openFromBadge(tester);
+
+        await close(tester);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(ModUpdateDialog), findsNothing);
+        expect(reported(), isFalse);
+      });
+    }
+
     testWidgets('several newer files are offered as a choice, not one answer',
         (tester) async {
       // The reported scenario: an SFW install, an NSFW sibling already ignored,
@@ -1151,7 +1255,7 @@ void main() {
             outcome: UpdateOutcome.updateAvailable,
             // The layer the verdict is about, without which no write is offered
             // and so no notice sits beside one.
-            subjectModId: 531649,
+            subject: const DownloadKey.base(531649),
             candidate: GbFile(idRow: 1732269, dateAdded: DateTime.utc(2026, 6)),
             newerFiles: [
               GbFile(idRow: 1732269, dateAdded: DateTime.utc(2026, 6)),
@@ -1377,6 +1481,40 @@ void main() {
         expect(find.text('Mod'), findsOneWidget);
         expect(find.text('Patch'), findsOneWidget);
         expect(find.text('You have'), findsNWidgets(2));
+      });
+
+      testWidgets('a base and a patch from one page: each section is named by its file',
+          (tester) async {
+        await tester.pumpWidget(const SizedBox());
+        final (client, _) = mixedClient(companionReachable: false);
+        final target = mod(
+          'EllenGlow',
+          origin: origin(fileId: 1732269).copyWith(downloads: [
+            origin(fileId: 1732269).base!,
+            patchFixture(
+              modId: 531649,
+              modIdConfidence: OriginConfidence.exact,
+              fileId: 1492636,
+              versionLabel: 'Glow demo',
+              versionConfidence: OriginConfidence.exact,
+            ),
+          ]),
+        );
+        await pumpLocalized(
+          tester,
+          ModUpdateDialog(mod: target, gateway: _RecordingGateway(target.origin, <ModOrigin?>[])),
+          overrides: [gameBananaClientProvider.overrideWithValue(client)],
+        );
+        await tester.pumpAndSettle();
+
+        // Both sections carry the page's name, so each names its file, the
+        // variant text in grey beneath it.
+        expect(find.text('ZZMI RabbitFX - Glow FX + Censor Remover'), findsNWidgets(2));
+        expect(find.text('Mod'), findsOneWidget);
+        expect(find.text('Patch'), findsOneWidget);
+        final variant = find.text('Glow demo').first;
+        expect(find.text('anbisworddemonew.zip'), findsWidgets);
+        expect(tester.widget<Text>(variant).style?.color, Theme.of(tester.element(variant)).colorScheme.onSurfaceVariant);
       });
 
       testWidgets('reopening the dialog does not lose the other mod\'s name',
@@ -1636,6 +1774,48 @@ void main() {
         expect(block.patches.single.updatesDismissedUntil, isNotNull);
       });
 
+      testWidgets("closing while a patch's update is written still drops the folder's verdict", (tester) async {
+        // Kept, it would go on reporting the update just taken.
+        await tester.pumpWidget(const SizedBox());
+        final (client, _) = mixedClient();
+        final target = mixedMod();
+        final container = ProviderContainer(overrides: [gameBananaClientProvider.overrideWithValue(client)]);
+        addTearDown(container.dispose);
+        final update = Completer<bool>();
+        bool? reported;
+        await pumpLocalized(
+          tester,
+          Builder(
+            builder: (context) => TextButton(
+              onPressed: () async => reported = await showModUpdateDialog(
+                context,
+                target,
+                gateway: _RecordingGateway(target.origin, <ModOrigin?>[], patchUpdate: update.future),
+              ),
+              child: const Text('open'),
+            ),
+          ),
+          container: container,
+        );
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+        expect(container.read(modUpdateChecksProvider)['EllenBikini']?.hasUpdate, isTrue);
+
+        await tester.ensureVisible(find.text('Update'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Update'));
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(find.byType(ModUpdateDialog), findsNothing);
+
+        update.complete(true);
+        await tester.pumpAndSettle();
+
+        expect(container.read(modUpdateChecksProvider).containsKey('EllenBikini'), isFalse);
+        expect(reported, isTrue);
+      });
+
       testWidgets('an unnamed patch still says only the patch is tracked',
           (tester) async {
         // The shipped half, unchanged: with no companion named there is
@@ -1667,9 +1847,27 @@ void main() {
 /// Captures what the dialog would write, instead of touching the real sidecar
 /// (and, through `ApiService`, the developer's real `config.json`).
 class _RecordingGateway implements ModUpdateGateway {
-  _RecordingGateway(this._current, this._written, {this.mods = const []});
+  _RecordingGateway(this._current, this._written, {this.mods = const [], this.hold, this.patchUpdate});
   final ModOrigin? _current;
   final List<ModOrigin?> _written;
+
+  /// When set, every write waits for it before it lands.
+  final Future<void>? hold;
+
+  /// What a patch's update answers, and when. Unset, the dialog is not expected to start one.
+  final Future<bool>? patchUpdate;
+
+  @override
+  Future<bool> applyPatchUpdate(
+    BuildContext context,
+    WidgetRef ref, {
+    required ModInfo mod,
+    required int remoteModId,
+    required GbFile file,
+    required bool asCompanion,
+    required List<GbFile> published,
+  }) =>
+      patchUpdate ?? (throw StateError('no patch update expected'));
 
   /// The library this dialog sees. Empty unless a test is about the archive's
   /// other mods — and never read at all for a mod with no sibling group, which
@@ -1685,6 +1883,7 @@ class _RecordingGateway implements ModUpdateGateway {
     String modId,
     ModOrigin? Function(ModOrigin? current) update,
   ) async {
+    await hold;
     _written.add(update(_current));
     return OriginWriteResult.written;
   }

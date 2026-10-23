@@ -253,14 +253,25 @@ class OriginResolution {
   /// file id written against a layer that has since been rebound or removed is
   /// precisely the corruption the re-read exists to prevent, and the plan a
   /// caller is holding is exactly what has gone stale in the case that matters.
+  ///
+  /// Always the **base** of [modId]: these answers are about what the folder
+  /// is, and the same page can also be a patch on top of it.
   static ModDownload? _layer(ModOrigin? existing, int modId) =>
-      existing?.downloadOf(modId);
+      existing?.downloadOf(DownloadKey.base(modId));
+
+  /// Whether a layer above the base records [fileId]: a patch from the base's
+  /// own page. Recorded on the base too, it would be one download in the stack
+  /// twice, and a read keeps only the lower copy, losing the patch's record.
+  static bool _heldAbove(ModOrigin existing, int fileId) =>
+      existing.patches.any((patch) => patch.fileId == fileId);
 
   /// Records which file of the bound mod is installed.
   ///
   /// Returns null when the block is no longer bound to [modId] — the sidecar was
   /// rewritten while the dialog was open, and a `file_id` written against the
-  /// wrong mod is precisely the corruption the re-read exists to prevent.
+  /// wrong mod is precisely the corruption the re-read exists to prevent. Also
+  /// null when a patch on the base records [file], so it is never written on
+  /// the base as well; `inferFile` holds the same rule.
   ///
   /// `version` and `versionLabel` come from the two GameBanana strings that must
   /// never be conflated: `_sVersion` is a per-file version, `_sDescription` is
@@ -281,10 +292,10 @@ class OriginResolution {
     required bool exact,
   }) {
     final layer = _layer(existing, modId);
-    if (layer == null) return null;
+    if (layer == null || _heldAbove(existing!, file.idRow)) return null;
     final rePickingRecorded = layer.fileId == file.idRow;
-    return existing!.withDownload(
-      modId,
+    return existing.withDownload(
+      DownloadKey.base(modId),
       (download) => download.copyWith(
         fileId: file.idRow,
         version: file.version,
@@ -323,10 +334,10 @@ class OriginResolution {
     required GbFile file,
   }) {
     final layer = _layer(existing, modId);
-    if (layer == null) return null;
+    if (layer == null || _heldAbove(existing!, file.idRow)) return null;
     if (layer.versionConfidence != OriginConfidence.unknown) return null;
-    return existing!.withDownload(
-      modId,
+    return existing.withDownload(
+      DownloadKey.base(modId),
       (download) => download.copyWith(
         fileId: file.idRow,
         version: file.version,

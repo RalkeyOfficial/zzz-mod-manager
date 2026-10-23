@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/button_working.dart';
 import '../../core/palette.dart';
 import '../../core/type_scale.dart';
 import '../../l10n/app_localizations.dart';
@@ -20,6 +21,7 @@ import '../../utils/byte_format.dart';
 import '../../utils/html_to_markdown.dart';
 import '../../utils/state_providers.dart';
 import '../components/character_tile.dart';
+import '../components/folder_downloads_summary.dart' show sharedPageFile;
 import '../components/mod_detail_parts.dart';
 import '../components/resolve/resolve_fragments.dart' show formatResolveDate;
 import '../components/zenith_controls.dart';
@@ -47,9 +49,10 @@ class ModHistoryTab extends ConsumerWidget {
 
   /// The base mod's update posts, newest first. Null while they load or when there are none to load.
   final List<GbUpdate>? updates;
-  final VoidCallback onReinstall;
-  final ValueChanged<ModSnapshot> onRestore;
-  final ValueChanged<ModDownload> onTakeOut;
+  /// Each handed the [WorkSpan] of the button pressed, so the button shows the wait (`WorkingAction`).
+  final WorkingCallback onReinstall;
+  final Future<void> Function(ModSnapshot snapshot, WorkSpan work) onRestore;
+  final Future<void> Function(ModDownload patch, WorkSpan work) onTakeOut;
   final ValueChanged<ModDownload> onStopIgnoring;
 
   @override
@@ -66,7 +69,7 @@ class ModHistoryTab extends ConsumerWidget {
     final post = _latestPost(updates);
     // While a restore, a patch removal or a stop-ignoring writes this folder, nothing else may start on it.
     final busy = ref.watch(modWritesInProgressProvider).contains(mod.id);
-    VoidCallback? unlessBusy(VoidCallback action) => busy ? null : action;
+    WorkingCallback? unlessBusy(WorkingCallback action) => busy ? null : action;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -77,7 +80,12 @@ class ModHistoryTab extends ConsumerWidget {
           children: [
             _CurrentRow(mod: mod, records: records, onReinstall: unlessBusy(onReinstall)),
             for (final entry in snapshots)
-              _SnapshotRow(entry: entry, records: records, onRestore: unlessBusy(() => onRestore(entry.snapshot))),
+              _SnapshotRow(
+                key: ValueKey(entry.snapshot.id),
+                entry: entry,
+                records: records,
+                onRestore: unlessBusy((work) => onRestore(entry.snapshot, work)),
+              ),
           ],
         ),
         if (post != null) _UpdatePost(post: post),
@@ -88,7 +96,7 @@ class ModHistoryTab extends ConsumerWidget {
             children: [
               SectionHeading(loc.t('library.history.patches'), aside: loc.t('library.history.patches_order'), large: true),
               for (final patch in patches)
-                _PatchRow(mod: mod, patch: patch, records: records, onTakeOut: unlessBusy(() => onTakeOut(patch))),
+                _PatchRow(mod: mod, patch: patch, records: records, onTakeOut: unlessBusy((work) => onTakeOut(patch, work))),
               _Footnote(loc.t('library.history.take_out_note')),
             ],
           ),
@@ -103,7 +111,7 @@ class ModHistoryTab extends ConsumerWidget {
                   mod: mod,
                   download: download,
                   records: records,
-                  onStopIgnoring: unlessBusy(() => onStopIgnoring(download)),
+                  onStopIgnoring: busy ? null : () => onStopIgnoring(download),
                 ),
             ],
           ),
@@ -223,7 +231,7 @@ class _CurrentRow extends ConsumerWidget {
   final Map<int, GbMod> records;
 
   /// Null while another write holds the folder.
-  final VoidCallback? onReinstall;
+  final WorkingCallback? onReinstall;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -249,11 +257,14 @@ class _CurrentRow extends ConsumerWidget {
       facts: facts,
       trailing: [
         if (canReinstall(mod))
-          OutlinedButton.icon(
-            style: smallButtonStyle(context),
+          WorkingAction(
             onPressed: onReinstall,
-            icon: const Icon(Icons.download_rounded),
-            label: Text(loc.t('library.history.reinstall')),
+            builder: (context, onPressed) => OutlinedButton.icon(
+              style: smallButtonStyle(context),
+              onPressed: onPressed,
+              icon: const WorkingIcon(Icon(Icons.download_rounded)),
+              label: Text(loc.t('library.history.reinstall')),
+            ),
           ),
         ZenithBadge(label: loc.t('library.history.in_use'), tone: palette.badgeOn),
       ],
@@ -264,11 +275,11 @@ class _CurrentRow extends ConsumerWidget {
 /// A snapshot to go back to: the file the folder held when it was saved, when its copy of the sidecar names one and
 /// this session holds the page, and otherwise the time it was saved.
 class _SnapshotRow extends StatelessWidget {
-  const _SnapshotRow({required this.entry, required this.records, required this.onRestore});
+  const _SnapshotRow({super.key, required this.entry, required this.records, required this.onRestore});
 
   final SnapshotEntry entry;
   final Map<int, GbMod> records;
-  final VoidCallback? onRestore;
+  final WorkingCallback? onRestore;
 
   @override
   Widget build(BuildContext context) {
@@ -293,11 +304,14 @@ class _SnapshotRow extends StatelessWidget {
       variant: file == null ? null : (base?.versionLabel ?? ''),
       facts: facts,
       trailing: [
-        OutlinedButton.icon(
-          style: smallButtonStyle(context),
+        WorkingAction(
           onPressed: onRestore,
-          icon: const Icon(Icons.history_rounded),
-          label: Text(loc.t('mods.backups.restore')),
+          builder: (context, onPressed) => OutlinedButton.icon(
+            style: smallButtonStyle(context),
+            onPressed: onPressed,
+            icon: const WorkingIcon(Icon(Icons.history_rounded)),
+            label: Text(loc.t('mods.backups.restore')),
+          ),
         ),
       ],
     );
@@ -355,7 +369,7 @@ class _PatchRow extends StatelessWidget {
   final ModInfo mod;
   final ModDownload patch;
   final Map<int, GbMod> records;
-  final VoidCallback? onTakeOut;
+  final WorkingCallback? onTakeOut;
 
   @override
   Widget build(BuildContext context) {
@@ -410,7 +424,9 @@ class _PatchRow extends StatelessWidget {
               spacing: 2,
               children: [
                 DownloadTitle(download: patch, folderName: mod.name, page: page),
-                if (file != null)
+                if (sharedPageFile(mod.origin, patch, page: page) case final shared?)
+                  LayerFileText(shared, nameStyle: ZenithType.of(context).mono.copyWith(color: palette.textProse))
+                else if (file != null)
                   Text(fileDisplayName(file), style: ZenithType.of(context).mono.copyWith(color: palette.textProse)),
                 if (facts.isNotEmpty) Text(facts, style: text.bodySmall?.copyWith(color: palette.text3)),
                 if (why != null) Text(why, style: text.bodySmall?.copyWith(color: palette.text3, fontStyle: FontStyle.italic)),
@@ -418,7 +434,14 @@ class _PatchRow extends StatelessWidget {
             ),
           ),
           if (removable)
-            OutlinedButton(style: smallButtonStyle(context), onPressed: onTakeOut, child: Text(loc.t('library.history.take_out'))),
+            WorkingAction(
+              onPressed: onTakeOut,
+              builder: (context, onPressed) => OutlinedButton(
+                style: smallButtonStyle(context),
+                onPressed: onPressed,
+                child: Text(loc.t('library.history.take_out')),
+              ),
+            ),
         ],
       ),
     );
@@ -462,6 +485,9 @@ class _IgnoredRow extends ConsumerWidget {
                 children: [
                   // In a folder of several downloads, which one's update this is.
                   if (stacked) DownloadTitle(download: download, folderName: mod.name, page: page),
+                  // Two layers of one page carry one name, so the row names which file's update it is.
+                  if (sharedPageFile(mod.origin, download, page: page) case final shared?)
+                    LayerFileText(shared, nameStyle: text.bodySmall!.copyWith(color: palette.text2)),
                   for (final file in files) ...[
                     Text(fileDisplayName(file), style: ZenithType.of(context).mono.copyWith(color: palette.textProse)),
                     if (file.description case final words? when words.trim().isNotEmpty)
@@ -490,13 +516,14 @@ class _IgnoredRow extends ConsumerWidget {
     );
   }
 
-  /// This download's own verdict out of the folder's.
+  /// This download's own verdict out of the folder's, by layer: its page can also be another layer's.
   UpdateCheck? _checkOf(UpdateCheck? folder) {
-    if (folder == null) return null;
+    final key = mod.origin?.keyOf(download);
+    if (folder == null || key == null) return null;
     for (final layer in folder.layers) {
-      if (layer.download.modId == download.modId) return layer.check;
+      if (layer.key == key) return layer.check;
     }
-    return folder.subjectModId == download.modId ? folder : null;
+    return folder.subject == key ? folder : null;
   }
 }
 

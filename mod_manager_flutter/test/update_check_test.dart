@@ -1253,4 +1253,95 @@ void main() {
       expect(check.subjectModId, 531649);
     });
   });
+
+  group('a base and a patch from one page', () {
+    // A lone fix file on the main file's own page, the shape about one in
+    // twelve of the most-downloaded character pages carries. The page is
+    // written out here because what matters is which file each layer holds.
+    const pageId = 700;
+    const mainFile = 1;
+    const fixFile = 2;
+    final mainOld = GbFile(idRow: mainFile, file: 'main.zip', description: 'Main file', dateAdded: DateTime.utc(2026, 1));
+    final fixOld = GbFile(idRow: fixFile, file: 'fix.zip', description: 'Hair fix', dateAdded: DateTime.utc(2026, 2));
+
+    ModOrigin samePage() => origin(
+          modId: pageId,
+          fileId: mainFile,
+          versionLabel: 'Main file',
+          patches: [
+            patchFixture(
+              modId: pageId,
+              modIdConfidence: OriginConfidence.exact,
+              fileId: fixFile,
+              versionLabel: 'Hair fix',
+              versionConfidence: OriginConfidence.exact,
+            ),
+          ],
+        );
+
+    UpdateCheck check(List<GbFile> files) => checkForUpdate(
+          origin: samePage(),
+          remote: GbMod(idRow: pageId, files: files),
+        );
+
+    UpdateCheck layer(UpdateCheck folded, DownloadRole role) =>
+        folded.layers.firstWhere((l) => l.key == DownloadKey(pageId, role)).check;
+
+    test('the base is not flagged by its own installed patch', () {
+      // The fix is usually the newer upload; it is installed, not an update.
+      final folded = check([mainOld, fixOld]);
+
+      expect(layer(folded, DownloadRole.base).outcome, UpdateOutcome.upToDate);
+      expect(layer(folded, DownloadRole.patch).outcome, UpdateOutcome.upToDate);
+      expect(folded.hasUpdate, isFalse);
+    });
+
+    test("a newer file wearing one layer's label goes to that layer only", () {
+      final fixNew = GbFile(idRow: 3, file: 'fix2.zip', description: 'Hair fix', dateAdded: DateTime.utc(2026, 3));
+      final folded = check([mainOld, fixOld, fixNew]);
+
+      final patch = layer(folded, DownloadRole.patch);
+      expect(patch.outcome, UpdateOutcome.updateAvailable);
+      expect(patch.candidate?.idRow, 3);
+      expect(layer(folded, DownloadRole.base).outcome, UpdateOutcome.upToDate,
+          reason: 'the author named that file the fix');
+      expect(folded.subject, const DownloadKey.patch(pageId));
+    });
+
+    test('an unlabelled newer file is listed under both layers', () {
+      // Nothing says whose it is, so both are told: the safe direction.
+      final unlabelled = GbFile(idRow: 4, file: 'new.zip', dateAdded: DateTime.utc(2026, 3));
+      final folded = check([mainOld, fixOld, unlabelled]);
+
+      for (final role in DownloadRole.values) {
+        final verdict = layer(folded, role);
+        expect(verdict.outcome, UpdateOutcome.possiblyOutdated, reason: role.wire);
+        expect(verdict.newerFiles.map((f) => f.idRow), [4], reason: role.wire);
+      }
+    });
+
+    test("an archived base is not offered the patch's file", () {
+      // Every current file could replace a file taken down, except the one
+      // another layer holds.
+      final unlabelled = GbFile(idRow: 4, file: 'new.zip', dateAdded: DateTime.utc(2026, 3));
+      final archivedMain = GbFile(
+          idRow: mainFile, file: 'main.zip', description: 'Main file', dateAdded: DateTime.utc(2026, 1), isArchived: true);
+      final base = layer(check([archivedMain, fixOld, unlabelled]), DownloadRole.base);
+
+      expect(base.outcome, UpdateOutcome.updateAvailable);
+      expect(base.newerFiles.map((f) => f.idRow), [4]);
+      expect(base.candidate?.idRow, 4, reason: 'the one file left to choose');
+    });
+
+    test('a dismissal on one layer leaves the other speaking', () {
+      final unlabelled = GbFile(idRow: 4, file: 'new.zip', dateAdded: DateTime.utc(2026, 3));
+      final folded = check([mainOld, fixOld, unlabelled]);
+      final refolded = refoldDismissal(folded, const DownloadKey.patch(pageId), true);
+
+      expect(layer(refolded, DownloadRole.patch).dismissed, isTrue);
+      expect(layer(refolded, DownloadRole.base).dismissed, isFalse);
+      expect(refolded.hasUpdate, isTrue);
+      expect(refolded.subject, const DownloadKey.base(pageId));
+    });
+  });
 }

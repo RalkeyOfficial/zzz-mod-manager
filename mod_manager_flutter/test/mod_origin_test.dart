@@ -305,16 +305,25 @@ void main() {
       expect(origin.hasIdentity, isFalse);
     });
 
-    test('a layer is found and addressed by its own id', () {
+    test('a layer is found and addressed by its page and its place', () {
       final origin = stack(const [
         ModDownload(modId: 1),
         ModDownload(role: DownloadRole.patch, modId: 2),
       ]);
 
-      expect(origin.downloadOf(2)!.role, DownloadRole.patch);
-      expect(origin.indexOf(2), 1);
-      expect(origin.indexOf(999), -1);
-      expect(origin.downloadOf(999), isNull);
+      expect(origin.downloadOf(const DownloadKey.patch(2))!.role, DownloadRole.patch);
+      expect(origin.indexOf(const DownloadKey.patch(2)), 1);
+      expect(origin.indexOf(const DownloadKey.base(2)), -1, reason: 'page 2 is not the base');
+      expect(origin.indexOf(const DownloadKey.base(999)), -1);
+      expect(origin.downloadOf(const DownloadKey.base(999)), isNull);
+    });
+
+    test('the key follows the position, not the stored tag', () {
+      // A fixture or a hand edit can carry a stale role; the position wins.
+      final origin = stack(const [ModDownload(modId: 1), ModDownload(modId: 1, fileId: 2)]);
+
+      expect(origin.keyAt(1), const DownloadKey.patch(1));
+      expect(origin.indexOf(const DownloadKey.patch(1)), 1);
     });
 
     test('only layers that name a page are trackable', () {
@@ -326,10 +335,8 @@ void main() {
       expect(origin.trackable.map((d) => d.modId), [1]);
     });
 
-    test('a repeated mod id keeps the lower layer', () {
-      // Kept, the second would have the check ask one page twice and report two
-      // verdicts for one folder — and the lower one is the one whose files the
-      // upper would have overwritten.
+    test('a base and a patch of one page are two layers, and both are kept', () {
+      // A lone `.ini` fix on the base's own page: one id, two files.
       final origin = ModOrigin.fromJson({
         'provenance': 'downloaded',
         'downloads': [
@@ -338,8 +345,51 @@ void main() {
         ],
       })!;
 
-      expect(origin.downloads, hasLength(1));
-      expect(origin.base!.fileId, 10);
+      expect(origin.downloads.map((d) => d.fileId), [10, 20]);
+      expect(origin.patches.single.role, DownloadRole.patch);
+    });
+
+    test('a second patch of one page is dropped, and the lower one kept', () {
+      final origin = ModOrigin.fromJson({
+        'provenance': 'downloaded',
+        'downloads': [
+          {'mod_id': 1, 'file_id': 10},
+          {'mod_id': 2, 'file_id': 20},
+          {'mod_id': 2, 'file_id': 30},
+        ],
+      })!;
+
+      expect(origin.downloads.map((d) => d.fileId), [10, 20]);
+    });
+
+    test('a layer recording the same page and file as one below it is dropped', () {
+      // One download recorded twice. Kept, a write by key would reach only one
+      // of the two copies.
+      final origin = ModOrigin.fromJson({
+        'provenance': 'downloaded',
+        'downloads': [
+          {'mod_id': 1, 'file_id': 10},
+          {'mod_id': 1, 'file_id': 10},
+          {'mod_id': 1, 'file_id': 30},
+        ],
+      })!;
+
+      expect(origin.downloads.map((d) => d.fileId), [10, 30],
+          reason: 'the duplicate goes, and the next patch of the page is the first one');
+    });
+
+    test('a stack of one layer per page round-trips unchanged', () {
+      final origin = ModOrigin.fromJson({
+        'provenance': 'downloaded',
+        'downloads': [
+          {'mod_id': 1, 'file_id': 10, 'version_label': 'Main'},
+          {'role': 'patch', 'mod_id': 2, 'file_id': 20},
+          {'role': 'patch', 'mod_id': 3},
+        ],
+      })!;
+
+      expect(ModOrigin.fromJson(origin.toJson()), origin);
+      expect(origin.downloads, hasLength(3));
     });
 
     test('a layer that knows nothing is kept, because its position is a fact',
@@ -420,7 +470,7 @@ void main() {
       expect(named.needsBase, isFalse, reason: 'but no longer being asked');
 
       // And removing the base asks again.
-      expect(named.withoutDownload(585282).needsBase, isTrue);
+      expect(named.withoutDownload(const DownloadKey.base(585282)).needsBase, isTrue);
     });
 
     test('an empty stack gains a layer for the folder\'s own download', () {
@@ -453,6 +503,22 @@ void main() {
       expect(twice.patches.single.version, '1.1');
     });
 
+    test('withLayerOnTop never drops the base, even of the same page', () {
+      // A patch whose file comes from its base's own page goes on top of it.
+      final base = ModOrigin(
+        provenance: OriginProvenance.downloaded,
+        downloads: const [ModDownload(modId: 700, fileId: 1)],
+      );
+      final patched = base.withLayerOnTop(const ModDownload(modId: 700, fileId: 2));
+
+      expect(patched.downloads.map((d) => d.fileId), [1, 2]);
+      expect(patched.base!.fileId, 1);
+
+      // A second fix from that page replaces the first, never the base.
+      final again = patched.withLayerOnTop(const ModDownload(modId: 700, fileId: 3));
+      expect(again.downloads.map((d) => d.fileId), [1, 3]);
+    });
+
     test('a layer with no id is always additive', () {
       // There is nothing to match it against, and two hand-dragged patches in
       // one folder is a real shape.
@@ -466,7 +532,7 @@ void main() {
     test('withDownload amends one layer and moves nothing', () {
       final origin = patchFolder().withLayerOnTop(const ModDownload(modId: 700));
       final amended =
-          origin.withDownload(605460, (d) => d.copyWith(fileId: 42));
+          origin.withDownload(const DownloadKey.base(605460), (d) => d.copyWith(fileId: 42));
 
       expect(amended.downloads.map((d) => d.modId), [605460, 700]);
       expect(amended.base!.fileId, 42);
@@ -493,7 +559,7 @@ void main() {
         ],
       );
 
-      final left = origin.withoutDownload(1);
+      final left = origin.withoutDownload(const DownloadKey.base(1));
       expect(left.downloads.single.modId, 2);
       expect(left.downloads.single.role, DownloadRole.base,
           reason: 'it is the bottom of what is left, so it says so');
@@ -513,18 +579,33 @@ void main() {
         // wrong layer it silences nothing and stamps another mod's release date
         // where it can hide a finding nobody dismissed.
         final until = DateTime.utc(2026, 5, 1);
-        final amended = folder().withDismissal(subject: 2, until: until);
+        final amended = folder().withDismissal(subject: const DownloadKey.patch(2), until: until);
 
-        expect(amended.downloadOf(2)!.updatesDismissedUntil, until);
+        expect(amended.downloadOf(const DownloadKey.patch(2))!.updatesDismissedUntil, until);
+        expect(amended.base!.updatesDismissedUntil, isNull);
+      });
+
+      test('on a page that is the base and a patch, dates only the layer named', () {
+        final samePage = ModOrigin(
+          provenance: OriginProvenance.downloaded,
+          downloads: const [
+            ModDownload(modId: 1, fileId: 10),
+            ModDownload(role: DownloadRole.patch, modId: 1, fileId: 20),
+          ],
+        );
+        final until = DateTime.utc(2026, 5, 1);
+        final amended = samePage.withDismissal(subject: const DownloadKey.patch(1), until: until);
+
+        expect(amended.patches.single.updatesDismissedUntil, until);
         expect(amended.base!.updatesDismissedUntil, isNull);
       });
 
       test('a null cutoff is the undo', () {
         final amended = folder()
-            .withDismissal(subject: 2, until: DateTime.utc(2026))
-            .withDismissal(subject: 2, until: null);
+            .withDismissal(subject: const DownloadKey.patch(2), until: DateTime.utc(2026))
+            .withDismissal(subject: const DownloadKey.patch(2), until: null);
 
-        expect(amended.downloadOf(2)!.updatesDismissedUntil, isNull);
+        expect(amended.downloadOf(const DownloadKey.patch(2))!.updatesDismissedUntil, isNull);
       });
 
       test('a subject this block no longer carries changes nothing', () {
@@ -532,8 +613,10 @@ void main() {
         // releases, and a verdict computed against a block that has since moved
         // on is exactly when that happens.
         final origin = folder();
-        expect(origin.withDismissal(subject: 999, until: DateTime.utc(2026)),
+        expect(origin.withDismissal(subject: const DownloadKey.base(999), until: DateTime.utc(2026)),
             origin);
+        expect(origin.withDismissal(subject: const DownloadKey.patch(1), until: DateTime.utc(2026)), origin,
+            reason: 'page 1 is the base here, not a patch');
       });
     });
   });
@@ -647,8 +730,9 @@ void main() {
     });
 
     test('a companion naming the block\'s own mod is dropped', () {
-      // The same thing said twice. Kept, it would have the check ask one page
-      // twice and report two verdicts for one folder.
+      // The flat shape never shipped, and in it a companion naming the block's
+      // own mod is that one download said twice: it records no file of its own
+      // to tell it apart as a patch of the same page.
       final origin = ModOrigin.fromJson({
         'provenance': 'downloaded',
         'mod_id': 585282,

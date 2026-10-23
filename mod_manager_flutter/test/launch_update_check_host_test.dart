@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/core/button_working.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
@@ -324,7 +325,10 @@ void main() {
 
       expect(fetchCalls, 1);
       expect(container.read(libraryCheckRunningProvider), isTrue);
+      // Off while a check it didn't start runs; only the button that starts a check shows it working.
       expect(checkAll().onPressed, isNull);
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.byType(ZenithSpinner), findsNothing);
 
       reply.complete([superseded(1)]);
       await tester.pumpAndSettle();

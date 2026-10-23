@@ -5,11 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/installed_file.dart';
+import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/dialogs/remove_patch_flow.dart';
 import 'package:mod_manager_flutter/services/patch_store.dart';
+import 'package:mod_manager_flutter/services/update_check.dart';
 import 'package:mod_manager_flutter/utils/notifications.dart';
+import 'package:mod_manager_flutter/utils/state_providers.dart';
 import 'package:path/path.dart' as p;
 
 import 'support/localized_harness.dart';
@@ -286,6 +289,51 @@ void main() {
 
     expect(library.snapshotsOf(modName), hasLength(1),
         reason: '"Restore a previous version…" is the way back from this');
+  });
+
+  /// A container over the temp library holding a session verdict for the folder that names the patch's layer.
+  ProviderContainer withVerdict() {
+    final container = watched().container;
+    container.read(modUpdateChecksProvider.notifier).state = {
+      modName: const UpdateCheck(outcome: UpdateOutcome.updateAvailable, subject: DownloadKey.patch(patchId)),
+      'Another mod': const UpdateCheck(outcome: UpdateOutcome.upToDate),
+    };
+    return container;
+  }
+
+  testWidgets("taking the patch out drops the folder's verdict and only that one", (tester) async {
+    final origin = await patchedFolder(tester);
+    final container = withVerdict();
+    await press(tester, origin, container: container);
+    await confirm(tester);
+
+    expect(changed, isTrue);
+    expect(container.read(modUpdateChecksProvider).keys, ['Another mod'],
+        reason: 'the verdict can name the layer that is gone');
+  });
+
+  testWidgets("a patch whose files are gone also drops the folder's verdict", (tester) async {
+    final origin = await patchedFolder(tester);
+    library.deleteMod(modName);
+    library.createMod(modName);
+    await tester.runAsync(() => library.writeOrigin(modName, origin));
+    final container = withVerdict();
+
+    await press(tester, origin, container: container);
+
+    expect(changed, isTrue);
+    expect(container.read(modUpdateChecksProvider).keys, ['Another mod']);
+  });
+
+  testWidgets("declining keeps the folder's verdict", (tester) async {
+    final origin = await patchedFolder(tester);
+    final container = withVerdict();
+    await press(tester, origin, container: container);
+
+    await tapWithIo(tester, find.text('Cancel'));
+
+    expect(changed, isFalse);
+    expect(container.read(modUpdateChecksProvider).keys, {modName, 'Another mod'});
   });
 
   testWidgets('declining changes nothing at all', (tester) async {

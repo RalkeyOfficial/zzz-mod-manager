@@ -4,6 +4,7 @@ import '../../models/character_info.dart';
 import '../../models/mod_download.dart';
 import '../../services/patch_removal.dart';
 import '../../utils/url_utils.dart';
+import '../components/folder_downloads_summary.dart' show layerLine, sharedPageFile;
 import 'reinstall_flow.dart' show canReinstall;
 
 /// The right-click menu for a mod card. A thin dispatcher: each entry runs the
@@ -186,7 +187,11 @@ void showModContextMenu(
                 child: Text(
                   patches.length > 1
                       ? loc.t('mods.context_menu.remove_patch_named', params: {
-                          'patch': patchNames[patch.modId] ?? '#${patch.modId}',
+                          // "<page> · <file>" for a patch from its base's own page.
+                          'patch': layerLine(
+                            patchNames[patch.modId] ?? '#${patch.modId}',
+                            sharedPageFile(mod.origin, patch),
+                          ),
                         })
                       : loc.t('mods.context_menu.remove_patch'),
                   overflow: TextOverflow.ellipsis,

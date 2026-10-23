@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/button_working.dart';
 import '../../core/palette.dart';
 import '../../core/type_scale.dart';
 import '../../l10n/app_localizations.dart';
@@ -148,14 +149,16 @@ class _HeaderState extends ConsumerState<_Header> {
             Text(_lastChecked(loc, checkedAt), style: text.bodyMedium?.copyWith(color: palette.text2)),
           ],
         ),
-        OutlinedButton.icon(
+        // Working while the check it started runs; off while any other check runs.
+        WorkingAction(
           onPressed: checking || !checkPlan.hasWork
               ? null
-              : () => unawaited(LibraryActionsHost.of(context).checkForUpdates()),
-          icon: checking
-              ? const SizedBox.square(dimension: 14, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Icon(Icons.sync_rounded),
-          label: Text(loc.t('library.all.check_all')),
+              : (work) => LibraryActionsHost.of(context).checkForUpdates(work: work),
+          builder: (context, onPressed) => OutlinedButton.icon(
+            onPressed: onPressed,
+            icon: const WorkingIcon(Icon(Icons.sync_rounded)),
+            label: Text(loc.t('library.all.check_all')),
+          ),
         ),
       ],
     );
@@ -1218,12 +1221,15 @@ class _MarkedCardState extends ConsumerState<_MarkedCard> {
           spacing: 8,
           runSpacing: 8,
           children: [
-            FilledButton.icon(
+            WorkingAction(
               onPressed: checking || _undoing || mods.isEmpty
                   ? null
-                  : () => unawaited(LibraryActionsHost.of(context).checkMods(mods)),
-              icon: const Icon(Icons.sync_rounded),
-              label: Text(loc.t('library.updates.check_them')),
+                  : (work) => LibraryActionsHost.of(context).checkMods(mods, work: work),
+              builder: (context, onPressed) => FilledButton.icon(
+                onPressed: onPressed,
+                icon: const WorkingIcon(Icon(Icons.sync_rounded)),
+                label: Text(loc.t('library.updates.check_them')),
+              ),
             ),
             TextButton(
               onPressed: _undoing ? null : () => unawaited(_undo()),

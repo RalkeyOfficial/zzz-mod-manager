@@ -28,6 +28,7 @@ class FileChoicePanel extends StatelessWidget {
     required this.selectedFileId,
     required this.onSelected,
     this.recordedFileId,
+    this.heldFileIds = const <int>{},
     this.heading,
     this.maxHeight = 230,
   });
@@ -37,6 +38,11 @@ class FileChoicePanel extends StatelessWidget {
   /// The file the sidecar already names, marked **on record**. Null while the
   /// panel is pointed at a mod the block does not describe.
   final int? recordedFileId;
+
+  /// Files another layer of the folder records. Their rows are greyed, with
+  /// "Already in this folder" under them, and cannot be picked: picked, one
+  /// download would be recorded twice. A page is never refused, only its file.
+  final Set<int> heldFileIds;
 
   final int? selectedFileId;
 
@@ -97,10 +103,15 @@ class FileChoicePanel extends StatelessWidget {
     );
   }
 
+  /// The colour of a row that cannot be picked: Material's disabled foreground.
+  static Color _greyed(ColorScheme scheme) =>
+      scheme.onSurface.withValues(alpha: 0.38);
+
   Widget _row(BuildContext context, ResolveCandidate candidate) {
     final loc = context.loc;
     final scheme = Theme.of(context).colorScheme;
-    final selected = selectedFileId == candidate.file.idRow;
+    final held = heldFileIds.contains(candidate.file.idRow);
+    final selected = !held && selectedFileId == candidate.file.idRow;
     final reason = switch (candidate.reason) {
       FileMatchReason.archiveHash => loc.t('mods.resolve.reason_hash'),
       FileMatchReason.folderName => loc.t('mods.resolve.reason_folder'),
@@ -113,7 +124,7 @@ class FileChoicePanel extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 4),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onTap: () => onSelected(candidate.file, candidate.isExact),
+        onTap: held ? null : () => onSelected(candidate.file, candidate.isExact),
         child: Container(
           padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
           decoration: BoxDecoration(
@@ -132,7 +143,11 @@ class FileChoicePanel extends StatelessWidget {
                     ? Icons.radio_button_checked
                     : Icons.radio_button_unchecked,
                 size: 18,
-                color: selected ? scheme.primary : scheme.onSurfaceVariant,
+                color: selected
+                    ? scheme.primary
+                    : held
+                        ? _greyed(scheme)
+                        : scheme.onSurfaceVariant,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -150,7 +165,10 @@ class FileChoicePanel extends StatelessWidget {
                       children: [
                         Text(
                           fileDisplayName(candidate.file),
-                          style: const TextStyle(fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: held ? _greyed(scheme) : null,
+                          ),
                         ),
                         if (candidate.file.isArchived)
                           resolveChip(loc.t('marketplace.badge_archived'),
@@ -179,6 +197,13 @@ class FileChoicePanel extends StatelessWidget {
                     if (candidate.file.dateAdded case final date?)
                       Text(
                         formatResolveDate(date),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    if (held)
+                      Text(
+                        loc.t('mods.resolve.file_in_folder'),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),

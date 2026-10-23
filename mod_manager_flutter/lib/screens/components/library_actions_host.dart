@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/button_working.dart';
 import '../../models/character_info.dart';
 import '../../services/bulk_resolution.dart';
 import '../../services/bulk_update_check.dart';
@@ -56,12 +57,15 @@ class LibraryActionsHost extends ConsumerStatefulWidget {
 abstract interface class LibraryActions {
   /// Checks every tracked mod for updates. With mods whose tracking the results let the user sort out, opens that
   /// screen; otherwise reports the outcome as a notification.
-  Future<void> checkForUpdates();
+  ///
+  /// [work] marks the requests, so the button that asked shows them working and goes back to rest before the results
+  /// screen opens.
+  Future<void> checkForUpdates({WorkSpan work = noWorkSpan});
 
   /// Checks only [mods], the All mods table's selection or the mods the Updates page's "Check them now" names, and
   /// reports the outcome as a notification. The tracking screen is the whole library's, opened by a whole-library
-  /// check or from the Updates page, never by this.
-  Future<void> checkMods(List<ModInfo> mods);
+  /// check or from the Updates page, never by this. [work] as for [checkForUpdates].
+  Future<void> checkMods(List<ModInfo> mods, {WorkSpan work = noWorkSpan});
 
   /// Opens the "sort out mod tracking" screen, running the check first when there is nothing in hand to show.
   Future<void> sortOutTracking();
@@ -102,14 +106,21 @@ class _LibraryActionsHostState extends ConsumerState<LibraryActionsHost> impleme
   }
 
   @override
-  Future<void> checkForUpdates() => _runUpdateCheck(ref.read(bulkUpdateCheckPlanProvider));
+  Future<void> checkForUpdates({WorkSpan work = noWorkSpan}) =>
+      _runUpdateCheck(ref.read(bulkUpdateCheckPlanProvider), work: work);
 
   @override
-  Future<void> checkMods(List<ModInfo> mods) => _runUpdateCheck(planBulkUpdateCheck(mods), wholeLibrary: false);
+  Future<void> checkMods(List<ModInfo> mods, {WorkSpan work = noWorkSpan}) =>
+      _runUpdateCheck(planBulkUpdateCheck(mods), wholeLibrary: false, work: work);
 
   /// [onDemand] is "sort out mod tracking" running the check first: the screen then opens for untracked mods too, since the user asked for it.
   /// A check of part of the library ([wholeLibrary] false) only reports, and doesn't count as the library checked.
-  Future<void> _runUpdateCheck(BulkUpdateCheckPlan plan, {bool onDemand = false, bool wholeLibrary = true}) async {
+  Future<void> _runUpdateCheck(
+    BulkUpdateCheckPlan plan, {
+    bool onDemand = false,
+    bool wholeLibrary = true,
+    WorkSpan work = noWorkSpan,
+  }) async {
     final running = ref.read(libraryCheckRunningProvider.notifier);
     if (running.state || !plan.hasWork) return;
     running.state = true;
@@ -121,12 +132,15 @@ class _LibraryActionsHostState extends ConsumerState<LibraryActionsHost> impleme
     try {
       // Shared with the opt-in startup check, so the two cannot disagree about
       // the cache or about what a pass leaves behind.
-      outcome = await runLibraryUpdateCheck(
-        plan: plan,
-        client: ref.read(gameBananaClientProvider),
-        fetch: widget.updateFetcher,
-        fetchUpdates: widget.updatesFetcher,
-        onProgress: (reached) => progress.state = reached,
+      final client = ref.read(gameBananaClientProvider);
+      outcome = await work(
+        () => runLibraryUpdateCheck(
+          plan: plan,
+          client: client,
+          fetch: widget.updateFetcher,
+          fetchUpdates: widget.updatesFetcher,
+          onProgress: (reached) => progress.state = reached,
+        ),
       );
       // Before the progress is cleared, so a mod the check reached never reads unchecked in between.
       checks.state = mergedChecks(checks.state, outcome, keep: changedDuringCheck(container, start));

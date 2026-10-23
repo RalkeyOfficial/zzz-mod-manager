@@ -5,6 +5,8 @@ import 'package:path/path.dart' as path;
 import 'package:mod_manager_flutter/services/archive_hash.dart';
 import 'package:mod_manager_flutter/services/archive_service.dart';
 
+import 'support/system_temp.dart';
+
 /// Builds a `.zip` at [zipPath] from a map of archive-relative path -> contents.
 /// A trailing `/` key denotes an (otherwise empty) directory entry.
 File _makeZip(String zipPath, Map<String, String> entries) {
@@ -461,6 +463,173 @@ void main() {
       );
 
       expect(result.failure, ExtractFailure.other);
+    });
+  });
+
+  group('the folder an unpack makes', () {
+    // The system temp folder is pointed into this test's own, so a folder left behind can be seen apart from other
+    // tests' work.
+    late Directory systemTemp;
+    setUp(() {
+      systemTemp = Directory(path.join(tmp.path, 'system_temp'))..createSync();
+      IOOverrides.global = SystemTempIn(systemTemp);
+    });
+    tearDown(() => IOOverrides.global = null);
+
+    List<String> leftOver() => [
+          for (final entry in systemTemp.listSync())
+            if (path.basename(entry.path).startsWith('zzz_archive_extract_')) path.basename(entry.path),
+        ];
+
+    /// Unpacks [archive] into a folder of the unpack's own making, and returns the result with that folder, which
+    /// the free-space question names and which is checked to exist while the unpack runs.
+    Future<(ArchiveExtractionResult, String)> unpack(File archive, {int? Function()? free}) async {
+      String? into;
+      final result = await ArchiveService.extractArchive(
+        archiveFile: archive,
+        freeSpace: (asked) async {
+          into = asked;
+          expect(Directory(asked).existsSync(), isTrue, reason: 'the unpack made its folder');
+          return free == null ? null : free();
+        },
+      );
+      expect(into, isNotNull, reason: 'the size was read, so the folder was made before the failure under test');
+      return (result, into!);
+    }
+
+    test('is deleted when the unpack is refused for space', () async {
+      final zip = _makeZip(path.join(tmp.path, 'Mod.zip'), {'Mod/mod.ini': 'x' * 5000});
+
+      final (result, into) = await unpack(zip, free: () => 10);
+
+      expect(result.failure, ExtractFailure.insufficientSpace);
+      expect(Directory(into).existsSync(), isFalse);
+      expect(leftOver(), isEmpty);
+    });
+
+    test('is deleted when the unpack fails for a reason other than a password', () async {
+      // Stored rather than deflated, so a flipped byte in the entry's data fails its checksum at the unpack while
+      // the central directory still lists it.
+      final bytes = 'x' * 5000;
+      final archive = Archive()..addFile(ArchiveFile('Mod/mod.ini', bytes.length, bytes.codeUnits)..compress = false);
+      final encoded = ZipEncoder().encode(archive)!;
+      encoded[100] ^= 0xff;
+      final zip = File(path.join(tmp.path, 'Broken.zip'))..writeAsBytesSync(encoded);
+
+      final (result, into) = await unpack(zip);
+
+      expect(result.success, isFalse);
+      expect(result.failure, ExtractFailure.other);
+      expect(Directory(into).existsSync(), isFalse);
+      expect(leftOver(), isEmpty);
+    });
+
+    test('is deleted when the archive holds no mod folder', () async {
+      // An empty `Mods/` in the ZZMI layout: nothing in it to import.
+      final zip = _makeZip(path.join(tmp.path, 'Empty.zip'), {'Mods/readme.txt': 'nothing here'});
+
+      final (result, into) = await unpack(zip);
+
+      expect(result.error, 'The archive contains no mod folders');
+      expect(Directory(into).existsSync(), isFalse);
+      expect(leftOver(), isEmpty);
+    });
+
+    test('is deleted when the unpack throws', () async {
+      final zip = _makeZip(path.join(tmp.path, 'Mod.zip'), {'Mod/mod.ini': 'x' * 5000});
+
+      final (result, into) = await unpack(zip, free: () => throw const FileSystemException('df failed'));
+
+      expect(result.success, isFalse);
+      expect(result.error, startsWith('Extraction failed'));
+      expect(Directory(into).existsSync(), isFalse);
+      expect(leftOver(), isEmpty);
+    });
+
+    test('is handed to the caller on success, the whole of it for mods a level down', () async {
+      final zip = _makeZip(path.join(tmp.path, 'Layout.zip'), {'Mods/Ellen/Ellen.ini': '[Constants]'});
+
+      final (result, into) = await unpack(zip);
+
+      expect(result.success, isTrue, reason: result.error);
+      expect(result.extractionRoot, into);
+      expect(path.dirname(path.dirname(result.extractedFolders!.single)), into,
+          reason: 'the root, not the parent of the first folder');
+      expect(Directory(into).existsSync(), isTrue, reason: 'the caller deletes it once done with the folders');
+    });
+
+    test('a destination the caller passed is left to the caller on a failure', () async {
+      final zip = _makeZip(path.join(tmp.path, 'Mod.zip'), {'Mod/mod.ini': 'x' * 5000});
+      final dest = Directory(path.join(tmp.path, 'out'))..createSync();
+
+      final result = await ArchiveService.extractArchive(
+        archiveFile: zip,
+        destinationDir: dest,
+        freeSpace: (_) async => 10,
+      );
+
+      expect(result.failure, ExtractFailure.insufficientSpace);
+      expect(dest.existsSync(), isTrue);
+    });
+  });
+
+  group('a listing taken before the unpack', () {
+    // Each test lists one archive, then swaps a bigger one in under the same name: an unpack that reads the listing
+    // it was handed sizes the small one and fits, and one that lists again sizes the big one and is refused.
+    test('is what the unpack sizes a zip by, rather than listing it again', () async {
+      final zip = _makeZip(path.join(tmp.path, 'Mod.zip'), {'Mod/mod.ini': 'x' * 1000});
+      final listing = await ArchiveService.listArchive(zip);
+      expect(listing.needsPassword, isFalse);
+      _makeZip(zip.path, {'Mod/mod.ini': 'x' * 9000});
+
+      Future<ArchiveExtractionResult> unpack({ArchiveListing? listing}) => ArchiveService.extractArchive(
+            archiveFile: zip,
+            destinationDir: Directory(path.join(tmp.path, 'out_${DateTime.now().microsecondsSinceEpoch}'))
+              ..createSync(),
+            freeSpace: (_) async => 5000,
+            listing: listing,
+          );
+
+      expect((await unpack(listing: listing)).success, isTrue, reason: 'sized from the listing it was handed');
+      expect((await unpack()).failure, ExtractFailure.insufficientSpace, reason: 'the swap is what a new listing sees');
+    });
+
+    test('is what the unpack sizes a 7z by too', () async {
+      File make(String name, int size) {
+        final source = Directory(path.join(tmp.path, name, 'Mod'))..createSync(recursive: true);
+        File(path.join(source.path, 'mod.ini')).writeAsStringSync('x' * size);
+        final archivePath = path.join(tmp.path, '$name.7z');
+        final made = Process.runSync(_sevenZip!, ['a', archivePath, source.path]);
+        expect(made.exitCode, 0, reason: made.stderr.toString());
+        return File(archivePath);
+      }
+
+      final archive = make('small', 1000);
+      final listing = await ArchiveService.listArchive(archive);
+      make('big', 9000).renameSync(archive.path);
+
+      final result = await ArchiveService.extractArchive(
+        archiveFile: archive,
+        destinationDir: Directory(path.join(tmp.path, 'out'))..createSync(),
+        freeSpace: (_) async => 5000,
+        listing: listing,
+      );
+
+      expect(result.success, isTrue, reason: result.error);
+    }, skip: _sevenZip == null ? '7z not installed' : null);
+
+    test("is ignored when it is another archive's", () async {
+      final other = _makeZip(path.join(tmp.path, 'Other.zip'), {'Mod/mod.ini': 'x'});
+      final zip = _makeZip(path.join(tmp.path, 'Mod.zip'), {'Mod/mod.ini': 'x' * 9000});
+
+      final result = await ArchiveService.extractArchive(
+        archiveFile: zip,
+        destinationDir: Directory(path.join(tmp.path, 'out'))..createSync(),
+        freeSpace: (_) async => 5000,
+        listing: await ArchiveService.listArchive(other),
+      );
+
+      expect(result.failure, ExtractFailure.insufficientSpace);
     });
   });
 }

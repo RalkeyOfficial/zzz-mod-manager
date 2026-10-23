@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Cards show the author, how long ago the mod was updated ("just now", "3 days ago"), likes and downloads.
   - A card's Install queues a mod with one file straight away; a mod with several files opens its page to pick one. A mod you have reads In library, or Update ready, with an Update button that opens the update dialog, when this session's update check found a newer file for sure rather than a "Maybe newer" guess.
   - A mod's page shows its screenshots with a grid of thumbnails, its description and tags, the author's update posts, and who made it, when it was updated, its likes and downloads. Its character in the crumbs at the top links back to the grid filtered to that character.
-  - The author's name on a mod's page opens the author's page: every Zenless Zone Zero mod they published, how many you have, a row of character tiles that narrows them, Hide installed and a sort of its own. Back returns to the mod you came from.
+  - The author's name on a mod's page opens the author's page: every Zenless Zone Zero mod they published, how many you have, a row of character tiles that narrows them, Hide installed and a sort of its own. Back returns to the mod you came from, and Escape, Alt+Left or the mouse's back button go back a page anywhere in the Marketplace.
   - On a mod's page you pick the files to install, one or several, each becoming its own mod, named after its variant when two hold a folder of the same name. Nothing is picked for you when a mod has more than one file. Each file shows its size, variant, upload age, and a virus-scan result that isn't clean.
   - A mod's page says which character it installs for, taken from its GameBanana category, and Change picks another for that install. A mod whose category names no character installs under Unassigned, and Change can pick Unassigned too.
   - Turn on after installing switches a mod on as soon as it is in your library, from a mod's page or a card's Install, and is remembered. It waits for a bulk action in All mods to finish first. A mod that can't be turned on stays installed and off, and a warning says so, or says why when its shader files or a network folder stopped it.
@@ -190,6 +190,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - On Wayland the window no longer carries two stacked title bars.
   - The portable build gets its icon on Wayland by running `packaging/install-desktop-entry.sh` once. It stays out of your application launcher unless you pass `--menu`.
 - A missing 7-Zip is reported as a missing tool rather than a broken archive.
+- An archive that fails to unpack no longer leaves its half-unpacked files in the system's temp folder.
 - Importing a folder no longer follows symbolic links out of it.
 - A mod whose folder can't be written to is named instead of failing quietly.
 - An import that fails says what went wrong — no mods folder set, the copy failed, no room — instead of reporting that the mods are already in your library.

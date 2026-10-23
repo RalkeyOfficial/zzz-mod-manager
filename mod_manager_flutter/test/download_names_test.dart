@@ -15,6 +15,7 @@ import 'package:mod_manager_flutter/services/origin_write.dart';
 
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
+import 'support/held_write.dart';
 import 'support/library_override.dart';
 import 'support/origin_shorthand.dart';
 
@@ -161,7 +162,7 @@ void main() {
         libraryOf([mod('a', stacked()), mod('b', stacked())]),
       ]);
       addTearDown(container.dispose);
-      container.read(modWritesInProgressProvider.notifier).state = {'b'};
+      final hold = holdWrite(container, 'b');
       late WidgetRef widgetRef;
       await tester.pumpWidget(UncontrolledProviderScope(
         container: container,
@@ -178,6 +179,7 @@ void main() {
       });
 
       expect(asked, ['a']);
+      await hold.release();
     });
   });
 }

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gamebanana.dart';
+import 'package:mod_manager_flutter/services/gamebanana/remote_mod_metadata.dart';
 import 'package:mod_manager_flutter/utils/creator_cast.dart';
 
 import 'support/fixtures.dart';
@@ -22,10 +23,18 @@ void main() {
   test('every character category of a real listing maps to a roster character', () {
     // The canary: a Character Skins child that maps to nothing would be a tile under its GameBanana name, with no
     // portrait, and the byline would name the category rather than the character.
-    final skins = listing('mod_index_submitter_2307694').where((m) => m.rootCategory?.idRow == 30305);
+    final mods = listing('mod_index_submitter_2307694');
+    final skins = mods.where((m) => m.rootCategory?.idRow == 30305);
     expect(skins, hasLength(22));
     for (final mod in skins) {
       expect(creatorGroupOf(mod).characterId, isNotNull, reason: mod.subCategory?.name);
+      expect(RemoteModMetadata.characterIdForMod(mod), creatorGroupOf(mod).characterId, reason: mod.subCategory?.name);
+    }
+    // And the other half: a mod of another type maps to no agent, whatever its category is called.
+    final others = mods.where((m) => m.rootCategory?.idRow != 30305);
+    expect(others, hasLength(2));
+    for (final mod in others) {
+      expect(RemoteModMetadata.characterIdForMod(mod), isNull, reason: mod.subCategory?.name);
     }
   });
 
@@ -64,6 +73,47 @@ void main() {
     );
     expect(creatorGroupOf(misc).key, 'type:29874');
     expect(creatorGroupOf(ellen).characterId, 'ellen');
+  });
+
+  test("a Bangboo or UI category whose name holds an agent's term is its type, never that agent", () {
+    const bangbooCategory = GbCategoryRef(idRow: 30711, name: "Von Lycaon's Bangboo");
+    const uiCategory = GbCategoryRef(idRow: 30396, name: 'Ellen Joe HUD');
+    // The names alone read as agents, which is what the type has to win against.
+    expect(RemoteModMetadata.characterIdForCategory(bangbooCategory.name), 'lycaon');
+    expect(RemoteModMetadata.characterIdForCategory(uiCategory.name), 'ellen');
+
+    final mods = [
+      // A listing names the root, a profile the parent.
+      const GbMod(idRow: 1, subCategory: bangbooCategory, rootCategory: GbCategoryRef(idRow: 30702)),
+      const GbMod(idRow: 2, category: bangbooCategory, superCategory: GbCategoryRef(idRow: 30702)),
+      const GbMod(idRow: 3, subCategory: uiCategory, rootCategory: GbCategoryRef(idRow: 30395)),
+      const GbMod(idRow: 4, category: uiCategory, superCategory: GbCategoryRef(idRow: 30395)),
+    ];
+    for (final mod in mods) {
+      expect(creatorGroupOf(mod).characterId, isNull, reason: 'mod ${mod.idRow}');
+      expect(creatorGroupOf(mod).key, 'type:${mod.typeCategoryId}', reason: 'mod ${mod.idRow}');
+      // The mod page and the install read the same.
+      expect(RemoteModMetadata.characterIdForMod(mod), isNull, reason: 'mod ${mod.idRow}');
+      expect(RemoteModMetadata.fromMod(mod).characterId, isNull, reason: 'mod ${mod.idRow}');
+    }
+  });
+
+  test('a record that names no type maps to no agent, whatever its category is called', () {
+    const typeless = GbMod(idRow: 1, category: GbCategoryRef(idRow: 30306, name: 'Ellen Joe'));
+    expect(typeless.typeCategoryId, isNull);
+    expect(RemoteModMetadata.characterIdForMod(typeless), isNull);
+    expect(creatorGroupOf(typeless).characterId, isNull);
+  });
+
+  test('the type is read from the parent when a listing root carries no id', () {
+    const mod = GbMod(
+      idRow: 1,
+      category: GbCategoryRef(name: 'Ellen Joe HUD'),
+      rootCategory: GbCategoryRef(name: 'UI'),
+      superCategory: GbCategoryRef(idRow: kUiCategoryId, name: 'UI'),
+    );
+    expect(mod.typeCategoryId, kUiCategoryId);
+    expect(RemoteModMetadata.characterIdForMod(mod), isNull);
   });
 
   test("a category's character is worked out once, however many mods and builds ask", () {

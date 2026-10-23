@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/button_working.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../services/api_service.dart';
@@ -19,6 +20,7 @@ Future<void> showDeleteModDialog(
   ModInfo mod, {
   required VoidCallback onDeleted,
   int savedVersions = 0,
+  WorkSpan work = noWorkSpan,
 }) {
   final loc = context.loc;
   final notify = context.notify;
@@ -31,7 +33,8 @@ Future<void> showDeleteModDialog(
         // likely to ask about afterwards.
         logConfirmation('mod.delete', accepted: true, subject: mod.id);
         try {
-          final ok = await ApiService.deleteMod(mod.id);
+          // [work] shows the wait on the button that asked, after the question.
+          final ok = await work(() => ApiService.deleteMod(mod.id));
           if (!context.mounted) return;
           if (ok) {
             onDeleted();

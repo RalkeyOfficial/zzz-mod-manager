@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/button_feedback.dart';
 import '../../../core/palette.dart';
 import '../../../core/type_scale.dart';
 import '../../../l10n/app_localizations.dart';
@@ -178,7 +179,7 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
     notifier.state = notifier.state.showingCategory(
       id: category.idRow!,
       name: category.name,
-      parentId: (mod.rootCategory ?? mod.superCategory)?.idRow,
+      parentId: mod.typeCategoryId,
     );
     (widget.onBrowse ?? widget.onBack)();
   }
@@ -186,7 +187,7 @@ class _GbDetailViewState extends ConsumerState<GbDetailView> {
   Widget _body(BuildContext context, GbMod mod) {
     final treatment = contentTreatment(mod.effectiveVisibility, ref.watch(contentFilterProvider));
     final installed = ref.watch(installedModsIndexProvider).valueOrNull ?? InstalledModsIndex.empty;
-    final category = RemoteModMetadata.characterIdForCategory(mod.displayCategory?.name);
+    final category = RemoteModMetadata.characterIdForMod(mod);
     // A category that maps to no character installs under Unassigned, said explicitly on the job, so the import
     // never falls back to guessing from the folder's name.
     final target = _pickedCharacter ?? category ?? unknownCharacterId;
@@ -636,11 +637,8 @@ class _GbInstallPanel extends ConsumerWidget {
   /// "Character" for a Character Skins mod, else the type chip's label for its root, or the root's own name for a
   /// root the chips don't know. A profile filed directly under a root has no parent: its category is the root.
   String? _typeLabel(AppLocalizations loc) {
-    final root = mod.rootCategory ?? mod.superCategory ?? mod.category;
-    if (root?.idRow case final id?) {
-      if (kTypeChipLabelKeys[id] case final key?) return loc.t(key);
-    }
-    return root?.name;
+    if (kTypeChipLabelKeys[mod.typeCategoryId] case final key?) return loc.t(key);
+    return (mod.rootCategory ?? mod.superCategory ?? mod.category)?.name;
   }
 
   /// "by lacequeen · updated 5 days ago", with the date in its tooltip. The name is a link to the author's page.
@@ -1019,9 +1017,11 @@ class _GalleryArrow extends StatelessWidget {
         disabledForegroundColor: palette.onArtwork.withValues(alpha: 0.4),
         fixedSize: const Size(36, 36),
         minimumSize: const Size(36, 36),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-          side: BorderSide(color: palette.control),
+        // No ink, so the theme's press is drawn and shrinks the frame too.
+        overlayColor: Colors.transparent,
+      ).copyWith(
+        shape: pressShape(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: palette.control)),
         ),
       ),
       tooltip: onPressed == null ? null : tooltip,

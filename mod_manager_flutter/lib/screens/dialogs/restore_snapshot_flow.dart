@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
 
+import '../../core/button_working.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../services/backup/snapshot_service.dart';
@@ -24,7 +25,14 @@ final Logger _log = Logger('snapshot');
 /// The outcome is reported either way, success included: the folder's files are not something the user sees change.
 /// Returns true when the folder changed. The library is rescanned here, not by the caller: from the History tab
 /// nothing holds the user on the page while the folder is copied, and the result has to land even after they leave.
-Future<bool> restoreSnapshotFlow(BuildContext context, {required ModInfo mod, required ModSnapshot snapshot}) async {
+///
+/// [work] shows the copy on the button that asked, after the question.
+Future<bool> restoreSnapshotFlow(
+  BuildContext context, {
+  required ModInfo mod,
+  required ModSnapshot snapshot,
+  WorkSpan work = noWorkSpan,
+}) async {
   final loc = context.loc;
   final notify = context.notify;
   // **The app's container, not the caller's `ref`**, which dies with the page.
@@ -72,7 +80,7 @@ Future<bool> restoreSnapshotFlow(BuildContext context, {required ModInfo mod, re
   final card = notify.working(loc.t('mods.backups.restoring_title'), body: mod.name, characterId: mod.characterId);
   var ended = false;
   try {
-    final result = await writeSnapshotBack(container, mod: mod, snapshot: snapshot);
+    final result = await work(() => writeSnapshotBack(container, mod: mod, snapshot: snapshot));
     final safety = result.snapshot;
     if (result.success) {
       card.update(

@@ -518,6 +518,7 @@ needs its mark more than before.
 ### After a successful update
 
 `ModOrigin.updatedTo` rewrites the block.
+It rewrites the layer that was written and no other, found by its key, its page and its place (`withDownloadUpdatedTo`, `DownloadKey`): a page can be the folder's base and a patch on it at once, so a mod id alone would stamp both ([`origin-tracking.md`](origin-tracking.md#two-layers-of-one-page)).
 Both confidences reach `exact` on the same grounds a marketplace install does — the user picked this row of this mod's file list and we wrote exactly that file id — and `provenance` becomes `downloaded` even for a folder originally imported by hand, because the bytes in it now came from an archive this app fetched.
 Two fields are **cleared**, and each would otherwise be a lie about the folder as it stands:
 
@@ -889,6 +890,9 @@ Where the placement cannot be settled without a guess, the install falls back to
 ordinary new mod and says why — see
 [`origin-tracking.md` §10](origin-tracking.md#installing-a-patch-into-a-mod-that-already-works).
 
+A mod the patch was written into loses its session verdict, as one a patch is taken out of does ([Taking a patch back out](#taking-a-patch-back-out)): the patch is a layer the verdict doesn't know.
+A write that failed keeps it, since no layer was recorded.
+
 ### Base first, then patch — for both halves of a mixed folder
 
 **Layout belongs to the base.** It decides where files live, and the patch is
@@ -1028,6 +1032,9 @@ holds the patch at all. It is the surface that matters most for the case, since 
 patch somebody no longer has is usually noticed when something offers to update
 it. All three ask `removablePatches`, so none can offer what another refuses, and
 the dialog closes after a removal because the layers it drew are what changed.
+
+**Every Take out drops the folder's session verdict** once the layer is gone, these three and the tracking screen's alike, since all of them run `removePatchFlow`, which does it (`forgetUpdateCheck`).
+A verdict names the folder's layers, so kept it would go on naming the patch that came out; dropped, the folder reads as not checked until the next check.
 
 ---
 

@@ -44,7 +44,7 @@ void main() {
 
   group('a folder that holds a mod and a patch', () {
     test('the bottom layer writes by layout, with the patch set aside', () {
-      final route = updateWriteRoute(origin: mixed(), subjectModId: 7100);
+      final route = updateWriteRoute(origin: mixed(), subject: const DownloadKey.base(7100));
 
       expect(route.kind, UpdateWriteKind.base);
       expect(route.asCompanion, isFalse);
@@ -54,7 +54,7 @@ void main() {
     });
 
     test('the layer above is placed over what is below it', () {
-      final route = updateWriteRoute(origin: mixed(), subjectModId: 5100);
+      final route = updateWriteRoute(origin: mixed(), subject: const DownloadKey.patch(5100));
 
       expect(route.kind, UpdateWriteKind.patch);
       expect(route.asCompanion, isTrue);
@@ -81,12 +81,33 @@ void main() {
       );
 
       expect(
-        updateWriteRoute(origin: byPatchFirst, subjectModId: 7100).kind,
-        updateWriteRoute(origin: mixed(), subjectModId: 7100).kind,
+        updateWriteRoute(origin: byPatchFirst, subject: const DownloadKey.base(7100)).kind,
+        updateWriteRoute(origin: mixed(), subject: const DownloadKey.base(7100)).kind,
       );
       expect(
-        updateWriteRoute(origin: byPatchFirst, subjectModId: 5100).kind,
-        updateWriteRoute(origin: mixed(), subjectModId: 5100).kind,
+        updateWriteRoute(origin: byPatchFirst, subject: const DownloadKey.patch(5100)).kind,
+        updateWriteRoute(origin: mixed(), subject: const DownloadKey.patch(5100)).kind,
+      );
+    });
+
+    test('a page that is the base and a patch routes each layer by its place', () {
+      // A lone `.ini` fix from the base's own page: one id, two layers.
+      final samePage = ModOrigin(
+        provenance: OriginProvenance.downloaded,
+        source: 'gamebanana',
+        ingest: const ModIngest(patchFiles: ['Body.ini']),
+        downloads: const [
+          ModDownload(modId: 7100, fileId: 1, modIdConfidence: OriginConfidence.exact),
+          ModDownload(role: DownloadRole.patch, modId: 7100, fileId: 2, modIdConfidence: OriginConfidence.exact),
+        ],
+      );
+
+      final base = updateWriteRoute(origin: samePage, subject: const DownloadKey.base(7100));
+      expect(base.kind, UpdateWriteKind.base);
+      expect(base.patchModId, 7100, reason: "the patch's store is keyed by its page");
+      expect(
+        updateWriteRoute(origin: samePage, subject: const DownloadKey.patch(7100)).kind,
+        UpdateWriteKind.patch,
       );
     });
 
@@ -98,7 +119,7 @@ void main() {
       ));
 
       expect(
-        updateWriteRoute(origin: deep, subjectModId: 7100).patchModId,
+        updateWriteRoute(origin: deep, subject: const DownloadKey.base(7100)).patchModId,
         9000,
       );
     });
@@ -114,7 +135,7 @@ void main() {
     );
 
     test('it is an ordinary update', () {
-      final route = updateWriteRoute(origin: alone, subjectModId: 4001);
+      final route = updateWriteRoute(origin: alone, subject: const DownloadKey.base(4001));
 
       expect(route.kind, UpdateWriteKind.base);
       expect(route.asCompanion, isFalse);
@@ -140,7 +161,7 @@ void main() {
             ),
           ],
         ),
-        subjectModId: 4001,
+        subject: const DownloadKey.base(4001),
       );
 
       expect(route.kind, UpdateWriteKind.base);
@@ -157,14 +178,14 @@ void main() {
       // A verdict about a mod this folder does not claim to hold. Writing it
       // would overwrite one mod with another.
       expect(
-        updateWriteRoute(origin: mixed(), subjectModId: 999).kind,
+        updateWriteRoute(origin: mixed(), subject: const DownloadKey.base(999)).kind,
         UpdateWriteKind.none,
       );
     });
 
     test('a folder with no origin block at all', () {
       expect(
-        updateWriteRoute(origin: null, subjectModId: 4001).kind,
+        updateWriteRoute(origin: null, subject: const DownloadKey.base(4001)).kind,
         UpdateWriteKind.none,
       );
     });
@@ -173,7 +194,7 @@ void main() {
       // Every layer is addressed by its own id now. Null used to mean "the
       // folder's own", which was the spelling that made one download special.
       expect(
-        updateWriteRoute(origin: mixed(), subjectModId: null).kind,
+        updateWriteRoute(origin: mixed(), subject: null).kind,
         UpdateWriteKind.none,
       );
     });
@@ -185,7 +206,7 @@ void main() {
       // say so.
       final route = updateWriteRoute(
         origin: mixed(ingest: const ModIngest()),
-        subjectModId: 7100,
+        subject: const DownloadKey.base(7100),
       );
 
       expect(route.kind, UpdateWriteKind.base);
@@ -196,7 +217,7 @@ void main() {
 
     test('a folder with the record intact claims nothing of the kind', () {
       expect(
-        updateWriteRoute(origin: mixed(), subjectModId: 7100).flattensPatch,
+        updateWriteRoute(origin: mixed(), subject: const DownloadKey.base(7100)).flattensPatch,
         isFalse,
       );
     });

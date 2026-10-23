@@ -16,15 +16,14 @@ import '../services/gamebanana/gamebanana_client.dart';
 import 'gamebanana_url.dart';
 import 'state_providers.dart';
 
-/// GameBanana's Character Skins root. Its children are the live character roster, which the character chip lists.
-const int kCharacterSkinsCategoryId = 30305;
+export '../models/gamebanana/gb_category.dart' show kCharacterSkinsCategoryId;
 
 /// The type chips' short labels, by root category id, in the chips' order. A root this map doesn't know shows its live name, after these.
 const Map<int, String> kTypeChipLabelKeys = {
   kCharacterSkinsCategoryId: 'marketplace.type_character',
-  30702: 'marketplace.type_bangboo',
-  30395: 'marketplace.type_ui',
-  29874: 'marketplace.type_misc',
+  kBangbooSkinsCategoryId: 'marketplace.type_bangboo',
+  kUiCategoryId: 'marketplace.type_ui',
+  kMiscCategoryId: 'marketplace.type_misc',
 };
 
 /// The sorts the Sort menu offers, in its order. `latestComment` is a valid `_sSort` the menu leaves out.

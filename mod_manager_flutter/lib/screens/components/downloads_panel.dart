@@ -7,6 +7,7 @@ import '../../core/palette.dart';
 import '../../core/type_scale.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
+import '../../models/gamebanana/gb_file.dart';
 import '../../services/api_service.dart';
 import '../../services/download/download_exceptions.dart';
 import '../../services/download/download_job.dart';
@@ -14,6 +15,7 @@ import '../../services/download/download_progress.dart';
 import '../../services/download/download_queue.dart';
 import '../../services/download/queue_policy.dart';
 import '../../services/gamebanana/content_filter.dart';
+import '../../services/gamebanana/file_selection.dart';
 import '../../services/log/logger.dart';
 import '../../services/platform_service.dart';
 import '../../services/platform_service_factory.dart';
@@ -422,6 +424,7 @@ class _DownloadRow extends ConsumerWidget {
     final nameStyle = text.bodyMedium?.copyWith(fontWeight: FontWeight.w600, color: palette.text);
     final lineStyle = text.bodySmall?.copyWith(color: palette.text3);
     final name = Text(job.subject, maxLines: 1, overflow: TextOverflow.ellipsis, style: nameStyle);
+    final file = _FileLine(job.file);
     final tile = _Tile(job: job, characterId: actions.characterOf(job));
 
     Widget iconButton(IconData icon, String tooltip, VoidCallback onPressed) => IconButton(
@@ -489,6 +492,7 @@ class _DownloadRow extends ConsumerWidget {
                     spacing: 2,
                     children: [
                       name,
+                      file,
                       Text(_questionLine(loc, job.wait), style: lineStyle?.copyWith(color: palette.attention.foreground)),
                     ],
                   ),
@@ -505,7 +509,7 @@ class _DownloadRow extends ConsumerWidget {
           child: _RowFrame(
             children: [
               tile,
-              Expanded(child: _NameAndLine(name: name, line: Text(_queuedLine(loc, job), style: lineStyle))),
+              Expanded(child: _NameAndLine(name: name, file: file, line: Text(_queuedLine(loc, job), style: lineStyle))),
               for (final a in rowActions) control(a),
             ],
           ),
@@ -519,6 +523,7 @@ class _DownloadRow extends ConsumerWidget {
             Expanded(
               child: _NameAndLine(
                 name: name,
+                file: file,
                 line: Text(
                   failed ? _failureLine(loc, job.error) : _finishedLine(loc, job, actions),
                   maxLines: 3,
@@ -553,9 +558,16 @@ class _DownloadRow extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 spacing: 6,
                 children: [
-                  Row(
-                    spacing: 8,
-                    children: [Expanded(child: name), ?trailing],
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    spacing: 1,
+                    children: [
+                      Row(
+                        spacing: 8,
+                        children: [Expanded(child: name), ?trailing],
+                      ),
+                      file,
+                    ],
                   ),
                   _Bar(value: bar, dimmed: dimmed),
                   Text(_progressLine(loc, job), maxLines: 2, overflow: TextOverflow.ellipsis, style: lineStyle),
@@ -601,14 +613,58 @@ class _RowFrame extends StatelessWidget {
 }
 
 class _NameAndLine extends StatelessWidget {
-  const _NameAndLine({required this.name, required this.line});
+  const _NameAndLine({required this.name, required this.file, required this.line});
 
   final Widget name;
+  final Widget file;
   final Widget line;
 
   @override
   Widget build(BuildContext context) =>
-      Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: 2, children: [name, line]);
+      Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: 2, children: [name, file, line]);
+}
+
+/// Which file of the mod page the row is, the design's `.fl`: the file name in mono, and the author's variant text
+/// in quotes beside it in grey, so two files of one mod read apart. The name gives way first.
+class _FileLine extends StatelessWidget {
+  const _FileLine(this.file);
+
+  final GbFile file;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ZenithPalette.of(context);
+    final variant = fileDisplayDetail(file);
+    return LayoutBuilder(
+      builder: (context, constraints) => Row(
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        spacing: 8,
+        children: [
+          Flexible(
+            child: Text(
+              fileDisplayName(file),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: ZenithType.of(context).monoSmall.copyWith(color: palette.text2),
+              // The line is the 12px caption's, as on the canvas, with or without variant text beside it.
+              strutStyle: StrutStyle.fromTextStyle(Theme.of(context).textTheme.bodySmall!, forceStrutHeight: true),
+            ),
+          ),
+          if (variant != null)
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.6),
+              child: Text(
+                context.loc.t('marketplace.file_variant', params: {'variant': variant}),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: palette.text3),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 /// The row's 56×42 lead: the mod page's first image on the character's element tile, the misc tile for a category or

@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../../core/button_working.dart';
 import '../../l10n/app_localizations.dart';
 import '../../services/api_service.dart';
 import '../../services/platform_service.dart';
@@ -49,12 +50,16 @@ Future<void> writeLaunchSetting(LaunchSetting setting, String? value) => switch 
 ///
 /// A launch that works is its own feedback, the game opening, so only a failure is reported, including one the
 /// game's anti-cheat will cause when names can't be looked up inside umu-run's container.
+///
+/// [work] marks the wait for the launcher to start, which the button shows as working; the question for a launcher
+/// and the container's name check after the start stay outside it.
 Future<void> launchGame(
   BuildContext context,
   WidgetRef ref, {
   PlatformService? platform,
   LaunchPathPicker? picker,
   LaunchSettingWriter? writer,
+  WorkSpan? work,
 }) async {
   final container = ProviderScope.containerOf(context, listen: false);
   var target = ref.read(launchTargetProvider);
@@ -75,7 +80,8 @@ Future<void> launchGame(
     prefix: ref.read(winePrefixProvider),
     useUmu: ref.read(wineUseUmuProvider),
   );
-  final result = await (platform ?? PlatformServiceFactory.getInstance()).launchGame(request);
+  final service = platform ?? PlatformServiceFactory.getInstance();
+  final result = work == null ? await service.launchGame(request) : await work(() => service.launchGame(request));
   if (!context.mounted) return;
 
   final loc = context.loc;

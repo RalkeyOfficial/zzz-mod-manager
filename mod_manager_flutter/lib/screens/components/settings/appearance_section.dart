@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/button_feedback.dart';
 import '../../../core/palette.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../services/api_service.dart';
@@ -47,27 +48,30 @@ class AppearanceSettingsSection extends ConsumerWidget {
           // Words rather than sun/moon icons: nothing else on this tab is
           // iconographic, and each icon costs the description beside it 30px of
           // width at the narrowest window for a label that is already one word.
-          trailing: SegmentedButton<ThemeMode>(
-            segments: [
-              for (final value in _order)
-                ButtonSegment(
-                  value: value,
-                  label: Text(loc.t('settings.appearance.theme_${value.name}')),
-                ),
-            ],
-            selected: {mode},
-            // The tick says what the fill already says, and it is only ever on one
-            // segment — so it widens whichever one is selected and the labels
-            // shuffle sideways on every press.
-            showSelectedIcon: false,
-            onSelectionChanged: (selection) {
-              final value = selection.first;
-              // The provider first so the app repaints this frame, then the write
-              // so the choice survives a restart — the same order and the same
-              // reason as the marketplace's content filter.
-              ref.read(themeModeProvider.notifier).state = value;
-              (writer ?? ApiService.setThemeMode)(value);
-            },
+          trailing: KeyboardFocusRing(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+            child: SegmentedButton<ThemeMode>(
+              segments: [
+                for (final value in _order)
+                  ButtonSegment(
+                    value: value,
+                    label: Text(loc.t('settings.appearance.theme_${value.name}')),
+                  ),
+              ],
+              selected: {mode},
+              // The tick says what the fill already says, and it is only ever on one
+              // segment — so it widens whichever one is selected and the labels
+              // shuffle sideways on every press.
+              showSelectedIcon: false,
+              onSelectionChanged: (selection) {
+                final value = selection.first;
+                // The provider first so the app repaints this frame, then the write
+                // so the choice survives a restart — the same order and the same
+                // reason as the marketplace's content filter.
+                ref.read(themeModeProvider.notifier).state = value;
+                (writer ?? ApiService.setThemeMode)(value);
+              },
+            ),
           ),
         ),
         const SizedBox(height: 12),

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/button_feedback.dart';
 import '../../core/palette.dart';
 import '../../l10n/app_localizations.dart';
 // `AppNotification` and `NotificationKind` come through here: the queue re-exports its own model.
@@ -477,9 +478,13 @@ class _MorePill extends StatelessWidget {
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         backgroundColor: ground.background,
         foregroundColor: palette.text2,
-        shape: StadiumBorder(side: BorderSide(color: ground.border!)),
+        overlayColor: Colors.transparent,
         textStyle: Theme.of(context).textTheme.bodySmall,
+      ).copyWith(
+        side: focusRingOr(palette, null),
+        shape: pressShape(StadiumBorder(side: BorderSide(color: ground.border!))),
       ),
+      clipBehavior: Clip.none,
       child: Text(label),
     );
   }
@@ -1081,7 +1086,6 @@ class _ActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = Theme.of(context).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600);
-    final ring = ZenithPalette.of(context).accent;
     return TextButton(
       onPressed: onPressed,
       style: ButtonStyle(
@@ -1089,21 +1093,19 @@ class _ActionButton extends StatelessWidget {
         minimumSize: const WidgetStatePropertyAll(Size(0, height)),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         visualDensity: VisualDensity.standard,
-        shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(7))),
+        shape: pressShape(RoundedRectangleBorder(borderRadius: BorderRadius.circular(7))),
         overlayColor: const WidgetStatePropertyAll(Colors.transparent),
         backgroundColor: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.hovered) ? hover : Colors.transparent,
         ),
         foregroundColor: WidgetStatePropertyAll(color),
         textStyle: WidgetStatePropertyAll(label),
-        // A 2px accent ring on keyboard focus only, the way `:focus-visible` draws it, never after a click.
-        side: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.focused) &&
-                  FocusManager.instance.highlightMode == FocusHighlightMode.traditional
-              ? BorderSide(color: ring, width: 2, strokeAlign: BorderSide.strokeAlignOutside)
-              : BorderSide.none,
-        ),
+        // The press; the hover is the fill above. The keyboard focus ring is the border, since this layer has no
+        // Overlay for the theme's ring to be drawn in, and the button must not clip it.
+        backgroundBuilder: buttonFeedback(hover: false),
+        side: focusRingOr(ZenithPalette.of(context), null),
       ),
+      clipBehavior: Clip.none,
       child: Text(action.label),
     );
   }
@@ -1130,7 +1132,7 @@ class _CloseButton extends StatelessWidget {
         iconSize: 14,
         style: ButtonStyle(
           minimumSize: const WidgetStatePropertyAll(Size.square(26)),
-          shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(7))),
+          shape: pressShape(RoundedRectangleBorder(borderRadius: BorderRadius.circular(7))),
           overlayColor: const WidgetStatePropertyAll(Colors.transparent),
           backgroundColor: WidgetStateProperty.resolveWith(
             (states) => states.contains(WidgetState.hovered) ? palette.line : Colors.transparent,
@@ -1138,6 +1140,8 @@ class _CloseButton extends StatelessWidget {
           foregroundColor: WidgetStateProperty.resolveWith(
             (states) => states.contains(WidgetState.hovered) ? palette.text : palette.text3,
           ),
+          backgroundBuilder: buttonFeedback(hover: false),
+          side: focusRingOr(palette, null),
         ),
         icon: Icon(Icons.close_rounded, semanticLabel: label),
       ),

@@ -672,6 +672,54 @@ Widget _menuCheck(BuildContext context, bool on) =>
 /// The width of the Mature content and Sort menus, as drawn.
 const double _menuWidth = 236;
 
+/// A [MenuAnchor] whose open menu takes Escape, however it was opened.
+///
+/// A click focuses nothing, so a menu opened by one would leave Escape to whatever is under it: on a creator's page,
+/// going back a page with the menu still open. Opened by a click, it moves focus to a node around the button, under
+/// the anchor's own dismiss action, rather than to the button itself, which would draw its focus ring. Opened from
+/// the keyboard, focus is on the button already, under the same action, and stays there.
+class _EscapableMenuAnchor extends StatefulWidget {
+  const _EscapableMenuAnchor({
+    required this.style,
+    required this.alignmentOffset,
+    required this.menuChildren,
+    required this.builder,
+  });
+
+  final MenuStyle style;
+  final Offset alignmentOffset;
+  final List<Widget> menuChildren;
+  final MenuAnchorChildBuilder builder;
+
+  @override
+  State<_EscapableMenuAnchor> createState() => _EscapableMenuAnchorState();
+}
+
+class _EscapableMenuAnchorState extends State<_EscapableMenuAnchor> {
+  final FocusNode _anchorFocus = FocusNode(debugLabel: 'menu anchor', skipTraversal: true);
+
+  @override
+  void dispose() {
+    _anchorFocus.dispose();
+    super.dispose();
+  }
+
+  /// A click-open: a keyboard open finds focus on the button already, and keeps it there with its ring.
+  void _onOpen() {
+    if (!_anchorFocus.hasFocus) _anchorFocus.requestFocus();
+  }
+
+  @override
+  Widget build(BuildContext context) => MenuAnchor(
+    onOpen: _onOpen,
+    style: widget.style,
+    alignmentOffset: widget.alignmentOffset,
+    menuChildren: widget.menuChildren,
+    builder: (context, controller, child) =>
+        Focus(focusNode: _anchorFocus, child: widget.builder(context, controller, child)),
+  );
+}
+
 /// The Mature content and Sort buttons' style, with the hover fill and a stronger border while their menu is open.
 ButtonStyle _menuButtonStyle(BuildContext context, {required bool open}) {
   final style = smallButtonStyle(context);
@@ -720,7 +768,7 @@ class _MatureMenu extends ConsumerWidget {
       ContentFilterMode.hide => 'marketplace.mature_hide_hint',
     });
 
-    return MenuAnchor(
+    return _EscapableMenuAnchor(
       // Opens leftwards from the button's right edge, so it stays inside the window at the bar's right end.
       style: const MenuStyle(alignment: AlignmentDirectional.bottomEnd),
       alignmentOffset: const Offset(-_menuWidth, 4),
@@ -791,7 +839,7 @@ class GbSortMenu extends StatelessWidget {
     final palette = ZenithPalette.of(context);
     String label(GbModSort s) => loc.t('marketplace.sort_${s.name}');
 
-    return MenuAnchor(
+    return _EscapableMenuAnchor(
       style: const MenuStyle(alignment: AlignmentDirectional.bottomEnd),
       alignmentOffset: const Offset(-_menuWidth, 4),
       menuChildren: [

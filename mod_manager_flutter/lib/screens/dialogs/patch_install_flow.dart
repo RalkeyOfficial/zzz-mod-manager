@@ -212,9 +212,10 @@ typedef PatchDestinationPrompt = Future<Map<String, PatchDestination>?>
 /// patch is a folder they may well not want, and this is the last point at which
 /// nothing has been written.
 ///
-/// [patchModId] is the download's own mod page, when it has one. It is refused
-/// as an answer to "what does this patch?" — a folder cannot patch itself — and
-/// a hand-dragged folder simply has none.
+/// [patchModId] is the download's own mod page, when it has one; a hand-dragged
+/// folder simply has none. The page may be named as what the patch applies to,
+/// as a fix file on its base's own page is: only the patch's own file is
+/// refused, which [preparePatchQuestion] takes as `patchFileId`.
 ///
 /// [patchRequirements] is what that page's author declared it needs. A
 /// requirement linking a mod page is sometimes the mod being patched, and where
@@ -293,6 +294,7 @@ Future<PatchQuestion> preparePatchQuestion({
   required bool combined,
   required String modsPath,
   int? patchModId,
+  int? patchFileId,
   List<GbRequirement> patchRequirements = const <GbRequirement>[],
 }) async {
   // **Read here rather than handed in**, and after the scan has established
@@ -319,6 +321,7 @@ Future<PatchQuestion> preparePatchQuestion({
         PatchInstallSubject(
           modName: name,
           patchModId: patchModId,
+          patchFileId: patchFileId,
           kind: scan.assetPatches.containsKey(name) ? PatchKind.assets : PatchKind.references,
           destinations: ranked[name] ?? const <DestinationRank>[],
         ),
@@ -516,7 +519,9 @@ Future<({PatchWrite? write, PatchRefusal? refusal})> _planPatchWrite({
 /// which is the one thing that outlives the warning.
 ///
 /// Returns what to tell the user, in the order it should be told. [onPatched] is told each existing mod a patch was
-/// written into, or failed to be, so its cached in-game keys are read again.
+/// written into, or failed to be, so its cached in-game keys are read again. [onPatchedInto] is told only the ones it
+/// was written into, so their session verdicts are dropped (`forgetUpdateCheck`): a verdict names the folder's
+/// layers, and the patch changed them.
 Future<List<NotificationLines>> applyPatchInstall(
   AppLocalizations loc, {
   required PatchInstallDecision decision,
@@ -527,6 +532,7 @@ Future<List<NotificationLines>> applyPatchInstall(
   PatchIdentity? patch,
   BaseInstaller? installBase,
   void Function(String modId)? onPatched,
+  void Function(String modId)? onPatchedInto,
 
   /// Runs each write into an existing mod, so the app knows that mod's folder is being written
   /// (`whileWritingMod`). Without it the write just runs.
@@ -569,6 +575,7 @@ Future<List<NotificationLines>> applyPatchInstall(
       writeFailures.add(write.into);
       continue;
     }
+    onPatchedInto?.call(write.into.modId);
     patchedInto[entry.key] = write.into;
   }
 

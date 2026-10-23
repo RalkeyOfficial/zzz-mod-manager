@@ -94,9 +94,17 @@ than which file noticed it.
 | `download.pump` / `download.worker` | The isolate arm, and lines relayed from inside it (§8) |
 | `archive` | Extraction, 7-Zip, unsafe entries |
 | `install` | A Browse download's install: its questions, Turn on after installing, the mod page a card's Install fetches |
+| `update` | The update dialog and the apply flow's own steps, such as a failed scan for a sibling group |
 | `update.apply` | The applier's phases |
+| `update.check` | The startup update check failing |
+| `update.reinstall` | The reinstall flow |
 | `snapshot` | Capture, restore, retention |
 | `metadata` | Sidecars, origins, autofill |
+| `origin` | Origin records: assuming a mod current, the download-name lookup, the providers that read origins |
+| `sidecar` | Reading and writing a mod's `.download.json` sidecar |
+| `patch.store` | The patch store |
+| `shaders` | The shader-fix service |
+| `storage` | The disk-usage scan and reclaiming space |
 | `mods` | Library-level actions |
 | `ini` | Parsing |
 | `config` | The app's own settings and reading an older build's `config.json` |

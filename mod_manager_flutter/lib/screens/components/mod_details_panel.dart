@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../../core/button_working.dart';
 import '../../core/palette.dart';
 import '../../core/type_scale.dart';
 import '../../l10n/app_localizations.dart';
@@ -66,7 +67,8 @@ class ModDetailsPanel extends ConsumerWidget {
   final VoidCallback onOpenFolder;
   final VoidCallback onCheckForUpdate;
   final VoidCallback onResolveOrigin;
-  final VoidCallback onDelete;
+  /// Handed the button's [WorkSpan], so the button shows the delete's wait (`WorkingAction`).
+  final WorkingCallback onDelete;
   final NoteWriter? noteWriter;
 
   @override
@@ -207,15 +209,18 @@ class ModDetailsPanel extends ConsumerWidget {
                 ),
                 Tooltip(
                   message: loc.t('library.details.delete'),
-                  child: OutlinedButton(
-                    style: ButtonStyle(
-                      fixedSize: const WidgetStatePropertyAll(Size(36, 36)),
-                      minimumSize: const WidgetStatePropertyAll(Size(36, 36)),
-                      padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-                      foregroundColor: WidgetStatePropertyAll(palette.redText),
-                    ),
+                  child: WorkingAction(
                     onPressed: onDelete,
-                    child: const Icon(Icons.delete_outline_rounded),
+                    builder: (context, onPressed) => OutlinedButton(
+                      style: ButtonStyle(
+                        fixedSize: const WidgetStatePropertyAll(Size(36, 36)),
+                        minimumSize: const WidgetStatePropertyAll(Size(36, 36)),
+                        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+                        foregroundColor: WidgetStatePropertyAll(palette.redText),
+                      ),
+                      onPressed: onPressed,
+                      child: const Icon(Icons.delete_outline_rounded),
+                    ),
                   ),
                 ),
               ],

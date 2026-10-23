@@ -1,6 +1,10 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/core/button_feedback.dart';
+import 'package:mod_manager_flutter/core/palette.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gamebanana.dart';
 import 'package:mod_manager_flutter/screens/components/marketplace/gb_browse_view.dart';
 import 'package:mod_manager_flutter/screens/components/marketplace/gb_creator_view.dart';
@@ -31,7 +35,8 @@ void main() {
     superCategory: GbCategoryRef(idRow: 30305, name: 'Character Skins'),
   );
 
-  Future<ProviderContainer> pumpScreen(WidgetTester tester) async {
+  /// The screen as Browse, the page the sidebar shows, with [around] putting other widgets beside it.
+  Future<ProviderContainer> pumpScreen(WidgetTester tester, {Widget Function(Widget screen)? around}) async {
     final container = ProviderContainer(
       overrides: [
         marketplacePageFetcherProvider.overrideWithValue(
@@ -53,7 +58,14 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
-    await pumpLocalized(tester, const MarketplaceScreen(), container: container, surfaceSize: const Size(1400, 1000));
+    container.read(destinationProvider.notifier).state = AppDestination.browse;
+    const screen = MarketplaceScreen();
+    await pumpLocalized(
+      tester,
+      around?.call(screen) ?? screen,
+      container: container,
+      surfaceSize: const Size(1400, 1000),
+    );
     expectBuilt(MarketplaceScreen);
     return container;
   }
@@ -147,6 +159,202 @@ void main() {
     await tester.pumpAndSettle();
     expect(container.read(marketplaceRoutesProvider), isEmpty);
     expect(find.byType(GbCreatorView), findsNothing);
+  });
+
+  group('back from the keyboard and the mouse', () {
+    /// A mod's page with the creator's page over it, so each back has a page to leave and one to land on.
+    Future<ProviderContainer> twoPages(WidgetTester tester, {Widget Function(Widget screen)? around}) async {
+      final container = await pumpScreen(tester, around: around);
+      container.read(marketplaceRoutesProvider.notifier)
+        ..openFromGrid(1)
+        ..open(const MarketplaceCreatorRoute(member));
+      await tester.pumpAndSettle();
+      return container;
+    }
+
+    Future<void> altLeft(WidgetTester tester) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> escape(WidgetTester tester) async {
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> mouseBack(WidgetTester tester) async {
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse, buttons: kBackMouseButton);
+      await gesture.down(tester.getCenter(find.byType(MarketplaceScreen)));
+      await gesture.up();
+      await tester.pumpAndSettle();
+    }
+
+    final inputs = <String, Future<void> Function(WidgetTester)>{
+      'Escape': escape,
+      'Alt+Left': altLeft,
+      'the mouse back button': mouseBack,
+    };
+
+    for (final MapEntry(key: name, value: press) in inputs.entries) {
+      testWidgets('$name goes back one page at a time, and does nothing on the grid', (tester) async {
+        final container = await twoPages(tester);
+        List<MarketplaceRoute> routes() => container.read(marketplaceRoutesProvider);
+
+        await press(tester);
+        expect(routes(), [const MarketplaceModRoute(1)]);
+        expect(find.byType(GbCreatorView), findsNothing);
+        expect(find.byType(GbDetailView), findsOneWidget);
+
+        await press(tester);
+        expect(routes(), isEmpty);
+        expect(find.byType(GbDetailView), findsNothing);
+
+        await press(tester);
+        expect(routes(), isEmpty);
+        expect(find.byType(GbBrowseView), findsOneWidget);
+      });
+
+      testWidgets('$name does nothing while Browse is not the page shown', (tester) async {
+        final container = await twoPages(tester);
+        container.read(destinationProvider.notifier).state = AppDestination.settings;
+        await press(tester);
+        expect(container.read(marketplaceRoutesProvider), hasLength(2));
+      });
+    }
+
+    testWidgets('a dialog over Browse keeps Escape and Alt+Left, and its barrier the mouse back button', (
+      tester,
+    ) async {
+      final container = await twoPages(tester);
+      showDialog<void>(
+        context: tester.element(top(GbCreatorView)),
+        builder: (_) => const AlertDialog(content: Text('A dialog')),
+      );
+      await tester.pumpAndSettle();
+
+      await altLeft(tester);
+      await mouseBack(tester);
+      expect(find.text('A dialog'), findsOneWidget);
+      expect(container.read(marketplaceRoutesProvider), hasLength(2));
+
+      await escape(tester);
+      expect(find.text('A dialog'), findsNothing, reason: 'Escape closes the dialog');
+      expect(container.read(marketplaceRoutesProvider), hasLength(2), reason: '…and only the dialog');
+    });
+
+    group('a menu opened by a click', () {
+      Future<void> clickOpen(WidgetTester tester, Finder button, String header) async {
+        await tester.tap(button);
+        await tester.pumpAndSettle();
+        expect(find.text(header), findsOneWidget, reason: 'the menu is open');
+      }
+
+      Finder sortButton(Type page) => find.descendant(
+        of: find.descendant(of: top(page), matching: find.byType(GbSortMenu)),
+        matching: find.byType(OutlinedButton),
+      );
+
+      testWidgets("on a creator's page, Escape closes the Sort menu and the page stays", (tester) async {
+        final container = await twoPages(tester);
+        await clickOpen(tester, sortButton(GbCreatorView), 'SORT BY');
+
+        await escape(tester);
+        expect(find.text('SORT BY'), findsNothing);
+        expect(container.read(marketplaceRoutesProvider), hasLength(2));
+
+        // Closed, the next Escape is a back again.
+        await escape(tester);
+        expect(container.read(marketplaceRoutesProvider), [const MarketplaceModRoute(1)]);
+      });
+
+      testWidgets('opened from the keyboard, focus and its ring stay on the button, and Escape closes the menu', (
+        tester,
+      ) async {
+        final container = await twoPages(tester);
+        final button = sortButton(GbCreatorView);
+        final buttonFocus = Focus.of(tester.element(find.descendant(of: button, matching: find.byType(Row)).first));
+        buttonFocus.requestFocus();
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        expect(find.text('SORT BY'), findsOneWidget, reason: 'Enter opens the menu');
+
+        final accent = ZenithPalette.of(tester.element(button)).accent;
+        void expectRingOnButton(String reason) {
+          expect(FocusManager.instance.primaryFocus, buttonFocus, reason: reason);
+          final ring = find.descendant(of: find.byType(ButtonFocusRing), matching: find.byType(CustomPaint));
+          expect(ring, findsOneWidget, reason: reason);
+          // The ring paints over the whole overlay, moved to the button's place.
+          final at = tester.getTopLeft(button);
+          expect(
+            tester.renderObject(ring),
+            paints
+              ..transform(matrix4: equals(Matrix4.translationValues(at.dx, at.dy, 0).storage))
+              ..drrect(color: accent),
+            reason: reason,
+          );
+        }
+
+        expectRingOnButton('the menu is open');
+        await escape(tester);
+        expect(find.text('SORT BY'), findsNothing);
+        expect(container.read(marketplaceRoutesProvider), hasLength(2));
+        expectRingOnButton('Escape closed the menu');
+      });
+
+      testWidgets("on a creator's page, Alt+Left and the back button don't go back while the menu is open", (
+        tester,
+      ) async {
+        final container = await twoPages(tester);
+        await clickOpen(tester, sortButton(GbCreatorView), 'SORT BY');
+
+        await altLeft(tester);
+        expect(find.text('SORT BY'), findsOneWidget);
+        expect(container.read(marketplaceRoutesProvider), hasLength(2));
+
+        // Pressed outside the menu, the back button closes it as any click outside does, and goes nowhere.
+        await mouseBack(tester);
+        expect(find.text('SORT BY'), findsNothing);
+        expect(container.read(marketplaceRoutesProvider), hasLength(2));
+      });
+
+      testWidgets("on the grid, Escape closes the Sort and Mature content menus", (tester) async {
+        final container = await pumpScreen(tester);
+        await clickOpen(tester, sortButton(GbBrowseView), 'SORT BY');
+        await escape(tester);
+        expect(find.text('SORT BY'), findsNothing);
+
+        await clickOpen(
+          tester,
+          find.ancestor(of: find.byIcon(Icons.visibility_outlined), matching: find.byType(OutlinedButton)),
+          'MATURE CONTENT',
+        );
+        await escape(tester);
+        expect(find.text('MATURE CONTENT'), findsNothing);
+        expect(container.read(marketplaceRoutesProvider), isEmpty);
+        expect(find.byType(GbBrowseView), findsOneWidget);
+      });
+    });
+
+    testWidgets('a focused text field keeps Escape and Alt+Left', (tester) async {
+      final container = await twoPages(
+        tester,
+        around: (screen) => Column(
+          children: [
+            const TextField(key: ValueKey('field')),
+            Expanded(child: screen),
+          ],
+        ),
+      );
+      await tester.tap(find.byKey(const ValueKey('field')));
+      await tester.pump();
+
+      await escape(tester);
+      await altLeft(tester);
+      expect(container.read(marketplaceRoutesProvider), hasLength(2));
+    }, variant: TargetPlatformVariant(const {TargetPlatform.linux, TargetPlatform.windows}));
   });
 
   group('the stack', () {

@@ -22,6 +22,7 @@ import 'support/fake_download_transport.dart';
 import 'support/localized_harness.dart';
 import 'support/origin_shorthand.dart';
 import 'support/recording_service.dart';
+import 'support/system_temp.dart';
 import 'support/temp_library.dart';
 
 /// An update drops the mod's cached keys whether or not it lands: a write that failed part-way may still have changed
@@ -221,5 +222,70 @@ void main() {
     expect(temp.read(modName, 'Textures/Patch.dds'), 'v2', reason: 'the new files are in');
     expect(service.keysDropped, contains(modName));
     expect(markedWriting, {modName}, reason: "a press on the mod's switch waits for the write");
+  });
+
+  group('the unpack an update made', () {
+    // The system temp folder is pointed into the library's, so what an update leaves there can be seen apart from
+    // other tests' work.
+    late Directory systemTemp;
+    setUp(() {
+      systemTemp = Directory(p.join(temp.root.path, 'system_temp'))..createSync();
+      IOOverrides.global = SystemTempIn(systemTemp);
+    });
+    tearDown(() => IOOverrides.global = null);
+
+    List<String> leftOver() => [
+          for (final entry in systemTemp.listSync())
+            if (p.basename(entry.path).startsWith('zzz_archive_extract_')) p.basename(entry.path),
+        ];
+
+    testWidgets('is deleted whole when the mod came out a level down, as Mods/<mod>', (tester) async {
+      final mod = await installed(
+        tester,
+        originFixture(
+          modId: 100,
+          modIdConfidence: OriginConfidence.exact,
+          fileId: 1,
+          versionConfidence: OriginConfidence.exact,
+          ingest: const ModIngest(folders: [modName]),
+        ),
+      );
+      final file = serve(2, {'Mods/Ellen/Ellen.ini': '[KeySwap]\nkey = VK_2\n'});
+
+      await runFailingAtTheRecord(
+        tester,
+        (context, ref) => applyUpdateFlow(context, ref, mod: mod, remoteModId: 100, file: file, confirm: false),
+      );
+
+      expect(temp.read(modName, 'Ellen.ini'), contains('VK_2'), reason: 'the unpack ran and was written from');
+      expect(leftOver(), isEmpty);
+    });
+
+    testWidgets("and a patch update's too", (tester) async {
+      temp.write(modName, 'Textures/Patch.dds', 'v1');
+      final mod = await installed(
+        tester,
+        originFixture(
+          modId: 100,
+          modIdConfidence: OriginConfidence.exact,
+          patches: [
+            patchFixture(
+              modId: patchId,
+              files: const [InstalledFile(path: 'Textures/Patch.dds', role: InstalledFileRole.added)],
+            ),
+          ],
+        ),
+      );
+      final file = serve(3, {'Mods/Ellen Fix/Textures/Patch.dds': 'v2'});
+
+      await runFailingAtTheRecord(
+        tester,
+        (context, ref) =>
+            applyPatchUpdateFlow(context, ref, mod: mod, remoteModId: patchId, file: file, asCompanion: true),
+      );
+
+      expect(temp.read(modName, 'Textures/Patch.dds'), 'v2', reason: 'the unpack ran and was written from');
+      expect(leftOver(), isEmpty);
+    });
   });
 }

@@ -105,10 +105,12 @@ class ReclaimController extends AsyncNotifier<ReclaimOutcome?> {
       ref.read(storageRootsProvider),
       downloadsBusy: () =>
           ref.read(downloadQueueProvider).any((job) => !job.state.isTerminal),
-      // A download installing holds its folders past the unpack, while the import copies from them.
+      // A download installing holds its folders past the unpack, while the import copies from them, and an update
+      // holds its own while it asks and writes.
       installBusy: () =>
           ArchiveActivity.isBusy ||
-          ref.read(downloadQueueProvider).any((job) => job.state == DownloadJobState.installing),
+          ref.read(downloadQueueProvider).any(
+              (job) => job.state == DownloadJobState.installing || job.state == DownloadJobState.updating),
       downloadWaiting: () => ref.read(downloadQueueProvider).any((job) => job.state == DownloadJobState.waiting),
       modNames: () async {
         try {

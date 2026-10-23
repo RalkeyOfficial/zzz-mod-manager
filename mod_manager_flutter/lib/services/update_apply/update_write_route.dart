@@ -23,6 +23,7 @@
 /// Pure, so the decision can be tested without a download, a folder or a dialog.
 library;
 
+import '../../models/mod_download.dart';
 import '../../models/mod_origin.dart';
 
 enum UpdateWriteKind {
@@ -85,17 +86,17 @@ class UpdateWriteRoute {
   final bool flattensPatch;
 }
 
-/// The route for a verdict about the layer naming [subjectModId], against the
-/// folder described by [origin].
+/// The route for a verdict about the layer [subject] names, against the folder
+/// described by [origin].
 ///
-/// Refused for a mod this folder does not record: writing it would overwrite one
-/// mod with another.
+/// Refused for a layer this folder does not record: writing it would overwrite
+/// one mod with another.
 UpdateWriteRoute updateWriteRoute({
   required ModOrigin? origin,
-  required int? subjectModId,
+  required DownloadKey? subject,
 }) {
-  if (origin == null || subjectModId == null) return UpdateWriteRoute.refused;
-  final index = origin.indexOf(subjectModId);
+  if (origin == null || subject == null) return UpdateWriteRoute.refused;
+  final index = origin.indexOf(subject);
   if (index < 0) return UpdateWriteRoute.refused;
 
   if (index > 0) {

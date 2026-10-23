@@ -20,6 +20,7 @@ import '../services/backup/snapshot_service.dart';
 import '../services/bulk_update_check.dart';
 import '../services/download_names.dart';
 import '../services/installed_mods_index.dart';
+import '../models/mod_download.dart';
 import '../models/mod_origin.dart';
 import '../services/log/logger.dart';
 import '../services/mod_manager_service.dart';
@@ -932,6 +933,15 @@ final libraryCheckProgressProvider = StateProvider<Set<String>>((ref) => const {
 final modUpdateChecksProvider =
     StateProvider<Map<String, UpdateCheck>>((ref) => const {});
 
+/// Drops [modId]'s verdict after a write that changed which downloads its folder holds, such as a patch put in or
+/// taken out. The verdict names layers, so the folder reads as not checked until the next check rather than naming
+/// one that is gone.
+void forgetUpdateCheck(ProviderContainer container, String modId) {
+  final checks = container.read(modUpdateChecksProvider.notifier);
+  if (!checks.state.containsKey(modId)) return;
+  checks.state = {...checks.state}..remove(modId);
+}
+
 /// What a check is starting from, taken as it starts, for [changedDuringCheck] at its end.
 UpdateCheckStart updateCheckStart(ProviderContainer container) => UpdateCheckStart(
       checks: container.read(modUpdateChecksProvider),
@@ -1020,7 +1030,7 @@ DateTime? _newestFileDate(GbMod page) {
   return newest;
 }
 
-/// Takes back the ignored update on [mod]'s download from mod page [subject], and rescans. Returns false when the
+/// Takes back the ignored update on the layer of [mod] that [subject] names, and rescans. Returns false when the
 /// sidecar could not be written.
 ///
 /// The session's verdict is re-folded too (`refoldDismissal`, as the update dialog's undo does): the badge reads it,
@@ -1029,7 +1039,7 @@ DateTime? _newestFileDate(GbMod page) {
 Future<bool> stopIgnoringUpdate(
   ProviderContainer container, {
   required ModInfo mod,
-  required int subject,
+  required DownloadKey subject,
   OriginWriter? writer,
 }) async {
   final write = writer ?? originWriterFor(container.read(modManagerServiceProvider.future));
@@ -1040,7 +1050,7 @@ Future<bool> stopIgnoringUpdate(
   );
   if (!result.ok) return false;
   final checks = container.read(modUpdateChecksProvider.notifier);
-  if (checks.state[mod.id] case final check? when check.layers.length > 1 || check.subjectModId == subject) {
+  if (checks.state[mod.id] case final check? when check.layers.length > 1 || check.subject == subject) {
     checks.state = {...checks.state, mod.id: refoldDismissal(check, subject, false)};
   }
   await container.read(libraryProvider.notifier).rescan();
@@ -1052,25 +1062,49 @@ Future<bool> stopIgnoringUpdate(
 ///
 /// The dismissal is written on the layer whose page has the update, up to the newest file the check reported
 /// (`UpdateCheck.dismissableUpTo`), so anything uploaded after speaks up again.
+///
+/// **This is the folder's Ignore**, so it also dismisses every other layer of the same page whose finding lists the
+/// same files: a newer file nobody labelled is listed under both a base and a patch from one page, and dismissed on
+/// the winner alone, the other layer wins the re-fold with the file just ignored. The update dialog's and History's
+/// Ignore act on one layer and stay per layer.
 Future<bool> ignoreUpdate(
   ProviderContainer container, {
   required ModInfo mod,
   required UpdateCheck check,
   OriginWriter? writer,
 }) async {
-  final subject = check.subjectModId;
+  final subject = check.subject;
   final until = check.dismissableUpTo;
   if (subject == null || until == null) return false;
+  Set<int> listed(UpdateCheck verdict) => {for (final file in verdict.newerFiles) file.idRow};
+  final same = listed(check);
+  final dismissals = <DownloadKey, DateTime>{
+    subject: until,
+    for (final layer in check.layers)
+      if (layer.key case final key? when key != subject && key.modId == subject.modId)
+        if (layer.check.hasUpdate && same.isNotEmpty && setEquals(listed(layer.check), same))
+          if (layer.check.dismissableUpTo case final date?) key: date,
+  };
   final write = writer ?? originWriterFor(container.read(modManagerServiceProvider.future));
   final result = await whileWritingMod(
     container,
     mod.id,
-    () => write(mod.id, (origin) => origin?.withDismissal(subject: subject, until: until)),
+    () => write(mod.id, (origin) {
+      var next = origin;
+      for (final entry in dismissals.entries) {
+        next = next?.withDismissal(subject: entry.key, until: entry.value);
+      }
+      return next;
+    }),
   );
   if (!result.ok) return false;
   final checks = container.read(modUpdateChecksProvider.notifier);
   if (checks.state[mod.id] case final held?) {
-    checks.state = {...checks.state, mod.id: refoldDismissal(held, subject, true)};
+    var refolded = held;
+    for (final key in dismissals.keys) {
+      refolded = refoldDismissal(refolded, key, true);
+    }
+    checks.state = {...checks.state, mod.id: refolded};
   }
   await container.read(libraryProvider.notifier).rescan();
   return true;

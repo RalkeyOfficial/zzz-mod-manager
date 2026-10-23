@@ -4,11 +4,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/core/button_working.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_exceptions.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_update.dart';
+import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/all_mods/all_mods_view.dart';
@@ -234,7 +236,7 @@ void main() {
     // As an Ignore or an applied update does: it writes the folder, then sets or drops the session's verdict.
     await pumpHost(tester);
     await startCheck(tester);
-    const ignored = UpdateCheck(outcome: UpdateOutcome.updateAvailable, dismissed: true, subjectModId: 1);
+    const ignored = UpdateCheck(outcome: UpdateOutcome.updateAvailable, dismissed: true, subject: DownloadKey.base(1));
     container.read(modUpdateChecksProvider.notifier).state = {'stale': ignored};
 
     answer();
@@ -263,8 +265,12 @@ void main() {
     await startCheck(tester);
     expect(container.read(libraryCheckRunningProvider), isTrue);
 
-    expect(tester.widget<OutlinedButton>(checkAll()).onPressed, isNull, reason: 'the check button is disabled');
-    expect(find.descendant(of: checkAll(), matching: find.byType(CircularProgressIndicator)), findsOneWidget);
+    // The check button shows it working once the check has run 200 ms, and a press on it does nothing.
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.descendant(of: checkAll(), matching: find.byType(ZenithSpinner)), findsOneWidget);
+    await tester.tap(checkAll());
+    await tester.pump();
+    expect(fetches, 1);
 
     // A request from anywhere else is ignored rather than raced into the same results.
     final actions = LibraryActionsHost.of(tester.element(find.byType(AllModsView)));

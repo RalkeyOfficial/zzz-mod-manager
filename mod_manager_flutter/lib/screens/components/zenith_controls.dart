@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../../core/button_feedback.dart';
 import '../../core/palette.dart';
 import '../../core/type_scale.dart';
 
@@ -13,7 +14,7 @@ ButtonStyle smallButtonStyle(BuildContext context, {bool iconOnly = false}) => B
   fixedSize: iconOnly ? const WidgetStatePropertyAll(Size(30, 30)) : null,
   padding: WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: iconOnly ? 0 : 10)),
   textStyle: WidgetStatePropertyAll(Theme.of(context).textTheme.labelMedium),
-  shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(7))),
+  shape: pressShape(RoundedRectangleBorder(borderRadius: BorderRadius.circular(7))),
 );
 
 /// A 28px filter chip, with an optional count after its label. Selected takes [ZenithPalette.selected].

@@ -934,7 +934,7 @@
       "companion_heading": "Which mod do these files belong to?",
       "companion_add": "Add",
       "companion_file_unknown": "Nothing here records which of these you actually have — these are the files this mod page publishes, not what's in your folder. Pick the one you recognise, or say you don't know.",
-      "companion_is_self": "That is this mod, not another one",
+      "file_in_folder": "Already in this folder",
       "companion_remove": "This is just one mod after all",
       "companion_remove_hint": "Stops watching the other mod page.",
       "companion_remove_patch_title": "This patch is no longer in the folder?",

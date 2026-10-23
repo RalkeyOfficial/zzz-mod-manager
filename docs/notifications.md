@@ -200,7 +200,7 @@ The ones several kinds of card carry are built in `utils/notification_actions.da
   A mod removed or renamed since is not shown; a Note says it is no longer in the library. A library that couldn't be read is not that: a failed scan keeps the list from before the install as its value, so the error is asked about first, and Open shows the Characters view with the scan's error and its Try again rather than calling the mod gone.
   There is no "Turn on": whether an install is turned on belongs where the install is started, the mod page's Turn on after installing switch, not on the card that reports it. A mod that switch couldn't turn on is said beside the card as a warning, "Installed, but not turned on", since the mod arrived; one refused for its shader files or for a network folder gets the Library's own card for that refusal instead.
 
-**Keyboard focus draws a 2px accent ring** on an action, as the canvas's `:focus-visible` does, and never after a click. No key reaches a card yet: Tab moves within the page or dialog in front, and this layer is outside both.
+**Keyboard focus draws a 2px accent ring** 2px out from an action, the app's ring for every button, and never after a click. A press draws the action's text colour at 16% over it; the hover is the action's own fill. The canvas draws the actions' ring 1px out; it is 2px, the same as every other button's. No key reaches a card yet: Tab moves within the page or dialog in front, and this layer is outside both.
 
 **A keycap in the body.** A body holding `{key}` with `keycap: 'F10'` draws a `Keycap` there (`keycapSentence`), so each language puts the key where its own word order wants it. The log writes the key in its place.
 

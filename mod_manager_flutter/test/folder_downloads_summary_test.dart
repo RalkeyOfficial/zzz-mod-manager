@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
@@ -52,9 +53,9 @@ void main() {
     ModOrigin? block, {
     String folderName = 'Pulchra-BottomHeavy(NSFW)',
     Map<int, String> knownNames = const {},
-    Map<int, String> notes = const {},
+    Map<DownloadKey, String> notes = const {},
     Map<int, GbMod> sessionRecords = const {},
-    Map<int, FolderRowAction> rowActions = const {},
+    Map<DownloadKey, FolderRowAction> rowActions = const {},
     void Function(ModDownload)? onEdit,
   }) =>
       pumpLocalized(
@@ -217,9 +218,9 @@ void main() {
     await pump(
       tester,
       origin(patches: [patch()]),
-      notes: const {
-        585282: 'Updates: This is the latest file',
-        605460: 'Updates: An update is available',
+      notes: {
+        const DownloadKey.base(585282): 'Updates: This is the latest file',
+        const DownloadKey.patch(605460): 'Updates: An update is available',
       },
     );
 
@@ -234,7 +235,7 @@ void main() {
     await pump(
       tester,
       origin(modId: 585282, patches: [patch(modId: 605460)]),
-      rowActions: const {585282: FolderRowAction.change},
+      rowActions: {const DownloadKey.base(585282): FolderRowAction.change},
       onEdit: (download) => acted = download,
     );
 
@@ -253,7 +254,7 @@ void main() {
     await pump(
       tester,
       origin(patches: [patch()]),
-      rowActions: const {605460: FolderRowAction.remove},
+      rowActions: {const DownloadKey.patch(605460): FolderRowAction.remove},
       onEdit: (download) => acted = download,
     );
 
@@ -273,15 +274,48 @@ void main() {
         modId: 585283,
         patches: [patch(modId: 585282), patch()],
       ),
-      rowActions: const {
-        585283: FolderRowAction.change,
-        605460: FolderRowAction.remove,
+      rowActions: {
+        const DownloadKey.base(585283): FolderRowAction.change,
+        const DownloadKey.patch(605460): FolderRowAction.remove,
       },
       onEdit: (_) {},
     );
 
     expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
     expect(find.byIcon(Icons.delete_outline), findsOneWidget);
+  });
+
+  testWidgets('two layers of one page are each named by their file, and act on their own', (tester) async {
+    // A lone fix file from the base's own page: both rows carry the page's
+    // name, so each names its file, the variant text in grey beneath.
+    ModDownload? acted;
+    final samePage = origin(patches: [
+      patch(modId: 585282, fileId: 1500000, versionLabel: 'Hair fix'),
+    ]);
+    await pump(
+      tester,
+      samePage,
+      knownNames: const {585282: 'Ellen Maid'},
+      rowActions: {const DownloadKey.patch(585282): FolderRowAction.remove},
+      onEdit: (download) => acted = download,
+      sessionRecords: {
+        585282: GbMod(idRow: 585282, name: 'Ellen Maid', files: [
+          GbFile(idRow: 1433843, file: 'ellen_main.zip', description: 'Main file'),
+          GbFile(idRow: 1500000, file: 'hair_fix.zip', description: 'Hair fix'),
+        ]),
+      },
+    );
+
+    expect(find.text('Ellen Maid'), findsNWidgets(2));
+    expect(find.text('ellen_main.zip'), findsOneWidget);
+    expect(find.text('hair_fix.zip'), findsOneWidget);
+    final variant = tester.widget<Text>(find.text('Hair fix'));
+    final context = tester.element(find.text('Hair fix'));
+    expect(variant.style?.color, Theme.of(context).colorScheme.onSurfaceVariant, reason: 'grey, beneath the filename');
+    expect(find.byIcon(Icons.delete_outline), findsOneWidget, reason: 'the base row keeps none');
+
+    await tester.tap(find.byIcon(Icons.delete_outline));
+    expect(acted?.fileId, 1500000);
   });
 
   testWidgets('no affordance when no row has an action', (tester) async {

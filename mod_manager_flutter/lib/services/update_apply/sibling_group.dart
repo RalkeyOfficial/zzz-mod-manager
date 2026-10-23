@@ -355,9 +355,11 @@ class _Candidate {
     if (member.id == primary.id) continue;
     if (member.origin?.ingest?.siblingGroup != group) continue;
 
+    // A member is written only as its own base, so the base of that page is
+    // the layer asked for.
     final route = updateWriteRoute(
       origin: member.origin,
-      subjectModId: subjectModId,
+      subject: DownloadKey.base(subjectModId),
     );
     if (route.kind != UpdateWriteKind.base) {
       refused.add(SiblingRefused(mod: member, reason: SiblingRefusal.notBase));

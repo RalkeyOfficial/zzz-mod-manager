@@ -1,4 +1,6 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/app_localizations.dart';
@@ -38,6 +40,54 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   /// which is one per marketplace open — the tabs are keyed children of an
   /// `AnimatedSwitcher` with no keep-alive, so a new `State` *is* the event.
   bool _librarySnapshotTaken = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // A late handler sees only a key nothing focused has taken, so a dialog, a menu or a text field keeps its own
+    // Escape and Alt+Left: a field takes Escape to hide its toolbar and Alt+Left to move to the line's start, and
+    // Browse's menus and the character popover take focus when they open, so their Escape closes them.
+    // It also sees a key pressed while nothing on the page has focus, which a `Focus` around the page would miss.
+    FocusManager.instance.addLateKeyEventHandler(_onUnclaimedKey);
+  }
+
+  @override
+  void dispose() {
+    FocusManager.instance.removeLateKeyEventHandler(_onUnclaimedKey);
+    super.dispose();
+  }
+
+  /// Goes back one page for Escape, Alt+Left or the mouse's back button, if a page is open over the grid, Browse is
+  /// the page shown and no dialog, panel or menu is over it. Returns whether it went back.
+  bool _goBack() {
+    if (!mounted || ref.read(destinationProvider) != AppDestination.browse) return false;
+    // A dialog or the Downloads panel is a route over this one.
+    if (!(ModalRoute.isCurrentOf(context) ?? true)) return false;
+    // An open menu holds focus (`_EscapableMenuAnchor`) and takes Escape itself; Alt+Left and the back button wait
+    // for it to close, which a click outside it does.
+    final focused = FocusManager.instance.primaryFocus?.context;
+    if (focused != null && (MenuController.maybeOf(focused)?.isOpen ?? false)) return false;
+    if (ref.read(marketplaceRoutesProvider).isEmpty) return false;
+    ref.read(marketplaceRoutesProvider.notifier).back();
+    return true;
+  }
+
+  KeyEventResult _onUnclaimedKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final keyboard = HardwareKeyboard.instance;
+    final isBack = switch (event.logicalKey) {
+      LogicalKeyboardKey.escape => !keyboard.isAltPressed && !keyboard.isControlPressed && !keyboard.isMetaPressed,
+      LogicalKeyboardKey.arrowLeft =>
+        keyboard.isAltPressed && !keyboard.isControlPressed && !keyboard.isMetaPressed && !keyboard.isShiftPressed,
+      _ => false,
+    };
+    if (!isBack) return KeyEventResult.ignored;
+    return _goBack() ? KeyEventResult.handled : KeyEventResult.ignored;
+  }
+
+  void _onPointerDown(PointerDownEvent event) {
+    if (event.buttons & kBackMouseButton != 0) _goBack();
+  }
 
   @override
   void didChangeDependencies() {
@@ -84,13 +134,12 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
     // was left: a creator's page keeps its loaded mods, its tile and its scroll, a mod's page its picture and its
     // picked files. A page gone back past is disposed, and a mod opened again starts afresh.
     final navigator = ref.read(marketplaceRoutesProvider.notifier);
-    return IndexedStack(
+    final stack = IndexedStack(
       index: routes.length,
       sizing: StackFit.expand,
       children: [
-        // `IndexedStack` hides a child from painting, hit-testing and semantics,
-        // but **not** from focus traversal — so without this, tabbing on the page
-        // on top walks into the search box of a grid that isn't on screen.
+        // `IndexedStack` already keeps its hidden children out of focus through `Visibility`;
+        // this states it explicitly for the grid and every page but the top one.
         ExcludeFocus(
           excluding: routes.isNotEmpty,
           child: GbBrowseView(onOpenMod: navigator.openFromGrid, onInstallFile: _installFile),
@@ -105,6 +154,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
           ),
       ],
     );
+    // Translucent, so the back button goes back over a page's empty space as well as over its content.
+    return Listener(behavior: HitTestBehavior.translucent, onPointerDown: _onPointerDown, child: stack);
   }
 
   /// The page for [route], with [below] the page it was opened from, or null for the grid.

@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/button_working.dart';
 import '../../core/palette.dart';
 import '../../core/type_scale.dart';
 import '../../l10n/app_localizations.dart';
@@ -332,10 +333,11 @@ class _AllModsViewState extends ConsumerState<AllModsView> {
               Icons.toggle_off_outlined,
               anyOn ? () => run(() => bulkDisable(context, container, selected)) : null,
             ),
-            button(
-              loc.t('library.all.check'),
-              Icons.sync_rounded,
-              checkable && !checking ? () => unawaited(LibraryActionsHost.of(context).checkMods(selected)) : null,
+            WorkingAction(
+              onPressed: checkable && !checking
+                  ? (work) => LibraryActionsHost.of(context).checkMods(selected, work: work)
+                  : null,
+              builder: (context, onPressed) => button(loc.t('library.all.check'), Icons.sync_rounded, onPressed),
             ),
             if (markCount != null)
               button(
@@ -577,14 +579,16 @@ class _HeaderState extends ConsumerState<_Header> {
               if (scanned) Text(parts.join(' · '), style: text.bodyMedium?.copyWith(color: palette.text2)),
             ],
           ),
-          OutlinedButton.icon(
+          // Working while the check it started runs; off while any other check runs.
+          WorkingAction(
             onPressed: checking || !checkPlan.hasWork
                 ? null
-                : () => unawaited(LibraryActionsHost.of(context).checkForUpdates()),
-            icon: checking
-                ? const SizedBox.square(dimension: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.sync_rounded),
-            label: Text(loc.t('library.all.check_all')),
+                : (work) => LibraryActionsHost.of(context).checkForUpdates(work: work),
+            builder: (context, onPressed) => OutlinedButton.icon(
+              onPressed: onPressed,
+              icon: const WorkingIcon(Icon(Icons.sync_rounded)),
+              label: Text(loc.t('library.all.check_all')),
+            ),
           ),
         ],
       ),

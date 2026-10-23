@@ -8,7 +8,7 @@ import 'zzz_characters.dart';
 /// Who or what a mod on a creator's page is for: one character tile, and the name its card's byline shows.
 ///
 /// A Character Skins mod is its character, mapped from the category as an install maps it
-/// ([RemoteModMetadata.characterIdForCategory]); a skin whose category maps to no roster character is its category.
+/// ([RemoteModMetadata.characterIdForMod]); a skin whose category maps to no roster character is its category.
 /// A mod of any other type, UI, Misc or Bangboo, is that type, whichever of its children it is filed under.
 @immutable
 class CreatorGroup {
@@ -73,14 +73,13 @@ String? _characterIdFor(String? categoryName) => _characterOfCategory.putIfAbsen
 /// The group [mod] belongs to on a creator's page.
 CreatorGroup creatorGroupOf(GbMod mod) {
   final category = mod.displayCategory;
-  final root = mod.rootCategory ?? mod.superCategory;
-  // A profile filed directly under a root has no parent: its category is the root.
-  final rootId = root?.idRow ?? (kTypeChipLabelKeys.containsKey(category?.idRow) ? category?.idRow : null);
-  // The type first, so a Bangboo or a UI mod is never taken for a character whose name its category happens to hold.
+  // The type first, as [RemoteModMetadata.characterIdForMod] decides it, so a Bangboo or a UI mod, or one of no known
+  // type, is never taken for a character whose name its category happens to hold.
+  final rootId = mod.typeCategoryId;
   if (rootId != null && rootId != kCharacterSkinsCategoryId) {
-    return CreatorGroup.type(rootId, root?.name ?? category?.name);
+    return CreatorGroup.type(rootId, (mod.rootCategory ?? mod.superCategory)?.name ?? category?.name);
   }
-  final characterId = _characterIdFor(category?.name);
+  final characterId = rootId == null ? null : _characterIdFor(category?.name);
   if (characterId != null) {
     if (characterById(characterId) case final character?) return CreatorGroup.character(character);
   }

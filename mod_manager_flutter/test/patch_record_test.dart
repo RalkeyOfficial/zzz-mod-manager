@@ -125,6 +125,19 @@ void main() {
                 'answer stays undoable');
       });
 
+      test("the patch's own page can be its base", () {
+        // A lone fix file from the main file's page, installed as its own
+        // folder: the main file goes underneath and both layers stay.
+        final amended = withPatchShape(tracked(), base: const ModDownload(
+          modId: 4001,
+          fileId: 8000,
+          modIdConfidence: OriginConfidence.user,
+        ))!;
+
+        expect(amended.downloads.map((d) => (d.modId, d.fileId)), [(4001, 8000), (4001, 9001)]);
+        expect(ModOrigin.fromJson(amended.toJson()), amended, reason: 'and a read keeps both');
+      });
+
       test('a re-import never inserts a second base under the first', () {
         // This runs again on every re-import of the same folder. Answering the
         // prompt with a *different* mod replaces the bottom layer — a folder
@@ -302,7 +315,7 @@ void main() {
 
     ModOrigin? updated(ModOrigin? origin) => withDownloadUpdatedTo(
           origin,
-          modId: 7100,
+          layer: const DownloadKey.patch(7100),
           fileId: 900,
           version: '2.0',
           versionLabel: 'NSFW',
@@ -313,7 +326,7 @@ void main() {
       // **The one route to `exact` on a layer the user did not identify by
       // hand**: every other is somebody telling us about bytes they moved in
       // themselves, and these are bytes we fetched.
-      final layer = updated(folder())!.downloadOf(7100)!;
+      final layer = updated(folder())!.downloadOf(const DownloadKey.patch(7100))!;
 
       expect(layer.fileId, 900);
       expect(layer.version, '2.0');
@@ -341,30 +354,30 @@ void main() {
       // "I don't know which file, I got it around then" is a weaker answer, and
       // leaving it beside a known file means two comparisons disagreeing.
       final start = folder().withDownload(
-        7100,
+        const DownloadKey.patch(7100),
         (d) => d.copyWith(baselineRemoteDate: DateTime.utc(2025, 1, 1)),
       );
-      expect(updated(start)!.downloadOf(7100)!.baselineRemoteDate, isNull);
+      expect(updated(start)!.downloadOf(const DownloadKey.patch(7100))!.baselineRemoteDate, isNull);
     });
 
     test('a dismissal goes, because they have taken the update', () {
       // Stored as a date at or after this file's, so keeping it would silence
       // the *next* release too.
       final start = folder().withDownload(
-        7100,
+        const DownloadKey.patch(7100),
         (d) => d.copyWith(updatesDismissedUntil: DateTime.utc(2025, 1, 1)),
       );
-      expect(updated(start)!.downloadOf(7100)!.updatesDismissedUntil, isNull);
+      expect(updated(start)!.downloadOf(const DownloadKey.patch(7100))!.updatesDismissedUntil, isNull);
     });
 
     test('the file list survives when the caller cannot report one', () {
       // Null is "I do not know", and an empty list would claim this layer put
       // nothing in the folder.
       final start = folder().withDownload(
-        7100,
+        const DownloadKey.patch(7100),
         (d) => d.copyWith(files: const [InstalledFile(path: 'Body.dds')]),
       );
-      expect(updated(start)!.downloadOf(7100)!.files.single.path, 'Body.dds');
+      expect(updated(start)!.downloadOf(const DownloadKey.patch(7100))!.files.single.path, 'Body.dds');
     });
 
     test('the other layers are untouched', () {
@@ -374,6 +387,16 @@ void main() {
         modIdConfidence: OriginConfidence.exact,
       );
       expect(updated(folder(extra: other))!.downloads.last, other);
+    });
+
+    test('on a page that is the base and a patch, only the layer named is stamped', () {
+      final samePage = tracked(patches: const [
+        ModDownload(role: DownloadRole.patch, modId: 4001, fileId: 77),
+      ]);
+      final amended = withDownloadUpdatedTo(samePage,
+          layer: const DownloadKey.patch(4001), fileId: 900)!;
+
+      expect(amended.downloads.map((d) => d.fileId), [samePage.base!.fileId, 900]);
     });
 
     test('a folder with no such layer is left exactly as it was', () {

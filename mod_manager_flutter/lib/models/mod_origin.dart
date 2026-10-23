@@ -103,20 +103,40 @@ class ModOrigin {
   List<ModDownload> get patches =>
       downloads.length < 2 ? const <ModDownload>[] : downloads.sublist(1);
 
-  /// The layer naming [modId], or null. Ids are deduplicated on read, so there
-  /// is at most one.
-  ModDownload? downloadOf(int modId) {
-    for (final download in downloads) {
-      if (download.modId == modId) return download;
+  /// The key of the layer at [index], with the role its **position** gives it,
+  /// or null for a layer with no page.
+  ///
+  /// Read from the position rather than the stored tag, for the reason
+  /// [DownloadRole] gives: the position is the truth.
+  DownloadKey? keyAt(int index) => switch (downloads[index].modId) {
+        final id? => DownloadKey(id, DownloadRole.forIndex(index)),
+        null => null,
+      };
+
+  /// The key of [download], a layer of this stack, or null when it has no page
+  /// or is not in the stack.
+  DownloadKey? keyOf(ModDownload download) {
+    for (var i = 0; i < downloads.length; i++) {
+      if (identical(downloads[i], download)) return keyAt(i);
+    }
+    for (var i = 0; i < downloads.length; i++) {
+      if (downloads[i] == download) return keyAt(i);
     }
     return null;
   }
 
+  /// The layer [key] names, or null. A page has at most one base and one patch
+  /// (see [DownloadKey]), so there is at most one.
+  ModDownload? downloadOf(DownloadKey key) {
+    final index = indexOf(key);
+    return index < 0 ? null : downloads[index];
+  }
+
   /// This layer's index, or -1. The address of a layer for anything that has to
   /// act on the stack around it.
-  int indexOf(int modId) {
+  int indexOf(DownloadKey key) {
     for (var i = 0; i < downloads.length; i++) {
-      if (downloads[i].modId == modId) return i;
+      if (keyAt(i) == key) return i;
     }
     return -1;
   }
@@ -218,16 +238,22 @@ class ModOrigin {
         downloads: downloads ?? this.downloads,
       );
 
-  /// [downloads] with the layer naming [modId] replaced by [update]'s result.
+  /// [downloads] with the layer [key] names replaced by [update]'s result.
   ///
-  /// **By id, and the position is untouched.** A layer's place in the stack is
+  /// **By key, and the position is untouched.** A layer's place in the stack is
   /// where its files physically sit; amending what we believe about it is not a
-  /// reason to move it.
-  ModOrigin withDownload(int modId, ModDownload Function(ModDownload) update) =>
-      copyWith(downloads: [
-        for (final download in downloads)
-          if (download.modId == modId) update(download) else download,
-      ]);
+  /// reason to move it. A mod id alone would reach both layers of a page that is
+  /// the base and a patch at once.
+  ModOrigin withDownload(
+    DownloadKey key,
+    ModDownload Function(ModDownload) update,
+  ) {
+    final index = indexOf(key);
+    return copyWith(downloads: [
+      for (var i = 0; i < downloads.length; i++)
+        if (i == index) update(downloads[i]) else downloads[i],
+    ]);
+  }
 
   /// [downloads] with the **bottom** layer replaced, creating one when the stack
   /// is empty.
@@ -265,31 +291,38 @@ class ModOrigin {
         ]),
       );
 
-  /// [layer] added on top, replacing any layer that already names the same mod.
+  /// [layer] added on top, replacing any **patch** that already names the same
+  /// mod.
   ///
-  /// **Deduplicated by mod id**: one folder can legitimately hold two different
-  /// patches, and re-applying the same one must not list it twice. A layer with
-  /// no id is always additive, since there is nothing to match it against.
+  /// **Deduplicated by mod id among the patches**: one folder can legitimately
+  /// hold two different patches, and re-applying the same one must not list it
+  /// twice. The bottom layer is never dropped, since a page can be the base and
+  /// a patch at once ([DownloadKey]). A layer with no id is always additive,
+  /// since there is nothing to match it against.
   ModOrigin withLayerOnTop(ModDownload layer) => copyWith(
         downloads: _reroled([
-          for (final download in downloads)
-            if (layer.modId == null || download.modId != layer.modId) download,
+          for (var i = 0; i < downloads.length; i++)
+            if (i == 0 || layer.modId == null || downloads[i].modId != layer.modId)
+              downloads[i],
           layer,
         ]),
       );
 
-  /// The stack without the layer naming [modId], roles re-derived.
+  /// The stack without the layer [key] names, roles re-derived.
   ///
   /// Removing the bottom layer is expressible and is *not* refused here: it
   /// leaves a folder needing a base again, which is a state the app already
   /// describes ([needsBase]) and a caller may legitimately produce. Whether to
   /// offer it is that caller's judgement, not this type's.
-  ModOrigin withoutDownload(int modId) => copyWith(
-        downloads: _reroled([
-          for (final download in downloads)
-            if (download.modId != modId) download,
-        ]),
-      );
+  ModOrigin withoutDownload(DownloadKey key) {
+    final index = indexOf(key);
+    return copyWith(
+      downloads: _reroled([
+        for (var i = 0; i < downloads.length; i++)
+          if (i != index) downloads[i],
+      ]),
+    );
+  }
 
   /// A dismissal — or its undo, with a null [until] — recorded against **one
   /// layer**.
@@ -304,7 +337,10 @@ class ModOrigin {
   /// the bottom layer would dismiss the wrong mod's releases, and a verdict
   /// computed against a block that has since moved on is exactly when that
   /// happens.
-  ModOrigin withDismissal({required int subject, required DateTime? until}) =>
+  ModOrigin withDismissal({
+    required DownloadKey subject,
+    required DateTime? until,
+  }) =>
       withDownload(
         subject,
         (download) => until == null
@@ -370,9 +406,10 @@ class ModOrigin {
   /// - **An unusable entry goes and the list survives.** A sidecar can arrive
   ///   from a stranger holding anything; one bad entry must not cost the others,
   ///   and none of them may cost the folder's own facts.
-  /// - **A repeated mod id keeps the lower layer.** Kept, the second would have
-  ///   the check ask one page twice and report two verdicts for one folder — and
-  ///   the lower one is the one whose files the upper would have overwritten.
+  /// - **A second patch of one page is dropped, and so is a layer that records
+  ///   the same page and file as one below it.** The lower layer is kept: it is
+  ///   the one whose files the upper would have overwritten. A base and a patch
+  ///   of one page are two layers ([DownloadKey]) and both stay.
   /// - **An entry that knows nothing is still kept**, and that is the one rule
   ///   here that would be wrong in the old shape. A companion with no identity
   ///   was worthless, because a companion *was* an identity. A layer with no
@@ -383,14 +420,25 @@ class ModOrigin {
   static List<ModDownload> _stack(Object? raw) {
     if (raw is! List) return const <ModDownload>[];
     final parsed = <ModDownload>[];
-    final seen = <int>{};
+    final patchPages = <int>{};
     for (final entry in raw) {
       final download = ModDownload.fromJson(entry, index: parsed.length);
       if (download == null) continue;
-      if (download.modId case final id? when !seen.add(id)) continue;
+      if (parsed.isNotEmpty) {
+        if (_recordsFileBelow(parsed, download)) continue;
+        if (download.modId case final id? when !patchPages.add(id)) continue;
+      }
       parsed.add(download);
     }
     return parsed;
+  }
+
+  static bool _recordsFileBelow(List<ModDownload> below, ModDownload layer) {
+    if (layer.modId == null || layer.fileId == null) return false;
+    return below.any(
+      (download) =>
+          download.modId == layer.modId && download.fileId == layer.fileId,
+    );
   }
 
   /// Reads a sidecar written in the **flat** shape — identity on the block

@@ -755,6 +755,29 @@ and that follows from the null rather than needing to be said anywhere else. The
 old shape *required* an identity and therefore recorded nothing at all for such a
 patch.
 
+### Two layers of one page
+
+A patch whose file comes from its base's own page is a patch like any other.
+About one in twelve of the 150 most-downloaded ZZZ character pages carries one, usually a lone `.ini` fix or a texture overwrite.
+
+**A layer is named by its page and its place** (`DownloadKey` in `models/mod_download.dart`: the mod id plus the `DownloadRole`).
+A page can be the base and a patch at once, but never two patches, so the pair names one layer.
+Every write, dismissal and verdict finds its layer by this key (`ModOrigin.downloadOf`, `withDownload`, `withoutDownload`, `withDismissal`); a mod id alone would reach both layers.
+An update leaves a layer where it is, so the key survives a newer file.
+It changes only when a base is named under a patch or the bottom layer is removed, and both of those writes drop the folder's verdict.
+
+- **Read:** a second patch of one page is dropped, and so is a layer that records the same page and file as one below it. The lower layer is kept, and no other layer is ever dropped for sharing a page.
+- **Putting a patch in** replaces the patch from the same page, never the base (`withLayerOnTop`). The base's own file is refused.
+- **Update checks:** the page is fetched once and each layer compares its own file ([`update-checks.md`](update-checks.md) §2). Two kinds of file are dropped from a layer's candidates. One is a file another layer of the folder records, because it is installed. The other is a file carrying another same-page layer's variant label and not this layer's, because the author named it that layer's. Any other newer file is listed under both layers, which is the safe direction. The fold is unchanged.
+- **Ignore** is written on the layer the key names. The date stays on that layer's own entry, so nothing on disk changes shape. An Ignore on the whole folder (the Updates page's row) also dates every other layer of the page whose finding lists the same files, since otherwise that layer wins the fold with the file just ignored ([`update-checks.md`](update-checks.md) §4). The update dialog's and History's Ignore act on one layer.
+- **Refused:** only a file the folder already holds, never a page. That row in the tracking screen's file pickers, the patch prompt and the Updates page's Which file? list is greyed, with "Already in this folder" under it or beside it, and it is never suggested or preselected. The writes refuse it too: `OriginResolution.pickFile` and `inferFile` write nothing when a patch on the base records that file, so no path records it on the base as well.
+- **Shown:** both rows carry the same page name, so each names its file: the filename, with its variant text in grey beneath ([`update-checks.md`](update-checks.md) §7), never a tag. Where there is room for one line (a menu, a notification, the Take out confirmation), it reads "<page> · <file>".
+
+Three cases are settled by the same rule rather than by a case of their own.
+A newer unlabelled file on the shared page shows under both layers. The Updates page's Ignore covers every same-page layer that lists the same files, while the update dialog's and History's Ignore act on one layer ([`update-checks.md`](update-checks.md) §4).
+Two different fix files from one page in one folder: the second replaces the first, as for a patch from any page.
+No file name is saved on the layer: the Base or Patch badge, the saved variant text and a fetched page are enough to tell the two apart.
+
 ### It lives inside `origin`, and that is what keeps it additive
 
 `downloads` is a key **inside** the `origin` object rather than a restructuring of
@@ -784,9 +807,8 @@ list:
   disagreement is logged. An unrecognised role loses the same way.
 - **One bad entry costs only itself.** The rest of the list and the folder's own
   facts survive it.
-- **A repeated mod id keeps the lower layer.** Kept, the second would have the
-  check ask one page twice and report two verdicts for one folder — and the lower
-  one is the one whose files the upper would have overwritten.
+- **A second patch of one page is dropped, and so is a layer that records the same page and file as one below it** ([above](#two-layers-of-one-page)).
+  The lower layer is kept: it is the one whose files the upper would have overwritten. A base and a patch of one page are two layers, and both stay.
 - **No nesting.** A layer carries no stack of its own.
 - Absent from the json when empty, which is every sidecar that records only how
   the folder got here.
@@ -869,7 +891,7 @@ download is; see
 surfaces where the folder's contents are *context* rather than the subject.
 
 **The affordance is on the row, not beside the list.** A separate editable row below the list would put one download in a place of its own again; as a button on the row it looks like every other entry with one more thing on it.
-Which rows offer one, and which of the two actions each offers, is passed in by mod id rather than derived: what can be done to a layer depends on which flows exist, not on anything visible in the row, and a widget guessing would offer a button that does nothing.
+Which rows offer one, and which of the two actions each offers, is passed in by layer (its `DownloadKey`) rather than derived: what can be done to a layer depends on which flows exist, not on anything visible in the row, and a widget guessing would offer a button that does nothing.
 The resolve dialog gives a patch *remove* and a patch-shaped folder's bottom layer *change* (see [below](#taking-a-patch-out)); the details panel gives none, its summary being a read-only answer to "what is this".
 
 ### Naming what a patch applies to
@@ -898,6 +920,10 @@ What it may write is narrower than the identity step:
 | Pick a file | `file_id`, `version`, `version_label` at `user` on that layer. A banked-hash row's `exact` is discarded: the hash is a fact about the archive the layer *above* came from. |
 | "I don't know which" | `assumed_latest` plus the other mod's **own creation date** as the baseline. The folder's install date belongs to the download we performed. |
 | "This folder is one mod after all" | Removes the bottom layer and clears `patch_shaped`. What is left is one download that patches nothing, which is an ordinary mod. A wrong answer has to be undoable, or naming one is a trap. |
+
+**A mod page is never refused as the base**, the patch's own included: a base and a patch of one page are two layers ([above](#two-layers-of-one-page)).
+**A file the folder already holds is**: its row in the file picker is greyed, with "Already in this folder" under it.
+Written, it would record one download twice, and a read keeps only the lower of the two (`ModOrigin._stack`).
 
 Changing the identity clears whatever was answered about the previous one, and the
 baseline is read from the record **when the answer is written** rather than held

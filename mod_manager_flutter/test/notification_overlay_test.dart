@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/core/button_feedback.dart';
 import 'package:mod_manager_flutter/core/palette.dart';
 import 'package:mod_manager_flutter/screens/components/character_tile.dart';
 import 'package:mod_manager_flutter/screens/components/notification_overlay.dart';
@@ -596,16 +597,47 @@ void main() {
       await tester.pumpAndSettle();
       addTearDown(() => FocusManager.instance.highlightStrategy = FocusHighlightStrategy.automatic);
 
-      final side = tester.widget<TextButton>(find.widgetWithText(TextButton, 'Open folder')).style!.side!;
-      expect(side.resolve({}), BorderSide.none);
+      final button = find.widgetWithText(TextButton, 'Open folder');
+      expect(tester.renderObject(button), isNot(paints..drrect()));
 
       FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTouch;
-      expect(side.resolve({WidgetState.focused}), BorderSide.none);
+      Focus.of(tester.element(find.text('Open folder'))).requestFocus();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(tester.renderObject(button), isNot(paints..drrect()), reason: "a pointer's focus draws none");
 
+      // The app's ring: 2px of the accent from 2px to 4px out of the button's 7px corners. The button's border
+      // eases in over 200 ms.
       FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
-      final ring = side.resolve({WidgetState.focused})!;
-      expect(ring.color, palette.accent);
-      expect(ring.width, 2);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      final edge = RRect.fromRectAndRadius(Offset.zero & tester.getSize(button), const Radius.circular(7));
+      expect(
+        tester.renderObject(button),
+        paints..drrect(outer: edge.inflate(4), inner: edge.inflate(2), color: palette.accent),
+      );
+    });
+
+    testWidgets('a press draws its text colour at 16%, over the fill it has under the pointer', (tester) async {
+      await pumpOverlay(tester);
+      center().error('Failed', body: 'x', actions: [NotificationAction('Open folder', () {})]);
+      await tester.pumpAndSettle();
+      final button = find.widgetWithText(TextButton, 'Open folder');
+      final layer = tester.renderObject(
+        find.descendant(
+          of: find.descendant(of: button, matching: find.byType(ButtonFeedback)),
+          matching: find.byType(CustomPaint),
+        ).first,
+      );
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: tester.getCenter(button));
+      await tester.pumpAndSettle();
+      expect(layer, isNot(paints..path()), reason: 'the hover is the fill alone');
+      await mouse.down(tester.getCenter(button));
+      await tester.pumpAndSettle();
+      expect(layer, paints..path(color: palette.link.withValues(alpha: palette.link.a * 0.16)));
+      await mouse.up();
+      await mouse.removePointer();
+      await tester.pump(const Duration(seconds: 9));
     });
 
     testWidgets('pressing one runs it and closes the card; closes: false keeps it', (tester) async {

@@ -115,11 +115,12 @@ class GameBananaClient {
     );
   }
 
-  /// The game's "best of period" submissions via `Game/<id>/TopSubs` — three
-  /// mods for each of seven windows (today … all time).
+  /// The game's "best of period" mods via `Game/<id>/TopSubs` — up to three
+  /// for each of seven windows (today … all time).
   ///
-  /// Entries whose `_sPeriod` we don't recognise are dropped rather than
-  /// mislabelled, so this can return fewer than 21.
+  /// Entries that are not mods (a `Wip`, say) are dropped because their ids are
+  /// not mod ids, and entries whose `_sPeriod` we don't recognise are dropped
+  /// rather than mislabelled, so this can return fewer than 21.
   Future<List<GbTopSub>> topSubs({bool refresh = false}) async {
     return _fetchParsed(
       _endpoints.topSubs(),

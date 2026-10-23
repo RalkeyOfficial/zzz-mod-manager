@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/core/palette.dart';
+import 'package:mod_manager_flutter/core/type_scale.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_image.dart';
@@ -56,6 +57,8 @@ void main() {
     int? size,
     DateTime? fileDate,
     DownloadResult? result,
+    String? fileName,
+    String? variant,
   }) {
     final seq = ++nextSeq;
     return DownloadJob(
@@ -63,7 +66,7 @@ void main() {
       request: DownloadRequest(url: Uri.parse('https://gamebanana.com/dl/$seq'), expectedSize: size),
       intent: intent,
       subject: subject ?? 'Mod $seq',
-      file: GbFile(idRow: seq, filesize: size, dateAdded: fileDate),
+      file: GbFile(idRow: seq, filesize: size, dateAdded: fileDate, file: fileName, description: variant),
       mod: mod,
       characterId: characterId,
       state: state,
@@ -390,6 +393,9 @@ void main() {
       await t.tap(find.text('Pick folders…'));
       await t.tap(find.text('Install anyway'));
       await t.tap(find.text('Enter password'));
+      // The third row's buttons sit under the footer at this height until scrolled to.
+      await t.ensureVisible(find.text('Open mod page'));
+      await t.pump();
       await t.tap(find.text('Open mod page'));
       expect(questions.calls, ['answer 1', 'answer 2', 'answer 3', 'openModPage 3']);
     });
@@ -559,6 +565,85 @@ void main() {
       final container = seeded([job(subject: 'A' * 400, state: DownloadJobState.queued)]);
       await pumpPanel(t, container);
       expect(t.takeException(), isNull);
+    });
+  });
+
+  group('which file', () {
+    testWidgets('every row names its file under the mod, its variant text quoted beside it in grey', (t) async {
+      final type = ZenithType.of;
+      final container = seeded([
+        job(
+          subject: 'Asking',
+          state: DownloadJobState.waiting,
+          wait: const InstallWait(InstallQuestion.patch),
+          fileName: 'StockingFix_v2.zip',
+          variant: 'for the maid outfit',
+        ),
+        job(subject: 'Victorian Ballgown', fileName: 'VictorianBallgown_v1.2.zip', variant: 'Full dress'),
+        job(
+          subject: 'Shark Hoodie Recolor',
+          state: DownloadJobState.updating,
+          intent: DownloadIntent.callerHandles,
+          fileName: 'SharkHoodie_Blue_1Oct.zip',
+          variant: 'blue',
+        ),
+        job(subject: 'Victorian Ballgown', state: DownloadJobState.queued, fileName: 'Ballgown_Black.7z', variant: 'black ver.'),
+        job(subject: 'Plain', state: DownloadJobState.queued, fileName: 'RacingSuit_Belle.zip'),
+        job(
+          subject: 'Finished',
+          state: DownloadJobState.done,
+          outcome: JobOutcome.saved,
+          finishedAt: now,
+          fileName: 'WinterMaid_v1.4.zip',
+          variant: 'standard',
+        ),
+        job(subject: 'Broken', state: DownloadJobState.failed, error: Exception('x'), finishedAt: now, fileName: 'Broken.zip'),
+      ]);
+      await pumpPanel(t, container);
+
+      final rows = {
+        'Asking': ('StockingFix_v2.zip', '“for the maid outfit”'),
+        'Shark Hoodie Recolor': ('SharkHoodie_Blue_1Oct.zip', '“blue”'),
+        'Finished': ('WinterMaid_v1.4.zip', '“standard”'),
+        'Plain': ('RacingSuit_Belle.zip', null),
+        'Broken': ('Broken.zip', null),
+      };
+      for (final MapEntry(key: subject, value: (fileName, variant)) in rows.entries) {
+        final name = t.getRect(find.text(subject));
+        final file = t.getRect(find.text(fileName));
+        expect(file.top, greaterThanOrEqualTo(name.bottom), reason: '$fileName under $subject');
+        expect(file.left, name.left, reason: '$fileName lines up with $subject');
+        if (variant != null) {
+          final quoted = t.getRect(find.text(variant));
+          expect(quoted.left, greaterThan(file.right), reason: '$variant beside $fileName');
+          expect(quoted.top, lessThan(file.bottom), reason: '$variant on the same line');
+        }
+      }
+
+      // The two Victorian Ballgown rows read apart by their file.
+      expect(find.text('Victorian Ballgown'), findsNWidgets(2));
+      expect(find.text('“Full dress”'), findsOneWidget);
+      expect(find.text('“black ver.”'), findsOneWidget);
+
+      final fileStyle = t.widget<Text>(find.text('VictorianBallgown_v1.2.zip')).style!;
+      final mono = type(t.element(find.text('VictorianBallgown_v1.2.zip'))).monoSmall;
+      expect(fileStyle.fontFamily, mono.fontFamily);
+      expect(fileStyle.fontSize, 11);
+      expect(fileStyle.color, dark.text2);
+      final variantStyle = t.widget<Text>(find.text('“Full dress”')).style!;
+      expect(variantStyle.fontSize, 12);
+      expect(variantStyle.color, dark.text3);
+    });
+
+    testWidgets('a long file name gives way to the variant text, and nothing overflows', (t) async {
+      final container = seeded([
+        job(subject: 'Long', fileName: '${'VeryLongFileName' * 20}.zip', variant: 'the variant'),
+        job(subject: 'Longer', fileName: 'short.zip', variant: 'variant ' * 40),
+      ]);
+      await pumpPanel(t, container);
+      expect(t.takeException(), isNull);
+      expect(t.getRect(find.text('“the variant”')).width, greaterThan(40), reason: 'the variant keeps its text');
+      expect(t.getRect(find.text('short.zip')).width, greaterThan(40), reason: 'a long variant leaves the name room');
     });
   });
 

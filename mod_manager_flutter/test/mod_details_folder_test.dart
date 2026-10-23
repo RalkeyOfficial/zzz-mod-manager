@@ -72,7 +72,7 @@ void main() {
           onOpenFolder: () {},
           onCheckForUpdate: () {},
           onResolveOrigin: () {},
-          onDelete: () {},
+          onDelete: (_) async {},
           noteWriter: (_, _) async => true,
         ),
       ),
@@ -271,8 +271,8 @@ void main() {
 
     /// The folder's verdict as the check builds it: one judgement per layer, folded.
     UpdateCheck folded({required UpdateOutcome base, required UpdateOutcome patch}) => foldDownloads([
-      DownloadCheck(download: stacked.downloads[0], check: UpdateCheck(outcome: base)),
-      DownloadCheck(download: stacked.downloads[1], check: UpdateCheck(outcome: patch)),
+      DownloadCheck(download: stacked.downloads[0], key: stacked.keyAt(0), check: UpdateCheck(outcome: base)),
+      DownloadCheck(download: stacked.downloads[1], key: stacked.keyAt(1), check: UpdateCheck(outcome: patch)),
     ]);
 
     testWidgets("a newer patch is not the base mod's newer file", (tester) async {
@@ -310,7 +310,11 @@ void main() {
         sessionRecords: {585282: baseRecord},
         sessionChecks: {
           'Pulchra-BottomHeavy': foldDownloads([
-            DownloadCheck(download: single.downloads.single, check: const UpdateCheck(outcome: UpdateOutcome.updateAvailable)),
+            DownloadCheck(
+              download: single.downloads.single,
+              key: single.keyAt(0),
+              check: const UpdateCheck(outcome: UpdateOutcome.updateAvailable),
+            ),
           ]),
         },
       );

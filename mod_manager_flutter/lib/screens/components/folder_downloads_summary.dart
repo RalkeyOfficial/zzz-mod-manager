@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../models/gamebanana/gb_file.dart';
+import '../../models/gamebanana/gb_mod.dart';
 import '../../models/mod_download.dart';
 import '../../models/mod_origin.dart';
 import '../../models/origin_enums.dart';
+import '../../services/gamebanana/file_selection.dart';
 import '../../services/origin_summary.dart';
 import '../../services/update_check_run.dart';
 import '../../utils/gamebanana_url.dart';
@@ -52,6 +55,56 @@ String downloadName(
       : loc.t('mods.folder.local_patch');
 }
 
+/// Which file a layer is, for telling it apart from another layer of its page:
+/// [name] titles it and [detail] goes in grey beneath, as a file is named
+/// everywhere else (`docs/update-checks.md` §7).
+class LayerFile {
+  const LayerFile(this.name, {this.detail});
+
+  final String name;
+  final String? detail;
+}
+
+/// Whether another layer of [origin] names [download]'s page.
+bool sharesPage(ModOrigin? origin, ModDownload download) {
+  final id = download.modId;
+  if (id == null || origin == null) return false;
+  return origin.downloads.where((layer) => layer.modId == id).length > 1;
+}
+
+/// [download]'s file, when another layer of [origin] shares its page and so
+/// shares its name; null otherwise, or when nothing names the file.
+///
+/// The filename and its variant text when [file] or [page] has the file
+/// record; without one, the variant text saved with the layer, then its
+/// version. Never a tag: both rows already carry the Base or Patch badge.
+LayerFile? sharedPageFile(
+  ModOrigin? origin,
+  ModDownload download, {
+  GbMod? page,
+  GbFile? file,
+}) {
+  if (!sharesPage(origin, download)) return null;
+  final record = file ??
+      switch (download.fileId) {
+        final id? => fileWithId(page?.allFiles, id),
+        null => null,
+      };
+  if (record != null) {
+    return LayerFile(fileDisplayName(record), detail: fileDisplayDetail(record));
+  }
+  final label = download.versionLabel?.trim();
+  if (label != null && label.isNotEmpty) return LayerFile(label);
+  final version = download.version?.trim();
+  if (version != null && version.isNotEmpty) return LayerFile(version);
+  return null;
+}
+
+/// A layer named on one line, where there is no room for a second:
+/// `<page> · <file>` when [file] tells it apart from another layer of its page.
+String layerLine(String pageName, LayerFile? file) =>
+    file == null ? pageName : '$pageName · ${file.name}';
+
 /// **What this folder holds**, as a list of peers.
 ///
 /// Shown by the resolve dialog. The details panel and the mod's page draw the
@@ -80,10 +133,10 @@ class FolderDownloadsSummary extends ConsumerStatefulWidget {
     required this.origin,
     required this.folderName,
     this.knownNames = const <int, String>{},
-    this.notes = const <int, String>{},
+    this.notes = const <DownloadKey, String>{},
     this.lookUpNames = false,
     this.onEdit,
-    this.rowActions = const <int, FolderRowAction>{},
+    this.rowActions = const <DownloadKey, FolderRowAction>{},
   });
 
   final ModOrigin? origin;
@@ -98,10 +151,10 @@ class FolderDownloadsSummary extends ConsumerStatefulWidget {
   /// above.
   final Map<int, String> knownNames;
 
-  /// One extra line per mod id — the update dialog puts that download's own
+  /// One extra line per layer — the update dialog puts that download's own
   /// verdict here, which is what makes the list peers in substance and not just
   /// in layout.
-  final Map<int, String> notes;
+  final Map<DownloadKey, String> notes;
 
   /// Fetch a missing name over the network, once each, when nothing local has
   /// one. Off by default; the callers' reasoning is in
@@ -118,13 +171,15 @@ class FolderDownloadsSummary extends ConsumerStatefulWidget {
   /// more thing on it.
   final void Function(ModDownload download)? onEdit;
 
-  /// Which rows [onEdit] applies to, by mod id, and what it does to each.
+  /// Which rows [onEdit] applies to, by layer, and what it does to each. By
+  /// layer rather than mod id: a page can be the base and a patch at once, and
+  /// the two rows take different actions.
   ///
   /// Explicit rather than derived: what can be done to an entry depends on
   /// which flows exist, not on anything visible in the row, and a widget
   /// guessing at it would offer a button that does nothing. Empty means no row
   /// has one.
-  final Map<int, FolderRowAction> rowActions;
+  final Map<DownloadKey, FolderRowAction> rowActions;
 
   @override
   ConsumerState<FolderDownloadsSummary> createState() =>
@@ -210,18 +265,21 @@ class _FolderDownloadsSummaryState
           ),
         ),
         const SizedBox(height: 8),
-        for (final download in downloads) _row(download),
+        for (var i = 0; i < downloads.length; i++)
+          _row(downloads[i], widget.origin!.keyAt(i)),
       ],
     );
   }
 
-  Widget _row(ModDownload download) {
+  Widget _row(ModDownload download, DownloadKey? key) {
     final loc = context.loc;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final isPatch = download.role == DownloadRole.patch;
     final detail = _detailLine(loc, download);
-    final note = download.modId == null ? null : widget.notes[download.modId];
+    final note = key == null ? null : widget.notes[key];
+    final file = sharedPageFile(widget.origin, download,
+        page: ref.watch(knownModPagesProvider)[download.modId]);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -267,10 +325,19 @@ class _FolderDownloadsSummaryState
                     ),
                   ],
                 ),
-                if (detail != null) ...[
+                // Two layers of one page carry one name, so each names its
+                // file, with the variant text in grey beneath.
+                if (file != null) ...[
+                  const SizedBox(height: 2),
+                  Text(file.name, style: theme.textTheme.bodySmall),
+                ],
+                if ((file == null
+                        ? detail
+                        : file.detail ?? (detail == file.name ? null : detail))
+                    case final line?) ...[
                   const SizedBox(height: 2),
                   Text(
-                    detail,
+                    line,
                     style: theme.textTheme.bodySmall
                         ?.copyWith(color: scheme.onSurfaceVariant),
                   ),
@@ -295,8 +362,8 @@ class _FolderDownloadsSummaryState
                   launchExternalUrl(context, gameBananaModUrl(id)),
             ),
           if (widget.onEdit case final edit?)
-            if (download.modId case final id?)
-              if (widget.rowActions[id] case final action?)
+            if (key != null)
+              if (widget.rowActions[key] case final action?)
                 IconButton(
                   icon: Icon(
                     switch (action) {

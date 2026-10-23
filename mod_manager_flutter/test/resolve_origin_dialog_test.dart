@@ -10,6 +10,7 @@ import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/origin_write.dart';
+import 'package:mod_manager_flutter/screens/dialogs/companion_resolve_dialog.dart';
 import 'package:mod_manager_flutter/screens/dialogs/resolve_origin_dialog.dart';
 import 'package:mod_manager_flutter/services/bulk_update_check.dart';
 import 'package:mod_manager_flutter/services/gamebanana/gamebanana_client.dart';
@@ -1257,12 +1258,11 @@ void main() {
       expect(gateway.writes, 0);
     });
 
-    testWidgets('the folder cannot be named as its own companion',
+    testWidgets("the folder's own page can be its base, and only its own file is refused",
         (tester) async {
-      // It is the same mod said twice, and it would have the check ask one
-      // page twice and report two verdicts for one folder. The search
-      // legitimately returns it — the folder *is* that mod — so the refusal
-      // has to be here rather than in the results.
+      // A patch whose file comes from its base's own page is a patch like any
+      // other: the page is offered, and the file the folder already holds is
+      // greyed with "Already in this folder" under it.
       final transport = FakeHttpTransport()
         ..stub(recordUrl, body: gbMultiRecordFixture(531649))
         ..stub(
@@ -1270,7 +1270,7 @@ void main() {
           body: '{"_aMetadata":{"_nRecordCount":1},"_aRecords":'
               '[{"_idRow":531649,"_sName":"RabbitFX Ellen"}]}',
         );
-      await pumpDialog(
+      final gateway = await pumpDialog(
         tester,
         target: mod(origin: patchShaped()),
         transport: transport,
@@ -1282,13 +1282,78 @@ void main() {
       await tester.tap(find.text('RabbitFX Ellen').first);
       await tester.pumpAndSettle();
 
-      expect(find.text('That is this mod, not another one'), findsOneWidget);
-      expect(
-        tester
-            .widget<FilledButton>(find.byType(FilledButton).last)
-            .onPressed,
-        isNull,
+      // The held file: greyed, with the reason under it, and not pickable.
+      Finder inStep(Finder finder) => find.descendant(of: find.byType(CompanionResolveDialog), matching: finder);
+      final held = inStep(find.text('v77.zip'));
+      await tester.ensureVisible(held);
+      final heldStyle = tester.widget<Text>(held).style;
+      final scheme = Theme.of(tester.element(held)).colorScheme;
+      expect(heldStyle?.color, scheme.onSurface.withValues(alpha: 0.38));
+      expect(inStep(find.text('Already in this folder')), findsOneWidget);
+      await tester.tap(held);
+      await tester.pumpAndSettle();
+      expect(inStep(find.byIcon(Icons.radio_button_checked)), findsNothing, reason: 'a held file cannot be picked');
+      final add = find.widgetWithText(FilledButton, 'Add');
+
+      // Another file of the same page is an ordinary answer.
+      final other = inStep(find.text('rabbitfx_fixer_exe_version.zip'));
+      await tester.dragUntilVisible(other, inStep(find.byType(ListView)).first, const Offset(0, -100));
+      await tester.ensureVisible(other);
+      await tester.tap(other);
+      await tester.pumpAndSettle();
+      expect(tester.widget<FilledButton>(add).onPressed, isNotNull);
+      await tester.tap(add);
+      await tester.pumpAndSettle();
+
+      expect(gateway.written!.downloads.map((d) => (d.modId, d.fileId)), [(531649, 1491924), (531649, 1732269)],
+          reason: 'the base goes underneath the patch of the same page, and both layers stay');
+    });
+
+    testWidgets("a base on file can be changed to the patch's own page",
+        (tester) async {
+      // A base and a patch of one page are two layers, and a read keeps both.
+      final transport = FakeHttpTransport()
+        ..stub(recordUrl, body: gbMultiRecordFixture(531649))
+        ..stub(recordUrlOf(otherModId), body: gbMultiRecordFixture(otherModId))
+        ..stub(
+          companionSearchUrl,
+          body: '{"_aMetadata":{"_nRecordCount":1},"_aRecords":'
+              '[{"_idRow":531649,"_sName":"RabbitFX Ellen"}]}',
+        );
+      final gateway = await pumpDialog(
+        tester,
+        target: mod(
+          origin: patchShapedWithBase(const [
+            ModDownload(
+              modId: otherModId,
+              modIdConfidence: OriginConfidence.user,
+            ),
+          ]),
+        ),
+        transport: transport,
       );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.byIcon(Icons.edit_outlined));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.edit_outlined));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Change').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('RabbitFX Ellen').first);
+      await tester.pumpAndSettle();
+
+      Finder inStep(Finder finder) => find.descendant(of: find.byType(CompanionResolveDialog), matching: finder);
+      expect(inStep(find.text('Already in this folder')), findsOneWidget, reason: "the patch's own file");
+      final other = inStep(find.text('rabbitfx_fixer_exe_version.zip'));
+      await tester.dragUntilVisible(other, inStep(find.byType(ListView)).first, const Offset(0, -100));
+      await tester.ensureVisible(other);
+      await tester.tap(other);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+      await tester.pumpAndSettle();
+
+      expect(gateway.written!.downloads.map((d) => (d.modId, d.fileId)), [(531649, 1491924), (531649, 1732269)]);
     });
   });
 

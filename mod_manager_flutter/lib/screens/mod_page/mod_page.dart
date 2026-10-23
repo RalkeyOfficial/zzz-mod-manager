@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../../core/button_feedback.dart';
+import '../../core/button_working.dart';
 import '../../core/palette.dart';
 import '../../core/type_scale.dart';
 import '../../l10n/app_localizations.dart';
@@ -79,10 +81,11 @@ class LibraryModPage extends ConsumerStatefulWidget {
   final VoidCallback onOpenFolder;
   final VoidCallback onCheckForUpdate;
   final VoidCallback onResolveOrigin;
-  final VoidCallback onDelete;
-  final VoidCallback onReinstall;
-  final ValueChanged<ModSnapshot> onRestore;
-  final ValueChanged<ModDownload> onTakeOut;
+  /// Each handed the [WorkSpan] of the button pressed, so the button shows the wait (`WorkingAction`).
+  final WorkingCallback onDelete;
+  final WorkingCallback onReinstall;
+  final Future<void> Function(ModSnapshot snapshot, WorkSpan work) onRestore;
+  final Future<void> Function(ModDownload patch, WorkSpan work) onTakeOut;
   final ValueChanged<ModDownload> onStopIgnoring;
   final NoteWriter? noteWriter;
 
@@ -313,9 +316,11 @@ class _CarouselState extends State<_Carousel> {
         foregroundColor: palette.text,
         fixedSize: const Size(36, 36),
         minimumSize: const Size(36, 36),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-          side: BorderSide(color: palette.control),
+        // No ink, so the theme's press is drawn and shrinks the frame too.
+        overlayColor: Colors.transparent,
+      ).copyWith(
+        shape: pressShape(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: palette.control)),
         ),
       ),
       tooltip: tooltip,
@@ -416,7 +421,7 @@ class _Summary extends ConsumerWidget {
   final VoidCallback onOpenFolder;
   final VoidCallback onCheckForUpdate;
   final VoidCallback onResolveOrigin;
-  final VoidCallback onDelete;
+  final WorkingCallback onDelete;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -525,15 +530,18 @@ class _Summary extends ConsumerWidget {
             ),
             Tooltip(
               message: loc.t('library.details.delete'),
-              child: OutlinedButton(
-                style: ButtonStyle(
-                  fixedSize: const WidgetStatePropertyAll(Size(36, 36)),
-                  minimumSize: const WidgetStatePropertyAll(Size(36, 36)),
-                  padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-                  foregroundColor: WidgetStatePropertyAll(palette.redText),
-                ),
+              child: WorkingAction(
                 onPressed: onDelete,
-                child: const Icon(Icons.delete_outline_rounded),
+                builder: (context, onPressed) => OutlinedButton(
+                  style: ButtonStyle(
+                    fixedSize: const WidgetStatePropertyAll(Size(36, 36)),
+                    minimumSize: const WidgetStatePropertyAll(Size(36, 36)),
+                    padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+                    foregroundColor: WidgetStatePropertyAll(palette.redText),
+                  ),
+                  onPressed: onPressed,
+                  child: const Icon(Icons.delete_outline_rounded),
+                ),
               ),
             ),
           ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/button_working.dart';
 import '../../core/palette.dart';
 import '../../core/type_scale.dart';
 import '../../l10n/app_localizations.dart';
@@ -194,10 +195,13 @@ class _ZzmiCard extends ConsumerWidget {
             Text(loc.t('shell.zzmi.missing_hint'), style: secondary),
           SizedBox(
             height: 40,
-            child: FilledButton.icon(
-              onPressed: () => launchGame(context, ref),
-              icon: const Icon(Icons.play_arrow_rounded, size: 18),
-              label: Text(loc.t('shell.launch.button')),
+            child: WorkingAction(
+              onPressed: (work) => launchGame(context, ref, work: work),
+              builder: (context, onPressed) => FilledButton.icon(
+                onPressed: onPressed,
+                icon: const WorkingIcon(Icon(Icons.play_arrow_rounded, size: 18)),
+                label: Text(loc.t('shell.launch.button')),
+              ),
             ),
           ),
         ],

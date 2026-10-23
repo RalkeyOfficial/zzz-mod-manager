@@ -56,9 +56,12 @@ enum GbTopSubPeriod {
 /// urls with no size to negotiate — so [image] is an ordinary [GbImage] whose
 /// `_sFile` happens to be the 800px render.
 ///
-/// [idRow] is a real mod id, so opening one goes through the normal
-/// `Mod/<id>/ProfilePage` detail path — nothing about the detail view needs to
-/// know these exist.
+/// The list holds more than mods: `_sModelName` can name another model, such as
+/// a `Wip`, whose `_idRow` counts in that model's own id space. Asking
+/// `Mod/<id>/ProfilePage` for a Wip's id opens whichever unrelated mod holds that
+/// number (Wip 104523 is a Counter-Strike map as a mod), so [fromJson] keeps only
+/// `Mod` entries. What is left is a real mod id, and opening one goes through the
+/// normal detail path — nothing about the detail view needs to know these exist.
 class GbTopSub {
   const GbTopSub({
     required this.idRow,
@@ -74,7 +77,7 @@ class GbTopSub {
     this.rootCategory,
   });
 
-  /// `_idRow` — the mod id.
+  /// `_idRow` — the mod id; [fromJson] keeps only `Mod` rows.
   final int idRow;
 
   /// `_sPeriod`, parsed. Non-null: entries with an unknown window are dropped.
@@ -112,8 +115,13 @@ class GbTopSub {
   /// treated as needing a warning rather than assumed safe.
   GbVisibility get effectiveVisibility => visibility ?? GbVisibility.warn;
 
-  /// Returns null when the row has no id or an unrecognised period.
+  /// Returns null when the row is not a `Mod`, or has no id or an unrecognised
+  /// period.
+  ///
+  /// A row without `_sModelName` is dropped too: its id cannot be trusted to be a
+  /// mod id, and opening the wrong page is worse than one slide fewer.
   static GbTopSub? fromJson(Map<String, dynamic> json) {
+    if (gbString(json['_sModelName']) != 'Mod') return null;
     final id = gbInt(json['_idRow']);
     final period = GbTopSubPeriod.parse(json['_sPeriod']);
     if (id == null || period == null) return null;

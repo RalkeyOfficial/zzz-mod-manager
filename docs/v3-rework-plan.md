@@ -165,7 +165,7 @@ The memory note `v3-canvas-vs-docs-decisions` holds these. In short:
 
 - **Phase 5e, Updates page follow-ups:** built, reviewed and committed (the commit after `1c623cb`). Written up in `update-checks.md` §4 and §5 and `library-screen.md` §17.
   - A check's results skip every folder whose tracking changed while it ran (`UpdateCheckStart.changedSince`): a write on it running when the check started, started since or still running (`modWritesStartedProvider`, kept by `whileWritingMod`), its session verdict set or dropped since, its tracking on the last scan different, or the folder gone. The tracking screen, both markings, the update dialog's Ignore, a patch's record after Take out and a patch put into a mod now write inside `whileWritingMod` for it. So the Updates page's Ignore and Undo stay on during a check; only the controls that start a second pass are off. One case is left, written in `update-checks.md` §5: a write that ended just before the check started, whose rescan lands after its results.
-  - Not built, decided with the user after review: a dismissal keeps finding its layer by mod id. A stack never holds two layers of one mod page (`ModOrigin._stack` drops the second on read, and `withLayerOnTop` replaces it), so a patch from its base's own page can't share the base's Ignore.
+  - A dismissal finds its layer by page and place (`DownloadKey`), since phase 6b lets one page be both the base and a patch.
   - A running fade in the strip moves with its pill when the strip grows or shrinks (`pillPlacesBefore`).
   - The Base unknown tooltip reads "Only the patch can be checked, not the mod under it", true before a check too. Decided without asking, over a second string for before the check.
   - A folder with a layer still asking which file isn't answered (`answeredByCheck`), so a mixed folder just marked isn't checked until a check compares its base.
@@ -186,31 +186,34 @@ The memory note `v3-canvas-vs-docs-decisions` holds these. In short:
     - The queue isn't persisted, so a paused or waiting download doesn't survive a restart (its `.part` does). The patch and folders dialogs the waiting rows open are restyled in phase 8.
     - The 7z start-failure logging path (`ProcessException`) has no test, for want of a seam.
 
+- **Phase 6b, Review follow-ups** (artboards `ButtonStates`, `Downloads`): built and reviewed, not committed. Checked in tests and widget renders, not yet in the running app.
+  - Buttons follow `ButtonStates`: the text colour over the fill at 8% on hover and 16% pressed, a 97% press, and a Working spinner on actions that wait on disk, network or the game (shown after 200 ms, held at least 500 ms). It is wired on Check all, Check, Check them now, Launch game, Delete, Restore, Take out and Reinstall; actions that hand off to the download queue or open a window show none. Written up in `app-architecture.md` §1.
+  - Decided with the user: on paper the primary button takes the accent (violet `#6B45D9` with white, lime and teal as they are, Paper ink), while the colour scheme's `primary` stays the readable accent so text in older dialogs stays legible. The keyboard focus ring keeps the readable accent, not the canvas's primary fill.
+  - The focus ring follows keyboard focus only, is drawn by one overlay entry for the focused button, clipped to its scroll views, and reaches buttons with their own `side`, segmented buttons and the notification actions (2px out).
+  - The Downloads panel names each row's file, with its variant text in grey beside it.
+  - Decided with the user: a patch from its base's own GameBanana page is its own layer, like a patch from another page. Measured on 447 ZZZ character pages, about 1 in 12 of the 150 most downloaded carry such a file. A layer is named by page and place (`DownloadKey`); only a file the folder already holds is refused, never a page. Ignore on the Updates page covers every layer of the page listing the same files; the update dialog's and History's stay per layer. Written up in `origin-tracking.md` §10 and `update-checks.md` §2–4.
+  - Browse: Escape, Alt+Left and the mouse back button go back a page, after any open menu or field takes its Escape; a Bangboo, UI or Misc mod never maps to an agent; the carousel leaves out submissions that aren't mods (a WIP's id opened an unrelated mod).
+  - Archives and the queue: every failed extraction deletes its temp folder, an update deletes its whole extraction root, a drop lists each archive once, a job settles when the queue's host is gone, and the reclaim gate counts an update in progress.
+  - Patches and tracking: Take out and a patch put in drop the folder's session verdict; the update dialog reports its writes however it closes, and its verdict lands even when closed mid-write. `test/support/held_write.dart` holds a real `whileWritingMod` for tests.
+  - Docs: `logging.md` §4's tag table is complete; the marketplace and downloads wording describes the present. `gamebanana-api.md` gains §3.2 on WIPs (measured 2026-10-23: 224 ZZZ WIPs, 37 with files, ids per model) and states the edge cache's two header sets (`application/json` fresh, `text/html` cached, both UTF-8), which the client decodes as UTF-8 from the bytes either way.
+
 ## Phases left
 
 Each is reviewable on its own and ends with tests green, docs and changelog updated, and the user's go-ahead.
 
-6b. **Review follow-ups** (a phase of its own, done after phase 6 is committed and before phase 7 starts): what the reviews of phases 5e and 6 found outside their scope, each reviewable and tested like any phase.
-   - Needs the designer first (a canvas change before any code):
-     - The Downloads panel names only the mod, not which file or variant is downloading. Two variants of one mod read the same ("Victorian Ballgown" twice), so a row can't be told from another. The canvas's rule elsewhere is variant text as grey text under the file name, never a tag; the `Downloads` artboard's rows have no place for it yet.
-     - Buttons give no feedback on the button itself when pressed: only a button whose label changes afterwards (Turn on → Show) shows anything. Every button theme in `app_theme.dart` sets `overlayColor` to transparent, so a press draws nothing; hover is the only state. The canvas needs a pressed state (and whether a button shows working while its action runs) for the primary, default, ghost and icon buttons, in both themes and every accent.
-   - From phase 5e:
-     - Take out (History, the right-click menu) and a patch put into a mod you already have leave the folder's session verdict as it was, so it can name a layer that is gone until the next check. The update dialog's own Take out drops it (`mod_update_dialog.dart`); `removePatchFlow` and `applyPatchInstall` should do the same.
-     - A patch from its base's own mod page, put into that base with "Add it to a mod you already have", replaces the base's layer (`withLayerOnTop` drops the layer of the same mod id): the base's file and file list are lost, and the patch gets no History row or Take out. How that case should read is a design call; ask the user.
-     - The tracking screen naming a base when one is already on file doesn't refuse the patch's own mod id (`resolve_origin_dialog.dart`, `primaryModId: null` once a base exists), so it can write two layers of one page, and the second is dropped on the next read.
-     - `download_names_test`, `all_mods_bulk_actions_test` and `mods_screen_test` fake a folder being written by setting `modWritesInProgressProvider`, which `whileWritingMod` overwrites from its own counts. A test helper that holds a real `whileWritingMod`, as `all_mods_view_test` does, would keep them meaningful if one of those flows gains a wrapped write.
-   - From phase 6a:
-     - Closing the update dialog with Escape or a click outside after "Ignore this update" skips the library rescan: `showModUpdateDialog` returns `?? false`, so only the dialog's own buttons report the write. Every caller.
-     - The keyboard focus ring stays on a button Tab focused after the user clicks another, since a Material button takes no focus on click.
-     - A button whose own style sets `side` (the mod page's favourite button, `IconButton.styleFrom(side:)`) loses the theme's focus ring; segmented buttons have none. The notification actions' ring sits flush, the theme's 2px out.
-   - From phases 6b–6d:
-     - Temp folders left behind: `extractArchive` keeps its temp folder after a space refusal, a non-password extraction failure, "no mod folders" and its outer catch; the update flow's `_cleanupExtract(Directory(folders.first).parent)` deletes only `Mods/` for a `Mods/<mod>` layout, leaving the root.
-     - A Bangboo or UI child category whose name holds an agent's term is taken for that agent by `RemoteModMetadata.characterIdForCategory` (the substring matcher `detectCharacterId`), on the mod page's Install for card and at install; the creator page decides the type first (`creator_cast.dart`). The canary in `creator_cast_test` checks only that each category maps to something.
-     - Browse's pages have no keyboard or mouse back: Escape, Alt+Left and the mouse back button do nothing.
-     - `logging.md` §4's tag table lacks `origin`, `patch.store`, `shaders`, `sidecar`, `storage`, `update`, `update.check` and `update.reinstall`.
-     - A drop still lists each archive twice (`needsPassword` to ask every password up front, then `extractArchive`).
-     - Edge cases: `DownloadQueueHost._report`'s `if (!mounted) return` leaves a job `installing` forever if the host is unmounted; the storage reclaim gate doesn't count an `updating` job's temp extraction.
-     - Doc nits: `IndexedStack` already keeps hidden children out of focus through `Visibility` on this SDK, so the `ExcludeFocus` reason in `marketplace.md` §3 and `marketplace_screen.dart` is out of date; history wording in older paragraphs (`marketplace.md` "which the old modal progress dialog hid", the heading "What the two screens say"; `downloads.md` "which is what the marketplace's own use wants", which has no marketplace caller).
+6c. **Review follow-ups** (a phase of its own, before phase 7 starts): what the reviews of phase 6b found outside their scope, each reviewable and tested like any phase.
+   - Layers and tracking:
+     - The tracking screen's refusal reads the folder's stack as it was when the dialog opened, and its write doesn't check again on disk. A layer added in the background (a queued patch install) can still be duplicated, and `withBase` replaces a patch if the folder became mixed since (`resolve_origin_dialog.dart`, around the write).
+     - `baseUpdateCheck` and `forgetBaseVerdict` take `layers.first` as the base even when the bottom layer has no page.
+     - `CompanionRemoved` doesn't re-derive the stored roles, so the tags go stale and a read logs a warning.
+     - `_recordOrigin` stamps `placedPatchFiles` on every patch.
+     - The base's default Update candidate is the newest unlabelled file, which on a page with a fix file can be the fix.
+     - `_rememberNames` writes the sidecar outside `whileWritingMod`.
+   - Update flows: they use the dialog's `ref` after awaits though the dialog can close mid-flow, so a throw there reads as "nothing written" (`apply_update_flow.dart`).
+   - Keyboard: Arrow Down from an open Browse menu (Sort, Mature content, any `MenuAnchor`) moves focus to the page behind it instead of into the menu's items.
+   - Canvas values: the light palette's `raised` is `#F8F5F1` against the canvas's `#FBF9F6`, and `text3` `#67636B` against `#6E6A72`.
+   - Older buttons outside the press and ring rules until their screens are rebuilt: `settings_screen.dart` and `auto_tag_section.dart` (phase 7) and `welcome_screen.dart` (phase 10) set their own shape or foreground; `delete_mod_dialog.dart` (phase 8) and `reclaim_button.dart` (phase 7) have `Colors.red` danger buttons.
+   - Browse's `ExcludeFocus` around hidden tabs is redundant on this SDK (`IndexedStack`'s `Visibility` already excludes them); remove it or keep it as a statement of intent.
 7. **Settings, Storage, About** (artboards `Settings`, `Storage`, `About`).
    - Section nav (General, Game & folders, Launching, Mods, GameBanana, Storage, Appearance, About), and Game & folders including Move library… (design note first). Game & folders holds only the ZZMI folder and the mod library.
      - Move library… re-points links with the rule a changed Mod library already follows ([`configuration.md`](configuration.md#changing-the-mod-library), `ModManagerService.relinkLibrary`): a link whose target is exactly `<old>/<its own name>`, live or dead, follows when the new library has that folder; a mod the new library lacks keeps its link; a refused shader placement keeps the old link and names the mod.

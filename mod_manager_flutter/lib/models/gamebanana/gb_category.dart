@@ -1,5 +1,16 @@
 import 'gb_coerce.dart';
 
+/// GameBanana's Character Skins root. Its children are the live character roster, which the character chip lists.
+const int kCharacterSkinsCategoryId = 30305;
+
+/// The other three roots: Bangboo Skins, UI and Other/Misc.
+const int kBangbooSkinsCategoryId = 30702;
+const int kUiCategoryId = 30395;
+const int kMiscCategoryId = 29874;
+
+/// Zenless Zone Zero's root categories, the types a mod is filed under.
+const Set<int> kRootCategoryIds = {kCharacterSkinsCategoryId, kBangbooSkinsCategoryId, kUiCategoryId, kMiscCategoryId};
+
 /// A category as embedded **on a mod** — `_aCategory` on a profile, or
 /// `_aRootCategory` / `_aSubCategory` on a listing record.
 ///

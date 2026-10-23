@@ -171,10 +171,12 @@ void main() {
       final held = foldDownloads([
         DownloadCheck(
           download: origin.downloads[0],
+          key: origin.keyAt(0),
           check: const UpdateCheck(outcome: UpdateOutcome.versionUnknown),
         ),
         DownloadCheck(
           download: origin.downloads[1],
+          key: origin.keyAt(1),
           check: const UpdateCheck(outcome: UpdateOutcome.updateAvailable),
         ),
       ]);

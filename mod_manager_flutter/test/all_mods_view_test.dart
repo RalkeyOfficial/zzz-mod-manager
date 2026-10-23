@@ -19,6 +19,7 @@ import 'package:mod_manager_flutter/utils/notifications.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 
 import 'support/all_mods_harness.dart';
+import 'support/held_write.dart';
 import 'support/library_override.dart';
 import 'support/localized_harness.dart';
 import 'support/origin_shorthand.dart';
@@ -299,15 +300,13 @@ void main() {
           return OriginWriteResult.written;
         },
       );
-      final holding = Completer<void>();
-      final hold = whileWritingMod(container, 'b', () => holding.future);
+      final hold = holdWrite(container, 'b');
       await tick(tester, ['a', 'b']);
       await tester.tap(barButton('Mark 2 as current'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, 'Mark 2 as current'));
       await tester.pumpAndSettle();
-      holding.complete();
-      await hold;
+      await hold.release();
 
       expect(written, ['a']);
       final titles = [for (final n in container.read(notificationsProvider)) n.title];

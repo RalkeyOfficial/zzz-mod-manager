@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/l10n/app_localizations.dart';
 import 'package:mod_manager_flutter/models/app_notification.dart';
@@ -23,6 +24,8 @@ import 'package:mod_manager_flutter/services/patch_detection.dart';
 import 'package:mod_manager_flutter/services/patch_placement.dart';
 import 'package:mod_manager_flutter/services/patch_scan.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_applier.dart';
+import 'package:mod_manager_flutter/services/update_check.dart';
+import 'package:mod_manager_flutter/utils/state_providers.dart';
 import 'package:path/path.dart' as p;
 
 import 'support/origin_shorthand.dart';
@@ -550,6 +553,69 @@ void main() {
 
       expect(lines.map((l) => l.title), contains(loc.t('mods.snackbar.patch_write_failed_title')));
       expect(keysDropped, ['Ellen']);
+    });
+
+    /// A container holding a session verdict for Ellen and for a mod the install doesn't touch.
+    ProviderContainer withVerdicts() {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      container.read(modUpdateChecksProvider.notifier).state = {
+        'Ellen': const UpdateCheck(outcome: UpdateOutcome.upToDate),
+        'Lycaon': const UpdateCheck(outcome: UpdateOutcome.upToDate),
+      };
+      return container;
+    }
+
+    test("the mod a patch went into loses its session verdict, and only it", () async {
+      // The verdict names the folder's layers, and the patch is one it doesn't know.
+      library('Ellen', {'ellen.ini': 'x', 'Textures/Body.dds': 'v1'});
+      final folder = incoming('Ellen Fix', {'Body.dds': 'v2'});
+      final decision = await decide(
+        folders: [folder],
+        answers: {
+          'Ellen Fix': const InstallIntoMod(modId: 'Ellen', modName: 'Ellen'),
+        },
+      );
+      final container = withVerdicts();
+
+      await applyPatchInstall(
+        loc,
+        decision: decision,
+        importedMods: const [],
+        modsPath: modsPath,
+        applier: applier,
+        amend: amend,
+        patch: patchFromAPage,
+        onPatchedInto: (modId) => forgetUpdateCheck(container, modId),
+      );
+
+      expect(container.read(modUpdateChecksProvider).keys, ['Lycaon']);
+    });
+
+    test('a mod whose patch write failed keeps its session verdict', () async {
+      // Nothing was recorded on it, so its layers are what the verdict names.
+      library('Ellen', {'ellen.ini': 'x', 'Textures/Body.dds': 'v1'});
+      final folder = incoming('Ellen Fix', {'Body.dds': 'v2'});
+      final decision = await decide(
+        folders: [folder],
+        answers: {
+          'Ellen Fix': const InstallIntoMod(modId: 'Ellen', modName: 'Ellen'),
+        },
+      );
+      final container = withVerdicts();
+
+      await applyPatchInstall(
+        loc,
+        decision: decision,
+        importedMods: const [],
+        modsPath: modsPath,
+        applier: _CopyFailsApplier(snapshots: SnapshotService(rootPath: p.join(tmp.path, 'backups'))),
+        amend: amend,
+        patch: patchFromAPage,
+        onPatchedInto: (modId) => forgetUpdateCheck(container, modId),
+      );
+
+      expect(container.read(modUpdateChecksProvider).keys, {'Ellen', 'Lycaon'});
     });
 
     test('a mod page download is recorded against the mod it went into',

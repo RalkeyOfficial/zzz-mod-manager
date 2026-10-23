@@ -52,6 +52,34 @@ enum DownloadRole {
   }
 }
 
+/// **Which layer of a folder**: its mod page and its place.
+///
+/// A page can be the base and a patch at once (a lone `.ini` fix on the base's
+/// own page), but never two patches, so the pair names one layer where a mod id
+/// alone would reach both. An update leaves a layer where it is, so the key
+/// survives a newer file; it changes only when a base is named under a patch or
+/// the bottom layer is removed.
+class DownloadKey {
+  const DownloadKey(this.modId, this.role);
+
+  const DownloadKey.base(this.modId) : role = DownloadRole.base;
+
+  const DownloadKey.patch(this.modId) : role = DownloadRole.patch;
+
+  final int modId;
+  final DownloadRole role;
+
+  @override
+  bool operator ==(Object other) =>
+      other is DownloadKey && other.modId == modId && other.role == role;
+
+  @override
+  int get hashCode => Object.hash(modId, role);
+
+  @override
+  String toString() => 'DownloadKey(${role.wire} #$modId)';
+}
+
 /// **One download in a mod folder**: which remote file it is, how sure we are,
 /// and which files it laid down.
 ///
@@ -150,6 +178,12 @@ class ModDownload {
 
   /// Whether this layer can be asked about at all.
   bool get hasIdentity => modId != null;
+
+  /// The name of this layer in its folder, or null for one with no page.
+  DownloadKey? get key => switch (modId) {
+        final id? => DownloadKey(id, role),
+        null => null,
+      };
 
   /// Whether the app knows which of the folder's files are this layer's.
   bool get hasFileRecord => files.isNotEmpty;

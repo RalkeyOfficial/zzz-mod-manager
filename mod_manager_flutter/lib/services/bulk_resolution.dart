@@ -61,6 +61,7 @@ class BulkResolutionRow {
     required this.questions,
     required this.candidates,
     this.suggestion,
+    this.heldFiles = const <GbFile>[],
   });
 
   final ModInfo mod;
@@ -78,6 +79,12 @@ class BulkResolutionRow {
   /// Empty unless [questions] contains [BulkResolutionQuestion.version]: there
   /// is nothing to pick when a version is already on record.
   final List<ResolveCandidate> candidates;
+
+  /// The page's files another layer of the folder records, a patch from the
+  /// base's own page: shown greyed, "Already in this folder", and never among
+  /// [candidates] or the [suggestion]. Recorded on the base, one download would
+  /// be in the stack twice, and a read keeps only the lower copy.
+  final List<GbFile> heldFiles;
 
   /// The file this pass would record with no further input, or null when the
   /// honest answer is "you choose".
@@ -198,13 +205,24 @@ BulkResolutionPlan planBulkResolution({
     }
 
     var candidates = const <ResolveCandidate>[];
+    var heldFiles = const <GbFile>[];
     ResolveCandidate? suggestion;
     if (base.versionConfidence == OriginConfidence.unknown) {
+      final held = {
+        for (final patch in origin.patches)
+          if (patch.fileId case final id?) id,
+      };
+      heldFiles = [
+        for (final file in remote.allFiles ?? const <GbFile>[])
+          if (held.contains(file.idRow)) file,
+      ];
       // `Mod/Multi` folds archived files into `_aFiles` and flags them with
       // `_bIsArchived`, where a profile splits them across two keys. Passing
       // `allFiles` is what makes one ranking serve both shapes.
       final resolution = rankResolveCandidates(
-        files: remote.allFiles,
+        files: remote.allFiles
+            ?.where((file) => !held.contains(file.idRow))
+            .toList(),
         folderName: mod.name,
         installedAt: origin.installedAt,
         archiveMd5: base.archiveMd5,
@@ -226,6 +244,7 @@ BulkResolutionPlan planBulkResolution({
       questions: questions,
       candidates: candidates,
       suggestion: suggestion,
+      heldFiles: heldFiles,
     ));
   }
 

@@ -28,11 +28,14 @@ Future<ProviderContainer> pumpModsScreen(
   String? selected,
   Override? library,
   Size surfaceSize = const Size(1200, 800),
+
+  /// The library service the screen's flows reach, in place of [temp]'s own: a `RecordingService`'s overrides.
+  List<Override>? services,
 }) async {
   final container = ProviderContainer(
     overrides: [
       library ?? libraryOf(mods),
-      ...temp.overrides,
+      ...services ?? temp.overrides,
       modBackupsProvider.overrideWith((ref) async => <String>{}),
     ],
   );

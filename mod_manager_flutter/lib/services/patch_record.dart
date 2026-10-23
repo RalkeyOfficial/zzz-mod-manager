@@ -79,8 +79,11 @@ ModOrigin withAppliedPatch(ModOrigin? current, ModDownload patch) {
   return withRebuiltPatchFiles(base.withLayerOnTop(patch));
 }
 
-/// [current] with the layer naming [modId] recorded as the file the app has just
+/// [current] with the layer [layer] names recorded as the file the app has just
 /// downloaded and written into the folder.
+///
+/// By key, so a page that is both the folder's base and a patch on it has only
+/// the layer that was written stamped.
 ///
 /// A separate write from the one that records the folder's own identity, and for
 /// one reason: **a layer's place in the stack does not change because we learned
@@ -91,7 +94,7 @@ ModOrigin withAppliedPatch(ModOrigin? current, ModDownload patch) {
 /// the entry would record a download nobody named.
 ModOrigin? withDownloadUpdatedTo(
   ModOrigin? current, {
-  required int modId,
+  required DownloadKey layer,
   required int fileId,
   String? version,
   String? versionLabel,
@@ -101,9 +104,9 @@ ModOrigin? withDownloadUpdatedTo(
 }) {
   if (current == null) return null;
   return withRebuiltPatchFiles(current.withDownload(
-    modId,
+    layer,
     (download) => download.updatedTo(
-      modId: modId,
+      modId: layer.modId,
       fileId: fileId,
       version: version,
       versionLabel: versionLabel,

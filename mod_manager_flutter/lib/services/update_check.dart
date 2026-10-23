@@ -186,7 +186,7 @@ class UpdateCheck {
     this.dismissed = false,
     this.newerFiles = const <GbFile>[],
     this.candidateMatchesVariant = false,
-    this.subjectModId,
+    this.subject,
     this.layers = const <DownloadCheck>[],
   });
 
@@ -208,15 +208,16 @@ class UpdateCheck {
         dismissed: dismissed,
         newerFiles: newerFiles,
         candidateMatchesVariant: candidateMatchesVariant,
-        subjectModId: subjectModId,
+        subject: subject,
         layers: layers,
       );
 
-  /// The same verdict, re-attributed to [modId] and carrying every layer's own.
+  /// The same verdict, re-attributed to the layer [key] names and carrying
+  /// every layer's own.
   ///
   /// Used only by [foldDownloads], where the winning layer's fields become the
   /// folder's.
-  UpdateCheck asSubject(int? modId, List<DownloadCheck> others) =>
+  UpdateCheck asSubject(DownloadKey? key, List<DownloadCheck> others) =>
       UpdateCheck(
         outcome: outcome,
         installedFile: installedFile,
@@ -229,7 +230,7 @@ class UpdateCheck {
         dismissed: dismissed,
         newerFiles: newerFiles,
         candidateMatchesVariant: candidateMatchesVariant,
-        subjectModId: modId,
+        subject: key,
         layers: others,
       );
 
@@ -311,7 +312,13 @@ class UpdateCheck {
   /// only where nothing was asked at all (untracked, `tracking: off`, no
   /// identity). Without this the UI would render a verdict about one mod under
   /// the name of another.
-  final int? subjectModId;
+  ///
+  /// A key rather than a mod id: a page can be the base and a patch of one
+  /// folder at once, and the id alone would name both.
+  final DownloadKey? subject;
+
+  /// The page [subject] names, for a reader that needs only the page.
+  int? get subjectModId => subject?.modId;
 
   /// **Every layer's own verdict**, bottom of the stack first.
   ///
@@ -387,16 +394,23 @@ class UpdateCheck {
         comparedAgainst: comparedAgainst,
         newestListed: newestListed,
         dismissed: value,
-        subjectModId: subjectModId,
+        subject: subject,
         layers: layers,
       );
 }
 
 /// One layer of the stack and its own verdict, kept beside the folded one.
 class DownloadCheck {
-  const DownloadCheck({required this.download, required this.check});
+  const DownloadCheck({
+    required this.download,
+    required this.key,
+    required this.check,
+  });
 
   final ModDownload download;
+
+  /// Which layer this is: the key its position gave it when the check ran.
+  final DownloadKey? key;
   final UpdateCheck check;
 }
 
@@ -461,24 +475,80 @@ UpdateCheck checkForUpdate({
   // **A layer with no mod page is left out**, as a patch dragged in from a
   // local folder is: there is nothing to ask about it, so the folder reads what
   // its other layers say, as a Local mod is left out of the library's checks.
+  //
+  // **A page that is both the base and a patch is asked once**: both layers
+  // read [remote], and each compares its own file against it.
+  final stack = origin!.downloads;
   final layers = <DownloadCheck>[
-    for (final download in origin!.trackable)
-      DownloadCheck(
-        download: download,
-        check: _judgeLayer(
-          download: download,
-          remote: download.modId == origin.base?.modId
-              ? remote
-              : companionRemotes[download.modId],
-          releases: download.modId == origin.base?.modId
-              ? releases
-              : (companionReleases[download.modId] ?? ReleaseGroups.empty),
-          patchShaped: origin.needsBase,
+    for (var i = 0; i < stack.length; i++)
+      if (stack[i].hasIdentity)
+        DownloadCheck(
+          download: stack[i],
+          key: origin.keyAt(i),
+          check: _judgeLayer(
+            download: stack[i],
+            others: [
+              for (var j = 0; j < stack.length; j++)
+                if (j != i) stack[j],
+            ],
+            remote: stack[i].modId == origin.base?.modId
+                ? remote
+                : companionRemotes[stack[i].modId],
+            releases: stack[i].modId == origin.base?.modId
+                ? releases
+                : (companionReleases[stack[i].modId] ?? ReleaseGroups.empty),
+            patchShaped: origin.needsBase,
+          ),
         ),
-      ),
   ];
 
   return foldDownloads(layers);
+}
+
+/// The files of [remote] that belong to **another layer** of the folder, and so
+/// are never an update to [download].
+///
+/// Two kinds, both statements of fact rather than guesses:
+///
+/// - **A file another layer records**: it is installed already. Without this a
+///   base and a patch from one page flag each other, since the patch's file is
+///   usually the newer upload.
+/// - **A file carrying another same-page layer's variant label and not this
+///   layer's**: the author named it that layer's.
+///
+/// Any other newer file stays a candidate under every layer of the page, which
+/// is the safe direction: a false "possibly outdated" costs one look.
+bool Function(GbFile) _heldElsewhere({
+  required ModDownload download,
+  required List<ModDownload> others,
+  required List<GbFile> all,
+  required String? label,
+}) {
+  final held = <int>{
+    for (final other in others)
+      if (other.fileId case final id?) id,
+  };
+  final labels = <String>{
+    for (final other in others)
+      if (other.modId != null && other.modId == download.modId)
+        if (_labelKey(other.versionLabel) ??
+                _labelKey(_fileById(all, other.fileId)?.description)
+            case final key?)
+          key,
+  };
+  return (file) {
+    if (held.contains(file.idRow)) return true;
+    final key = _labelKey(file.description);
+    return key != null && key != label && labels.contains(key);
+  };
+}
+
+GbFile? _fileById(List<GbFile> files, int? id) {
+  if (id == null) return null;
+  for (final file in files) {
+    if (file.idRow == id) return file;
+  }
+  return null;
 }
 
 /// One layer with a mod page, judged. Every such layer goes through here,
@@ -493,6 +563,7 @@ UpdateCheck checkForUpdate({
 /// see the note at the call site.
 UpdateCheck _judgeLayer({
   required ModDownload download,
+  required List<ModDownload> others,
   required GbMod? remote,
   required ReleaseGroups releases,
   required bool patchShaped,
@@ -502,6 +573,7 @@ UpdateCheck _judgeLayer({
   }
   final judged = _judgeDownload(
     download: download,
+    others: others,
     remote: remote,
     releases: releases,
   );
@@ -565,8 +637,7 @@ UpdateCheck foldDownloads(List<DownloadCheck> layers) {
     return const UpdateCheck(outcome: UpdateOutcome.untracked);
   }
   if (layers.length == 1) {
-    return layers.single.check
-        .asSubject(layers.single.download.modId, layers);
+    return layers.single.check.asSubject(layers.single.key, layers);
   }
 
   bool isFinding(UpdateOutcome outcome) =>
@@ -594,7 +665,7 @@ UpdateCheck foldDownloads(List<DownloadCheck> layers) {
   }
 
   final winner = best ?? layers.first;
-  return winner.check.asSubject(winner.download.modId, layers);
+  return winner.check.asSubject(winner.key, layers);
 }
 
 /// Applies a dismissal to one identity's verdict and folds the folder again,
@@ -607,13 +678,14 @@ UpdateCheck foldDownloads(List<DownloadCheck> layers) {
 /// **Re-folded rather than patched in place**, because a dismissal can change
 /// which layer wins: a live finding beats a dismissed stronger one, so
 /// silencing the winner has to let another layer through.
-UpdateCheck refoldDismissal(UpdateCheck folded, int? subject, bool dismissed) {
+UpdateCheck refoldDismissal(UpdateCheck folded, DownloadKey? subject, bool dismissed) {
   if (folded.layers.length < 2) return folded.asDismissed(dismissed);
   return foldDownloads([
     for (final layer in folded.layers)
       DownloadCheck(
         download: layer.download,
-        check: layer.download.modId == subject ? layer.check.asDismissed(dismissed) : layer.check,
+        key: layer.key,
+        check: layer.key == subject ? layer.check.asDismissed(dismissed) : layer.check,
       ),
   ]);
 }
@@ -629,7 +701,7 @@ UpdateCheck? forgetBaseVerdict(UpdateCheck folded) {
   if (folded.layers.length < 2) return lasting(folded.outcome) ? folded : null;
   final base = folded.layers.first;
   final kept = lasting(base.check.outcome) ? base.check : const UpdateCheck(outcome: UpdateOutcome.versionUnknown);
-  return foldDownloads([DownloadCheck(download: base.download, check: kept), ...folded.layers.skip(1)]);
+  return foldDownloads([DownloadCheck(download: base.download, key: base.key, check: kept), ...folded.layers.skip(1)]);
 }
 
 /// The comparison itself, for **one** download against **one** mod page.
@@ -638,9 +710,13 @@ UpdateCheck? forgetBaseVerdict(UpdateCheck folded) {
 /// every download in the stack: every field it reads — the file id, the version,
 /// both confidences, the banked hash, the baseline, the dismissal — is a fact
 /// about one download, and the folder-level ones were never consulted here.
+///
+/// [others] are the folder's other layers: a file one of them holds or is named
+/// for is never this layer's update ([_heldElsewhere]).
 UpdateCheck _judgeDownload({
   required ModDownload download,
   required GbMod remote,
+  List<ModDownload> others = const <ModDownload>[],
   ReleaseGroups releases = ReleaseGroups.empty,
 }) {
   if (remote.isRemoteMissing) {
@@ -665,6 +741,17 @@ UpdateCheck _judgeDownload({
   final identityConfirmed = _isConfirmed(download.modIdConfidence);
 
   final installed = _findInstalledFile(download, all);
+  final heldElsewhere = _heldElsewhere(
+    download: download,
+    others: others,
+    all: all,
+    label: _labelKey(download.versionLabel) ??
+        _labelKey(installed.file?.description),
+  );
+  final mine = [
+    for (final file in current)
+      if (!heldElsewhere(file)) file,
+  ];
   if (installed.evidence != InstalledFileEvidence.none ||
       download.fileId != null) {
     return _withDismissal(
@@ -673,6 +760,7 @@ UpdateCheck _judgeDownload({
         download: download,
         remote: remote,
         current: current,
+        candidates: mine,
         installed: installed,
         identityConfirmed: identityConfirmed,
         releases: releases,
@@ -687,7 +775,8 @@ UpdateCheck _judgeDownload({
       _judgeAgainstBaseline(
         download: download,
         remote: remote,
-        current: current,
+        current: mine,
+        published: current,
       ),
     );
   }
@@ -804,6 +893,7 @@ UpdateCheck _judgeAgainstFile({
   required ModDownload download,
   required GbMod remote,
   required List<GbFile> current,
+  required List<GbFile> candidates,
   required _Installed installed,
   required bool identityConfirmed,
   required ReleaseGroups releases,
@@ -849,11 +939,12 @@ UpdateCheck _judgeAgainstFile({
   // Everything the author did *not* ship alongside the installed file. With no
   // recorded file id there is nothing to be a sibling of, so the pool is
   // untouched — which is also the state for every mod with no update feed.
+  // [candidates] is [current] without the files another layer holds.
   final installedId = file?.idRow ?? download.fileId;
   final offered = installedId == null || releases.isEmpty
-      ? current
+      ? candidates
       : [
-          for (final f in current)
+          for (final f in candidates)
             if (!releases.sameRelease(installedId, f.idRow)) f,
         ];
 
@@ -940,10 +1031,15 @@ UpdateCheck _judgeAgainstFile({
 ///
 /// The verdict is capped at [UpdateOutcome.possiblyOutdated] structurally —
 /// nothing here knows what is installed, only when it arrived.
+///
+/// [current] is already without the files another layer holds, and [published]
+/// is every current file: a newer one there that another layer holds explains
+/// the page's own update date, so that date is not read as a finding.
 UpdateCheck _judgeAgainstBaseline({
   required ModDownload download,
   required GbMod remote,
   required List<GbFile> current,
+  required List<GbFile> published,
 }) {
   final stored = download.baselineRemoteDate!;
   final created = remote.dateAdded;
@@ -984,7 +1080,9 @@ UpdateCheck _judgeAgainstBaseline({
   // a typo in the description. Only reached when no file date could answer —
   // a file with a date is the better signal because it can be *named*.
   final updated = remote.dateUpdated;
-  if (updated != null && updated.isAfter(baseline)) {
+  final explained =
+      published.any((f) => f.dateAdded?.isAfter(baseline) ?? false);
+  if (!explained && updated != null && updated.isAfter(baseline)) {
     return result(UpdateOutcome.possiblyOutdated);
   }
   return result(UpdateOutcome.upToDate);

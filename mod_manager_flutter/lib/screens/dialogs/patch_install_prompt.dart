@@ -24,6 +24,7 @@ class PatchInstallSubject {
   const PatchInstallSubject({
     required this.modName,
     required this.patchModId,
+    this.patchFileId,
     required this.kind,
     this.destinations = const <DestinationRank>[],
   });
@@ -31,12 +32,18 @@ class PatchInstallSubject {
   /// The name the mod will have, which is what the prompt calls it.
   final String modName;
 
-  /// The patch's **own** remote identity, refused as an answer: a folder cannot
-  /// patch itself, and recording it would have the check ask one page twice.
+  /// The patch's **own** remote identity. **Null for a folder dragged off a
+  /// disk**, which has no mod page at all.
   ///
-  /// **Null for a folder dragged off a disk**, which has no mod page at all.
-  /// Nothing is refused then, because there is no identity to collide with.
+  /// Not refused as an answer: a patch whose file comes from its base's own
+  /// page names that page as its base like any other. Only its file is
+  /// ([patchFileId]).
   final int? patchModId;
+
+  /// The patch's own file, which is the one answer refused: as the base it
+  /// names, the file picker greys it with "Already in this folder" under it,
+  /// and a library mod whose base is this exact file cannot be picked.
+  final int? patchFileId;
 
   final PatchKind kind;
 
@@ -227,7 +234,7 @@ class _PatchInstallPromptState extends ConsumerState<PatchInstallPrompt> {
     final outcome = await showCompanionResolveDialog(
       context,
       modName: subject.modName,
-      primaryModId: subject.patchModId,
+      heldFileIds: {?subject.patchFileId},
       existing: current is InstallAsNewMod ? current.base : null,
     );
     if (outcome == null || !mounted) return;
@@ -490,17 +497,21 @@ class _PatchInstallPromptState extends ConsumerState<PatchInstallPrompt> {
                 final mod = matches[index].mod;
                 final rank = matches[index].rank;
                 final label = mod.origin?.base?.versionLabel;
-                final reason = _reasonFor(rank);
+                // This very file is that mod already: it is a patch of its own
+                // page's base, never of itself.
+                final held = _holdsPatchFile(mod, subject);
+                final reason = held ? null : _reasonFor(rank);
                 return ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
-                  selected: mod.id == picked,
+                  enabled: !held,
+                  selected: !held && mod.id == picked,
                   titleTextStyle: Theme.of(context).textTheme.bodyMedium,
                   subtitleTextStyle: Theme.of(context).textTheme.bodySmall,
                   leading: _thumbnail(mod, selected: mod.id == picked),
                   title: Text(mod.name),
-                  isThreeLine: label != null && reason != null,
-                  subtitle: label == null && reason == null
+                  isThreeLine: label != null && (reason != null || held),
+                  subtitle: label == null && reason == null && !held
                       ? null
                       : Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -508,18 +519,33 @@ class _PatchInstallPromptState extends ConsumerState<PatchInstallPrompt> {
                             if (label != null)
                               Text(label),
                             if (reason != null) reason,
+                            if (held)
+                              Text(loc.t('mods.resolve.file_in_folder')),
                           ],
                         ),
-                  onTap: () => setState(() {
-                    _chosen[subject.modName] =
-                        InstallIntoMod(modId: mod.id, modName: mod.name, characterId: mod.characterId);
-                  }),
+                  onTap: held
+                      ? null
+                      : () => setState(() {
+                            _chosen[subject.modName] = InstallIntoMod(
+                                modId: mod.id, modName: mod.name, characterId: mod.characterId);
+                          }),
                 );
               },
             ),
           ),
       ],
     );
+  }
+
+  /// Whether [mod]'s base is the patch's own file, which no folder can be
+  /// patched with: a page is never refused, only its file.
+  static bool _holdsPatchFile(ModInfo mod, PatchInstallSubject subject) {
+    final fileId = subject.patchFileId;
+    final base = mod.origin?.base;
+    return fileId != null &&
+        base != null &&
+        base.modId == subject.patchModId &&
+        base.fileId == fileId;
   }
 
   /// The library in ranked order, each folder with its standing if it has one.

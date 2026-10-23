@@ -420,6 +420,7 @@ void main() {
               idRow: 1,
               name: 'First Mod',
               category: GbCategoryRef(idRow: 30306, name: 'Ellen Joe'),
+              superCategory: GbCategoryRef(idRow: kCharacterSkinsCategoryId, name: 'Character Skins'),
               files: [file],
             ),
           ),

@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 enum AccentChoice {
   violet,
 
-  /// Paper-white fills the primary button and a selected chip; everything else the accent marks stays violet, since
-  /// paper beside paper-white text would mark nothing.
+  /// Paper-white fills the primary button and a selected chip, ink on the paper theme; everything else the accent
+  /// marks stays violet, since paper beside paper-white text would mark nothing.
   paper,
   lime,
   teal;
@@ -57,7 +57,8 @@ class TonePair {
 /// needs a colour Material has no slot for reads it here through [ZenithPalette.of], never from a literal.
 ///
 /// Two grounds, dark ink and light paper, each with four accents. [accent] marks what is on or selected, and links.
-/// [primary] fills the primary button: the accent on ink, or paper-white with the Paper accent; always ink on paper.
+/// [primary] fills the primary button: the accent, paper-white with the Paper accent on ink and ink with it on paper,
+/// and violet darkened to read on paper.
 @immutable
 class ZenithPalette extends ThemeExtension<ZenithPalette> {
   const ZenithPalette({
@@ -218,7 +219,8 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
   final Color red;
   final Color onRed;
 
-  /// A destructive action drawn as an icon or text on a plain button, lighter than [red] so it reads at 16px.
+  /// Red as an icon or text, such as a destructive action on a plain button: lighter than [red] on ink and darker on
+  /// paper, so it reads at 16px.
   final Color redText;
 
   /// The title bar's close button under the pointer, with white on it.
@@ -430,10 +432,18 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     );
   }
 
-  /// The paper theme. The accents are darkened to read on paper, and the primary button is ink whatever the accent.
+  /// The paper theme. The accents are darkened to read on paper, except in the primary button's fill (the canvas's
+  /// `ButtonStates`): violet's darkened accent with white text, ink with paper text for the Paper accent, and lime's
+  /// and teal's own bright accent with ink text, which reads on it where white would not.
   factory ZenithPalette.light(AccentChoice accent) {
     const ink = Color(0xFF15161C);
     const paper = Color(0xFFF3EFEB);
+    final (primary, onPrimary) = switch (accent) {
+      AccentChoice.violet => (const Color(0xFF6B45D9), const Color(0xFFFFFFFF)),
+      AccentChoice.paper => (ink, paper),
+      AccentChoice.lime => (const Color(0xFFC8F031), const Color(0xFF0B0C0E)),
+      AccentChoice.teal => (const Color(0xFF5FE1D9), const Color(0xFF0B0C0E)),
+    };
     final (accentColor, link, selected) = switch (accent) {
       AccentChoice.violet || AccentChoice.paper => (
         const Color(0xFF6B45D9),
@@ -482,12 +492,13 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       text3: const Color(0xFF67636B),
       accent: accentColor,
       onAccent: const Color(0xFFFFFFFF),
-      primary: ink,
-      onPrimary: paper,
+      primary: primary,
+      onPrimary: onPrimary,
       link: link,
       selected: selected,
       amber: const Color(0xFF9A5B00),
-      red: const Color(0xFFC2361F),
+      // The canvas's danger fill; text in red on paper takes the darker [redText].
+      red: const Color(0xFFD2392B),
       onRed: const Color(0xFFFFFFFF),
       redText: const Color(0xFFC2361F),
       windowClose: const Color(0xFFC4352B),

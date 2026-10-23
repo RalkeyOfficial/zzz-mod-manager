@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
+import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/services/bulk_update_check.dart';
 import 'package:mod_manager_flutter/services/update_check.dart';
@@ -16,8 +17,8 @@ void main() {
         isActive: false,
         origin: originFixture(modId: 1, modIdConfidence: OriginConfidence.user, fileId: fileId),
       );
-  const before = UpdateCheck(outcome: UpdateOutcome.updateAvailable, subjectModId: 1);
-  const found = UpdateCheck(outcome: UpdateOutcome.upToDate, subjectModId: 1);
+  const before = UpdateCheck(outcome: UpdateOutcome.updateAvailable, subject: DownloadKey.base(1));
+  const found = UpdateCheck(outcome: UpdateOutcome.upToDate, subject: DownloadKey.base(1));
 
   Set<String> changed(
     UpdateCheckStart start, {

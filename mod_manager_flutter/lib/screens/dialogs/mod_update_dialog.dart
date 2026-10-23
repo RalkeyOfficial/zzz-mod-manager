@@ -55,16 +55,57 @@ enum _PatchAction { remove }
 ///
 /// Returns true when anything the library renders changed — a dismissal writes
 /// to the origin block and an applied update rewrites the folder, and both are
-/// only re-read by a scan.
-Future<bool> showModUpdateDialog(BuildContext context, ModInfo mod) async {
-  return await showDialog<bool>(
-        context: context,
-        builder: (_) => ModUpdateDialog(mod: mod),
-      ) ??
-      false;
+/// only re-read by a scan. The answer is the same however the dialog closed,
+/// and comes once every write it started has ended ([ModUpdateWrites]).
+///
+/// [gateway] is for tests only — see [ModUpdateGateway].
+Future<bool> showModUpdateDialog(
+  BuildContext context,
+  ModInfo mod, {
+  ModUpdateGateway? gateway,
+}) async {
+  final writes = ModUpdateWrites();
+  await showDialog<void>(
+    context: context,
+    builder: (_) => ModUpdateDialog(mod: mod, gateway: gateway, writes: writes),
+  );
+  return writes.settled();
 }
 
-/// The local side of the dialog — the one thing it does that isn't a request.
+/// What the update dialog wrote, held outside the dialog so the answer outlives it.
+///
+/// The route's own result can't carry it: Escape and a click outside pop with no result, and a write can still be
+/// running when any close lands — Ignore's sidecar write, the names a check saves, an update or a Take out. Each
+/// write goes through [track], and [settled] waits for the last of them, so the caller's rescan comes after it.
+class ModUpdateWrites {
+  bool _wrote = false;
+  final Set<Future<void>> _running = <Future<void>>{};
+
+  /// Counts [write] as a write once it ends with a result [changed] accepts. Returns [write] itself, so the dialog
+  /// awaits it, and handles its error, as it would without this.
+  Future<T> track<T>(Future<T> write, bool Function(T result) changed) {
+    late final Future<void> ended;
+    ended = write.then<void>(
+      (result) {
+        if (changed(result)) _wrote = true;
+      },
+      onError: (Object _) {},
+    ).whenComplete(() => _running.remove(ended));
+    _running.add(ended);
+    return write;
+  }
+
+  /// Whether anything was written, once no write is running.
+  Future<bool> settled() async {
+    while (_running.isNotEmpty) {
+      await Future.wait(_running.toList());
+    }
+    return _wrote;
+  }
+}
+
+/// The local side of the dialog — what it does that isn't a request: the origin
+/// write, the library read, and a patch's update written into the folder.
 ///
 /// Same seam and same reason as `ResolveOriginGateway`: production wraps the
 /// library service read through `modManagerServiceProvider`, and a test hands
@@ -86,6 +127,27 @@ class ModUpdateGateway {
   /// sibling group — one field already in hand, and null for every mod in a
   /// backfilled library.
   Future<List<ModInfo>> library() => ApiService.getMods();
+
+  /// Writes a patch's update over its placement in this mod's folder, through [applyPatchUpdateFlow]. True when the
+  /// folder changed.
+  Future<bool> applyPatchUpdate(
+    BuildContext context,
+    WidgetRef ref, {
+    required ModInfo mod,
+    required int remoteModId,
+    required GbFile file,
+    required bool asCompanion,
+    required List<GbFile> published,
+  }) =>
+      applyPatchUpdateFlow(
+        context,
+        ref,
+        mod: mod,
+        remoteModId: remoteModId,
+        file: file,
+        asCompanion: asCompanion,
+        published: published,
+      );
 }
 
 /// One download in the folder, with everything needed to render a section for
@@ -93,24 +155,28 @@ class ModUpdateGateway {
 class _Section {
   const _Section({
     required this.download,
+    required this.key,
     required this.name,
     required this.check,
+    this.file,
   });
 
   final ModDownload download;
+
+  /// What a write, a dismissal, a file choice and an open accordion key on:
+  /// this layer, by its page and its place. A page can be the base and a patch
+  /// at once, and its id alone would reach both sections.
+  final DownloadKey? key;
+
   final String name;
   final UpdateCheck check;
 
-  int? get modId => download.modId;
-  bool get isPatch => download.role == DownloadRole.patch;
+  /// Which file this layer is, set only when another layer shares its page and
+  /// so its [name].
+  final LayerFile? file;
 
-  /// What a write and a dismissal key on.
-  ///
-  /// **Always this layer's own id.** It used to be null for the folder's own
-  /// download, because that was the one the block kept in its own fields and
-  /// every write had a separate spelling for it. In a stack every layer is
-  /// addressed the same way.
-  int? get subjectModId => download.modId;
+  int? get modId => download.modId;
+  bool get isPatch => key?.role == DownloadRole.patch;
 }
 
 class ModUpdateDialog extends ConsumerStatefulWidget {
@@ -118,12 +184,16 @@ class ModUpdateDialog extends ConsumerStatefulWidget {
     super.key,
     required this.mod,
     this.gateway,
+    this.writes,
   });
 
   final ModInfo mod;
 
   /// Injected only by tests — see [ModUpdateGateway].
   final ModUpdateGateway? gateway;
+
+  /// Where the dialog counts its writes, handed in by [showModUpdateDialog].
+  final ModUpdateWrites? writes;
 
   @override
   ConsumerState<ModUpdateDialog> createState() => _ModUpdateDialogState();
@@ -132,6 +202,7 @@ class ModUpdateDialog extends ConsumerStatefulWidget {
 class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   late final ModUpdateGateway _gateway = widget.gateway ??
       ModUpdateGateway(ref.read(modManagerServiceProvider.future));
+  late final ModUpdateWrites _writes = widget.writes ?? ModUpdateWrites();
 
   bool _checking = false;
   bool _writing = false;
@@ -168,19 +239,19 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   final Set<int> _notesRequestedFor = <int>{};
   final Set<int> _loadingNotesFor = <int>{};
 
-  /// Which accordions are open. All start closed even when a check has already
-  /// fetched the feed: the verdict is what the dialog is for, and release notes
-  /// are what you open when you have decided to care.
-  final Set<int> _notesOpenFor = <int>{};
+  /// Which accordions are open, by section. All start closed even when a check
+  /// has already fetched the feed: the verdict is what the dialog is for, and
+  /// release notes are what you open when you have decided to care.
+  final Set<DownloadKey> _notesOpenFor = <DownloadKey>{};
 
-  /// Which published file the update would install, by mod id, when the user
+  /// Which published file the update would install, by section, when the user
   /// has chosen.
   ///
   /// Absent means "whatever the check would pick". Only ever set by tapping a
   /// row, and only offered when there is more than one — with a single candidate
   /// there is nothing to choose between and a selection control would be a
   /// question with one answer.
-  final Map<int, int> _chosenFileIdBy = <int, int>{};
+  final Map<DownloadKey, int> _chosenFileIdBy = <DownloadKey, int>{};
 
   /// Names fetched purely to label a section — see [_lookUpNames].
   final Map<int, String> _fetchedNames = <int, String>{};
@@ -190,12 +261,10 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// tracks it without waiting for a rescan the caller owns.
   DateTime? _dismissedUntil;
 
-  /// Which identity that edit was written against — a companion's mod id, or
-  /// null for the folder's own. Carried because re-applying it to the wrong one
-  /// is silent in both directions at once.
-  int? _dismissedSubject;
+  /// Which layer that edit was written against. Carried because re-applying it
+  /// to the wrong one is silent in both directions at once.
+  DownloadKey? _dismissedSubject;
   bool _dismissalEdited = false;
-  bool _wrote = false;
 
   /// The library as it was when this dialog opened, or null until it has been
   /// read — and permanently null for a mod with no sibling group, which is what
@@ -354,7 +423,10 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       final companionReleases = <int, ReleaseGroups>{};
       final feeds = <int, List<GbUpdate>>{modId: updates};
       for (final patch in origin!.patches) {
-        if (patch.modId case final patchModId?) {
+        // A page already asked once: the base's own, when the patch's file
+        // comes from it, is read by both layers.
+        if (patch.modId case final patchModId?
+            when patchModId != modId && !companionProfiles.containsKey(patchModId)) {
         try {
           companionProfiles[patchModId] =
               await fetchModRecord(client, patchModId, refresh: refresh);
@@ -410,9 +482,10 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// library rescans when the dialog closes. A failure is logged and nothing more: the check itself succeeded.
   Future<void> _rememberNames(Map<int, GbMod> pages) async {
     try {
-      if (await rememberDownloadNames(mods: [widget.mod], pages: pages, write: _gateway.writeOrigin)) {
-        _wrote = true;
-      }
+      await _writes.track(
+        rememberDownloadNames(mods: [widget.mod], pages: pages, write: _gateway.writeOrigin),
+        (wrote) => wrote,
+      );
     } catch (e) {
       _log.warning('download names were not saved', error: e, fields: {'mod': widget.mod.id});
     }
@@ -459,12 +532,17 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// nothing: a stack has no privileged entry whose answer could be the one left
   /// out.
   List<_Section> _sections(UpdateCheck folded) {
-    final downloads = widget.mod.origin?.trackable ?? const <ModDownload>[];
-    if (downloads.isEmpty) return const <_Section>[];
+    final origin = widget.mod.origin;
+    final stack = origin?.downloads ?? const <ModDownload>[];
+    final keyed = <(DownloadKey, ModDownload)>[
+      for (var i = 0; i < stack.length; i++)
+        if (origin!.keyAt(i) case final key?) (key, stack[i]),
+    ];
+    if (keyed.isEmpty) return const <_Section>[];
 
-    final byMod = <int, UpdateCheck>{
+    final byLayer = <DownloadKey, UpdateCheck>{
       for (final layer in folded.layers)
-        if (layer.download.modId case final id?) id: layer.check,
+        if (layer.key case final key?) key: layer.check,
     };
 
     // **A verdict with no per-layer breakdown belongs to the only layer there
@@ -472,42 +550,55 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     // answer — and a check that arrived without the breakdown (an older stored
     // one, or a caller that built the verdict rather than computing it) must
     // not render as "nothing may be concluded" about a mod it plainly judged.
-    if (byMod.isEmpty && downloads.length == 1) {
-      if (downloads.single.modId case final id?) byMod[id] = folded;
+    if (byLayer.isEmpty && keyed.length == 1) {
+      byLayer[keyed.single.$1] = folded;
     }
 
     return [
-      for (final download in downloads)
-        _Section(
-          download: download,
-          name: _nameFor(download),
-          // **Never a stand-in verdict.** A download the fold has no answer for
-          // has not been looked at, and `indeterminate` is what this file says
-          // about anything it did not ask about — the same rule that keeps a
-          // half-checked folder off "up to date".
-          check: byMod[download.modId ?? -1] ??
-              const UpdateCheck(outcome: UpdateOutcome.indeterminate),
-        ),
+      for (final (key, download) in keyed)
+        () {
+          // **Never a stand-in verdict.** A download the fold has no answer
+          // for has not been looked at, and `indeterminate` is what this file
+          // says about anything it did not ask about — the same rule that
+          // keeps a half-checked folder off "up to date".
+          final check = byLayer[key] ??
+              const UpdateCheck(outcome: UpdateOutcome.indeterminate);
+          return _Section(
+            download: download,
+            key: key,
+            name: _nameFor(download),
+            check: check,
+            file: sharedPageFile(origin, download,
+                page: _pageOf(key.modId), file: check.installedFile),
+          );
+        }(),
     ];
   }
+
+  /// The page of [modId] this dialog or the session holds, or null.
+  GbMod? _pageOf(int modId) =>
+      (_profile?.idRow == modId ? _profile : null) ??
+      _companionProfiles[modId] ??
+      ref.read(knownModPagesProvider)[modId];
 
   /// What to call a download: a page this dialog or the session holds, then
   /// the name saved with the layer, then its id ([downloadName]).
   String _nameFor(ModDownload download) {
     final id = download.modId;
-    final isBase = download.role == DownloadRole.base;
-    final fetched = id == null
-        ? null
-        : (isBase ? _profile?.name : _companionProfiles[id]?.name) ??
-            _fetchedNames[id] ??
-            ref.read(knownModPagesProvider)[id]?.name;
+    final fetched =
+        id == null ? null : _pageOf(id)?.name ?? _fetchedNames[id];
     return downloadName(loc, download,
         folderName: widget.mod.name, fetched: fetched);
   }
 
-  void _store(UpdateCheck? check) {
+  void _store(UpdateCheck? check) =>
+      _storeIn(ProviderScope.containerOf(context, listen: false), check);
+
+  /// [_store] through [container], for a write that can end after this dialog
+  /// has closed.
+  void _storeIn(ProviderContainer container, UpdateCheck? check) {
     if (check == null) return;
-    final notifier = ref.read(modUpdateChecksProvider.notifier);
+    final notifier = container.read(modUpdateChecksProvider.notifier);
     notifier.state = {...notifier.state, widget.mod.id: check};
   }
 
@@ -568,47 +659,56 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     // nothing — the companion carries its own — and stamps another mod's date
     // onto this block. With a section in hand that identity is the section's;
     // without one it is whichever the fold picked.
-    final subject = section?.subjectModId ?? folded.subjectModId;
+    final subject = section?.key ?? folded.subject;
 
     if (subject == null) return;
     setState(() => _writing = true);
-    final result = await whileWritingMod(
-      ProviderScope.containerOf(context, listen: false),
-      widget.mod.id,
-      () => _gateway.writeOrigin(
+    // Taken before the write: the dialog can be closed while it runs, and what
+    // follows it still has to reach the session verdict and the user.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final notify = context.notify;
+    final loc = this.loc;
+    final result = await _writes.track(
+      whileWritingMod(
+        container,
         widget.mod.id,
-        (block) => block?.withDismissal(subject: subject, until: until),
+        () => _gateway.writeOrigin(
+          widget.mod.id,
+          (block) => block?.withDismissal(subject: subject, until: until),
+        ),
       ),
+      (result) => result.ok,
     );
     final ok = result.ok;
-    if (!mounted) return;
-    setState(() {
-      _writing = false;
-      if (!ok) return;
+    if (ok) {
+      // Recorded whether or not the dialog is still open: the re-fold below
+      // reads them.
       _dismissedUntil = until;
       _dismissedSubject = subject;
       _dismissalEdited = true;
-      _wrote = true;
-    });
-    if (!ok) {
-      context.notify.error(
+      // Re-folded from the mod pages when this dialog has them. Opened from a
+      // card badge it never fetches any — the bulk pass answered — so a re-fold
+      // produces null there; stopping on that would leave a successful write
+      // looking like a button that did nothing.
+      //
+      // The fallback re-runs the *fold* rather than flipping the folder's
+      // verdict outright, because with several downloads a dismissal changes
+      // which one wins: waving away the patch's update on a folder whose mod
+      // also has one must leave the mod's finding standing, not mark the folder
+      // dismissed.
+      //
+      // Through the app's container, so a dialog closed while the write ran
+      // still leaves the badge reading what was written.
+      _storeIn(container, _fold() ?? refoldDismissal(folded, subject, dismissed));
+    } else {
+      notify.error(
         loc.t('mods.update.dismiss_failed_title'),
         body: loc.t('mods.update.dismiss_failed',
             params: {'mod': widget.mod.name}),
         characterId: widget.mod.characterId,
       );
-      return;
     }
-    // Re-folded from the mod pages when this dialog has them. Opened from a
-    // card badge it never fetches any — the bulk pass answered — so a re-fold
-    // produces null there, and returning early on that is exactly how a
-    // successful write once looked like a dead button.
-    //
-    // The fallback re-runs the *fold* rather than flipping the folder's verdict
-    // outright, because with several downloads a dismissal changes which one
-    // wins: waving away the patch's update on a folder whose mod also has one
-    // must leave the mod's finding standing, not mark the folder dismissed.
-    _store(_fold() ?? refoldDismissal(folded, subject, dismissed));
+    if (mounted) setState(() => _writing = false);
   }
 
   /// The file the Update button would install.
@@ -621,7 +721,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   GbFile? _fileToInstall(_Section? section) {
     final check = section?.check;
     if (section == null || check == null) return null;
-    if (_chosenFileIdBy[section.modId ?? -1] case final id?) {
+    if (_chosenFileIdBy[section.key] case final id?) {
       for (final file in check.newerFiles) {
         if (file.idRow == id) return file;
       }
@@ -643,19 +743,20 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     // claim this folder is that other mod. With a section in hand the answer is
     // the section's — which is the point of a button per download rather than
     // one shared button that has to work out which mod it means.
-    final subject = section?.subjectModId ?? _stored?.subjectModId;
-    final modId = subject ?? widget.mod.origin?.base?.modId;
+    final subject = section?.key ?? _stored?.subject;
+    final modId = subject?.modId ?? widget.mod.origin?.base?.modId;
     if (modId == null) return;
 
     final route = updateWriteRoute(
       origin: widget.mod.origin,
-      subjectModId: subject,
+      subject: subject,
     );
     // Not redundant with `build`'s guard: that one is a widget condition, this
     // is the call that overwrites a live folder.
     if (route.kind == UpdateWriteKind.none) return;
 
     setState(() => _writing = true);
+    final container = ProviderScope.containerOf(context, listen: false);
     // **What this check found newer than what this mod holds.** A pick below
     // the newest of them records the rest as passed over, and the group needs
     // it to tell a sibling that wants this file from one that has already gone
@@ -665,43 +766,43 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
         (section?.check ?? _stored)?.newerFiles ?? const <GbFile>[];
     // **Base by layout, patch by placement**, and the folder decides which this
     // is rather than the button. See `update_write_route.dart`.
-    final changed = route.kind == UpdateWriteKind.patch
-        ? await applyPatchUpdateFlow(
-            context,
-            ref,
-            mod: widget.mod,
-            remoteModId: modId,
-            file: file,
-            asCompanion: route.asCompanion,
-            published: published,
-          )
-        : await applyUpdateFlow(
-            context,
-            ref,
-            mod: widget.mod,
-            remoteModId: modId,
-            file: file,
-            patchFiles: route.patchFiles,
-            patchModId: route.patchModId,
-            asCompanion: route.asCompanion,
-            flattensPatch: route.flattensPatch,
-            published: published,
-          );
-    if (!mounted) return;
-    setState(() {
-      _writing = false;
-      _wrote = _wrote || changed;
-    });
-    if (!changed) return;
-    // **Not cleared here.** The base write can go into several folders and can
-    // skip this one entirely — the user may untick it in favour of the archive's
-    // other mods — so only the flow knows which marks are stale. The patch path
-    // writes this folder and nothing else, so it clears its own.
-    if (route.kind == UpdateWriteKind.patch) {
-      final notifier = ref.read(modUpdateChecksProvider.notifier);
-      notifier.state = {...notifier.state}..remove(widget.mod.id);
+    final changed = await _writes.track(
+      route.kind == UpdateWriteKind.patch
+          ? _gateway.applyPatchUpdate(
+              context,
+              ref,
+              mod: widget.mod,
+              remoteModId: modId,
+              file: file,
+              asCompanion: route.asCompanion,
+              published: published,
+            )
+          : applyUpdateFlow(
+              context,
+              ref,
+              mod: widget.mod,
+              remoteModId: modId,
+              file: file,
+              patchFiles: route.patchFiles,
+              patchModId: route.patchModId,
+              asCompanion: route.asCompanion,
+              flattensPatch: route.flattensPatch,
+              published: published,
+            ),
+      (changed) => changed,
+    );
+    // **Not cleared here for the base.** The base write can go into several
+    // folders and can skip this one entirely — the user may untick it in favour
+    // of the archive's other mods — so only the flow knows which marks are
+    // stale. The patch path writes this folder and nothing else, so it clears
+    // its own, through the app's container: the dialog may have been closed
+    // while the write ran.
+    if (changed && route.kind == UpdateWriteKind.patch) {
+      forgetUpdateCheck(container, widget.mod.id);
     }
-    if (mounted) Navigator.of(context).pop(true);
+    if (!mounted) return;
+    setState(() => _writing = false);
+    if (changed) Navigator.of(context).pop();
   }
 
   /// Opens this mod's page in the in-app marketplace.
@@ -711,7 +812,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   void _openInMarketplace(int modId) {
     ref.read(marketplaceOpenModProvider.notifier).state = modId;
     ref.read(destinationProvider.notifier).state = AppDestination.browse;
-    Navigator.of(context).pop(_wrote);
+    Navigator.of(context).pop();
   }
 
   @override
@@ -731,7 +832,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     final route = hasFinding
         ? updateWriteRoute(
             origin: widget.mod.origin,
-            subjectModId: check.subjectModId,
+            subject: check.subject,
           )
         : UpdateWriteRoute.refused;
     // **One subject, one action bar.** A folder holding several downloads gives
@@ -748,19 +849,9 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
         ? null
         : _fileToInstall(sole);
 
-    // Tapping the barrier or pressing Escape pops with **null**, which the
-    // caller reads as "nothing was written" — so a dismissal saved and then
-    // closed that way would skip the rescan and leave `ModInfo.origin` stale
-    // until the next one. Intercepting and re-popping with the real result is
-    // the only way to carry it out through a route the user closed rather than
-    // a button we drew.
-    return PopScope<bool>(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        Navigator.of(context).pop(_wrote);
-      },
-      child: AlertDialog(
+    // Every close is a plain pop, Escape and a click outside included: whether anything was written is
+    // `ModUpdateWrites`'s answer, never the route's result.
+    return AlertDialog(
         title: Text(
           loc.t('mods.update.title', params: {'mod': widget.mod.name}),
         ),
@@ -825,7 +916,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
             )
           else
             TextButton(
-              onPressed: () => Navigator.of(context).pop(_wrote),
+              onPressed: () => Navigator.of(context).pop(),
               child: Text(loc.t('mods.update.close')),
             ),
           // The primary action, and the only one that touches the mod folder.
@@ -839,7 +930,6 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
               label: Text(loc.t('mods.update_apply.action')),
             ),
         ],
-      ),
     );
   }
 
@@ -898,6 +988,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
                 // verdict is `untracked` or `trackingOff`, and there is no layer
                 // to attribute it to.
                 download: const ModDownload(),
+                key: null,
                 name: widget.mod.name,
                 check: check,
               )
@@ -939,12 +1030,31 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: Text(
-            section.name,
-            style: Theme.of(context)
-                .textTheme
-                .titleSmall
-                ?.copyWith(fontWeight: FontWeight.w700),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                section.name,
+                style: Theme.of(context)
+                    .textTheme
+                    .titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              // Two layers of one page carry one name, so each names its file,
+              // with the variant text in grey beneath (update-checks §7).
+              if (section.file case final file?) ...[
+                Text(file.name, style: Theme.of(context).textTheme.bodySmall),
+                if (file.detail case final detail?)
+                  Text(
+                    detail,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
+              ],
+            ],
           ),
         ),
         const SizedBox(width: 6),
@@ -1009,26 +1119,21 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   ///
   /// Closes on success for the same reason [_applyUpdate] does: the sections are
   /// built from the block this dialog read when it opened, and one of the layers
-  /// they describe is now gone. The session verdict goes with it — this write
-  /// touches this folder and nothing else, so it is exactly the mark that has
-  /// gone stale.
+  /// they describe is now gone. The flow drops the folder's session verdict.
   Future<void> _removePatch(_Section section) async {
     setState(() => _writing = true);
-    final removed = await removePatchFlow(
-      context,
-      mod: widget.mod,
-      patch: section.download,
-      patchName: section.name,
+    final removed = await _writes.track(
+      removePatchFlow(
+        context,
+        mod: widget.mod,
+        patch: section.download,
+        patchName: layerLine(section.name, section.file),
+      ),
+      (removed) => removed,
     );
     if (!mounted) return;
-    setState(() {
-      _writing = false;
-      _wrote = _wrote || removed;
-    });
-    if (!removed) return;
-    final notifier = ref.read(modUpdateChecksProvider.notifier);
-    notifier.state = {...notifier.state}..remove(widget.mod.id);
-    if (mounted) Navigator.of(context).pop(true);
+    setState(() => _writing = false);
+    if (removed) Navigator.of(context).pop();
   }
 
   List<Widget> _verdict(_Section section, {required bool withActions}) {
@@ -1242,7 +1347,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// must stay reachable.
   List<Widget> _options(_Section section) {
     final check = section.check;
-    final chosen = _chosenFileIdBy[section.modId ?? -1];
+    final chosen = _chosenFileIdBy[section.key];
     final scheme = Theme.of(context).colorScheme;
     return [
       const SizedBox(height: 12),
@@ -1309,11 +1414,14 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// separator.
   List<Widget> _releaseNotes(_Section section) {
     final modId = section.modId;
-    if (modId == null) return const [];
+    final key = section.key;
+    if (modId == null || key == null) return const [];
 
+    // The feed is the page's, so two layers of one page share it; which
+    // accordion is open is each section's own.
     final requested = _notesRequestedFor.contains(modId);
     final loading = _loadingNotesFor.contains(modId);
-    final open = _notesOpenFor.contains(modId);
+    final open = _notesOpenFor.contains(key);
     final since = section.check.comparedAgainst;
     final relevant = [
       for (final update in _updatesByMod[modId] ?? const <GbUpdate>[])
@@ -1347,12 +1455,12 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
                   ? null
                   : () {
                       if (!requested) {
-                        setState(() => _notesOpenFor.add(modId));
+                        setState(() => _notesOpenFor.add(key));
                         unawaited(_loadNotes(modId));
                       } else {
                         setState(() => open
-                            ? _notesOpenFor.remove(modId)
-                            : _notesOpenFor.add(modId));
+                            ? _notesOpenFor.remove(key)
+                            : _notesOpenFor.add(key));
                       }
                     },
               child: Padding(
@@ -1474,12 +1582,12 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       padding: const EdgeInsets.only(bottom: 4),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        // Keyed by mod, so choosing a file for the patch cannot silently become
-        // the choice for the mod it patches.
-        onTap: _busy
+        // Keyed by layer, so choosing a file for the patch cannot silently
+        // become the choice for the mod it patches, even from one page.
+        onTap: _busy || section.key == null
             ? null
             : () => setState(
-                  () => _chosenFileIdBy[section.modId ?? -1] = file.idRow,
+                  () => _chosenFileIdBy[section.key!] = file.idRow,
                 ),
         child: Container(
           padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),

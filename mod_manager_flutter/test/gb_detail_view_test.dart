@@ -493,6 +493,26 @@ void main() {
       expect(isUnassignedCharacterId(character), isTrue, reason: 'not $character');
     });
 
+    testWidgets("a Bangboo category whose name holds an agent's term installs under Unassigned, not that agent", (
+      tester,
+    ) async {
+      await pumpDetail(
+        tester,
+        profile: mod(
+          files: const [GbFile(idRow: 11, file: 'only.zip')],
+          category: const GbCategoryRef(idRow: 30711, name: "Von Lycaon's Bangboo"),
+          superCategory: const GbCategoryRef(idRow: 30702, name: 'Bangboo Skins'),
+        ),
+      );
+      final card = find.byKey(const ValueKey('install_for'));
+      expect(find.descendant(of: card, matching: find.text('No character in the GameBanana category')), findsOneWidget);
+      expect(find.descendant(of: card, matching: find.text('Unassigned')), findsOneWidget);
+      expect(find.descendant(of: card, matching: find.textContaining('Lycaon')), findsNothing);
+      expect(find.text('It becomes a mod under Unassigned.'), findsOneWidget);
+      await tester.tap(find.text('Install 1 file'));
+      expect(queued.single.$2, unknownCharacterId);
+    });
+
     testWidgets('Change offers Unassigned, and picking it on a page with a character puts the job there', (
       tester,
     ) async {

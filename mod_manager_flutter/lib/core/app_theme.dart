@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'button_feedback.dart';
 import 'palette.dart';
 import 'type_scale.dart';
 
@@ -12,10 +13,13 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
   final p = ZenithPalette.forBrightness(brightness, accent);
   final text = appTextGeometry();
 
+  // On paper the primary button's fill can be lime or teal, which can't be read as text, so the scheme's primary,
+  // which older screens use for text and icons, is the readable accent there. The button takes p.primary itself.
+  final light = brightness == Brightness.light;
   final scheme = ColorScheme(
     brightness: brightness,
-    primary: p.primary,
-    onPrimary: p.onPrimary,
+    primary: light ? p.accent : p.primary,
+    onPrimary: light ? p.onAccent : p.onPrimary,
     primaryContainer: p.selected.background,
     onPrimaryContainer: p.selected.foreground,
     secondary: p.accent,
@@ -24,7 +28,8 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
     onSecondaryContainer: Color.lerp(p.accent, p.text, 0.3),
     tertiary: p.blue,
     onTertiary: p.ground,
-    error: p.red,
+    // Older screens use it for text, which on paper takes the darker red that reads.
+    error: light ? p.redText : p.red,
     onError: p.onRed,
     errorContainer: p.badgeMissing.background,
     onErrorContainer: p.badgeMissing.foreground,
@@ -53,37 +58,42 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
 
   // Buttons: 36px tall, 8px corners, 16px icons. The secondary button is the default shape; primary fills with
   // p.primary, ghost drops the fill and the border, danger fills red.
+  //
+  // A button keeps its fill and border in every state. Hover, press and the keyboard focus ring are drawn by
+  // [buttonFeedback], the canvas's `ButtonStates` board, so a call site's own colours and border get them too;
+  // Material's ink stays off.
   const buttonPadding = EdgeInsets.symmetric(horizontal: 14);
   const buttonSize = Size(36, 36);
   const iconSize = WidgetStatePropertyAll(16.0);
   final buttonText = WidgetStatePropertyAll(text.labelLarge);
+  final feedback = buttonFeedback();
+  // Shrinks with the press, so the fill and border do too. Material's own easing of a state change is off: the
+  // press runs on the canvas's timing, and a colour change is instant, as on the canvas.
+  final buttonShape = pressShape(rounded(8));
 
-  WidgetStateProperty<Color?> onHover(Color idle, Color hovered) =>
-      WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.hovered) ? hovered : idle);
   WidgetStateProperty<Color?> disabledOr(Color enabled, Color disabled) =>
       WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.disabled) ? disabled : enabled);
 
-  // Keyboard focus draws a 2px accent ring 2px out from the button, the canvas's `:focus-visible` outline: the gap
-  // keeps it visible around a primary button filled in the accent. A click never focuses a button, so it draws none.
-  // Unfocused, [idle] is the button's own border, and null keeps whatever border a local shape carries.
-  final focusRing = BorderSide(color: p.accent, width: 2, strokeAlign: 3);
-  WidgetStateProperty<BorderSide?> ringOr(BorderSide? idle) => WidgetStateProperty.resolveWith(
-    (states) =>
-        states.contains(WidgetState.focused) && FocusManager.instance.highlightMode == FocusHighlightMode.traditional
-        ? focusRing
-        : idle,
-  );
+  // A ghost or icon button's text goes from text2 to text under the pointer and while pressed.
+  WidgetStateProperty<Color?> quietForeground({bool selectable = false}) => WidgetStateProperty.resolveWith((states) {
+    if (states.contains(WidgetState.disabled)) return p.text3;
+    if (selectable && states.contains(WidgetState.selected)) return p.accent;
+    if (states.contains(WidgetState.hovered) || states.contains(WidgetState.pressed)) return p.text;
+    return p.text2;
+  });
 
   final secondaryButton = ButtonStyle(
     minimumSize: const WidgetStatePropertyAll(buttonSize),
     padding: const WidgetStatePropertyAll(buttonPadding),
     textStyle: buttonText,
     iconSize: iconSize,
-    shape: WidgetStatePropertyAll(rounded(8)),
-    side: ringOr(BorderSide(color: p.control)),
-    backgroundColor: onHover(p.raised, p.hover),
+    shape: buttonShape,
+    animationDuration: Duration.zero,
+    side: WidgetStatePropertyAll(BorderSide(color: p.control)),
+    backgroundColor: WidgetStatePropertyAll(p.raised),
     foregroundColor: disabledOr(p.text, p.text3),
     overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+    backgroundBuilder: feedback,
     elevation: const WidgetStatePropertyAll(0),
   );
 
@@ -92,16 +102,13 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
     padding: const WidgetStatePropertyAll(buttonPadding),
     textStyle: WidgetStatePropertyAll(text.labelLarge!.copyWith(fontWeight: FontWeight.w600)),
     iconSize: iconSize,
-    shape: WidgetStatePropertyAll(rounded(8)),
+    shape: buttonShape,
+    animationDuration: Duration.zero,
     // Disabled is the whole button at 45%, as the design fades it.
-    backgroundColor: WidgetStateProperty.resolveWith((states) {
-      if (states.contains(WidgetState.disabled)) return p.primary.withValues(alpha: 0.45);
-      if (states.contains(WidgetState.hovered)) return primaryHover(p);
-      return p.primary;
-    }),
+    backgroundColor: disabledOr(p.primary, p.primary.withValues(alpha: 0.45)),
     foregroundColor: disabledOr(p.onPrimary, p.onPrimary.withValues(alpha: 0.45)),
-    side: ringOr(null),
     overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+    backgroundBuilder: feedback,
     elevation: const WidgetStatePropertyAll(0),
   );
 
@@ -110,15 +117,12 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
     padding: const WidgetStatePropertyAll(buttonPadding),
     textStyle: buttonText,
     iconSize: iconSize,
-    shape: WidgetStatePropertyAll(rounded(8)),
-    backgroundColor: onHover(Colors.transparent, p.raised),
-    foregroundColor: WidgetStateProperty.resolveWith((states) {
-      if (states.contains(WidgetState.disabled)) return p.text3;
-      if (states.contains(WidgetState.hovered)) return p.text;
-      return p.text2;
-    }),
-    side: ringOr(null),
+    shape: buttonShape,
+    animationDuration: Duration.zero,
+    backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
+    foregroundColor: quietForeground(),
     overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+    backgroundBuilder: feedback,
   );
 
   OutlineInputBorder fieldBorder(Color color) =>
@@ -163,16 +167,12 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
       style: ButtonStyle(
         minimumSize: const WidgetStatePropertyAll(buttonSize),
         iconSize: iconSize,
-        shape: WidgetStatePropertyAll(rounded(8)),
-        backgroundColor: onHover(Colors.transparent, p.raised),
-        foregroundColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.disabled)) return p.text3;
-          if (states.contains(WidgetState.selected)) return p.accent;
-          if (states.contains(WidgetState.hovered)) return p.text;
-          return p.text2;
-        }),
-        side: ringOr(null),
+        shape: buttonShape,
+        animationDuration: Duration.zero,
+        backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
+        foregroundColor: quietForeground(selectable: true),
         overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+        backgroundBuilder: feedback,
       ),
     ),
     iconTheme: IconThemeData(color: p.text2, size: 16),
@@ -258,7 +258,14 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
         foregroundColor: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.selected) ? p.text : p.text2,
         ),
-        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+        // A segment takes no background builder (SegmentedButton passes its segments only some of the style), so
+        // its hover and press are Material's highlights in the buttons' colours. Ink asks for each highlight with its
+        // own state alone and paints the pressed one over the hover one, so the press is set to make 16% together.
+        overlayColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.pressed)) return p.text2.withValues(alpha: 1 - 0.84 / 0.92);
+          if (states.contains(WidgetState.hovered)) return p.text2.withValues(alpha: ButtonFeedback.hoverOpacity);
+          return Colors.transparent;
+        }),
       ),
     ),
     tabBarTheme: TabBarThemeData(
@@ -337,12 +344,4 @@ ThemeData buildAppTheme({required Brightness brightness, required AccentChoice a
   );
 
   return withAppTypeScale(base);
-}
-
-/// The primary button under the pointer: the design's `brightness(1.08)`. Scaling ink's channels leaves it ink, so
-/// on paper the button is lifted toward white instead.
-Color primaryHover(ZenithPalette p) {
-  if (p.brightness == Brightness.light) return Color.lerp(p.primary, Colors.white, 0.14)!;
-  double up(double channel) => (channel * 1.08).clamp(0.0, 1.0);
-  return Color.from(alpha: p.primary.a, red: up(p.primary.r), green: up(p.primary.g), blue: up(p.primary.b));
 }

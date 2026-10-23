@@ -73,14 +73,18 @@ class InstalledModsIndex {
       //
       // Inside the `tracking: "off"` guard on purpose — the switch is about the
       // folder, which is exactly why no layer carries one of its own.
+      //
+      // **Once per folder per key**: a page can be a folder's base and a patch
+      // on it at once, and that is still one folder holding that page.
+      void add<K>(Map<K, List<String>> index, K key) {
+        final folders = index.putIfAbsent(key, () => <String>[]);
+        if (!folders.contains(mod.id)) folders.add(mod.id);
+      }
+
       if (origin.tracking != OriginTracking.off) {
         for (final download in origin.downloads) {
-          if (download.modId case final modId?) {
-            byModId.putIfAbsent(modId, () => <String>[]).add(mod.id);
-          }
-          if (download.fileId case final fileId?) {
-            byFileId.putIfAbsent(fileId, () => <String>[]).add(mod.id);
-          }
+          if (download.modId case final modId?) add(byModId, modId);
+          if (download.fileId case final fileId?) add(byFileId, fileId);
         }
       }
 
@@ -89,7 +93,7 @@ class InstalledModsIndex {
       // user can pick again from the same file list.
       for (final download in origin.downloads) {
         if (normalizeArchiveMd5(download.archiveMd5) case final md5?) {
-          byArchiveMd5.putIfAbsent(md5, () => <String>[]).add(mod.id);
+          add(byArchiveMd5, md5);
         }
       }
     }

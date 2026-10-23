@@ -174,6 +174,39 @@ void main() {
       expect(plan.skipped['mine']?.outcome, UpdateOutcome.trackingOff);
     });
 
+    test('a page that is the base and a patch is asked once', () async {
+      // A lone fix file on the base's own page: one id, two layers, one request.
+      final asked = <int>[];
+      final plan = planBulkUpdateCheck([
+        mod(
+          'EllenFix',
+          origin: origin(modId: 111, fileId: 10, patches: [
+            patchFixture(modId: 111, modIdConfidence: OriginConfidence.exact, fileId: 20),
+          ]),
+        ),
+      ]);
+      final outcome = await runBulkUpdateCheck(
+        plan: plan,
+        fetch: (ids) async {
+          asked.addAll(ids);
+          return [
+            GbMod(idRow: 111, files: [
+              GbFile(idRow: 10, dateAdded: DateTime.utc(2026, 1)),
+              GbFile(idRow: 20, dateAdded: DateTime.utc(2026, 2)),
+            ]),
+          ];
+        },
+      );
+
+      expect(asked, [111]);
+      expect(outcome.requests, 1);
+      expect(plan.byModId[111], hasLength(1), reason: 'the folder is listed once under its page');
+      final check = outcome.checks['EllenFix']!;
+      expect(check.layers, hasLength(2));
+      expect(check.outcome, UpdateOutcome.upToDate,
+          reason: "the base is not flagged by the patch's own installed file");
+    });
+
     test('a finding on the other mod reaches the folder', () async {
       final outcome = await runBulkUpdateCheck(
         plan: planBulkUpdateCheck([

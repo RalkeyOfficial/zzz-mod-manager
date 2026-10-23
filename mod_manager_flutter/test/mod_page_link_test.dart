@@ -86,7 +86,7 @@ void main() {
             onOpenFolder: () {},
             onCheckForUpdate: () {},
             onResolveOrigin: () {},
-            onDelete: () {},
+            onDelete: (_) async {},
             noteWriter: (_, _) async => true,
           ),
         ),

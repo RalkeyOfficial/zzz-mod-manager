@@ -76,7 +76,19 @@ class RemoteModMetadata {
   /// actually files the mod, picked from a list, and it maps cleanly: all 60
   /// children of Character Skins resolve to a roster id, while none of the 4 root
   /// categories and none of the 22 Bangboo categories falsely match one.
+  ///
+  /// Only for a name known to be a Character Skins child: a mod's agent goes through [characterIdForMod].
   static String? characterIdForCategory(String? name) => storedCharacterId(detectCharacterId(name ?? ''));
+
+  /// The roster id of the agent [mod] is filed under, or null.
+  ///
+  /// The type first: only a Character Skins mod is an agent's. A Bangboo, UI or Other/Misc child category whose name
+  /// holds an agent's term is that type, never the agent, so it maps to nothing and installs under Unassigned, and so
+  /// does a record that names no type.
+  static String? characterIdForMod(GbMod mod) {
+    if (mod.typeCategoryId != kCharacterSkinsCategoryId) return null;
+    return characterIdForCategory(mod.displayCategory?.name);
+  }
 
   /// Reads everything useful out of a mod profile.
   ///
@@ -92,9 +104,7 @@ class RemoteModMetadata {
         for (final tag in mod.tags)
           if (!_isCreditTag(tag)) tag,
       ],
-      // `displayCategory` is most-specific-first, so this works on a listing
-      // record (`_aSubCategory`) as well as a profile (`_aCategory`).
-      characterId: characterIdForCategory(mod.displayCategory?.name),
+      characterId: characterIdForMod(mod),
       imageUrls: [
         for (final image in mod.images.take(maxImages))
           // Full size rather than a ladder rung. Measured: 112 of 132 captured

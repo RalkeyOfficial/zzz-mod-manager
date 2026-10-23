@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/core/button_working.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/mod_download.dart';
@@ -157,7 +158,7 @@ void main() {
       newerFiles: [
         GbFile(idRow: 11, file: 'Swimsuit_v2.zip', dateAdded: DateTime.utc(2026, 10, 3), description: 'hood up'),
       ],
-      subjectModId: 1,
+      subject: DownloadKey.base(1),
     );
 
     testWidgets('a row shows the file you have and the newer one', (tester) async {
@@ -179,7 +180,7 @@ void main() {
         outcome: UpdateOutcome.possiblyOutdated,
         comparedAgainst: added,
         newerFiles: [GbFile(idRow: 11, file: 'new.zip', dateAdded: DateTime.utc(2026, 10, 3))],
-        subjectModId: 1,
+        subject: DownloadKey.base(1),
       );
       await pumpPage(tester, [mod('Coat', tracked(OriginConfidence.assumedLatest))], checks: {'Coat': dated});
 
@@ -218,7 +219,7 @@ void main() {
       const undated = UpdateCheck(
         outcome: UpdateOutcome.updateAvailable,
         newerFiles: [GbFile(idRow: 11, file: 'new.zip')],
-        subjectModId: 1,
+        subject: DownloadKey.base(1),
       );
       await pumpPage(tester, [mod('Swimsuit', tracked(OriginConfidence.exact))], checks: {'Swimsuit': undated});
 
@@ -231,7 +232,7 @@ void main() {
         outcome: UpdateOutcome.possiblyOutdated,
         comparedAgainst: added,
         newerFiles: [GbFile(idRow: 11, file: 'new.zip', dateAdded: DateTime.utc(2026, 10))],
-        subjectModId: 1,
+        subject: DownloadKey.base(1),
       );
       await pumpPage(tester, [mod('Coat', tracked(OriginConfidence.user))], checks: {'Coat': byDate});
 
@@ -246,7 +247,7 @@ void main() {
         evidence: InstalledFileEvidence.recorded,
         installedFile: GbFile(idRow: 10, file: 'Coat_v1.zip', dateAdded: DateTime.utc(2026, 8, 12)),
         comparedAgainst: DateTime.utc(2026, 8, 12),
-        subjectModId: 1,
+        subject: DownloadKey.base(1),
       );
       await pumpPage(tester, [mod('Coat', tracked(OriginConfidence.exact))], checks: {'Coat': grouped});
 
@@ -255,7 +256,7 @@ void main() {
     });
 
     testWidgets('a dated mod whose page changed with no newer file says so, and quotes no upload date', (tester) async {
-      final changed = UpdateCheck(outcome: UpdateOutcome.possiblyOutdated, comparedAgainst: added, subjectModId: 1);
+      final changed = UpdateCheck(outcome: UpdateOutcome.possiblyOutdated, comparedAgainst: added, subject: DownloadKey.base(1));
       await pumpPage(tester, [mod('Coat', tracked(OriginConfidence.assumedLatest))], checks: {'Coat': changed});
 
       expect(find.text('Its page changed'), findsOneWidget);
@@ -272,7 +273,7 @@ void main() {
           GbFile(idRow: 11, file: 'a.zip', dateAdded: DateTime.utc(2026, 9)),
           GbFile(idRow: 12, file: 'b.zip', dateAdded: DateTime.utc(2026, 10)),
         ],
-        subjectModId: 1,
+        subject: DownloadKey.base(1),
       );
       await pumpPage(tester, [mod('Coat', tracked(OriginConfidence.exact))], checks: {'Coat': gone});
 
@@ -286,7 +287,7 @@ void main() {
     final update = UpdateCheck(
       outcome: UpdateOutcome.updateAvailable,
       newerFiles: [GbFile(idRow: 11, file: 'new.zip', dateAdded: DateTime.utc(2026, 10))],
-      subjectModId: 1,
+      subject: DownloadKey.base(1),
     );
     await pumpPage(
       tester,
@@ -310,10 +311,13 @@ void main() {
 
     container.read(libraryCheckRunningProvider.notifier).state = true;
     await tester.pump();
-    expect(pressed<OutlinedButton>('Check all for updates'), isNull);
     expect(pressed<TextButton>('Pick the files one by one'), isNull);
     expect(pressed<OutlinedButton>('Sort out tracking…'), isNull);
+    // Neither started this check, so both are off rather than showing it as their own work.
+    expect(pressed<OutlinedButton>('Check all for updates'), isNull);
     expect(pressed<FilledButton>('Check them now'), isNull);
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byType(ZenithSpinner), findsNothing);
     // The check leaves the verdicts of folders written while it runs as they are.
     expect(pressed<TextButton>('Ignore'), isNotNull);
     expect(pressed<TextButton>('Undo'), isNotNull);
@@ -359,7 +363,7 @@ void main() {
 
       final picked = disk['b']!.copyBase(fileId: 10, versionConfidence: OriginConfidence.user);
       disk['b'] = picked;
-      const answer = UpdateCheck(outcome: UpdateOutcome.upToDate, subjectModId: 1);
+      const answer = UpdateCheck(outcome: UpdateOutcome.upToDate, subject: DownloadKey.base(1));
       container.read(modUpdateChecksProvider.notifier).state = {'a': answer, 'b': answer};
       await tapWithIo(tester, find.text('Undo'));
       await tester.pumpAndSettle();
@@ -432,10 +436,12 @@ void main() {
       final folder = foldDownloads([
         DownloadCheck(
           download: const ModDownload(modId: 1),
+          key: const DownloadKey.base(1),
           check: UpdateCheck(outcome: UpdateOutcome.possiblyOutdated, comparedAgainst: added),
         ),
         DownloadCheck(
           download: const ModDownload(role: DownloadRole.patch, modId: 2),
+          key: const DownloadKey.patch(2),
           check: const UpdateCheck(outcome: UpdateOutcome.updateAvailable),
         ),
       ]);
@@ -452,17 +458,19 @@ void main() {
         reason: "the base's check by date went with the date",
       );
       // Ignoring the patch's update now leaves nothing about the base to bring back.
-      expect(refoldDismissal(kept, 2, true).hasUpdate, isFalse);
+      expect(refoldDismissal(kept, const DownloadKey.patch(2), true).hasUpdate, isFalse);
     });
 
     test("the base's verdict is the bottom layer's", () {
       final folder = foldDownloads([
         DownloadCheck(
           download: const ModDownload(modId: 1),
+          key: const DownloadKey.base(1),
           check: UpdateCheck(outcome: UpdateOutcome.upToDate, comparedAgainst: added),
         ),
         DownloadCheck(
           download: const ModDownload(role: DownloadRole.patch, modId: 2),
+          key: const DownloadKey.patch(2),
           check: const UpdateCheck(outcome: UpdateOutcome.updateAvailable),
         ),
       ]);
@@ -475,9 +483,14 @@ void main() {
 
     test('a base page found gone keeps saying so', () {
       final folder = foldDownloads([
-        DownloadCheck(download: const ModDownload(modId: 1), check: const UpdateCheck(outcome: UpdateOutcome.sourceGone)),
+        DownloadCheck(
+          download: const ModDownload(modId: 1),
+          key: const DownloadKey.base(1),
+          check: const UpdateCheck(outcome: UpdateOutcome.sourceGone),
+        ),
         DownloadCheck(
           download: const ModDownload(role: DownloadRole.patch, modId: 2),
+          key: const DownloadKey.patch(2),
           check: const UpdateCheck(outcome: UpdateOutcome.upToDate),
         ),
       ]);

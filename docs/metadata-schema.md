@@ -292,8 +292,8 @@ re-downloaded because a patch's mod page can be gone by the time the base update
 
 **Per download, on the layer that wrote it.** One flat list on the folder cannot
 say whose a file is, and a folder can legitimately hold two patches — which is
-why `withLayerOnTop` deduplicates by mod id. Without the attribution, only
-"remove every patch" is expressible.
+why `withLayerOnTop` deduplicates by mod id among the patches, never touching the base, whose page can be a patch's too ([`origin-tracking.md`](origin-tracking.md#two-layers-of-one-page)).
+Without the attribution, only "remove every patch" is expressible.
 
 Three fields, and each earns its place:
 

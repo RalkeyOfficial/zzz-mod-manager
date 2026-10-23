@@ -248,6 +248,12 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
   /// chip naming what put it there, so "on record" and "our best guess" cannot
   /// be mistaken for one another — which is the real ambiguity, not the
   /// selection itself.
+  /// The files the patches on the base record, which the base's file picker greys and never selects.
+  Set<int> get _heldFileIds => {
+        for (final patch in _origin?.patches ?? const <ModDownload>[])
+          if (patch.fileId case final id?) id,
+      };
+
   void _applyDefaultSelection() {
     if (_summary.fileId case final recorded?) {
       for (final candidate in _resolution.candidates) {
@@ -262,7 +268,9 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
       }
     }
     final preselected = _resolution.preselected;
-    if (preselected == null) return;
+    // Never a file a patch on the base records, even as the page's only file: the panel greys it, and Save would
+    // write it on the base too.
+    if (preselected == null || _heldFileIds.contains(preselected.file.idRow)) return;
     setState(() {
       _selectedFile = preselected.file;
       _selectionIsExact = preselected.isExact;
@@ -646,10 +654,12 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
         },
         lookUpNames: true,
         rowActions: {
-          if (wasPatchShaped)
-            if (origin.base?.modId case final id?) id: FolderRowAction.change,
-          for (final patch in origin.patches)
-            if (patch.modId case final id?) id: FolderRowAction.remove,
+          for (var i = 0; i < origin.downloads.length; i++)
+            if (origin.keyAt(i) case final key?)
+              if (i > 0)
+                key: FolderRowAction.remove
+              else if (wasPatchShaped)
+                key: FolderRowAction.change,
         },
         onEdit: _actOnLayer,
       ),
@@ -657,14 +667,15 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     ];
   }
 
-  /// Routes a row to the flow for **that** layer, matched by mod id.
+  /// Routes a row to the flow for **that** layer, matched by its key.
   ///
-  /// The id is what the row displays and links to, so it is the only thing that
-  /// cannot act on a different download than the one pressed.
+  /// The key names the layer itself, where a mod id alone would match both
+  /// layers of a page that is the base and a patch at once.
   void _actOnLayer(ModDownload download) {
     final origin = _origin;
-    if (origin == null || download.modId == null) return;
-    if (download.modId == origin.base?.modId) {
+    final key = origin?.keyOf(download);
+    if (key == null) return;
+    if (key.role == DownloadRole.base) {
       _nameTheBase();
     } else {
       _takeOutPatch(download);
@@ -690,7 +701,7 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
       context,
       mod: widget.mod,
       patch: patch,
-      patchName: _layerName(patch.modId!),
+      patchName: _layerName(patch),
     );
     if (!changed || !mounted) return;
     // The block this dialog is holding has just been rewritten under it, and
@@ -745,10 +756,14 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     final outcome = await showCompanionResolveDialog(
       context,
       modName: widget.mod.name,
-      // What the folder's own download is, so the step can refuse naming it as
-      // its own base. Null once a base is on file: the bottom layer is then the
-      // base itself, and refusing it would refuse re-confirming the answer.
-      primaryModId: named == null ? _modId : null,
+      // The files the folder's other layers record, so none is named as the one
+      // under them. A page is never refused: the patch's own page can be its
+      // base. The base on file is left out, as it is the layer this answer
+      // replaces.
+      heldFileIds: {
+        for (var i = named == null ? 0 : 1; i < origin.downloads.length; i++)
+          if (origin.downloads[i].fileId case final id?) id,
+      },
       existing: named,
     );
     if (outcome == null || !mounted) return;
@@ -776,13 +791,15 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     });
   }
 
-  /// The best name this dialog can put on a layer, without fetching one.
-  String _layerName(int modId) => switch (_origin?.downloadOf(modId)) {
-        final layer? => downloadName(loc, layer,
-            folderName: widget.mod.name,
-            fetched: ref.read(knownModPagesProvider)[modId]?.name),
-        null => loc.t('mods.folder.unnamed', params: {'id': '$modId'}),
-      };
+  /// The best name this dialog can put on a layer, without fetching one, on one
+  /// line: `<page> · <file>` where another layer shares its page.
+  String _layerName(ModDownload layer) {
+    final page = ref.read(knownModPagesProvider)[layer.modId];
+    return layerLine(
+      downloadName(loc, layer, folderName: widget.mod.name, fetched: page?.name),
+      sharedPageFile(_origin, layer, page: page),
+    );
+  }
 
   /// The title of [modId]'s page, when this dialog holds that page.
   String? _pageName(int modId) =>
@@ -929,6 +946,9 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
       resolution: _resolution,
       heading: loc.t('mods.resolve.file_heading'),
       recordedFileId: _summary.fileId,
+      // This step answers for the base, so a file a patch on it records is
+      // already in the folder: the patch's own page is offered, its file is not.
+      heldFileIds: _heldFileIds,
       selectedFileId: _selectedFile?.idRow,
       onSelected: (file, isExact) => setState(() {
         _selectedFile = file;

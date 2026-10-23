@@ -146,6 +146,29 @@ void main() {
       }
     }, skip: _sevenZip == null ? '7z not installed' : null);
 
+    test('a listing taken without one is reused, except where it said nothing: encrypted headers are listed again',
+        () async {
+      final contents = contents7z();
+      final contentsListing = await ArchiveService.listArchive(contents);
+      expect(contentsListing.needsPassword, isTrue);
+      final unpacked =
+          await ArchiveService.extractArchive(archiveFile: contents, password: _password, listing: contentsListing);
+      expect(unpacked.success, isTrue, reason: unpacked.error);
+      await ArchiveService.deleteExtraction(unpacked.extractedFolders!);
+
+      // Without the password the listing has no size, so only a listing taken again with it can refuse for space.
+      final headers = headers7z();
+      final headersListing = await ArchiveService.listArchive(headers);
+      expect(headersListing.needsPassword, isTrue);
+      final refused = await ArchiveService.extractArchive(
+        archiveFile: headers,
+        password: _password,
+        listing: headersListing,
+        freeSpace: (_) async => 1,
+      );
+      expect(refused.failure, ExtractFailure.insufficientSpace);
+    }, skip: _sevenZip == null ? '7z not installed' : null);
+
     test('without one, an encrypted 7z is caught by the unpack too, as the backstop', () async {
       final result = await ArchiveService.extractArchive(archiveFile: contents7z());
       expect(result.failure, ExtractFailure.passwordRequired);

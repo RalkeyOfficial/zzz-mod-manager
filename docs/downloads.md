@@ -196,6 +196,10 @@ A refusal writes nothing, keeps the archive, and names both figures — the arch
 is the way out, so an install that could not unpack is retried by clearing space
 rather than by downloading again.
 
+**An unpack that fails deletes the `zzz_archive_extract_*` directory it made**, whatever it failed at: the space check, a password, the unpack itself, an archive with no mod folder in it, or an error.
+A destination the caller passed in is the caller's and is left alone.
+On success the directory is handed to the caller (`ArchiveExtractionResult.extractionRoot`), which deletes the whole of it once done with the folders, never the parent of a folder: an archive laid out like ZZMI's folder comes out as `Mods/<mod>`, a level below it.
+
 ### The copy into the library
 
 The third write, on a third volume, and the only one on the user's own mod disk.
@@ -299,6 +303,9 @@ disk. Owning it there is safe only behind a modal dialog that makes walking away
 impossible, and removing that barrier is the whole point of a queue. It must also sit **below** the `Navigator`, unlike
 `NotificationHost`, because `showDialog` needs one as an ancestor.
 
+**An install that ends settles its job whether or not the host is still mounted**, through the app's container rather than the host's own `ref`: the queue outlives the widget, and a job left `installing` would hold the install slot and the Storage reclaim's gate for good.
+Only what needs the host is skipped once it is gone, Turn on after installing and the result's card, so new mods stay installed and off.
+
 **One install at a time.** Installing runs `7z` and writes into the mods folder through a service held as a singleton, and two of those interleaving would race on both. An install that needs an answer does not hold the slot while it waits for one (§10). Turn on after installing is part of the install, so the slot stays held while it waits for a running bulk action of the All mods table to end ([`marketplace.md`](marketplace.md) §5).
 
 ### The filename, and why it must not reach the mod
@@ -367,8 +374,7 @@ dialog after the first.
 knows which queue job Cancel belongs to; only the caller knows when its question
 is ready. So `downloadFileWithProgress` hands its closer to a `ProgressHold`
 rather than using it, and the caller releases it immediately before the next
-thing the user sees. Without a hold the download closes its own modal, which is
-what the marketplace's own use wants — nothing follows the transfer there.
+thing the user sees. Without a hold the download closes its own modal, for a caller where nothing follows the transfer.
 
 **The preparing phase is not cancellable, and the button goes rather than being
 disabled.** Unpacking cannot be stopped half way and leave anything usable, and
@@ -453,14 +459,15 @@ The install (`dialogs/install_archive_flow.dart`) is three parts, and only the m
   - Rejected: keeping the archive and unpacking again at the answer. Extraction is the slow step and scales with the archive (1.24 GB at the tail), so the user would wait in front of a window at the moment they chose to act.
 - **The temp folder goes when the job ends**: at Don't install, at a Cancel of an answered job still waiting for the slot, and at the end of the finish, once the import and the patch writes have read it, as the drop's import deletes its own.
   `ArchiveService.deleteExtraction` walks up from the folders to the nearest `zzz_archive_extract_*` directory and deletes that, so an archive laid out as `Mods/<mod>` leaves no empty `Mods` behind.
-- **The Storage reclaim refuses the temp extractions while a job waits or installs**: a waiting one with a skip reason of its own ("a download is waiting for your answer in Downloads"), an installing one as any install in progress. A waiting job's folder can be older than that target's one-hour grace, and so can the folder the finish is copying from after a long wait. The archive and partial targets need nothing more: a waiting job is not terminal, so `downloadsBusy` already closes their gate.
+- **The Storage reclaim refuses the temp extractions while a job waits, installs or updates**: a waiting one with a skip reason of its own ("a download is waiting for your answer in Downloads"), an installing or updating one as any install in progress, since an update holds its unpack while it asks and writes. A waiting job's folder can be older than that target's one-hour grace, and so can the folder the finish is copying from after a long wait. The archive and partial targets need nothing more: a waiting job is not terminal, so `downloadsBusy` already closes their gate.
 - **App exit loses a waiting job with its answers**, since the queue is not persisted; the download is asked for again from Browse. Nothing runs at close, which stays instant, as the log flush is bounded for the same reason. A password wait's archive goes at the next launch's sweep (§8). An unpacked folder is left to the reclaim's temp extractions, which take it once it is an hour old, and on a tmpfs a reboot takes it first. There is no "close anyway?" question: closing with a download waiting is the user's own doing.
 
 ### The drop asks directly
 
 A drag-and-drop or paste import (`_importModsFromFolders` in `mods_screen.dart`) asks its questions as dialogs: the user is at the screen, has just dropped, and the import's own window follows. A dismissed dialog ends the import, since there is no row to come back to.
 It shares the import selection dialog, the patch prompt and the password dialog with the rows. The already-installed question is the one it words on its own, as a dialog that ends "Install it again anyway?" (`confirmArchiveNotDuplicate`), where the row's sentence is the statement alone and its buttons the question.
-It asks for passwords too: every dropped archive is listed before any is unpacked, so every password is asked up front, the locked ones one at a time, and then all are unpacked under the Working card. A password that did not open its archive asks again during the unpack. A dropped archive has no mod page, so its dialog has no Open mod page.
+It asks for passwords too: every dropped archive is listed before any is unpacked, so every password is asked up front, the locked ones one at a time, and then all are unpacked under the Working card.
+Each listing goes on to its unpack (`ArchiveService.listArchive`, then `extractArchive(listing:)`), so an archive is listed once per drop; only one whose listing said nothing is listed again with its password: encrypted headers, a failed or timed-out listing, or no 7-Zip. A password that did not open its archive asks again during the unpack. A dropped archive has no mod page, so its dialog has no Open mod page.
 A drop whose every password was declined shows no Unpacking card and no "Nothing to import": the user said no, and nothing else happened.
 
 The update flows (`applyUpdateFlow`, `applyPatchUpdateFlow`) ask for a password the same way, over their own window, and again after one that did not open the archive: an update is a conversation the user is in. Don't install there ends the update, and so does Open mod page, which then closes every window over the pages, the update's own and the Downloads panel included, and opens the page in Browse.
@@ -557,7 +564,8 @@ The header has "Downloads", Clear finished while the Finished group has a row, a
 
 **Four groups, in this order, each left out when empty**: Needs your attention with its count, In progress, Waiting, Finished. The first three are in queue order and Finished is newest first. A paused download stays in In progress where it was, so Resume comes up under the pointer that pressed Pause, and so does a resumed one while it waits for a slot, its line "Waiting for a free slot · 133 MB of 214 MB" and its bar still dimmed.
 
-A row leads with a 56×42 thumbnail: the mod page's first preview, on the character's element tile while it loads or where there is none, the misc tile for a category or Unknown. A preview the content filter would hide is blurred instead, since the user asked for this download. A waiting row is amber and leads with its question's icon on an amber tile instead: a link for a patch, a folder, a lock, and two overlapping squares for an identical archive. Then the name, a line, and the controls.
+A row leads with a 56×42 thumbnail: the mod page's first preview, on the character's element tile while it loads or where there is none, the misc tile for a category or Unknown. A preview the content filter would hide is blurred instead, since the user asked for this download. A waiting row is amber and leads with its question's icon on an amber tile instead: a link for a patch, a folder, a lock, and two overlapping squares for an identical archive. Then the name, the file, a line, and the controls.
+The file is which file of the mod page the row is: its name in mono, and the author's variant text in quotes beside it in grey, as the mod page's file list words it (`fileDisplayName`, `fileDisplayDetail`), on every row. Two files of one mod read the same by name alone, "Victorian Ballgown" twice, so it is what tells them apart; a long file name gives way before the variant text does.
 
 | State | Group | The line | Controls |
 |---|---|---|---|

@@ -328,8 +328,12 @@ void main() {
       );
       final layers = stacked.origin!.downloads;
       final folded = foldDownloads([
-        DownloadCheck(download: layers[0], check: verdict(UpdateOutcome.updateAvailable, dismissed: true)),
-        DownloadCheck(download: layers[1], check: verdict(UpdateOutcome.indeterminate)),
+        DownloadCheck(
+          download: layers[0],
+          key: stacked.origin!.keyAt(0),
+          check: verdict(UpdateOutcome.updateAvailable, dismissed: true),
+        ),
+        DownloadCheck(download: layers[1], key: stacked.origin!.keyAt(1), check: verdict(UpdateOutcome.indeterminate)),
       ]);
       expect(updatesCellOf(stacked, folded), UpdatesCell.couldntCheck);
     });

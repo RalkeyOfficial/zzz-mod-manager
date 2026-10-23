@@ -35,6 +35,9 @@ class RecordingService extends ModManagerService {
   /// Whether a write to a mod's origin throws, as a sidecar on a read-only disk does.
   bool failOriginWrites = false;
 
+  /// While set, a write to a mod's origin waits for it.
+  Completer<void>? holdOriginWrites;
+
   /// Puts this in `ApiService` in place of the library's own service.
   void install() => ApiService.useLibraryForTests(temp.config, service: this);
 
@@ -56,8 +59,9 @@ class RecordingService extends ModManagerService {
   }
 
   @override
-  Future<OriginWriteResult> updateModOrigin(String modName, ModOrigin? Function(ModOrigin? current) update) {
+  Future<OriginWriteResult> updateModOrigin(String modName, ModOrigin? Function(ModOrigin? current) update) async {
     if (failOriginWrites) throw StateError('origin write refused');
+    await holdOriginWrites?.future;
     return super.updateModOrigin(modName, update);
   }
 }

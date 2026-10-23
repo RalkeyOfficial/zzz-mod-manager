@@ -761,6 +761,20 @@ class _BulkResolutionDialogState extends State<BulkResolutionDialog> {
                       style: theme.textTheme.bodySmall,
                     ),
                   ),
+                // Another layer's file, a patch from this page: greyed, never
+                // the base's answer.
+                for (final file in row.heldFiles)
+                  DropdownMenuItem<int>(
+                    value: file.idRow,
+                    enabled: false,
+                    child: Text(
+                      '${fileDisplayName(file)} · ${loc.t('mods.resolve.file_in_folder')}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: scheme.onSurface.withValues(alpha: 0.38)),
+                    ),
+                  ),
               ],
               onChanged: (id) => setState(() {
                 final candidate = row.candidates

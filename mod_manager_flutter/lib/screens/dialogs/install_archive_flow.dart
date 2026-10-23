@@ -361,6 +361,7 @@ Future<InstallAnswer> answerInstallQuestion(
         combined: plan.combine,
         modsPath: modsPath,
         patchModId: job.mod?.idRow,
+        patchFileId: job.file.idRow,
         // What the author says this needs. For a patch that is sometimes the mod being patched, and where the
         // library holds it, it leads the destinations with the author's own words on it.
         patchRequirements: job.mod?.requirements ?? const <GbRequirement>[],
@@ -543,6 +544,7 @@ Future<InstallResult> _finish(BuildContext context, WidgetRef ref, DownloadJob j
       ),
       amend: modManager.updateModOrigin,
       onPatched: modManager.invalidateKeybinds,
+      onPatchedInto: (modId) => forgetUpdateCheck(container, modId),
       whileWriting: (modId, write) => whileWritingMod(container, modId, write),
       // Naming what a patch patches is an instruction to install that mod into the folder, not just a note about
       // it. Its download keeps its window, since the user asked for it in the answer a moment before.

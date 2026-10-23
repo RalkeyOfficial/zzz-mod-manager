@@ -100,8 +100,7 @@ requested and then given an answer that ignores the response.
 
 A mixed folder is checked against two mod pages ([`origin-tracking.md` §10](origin-tracking.md#10-a-folder-that-holds-two-downloads)), and the card has one slot, `modUpdateChecksProvider` is keyed by folder, and the Updates chips count one number per folder. So `checkForUpdate` **folds** rather than fanning out.
 
-**The top-level fields describe whichever layer won**, and `subjectModId` names it
-by its own id. This is load-bearing: every consumer reads `candidate` and
+**The top-level fields describe whichever layer won**, and `subject` names it by its key, its page and its place (`DownloadKey`, [`origin-tracking.md`](origin-tracking.md#two-layers-of-one-page)): a page can be a folder's base and a patch on it at once, and its id alone would name both. This is load-bearing: every consumer reads `candidate` and
 `newerFiles`, and `dismissableUpTo` is computed from the latter — a verdict folded
 from one layer sitting on another's file list would illustrate one mod's finding
 with another's files, and would write a dismissal cutoff from the wrong mod's
@@ -128,6 +127,10 @@ The fold applies the file's existing asymmetry across layers — the most action
 - **`tracking: "off"` short-circuits before any of it.** No layer is consulted,
   which is the folder-level switch doing its job.
 
+**A page that is a folder's base and a patch on it is asked once**, and each layer compares its own file against it.
+Two kinds of file are dropped from a layer's candidates first, both statements of fact rather than guesses: a file another layer of the folder records, because it is installed; and a file carrying another same-page layer's variant label and not this layer's, because the author named it that layer's.
+Any other newer file is listed under both layers, which is the safe direction. Without the first rule a base and its own page's fix flag each other, since the fix is usually the newer upload.
+
 `tracksPatchOnly` is therefore produced only while `ingest.patch_shaped` is set
 *and* nothing is recorded under the folder's own download. Naming what it patches
 retires it, per folder.
@@ -149,7 +152,7 @@ Two guards enforce that, because the first is a widget condition a later edit co
 stop satisfying and the second is the call that touches a live folder.
 
 The file is recorded **against the layer that was written**, and against no other:
-`withDownloadUpdatedTo` amends that one by mod id and leaves its position alone,
+`withDownloadUpdatedTo` amends that one by its key and leaves its position alone,
 reaching `exact` on the same grounds any layer does — we fetched those bytes off
 that page. The folder's own facts (its install date, its provenance) are refreshed
 only when the write was the **bottom** layer's: a patch arriving on top does not
@@ -278,6 +281,8 @@ file. With no file date able to answer, `_tsDateUpdated` is the fallback —
 **never `_tsDateModified`**, which is bumped by cosmetic edits and would flag a
 mod because its author fixed a typo.
 
+**A page date explained by another layer's file is not a finding.** When the only files newer than the baseline are ones another layer of the folder holds or is named for ([§2](#a-folder-with-two-identities-still-gets-one-verdict)), the page's `_tsDateUpdated` is that upload, so it is not read as an update: otherwise a date-only base is flagged by the fix from its own page that it already holds.
+
 This path is capped at `possiblyOutdated` structurally: nothing here knows what
 is installed, only when it arrived.
 
@@ -377,12 +382,15 @@ Eight rules:
   promised the opposite. The user was shown the whole list and ignored the whole
   finding, so the dismissal covers the whole list.
 - **It belongs to the layer whose releases it waves away.** A folded verdict names
-  that layer in `subjectModId`, and the cutoff goes on **that layer's** entry — one
-  rule, `ModOrigin.withDismissal`, shared by the write and by the re-fold that
+  that layer by its key in `subject`, and the cutoff goes on **that layer's** entry — one rule, `ModOrigin.withDismissal`, shared by the write and by the re-fold that
   follows it so the two cannot disagree. Written on the wrong layer a dismissal
   fails twice at once: it silences nothing, because the check reads each layer's own
   field, and it stamps another mod's release date where it can hide a finding nobody
   dismissed.
+- **An Ignore on the whole folder covers every layer of the page that lists the same files.**
+  A newer file nobody labelled is listed under both a base and a patch from one page ([§2](#a-folder-with-two-identities-still-gets-one-verdict)); dismissed on the winning layer alone, the other wins the re-fold with the very file just ignored, and Ignore looks dead until it is pressed twice.
+  So the Updates page's row (`ignoreUpdate`) dates each such layer up to its own newest listed file.
+  The update dialog's and History's controls name one layer and act on that layer only.
 - **The verdict is kept, not rewritten.** Only `hasUpdate` — the badge — goes quiet.
   The dialog goes on saying what is published, because "there is an update and you dismissed it" and "there is nothing new" are different facts, and someone reopening that dialog is usually there to change their mind.
   Any dismissal, the Updates page's Ignore included, is undone with Stop ignoring in the update dialog or on the History tab of the mod's page, which lists it as an Ignored update ([`library-screen.md`](library-screen.md) §15).
@@ -461,7 +469,7 @@ is not an answer.
 
 ### A mixed folder is two requests and one answer
 
-A folder is listed under **every** mod id in its stack, so every page is fetched.
+A folder is listed under **every** mod id in its stack, once per id, so every page is fetched once, a page that is both its base and a patch on it included.
 Two consequences shape the pass:
 
 - **Nothing is folded as records arrive.** The ids can land in different batches,
@@ -476,7 +484,7 @@ than short-circuited to a verdict, so a *layer* whose page has gone reads as
 `sourceGone` instead of collapsing into "never asked".
 
 Phase two asks the feed of **the identity that produced the finding**
-(`subjectModId`), which for a mixed folder is frequently not its primary — groups
+(`subject`'s page), which for a mixed folder is frequently not its primary — groups
 refine one mod's verdict, and the patch's grouping says nothing about the base mod's
 files. The result is re-**folded** rather than patched in: if the groups withdraw the
 finding the folder was reporting, the folder falls back to what its other identity
@@ -485,8 +493,7 @@ said.
 **Cost, measured against a real 17-mod library** (16 distinct mod ids, all
 tracked): **five requests, 226 ms** warm — one `Mod/Multi` plus one release feed
 for each of four mods flagged by phase one. A cold first run of phase one alone
-was 982 ms. There is no progress
-UI and none is warranted; the button shows a spinner and disables while it runs.
+was 982 ms. There is no progress UI and none is warranted; the button shows it working while it runs, once it has run 200 ms, and ignores a press.
 Injecting one dead mod id into that same library — the wrong-paste case — cost
 **9 requests and 1490 ms**, and every other mod still got a real verdict where
 without the halving all seventeen would have been reported unreachable.
@@ -582,7 +589,7 @@ A folder is left out of the merge when:
 - or it is gone.
 
 One case is left: a write that ended just before the pass started, whose rescan lands only after the pass's results. The pass started from the block before the write, and nothing above tells. Its window is a library scan, which is local and usually done long before a pass's requests come back.
-So nothing has to be disabled while a check runs to protect its results: Ignore, Undo and Update stay on, and only the controls that would start a second pass are off. A folder left out reads what its write left it; the next check answers it.
+So nothing has to be disabled while a check runs to protect its results: Ignore, Undo and Update stay on, and only the controls that would start a second pass are off, except the check button that started the pass, which shows it working and ignores a press. A folder left out reads what its write left it; the next check answers it.
 
 ---
 
@@ -707,9 +714,10 @@ Three things this rests on:
   nothing about the mod it patched, and a `folderOwn` field existed to carry it
   back. A stack has no privileged entry, so the field is gone and the section list
   is a plain lookup.
-- **Everything per-download is keyed by mod id** — the release feed, whether its
-  accordion is open, which file the user picked. One shared "chosen file" would let a
-  choice made for the patch install the mod it patches.
+- **Everything per-download is keyed by layer** — whether its accordion is open, which file the user picked, what Ignore and Update act on.
+  One shared "chosen file" would let a choice made for the patch install the mod it patches, and a mod id would do the same for a base and a patch from one page.
+  The release feed is the page's, so it is fetched once and shared by both.
+- **Two layers of one page each name their file** under the page's name: the filename, with the variant text in grey beneath ([§7](#7-how-a-file-is-named)).
 - **Actions live in the section, not the action bar.** Two subjects cannot share one
   Update button: it would have to pick a mod on the user's behalf, and picking wrong
   writes another mod's archive over this folder. A **folder with one download is
@@ -784,6 +792,8 @@ Re-checking the whole library, cache and all, is the job of the All mods table's
 
 **"Ignore this update" and its undo live here.** Ignore is in the dialog and on the Updates page's Newer files rows ([`library-screen.md`](library-screen.md) §17), both of which show the file you have beside the newer one, so an update is read before it is waved away; it is never on a card or a badge, where it would dismiss something the user has not read.
 It writes to the sidecar, so the dialog reports back whether it wrote anything and the mods screen rescans on the way out; the status slot is drawn from `ModInfo.origin`, which only a scan re-reads. See [§4](#4-dismissing-an-update) for what it stores and why it is a date.
+The report is the same however the dialog closes, by a button, Escape or a click outside, and comes once every write it started has ended (`ModUpdateWrites`): closed while Ignore's write is still running, the rescan waits for that write rather than reading the folder before it.
+The verdict is re-folded when the write ends through the app's container, not the dialog's, so a dialog closed mid-write still leaves the badge reading as ignored.
 
 The undo is also on the History tab of the mod's page
 ([`library-screen.md`](library-screen.md) §15): taking a dismissal back only

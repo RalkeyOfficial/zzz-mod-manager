@@ -583,16 +583,19 @@ void main() {
       expect(find.textContaining('No file recorded'), findsOneWidget);
     });
 
-    testWidgets('the patch\'s own mod page cannot be named as what it patches',
+    testWidgets("the patch's own page can be named as what it patches, all but its own file",
         (tester) async {
+      // A lone fix file from the main file's page: the page is the base, and
+      // only the patch's own file is already in the folder.
       await open(
         tester,
         subjects: const [
           PatchInstallSubject(
             modName: 'Ellen Patch',
             // The id the search's result carries, so picking it is picking
-            // the patch itself.
+            // the patch's own page.
             patchModId: baseModId,
+            patchFileId: 1462303,
             kind: PatchKind.assets,
           ),
         ],
@@ -602,7 +605,60 @@ void main() {
       await tester.tap(find.text(baseModName).first);
       await tester.pumpAndSettle();
 
-      expect(find.text('That is this mod, not another one'), findsOneWidget);
+      final held = find.text('v34.zip');
+      await tester.ensureVisible(held);
+      final scheme = Theme.of(tester.element(held)).colorScheme;
+      expect(tester.widget<Text>(held).style?.color, scheme.onSurface.withValues(alpha: 0.38));
+      expect(find.text('Already in this folder'), findsOneWidget);
+
+      final other = find.text('v33.zip');
+      await tester.ensureVisible(other);
+      await tester.tap(other);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining(baseModName), findsWidgets, reason: 'the page is named as the base');
+    });
+
+    testWidgets('a library mod whose base is this very file cannot be picked', (tester) async {
+      final same = ModInfo(
+        id: 'Ellen Main',
+        name: 'Ellen Main',
+        characterId: 'ellen',
+        isActive: false,
+        origin: originFixture(
+          source: 'gamebanana',
+          modId: baseModId,
+          fileId: 1462303,
+          modIdConfidence: OriginConfidence.exact,
+          provenance: OriginProvenance.downloaded,
+        ),
+      );
+      await open(
+        tester,
+        subjects: const [
+          PatchInstallSubject(
+            modName: 'Ellen Patch',
+            patchModId: baseModId,
+            patchFileId: 1462303,
+            kind: PatchKind.assets,
+          ),
+        ],
+        mods: [same, ...library],
+      );
+      await tester.tap(find.text('Install it into an existing mod'));
+      await tester.pumpAndSettle();
+
+      final row = tester.widget<ListTile>(find.widgetWithText(ListTile, 'Ellen Main'));
+      expect(row.enabled, isFalse);
+      expect(find.text('Already in this folder'), findsOneWidget);
+      await tester.tap(find.text('Ellen Main'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Install')).onPressed, isNull,
+          reason: 'tapping it picked nothing');
+      expect(tester.widget<ListTile>(find.widgetWithText(ListTile, 'Ellen v1')).enabled, isTrue,
+          reason: 'another mod of any page is an ordinary destination');
     });
 
     testWidgets('a name out of an archive is searched as words', (tester) async {
@@ -643,7 +699,7 @@ void main() {
       await tester.tap(find.text(baseModName).first);
       await tester.pumpAndSettle();
 
-      expect(find.text('That is this mod, not another one'), findsNothing);
+      expect(find.text('Already in this folder'), findsNothing);
       expect(find.text('Add'), findsOneWidget,
           reason: 'the answer can be given, which is the whole point');
     });

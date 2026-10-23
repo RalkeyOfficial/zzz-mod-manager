@@ -119,6 +119,31 @@ void main() {
     });
   });
 
+  group('an entry that is not a mod', () {
+    // Captured live on 2026-10-23: the third "today" entry was a Wip, whose
+    // `_idRow` 104523 is a Wip id. `Mod/104523/ProfilePage` is "de_urbanwarfare",
+    // a Counter-Strike: Source map, which is the page the carousel opened.
+    late List<GbTopSub> subs;
+
+    setUpAll(() {
+      subs = parseBareList(
+        loadGbFixture('topsubs_19567_with_wip'),
+        GbTopSub.fromJson,
+      );
+    });
+
+    test('is left out, so the carousel never opens its id as a mod', () {
+      expect(subs.map((s) => s.idRow), [731121]);
+      expect(subs.map((s) => s.name), isNot(contains('Void Hunter Eldreda')));
+    });
+
+    test('every entry kept links to a mod page', () {
+      for (final sub in subs) {
+        expect(sub.profileUrl, 'https://gamebanana.com/mods/${sub.idRow}');
+      }
+    });
+  });
+
   group('groupTopSubs', () {
     GbTopSub sub(int id, GbTopSubPeriod period) =>
         GbTopSub(idRow: id, period: period, visibility: GbVisibility.show);
@@ -158,15 +183,33 @@ void main() {
 
   group('GbTopSub.fromJson', () {
     test('drops a row with no id', () {
-      expect(GbTopSub.fromJson({'_sPeriod': 'today'}), isNull);
+      expect(
+        GbTopSub.fromJson({'_sModelName': 'Mod', '_sPeriod': 'today'}),
+        isNull,
+      );
     });
 
     test('drops a row with an unrecognised period', () {
-      expect(GbTopSub.fromJson({'_idRow': 1, '_sPeriod': 'fortnight'}), isNull);
+      expect(
+        GbTopSub.fromJson({
+          '_sModelName': 'Mod',
+          '_idRow': 1,
+          '_sPeriod': 'fortnight',
+        }),
+        isNull,
+      );
+    });
+
+    test('drops a row with no model name, since its id may not be a mod id', () {
+      expect(GbTopSub.fromJson({'_idRow': 1, '_sPeriod': 'today'}), isNull);
     });
 
     test('an absent visibility field fails closed to warn', () {
-      final sub = GbTopSub.fromJson({'_idRow': 1, '_sPeriod': 'today'})!;
+      final sub = GbTopSub.fromJson({
+        '_sModelName': 'Mod',
+        '_idRow': 1,
+        '_sPeriod': 'today',
+      })!;
       expect(sub.visibility, isNull);
       expect(sub.effectiveVisibility, GbVisibility.warn);
     });

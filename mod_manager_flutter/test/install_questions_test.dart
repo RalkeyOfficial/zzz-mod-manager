@@ -12,6 +12,8 @@ import 'package:mod_manager_flutter/screens/dialogs/patch_install_prompt.dart';
 import 'package:mod_manager_flutter/services/download/download_handle.dart';
 import 'package:mod_manager_flutter/services/download/download_job.dart';
 import 'package:mod_manager_flutter/services/download/download_request.dart';
+import 'package:mod_manager_flutter/services/update_check.dart';
+import 'package:mod_manager_flutter/utils/state_providers.dart';
 import 'package:path/path.dart' as p;
 
 import 'support/localized_harness.dart';
@@ -181,6 +183,36 @@ void main() {
     expect(given, isA<AnswerGiven>());
     final done = await run(tester, jobFor(archive, prepared: (given as AnswerGiven).prepared));
     expect((done as InstallEnds).result.mods, ['Ellen Fix']);
+  });
+
+  testWidgets("a patch put into a mod you already have drops that mod's update verdict, and only its", (tester) async {
+    // The verdict names the folder's layers, and the patch is a new one.
+    await mount(tester);
+    temp.write('Ellen Maid', 'fix.ini', modIni);
+    temp.write('Ellen Maid', 'Body.dds', 'the mod');
+    final archive = zipOf(File(p.join(downloads.path, 'Ellen Fix.zip')), {'Ellen Fix/fix.ini': patchIni});
+    final container = ProviderScope.containerOf(context, listen: false);
+    container.read(modUpdateChecksProvider.notifier).state = {
+      'Ellen Maid': const UpdateCheck(outcome: UpdateOutcome.upToDate),
+      'Winter Maid': const UpdateCheck(outcome: UpdateOutcome.upToDate),
+    };
+
+    final waits = await run(tester, jobFor(archive)) as InstallWaits;
+    late InstallAnswer given;
+    await tester.runAsync(() async {
+      given = await answerInstallQuestion(
+        context,
+        ref,
+        jobFor(archive, prepared: waits.prepared, wait: waits.wait),
+        prompt: (context, {required List<PatchInstallSubject> subjects, required List<ModInfo> library, bool combined = false}) async =>
+            const PatchPromptAnswer({'Ellen Fix': InstallIntoMod(modId: 'Ellen Maid', modName: 'Ellen Maid')}),
+      );
+    });
+    final done = await run(tester, jobFor(archive, prepared: (given as AnswerGiven).prepared));
+
+    expect(done, isA<InstallEnds>());
+    expect(temp.read('Ellen Maid', 'fix.ini'), patchIni, reason: 'the patch went in');
+    expect(container.read(modUpdateChecksProvider).keys, ['Winter Maid']);
   });
 
   testWidgets('a closed folder picker keeps the download waiting at that question', (tester) async {
