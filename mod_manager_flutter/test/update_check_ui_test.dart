@@ -725,6 +725,33 @@ void main() {
       expect(find.textContaining('7.7'), findsWidgets);
     });
 
+    testWidgets("saving the page's title is a write on the mod while it runs", (tester) async {
+      await tester.pumpWidget(const SizedBox());
+      final (client, _) = fakeClient();
+      final target = mod('Ellen', origin: origin(fileId: 1696178));
+      final container = ProviderContainer(overrides: [gameBananaClientProvider.overrideWithValue(client)]);
+      addTearDown(container.dispose);
+      final busyDuringWrites = <bool>[];
+
+      await pumpLocalized(
+        tester,
+        ModUpdateDialog(
+          mod: target,
+          gateway: _RecordingGateway(
+            target.origin,
+            [],
+            onWrite: () => busyDuringWrites.add(container.read(modWritesInProgressProvider).contains('Ellen')),
+          ),
+        ),
+        container: container,
+      );
+      await tester.pumpAndSettle();
+
+      expect(busyDuringWrites, [true], reason: 'a check running on this folder must see the write');
+      expect(container.read(modWritesInProgressProvider), isEmpty, reason: 'and it ends with the write');
+      expect(container.read(modWritesStartedProvider)['Ellen'], 1);
+    });
+
     testWidgets('the newest file reads as current, with no update action',
         (tester) async {
       await pumpDialog(
@@ -1847,9 +1874,12 @@ void main() {
 /// Captures what the dialog would write, instead of touching the real sidecar
 /// (and, through `ApiService`, the developer's real `config.json`).
 class _RecordingGateway implements ModUpdateGateway {
-  _RecordingGateway(this._current, this._written, {this.mods = const [], this.hold, this.patchUpdate});
+  _RecordingGateway(this._current, this._written, {this.mods = const [], this.hold, this.patchUpdate, this.onWrite});
   final ModOrigin? _current;
   final List<ModOrigin?> _written;
+
+  /// Called as each write runs, before it lands.
+  final void Function()? onWrite;
 
   /// When set, every write waits for it before it lands.
   final Future<void>? hold;
@@ -1883,6 +1913,7 @@ class _RecordingGateway implements ModUpdateGateway {
     String modId,
     ModOrigin? Function(ModOrigin? current) update,
   ) async {
+    onWrite?.call();
     await hold;
     _written.add(update(_current));
     return OriginWriteResult.written;

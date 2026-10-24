@@ -218,9 +218,13 @@ class _ButtonFeedbackState extends State<ButtonFeedback> with TickerProviderStat
   /// scrolls under.
   RingGeometry? _ringGeometry() {
     if (!mounted) return null;
-    final box = context.findRenderObject();
+    // The ring paints until its entry is removed, which can be a frame after the button left the tree (a menu's item
+    // as the menu closes). That element is inactive then, and [Element.renderObject], unlike `findRenderObject`, can
+    // be asked: its render object is detached by then.
+    final box = (context as Element).renderObject;
+    if (box is! RenderBox || !box.attached || !box.hasSize) return null;
     final overlay = _overlay?.context.findRenderObject();
-    if (box is! RenderBox || overlay is! RenderBox || !box.attached || !box.hasSize) return null;
+    if (overlay is! RenderBox) return null;
     Rect? clip;
     var scrollable = context.findAncestorStateOfType<ScrollableState>();
     while (scrollable != null) {

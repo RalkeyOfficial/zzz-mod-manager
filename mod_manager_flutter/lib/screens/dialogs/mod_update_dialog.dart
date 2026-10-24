@@ -479,11 +479,17 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   }
 
   /// Saves the titles of [pages] on this mod's downloads, through the dialog's own write. Counted as a write, so the
-  /// library rescans when the dialog closes. A failure is logged and nothing more: the check itself succeeded.
+  /// library rescans when the dialog closes, and marked on the mod while it runs, so a check on it sees the write.
+  /// A failure is logged and nothing more: the check itself succeeded.
   Future<void> _rememberNames(Map<int, GbMod> pages) async {
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
       await _writes.track(
-        rememberDownloadNames(mods: [widget.mod], pages: pages, write: _gateway.writeOrigin),
+        whileWritingMod(
+          container,
+          widget.mod.id,
+          () => rememberDownloadNames(mods: [widget.mod], pages: pages, write: _gateway.writeOrigin),
+        ),
         (wrote) => wrote,
       );
     } catch (e) {

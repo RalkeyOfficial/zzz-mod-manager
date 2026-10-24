@@ -24,6 +24,7 @@ import '../models/mod_ingest.dart';
 import '../models/mod_origin.dart';
 import '../models/origin_enums.dart';
 import 'folder_downloads.dart';
+import 'ini_resources.dart';
 
 /// [current] recorded as **a patch whose base is missing**, with [base] named as
 /// the mod it applies to when the user has said which that is.
@@ -115,6 +116,28 @@ ModOrigin? withDownloadUpdatedTo(
       updatesDismissedUntil: updatesDismissedUntil,
     ),
   ));
+}
+
+/// [origin] with the files an update put back recorded on the patches, by the recorded path each came from.
+///
+/// **A patch takes only its own files**: one that records none is left as it is, and one whose files were all missing
+/// records none. With a single patch, though, every placed file is its, which also gives a record that predates the
+/// per-layer registries its first one. Called only for a write that had recorded patch files to put back.
+ModOrigin withPlacedPatches(ModOrigin origin, Map<String, InstalledFile> placedFrom) {
+  final patches = origin.patches;
+  if (patches.isEmpty) return origin;
+  return origin.copyWith(
+    downloads: [
+      origin.downloads.first,
+      for (final patch in patches)
+        if (patches.length == 1)
+          patch.copyWith(files: placedFrom.values.toList())
+        else if (patch.files.isEmpty)
+          patch
+        else
+          patch.copyWith(files: [for (final file in patch.files) ?placedFrom[normalizeIniPath(file.path)]]),
+    ],
+  );
 }
 
 /// [origin] with `ingest.patch_files` recomputed from the stack.

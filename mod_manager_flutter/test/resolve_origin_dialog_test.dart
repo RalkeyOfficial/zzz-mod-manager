@@ -1240,6 +1240,30 @@ void main() {
       expect(gateway.written!.needsBase, isFalse,
           reason: 'a wrong answer has to be undoable, or naming one is a trap');
       expect(gateway.written!.ingest?.patchShaped ?? false, isFalse);
+      expect(gateway.written!.downloads.single.role, DownloadRole.base,
+          reason: 'the stored role follows the position, so the layer left is the base');
+    });
+
+    testWidgets('a layer added to the folder since the dialog opened refuses the answer', (tester) async {
+      final opened = patchShaped();
+      final gateway = await pumpDialog(
+        tester,
+        target: mod(origin: opened),
+        transport: bothPages(),
+        gateway: _FakeGateway(current: opened.withLayerOnTop(patchFixture(modId: thirdModId, fileId: 7))),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Name the mod it patches'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(otherModName).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
+
+      expect(gateway.writes, 1);
+      expect(gateway.abandoned, isTrue, reason: 'naming a base under a different stack would replace a layer');
+      expect(find.byType(ResolveOriginDialog), findsOneWidget, reason: 'it stays open to say so');
     });
 
     testWidgets('cancelling the second step writes nothing', (tester) async {

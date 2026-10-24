@@ -197,23 +197,21 @@ The memory note `v3-canvas-vs-docs-decisions` holds these. In short:
   - Patches and tracking: Take out and a patch put in drop the folder's session verdict; the update dialog reports its writes however it closes, and its verdict lands even when closed mid-write. `test/support/held_write.dart` holds a real `whileWritingMod` for tests.
   - Docs: `logging.md` §4's tag table is complete; the marketplace and downloads wording describes the present. `gamebanana-api.md` gains §3.2 on WIPs (measured 2026-10-23: 224 ZZZ WIPs, 37 with files, ids per model) and states the edge cache's two header sets (`application/json` fresh, `text/html` cached, both UTF-8), which the client decodes as UTF-8 from the bytes either way.
 
+- **Phase 6c, Review follow-ups** (what the reviews of phase 6b found outside their scope): built, not reviewed, not committed. Checked in tests only, not yet in the running app. What is left of it is under "Phases left".
+  - Layers and tracking: the tracking screen's naming step declines when the folder's layers changed since the dialog opened, so a queued patch install can't get a base duplicated or replaced, and taking the answer back re-derives the stored roles. The base's verdict is the layer with the base role, so a base with no page has none (`UpdateCheck.baseLayer`, used by `baseUpdateCheck` and `forgetBaseVerdict`). After a base update each patch records only the files placed from its own paths (`withPlacedPatches`). The update dialog's title write runs inside `whileWritingMod`.
+  - Update flows read through the app's container, so a window closed mid-update leaves a landed patch update as done; a base update's window closed before its confirmation ends with nothing written.
+  - Keyboard: Arrow Down and Arrow Up from an open Browse menu go to its first and last item, and every other arrow, and these two on a closed menu, reach the page. The ring reads its button's place from the button's render object, because its entry can outlive the button by a frame, as a menu's focused item does when the menu closes.
+  - Decided with the user: the update dialog keeps its default file, including the flagged "newest published" pick when several newer files match no variant. The user sees what the app picked and why, can pick another row, or can ignore the update.
+  - Canvas values: the light palette's `raised` is `#FBF9F6` and `text3` `#6E6A72`, as the canvas draws them. Contrast below WCAG AA is a change to make in the design first.
+  - Browse's `ExcludeFocus` around hidden pages is gone: `IndexedStack` already keeps them out of focus, pinned in `test/indexed_stack_focus_test.dart`.
+  - No CHANGELOG line: everything here is on screens and flows not yet released.
+
 ## Phases left
 
 Each is reviewable on its own and ends with tests green, docs and changelog updated, and the user's go-ahead.
 
-6c. **Review follow-ups** (a phase of its own, before phase 7 starts): what the reviews of phase 6b found outside their scope, each reviewable and tested like any phase.
-   - Layers and tracking:
-     - The tracking screen's refusal reads the folder's stack as it was when the dialog opened, and its write doesn't check again on disk. A layer added in the background (a queued patch install) can still be duplicated, and `withBase` replaces a patch if the folder became mixed since (`resolve_origin_dialog.dart`, around the write).
-     - `baseUpdateCheck` and `forgetBaseVerdict` take `layers.first` as the base even when the bottom layer has no page.
-     - `CompanionRemoved` doesn't re-derive the stored roles, so the tags go stale and a read logs a warning.
-     - `_recordOrigin` stamps `placedPatchFiles` on every patch.
-     - The base's default Update candidate is the newest unlabelled file, which on a page with a fix file can be the fix.
-     - `_rememberNames` writes the sidecar outside `whileWritingMod`.
-   - Update flows: they use the dialog's `ref` after awaits though the dialog can close mid-flow, so a throw there reads as "nothing written" (`apply_update_flow.dart`).
-   - Keyboard: Arrow Down from an open Browse menu (Sort, Mature content, any `MenuAnchor`) moves focus to the page behind it instead of into the menu's items.
-   - Canvas values: the light palette's `raised` is `#F8F5F1` against the canvas's `#FBF9F6`, and `text3` `#67636B` against `#6E6A72`.
+6c. **Review follow-ups, what is left** (before phase 7 starts):
    - Older buttons outside the press and ring rules until their screens are rebuilt: `settings_screen.dart` and `auto_tag_section.dart` (phase 7) and `welcome_screen.dart` (phase 10) set their own shape or foreground; `delete_mod_dialog.dart` (phase 8) and `reclaim_button.dart` (phase 7) have `Colors.red` danger buttons.
-   - Browse's `ExcludeFocus` around hidden tabs is redundant on this SDK (`IndexedStack`'s `Visibility` already excludes them); remove it or keep it as a statement of intent.
 7. **Settings, Storage, About** (artboards `Settings`, `Storage`, `About`).
    - Section nav (General, Game & folders, Launching, Mods, GameBanana, Storage, Appearance, About), and Game & folders including Move library… (design note first). Game & folders holds only the ZZMI folder and the mod library.
      - Move library… re-points links with the rule a changed Mod library already follows ([`configuration.md`](configuration.md#changing-the-mod-library), `ModManagerService.relinkLibrary`): a link whose target is exactly `<old>/<its own name>`, live or dead, follows when the new library has that folder; a mod the new library lacks keeps its link; a refused shader placement keeps the old link and names the mod.

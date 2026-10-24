@@ -38,11 +38,17 @@ class RecordingService extends ModManagerService {
   /// While set, a write to a mod's origin waits for it.
   Completer<void>? holdOriginWrites;
 
+  /// While set, the first read of `modManagerServiceProvider` in a container waits for it.
+  Completer<void>? holdLookup;
+
   /// Puts this in `ApiService` in place of the library's own service.
   void install() => ApiService.useLibraryForTests(temp.config, service: this);
 
   List<Override> get overrides => [
-        modManagerServiceProvider.overrideWith((ref) async => this),
+        modManagerServiceProvider.overrideWith((ref) async {
+          await holdLookup?.future;
+          return this;
+        }),
         snapshotServiceProvider.overrideWithValue(temp.snapshots),
       ];
 

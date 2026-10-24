@@ -244,7 +244,7 @@ Future<bool> applyUpdateFlow(
     final mods = await container.read(modManagerServiceProvider.future);
     // Read once, before anything is written: retention is a disk operation and
     // has to run even if the widget that owns `ref` has gone by then.
-    final snapshots = ref.read(snapshotServiceProvider);
+    final snapshots = container.read(snapshotServiceProvider);
     final applier = UpdateApplier(
       snapshots: snapshots,
       activation: ModManagerActivationPort(mods, leaveOff: (m) => leftOffAfterWrite(container, m)),
@@ -632,8 +632,8 @@ Future<bool> applyPatchUpdateFlow(
 
     hold.say(loc.t('marketplace.preparing_writing'));
     queue.updateStep(download.seq, UpdateStep.writing);
-    final mods = await ref.read(modManagerServiceProvider.future);
-    final snapshots = ref.read(snapshotServiceProvider);
+    final mods = await container.read(modManagerServiceProvider.future);
+    final snapshots = container.read(snapshotServiceProvider);
     final applier = UpdateApplier(
       snapshots: snapshots,
       activation: ModManagerActivationPort(mods, leaveOff: (m) => leftOffAfterWrite(container, m)),
@@ -666,7 +666,7 @@ Future<bool> applyPatchUpdateFlow(
     mods.invalidateKeybinds(mod.id);
 
     if (result.snapshot != null) {
-      ref.invalidate(modBackupsProvider);
+      container.invalidate(modBackupsProvider);
       // **Whenever one was taken, not only on a write that landed.** The
       // snapshot comes before the copy, so a placement that failed part-way
       // still added a whole folder to the budget — see §5 of
@@ -718,8 +718,8 @@ Future<bool> applyPatchUpdateFlow(
     });
 
     // Pruning already ran with the snapshot, and the keys were dropped with the write, above.
-    ref.invalidate(modBackupsProvider);
-    ref.invalidate(libraryProvider);
+    container.invalidate(modBackupsProvider);
+    container.invalidate(libraryProvider);
 
     queue.endUpdate(download.seq, end);
     if (!context.mounted) return true;
@@ -1034,7 +1034,7 @@ Future<List<AppliedUpdate>> _writeAll({
         // stamping them onto `ingest` would credit the folder's own record with
         // a patch's file list.
         files: result.writtenFiles,
-        placedPatchFiles: result.placedPatchFiles,
+        placedFrom: target.patchFiles.isEmpty ? null : result.placedFrom,
       );
     }
   } finally {
@@ -1082,7 +1082,7 @@ List<String> _recordedAbove(ModOrigin? origin, DownloadKey layer) {
 ///
 /// **Two downloads moved and each gets its own record**, which is the whole
 /// reason a mixed folder can be rebuilt. [files] is what this write laid down —
-/// the base — and [placedPatchFiles] is where the patch ended up on top of it.
+/// the base — and [placedFrom] is where each patch ended up on top of it.
 /// Which of the two records is the folder's own depends on [asCompanion], and
 /// nothing else about the write does.
 Future<void> _recordOrigin({
@@ -1096,7 +1096,7 @@ Future<void> _recordOrigin({
   required List<String>? patchFiles,
   required DateTime? dismissUntil,
   List<InstalledFile>? files,
-  List<InstalledFile>? placedPatchFiles,
+  Map<String, InstalledFile>? placedFrom,
 }) async {
   final now = DateTime.now();
   await mods.updateModOrigin(mod.id, (current) {
@@ -1128,13 +1128,7 @@ Future<void> _recordOrigin({
 
     // The layers above moved onto the new base's layout, so their records are
     // rewritten too. One write, not two: they are layers of one stack.
-    if (placedPatchFiles != null && placedPatchFiles.isNotEmpty) {
-      block = block.copyWith(downloads: [
-        block.downloads.first,
-        for (final patch in block.patches)
-          patch.copyWith(files: placedPatchFiles),
-      ]);
-    }
+    if (placedFrom != null) block = withPlacedPatches(block, placedFrom);
 
     block = block.copyWith(
       source: gameBananaSource,

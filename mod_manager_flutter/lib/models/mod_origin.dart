@@ -324,6 +324,9 @@ class ModOrigin {
     );
   }
 
+  /// The stack without its bottom layer, roles re-derived: the first patch becomes the base.
+  ModOrigin withoutBase() => copyWith(downloads: _reroled(patches));
+
   /// A dismissal — or its undo, with a null [until] — recorded against **one
   /// layer**.
   ///

@@ -132,25 +132,18 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
     //
     // Every page in the stack stays mounted the same way, keyed by what it shows, so going back finds a page as it
     // was left: a creator's page keeps its loaded mods, its tile and its scroll, a mod's page its picture and its
-    // picked files. A page gone back past is disposed, and a mod opened again starts afresh.
+    // picked files. A page gone back past is disposed, and a mod opened again starts afresh. `IndexedStack` keeps the
+    // hidden pages out of Tab's reach itself (`test/indexed_stack_focus_test.dart`).
     final navigator = ref.read(marketplaceRoutesProvider.notifier);
     final stack = IndexedStack(
       index: routes.length,
       sizing: StackFit.expand,
       children: [
-        // `IndexedStack` already keeps its hidden children out of focus through `Visibility`;
-        // this states it explicitly for the grid and every page but the top one.
-        ExcludeFocus(
-          excluding: routes.isNotEmpty,
-          child: GbBrowseView(onOpenMod: navigator.openFromGrid, onInstallFile: _installFile),
-        ),
+        GbBrowseView(onOpenMod: navigator.openFromGrid, onInstallFile: _installFile),
         for (var depth = 0; depth < routes.length; depth++)
           KeyedSubtree(
             key: ValueKey(routes[depth]),
-            child: ExcludeFocus(
-              excluding: depth != routes.length - 1,
-              child: _page(routes[depth], depth == 0 ? null : routes[depth - 1]),
-            ),
+            child: _page(routes[depth], depth == 0 ? null : routes[depth - 1]),
           ),
       ],
     );

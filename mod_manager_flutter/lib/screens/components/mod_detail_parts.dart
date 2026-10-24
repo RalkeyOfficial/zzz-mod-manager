@@ -540,7 +540,7 @@ class DownloadTitle extends StatelessWidget {
 /// verdict can be the patch's.
 UpdateCheck? baseUpdateCheck(ModInfo mod, UpdateCheck? check) {
   if (check == null) return null;
-  if (check.layers.isNotEmpty) return check.layers.first.check;
+  if (check.layers.isNotEmpty) return check.baseLayer?.check;
   // By layer: the base's page can also be a patch on it, whose verdict this is not.
   final origin = mod.origin;
   if (origin == null || origin.downloads.isEmpty) return null;

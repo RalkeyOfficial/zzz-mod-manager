@@ -332,6 +332,15 @@ class UpdateCheck {
   /// could say nothing at all about the mod it patched.
   final List<DownloadCheck> layers;
 
+  /// The bottom of the stack's own verdict, or null when it has none: a base with no page is left out of [layers], and
+  /// the first one in there is then a patch.
+  DownloadCheck? get baseLayer {
+    for (final layer in layers) {
+      if (layer.key?.role == DownloadRole.base) return layer;
+    }
+    return null;
+  }
+
   /// The user has seen this much and said "not this one".
   ///
   /// The verdict is **kept**, not rewritten: the dialog still shows what is
@@ -691,17 +700,21 @@ UpdateCheck refoldDismissal(UpdateCheck folded, DownloadKey? subject, bool dismi
 }
 
 /// [folded] with the base's comparison taken back, as when the base's file is no longer known: it then asks which
-/// file instead, and the folder is folded again. Null for a folder of one layer, which has no other verdict left to
-/// show.
+/// file instead, and the folder is folded again. Null for a folder of the base alone, which has no other verdict left
+/// to show.
 ///
-/// The base is the bottom layer. A base whose page was found gone or couldn't be compared keeps that verdict, which no file would change, in a folder of
-/// one layer too.
+/// The base is the layer with the base role ([UpdateCheck.baseLayer]). A base whose page was found gone or couldn't be
+/// compared keeps that verdict, which no file would change, in a folder of one layer too. A folder whose base has no
+/// page has no base verdict to take back, so it stays as it is.
 UpdateCheck? forgetBaseVerdict(UpdateCheck folded) {
   bool lasting(UpdateOutcome outcome) => outcome == UpdateOutcome.sourceGone || outcome == UpdateOutcome.indeterminate;
+  if (folded.layers.isEmpty) return lasting(folded.outcome) ? folded : null;
+  final base = folded.baseLayer;
+  if (base == null) return folded;
   if (folded.layers.length < 2) return lasting(folded.outcome) ? folded : null;
-  final base = folded.layers.first;
   final kept = lasting(base.check.outcome) ? base.check : const UpdateCheck(outcome: UpdateOutcome.versionUnknown);
-  return foldDownloads([DownloadCheck(download: base.download, key: base.key, check: kept), ...folded.layers.skip(1)]);
+  final forgotten = DownloadCheck(download: base.download, key: base.key, check: kept);
+  return foldDownloads([for (final layer in folded.layers) layer == base ? forgotten : layer]);
 }
 
 /// The comparison itself, for **one** download against **one** mod page.

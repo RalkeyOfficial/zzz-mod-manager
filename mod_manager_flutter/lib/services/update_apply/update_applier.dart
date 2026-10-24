@@ -286,13 +286,14 @@ class UpdateApplier {
       );
     }
 
-    final placed = await _putPatchBack(
+    final placedFrom = await _putPatchBack(
       modFolder: modFolder,
       snapshot: snapshot,
       aside: aside,
       placement: placement,
       patchModId: patchModId,
     );
+    final placed = placedFrom.values.toList();
     final reactivated = wasActive && await activation.activate(modName);
 
     // What the wipe took that nothing wrote again: a report, not a decision.
@@ -314,6 +315,7 @@ class UpdateApplier {
       droppedFiles: droppedFiles,
       patchFiles: [for (final file in placed) file.path],
       placedPatchFiles: placed,
+      placedFrom: placedFrom,
       missingPatchFiles: aside.missing,
       // A **diff**, computed after the copy. Reporting every keybind the mod
       // used to have is unreadable and appears whether anything moved or not;
@@ -373,14 +375,14 @@ class UpdateApplier {
   /// store is dropped and each newly-displaced file is kept before the patch
   /// goes over it. With no [patchModId] there is no store, and nothing here
   /// changes that.
-  Future<List<InstalledFile>> _putPatchBack({
+  Future<Map<String, InstalledFile>> _putPatchBack({
     required Directory modFolder,
     required ModSnapshot snapshot,
     required _PatchAside aside,
     required PatchPlacement placement,
     int? patchModId,
   }) async {
-    if (aside.taken.isEmpty) return const <InstalledFile>[];
+    if (aside.taken.isEmpty) return const <String, InstalledFile>{};
 
     if (patchModId != null) {
       await store.discard(modFolder: modFolder, patchModId: patchModId);
@@ -388,7 +390,7 @@ class UpdateApplier {
 
     final source = Directory(path.join(snapshot.directory.path, 'files'));
     final after = await readFolderContents(modFolder);
-    final placed = <InstalledFile>[];
+    final placed = <String, InstalledFile>{};
     for (final entry in aside.taken.entries) {
       final target = placement.mapping[entry.key] ?? entry.key;
       // A file the base does not have keeps its own path, and keeps the spelling
@@ -413,12 +415,12 @@ class UpdateApplier {
           File(path.join(source.path, entry.value)),
           destination.path,
         );
-        placed.add(InstalledFile(
+        placed[entry.key] = InstalledFile(
           path: onDisk,
           bytes: await _fileSize(copied),
           role:
               occupied ? InstalledFileRole.replaced : InstalledFileRole.added,
-        ));
+        );
       } catch (e) {
         _log.error('could not put a patch file back',
             error: e, fields: {'file': onDisk, 'phase': 'place'});
@@ -1000,6 +1002,7 @@ class UpdateApplyResult {
     this.droppedFiles = const <String>[],
     this.restoredFiles = const <String>[],
     this.placedPatchFiles = const <InstalledFile>[],
+    this.placedFrom = const <String, InstalledFile>{},
     this.patchFiles = const <String>[],
     this.missingPatchFiles = const <String>[],
   });
@@ -1078,6 +1081,10 @@ class UpdateApplyResult {
   /// already-released build can still read out of `ingest.patch_files`, and this
   /// is what a removal acts on.
   final List<InstalledFile> placedPatchFiles;
+
+  /// [placedPatchFiles] by the recorded path each came from (`normalizeIniPath`), so each patch of a folder holding
+  /// several records only its own.
+  final Map<String, InstalledFile> placedFrom;
 
   /// Recorded patch files that were not in the folder any more.
   ///

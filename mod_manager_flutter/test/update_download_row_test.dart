@@ -78,13 +78,18 @@ void main() {
         ingest: const ModIngest(folders: [modName]),
       );
 
-  /// Presses a button running [flow], and pumps until it ends or [until] says to stop.
+  /// Presses a button running [flow], and pumps until it ends or [until] says to stop. [closeWhen] says when the
+  /// window the flow runs on closes, and [afterClose] runs a pump later.
   Future<bool?> run(
     WidgetTester tester,
     Future<bool> Function(BuildContext context, WidgetRef ref) flow, {
     bool Function()? until,
+    bool Function()? closeWhen,
+    void Function()? afterClose,
   }) async {
     bool? changed;
+    final window = ValueNotifier(true);
+    addTearDown(window.dispose);
     container = ProviderContainer(overrides: [
       ...service.overrides,
       downloadServiceProvider.overrideWith(
@@ -105,11 +110,16 @@ void main() {
     });
     await pumpLocalized(
       tester,
-      Consumer(
-        builder: (context, ref, _) => ElevatedButton(
-          onPressed: () async => changed = await flow(context, ref),
-          child: const Text('update'),
-        ),
+      ValueListenableBuilder<bool>(
+        valueListenable: window,
+        builder: (context, open, _) => !open
+            ? const SizedBox()
+            : Consumer(
+                builder: (context, ref, _) => ElevatedButton(
+                  onPressed: () async => changed = await flow(context, ref),
+                  child: const Text('update'),
+                ),
+              ),
       ),
       container: container,
     );
@@ -117,7 +127,19 @@ void main() {
 
     // The download's progress window spins until the flow ends, so the frames are pumped by hand.
     await tester.runAsync(() => tester.tap(find.text('update')));
-    bool done() => changed != null || (until?.call() ?? false);
+    var closed = false;
+    var afterRan = false;
+    bool done() {
+      if (closed) {
+        if (!afterRan) afterClose?.call();
+        afterRan = true;
+      } else if (closeWhen?.call() ?? false) {
+        closed = true;
+        window.value = false;
+      }
+      return changed != null || (until?.call() ?? false);
+    }
+
     for (var i = 0; i < 100 && !done(); i++) {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
       await tester.pump();
@@ -216,6 +238,56 @@ void main() {
     expect(jobs(), isEmpty);
   });
 
+  testWidgets('a base update confirmed after the window it started from closed still writes, and says so',
+      (tester) async {
+    final mod = await installed(tester, tracked());
+    final file = serve(2, {'Ellen/Ellen.ini': '[KeySwap]\nkey = VK_2\n'});
+    bool confirmationUp() => find.text('Cancel').evaluate().isNotEmpty;
+
+    final changed = <bool>[];
+    await run(
+      tester,
+      (context, ref) async {
+        final result = await applyUpdateFlow(context, ref, mod: mod, remoteModId: 100, file: file);
+        changed.add(result);
+        return result;
+      },
+      closeWhen: confirmationUp,
+      until: confirmationUp,
+    );
+    await tester.pump();
+    expect(find.byType(ElevatedButton), findsNothing, reason: 'the window the flow started from is gone');
+
+    await tester.runAsync(() => tester.tap(find.widgetWithText(FilledButton, 'Update')));
+    for (var i = 0; i < 100 && !finished(); i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump();
+    }
+
+    expect(jobs().single.state, DownloadJobState.done);
+    expect(jobs().single.outcome, JobOutcome.updated);
+    expect(temp.read(modName, 'Ellen.ini'), '[KeySwap]\nkey = VK_2\n');
+  });
+
+  testWidgets('a base update whose window closed before its confirmation ends with nothing written and no failure',
+      (tester) async {
+    final mod = await installed(tester, tracked());
+    final file = serve(2, {'Ellen/Ellen.ini': '[KeySwap]\nkey = VK_2\n'});
+    // The flow waits here, after its download and unpacking, until the window it started from is gone.
+    service.holdLookup = Completer<void>();
+
+    final changed = await run(
+      tester,
+      (context, ref) => applyUpdateFlow(context, ref, mod: mod, remoteModId: 100, file: file),
+      closeWhen: () => jobs().any((j) => j.state == DownloadJobState.updating),
+      afterClose: () => service.holdLookup!.complete(),
+    );
+
+    expect(changed, isFalse);
+    expect(jobs(), isEmpty, reason: 'declined, not failed');
+    expect(temp.read(modName, 'Ellen.ini'), '[KeySwap]\nkey = VK_1\n');
+  });
+
   testWidgets("Open mod page in the update's password dialog closes the windows over the pages and opens it in Browse",
       (tester) async {
     final mod = await installed(tester, tracked());
@@ -294,6 +366,78 @@ void main() {
     );
     expect(jobs().single.state, DownloadJobState.done);
     expect(jobs().single.outcome, JobOutcome.updated);
+  });
+
+  testWidgets('a base update over two patches records, on each, only the files placed from its own', (tester) async {
+    temp.write(modName, 'A.dds', 'a1');
+    temp.write(modName, 'B.dds', 'b1');
+    const otherPatchId = 777;
+    final origin = originFixture(
+      modId: 100,
+      modIdConfidence: OriginConfidence.exact,
+      fileId: 1,
+      versionConfidence: OriginConfidence.exact,
+      ingest: const ModIngest(folders: [modName]),
+      patches: [
+        patchFixture(modId: patchId, files: const [InstalledFile(path: 'A.dds', role: InstalledFileRole.added)]),
+        patchFixture(modId: otherPatchId, files: const [InstalledFile(path: 'B.dds', role: InstalledFileRole.added)]),
+      ],
+    );
+    final mod = await installed(tester, origin);
+    // The new base keeps `A.dds` in a subfolder, so the first patch goes back there; it has no `B.dds`.
+    final file = serve(2, {'Ellen/Ellen.ini': '[KeySwap]\nkey = VK_2\n', 'Ellen/Textures/A.dds': 'base a'});
+
+    await run(
+      tester,
+      (context, ref) => applyUpdateFlow(
+        context,
+        ref,
+        mod: mod,
+        remoteModId: 100,
+        file: file,
+        confirm: false,
+        patchFiles: const ['A.dds', 'B.dds'],
+        patchModId: patchId,
+      ),
+      until: finished,
+    );
+
+    expect(temp.read(modName, 'Textures/A.dds'), 'a1', reason: 'the patch is back on top of the new base');
+    final patches = temp.originOf(modName)!.patches;
+    expect(patches.map((p) => p.modId), [patchId, otherPatchId]);
+    expect(patches[0].files.map((f) => f.path), ['Textures/A.dds']);
+    expect(patches[1].files.map((f) => f.path), ['B.dds']);
+  });
+
+  testWidgets('a patch update whose window closed while it ran still writes, and says so', (tester) async {
+    temp.write(modName, 'Textures/Patch.dds', 'v1');
+    final origin = originFixture(
+      modId: 100,
+      modIdConfidence: OriginConfidence.exact,
+      patches: [
+        patchFixture(
+          modId: patchId,
+          files: const [InstalledFile(path: 'Textures/Patch.dds', role: InstalledFileRole.added)],
+        ),
+      ],
+    );
+    final mod = await installed(tester, origin);
+    final file = serve(3, {'Ellen Fix/Textures/Patch.dds': 'v2'});
+    // The flow waits here, after its download and unpacking, until the window it started from is gone.
+    service.holdLookup = Completer<void>();
+
+    await run(
+      tester,
+      (context, ref) =>
+          applyPatchUpdateFlow(context, ref, mod: mod, remoteModId: patchId, file: file, asCompanion: true),
+      closeWhen: () => jobs().any((j) => j.state == DownloadJobState.updating),
+      afterClose: () => service.holdLookup!.complete(),
+      until: finished,
+    );
+
+    expect(jobs().single.state, DownloadJobState.done, reason: 'the write landed, so the row is not a failure');
+    expect(jobs().single.outcome, JobOutcome.updated);
+    expect(temp.read(modName, 'Textures/Patch.dds'), 'v2');
   });
 }
 

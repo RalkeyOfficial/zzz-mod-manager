@@ -638,6 +638,8 @@ Every surface that writes an origin block takes the same `OriginWriter` seam, so
 The per-mod dialog words each answer differently, since "your tracking changed while this dialog was open" and "the folder may be read-only" call for different actions,
 and the bulk surfaces count a decline apart from a failure.
 
+The tracking screen's step that names what a patch applies to (or takes that answer back) is asked about the folder's layers as the dialog opened, and declines when the sidecar's layers, by page and file, are not those: a layer added meanwhile, such as a queued patch install, would otherwise be duplicated, or replaced where the base was meant to go under it.
+
 A failed write is reported, not swallowed: nothing re-attempts it, and the scan-time
 backfill is no substitute — it only ever recovers identity from a `source_url`, at a
 weaker confidence than anything decided here.
@@ -996,7 +998,8 @@ exist, not on anything visible in the row, and a widget guessing would offer a
 button that does nothing. In the resolve dialog a patch row offers removal, and the
 **bottom** layer offers *change* only for a patch-shaped folder — the one place a
 "this is just one mod after all" undo exists. An ordinary mod's base row carries
-nothing, because the identity card above it is the whole story there.
+nothing, because the identity card above it is the whole story there. That undo drops the bottom layer and
+re-derives the stored roles, so the layer left is the base on disk as well as by position.
 
 The row that *opens* the naming step is only the **empty** case — patch-shaped,
 nothing underneath. Once a base exists it is the layer the identity card edits, so a

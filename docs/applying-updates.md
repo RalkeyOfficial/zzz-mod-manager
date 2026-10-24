@@ -56,6 +56,8 @@ fail against them. It is put back exactly as it was afterwards, active or not.
 `.zzz-mod-manager/`, recursively. `utils/directory_copy.dart` is the copy into the
 emptied folder.
 
+**The flows outlive the window that started them.** The update flows (`applyUpdateFlow`, `applyPatchUpdateFlow`) read providers and invalidate through the app's container, never through the window's `ref`, which throws once that window is closed. A window closed after the confirmation, or during a patch update, which asks nothing, leaves the write to finish and the row to say what happened, where a `ref` read after the write would turn a landed write into a failure. Before the confirmation a closed window ends the flow with nothing written.
+
 ### What goes, what comes back, and the patch layer's own update
 
 **A base update takes everything.** The loader reads **every** `.ini` in the folder but the ones its `DISABLED*` rule skips ([`library-screen.md`](library-screen.md) §12), so an old version's renamed `.ini` left beside its successor doubles the hotkeys and the overrides, and a shader the author dropped goes on being applied.
@@ -963,6 +965,11 @@ has a predecessor. Nothing else can distinguish them afterwards.
 - **It records what the app wrote**, so a path that is gone is reported and
   skipped, never restored: the user deleting one of those files is an edit rather
   than damage.
+- **Each patch takes only the files that came from its own record.** A folder with two patches puts back the union of
+  both, and `applyBaseThenPatch` answers each file by the recorded path it came from (`UpdateApplyResult.placedFrom`),
+  since the new layout often moves it. A patch records the files placed from its own paths, so one whose files were
+  all missing records none. A folder with a single patch gives it every file placed, which also gives a record that
+  predates the per-layer registries its first.
 - **It is re-written after every write that moves the patch**, which
   `applyBaseThenPatch` does by design. `ingestAfterUpdate` carries it — and
   `patch_shaped` — across an ordinary update for the same reason: rebuilt from

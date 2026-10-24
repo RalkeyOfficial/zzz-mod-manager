@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/core/palette.dart';
@@ -632,6 +633,85 @@ void main() {
 
       expect(listing.asked, hasLength(asked));
       expect(offset(tester), scrolled, reason: 'an equal query does not scroll back to the top');
+    });
+
+    testWidgets('Arrow Down in an open menu goes to its first item, Arrow Up to its last', (tester) async {
+      await pumpBrowse(tester, listing: _Listing({1: page([1], complete: true)}));
+      final items = find.byType(MenuItemButton);
+      MenuItemButton? focusedItem() => FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType();
+
+      for (final tooltip in ['Sort: Newest', 'Mature content: Show without blur']) {
+        await tester.tap(find.byTooltip(tooltip));
+        await tester.pumpAndSettle();
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+        expect(focusedItem(), same(tester.widget(items.first)), reason: '$tooltip, Arrow Down');
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(items, findsNothing, reason: '$tooltip closes on Escape');
+
+        await tester.tap(find.byTooltip(tooltip));
+        await tester.pumpAndSettle();
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        await tester.pumpAndSettle();
+        expect(focusedItem(), same(tester.widget(items.last)), reason: '$tooltip, Arrow Up');
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+      }
+    });
+
+    testWidgets('the arrows still move focus on the page when the menu is closed, and Left and Right when it is open', (
+      tester,
+    ) async {
+      await pumpBrowse(tester, listing: _Listing({1: page([1], complete: true)}));
+      final sort = find.ancestor(of: find.byIcon(Icons.swap_vert_rounded), matching: find.byType(OutlinedButton));
+      FocusNode? focused() => FocusManager.instance.primaryFocus;
+
+      for (final key in [LogicalKeyboardKey.arrowLeft, LogicalKeyboardKey.arrowDown]) {
+        Focus.of(tester.element(sort)).requestFocus();
+        await tester.pump();
+        final before = focused();
+        await tester.sendKeyEvent(key);
+        await tester.pump();
+        expect(focused(), isNot(before), reason: '${key.keyLabel} with the menu closed moves focus');
+      }
+
+      Focus.of(tester.element(sort)).requestFocus();
+      await tester.pump();
+      await tester.tap(find.byTooltip('Sort: Newest'));
+      await tester.pumpAndSettle();
+      final before = focused();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pump();
+      expect(focused(), isNot(before), reason: 'Left with the menu open moves focus on the page');
+    });
+
+    testWidgets('an arrow pressed the moment a menu reopens does nothing, and a modified one is left to the page', (
+      tester,
+    ) async {
+      await pumpBrowse(tester, listing: _Listing({1: page([1], complete: true)}));
+      MenuItemButton? focusedItem() => FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType();
+
+      await tester.tap(find.byTooltip('Sort: Newest'));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      // Reopened, and the key arrives before the new menu has been built.
+      await tester.tap(find.byTooltip('Sort: Newest'));
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowDown);
+      expect(tester.takeException(), isNull);
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pump();
+      expect(focusedItem(), isNull, reason: 'Shift+Down does not enter the menu');
     });
 
     testWidgets('a menu button is drawn open while its menu is', (tester) async {

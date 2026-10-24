@@ -794,6 +794,7 @@ Re-checking the whole library, cache and all, is the job of the All mods table's
 It writes to the sidecar, so the dialog reports back whether it wrote anything and the mods screen rescans on the way out; the status slot is drawn from `ModInfo.origin`, which only a scan re-reads. See [§4](#4-dismissing-an-update) for what it stores and why it is a date.
 The report is the same however the dialog closes, by a button, Escape or a click outside, and comes once every write it started has ended (`ModUpdateWrites`): closed while Ignore's write is still running, the rescan waits for that write rather than reading the folder before it.
 The verdict is re-folded when the write ends through the app's container, not the dialog's, so a dialog closed mid-write still leaves the badge reading as ignored.
+The titles this dialog's check saves on the folder's downloads are written inside `whileWritingMod` too, so a check running on that folder sees the write like any other. The titles the library-wide checks and a mod page's fetch save are not, and skip a folder that is being written.
 
 The undo is also on the History tab of the mod's page
 ([`library-screen.md`](library-screen.md) §15): taking a dismissal back only

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart' show HardwareKeyboard, KeyEvent, KeyUpEvent, LogicalKeyboardKey;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/palette.dart';
@@ -697,6 +698,10 @@ class _EscapableMenuAnchor extends StatefulWidget {
 
 class _EscapableMenuAnchorState extends State<_EscapableMenuAnchor> {
   final FocusNode _anchorFocus = FocusNode(debugLabel: 'menu anchor', skipTraversal: true);
+  final MenuController _controller = MenuController();
+
+  /// The open menu's focus scope, taken from a probe in its first row.
+  FocusScopeNode? _menuScope;
 
   @override
   void dispose() {
@@ -709,14 +714,49 @@ class _EscapableMenuAnchorState extends State<_EscapableMenuAnchor> {
     if (!_anchorFocus.hasFocus) _anchorFocus.requestFocus();
   }
 
+  /// Arrow Down and Arrow Up go into the open menu, to its first and last item. Without this the arrow moves focus to
+  /// whatever is below or above the button, on the page behind the menu. Every other key, and these two while the menu
+  /// is closed, is left to the page: a disabled `Actions` entry would swallow them.
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (event is KeyUpEvent || !_controller.isOpen) return KeyEventResult.ignored;
+    final keyboard = HardwareKeyboard.instance;
+    if (keyboard.isShiftPressed || keyboard.isAltPressed || keyboard.isControlPressed || keyboard.isMetaPressed) {
+      return KeyEventResult.ignored;
+    }
+    final first = switch (event.logicalKey) {
+      LogicalKeyboardKey.arrowDown => true,
+      LogicalKeyboardKey.arrowUp => false,
+      _ => null,
+    };
+    // The scope of the menu opened last time is gone, and this one's is not built until the next frame.
+    final scope = _menuScope;
+    final context = scope?.context;
+    if (first == null || scope == null || context == null || !context.mounted) return KeyEventResult.ignored;
+    final policy = FocusTraversalGroup.maybeOf(context) ?? ReadingOrderTraversalPolicy();
+    final item = first
+        ? policy.findFirstFocus(scope, ignoreCurrentFocus: true)
+        : policy.findLastFocus(scope, ignoreCurrentFocus: true);
+    item?.requestFocus();
+    return KeyEventResult.handled;
+  }
+
   @override
   Widget build(BuildContext context) => MenuAnchor(
+    controller: _controller,
     onOpen: _onOpen,
     style: widget.style,
     alignmentOffset: widget.alignmentOffset,
-    menuChildren: widget.menuChildren,
+    menuChildren: [
+      Builder(
+        builder: (context) {
+          _menuScope = FocusScope.of(context);
+          return const SizedBox.shrink();
+        },
+      ),
+      ...widget.menuChildren,
+    ],
     builder: (context, controller, child) =>
-        Focus(focusNode: _anchorFocus, child: widget.builder(context, controller, child)),
+        Focus(focusNode: _anchorFocus, onKeyEvent: _onKey, child: widget.builder(context, controller, child)),
   );
 }
 

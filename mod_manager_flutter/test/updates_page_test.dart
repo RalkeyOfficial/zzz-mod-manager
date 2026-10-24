@@ -11,6 +11,7 @@ import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/components/library_actions_host.dart';
+import 'package:mod_manager_flutter/screens/components/mod_detail_parts.dart';
 import 'package:mod_manager_flutter/screens/updates/updates_page.dart';
 import 'package:mod_manager_flutter/services/bulk_assume_current.dart';
 import 'package:mod_manager_flutter/services/origin_write.dart';
@@ -503,6 +504,52 @@ void main() {
         isNull,
         reason: 'a check by date in a folder of one layer has nothing left',
       );
+    });
+
+    test('a base with no page has no verdict to take back or to show: the first layer is a patch', () {
+      final folder = foldDownloads([
+        DownloadCheck(
+          download: const ModDownload(role: DownloadRole.patch, modId: 2),
+          key: const DownloadKey.patch(2),
+          check: UpdateCheck(outcome: UpdateOutcome.upToDate, comparedAgainst: added),
+        ),
+        DownloadCheck(
+          download: const ModDownload(role: DownloadRole.patch, modId: 3),
+          key: const DownloadKey.patch(3),
+          check: const UpdateCheck(outcome: UpdateOutcome.updateAvailable),
+        ),
+      ]);
+      expect(folder.baseLayer, isNull);
+      expect(forgetBaseVerdict(folder), same(folder), reason: 'the patches keep what they said');
+
+      final onePatch = foldDownloads([
+        DownloadCheck(
+          download: const ModDownload(role: DownloadRole.patch, modId: 2),
+          key: const DownloadKey.patch(2),
+          check: UpdateCheck(outcome: UpdateOutcome.upToDate, comparedAgainst: added),
+        ),
+      ]);
+      expect(forgetBaseVerdict(onePatch), same(onePatch), reason: 'a lone patch is not the base');
+
+      final origin = originFixture(modId: null, patches: [patchFixture(modId: 2)]);
+      expect(baseUpdateCheck(mod('a', origin), folder), isNull);
+    });
+
+    test("a base with a page has its own verdict shown, whatever the patches say", () {
+      final folder = foldDownloads([
+        DownloadCheck(
+          download: const ModDownload(modId: 1),
+          key: const DownloadKey.base(1),
+          check: UpdateCheck(outcome: UpdateOutcome.upToDate, comparedAgainst: added),
+        ),
+        DownloadCheck(
+          download: const ModDownload(role: DownloadRole.patch, modId: 2),
+          key: const DownloadKey.patch(2),
+          check: const UpdateCheck(outcome: UpdateOutcome.updateAvailable),
+        ),
+      ]);
+      final origin = originFixture(modId: 1, patches: [patchFixture(modId: 2)]);
+      expect(baseUpdateCheck(mod('a', origin), folder)?.outcome, UpdateOutcome.upToDate);
     });
 
     testWidgets('Undo names a mod whose folder is gone since the marking, and lets it go', (tester) async {

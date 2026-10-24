@@ -411,6 +411,70 @@ void main() {
     });
   });
 
+  group('withPlacedPatches', () {
+    const body = InstalledFile(path: 'Textures/Body.dds', role: InstalledFileRole.replaced);
+    const face = InstalledFile(path: 'Textures/Face.dds');
+    final placed = {'body.dds': body, 'face.dds': face};
+
+    test('each of two patches takes only the files it recorded', () {
+      final origin = tracked(patches: [
+        const ModDownload(role: DownloadRole.patch, modId: 5100, files: [InstalledFile(path: 'Body.dds')]),
+        const ModDownload(role: DownloadRole.patch, modId: 5200, files: [InstalledFile(path: 'Face.dds')]),
+      ]);
+
+      final amended = withPlacedPatches(origin, placed);
+
+      expect(amended.patches[0].files, [body]);
+      expect(amended.patches[1].files, [face]);
+      expect(amended.base, origin.base, reason: 'the base is not touched');
+    });
+
+    test('a patch with a file that was not put back keeps no record of it', () {
+      final origin = tracked(patches: [
+        const ModDownload(role: DownloadRole.patch, modId: 5100, files: [InstalledFile(path: 'Body.dds')]),
+        const ModDownload(role: DownloadRole.patch, modId: 5200, files: [InstalledFile(path: 'Gone.dds')]),
+      ]);
+
+      final amended = withPlacedPatches(origin, placed);
+
+      expect(amended.patches[0].files, [body]);
+      expect(amended.patches[1].files, isEmpty);
+    });
+
+    test('a patch that records no files is left alone among several', () {
+      final origin = tracked(patches: [
+        const ModDownload(role: DownloadRole.patch, modId: 5100, files: [InstalledFile(path: 'Body.dds')]),
+        const ModDownload(role: DownloadRole.patch, modId: 5200),
+      ]);
+
+      expect(withPlacedPatches(origin, placed).patches[1].files, isEmpty);
+    });
+
+    test('a lone patch takes every file, including when it recorded none', () {
+      final origin = tracked(patches: [const ModDownload(role: DownloadRole.patch, modId: 5100)]);
+
+      expect(withPlacedPatches(origin, placed).patches.single.files, [body, face]);
+    });
+
+    test('nothing placed leaves a patch with the files it recorded none of', () {
+      final origin = tracked(patches: [
+        const ModDownload(role: DownloadRole.patch, modId: 5100, files: [InstalledFile(path: 'Body.dds')]),
+        const ModDownload(role: DownloadRole.patch, modId: 5200, files: [InstalledFile(path: 'Face.dds')]),
+      ]);
+
+      final amended = withPlacedPatches(origin, const {});
+
+      expect(amended.patches.map((p) => p.files), [isEmpty, isEmpty]);
+
+      final lone = origin.copyWith(downloads: [origin.downloads.first, origin.patches.first]);
+      expect(withPlacedPatches(lone, const {}).patches.single.files, isEmpty);
+    });
+
+    test('a folder with no patch changes nothing', () {
+      expect(withPlacedPatches(tracked(), placed).downloads, hasLength(1));
+    });
+  });
+
   group('withRebuiltPatchFiles', () {
     test('it derives the flat list from the layers', () {
       final origin = tracked(patches: [

@@ -12,6 +12,7 @@ import 'package:mod_manager_flutter/screens/dialogs/patch_install_flow.dart';
 import 'package:mod_manager_flutter/screens/dialogs/patch_install_prompt.dart';
 import 'package:mod_manager_flutter/services/backup/snapshot_service.dart';
 import 'package:mod_manager_flutter/services/folder_contents.dart';
+import 'package:mod_manager_flutter/services/ini_resources.dart';
 import 'package:mod_manager_flutter/services/origin_write.dart';
 import 'package:mod_manager_flutter/services/patch_placement.dart';
 import 'package:mod_manager_flutter/services/patch_record.dart';
@@ -202,12 +203,11 @@ void main() {
       patchModId: route.patchModId,
     );
     expect(rewritten.success, isTrue);
+    expect(rewritten.placedFrom.keys, route.patchFiles.map(normalizeIniPath), reason: 'each by the path it came from');
+    expect(rewritten.placedFrom.values, rewritten.placedPatchFiles);
     await amend('Ellen', (current) {
       final updated = withDownloadUpdatedTo(current, layer: base, fileId: fileA2, files: rewritten.writtenFiles)!;
-      return withRebuiltPatchFiles(updated.copyWith(downloads: [
-        updated.base!,
-        for (final layer in updated.patches) layer.copyWith(files: rewritten.placedPatchFiles),
-      ]));
+      return withRebuiltPatchFiles(withPlacedPatches(updated, rewritten.placedFrom));
     });
     expect(read('ellen.ini'), 'B2 fix', reason: 'B2 is put back on top');
     expect(read('Textures/Body.dds'), 'A2 body');

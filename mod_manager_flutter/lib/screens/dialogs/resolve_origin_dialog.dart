@@ -769,7 +769,9 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
     if (outcome == null || !mounted) return;
 
     await _write((current) {
-      if (current == null) return null;
+      // The answer was given about the stack this dialog showed: a layer added since (a patch install that was
+      // queued) would be duplicated, or replaced where the base was meant to go under it.
+      if (current == null || !_sameLayers(current, origin)) return null;
       return withRebuiltPatchFiles(switch (outcome) {
         // Under everything, which is what makes the folder's own layer a patch
         // — with no field to rewrite, because the role follows the position.
@@ -780,15 +782,22 @@ class _ResolveOriginDialogState extends ConsumerState<ResolveOriginDialog> {
         // "This is just one mod after all". The layer goes and the flag goes
         // with it: what is left is one download that patches nothing, which is
         // an ordinary mod.
-        CompanionRemoved() => (current.isMixed
-                ? current.copyWith(downloads: current.patches)
-                : current)
+        CompanionRemoved() => (current.isMixed ? current.withoutBase() : current)
             .copyWith(
             ingest: (current.ingest ?? const ModIngest())
                 .copyWith(patchShaped: false),
           ),
       });
     });
+  }
+
+  /// Whether [a] and [b] hold the same layers, by page and file.
+  static bool _sameLayers(ModOrigin a, ModOrigin b) {
+    if (a.downloads.length != b.downloads.length) return false;
+    for (var i = 0; i < a.downloads.length; i++) {
+      if (a.downloads[i].modId != b.downloads[i].modId || a.downloads[i].fileId != b.downloads[i].fileId) return false;
+    }
+    return true;
   }
 
   /// The best name this dialog can put on a layer, without fetching one, on one
