@@ -29,7 +29,6 @@ class SettingsAboutCard extends ConsumerWidget {
       AppUpdateOutcome.newer => loc.t('settings.about_card.newer', params: {'version': result?.latest ?? ''}),
       _ => null,
     };
-    final dark = palette.brightness == Brightness.dark;
 
     Future<void> open(String url) async {
       final notify = context.notify;
@@ -56,7 +55,7 @@ class SettingsAboutCard extends ConsumerWidget {
               spacing: 14,
               children: [
                 Image.asset(
-                  dark ? 'assets/brand/logo-mark-on-dark.png' : 'assets/brand/logo-mark-on-light.png',
+                  'assets/brand/logo-app-icon.png',
                   width: 44,
                   height: 44,
                   excludeFromSemantics: true,

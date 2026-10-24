@@ -184,6 +184,16 @@ void main() {
     expect(scrolled(tester), greaterThan(0), reason: 'the page scrolls to the section asked for');
   });
 
+  testWidgets("the page ends with the Zenith card, drawn with the app icon as the canvas's is", (tester) async {
+    await pumpPage(tester);
+
+    final images = tester.widgetList<Image>(find.byType(Image)).map((i) => (i.image as AssetImage).assetName);
+    expect(images, contains('assets/brand/logo-app-icon.png'));
+    expect(images, isNot(contains('assets/brand/logo-mark-on-dark.png')));
+    expect(find.text('Source code'), findsOneWidget);
+    expect(find.text('Report a problem'), findsOneWidget);
+  });
+
   testWidgets('a narrow window puts the list above the page without overflowing', (tester) async {
     await pumpPage(tester, size: const Size(600, 700));
 

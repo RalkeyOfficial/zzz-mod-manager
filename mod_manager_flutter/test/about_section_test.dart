@@ -134,11 +134,12 @@ void main() {
       expect(find.text('Version ${AppConstants.appVersion} · Linux'), findsOneWidget);
     });
 
-    testWidgets('draws the logo from the brand assets', (tester) async {
+    testWidgets("draws the detailed logo, as the canvas's hero does, not the title bar's mark", (tester) async {
       await pumpAbout(tester);
 
       final images = tester.widgetList<Image>(find.byType(Image)).map((i) => (i.image as AssetImage).assetName);
-      expect(images, contains('assets/brand/logo-mark-on-dark.png'));
+      expect(images, contains('assets/brand/logo-detailed.png'));
+      expect(images, isNot(contains('assets/brand/logo-mark-on-dark.png')));
     });
 
     testWidgets('makes no request until Check for updates is pressed', (tester) async {
@@ -447,12 +448,12 @@ void main() {
     });
   }
 
-  testWidgets('draws the logo made for the paper theme in it', (tester) async {
+  testWidgets('draws the same detailed logo in the paper theme', (tester) async {
     await pumpAbout(tester, brightness: Brightness.light);
 
     final images = tester.widgetList<Image>(find.byType(Image)).map((i) => (i.image as AssetImage).assetName);
-    expect(images, contains('assets/brand/logo-mark-on-light.png'));
-    expect(images, isNot(contains('assets/brand/logo-mark-on-dark.png')));
+    expect(images, contains('assets/brand/logo-detailed.png'));
+    expect(images, isNot(contains('assets/brand/logo-mark-on-light.png')));
   });
 
   for (final brightness in Brightness.values) {

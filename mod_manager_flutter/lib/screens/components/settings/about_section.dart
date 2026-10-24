@@ -180,9 +180,8 @@ class _Logo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = ZenithPalette.of(context);
-    final asset = palette.brightness == Brightness.dark
-        ? 'assets/brand/logo-mark-on-dark.png'
-        : 'assets/brand/logo-mark-on-light.png';
+    // The detailed logo, as the canvas's hero draws it: the title bar's mark is the small one.
+    const asset = 'assets/brand/logo-detailed.png';
     Image mark({String? label}) => Image.asset(
       asset,
       width: size,
