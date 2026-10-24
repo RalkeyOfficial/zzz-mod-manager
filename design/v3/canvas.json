@@ -1,0 +1,344 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "About.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "title": "Settings · about",
+      "w": 1440,
+      "x": 6080,
+      "y": 2520
+    },
+    "AssumeCurrentModal.dc.html": {
+      "h": 900,
+      "is_interactive": true,
+      "title": "Modal · mark mods as current",
+      "w": 1440,
+      "x": 7600,
+      "y": 4800
+    },
+    "AllMods.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "title": "Library · all mods table",
+      "w": 1440,
+      "x": 3040,
+      "y": 0
+    },
+    "Browse.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "title": "Browse · GameBanana grid",
+      "w": 1440,
+      "x": 0,
+      "y": 1260
+    },
+    "BrowseMod.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "title": "Browse · mod page",
+      "w": 1440,
+      "x": 1520,
+      "y": 1260
+    },
+    "Colours.dc.html": {
+      "h": 900,
+      "title": "Colour directions",
+      "w": 1440,
+      "x": 1520,
+      "y": -1260
+    },
+    "ContextMenu.dc.html": {
+      "h": 900,
+      "title": "Overlay · mod right-click menu",
+      "w": 1440,
+      "x": 7600,
+      "y": 3780
+    },
+    "DeleteModal.dc.html": {
+      "h": 900,
+      "title": "Modal · delete a mod",
+      "w": 1440,
+      "x": 3040,
+      "y": 3780
+    },
+    "Downloads.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "title": "Downloads panel",
+      "w": 1440,
+      "x": 3040,
+      "y": 1260
+    },
+    "EditModal.dc.html": {
+      "h": 900,
+      "is_interactive": true,
+      "title": "Modal · edit mod info",
+      "w": 1440,
+      "x": 6080,
+      "y": 3780
+    },
+    "Foundations.dc.html": {
+      "h": 900,
+      "title": "Foundations · tokens & components",
+      "w": 1440,
+      "x": 0,
+      "y": -1260
+    },
+    "ImportModal.dc.html": {
+      "h": 900,
+      "title": "Modal · import dropped files",
+      "w": 1440,
+      "x": 0,
+      "y": 3780
+    },
+    "Loadouts.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "title": "Loadouts",
+      "w": 1440,
+      "x": 6080,
+      "y": 0
+    },
+    "Main.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "title": "Library · character view",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "ModPage.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "title": "Library · mod page",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "Onboarding.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "First run · locate ZZMI",
+      "w": 1440,
+      "x": 0,
+      "y": 2520
+    },
+    "OnboardingLaunch.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "title": "First run · set up launching (Linux)",
+      "w": 1440,
+      "x": 1520,
+      "y": 2520
+    },
+    "PatchModal.dc.html": {
+      "h": 900,
+      "is_interactive": true,
+      "title": "Modal · install a patch",
+      "w": 1440,
+      "x": 3040,
+      "y": 4800
+    },
+    "FoldersModal.dc.html": {
+      "h": 900,
+      "is_interactive": true,
+      "title": "Modal · archive with several folders",
+      "w": 1440,
+      "x": 4560,
+      "y": 4800
+    },
+    "MakePatchModal.dc.html": {
+      "h": 900,
+      "is_interactive": true,
+      "title": "Modal · make a mod a patch",
+      "w": 1440,
+      "x": 6080,
+      "y": 4800
+    },
+    "Palette.dc.html": {
+      "h": 900,
+      "title": "Overlay · command palette",
+      "w": 1440,
+      "x": 4560,
+      "y": 3780
+    },
+    "ReinstallModal.dc.html": {
+      "h": 900,
+      "title": "Modal · reinstall this version",
+      "w": 1440,
+      "x": 10640,
+      "y": 3780
+    },
+    "Settings.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "title": "Settings",
+      "w": 1440,
+      "x": 3040,
+      "y": 2520
+    },
+    "Storage.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "title": "Settings · storage",
+      "w": 1440,
+      "x": 4560,
+      "y": 2520
+    },
+    "TrackingModal.dc.html": {
+      "h": 900,
+      "is_interactive": true,
+      "title": "Modal · update tracking",
+      "w": 1440,
+      "x": 9120,
+      "y": 3780
+    },
+    "UpdateModal.dc.html": {
+      "h": 900,
+      "title": "Modal · update a mod",
+      "w": 1440,
+      "x": 1520,
+      "y": 3780
+    },
+    "UpdateOneModal.dc.html": {
+      "h": 900,
+      "is_interactive": true,
+      "title": "Modal · update one mod",
+      "w": 1440,
+      "x": 1520,
+      "y": 4800
+    },
+    "Updates.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "title": "Library · updates",
+      "w": 1440,
+      "x": 4560,
+      "y": 0
+    },
+    "Notifications.dc.html": {
+      "h": 900,
+      "is_interactive": true,
+      "title": "Overlay · notifications",
+      "w": 1440,
+      "x": 9120,
+      "y": 4800
+    },
+    "BrowseCreator.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "title": "Browse · creator page",
+      "w": 1440,
+      "x": 4560,
+      "y": 1260
+    },
+    "ButtonStates.dc.html": {
+      "h": 900,
+      "is_interactive": true,
+      "title": "Foundations · button states",
+      "w": 1440,
+      "x": 3040,
+      "y": -1260
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-10-17T12:00:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "t1": {
+      "kind": "title1",
+      "maxW": 7520,
+      "text": "Library",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "t2": {
+      "kind": "title1",
+      "maxW": 6000,
+      "text": "Browse GameBanana",
+      "w": 240,
+      "x": 0,
+      "y": 960
+    },
+    "t3": {
+      "kind": "title1",
+      "maxW": 8000,
+      "text": "Setup & settings",
+      "w": 240,
+      "x": 0,
+      "y": 2220
+    },
+    "t4": {
+      "kind": "title1",
+      "maxW": 8000,
+      "text": "Modals & overlays",
+      "w": 240,
+      "x": 0,
+      "y": 3480
+    },
+    "t5": {
+      "kind": "title1",
+      "maxW": 8000,
+      "text": "Foundations",
+      "w": 240,
+      "x": 0,
+      "y": -1560
+    }
+  },
+  "order": [
+    "Foundations.dc.html",
+    "Colours.dc.html",
+    "ButtonStates.dc.html",
+    "Main.dc.html",
+    "ModPage.dc.html",
+    "AllMods.dc.html",
+    "Updates.dc.html",
+    "Loadouts.dc.html",
+    "Browse.dc.html",
+    "BrowseMod.dc.html",
+    "BrowseCreator.dc.html",
+    "Downloads.dc.html",
+    "Onboarding.dc.html",
+    "OnboardingLaunch.dc.html",
+    "Settings.dc.html",
+    "Storage.dc.html",
+    "About.dc.html",
+    "ImportModal.dc.html",
+    "UpdateModal.dc.html",
+    "UpdateOneModal.dc.html",
+    "PatchModal.dc.html",
+    "FoldersModal.dc.html",
+    "MakePatchModal.dc.html",
+    "DeleteModal.dc.html",
+    "Palette.dc.html",
+    "EditModal.dc.html",
+    "ContextMenu.dc.html",
+    "TrackingModal.dc.html",
+    "ReinstallModal.dc.html",
+    "AssumeCurrentModal.dc.html",
+    "Notifications.dc.html"
+  ],
+  "pages": [],
+  "title": "Zenith v3 UI"
+}

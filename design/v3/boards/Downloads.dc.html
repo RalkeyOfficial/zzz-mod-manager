@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Downloads panel</title>
+<script src="../../runtime/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Unbounded:wght@500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#060708}
+a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
+.app,.app *{box-sizing:border-box}
+.app{font-family:'Geist',system-ui,sans-serif;color:#ECEDEE;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+:where(.app) :where(button,input,textarea){font:inherit;color:inherit}
+.app h1,.app h2,.app h3,.app p{margin:0}
+.disp{font-family:'Unbounded','Geist',sans-serif;letter-spacing:-0.01em}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.logo{width:26px;height:26px;display:block;flex:none;object-fit:contain}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:8px;border:1px solid #363A42;background:#1A1C20;color:#ECEDEE;font-weight:500;font-size:13px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn:hover{background:#24272C;color:#ECEDEE}
+.btn-pri{background:var(--ac);border-color:var(--ac);color:#0B0C0E;font-weight:600}
+.btn-ghost{background:transparent;border-color:transparent;color:#A9ADB5}
+.btn-sm{height:30px;padding:0 10px;font-size:12px;border-radius:7px}
+.ibtn{width:36px;padding:0}.btn-sm.ibtn{width:30px}
+.lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#80858F}
+.sk{background:#15171A;border-radius:8px}
+.t-ice{background-color:#0E1D25;background-image:radial-gradient(#1F4556 1.1px,transparent 1.3px);background-size:7px 7px}
+.t-fire{background-color:#25130D;background-image:radial-gradient(#552B19 1.1px,transparent 1.3px);background-size:7px 7px}
+.t-elec{background-color:#0F1730;background-image:radial-gradient(#243F73 1.1px,transparent 1.3px);background-size:7px 7px}
+.t-ether{background-color:#21112A;background-image:radial-gradient(#4E275E 1.1px,transparent 1.3px);background-size:7px 7px}
+.t-misc{background-color:#15171A;background-image:radial-gradient(#2C3038 1.1px,transparent 1.3px);background-size:7px 7px}
+.dl{display:flex;gap:12px;padding:12px;border-radius:12px;border:1px solid #23262B;background:#121316}
+.bar{height:6px;border-radius:99px;background:#22252A;overflow:hidden}
+.bar span{display:block;height:100%;background:var(--ac);border-radius:99px}
+.bar.ind span{width:35%;margin-left:30%;opacity:.7}
+.dl.att{border-color:#5A4215;background:#17120A}
+.fl{display:flex;align-items:baseline;gap:8px;min-width:0;font-size:12px;color:#80858F}
+.fl .fn{font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:#A9ADB5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.fl .vt{white-space:nowrap;flex:none}
+.atticon{width:56px;height:42px;border-radius:7px;flex:none;display:grid;place-items:center;background:#2A1F0A;color:#FFC870}
+</style>
+</helmet>
+<div class="app" style="--ac: {{accent}}; position: relative; width: 100%; height: 900px; background: #0B0C0E; overflow: hidden">
+
+<div aria-hidden="true" style="position: absolute; inset: 0; display: flex; flex-direction: column">
+  <div style="height: 44px; border-bottom: 1px solid #1E2024; background: #0A0B0D; display: flex; align-items: center; gap: 10px; padding-left: 16px"><img class="logo" src="../../../mod_manager_flutter/assets/brand/logo-mark-on-dark.png" alt="Zenith"><span class="disp" style="font-weight: 700; letter-spacing: .08em">ZENITH</span></div>
+  <div style="flex: 1; display: flex">
+    <div style="width: 216px; background: #0A0B0D; border-right: 1px solid #1E2024; padding: 22px 14px; display: flex; flex-direction: column; gap: 12px">
+      <div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px; margin-top: 18px"></div><div class="sk" style="height: 26px"></div>
+    </div>
+    <div style="flex: 1; padding: 28px 32px; display: flex; flex-direction: column; gap: 18px">
+      <div class="sk" style="height: 34px; width: 220px"></div>
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px">
+        <div class="sk" style="height: 260px"></div><div class="sk" style="height: 260px"></div><div class="sk" style="height: 260px"></div><div class="sk" style="height: 260px"></div>
+        <div class="sk" style="height: 260px"></div><div class="sk" style="height: 260px"></div><div class="sk" style="height: 260px"></div><div class="sk" style="height: 260px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(4,5,6,.6)"></div>
+
+<aside role="dialog" aria-label="Downloads" style="position: absolute; top: 44px; right: -1px; bottom: 0; width: 441px; max-width: 100%; display: flex; flex-direction: column; background: #0D0E10; border-left: 1px solid #2A2D33; box-shadow: -24px 0 60px rgba(0,0,0,.5)">
+  <div style="display: flex; align-items: center; justify-content: space-between; padding: 18px 20px; border-bottom: 1px solid #1E2024">
+    <h2 class="disp" style="font-size: 18px; font-weight: 700">Downloads</h2>
+    <div style="display: flex; gap: 4px">
+      <button class="btn btn-ghost btn-sm">Clear finished</button>
+      <a class="btn btn-ghost btn-sm ibtn" href="Browse.dc.html" aria-label="Close downloads"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></a>
+    </div>
+  </div>
+
+  <div style="flex: 1; overflow: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px">
+    <span class="lbl" style="padding: 4px 2px; color: #FFC870">Needs your attention · 3</span>
+    <div class="dl att">
+      <div class="atticon"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 15l-2 2a3 3 0 0 1-4.2-4.2l3-3a3 3 0 0 1 4.2 0"></path><path d="M15 9l2-2a3 3 0 0 1 4.2 4.2l-3 3a3 3 0 0 1-4.2 0"></path></svg></div>
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span style="font-weight: 600">Stocking Fix</span>
+          <span class="fl"><span class="fn">StockingFix_v2.zip</span><span class="vt">“for the maid outfit”</span></span>
+          <span style="font-size: 12px; color: #E6D3B3">Looks like a patch for another mod. Choose what it should patch.</span>
+        </div>
+        <div style="display: flex; gap: 6px">
+          <a class="btn btn-sm" href="PatchModal.dc.html">Choose…</a>
+          <button class="btn btn-sm btn-ghost">Don't install</button>
+        </div>
+      </div>
+    </div>
+    <div class="dl att">
+      <div class="atticon"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.5l2 2h7.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path></svg></div>
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span style="font-weight: 600">Shark Hoodie Pack</span>
+          <span class="fl"><span class="fn">SharkHoodie_AllColours.7z</span></span>
+          <span style="font-size: 12px; color: #E6D3B3">The archive has 3 folders. Pick which to install and how.</span>
+        </div>
+        <div style="display: flex; gap: 6px">
+          <a class="btn btn-sm" href="FoldersModal.dc.html">Pick folders…</a>
+          <button class="btn btn-sm btn-ghost">Don't install</button>
+        </div>
+      </div>
+    </div>
+    <div class="dl att">
+      <div class="atticon"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg></div>
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span style="font-weight: 600">Idol Stage Outfit</span>
+          <span class="fl"><span class="fn">IdolStage_v3.rar</span><span class="vt">“with hat”</span></span>
+          <span style="font-size: 12px; color: #E6D3B3">The archive asks for a password. Authors usually put it in the mod description.</span>
+        </div>
+        <div style="display: flex; gap: 6px">
+          <button class="btn btn-sm">Enter password</button>
+          <a class="btn btn-sm btn-ghost" href="BrowseMod.dc.html">Open mod page</a>
+        </div>
+      </div>
+    </div>
+
+    <span class="lbl" style="padding: 12px 2px 4px">In progress</span>
+    <div class="dl">
+      <div class="t-ether" style="width: 56px; height: 42px; border-radius: 7px; flex: none"></div>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px">
+        <div style="display: flex; flex-direction: column; gap: 1px"><div style="display: flex; justify-content: space-between; gap: 8px"><span style="font-weight: 600">Victorian Ballgown</span><span class="mono" style="font-size: 11px; color: #A9ADB5">62%</span></div><span class="fl"><span class="fn">VictorianBallgown_v1.2.zip</span><span class="vt">“Full dress”</span></span></div>
+        <div class="bar"><span style="width: 62%"></span></div>
+        <span style="font-size: 12px; color: #80858F">133 of 214 MB · 4.1 MB/s · for Ellen Joe</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <button class="btn btn-ghost btn-sm ibtn" aria-label="Pause"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6v12M15 6v12"></path></svg></button>
+        <button class="btn btn-ghost btn-sm ibtn" aria-label="Cancel"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+      </div>
+    </div>
+    <div class="dl">
+      <div class="t-elec" style="width: 56px; height: 42px; border-radius: 7px; flex: none"></div>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px">
+        <div style="display: flex; flex-direction: column; gap: 1px"><div style="display: flex; justify-content: space-between; gap: 8px"><span style="font-weight: 600">Shark Hoodie Recolor</span><span style="font-size: 11px; color: #A9ADB5">Updating</span></div><span class="fl"><span class="fn">SharkHoodie_Blue_1Oct.zip</span><span class="vt">“blue”</span></span></div>
+        <div class="bar ind"><span></span></div>
+        <span style="font-size: 12px; color: #80858F">Unpacking the 1 Oct file · old one kept as a snapshot</span>
+      </div>
+    </div>
+
+    <span class="lbl" style="padding: 12px 2px 4px">Waiting</span>
+    <div class="dl" style="opacity: .75">
+      <div class="t-ether" style="width: 56px; height: 42px; border-radius: 7px; flex: none"></div>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+        <span style="font-weight: 600">Victorian Ballgown</span>
+        <span class="fl"><span class="fn">Ballgown_Black.7z</span><span class="vt">“black ver.”</span></span>
+        <span style="font-size: 12px; color: #80858F">198 MB · starts after the current download</span>
+      </div>
+      <button class="btn btn-ghost btn-sm ibtn" aria-label="Remove from queue"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+    </div>
+    <div class="dl" style="opacity: .75">
+      <div class="t-fire" style="width: 56px; height: 42px; border-radius: 7px; flex: none"></div>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+        <span style="font-weight: 600">Racing Suit</span>
+        <span class="fl"><span class="fn">RacingSuit_Belle.zip</span></span>
+        <span style="font-size: 12px; color: #80858F">156 MB · second in line</span>
+      </div>
+      <button class="btn btn-ghost btn-sm ibtn" aria-label="Remove from queue"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+    </div>
+
+    <span class="lbl" style="padding: 12px 2px 4px">Finished</span>
+    <div class="dl">
+      <div class="t-ice" style="width: 56px; height: 42px; border-radius: 7px; flex: none"></div>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+        <span style="font-weight: 600">Winter Maid Uniform</span>
+        <span class="fl"><span class="fn">WinterMaid_v1.4.zip</span><span class="vt">“standard”</span></span>
+        <span style="font-size: 12px; color: #80858F">Updated to the 28 Sep file · Ellen Joe · 2 min ago</span>
+      </div>
+      <a class="btn btn-sm" href="Main.dc.html">Show</a>
+    </div>
+    <div class="dl">
+      <div class="t-misc" style="width: 56px; height: 42px; border-radius: 7px; flex: none"></div>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+        <span style="font-weight: 600">Bangboo Party Hats</span>
+        <span class="fl"><span class="fn">PartyHats.zip</span></span>
+        <span style="font-size: 12px; color: #80858F">Installed · Unknown · 9 min ago</span>
+      </div>
+      <button class="btn btn-sm btn-pri">Turn on</button>
+    </div>
+  </div>
+
+  <div style="padding: 12px 20px; border-top: 1px solid #1E2024; font-size: 12px; color: #80858F">Archives are deleted once they're installed.</div>
+</aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#A98BFF","options":["#A98BFF","#F3EFEB","#C8F031","#5FE1D9"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#A98BFF' };
+  }
+}
+</script>
+</body>
+</html>

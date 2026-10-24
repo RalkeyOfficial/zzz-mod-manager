@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings · about</title>
+<script src="../../runtime/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Unbounded:wght@500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#060708}
+a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
+.app,.app *{box-sizing:border-box}
+.app{font-family:'Geist',system-ui,sans-serif;color:#ECEDEE;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+:where(.app) :where(button,input,textarea){font:inherit;color:inherit}
+.app h1,.app h2,.app h3,.app p{margin:0}
+.disp{font-family:'Unbounded','Geist',sans-serif;letter-spacing:-0.01em}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.logo{width:26px;height:26px;display:block;flex:none;object-fit:contain}
+.winbtn{width:46px;height:44px;display:grid;place-items:center;background:transparent;border:0;color:#A9ADB5;cursor:pointer}
+.winbtn:hover{background:#1A1C20}.winbtn.x:hover{background:#C4352B;color:#fff}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:8px;border:1px solid #363A42;background:#1A1C20;color:#ECEDEE;font-weight:500;font-size:13px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn:hover{background:#24272C;color:#ECEDEE}
+.btn-pri{background:var(--ac);border-color:var(--ac);color:#0B0C0E;font-weight:600}
+.btn-pri:hover{background:var(--ac);color:#0B0C0E;filter:brightness(1.08)}
+.btn-ghost{background:transparent;border-color:transparent;color:#A9ADB5}
+.btn-sm{height:30px;padding:0 10px;font-size:12px;border-radius:7px}
+.field{display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;border-radius:8px;border:1px solid #2F3239;background:#101114;color:#80858F}
+.kbd{font-family:'Geist Mono',monospace;font-size:11px;line-height:1;padding:3px 6px;border-radius:5px;border:1px solid #3A3E46;border-bottom-width:2px;background:#1A1C20;color:#C9CCD2;white-space:nowrap}
+.lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#80858F}
+.nav{display:flex;align-items:center;gap:12px;height:38px;padding:0 12px;border-radius:8px;color:#A9ADB5;text-decoration:none;font-weight:500}
+.nav:hover{background:#17191D;color:#ECEDEE}
+.nav.cur{background:#1C1F24;color:#ECEDEE;box-shadow:inset 0 0 0 1px #2A2D33}
+.nav.cur .i{color:var(--ac)}
+.nav .n{margin-left:auto;font-family:'Geist Mono',monospace;font-size:11px;color:#80858F}
+.nav .n.hot{background:#3A2A0C;color:#FFC870;padding:1px 6px;border-radius:5px}
+.nav .n.att{display:inline-flex;align-items:center;gap:4px;background:#3A2A0C;color:#FFC870;padding:1px 6px 1px 5px;border-radius:5px;font-weight:600}
+.nav .n.att .i{width:12px;height:12px;stroke-width:2.2}
+.snav{display:block;padding:7px 12px;border-radius:7px;color:#A9ADB5;text-decoration:none}
+.snav:hover{color:#ECEDEE;background:#141619}
+.snav.cur{color:#ECEDEE;background:#16181C;box-shadow:inset 2px 0 0 var(--ac)}
+.group{border:1px solid #23262B;border-radius:14px;background:#101114;overflow:hidden}
+.row{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:14px 20px;border-bottom:1px solid #1A1C20;flex-wrap:wrap}
+.row:last-child{border-bottom:0}
+.row .t{display:flex;flex-direction:column;gap:3px;flex:1 1 260px;min-width:0}
+.row .t b{font-weight:600}
+.row .t span{font-size:12px;color:#80858F}
+.lk{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:12px;border:1px solid #23262B;background:#101114;color:#ECEDEE;text-decoration:none}
+.lk:hover{border-color:#3A3E46;color:#ECEDEE}
+.lk .ico{width:34px;height:34px;border-radius:9px;background:#1A1C20;display:grid;place-items:center;color:#A9ADB5;flex:none}
+</style>
+</helmet>
+<div class="app" style="--ac: {{accent}}; position: relative; width: 100%; min-height: 900px; background: #0B0C0E; display: flex; flex-direction: column; overflow: hidden">
+
+<header style="display: flex; align-items: center; gap: 16px; height: 44px; padding-left: 16px; border-bottom: 1px solid #1E2024; background: #0A0B0D; flex: none">
+  <div style="display: flex; align-items: center; gap: 10px; width: 200px">
+    <img class="logo" src="../../../mod_manager_flutter/assets/brand/logo-mark-on-dark.png" alt="Zenith">
+    <span class="disp" style="font-weight: 700; letter-spacing: .08em">ZENITH</span>
+  </div>
+  <a href="Palette.dc.html" class="field" style="width: 440px; max-width: 40%; height: 30px; margin: 0 auto; text-decoration: none; cursor: pointer">
+    <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+    <span style="flex: 1; font-size: 12px">Search mods, characters and actions</span>
+    <span class="kbd">Ctrl K</span>
+  </a>
+  <div style="display: flex">
+    <button class="winbtn" aria-label="Minimize"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"></path></svg></button>
+    <button class="winbtn" aria-label="Maximize"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1.5"></rect></svg></button>
+    <button class="winbtn x" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+  </div>
+</header>
+
+<div style="flex: 1; display: flex; flex-wrap: wrap; min-height: 0">
+  <nav aria-label="Main" style="flex: 0 0 216px; display: flex; flex-direction: column; gap: 2px; padding: 14px 10px; border-right: 1px solid #1E2024; background: #0A0B0D">
+    <span class="lbl" style="padding: 6px 12px 8px">Library</span>
+    <a class="nav" href="Main.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"></rect><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"></rect><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"></rect><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"></rect></svg>Characters<span class="n">48</span></a>
+    <a class="nav" href="AllMods.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"></path></svg>All mods<span class="n">61</span></a>
+    <a class="nav" href="Updates.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="m8.5 12 3.5-3.5 3.5 3.5M12 8.5V16"></path></svg>Updates<span class="n hot">3</span></a>
+    <a class="nav" href="Loadouts.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.5 8.5 4.5-8.5 4.5L3.5 8z"></path><path d="m3.5 12.5 8.5 4.5 8.5-4.5"></path><path d="m3.5 16.5 8.5 4.5 8.5-4.5"></path></svg>Loadouts<span class="n">4</span></a>
+    <span class="lbl" style="padding: 18px 12px 8px">GameBanana</span>
+    <a class="nav" href="Browse.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="m15.5 8.5-2 5-5 2 2-5z"></path></svg>Browse</a>
+    <a class="nav" href="Downloads.dc.html" aria-label="Downloads, 3 need your attention"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 10 5 5 5-5"></path><path d="M5 20h14"></path></svg>Downloads<span class="n att" title="3 downloads need your attention"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4 2.8 19.5h18.4z"></path><path d="M12 10v4.5M12 17v.01"></path></svg>3</span></a>
+    <div style="margin-top: auto; display: flex; flex-direction: column; gap: 10px">
+      <div style="padding: 12px; border-radius: 12px; background: #121316; border: 1px solid #23262B; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; align-items: center; gap: 8px">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--ac); box-shadow: 0 0 0 3px color-mix(in srgb,var(--ac) 25%,transparent)"></span>
+          <span style="font-weight: 600; font-size: 12px">ZZMI connected</span>
+        </div>
+        <span style="color: #A9ADB5; font-size: 12px">14 mods active · press <span class="kbd">F10</span> in game after changes</span>
+        <button class="btn btn-pri" style="width: 100%; height: 40px"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="fill: currentColor; stroke: none"><path d="M8 5v14l11-7z"></path></svg>Launch game</button>
+      </div>
+      <a class="nav cur" href="Settings.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"></path><circle cx="15" cy="6" r="2"></circle><circle cx="9" cy="12" r="2"></circle><circle cx="17" cy="18" r="2"></circle></svg>Settings</a>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-wrap: wrap; align-items: flex-start">
+    <aside style="flex: 0 0 210px; padding: 28px 12px 28px 20px; display: flex; flex-direction: column; gap: 2px">
+      <h1 class="disp" style="font-size: 24px; font-weight: 700; padding: 0 12px 16px">Settings</h1>
+      <a class="snav" href="Settings.dc.html">General</a>
+      <a class="snav" href="Settings.dc.html">Game &amp; folders</a>
+      <a class="snav" href="Settings.dc.html">Mods</a>
+      <a class="snav" href="Settings.dc.html">GameBanana</a>
+      <a class="snav" href="Storage.dc.html">Storage</a>
+      <a class="snav" href="Settings.dc.html">Appearance</a>
+      <a class="snav cur" href="About.dc.html">About</a>
+    </aside>
+
+    <div style="flex: 999 1 520px; min-width: 0; max-width: 820px; padding: 28px 32px 48px; display: flex; flex-direction: column; gap: 24px">
+      <section style="position: relative; overflow: hidden; display: flex; align-items: center; gap: 28px; padding: 28px; border-radius: 18px; border: 1px solid #23262B; background-color: #101114; background-image: radial-gradient(#1C1F23 1.2px, transparent 1.4px); background-size: 12px 12px; flex-wrap: wrap">
+        <img src="../../../mod_manager_flutter/assets/brand/logo-detailed.png" alt="Zenith logo" style="width: 120px; height: 120px; flex: none; filter: drop-shadow(0 14px 32px rgba(0,0,0,.5))">
+        <div style="display: flex; flex-direction: column; gap: 10px; flex: 1 1 280px">
+          <h2 class="disp" style="font-size: 28px; font-weight: 800; text-transform: uppercase; line-height: 1.05">Zenith</h2>
+          <span style="color: #C9CCD2">Mod manager for Zenless Zone Zero</span>
+          <span style="color: #A9ADB5">Version <span class="mono" style="color: #ECEDEE">3.0.0</span> · Linux</span>
+          <span style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #C9CCD2"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--ac); width: 14px; height: 14px"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg>You're on the latest version · checked 10 minutes ago</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <button class="btn"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 11A7.5 7.5 0 0 0 5.6 7.5L4 9.5"></path><path d="M4 4.5v5h5"></path><path d="M4.5 13a7.5 7.5 0 0 0 13.9 3.5l1.6-2"></path><path d="M20 19.5v-5h-5"></path></svg>Check for updates</button>
+          <a class="btn btn-ghost" href="https://github.com">Release notes</a>
+        </div>
+      </section>
+
+      <section style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+        <a class="lk" href="https://github.com">
+          <span class="ico"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M13.5 5l-3 14"></path></svg></span>
+          <span style="display: flex; flex-direction: column"><b style="font-weight: 600">Source code</b><span style="font-size: 12px; color: #80858F">GitHub</span></span>
+        </a>
+        <a class="lk" href="https://github.com">
+          <span class="ico"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4 2.8 19.5h18.4z"></path><path d="M12 10v4.5M12 17v.01"></path></svg></span>
+          <span style="display: flex; flex-direction: column"><b style="font-weight: 600">Report a problem</b><span style="font-size: 12px; color: #80858F">Opens a GitHub issue</span></span>
+        </a>
+        <a class="lk" href="https://github.com">
+          <span class="ico"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h7l4 4v12H7z"></path><path d="M14 4v4h4M10 13h5M10 16.5h5"></path></svg></span>
+          <span style="display: flex; flex-direction: column"><b style="font-weight: 600">License</b><span style="font-size: 12px; color: #80858F">[license name]</span></span>
+        </a>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 12px">
+        <h2 style="font-size: 15px; font-weight: 600">For bug reports</h2>
+        <div class="group">
+          <div class="row">
+            <div class="t"><b>App data</b><span class="mono" style="color: #C9CCD2">~/.local/share/zzz-mod-manager</span></div>
+            <button class="btn btn-sm">Open</button>
+          </div>
+          <div class="row">
+            <div class="t"><b>Logs</b><span>Kept for 14 days. Attach the newest file to a bug report.</span></div>
+            <button class="btn btn-sm">Open log folder</button>
+          </div>
+          <div class="row">
+            <div class="t"><b>System info</b><span class="mono">3.0.0 · Linux · ZZMI found · 61 mods</span></div>
+            <button class="btn btn-sm"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"></rect><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"></path></svg>Copy</button>
+          </div>
+        </div>
+      </section>
+
+      <p style="font-size: 12px; color: #80858F; line-height: 1.6">Made by RalkeyOfficial. Not affiliated with HoYoverse or GameBanana. Zenless Zone Zero and its characters belong to HoYoverse; mods belong to their authors.</p>
+    </div>
+  </main>
+</div>
+
+<footer style="display: flex; align-items: center; gap: 18px; height: 28px; padding: 0 16px; border-top: 1px solid #1E2024; background: #0A0B0D; color: #80858F; font-size: 11px; flex: none">
+  <span class="mono">ZZMI · ~/Games/XXMI/ZZMI</span>
+  <span>14 links active</span>
+  <span>Watching library for changes</span>
+  <span style="margin-left: auto" class="mono">v3.0.0</span>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#A98BFF","options":["#A98BFF","#F3EFEB","#C8F031","#5FE1D9"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#A98BFF' };
+  }
+}
+</script>
+</body>
+</html>

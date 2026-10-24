@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Update tracking</title>
+<script src="../../runtime/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Unbounded:wght@500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#060708}
+a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
+.app,.app *{box-sizing:border-box}
+.app{font-family:'Geist',system-ui,sans-serif;color:#ECEDEE;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+:where(.app) :where(button,input,textarea){font:inherit;color:inherit}
+.app h1,.app h2,.app h3,.app p{margin:0}
+.disp{font-family:'Unbounded','Geist',sans-serif;letter-spacing:-0.01em}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.logo{width:26px;height:26px;display:block;flex:none;object-fit:contain}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:8px;border:1px solid #363A42;background:#1A1C20;color:#ECEDEE;font-weight:500;font-size:13px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn:hover{background:#24272C;color:#ECEDEE}
+.btn-pri{background:var(--ac);border-color:var(--ac);color:#0B0C0E;font-weight:600}
+.btn-pri:hover{background:var(--ac);color:#0B0C0E;filter:brightness(1.08)}
+.btn-pri[disabled]{opacity:.45;cursor:not-allowed;filter:none}
+.btn-ghost{background:transparent;border-color:transparent;color:#A9ADB5}
+.btn-sm{height:30px;padding:0 10px;font-size:12px;border-radius:7px}
+.ibtn{width:36px;padding:0}.btn-sm.ibtn{width:30px}
+.lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#80858F}
+.sk{background:#15171A;border-radius:8px}
+.badge{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;font-size:11px;font-weight:600;letter-spacing:.02em;white-space:nowrap}
+.b-off{background:#1A1C20;color:#A9ADB5;border:1px solid #2A2D33}
+.b-info{background:#0F2236;color:#9CCBFF;border:1px solid #1F4468}
+.t-fire{background-color:#25130D;background-image:radial-gradient(#552B19 1.1px,transparent 1.3px);background-size:8px 8px}
+.inp{flex:1;min-width:0;height:36px;padding:0 12px;border-radius:8px;border:1px solid #2F3239;background:#101114;outline:0;color:#ECEDEE}
+.step{display:flex;flex-direction:column;gap:10px}
+.step .h{display:flex;align-items:center;gap:10px}
+.step .n{width:22px;height:22px;border-radius:6px;background:#1A1C20;border:1px solid #2F3239;display:grid;place-items:center;font-family:'Geist Mono',monospace;font-size:11px;color:#C9CCD2;flex:none}
+.step .n.ok{background:var(--ac);border-color:var(--ac);color:#0B0C0E}
+.step .h b{font-weight:600}
+.file{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;border-radius:10px;border:1px solid #2A2D33;background:#101114;cursor:pointer;text-align:left}
+.file.on{border-color:color-mix(in srgb,var(--ac) 60%,#2A2D33);background:color-mix(in srgb,var(--ac) 7%,#101114)}
+.cb{width:18px;height:18px;border-radius:5px;border:1.5px solid #4A4E57;flex:none;display:grid;place-items:center;color:transparent}
+.file.on .cb,.cb.on{background:var(--ac);border-color:var(--ac);color:#0B0C0E}
+.hint{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;font-size:11px;color:#C9CCD2;border:1px dashed #4A4E57}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{height:30px;padding:0 12px;border-radius:7px;border:1px solid #2F3239;background:#101114;color:#C9CCD2;cursor:pointer;font-size:12px;font-weight:500}
+.seg button.on{background:color-mix(in srgb,var(--ac) 14%,#121316);border-color:color-mix(in srgb,var(--ac) 55%,#121316);color:#ECEDEE}
+</style>
+</helmet>
+<div class="app" style="--ac: {{accent}}; position: relative; width: 100%; height: 900px; background: #0B0C0E; overflow: hidden">
+
+<div aria-hidden="true" style="position: absolute; inset: 0; display: flex; flex-direction: column">
+  <div style="height: 44px; border-bottom: 1px solid #1E2024; background: #0A0B0D; display: flex; align-items: center; gap: 10px; padding-left: 16px"><img class="logo" src="../../../mod_manager_flutter/assets/brand/logo-mark-on-dark.png" alt=""><span class="disp" style="font-weight: 700; letter-spacing: .08em">ZENITH</span></div>
+  <div style="flex: 1; display: flex">
+    <div style="width: 216px; background: #0A0B0D; border-right: 1px solid #1E2024; padding: 22px 14px; display: flex; flex-direction: column; gap: 12px">
+      <div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div>
+    </div>
+    <div style="width: 280px; border-right: 1px solid #1E2024; padding: 18px 14px; display: flex; flex-direction: column; gap: 10px">
+      <div class="sk" style="height: 36px"></div><div class="sk" style="height: 44px"></div><div class="sk" style="height: 44px"></div><div class="sk" style="height: 44px"></div>
+    </div>
+    <div style="flex: 1; padding: 28px; display: flex; flex-direction: column; gap: 18px">
+      <div class="sk" style="height: 110px"></div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px"><div class="sk" style="height: 250px"></div><div class="sk" style="height: 250px"></div></div>
+    </div>
+  </div>
+</div>
+<div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(4,5,6,.72)"></div>
+
+<div role="dialog" aria-modal="true" aria-labelledby="tr-title" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 760px; max-width: calc(100% - 32px); max-height: 850px; display: flex; flex-direction: column; border-radius: 18px; background: #0F1012; border: 1px solid #2A2D33; box-shadow: 0 30px 80px rgba(0,0,0,.6)">
+  <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 24px 16px; border-bottom: 1px solid #1E2024">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <h2 id="tr-title" class="disp" style="font-size: 20px; font-weight: 700">Update tracking</h2>
+      <span style="display: flex; align-items: center; gap: 8px; color: #A9ADB5">Beach Day · Ellen Joe <span class="badge b-off">Not tracked</span></span>
+    </div>
+    <a class="btn btn-ghost btn-sm ibtn" href="AllMods.dc.html" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></a>
+  </div>
+
+  <div style="flex: 1; min-height: 0; overflow: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 22px">
+    <p style="color: #A9ADB5">Tell the manager where this mod came from, so it can check for updates and update it like a mod installed from Browse.</p>
+
+    <section class="step">
+      <div class="h"><span class="n ok"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 12px; height: 12px; stroke-width: 3"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg></span><b>GameBanana page</b></div>
+      <div style="display: flex; gap: 8px">
+        <input class="inp mono" style="font-size: 12px" value="https://gamebanana.com/mods/[mod id]" aria-label="GameBanana page link">
+        <a class="btn" href="Browse.dc.html">Search instead</a>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: center; padding: 10px; border-radius: 12px; border: 1px solid #23262B; background: #121316">
+        <span class="t-fire" style="width: 72px; height: 48px; border-radius: 8px; flex: none"></span>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0">
+          <b style="font-weight: 600">Beach Day Swimsuit</b>
+          <span style="font-size: 12px; color: #80858F">by sunbeam · Ellen Joe · 3 files · newest uploaded 3 weeks ago</span>
+        </div>
+        <span class="badge b-info">Found</span>
+      </div>
+    </section>
+
+    <section class="step">
+      <div class="h"><span class="n">2</span><b>Which files from that page are in this folder?</b></div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <sc-for list="{{files}}" as="f" hint-placeholder-count="3">
+          <button class="{{f.cls}}" aria-pressed="{{f.pressed}}" onClick="{{f.toggle}}">
+            <span class="cb"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 12px; height: 12px; stroke-width: 3"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg></span>
+            <span style="flex: 1; display: flex; flex-direction: column; min-width: 0">
+              <span class="mono" style="font-size: 12px">{{f.name}}</span>
+              <span style="font-size: 12px; color: #80858F">{{f.desc}}</span>
+            </span>
+            <sc-if value="{{f.hasHint}}" hint-placeholder-val="{{false}}"><span class="hint">{{f.hint}}</span></sc-if>
+            <span class="mono" style="font-size: 11px; color: #80858F; width: 52px; text-align: right">{{f.size}}</span>
+          </button>
+        </sc-for>
+      </div>
+      <span style="font-size: 12px; color: #80858F">Tick every file you unpacked into it, the main file first. Files uploaded after the main file you tick show up as updates. Hints are guesses; nothing is ticked for you.</span>
+    </section>
+
+    <section class="step">
+      <div class="h"><span class="n">3</span><b>Patches in this folder</b><span style="font-size: 12px; color: #80858F">Optional</span></div>
+      <p style="font-size: 12px; color: #A9ADB5">Copied a patch from another GameBanana page into this folder by hand? Add it so its updates are found too. Patches sit on top of the main file, in this order.</p>
+      <sc-for list="{{patches}}" as="p" hint-placeholder-count="1">
+        <div class="file" style="cursor: default">
+          <span class="t-fire" style="width: 44px; height: 30px; border-radius: 6px; flex: none"></span>
+          <span style="flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0">
+            <span style="font-weight: 600">{{p.name}}</span>
+            <span style="font-size: 12px; color: #80858F"><span class="mono">{{p.file}}</span> · uploaded {{p.date}} · by {{p.author}}</span>
+          </span>
+          <span class="badge b-off">Patch</span>
+          <button class="btn btn-ghost btn-sm ibtn" aria-label="Remove {{p.name}} from tracking" onClick="{{p.remove}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+        </div>
+      </sc-for>
+      <sc-if value="{{canAdd}}" hint-placeholder-val="{{true}}">
+        <button class="btn btn-sm" onClick="{{addPatch}}" style="align-self: flex-start"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Add a patch from GameBanana</button>
+      </sc-if>
+      <span style="font-size: 12px; color: #80858F">This only records what's already in the folder; no files are downloaded or changed.</span>
+    </section>
+
+    <label style="display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 12px; border: 1px solid #23262B; background: #121316; cursor: pointer">
+      <button class="{{dlCls}}" role="checkbox" aria-checked="{{dlChecked}}" aria-label="Download info from GameBanana" onClick="{{toggleDl}}" style="margin-top: 1px; padding: 0; cursor: pointer"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 12px; height: 12px; stroke-width: 3"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg></button>
+      <span style="display: flex; flex-direction: column; gap: 2px">
+        <b style="font-weight: 600">Download the description, images and tags from GameBanana</b>
+        <span style="font-size: 12px; color: #80858F">Replaces what Beach Day has now. Your note and keys stay.</span>
+      </span>
+    </label>
+  </div>
+
+  <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 24px; border-top: 1px solid #1E2024; flex-wrap: wrap">
+    <span style="font-size: 12px; color: #A9ADB5">{{status}}</span>
+    <div style="display: flex; gap: 8px">
+      <a class="btn btn-ghost" href="AllMods.dc.html">Cancel</a>
+      <sc-if value="{{ready}}" hint-placeholder-val="{{false}}"><a class="btn btn-pri" href="AllMods.dc.html">Start tracking</a></sc-if>
+      <sc-if value="{{notReady}}" hint-placeholder-val="{{true}}"><button class="btn btn-pri" disabled>Start tracking</button></sc-if>
+    </div>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#A98BFF","options":["#A98BFF","#F3EFEB","#C8F031","#5FE1D9"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { picked: [], dl: true, patches: [0] };
+  }
+  renderVals() {
+    const p = this.state.picked;
+    const files = [
+      ['BeachDay_v1.2.zip', '“Beach day” · uploaded 3 weeks ago', '64 MB', 'Same size as this folder'],
+      ['BeachDay_Sunhat.zip', '“sunhat addon (needs main)” · uploaded 3 weeks ago', '2 MB', null],
+      ['BeachDay_v1.0.zip', 'no variant text · uploaded 2 months ago', '61 MB', null]
+    ].map(([name, desc, size, hint], i) => {
+      const on = p.includes(i);
+      return {
+        name, desc, size,
+        hint: hint || '', hasHint: !!hint,
+        cls: on ? 'file on' : 'file',
+        pressed: on ? 'true' : 'false',
+        toggle: () => this.setState({ picked: on ? p.filter((x) => x !== i) : p.concat(i) })
+      };
+    });
+    const pool = [
+      ['Wet Look', 'WetLook_BeachDay.zip', '1 Oct 2026', 'hydro'],
+      ['Sunhat Recolor', 'Sunhat_Pastel.7z', '9 Oct 2026', 'sugarcube']
+    ];
+    const pp = this.state.patches;
+    const patches = pp.map((idx) => ({
+      name: pool[idx][0], file: pool[idx][1], date: pool[idx][2], author: pool[idx][3],
+      remove: () => this.setState({ patches: pp.filter((x) => x !== idx) })
+    }));
+    const nextPatch = [0, 1].find((x) => !pp.includes(x));
+    const ready = p.length > 0;
+    const status = ready ? 'Tracked mods are checked for updates with the rest of your library.' : 'Tick at least one file to continue';
+    return {
+      accent: this.props.accent ?? '#A98BFF',
+      files, ready, notReady: !ready, status,
+      patches,
+      canAdd: nextPatch !== undefined,
+      addPatch: () => { if (nextPatch !== undefined) this.setState({ patches: pp.concat(nextPatch) }); },
+      dlCls: this.state.dl ? 'cb on' : 'cb',
+      dlChecked: this.state.dl ? 'true' : 'false',
+      toggleDl: () => this.setState({ dl: !this.state.dl })
+    };
+  }
+}
+</script>
+</body>
+</html>

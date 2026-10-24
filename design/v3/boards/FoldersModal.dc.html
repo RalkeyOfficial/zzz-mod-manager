@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pick folders to install</title>
+<script src="../../runtime/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Unbounded:wght@500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#060708}
+a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
+.app,.app *{box-sizing:border-box}
+.app{font-family:'Geist',system-ui,sans-serif;color:#ECEDEE;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+:where(.app) :where(button,input,textarea){font:inherit;color:inherit}
+.app h1,.app h2,.app h3,.app p{margin:0}
+.disp{font-family:'Unbounded','Geist',sans-serif;letter-spacing:-0.01em}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.logo{width:26px;height:26px;display:block;flex:none;object-fit:contain}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:8px;border:1px solid #363A42;background:#1A1C20;color:#ECEDEE;font-weight:500;font-size:13px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn:hover{background:#24272C;color:#ECEDEE}
+.btn-pri{background:var(--ac);border-color:var(--ac);color:#0B0C0E;font-weight:600}
+.btn-pri:hover{background:var(--ac);color:#0B0C0E;filter:brightness(1.08)}
+.btn-ghost{background:transparent;border-color:transparent;color:#A9ADB5}
+.btn-sm{height:30px;padding:0 10px;font-size:12px;border-radius:7px}
+.ibtn{width:36px;padding:0}.btn-sm.ibtn{width:30px}
+.lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#80858F}
+.sk{background:#15171A;border-radius:8px}
+.av{position:relative;overflow:hidden;width:24px;height:24px;border-radius:6px;flex:none;background:#12303D}
+.av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 25%}
+.av::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:#9FE1FA}
+.t-elec{background-color:#0F1730;background-image:radial-gradient(#243F73 1.1px,transparent 1.3px);background-size:7px 7px}
+.folder{display:flex;align-items:center;gap:12px;width:100%;padding:11px 14px;border:0;border-bottom:1px solid #1A1C20;background:transparent;cursor:pointer;text-align:left}
+.folder:last-child{border-bottom:0}
+.folder.on{background:color-mix(in srgb,var(--ac) 7%,#121316)}
+.cb{width:18px;height:18px;border-radius:5px;border:1.5px solid #4A4E57;flex:none;display:grid;place-items:center;color:transparent}
+.folder.on .cb{background:var(--ac);border-color:var(--ac);color:#0B0C0E}
+.hint{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;font-size:11px;color:#C9CCD2;border:1px dashed #4A4E57;white-space:nowrap}
+.how{display:flex;align-items:flex-start;gap:12px;flex:1 1 240px;padding:12px 14px;border-radius:12px;border:1px solid #2A2D33;background:#121316;cursor:pointer;text-align:left}
+.how.on{border-color:color-mix(in srgb,var(--ac) 55%,#2A2D33);background:color-mix(in srgb,var(--ac) 6%,#121316)}
+.radio{width:18px;height:18px;border-radius:50%;border:1.5px solid #4A4E57;flex:none;position:relative;margin-top:1px}
+.how.on .radio{border-color:var(--ac)}
+.how.on .radio::after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--ac)}
+.name{flex:1;min-width:0;height:34px;padding:0 10px;border-radius:8px;border:1px solid #2F3239;background:#0F1012;outline:0;color:#ECEDEE}
+.pick{display:flex;align-items:center;gap:8px;height:34px;padding:0 10px 0 6px;border-radius:8px;border:1px solid #2F3239;background:#15171A;cursor:pointer}
+</style>
+</helmet>
+<div class="app" style="--ac: {{accent}}; position: relative; width: 100%; height: 900px; background: #0B0C0E; overflow: hidden">
+
+<div aria-hidden="true" style="position: absolute; inset: 0; display: flex; flex-direction: column">
+  <div style="height: 44px; border-bottom: 1px solid #1E2024; background: #0A0B0D; display: flex; align-items: center; gap: 10px; padding-left: 16px"><img class="logo" src="../../../mod_manager_flutter/assets/brand/logo-mark-on-dark.png" alt=""><span class="disp" style="font-weight: 700; letter-spacing: .08em">ZENITH</span></div>
+  <div style="flex: 1; display: flex">
+    <div style="width: 216px; background: #0A0B0D; border-right: 1px solid #1E2024; padding: 22px 14px; display: flex; flex-direction: column; gap: 12px">
+      <div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div>
+    </div>
+    <div style="flex: 1; padding: 28px 32px; display: flex; flex-direction: column; gap: 18px">
+      <div class="sk" style="height: 34px; width: 220px"></div>
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px">
+        <div class="sk" style="height: 260px"></div><div class="sk" style="height: 260px"></div><div class="sk" style="height: 260px"></div><div class="sk" style="height: 260px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(4,5,6,.72)"></div>
+
+<div role="dialog" aria-modal="true" aria-labelledby="fd-title" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 700px; max-width: calc(100% - 32px); max-height: 860px; display: flex; flex-direction: column; border-radius: 18px; background: #0F1012; border: 1px solid #2A2D33; box-shadow: 0 30px 80px rgba(0,0,0,.6)">
+  <div style="display: flex; align-items: center; gap: 14px; padding: 20px 24px 14px">
+    <span class="t-elec" style="width: 64px; height: 44px; border-radius: 8px; flex: none; border: 1px solid #23262B"></span>
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0">
+      <h2 id="fd-title" class="disp" style="font-size: 20px; font-weight: 700">Pick what to install</h2>
+      <span style="font-size: 12px; color: #80858F"><span class="mono">SharkHoodie_Pack.zip</span> has 3 folders · 289 MB</span>
+    </div>
+    <a class="btn btn-ghost btn-sm ibtn" href="Downloads.dc.html" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></a>
+  </div>
+
+  <div style="flex: 1; min-height: 0; overflow: auto; padding: 0 24px 18px; display: flex; flex-direction: column; gap: 16px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <span class="lbl">Folders in the archive</span>
+      <div role="group" aria-label="Folders to install" style="border: 1px solid #2A2D33; border-radius: 12px; background: #121316; overflow: hidden">
+        <sc-for list="{{folders}}" as="f" hint-placeholder-count="3">
+          <button class="{{f.cls}}" role="checkbox" aria-checked="{{f.checked}}" onClick="{{f.toggle}}">
+            <span class="cb"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 12px; height: 12px; stroke-width: 3"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg></span>
+            <svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="color: #80858F"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.5l2 2h7.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path></svg>
+            <span style="flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0">
+              <span class="mono" style="font-size: 12px">{{f.name}}</span>
+              <span style="font-size: 12px; color: #80858F">{{f.desc}}</span>
+            </span>
+            <sc-if value="{{f.hasHint}}" hint-placeholder-val="{{false}}"><span class="hint">{{f.hint}}</span></sc-if>
+            <span class="mono" style="font-size: 11px; color: #80858F; width: 56px; text-align: right">{{f.size}}</span>
+          </button>
+        </sc-for>
+      </div>
+      <span style="font-size: 12px; color: #80858F">Hints are guesses from what's inside each folder. Nothing is ticked for you.</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <span class="lbl">Install the ticked folders as</span>
+      <div role="radiogroup" aria-label="Install as" style="display: flex; gap: 10px; flex-wrap: wrap">
+        <button class="{{oneCls}}" role="radio" aria-checked="{{oneChecked}}" onClick="{{pickOne}}">
+          <span class="radio"></span>
+          <span style="display: flex; flex-direction: column; gap: 2px"><b style="font-weight: 600">One mod</b><span style="font-size: 12px; color: #80858F">The folders go into a single mod and turn on together. For parts that belong together.</span></span>
+        </button>
+        <button class="{{sepCls}}" role="radio" aria-checked="{{sepChecked}}" onClick="{{pickSep}}">
+          <span class="radio"></span>
+          <span style="display: flex; flex-direction: column; gap: 2px"><b style="font-weight: 600">Separate mods</b><span style="font-size: 12px; color: #80858F">Each folder becomes its own mod. For variants you switch between.</span></span>
+        </button>
+      </div>
+    </div>
+
+    <sc-if value="{{anyTicked}}" hint-placeholder-val="{{true}}">
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <span class="lbl">{{namesLbl}}</span>
+        <sc-for list="{{names}}" as="n" hint-placeholder-count="2">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <input class="name" value="{{n.value}}" aria-label="{{n.label}}">
+            <button class="pick" aria-label="Character: Ellen Joe"><span class="av"><img src="../../../mod_manager_flutter/assets/characters/ellen.png" alt=""></span>Ellen Joe<svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px; color: #80858F"><path d="m6 9 6 6 6-6"></path></svg></button>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+  </div>
+
+  <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 24px; border-top: 1px solid #1E2024; flex-wrap: wrap">
+    <a class="btn btn-ghost" href="Downloads.dc.html">Don't install</a>
+    <div style="display: flex; align-items: center; gap: 12px">
+      <span style="font-size: 12px; color: #A9ADB5">{{status}}</span>
+      <sc-if value="{{ready}}" hint-placeholder-val="{{true}}"><a class="btn btn-pri" href="Downloads.dc.html">{{goLbl}}</a></sc-if>
+      <sc-if value="{{notReady}}" hint-placeholder-val="{{false}}"><button class="btn btn-pri" disabled style="opacity: .45; cursor: not-allowed">Install</button></sc-if>
+    </div>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#A98BFF","options":["#A98BFF","#F3EFEB","#C8F031","#5FE1D9"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { ticked: [1, 2], mode: 'separate' };
+  }
+  renderVals() {
+    const { ticked, mode } = this.state;
+    const data = [
+      ['Previews/', '12 images, no .ini', '8 MB', 'Looks like preview images', ''],
+      ['Shark Hoodie (Hood up)/', 'SharkHoodie.ini and 41 files', '142 MB', '', 'Shark Hoodie (Hood up)'],
+      ['Shark Hoodie (Hood down)/', 'SharkHoodie.ini and 39 files', '139 MB', '', 'Shark Hoodie (Hood down)']
+    ];
+    const folders = data.map(([name, desc, size, hint], i) => {
+      const on = ticked.includes(i);
+      return {
+        name, desc, size,
+        hint, hasHint: !!hint,
+        cls: on ? 'folder on' : 'folder',
+        checked: on ? 'true' : 'false',
+        toggle: () => this.setState({ ticked: on ? ticked.filter((x) => x !== i) : ticked.concat(i).sort() })
+      };
+    });
+    const sep = mode === 'separate';
+    const n = ticked.length;
+    const names = sep
+      ? ticked.map((i) => ({ value: data[i][4] || data[i][0].replace('/', ''), label: 'Name for ' + data[i][0] }))
+      : (n > 0 ? [{ value: 'Shark Hoodie', label: 'Mod name' }] : []);
+    const mods = sep ? n : (n > 0 ? 1 : 0);
+    return {
+      accent: this.props.accent ?? '#A98BFF',
+      folders, names,
+      oneCls: sep ? 'how' : 'how on', sepCls: sep ? 'how on' : 'how',
+      oneChecked: sep ? 'false' : 'true', sepChecked: sep ? 'true' : 'false',
+      pickOne: () => this.setState({ mode: 'one' }),
+      pickSep: () => this.setState({ mode: 'separate' }),
+      anyTicked: n > 0,
+      namesLbl: sep ? 'Names' : 'Name',
+      ready: n > 0, notReady: n === 0,
+      status: n === 0 ? 'Tick at least one folder' : (sep ? n + ' folders, ' + n + ' mods' : n + (n === 1 ? ' folder' : ' folders') + ', 1 mod'),
+      goLbl: mods === 1 ? 'Install 1 mod' : 'Install ' + mods + ' mods'
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mark mods as current</title>
+<script src="../../runtime/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Unbounded:wght@500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#060708}
+a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
+.app,.app *{box-sizing:border-box}
+.app{font-family:'Geist',system-ui,sans-serif;color:#ECEDEE;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+:where(.app) :where(button,input,textarea){font:inherit;color:inherit}
+.app h1,.app h2,.app h3,.app p{margin:0}
+.disp{font-family:'Unbounded','Geist',sans-serif;letter-spacing:-0.01em}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.logo{width:26px;height:26px;display:block;flex:none;object-fit:contain}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:8px;border:1px solid #363A42;background:#1A1C20;color:#ECEDEE;font-weight:500;font-size:13px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn:hover{background:#24272C;color:#ECEDEE}
+.btn-pri{background:var(--ac);border-color:var(--ac);color:#0B0C0E;font-weight:600}
+.btn-pri:hover{background:var(--ac);color:#0B0C0E;filter:brightness(1.08)}
+.btn-ghost{background:transparent;border-color:transparent;color:#A9ADB5}
+.btn-sm{height:30px;padding:0 10px;font-size:12px;border-radius:7px}
+.lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#80858F}
+.badge{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 7px;border-radius:6px;font-size:11px;font-weight:600;letter-spacing:.02em;white-space:nowrap}
+.b-info{background:#0F2236;color:#9CCBFF;border:1px solid #1F4468}
+.b-off{background:#1A1C20;color:#A9ADB5;border:1px solid #2A2D33}
+.sk{background:#15171A;border-radius:8px}
+.cb{width:18px;height:18px;border-radius:5px;border:1.5px solid #4A4E57;background:transparent;display:grid;place-items:center;cursor:pointer;padding:0;flex:none;color:transparent}
+.cb.on{background:var(--ac);border-color:var(--ac);color:#0B0C0E}
+.dots{background-image:radial-gradient(rgba(255,255,255,.16) 1px,transparent 1.2px);background-size:6px 6px}
+.t-ice{background-color:#12303D}.t-fire{background-color:#3D1A10}.t-elec{background-color:#14244A}.t-ether{background-color:#331741}.t-phys{background-color:#382F10}.t-misc{background-color:#1E2126}
+.mrow{display:flex;align-items:center;gap:12px;padding:8px 12px;border-bottom:1px solid #17191C}
+.mrow.off{opacity:.55}
+.scroll{overflow:auto;scrollbar-width:thin;scrollbar-color:#2A2D33 transparent}
+</style>
+</helmet>
+<div class="app" style="--ac: {{accent}}; position: relative; width: 100%; height: 900px; background: #0B0C0E; overflow: hidden">
+
+<div aria-hidden="true" style="position: absolute; inset: 0; display: flex; flex-direction: column">
+  <div style="height: 44px; border-bottom: 1px solid #1E2024; background: #0A0B0D; display: flex; align-items: center; gap: 10px; padding-left: 16px"><img class="logo" src="../../../mod_manager_flutter/assets/brand/logo-mark-on-dark.png" alt=""><span class="disp" style="font-weight: 700; letter-spacing: .08em">ZENITH</span></div>
+  <div style="flex: 1; display: flex">
+    <div style="width: 216px; background: #0A0B0D; border-right: 1px solid #1E2024; padding: 22px 14px; display: flex; flex-direction: column; gap: 12px">
+      <div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div>
+    </div>
+    <div style="flex: 1; padding: 28px 32px; display: flex; flex-direction: column; gap: 14px">
+      <div class="sk" style="height: 30px; width: 220px"></div>
+      <div class="sk" style="height: 28px; width: 640px"></div>
+      <div class="sk" style="height: 120px; max-width: 1000px; background: #0B1520"></div>
+      <div class="sk" style="height: 34px"></div><div class="sk" style="height: 34px"></div><div class="sk" style="height: 34px"></div><div class="sk" style="height: 34px"></div><div class="sk" style="height: 34px"></div>
+    </div>
+  </div>
+</div>
+<div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(4,5,6,.72)"></div>
+
+<div role="dialog" aria-modal="true" aria-labelledby="ac-title" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 600px; max-width: calc(100% - 32px); display: flex; flex-direction: column; gap: 18px; padding: 24px; border-radius: 18px; background: #0F1012; border: 1px solid #2A2D33; box-shadow: 0 30px 80px rgba(0,0,0,.6)">
+  <div style="display: flex; gap: 14px; align-items: center">
+    <span style="width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center; flex: none; background: #0F2236; color: #9CCBFF; border: 1px solid #1F4468"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 20px; height: 20px"><rect x="4" y="5.5" width="16" height="14" rx="2"></rect><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"></path><path d="m9.5 15 1.8 1.8 3.4-3.4"></path></svg></span>
+    <div style="display: flex; flex-direction: column; gap: 2px">
+      <h2 id="ac-title" style="font-size: 17px; font-weight: 600">Mark {{count}} mods as current?</h2>
+      <span style="font-size: 12px; color: #80858F">The mods showing <span class="badge b-info">Which file?</span></span>
+    </div>
+  </div>
+
+  <p style="color: #C9CCD2; line-height: 1.6">Zenith can't tell which file you downloaded for these, so it can never say one is out of date. Marking them as current assumes each is the file that was newest on its GameBanana page on the day you added it.</p>
+
+  <div style="display: flex; flex-direction: column; gap: 10px; padding: 14px 16px 12px; border-radius: 12px; border: 1px solid #23262B; background: #0B0C0E">
+    <span style="font-size: 12px; color: #A9ADB5">Lab Coat, added <b style="font-weight: 600; color: #ECEDEE">18 Aug 2026</b></span>
+    <div style="position: relative; height: 8px; display: flex; gap: 3px">
+      <span style="flex: 3; border-radius: 99px 0 0 99px; background: color-mix(in srgb,var(--ac) 45%,#1A1C20)"></span>
+      <span style="flex: 2; border-radius: 0 99px 99px 0; background: #6A4C14"></span>
+      <span aria-hidden="true" style="position: absolute; left: 60%; top: -5px; width: 2px; height: 18px; border-radius: 2px; background: #ECEDEE"></span>
+    </div>
+    <div style="display: flex; justify-content: space-between; gap: 16px; font-size: 12px">
+      <span style="color: #C9CCD2">Uploaded by then: counts as the file you have</span>
+      <span style="color: #FFC870; text-align: right">Uploaded after: shows as an update</span>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; border: 1px solid #23262B; border-radius: 12px; overflow: hidden">
+    <div style="display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-bottom: 1px solid #23262B; background: #121316">
+      <button class="{{allCls}}" aria-label="Select all" onClick="{{toggleAll}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 12px; height: 12px; stroke-width: 3"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg></button>
+      <span style="flex: 1; font-weight: 600">{{count}} of 30</span>
+      <span style="font-size: 12px; color: #80858F">Untick one to leave it asking</span>
+    </div>
+    <div class="scroll" style="max-height: 216px">
+      <sc-for list="{{mods}}" as="m" hint-placeholder-count="9">
+        <div class="{{m.rowCls}}">
+          <button class="{{m.cbCls}}" aria-label="Mark {{m.name}} as current" aria-pressed="{{m.pressed}}" onClick="{{m.toggle}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 12px; height: 12px; stroke-width: 3"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg></button>
+          <span class="{{m.thumbCls}}" style="width: 36px; height: 24px; border-radius: 5px; flex: none"></span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+            <span style="font-weight: 600">{{m.name}}</span>
+            <span style="font-size: 12px; color: #80858F">{{m.char}} · {{m.author}}</span>
+          </span>
+          <span style="font-size: 12px; color: #A9ADB5">added <span class="mono">{{m.added}}</span></span>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #A9ADB5">
+    <span><b style="font-weight: 600; color: #C9CCD2">Left as they are:</b> 9 that aren't linked to GameBanana, and 2 with no date added on record.</span>
+    <span>Copied mods in from another folder? Their date added can be older than when you got them, so the first check may show an update for a file you already have. Say which file from its badge and it's settled for good.</span>
+  </div>
+
+  <div style="display: flex; align-items: center; gap: 8px; padding-top: 2px">
+    <span style="font-size: 12px; color: #80858F; margin-right: auto">Nothing is downloaded</span>
+    <a class="btn btn-ghost" href="Updates.dc.html">Cancel</a>
+    <a class="btn btn-pri" href="Updates.dc.html">Mark {{count}} as current</a>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#A98BFF","options":["#A98BFF","#F3EFEB","#C8F031","#5FE1D9"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { off: [] };
+  }
+  renderVals() {
+    const list = [
+      ['Lab Coat', 'pallet', 'Jane Doe', 'phys', '18 Aug 2026'],
+      ['Office Attire', 'kaori.ini', 'Tsukishiro Yanagi', 'elec', '9 Jul 2026'],
+      ['Track Suit', 'velo', 'Anby Demara', 'elec', '28 May 2026'],
+      ['Sailor Uniform', 'maple.ini', 'Nicole Demara', 'ether', '14 Apr 2026'],
+      ['Street Casual', 'rook', 'Billy Kid', 'phys', '2 Mar 2026'],
+      ['Long Hair Edit', 'inkwell', 'Zhu Yuan', 'ether', '11 Feb 2026'],
+      ['Gothic Dress', 'nocturne', 'Vivian Banshee', 'ether', '30 Jan 2026'],
+      ['Ice Queen Ballgown', 'frostbyte', 'Hoshimi Miyabi', 'ice', '19 Jan 2026'],
+      ['Racing Leathers', 'velo', 'Jane Doe', 'phys', '6 Jan 2026'],
+      ['Pinstripe Suit', 'kaori.ini', 'Caesar King', 'phys', '22 Dec 2025']
+    ];
+    const off = this.state.off;
+    const total = 30;
+    const count = off.length === list.length ? 0 : total - off.length;
+    const mods = list.map(([name, author, char, t, added], i) => {
+      const on = !off.includes(i);
+      return {
+        name, author, char, added,
+        thumbCls: 'dots t-' + t,
+        rowCls: on ? 'mrow' : 'mrow off',
+        cbCls: on ? 'cb on' : 'cb',
+        pressed: on ? 'true' : 'false',
+        toggle: () => this.setState({ off: on ? off.concat(i) : off.filter((x) => x !== i) })
+      };
+    });
+    return {
+      accent: this.props.accent ?? '#A98BFF',
+      mods,
+      count,
+      allCls: off.length === 0 ? 'cb on' : 'cb',
+      toggleAll: () => this.setState({ off: off.length === 0 ? list.map((_, i) => i) : [] })
+    };
+  }
+}
+</script>
+</body>
+</html>

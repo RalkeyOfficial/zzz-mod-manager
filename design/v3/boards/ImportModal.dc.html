@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Import dropped files</title>
+<script src="../../runtime/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Unbounded:wght@500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#060708}
+a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
+.app,.app *{box-sizing:border-box}
+.app{font-family:'Geist',system-ui,sans-serif;color:#ECEDEE;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+:where(.app) :where(button,input,textarea){font:inherit;color:inherit}
+.app h1,.app h2,.app h3,.app p{margin:0}
+.disp{font-family:'Unbounded','Geist',sans-serif;letter-spacing:-0.01em}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.logo{width:26px;height:26px;display:block;flex:none;object-fit:contain}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:8px;border:1px solid #363A42;background:#1A1C20;color:#ECEDEE;font-weight:500;font-size:13px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn:hover{background:#24272C;color:#ECEDEE}
+.btn-pri{background:var(--ac);border-color:var(--ac);color:#0B0C0E;font-weight:600}
+.btn-pri:hover{background:var(--ac);color:#0B0C0E;filter:brightness(1.08)}
+.btn-ghost{background:transparent;border-color:transparent;color:#A9ADB5}
+.btn-sm{height:30px;padding:0 10px;font-size:12px;border-radius:7px}
+.ibtn{width:36px;padding:0}.btn-sm.ibtn{width:30px}
+.sw{position:relative;width:38px;height:22px;border-radius:999px;border:1px solid #3A3E46;background:#22252A;cursor:pointer;padding:0;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#80858F}
+.sw.on{background:var(--ac);border-color:var(--ac)}
+.sw.on::after{left:19px;background:#0B0C0E}
+.lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#80858F}
+.sk{background:#15171A;border-radius:8px}
+.av{position:relative;overflow:hidden;width:24px;height:24px;border-radius:6px;display:grid;place-items:center;font-family:'Unbounded',sans-serif;font-weight:700;font-size:9px;flex:none}
+.av::after{content:"";position:absolute;right:-4px;top:0;width:6px;height:100%;background:currentColor;opacity:.55;transform:skewX(-18deg)}
+.av-ice{background:#12303D;color:#9FE1FA}.av-ether{background:#331741;color:#EBA0FF}
+.av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 25%}
+.av.has::after{left:0;right:0;top:auto;bottom:0;width:auto;height:2px;transform:none;opacity:1}
+.pick{display:flex;align-items:center;gap:8px;height:36px;padding:0 10px 0 6px;border-radius:8px;border:1px solid #2F3239;background:#15171A;cursor:pointer;width:100%}
+.pick.need{border-color:#6A4C14;background:#1F1708;color:#FFC870;padding-left:12px}
+.name{height:36px;padding:0 12px;border-radius:8px;border:1px solid #2F3239;background:#101114;outline:0;width:100%;color:#ECEDEE}
+.seg{display:flex;padding:3px;border-radius:9px;background:#0B0C0E;border:1px solid #23262B}
+.seg button{height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:#A9ADB5;cursor:pointer;font-weight:500;font-size:12px}
+.seg button.on{background:#24272C;color:#ECEDEE}
+.item{display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:12px;border:1px solid #23262B;background:#121316}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:10px}
+</style>
+</helmet>
+<div class="app" style="--ac: {{accent}}; position: relative; width: 100%; height: 900px; background: #0B0C0E; overflow: hidden">
+
+<div aria-hidden="true" style="position: absolute; inset: 0; display: flex; flex-direction: column">
+  <div style="height: 44px; border-bottom: 1px solid #1E2024; background: #0A0B0D; display: flex; align-items: center; gap: 10px; padding-left: 16px"><img class="logo" src="../../../mod_manager_flutter/assets/brand/logo-mark-on-dark.png" alt="Zenith"><span class="disp" style="font-weight: 700; letter-spacing: .08em">ZENITH</span></div>
+  <div style="flex: 1; display: flex">
+    <div style="width: 216px; background: #0A0B0D; border-right: 1px solid #1E2024; padding: 22px 14px; display: flex; flex-direction: column; gap: 12px">
+      <div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div>
+    </div>
+    <div style="width: 280px; border-right: 1px solid #1E2024; padding: 18px 14px; display: flex; flex-direction: column; gap: 10px">
+      <div class="sk" style="height: 36px"></div><div class="sk" style="height: 44px"></div><div class="sk" style="height: 44px"></div><div class="sk" style="height: 44px"></div><div class="sk" style="height: 44px"></div><div class="sk" style="height: 44px"></div>
+    </div>
+    <div style="flex: 1; padding: 28px; display: flex; flex-direction: column; gap: 18px">
+      <div class="sk" style="height: 110px"></div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px"><div class="sk" style="height: 250px"></div><div class="sk" style="height: 250px"></div><div class="sk" style="height: 250px"></div></div>
+    </div>
+  </div>
+</div>
+<div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(4,5,6,.72)"></div>
+
+<div role="dialog" aria-modal="true" aria-labelledby="imp-title" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 720px; max-width: calc(100% - 32px); display: flex; flex-direction: column; border-radius: 18px; background: #0F1012; border: 1px solid #2A2D33; box-shadow: 0 30px 80px rgba(0,0,0,.6)">
+  <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 22px 24px 16px">
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <h2 id="imp-title" class="disp" style="font-size: 20px; font-weight: 700">Import 3 mods</h2>
+      <span style="color: #A9ADB5">Check where each one goes. Names, characters and types are guessed from the files.</span>
+    </div>
+    <a class="btn btn-ghost btn-sm ibtn" href="Main.dc.html" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></a>
+  </div>
+
+  <div style="padding: 0 24px 18px; display: flex; flex-direction: column; gap: 10px">
+    <div class="item">
+      <span class="mono" style="font-size: 12px; color: #80858F; display: flex; align-items: center; gap: 8px"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px"><rect x="3.5" y="4" width="17" height="5" rx="1"></rect><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"></path></svg>EllenMaidWinter_v1_4.zip · 186 MB</span>
+      <div class="grid2">
+        <button class="pick" aria-label="Character: Ellen Joe"><span class="av av-ice has"><img src="../../../mod_manager_flutter/assets/characters/ellen.png" alt=""></span><span style="flex: 1; text-align: left">Ellen Joe</span><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="color: #80858F"><path d="m6 9 6 6 6-6"></path></svg></button>
+        <input class="name" value="Winter Maid Uniform" aria-label="Mod name">
+      </div>
+    </div>
+
+    <div class="item" style="border-color: #3D3216">
+      <span class="mono" style="font-size: 12px; color: #80858F; display: flex; align-items: center; gap: 8px"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px"><rect x="3.5" y="4" width="17" height="5" rx="1"></rect><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"></path></svg>SharkHoodie_2.1.7z · 142 MB</span>
+      <div class="grid2">
+        <button class="pick" aria-label="Character: Ellen Joe"><span class="av av-ice has"><img src="../../../mod_manager_flutter/assets/characters/ellen.png" alt=""></span><span style="flex: 1; text-align: left">Ellen Joe</span><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="color: #80858F"><path d="m6 9 6 6 6-6"></path></svg></button>
+        <input class="name" value="Shark Hoodie Recolor" aria-label="Mod name">
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap">
+        <span style="font-size: 12px; color: #FFC870">Ellen already has a mod with this name, installed 12 Aug.</span>
+        <div class="seg" role="radiogroup" aria-label="What to do with the existing mod">
+          <button class="on" role="radio" aria-checked="true">Update it</button>
+          <button role="radio" aria-checked="false">Keep both</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="item">
+      <span class="mono" style="font-size: 12px; color: #80858F; display: flex; align-items: center; gap: 8px"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.5l2 2h7.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path></svg>new_outfit_final/ · folder · 77 MB</span>
+      <div class="grid2">
+        <button class="pick need" aria-label="Choose a character or type"><span style="flex: 1; text-align: left">Choose a character or type</span><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+        <input class="name" value="new_outfit_final" aria-label="Mod name">
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 24px; border-top: 1px solid #1E2024; flex-wrap: wrap">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <button class="sw" aria-pressed="false" aria-label="Turn on after import"></button>
+      <span style="color: #A9ADB5">Turn on after import</span>
+    </div>
+    <div style="display: flex; gap: 8px">
+      <a class="btn btn-ghost" href="Main.dc.html">Cancel</a>
+      <button class="btn btn-pri" disabled="" style="opacity: .45; cursor: not-allowed">Import 3</button>
+    </div>
+  </div>
+  <span style="position: absolute; right: 24px; bottom: -28px; font-size: 12px; color: #A9ADB5">Choose a character or type for new_outfit_final to continue</span>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#A98BFF","options":["#A98BFF","#F3EFEB","#C8F031","#5FE1D9"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#A98BFF' };
+  }
+}
+</script>
+</body>
+</html>

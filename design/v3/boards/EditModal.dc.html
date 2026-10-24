@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Edit mod info</title>
+<script src="../../runtime/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Unbounded:wght@500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#060708}
+a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
+.app,.app *{box-sizing:border-box}
+.app{font-family:'Geist',system-ui,sans-serif;color:#ECEDEE;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+:where(.app) :where(button,input,textarea){font:inherit;color:inherit}
+.app h1,.app h2,.app h3,.app p{margin:0}
+.disp{font-family:'Unbounded','Geist',sans-serif;letter-spacing:-0.01em}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.logo{width:26px;height:26px;display:block;flex:none;object-fit:contain}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:8px;border:1px solid #363A42;background:#1A1C20;color:#ECEDEE;font-weight:500;font-size:13px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn:hover{background:#24272C;color:#ECEDEE}
+.btn-pri{background:var(--ac);border-color:var(--ac);color:#0B0C0E;font-weight:600}
+.btn-pri:hover{background:var(--ac);color:#0B0C0E;filter:brightness(1.08)}
+.btn-ghost{background:transparent;border-color:transparent;color:#A9ADB5}
+.btn-sm{height:30px;padding:0 10px;font-size:12px;border-radius:7px}
+.ibtn{width:36px;padding:0}.btn-sm.ibtn{width:30px}
+.lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#80858F}
+.kbd{font-family:'Geist Mono',monospace;font-size:11px;line-height:1;padding:3px 6px;border-radius:5px;border:1px solid #3A3E46;border-bottom-width:2px;background:#1A1C20;color:#C9CCD2;white-space:nowrap}
+.sk{background:#15171A;border-radius:8px}
+.av{position:relative;overflow:hidden;width:24px;height:24px;border-radius:6px;display:grid;place-items:center;font-family:'Unbounded',sans-serif;font-weight:700;font-size:9px;flex:none}
+.av::after{content:"";position:absolute;right:-4px;top:0;width:6px;height:100%;background:currentColor;opacity:.55;transform:skewX(-18deg)}
+.av-ice{background:#12303D;color:#9FE1FA}
+.av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 25%}
+.av.has::after{left:0;right:0;top:auto;bottom:0;width:auto;height:2px;transform:none;opacity:1}
+.t-ice{background-color:#0E1D25;background-image:radial-gradient(#1F4556 1.1px,transparent 1.3px);background-size:8px 8px}
+.fl{display:flex;flex-direction:column;gap:6px;min-width:0}
+.fl > .head{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:20px}
+.fl label,.fl .name{font-size:12px;font-weight:600;color:#C9CCD2}
+.inp{height:36px;padding:0 12px;border-radius:8px;border:1px solid #2F3239;background:#101114;outline:0;width:100%;color:#ECEDEE}
+.inp:focus,.ta:focus{border-color:color-mix(in srgb,var(--ac) 60%,#2F3239)}
+.ta{padding:10px 12px;border-radius:8px;border:1px solid #2F3239;background:#101114;outline:0;width:100%;resize:vertical;line-height:1.55;color:#ECEDEE}
+.pick{display:flex;align-items:center;gap:8px;height:36px;padding:0 10px 0 6px;border-radius:8px;border:1px solid #2F3239;background:#15171A;cursor:pointer;width:100%}
+.edited{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:#A9ADB5}
+.edited .d{width:6px;height:6px;border-radius:50%;background:var(--ac)}
+.revert{border:0;background:transparent;color:#80858F;font-size:11px;cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:2px}
+.revert:hover{color:#ECEDEE}
+.tagbox{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:40px;padding:6px;border-radius:8px;border:1px solid #2F3239;background:#101114}
+.tag{display:inline-flex;align-items:center;gap:4px;height:26px;padding:0 4px 0 10px;border-radius:6px;background:#1E2125;border:1px solid #2F3239;font-size:12px}
+.tag button{width:20px;height:20px;border:0;border-radius:4px;background:transparent;color:#80858F;display:grid;place-items:center;cursor:pointer;padding:0}
+.tag button:hover{background:#2A2D33;color:#ECEDEE}
+.sugg{display:inline-flex;align-items:center;gap:4px;height:26px;padding:0 10px;border-radius:6px;border:1px dashed #3A3E46;background:transparent;color:#A9ADB5;font-size:12px;cursor:pointer}
+.sugg:hover{color:#ECEDEE;border-color:#4A4E57}
+.kb{display:grid;grid-template-columns:minmax(0,1fr) 210px 30px;gap:8px;align-items:center}
+.keys{display:flex;align-items:center;gap:4px;height:36px;padding:0 10px;border-radius:8px;border:1px solid #2F3239;background:#101114;cursor:pointer;width:100%}
+.keys.rec{border-color:var(--ac);background:color-mix(in srgb,var(--ac) 8%,#101114);color:color-mix(in srgb,var(--ac) 70%,#FFFFFF)}
+.recdot{width:8px;height:8px;border-radius:50%;background:var(--ac)}
+</style>
+</helmet>
+<div class="app" style="--ac: {{accent}}; position: relative; width: 100%; height: 900px; background: #0B0C0E; overflow: hidden">
+
+<div aria-hidden="true" style="position: absolute; inset: 0; display: flex; flex-direction: column">
+  <div style="height: 44px; border-bottom: 1px solid #1E2024; background: #0A0B0D; display: flex; align-items: center; gap: 10px; padding-left: 16px"><img class="logo" src="../../../mod_manager_flutter/assets/brand/logo-mark-on-dark.png" alt="Zenith"><span class="disp" style="font-weight: 700; letter-spacing: .08em">ZENITH</span></div>
+  <div style="flex: 1; display: flex">
+    <div style="width: 216px; background: #0A0B0D; border-right: 1px solid #1E2024; padding: 22px 14px; display: flex; flex-direction: column; gap: 12px">
+      <div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div>
+    </div>
+    <div style="width: 280px; border-right: 1px solid #1E2024; padding: 18px 14px; display: flex; flex-direction: column; gap: 10px">
+      <div class="sk" style="height: 36px"></div><div class="sk" style="height: 44px"></div><div class="sk" style="height: 44px"></div><div class="sk" style="height: 44px"></div><div class="sk" style="height: 44px"></div>
+    </div>
+    <div style="flex: 1; padding: 28px; display: flex; flex-direction: column; gap: 18px">
+      <div class="sk" style="height: 110px"></div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px"><div class="sk" style="height: 250px"></div><div class="sk" style="height: 250px"></div></div>
+    </div>
+    <div style="width: 340px; border-left: 1px solid #1E2024; padding: 18px; display: flex; flex-direction: column; gap: 12px">
+      <div class="sk" style="height: 190px"></div><div class="sk" style="height: 30px"></div><div class="sk" style="height: 60px"></div>
+    </div>
+  </div>
+</div>
+<div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(4,5,6,.72)"></div>
+
+<div role="dialog" aria-modal="true" aria-labelledby="ed-title" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 920px; max-width: calc(100% - 32px); max-height: 820px; display: flex; flex-direction: column; border-radius: 18px; background: #0F1012; border: 1px solid #2A2D33; box-shadow: 0 30px 80px rgba(0,0,0,.6)">
+  <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 24px 16px; border-bottom: 1px solid #1E2024">
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <h2 id="ed-title" class="disp" style="font-size: 20px; font-weight: 700">Edit mod info</h2>
+      <span style="color: #A9ADB5">Winter Maid Uniform · Ellen Joe</span>
+    </div>
+    <a class="btn btn-ghost btn-sm ibtn" href="Main.dc.html" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></a>
+  </div>
+
+  <div style="flex: 1; min-height: 0; display: flex; flex-wrap: wrap; overflow: auto">
+    <div style="flex: 0 0 260px; padding: 20px 0 20px 24px; display: flex; flex-direction: column; gap: 18px">
+      <div class="fl">
+        <span class="name">Cover</span>
+        <div class="t-ice" style="position: relative; aspect-ratio: 4 / 3; border-radius: 10px; border: 1px solid #23262B">
+          <span class="mono" style="position: absolute; right: 8px; bottom: 6px; font-size: 10px; color: rgba(255,255,255,.4)">[cover]</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px">
+          <button class="t-ice" aria-label="Use screenshot 1 as cover" style="aspect-ratio: 1; border-radius: 6px; border: 0; outline: 2px solid var(--ac); outline-offset: -2px; cursor: pointer"></button>
+          <button class="t-ice" aria-label="Use screenshot 2 as cover" style="aspect-ratio: 1; border-radius: 6px; border: 0; opacity: .55; cursor: pointer"></button>
+          <button class="t-ice" aria-label="Use screenshot 3 as cover" style="aspect-ratio: 1; border-radius: 6px; border: 0; opacity: .55; cursor: pointer"></button>
+          <button aria-label="Choose an image file" style="aspect-ratio: 1; border-radius: 6px; border: 1px dashed #3A3E46; background: transparent; color: #A9ADB5; display: grid; place-items: center; cursor: pointer"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+        </div>
+        <span style="font-size: 12px; color: #80858F">Pick a screenshot or drop an image here.</span>
+      </div>
+
+      <div class="fl">
+        <span class="name">Tracking</span>
+        <div style="display: flex; flex-direction: column; gap: 4px; padding: 12px; border-radius: 10px; border: 1px solid #23262B; background: #121316">
+          <b style="font-weight: 600">GameBanana</b>
+          <span style="font-size: 12px; color: #80858F"><span class="mono">WinterMaid_v1.4.zip</span>, uploaded 28 Sep 2026. Newer uploads show up as updates.</span>
+          <a href="TrackingModal.dc.html" style="font-size: 12px; margin-top: 4px">Update tracking…</a>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex: 1 1 480px; min-width: 0; padding: 20px 24px 24px; display: flex; flex-direction: column; gap: 20px">
+      <div class="fl">
+        <div class="head"><label for="nm">Name</label></div>
+        <input id="nm" class="inp" value="Winter Maid Uniform">
+      </div>
+
+      <div style="display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 12px">
+        <div class="fl">
+          <div class="head"><span class="name">Character / type</span></div>
+          <button class="pick" aria-label="Character or type: Ellen Joe"><span class="av av-ice has"><img src="../../../mod_manager_flutter/assets/characters/ellen.png" alt=""></span><span style="flex: 1; text-align: left">Ellen Joe</span><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="color: #80858F"><path d="m6 9 6 6 6-6"></path></svg></button>
+        </div>
+        <div class="fl">
+          <div class="head"><label for="au">Author</label></div>
+          <input id="au" class="inp" value="frostbyte">
+        </div>
+      </div>
+
+      <div class="fl">
+        <div class="head">
+          <label for="ds">Description</label>
+          <span style="display: flex; align-items: center; gap: 10px"><span class="edited"><span class="d"></span>Edited</span><button class="revert">Use GameBanana text</button></span>
+        </div>
+        <textarea id="ds" class="ta" rows="4">Winter version of Ellen's maid uniform with a long coat, white hairpin and three stocking colours. Pair with the white hairpin, the black one clips through the hood.</textarea>
+      </div>
+
+      <div class="fl">
+        <div class="head"><span class="name" id="tg-l">Tags</span><span style="font-size: 11px; color: #80858F">Used by search and filters</span></div>
+        <div class="tagbox" role="group" aria-labelledby="tg-l">
+          <sc-for list="{{tags}}" as="t" hint-placeholder-count="3">
+            <span class="tag">{{t.name}}<button aria-label="Remove tag {{t.name}}" onClick="{{t.remove}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 12px; height: 12px"><path d="M7 7l10 10M17 7 7 17"></path></svg></button></span>
+          </sc-for>
+          <input aria-label="Add a tag" placeholder="Add a tag" style="flex: 1; min-width: 120px; height: 26px; border: 0; outline: 0; background: transparent; padding: 0 6px; color: #ECEDEE">
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center">
+          <span style="font-size: 12px; color: #80858F; margin-right: 2px">Suggested</span>
+          <sc-for list="{{sugg}}" as="s" hint-placeholder-count="3">
+            <button class="sugg" onClick="{{s.add}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 12px; height: 12px"><path d="M12 5v14M5 12h14"></path></svg>{{s.name}}</button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div class="fl" style="gap: 8px">
+        <div class="head">
+          <span style="display: flex; flex-direction: column; gap: 2px">
+            <span class="name">In-game keys</span>
+            <span style="font-size: 12px; color: #80858F">Changing a key edits <span class="mono" style="color: #C9CCD2">WinterMaid.ini</span> when you save. The labels are only for you.</span>
+          </span>
+          <button class="btn btn-ghost btn-sm"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.8-6.3L3.5 8.5"></path><path d="M3.5 3.5v5h5"></path></svg>Restore the author's keys</button>
+        </div>
+        <div class="kb"><span class="lbl">What it does</span><span class="lbl">Keys</span><span></span></div>
+        <div class="kb">
+          <input class="inp" value="Coat on / off" aria-label="Action 1">
+          <button class="keys" aria-label="Keys for action 1: Ctrl 1, changed from Alt 1"><span class="kbd">Ctrl</span><span class="kbd">1</span><span style="margin-left: auto; font-size: 11px; color: #80858F">was Alt 1</span></button>
+          <button class="btn btn-ghost btn-sm ibtn" aria-label="Remove action 1"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+        </div>
+        <div class="kb">
+          <input class="inp" value="Hairpin style" aria-label="Action 2">
+          <button class="keys" aria-label="Keys for action 2: Alt 2"><span class="kbd">Alt</span><span class="kbd">2</span></button>
+          <button class="btn btn-ghost btn-sm ibtn" aria-label="Remove action 2"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+        </div>
+        <div class="kb">
+          <input class="inp" value="Stockings · cycle 3" aria-label="Action 3">
+          <button class="keys rec" aria-label="Recording keys for action 3"><span class="recdot"></span>Press a key combo…</button>
+          <button class="btn btn-ghost btn-sm ibtn" aria-label="Remove action 3"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap">
+          <button class="btn btn-ghost btn-sm" style="padding-left: 4px"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Add a key</button>
+          <span style="font-size: 12px; color: #80858F"><span class="kbd">Esc</span> cancels recording</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 24px; border-top: 1px solid #1E2024; flex-wrap: wrap">
+    <span style="font-size: 12px; color: #80858F; max-width: 460px">Saving writes 1 changed key to WinterMaid.ini. Your edits, keys included, are put back after the mod updates.</span>
+    <div style="display: flex; gap: 8px">
+      <a class="btn btn-ghost" href="Main.dc.html">Cancel</a>
+      <a class="btn btn-pri" href="Main.dc.html">Save changes</a>
+    </div>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#A98BFF","options":["#A98BFF","#F3EFEB","#C8F031","#5FE1D9"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { tags: ['Outfit', 'Maid', 'Winter'] };
+  }
+  renderVals() {
+    const cur = this.state.tags;
+    const pool = ['Recolor', 'Accessory', 'Lore-friendly', 'Toggleable'];
+    return {
+      accent: this.props.accent ?? '#A98BFF',
+      tags: cur.map((name) => ({ name, remove: () => this.setState({ tags: cur.filter((t) => t !== name) }) })),
+      sugg: pool.filter((p) => !cur.includes(p)).slice(0, 3).map((name) => ({ name, add: () => this.setState({ tags: cur.concat(name) }) }))
+    };
+  }
+}
+</script>
+</body>
+</html>

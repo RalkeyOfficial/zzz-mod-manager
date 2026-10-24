@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Delete a mod</title>
+<script src="../../runtime/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Unbounded:wght@500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#060708}
+a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
+.app,.app *{box-sizing:border-box}
+.app{font-family:'Geist',system-ui,sans-serif;color:#ECEDEE;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+:where(.app) :where(button,input,textarea){font:inherit;color:inherit}
+.app h1,.app h2,.app h3,.app p{margin:0}
+.disp{font-family:'Unbounded','Geist',sans-serif;letter-spacing:-0.01em}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.logo{width:26px;height:26px;display:block;flex:none;object-fit:contain}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:8px;border:1px solid #363A42;background:#1A1C20;color:#ECEDEE;font-weight:500;font-size:13px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn:hover{background:#24272C;color:#ECEDEE}
+.btn-ghost{background:transparent;border-color:transparent;color:#A9ADB5}
+.btn-danger{background:#FF6B5B;border-color:#FF6B5B;color:#160605;font-weight:600}
+.btn-danger:hover{background:#FF7F70;color:#160605}
+.sk{background:#15171A;border-radius:8px}
+.cb{width:18px;height:18px;border-radius:5px;border:1.5px solid #4A4E57;background:transparent;display:grid;place-items:center;cursor:pointer;padding:0;flex:none;color:transparent}
+.cb.on{background:#ECEDEE;border-color:#ECEDEE;color:#0B0C0E}
+.t-ice{background-color:#0E1D25;background-image:radial-gradient(#1F4556 1.1px,transparent 1.3px);background-size:7px 7px}
+</style>
+</helmet>
+<div class="app" style="--ac: {{accent}}; position: relative; width: 100%; height: 900px; background: #0B0C0E; overflow: hidden">
+
+<div aria-hidden="true" style="position: absolute; inset: 0; display: flex; flex-direction: column">
+  <div style="height: 44px; border-bottom: 1px solid #1E2024; background: #0A0B0D; display: flex; align-items: center; gap: 10px; padding-left: 16px"><img class="logo" src="../../../mod_manager_flutter/assets/brand/logo-mark-on-dark.png" alt="Zenith"><span class="disp" style="font-weight: 700; letter-spacing: .08em">ZENITH</span></div>
+  <div style="flex: 1; display: flex">
+    <div style="width: 216px; background: #0A0B0D; border-right: 1px solid #1E2024; padding: 22px 14px; display: flex; flex-direction: column; gap: 12px">
+      <div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div>
+    </div>
+    <div style="width: 280px; border-right: 1px solid #1E2024; padding: 18px 14px; display: flex; flex-direction: column; gap: 10px">
+      <div class="sk" style="height: 36px"></div><div class="sk" style="height: 44px"></div><div class="sk" style="height: 44px"></div><div class="sk" style="height: 44px"></div><div class="sk" style="height: 44px"></div>
+    </div>
+    <div style="flex: 1; padding: 28px; display: flex; flex-direction: column; gap: 18px">
+      <div class="sk" style="height: 110px"></div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px"><div class="sk" style="height: 250px"></div><div class="sk" style="height: 250px"></div><div class="sk" style="height: 250px"></div></div>
+    </div>
+    <div style="width: 340px; border-left: 1px solid #1E2024; padding: 18px; display: flex; flex-direction: column; gap: 12px">
+      <div class="sk" style="height: 190px"></div><div class="sk" style="height: 30px"></div><div class="sk" style="height: 60px"></div>
+    </div>
+  </div>
+</div>
+<div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(4,5,6,.72)"></div>
+
+<div role="alertdialog" aria-modal="true" aria-labelledby="del-title" aria-describedby="del-desc" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 480px; max-width: calc(100% - 32px); display: flex; flex-direction: column; gap: 18px; padding: 24px; border-radius: 18px; background: #0F1012; border: 1px solid #2A2D33; box-shadow: 0 30px 80px rgba(0,0,0,.6)">
+  <div style="display: flex; gap: 14px; align-items: center">
+    <span class="t-ice" style="width: 64px; height: 44px; border-radius: 8px; flex: none; border: 1px solid #23262B"></span>
+    <div style="display: flex; flex-direction: column; gap: 2px">
+      <h2 id="del-title" style="font-size: 17px; font-weight: 600">Delete Winter Maid Uniform?</h2>
+      <span style="font-size: 12px; color: #80858F">Ellen Joe · 186 MB</span>
+    </div>
+  </div>
+  <p id="del-desc" style="color: #C9CCD2; line-height: 1.6">The mod folder goes to your system trash. It's active right now, so Ellen Joe goes back to her default look until you turn another mod on.</p>
+  <label style="display: flex; align-items: center; gap: 10px; cursor: pointer">
+    <button class="cb on" role="checkbox" aria-checked="true" aria-label="Also delete 2 snapshots"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 12px; height: 12px; stroke-width: 3"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg></button>
+    <span>Also delete its 2 snapshots <span style="color: #80858F">(361 MB)</span></span>
+  </label>
+  <div style="display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px">
+    <a class="btn btn-ghost" href="Main.dc.html">Cancel</a>
+    <a class="btn btn-danger" href="Main.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"></path><path d="M9 7V4.5h6V7"></path><path d="M6.5 7l1 12.5h9l1-12.5"></path></svg>Delete</a>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#A98BFF","options":["#A98BFF","#F3EFEB","#C8F031","#5FE1D9"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#A98BFF' };
+  }
+}
+</script>
+</body>
+</html>

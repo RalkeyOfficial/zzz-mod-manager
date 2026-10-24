@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings</title>
+<script src="../../runtime/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Unbounded:wght@500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#060708}
+a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
+.app,.app *{box-sizing:border-box}
+.app{font-family:'Geist',system-ui,sans-serif;color:#ECEDEE;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+:where(.app) :where(button,input,textarea){font:inherit;color:inherit}
+.app h1,.app h2,.app h3,.app p{margin:0}
+.disp{font-family:'Unbounded','Geist',sans-serif;letter-spacing:-0.01em}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.logo{width:26px;height:26px;display:block;flex:none;object-fit:contain}
+.winbtn{width:46px;height:44px;display:grid;place-items:center;background:transparent;border:0;color:#A9ADB5;cursor:pointer}
+.winbtn:hover{background:#1A1C20}.winbtn.x:hover{background:#C4352B;color:#fff}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:8px;border:1px solid #363A42;background:#1A1C20;color:#ECEDEE;font-weight:500;font-size:13px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn:hover{background:#24272C;color:#ECEDEE}
+.btn-pri{background:var(--ac);border-color:var(--ac);color:#0B0C0E;font-weight:600}
+.btn-ghost{background:transparent;border-color:transparent;color:#A9ADB5}
+.btn-sm{height:30px;padding:0 10px;font-size:12px;border-radius:7px}
+.ibtn{width:36px;padding:0}.btn-sm.ibtn{width:30px}
+.sw{position:relative;width:38px;height:22px;border-radius:999px;border:1px solid #3A3E46;background:#22252A;cursor:pointer;padding:0;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#80858F}
+.sw.on{background:var(--ac);border-color:var(--ac)}
+.sw.on::after{left:19px;background:#0B0C0E}
+.field{display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;border-radius:8px;border:1px solid #2F3239;background:#101114;color:#80858F}
+.kbd{font-family:'Geist Mono',monospace;font-size:11px;line-height:1;padding:3px 6px;border-radius:5px;border:1px solid #3A3E46;border-bottom-width:2px;background:#1A1C20;color:#C9CCD2;white-space:nowrap}
+.lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#80858F}
+.nav{display:flex;align-items:center;gap:12px;height:38px;padding:0 12px;border-radius:8px;color:#A9ADB5;text-decoration:none;font-weight:500}
+.nav:hover{background:#17191D;color:#ECEDEE}
+.nav.cur{background:#1C1F24;color:#ECEDEE;box-shadow:inset 0 0 0 1px #2A2D33}
+.nav.cur .i{color:var(--ac)}
+.nav .n{margin-left:auto;font-family:'Geist Mono',monospace;font-size:11px;color:#80858F}
+.nav .n.hot{background:#3A2A0C;color:#FFC870;padding:1px 6px;border-radius:5px}
+.nav .n.att{display:inline-flex;align-items:center;gap:4px;background:#3A2A0C;color:#FFC870;padding:1px 6px 1px 5px;border-radius:5px;font-weight:600}
+.nav .n.att .i{width:12px;height:12px;stroke-width:2.2}
+.snav{display:block;padding:7px 12px;border-radius:7px;color:#A9ADB5;text-decoration:none}
+.snav:hover{color:#ECEDEE;background:#141619}
+.snav.cur{color:#ECEDEE;background:#16181C;box-shadow:inset 2px 0 0 var(--ac)}
+.group{border:1px solid #23262B;border-radius:14px;background:#101114;overflow:hidden}
+.row{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:16px 20px;border-bottom:1px solid #1A1C20;flex-wrap:wrap}
+.row:last-child{border-bottom:0}
+.row .t{display:flex;flex-direction:column;gap:3px;flex:1 1 280px;min-width:0}
+.row .t b{font-weight:600}
+.row .t span{font-size:12px;color:#80858F}
+.sel{display:inline-flex;align-items:center;justify-content:space-between;gap:10px;min-width:200px;height:36px;padding:0 12px;border-radius:8px;border:1px solid #2F3239;background:#15171A;cursor:pointer}
+.seg{display:flex;padding:3px;border-radius:9px;background:#0B0C0E;border:1px solid #23262B}
+.seg button{height:30px;padding:0 14px;border-radius:7px;border:0;background:transparent;color:#A9ADB5;cursor:pointer;font-weight:500}
+.seg button.on{background:#24272C;color:#ECEDEE}
+.swatch{width:30px;height:30px;border-radius:8px;border:2px solid transparent;cursor:pointer;padding:0}
+.swatch.on{border-color:#ECEDEE}
+.ok{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#C9CCD2}
+.inp{width:280px;max-width:100%;height:36px;padding:0 12px;border-radius:8px;border:1px solid #2F3239;background:#101114;outline:0;color:#ECEDEE}
+.inp:focus{border-color:color-mix(in srgb,var(--ac) 60%,#2F3239)}
+</style>
+</helmet>
+<div class="app" style="--ac: {{accent}}; position: relative; width: 100%; min-height: 900px; background: #0B0C0E; display: flex; flex-direction: column; overflow: hidden">
+
+<header style="display: flex; align-items: center; gap: 16px; height: 44px; padding-left: 16px; border-bottom: 1px solid #1E2024; background: #0A0B0D; flex: none">
+  <div style="display: flex; align-items: center; gap: 10px; width: 200px">
+    <img class="logo" src="../../../mod_manager_flutter/assets/brand/logo-mark-on-dark.png" alt="Zenith">
+    <span class="disp" style="font-weight: 700; letter-spacing: .08em">ZENITH</span>
+  </div>
+  <a href="Palette.dc.html" class="field" style="width: 440px; max-width: 40%; height: 30px; margin: 0 auto; text-decoration: none; cursor: pointer">
+    <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+    <span style="flex: 1; font-size: 12px">Search mods, characters and actions</span>
+    <span class="kbd">Ctrl K</span>
+  </a>
+  <div style="display: flex">
+    <button class="winbtn" aria-label="Minimize"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"></path></svg></button>
+    <button class="winbtn" aria-label="Maximize"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1.5"></rect></svg></button>
+    <button class="winbtn x" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+  </div>
+</header>
+
+<div style="flex: 1; display: flex; flex-wrap: wrap; min-height: 0">
+  <nav aria-label="Main" style="flex: 0 0 216px; display: flex; flex-direction: column; gap: 2px; padding: 14px 10px; border-right: 1px solid #1E2024; background: #0A0B0D">
+    <span class="lbl" style="padding: 6px 12px 8px">Library</span>
+    <a class="nav" href="Main.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"></rect><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"></rect><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"></rect><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"></rect></svg>Characters<span class="n">48</span></a>
+    <a class="nav" href="AllMods.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"></path></svg>All mods<span class="n">61</span></a>
+    <a class="nav" href="Updates.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="m8.5 12 3.5-3.5 3.5 3.5M12 8.5V16"></path></svg>Updates<span class="n hot">3</span></a>
+    <a class="nav" href="Loadouts.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.5 8.5 4.5-8.5 4.5L3.5 8z"></path><path d="m3.5 12.5 8.5 4.5 8.5-4.5"></path><path d="m3.5 16.5 8.5 4.5 8.5-4.5"></path></svg>Loadouts<span class="n">4</span></a>
+    <span class="lbl" style="padding: 18px 12px 8px">GameBanana</span>
+    <a class="nav" href="Browse.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="m15.5 8.5-2 5-5 2 2-5z"></path></svg>Browse</a>
+    <a class="nav" href="Downloads.dc.html" aria-label="Downloads, 3 need your attention"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 10 5 5 5-5"></path><path d="M5 20h14"></path></svg>Downloads<span class="n att" title="3 downloads need your attention"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4 2.8 19.5h18.4z"></path><path d="M12 10v4.5M12 17v.01"></path></svg>3</span></a>
+    <div style="margin-top: auto; display: flex; flex-direction: column; gap: 10px">
+      <div style="padding: 12px; border-radius: 12px; background: #121316; border: 1px solid #23262B; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; align-items: center; gap: 8px">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--ac); box-shadow: 0 0 0 3px color-mix(in srgb,var(--ac) 25%,transparent)"></span>
+          <span style="font-weight: 600; font-size: 12px">ZZMI connected</span>
+        </div>
+        <span style="color: #A9ADB5; font-size: 12px">14 mods active · press <span class="kbd">F10</span> in game after changes</span>
+        <button class="btn btn-pri" style="width: 100%; height: 40px"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="fill: currentColor; stroke: none"><path d="M8 5v14l11-7z"></path></svg>Launch game</button>
+      </div>
+      <a class="nav cur" href="Settings.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"></path><circle cx="15" cy="6" r="2"></circle><circle cx="9" cy="12" r="2"></circle><circle cx="17" cy="18" r="2"></circle></svg>Settings</a>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-wrap: wrap; align-items: flex-start">
+    <aside style="flex: 0 0 210px; padding: 28px 12px 28px 20px; display: flex; flex-direction: column; gap: 2px">
+      <h1 class="disp" style="font-size: 24px; font-weight: 700; padding: 0 12px 16px">Settings</h1>
+      <a class="snav" href="#general">General</a>
+      <a class="snav cur" href="#folders">Game &amp; folders</a>
+      <a class="snav" href="#launch">Launching</a>
+      <a class="snav" href="#mods">Mods</a>
+      <a class="snav" href="#gb">GameBanana</a>
+      <a class="snav" href="Storage.dc.html">Storage</a>
+      <a class="snav" href="#look">Appearance</a>
+      <a class="snav" href="About.dc.html">About</a>
+    </aside>
+
+    <div style="flex: 999 1 520px; min-width: 0; max-width: 820px; padding: 28px 32px 48px; display: flex; flex-direction: column; gap: 28px">
+      <section id="folders" style="display: flex; flex-direction: column; gap: 12px">
+        <h2 style="font-size: 15px; font-weight: 600">Game &amp; folders</h2>
+        <div class="group">
+          <div class="row">
+            <div class="t"><b>ZZMI folder</b><span>Where the game loads mods from. Turning a mod on puts a link here.</span>
+              <span class="mono" style="color: #C9CCD2; margin-top: 6px">~/Games/XXMI Launcher/ZZMI</span>
+              <span class="ok" style="margin-top: 2px"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--ac); width: 14px; height: 14px"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg><span>d3dx.ini and Mods folder found</span></span>
+            </div>
+            <button class="btn">Change</button>
+          </div>
+          <div class="row">
+            <div class="t"><b>Mod library</b><span>Where your mods actually live, one folder per character.</span>
+              <span class="mono" style="color: #C9CCD2; margin-top: 6px">~/ZZZ Mods</span>
+              <span style="margin-top: 2px">7.9 GB used · 212 GB free on this drive</span>
+            </div>
+            <div style="display: flex; gap: 8px"><button class="btn btn-ghost">Open</button><button class="btn">Move…</button></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="launch" style="display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <h2 style="font-size: 15px; font-weight: 600">Launching the game</h2>
+          <sc-if value="{{linux}}" hint-placeholder-val="{{true}}"><span style="font-size: 12px; color: #80858F">On Linux the game runs through Proton, so Zenith needs to know how to start XXMI.</span></sc-if>
+          <sc-if value="{{windows}}" hint-placeholder-val="{{false}}"><span style="font-size: 12px; color: #80858F">What the Launch game button starts.</span></sc-if>
+        </div>
+        <div class="group">
+          <div class="row">
+            <div class="t"><b>XXMI Launcher</b><span>The launcher's .exe. Zenith starts it, and it starts the game with mods loaded.</span>
+              <span class="mono" style="color: #C9CCD2; margin-top: 6px; word-break: break-all">{{exePath}}</span>
+              <span class="ok" style="margin-top: 2px"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--ac); width: 14px; height: 14px"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg>Found</span>
+            </div>
+            <button class="btn">Change</button>
+          </div>
+          <div class="row">
+            <div class="t"><label for="args" style="font-weight: 600">Launch arguments</label><span>Passed to XXMI Launcher. Leave empty to open its window instead.</span></div>
+            <input id="args" class="inp mono" value="--nogui --xxmi ZZMI" style="font-size: 12px">
+          </div>
+          <sc-if value="{{linux}}" hint-placeholder-val="{{true}}">
+            <div class="row">
+              <div class="t"><b>Use umu-launcher</b><span>Runs Proton the way Steam does, including its per-game fixes.</span>
+                <sc-if value="{{umu}}" hint-placeholder-val="{{true}}"><span class="ok" style="margin-top: 4px"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--ac); width: 14px; height: 14px"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg>umu-run found at <span class="mono">/usr/bin/umu-run</span></span></sc-if>
+              </div>
+              <button class="{{umuCls}}" aria-pressed="{{umuPressed}}" aria-label="Use umu-launcher" onClick="{{toggleUmu}}"></button>
+            </div>
+            <div class="row">
+              <div class="t"><b>Proton</b><span>{{protonDesc}}</span></div>
+              <div style="display: flex; gap: 8px">
+                <button class="sel">GE-Proton10-15<svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="color: #80858F"><path d="m6 9 6 6 6-6"></path></svg></button>
+                <button class="btn ibtn" aria-label="Choose a Proton folder" title="Choose a Proton folder"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.5l2 2h7.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path></svg></button>
+              </div>
+            </div>
+            <div class="row">
+              <div class="t"><b>Wine prefix</b><span>The Windows environment XXMI runs in. An empty folder is set up on first launch.</span>
+                <span class="mono" style="color: #C9CCD2; margin-top: 6px; word-break: break-all">~/Games/XXMI Launcher/prefix</span>
+              </div>
+              <div style="display: flex; gap: 8px"><button class="btn btn-ghost">Open</button><button class="btn">Change</button></div>
+            </div>
+          </sc-if>
+        </div>
+      </section>
+
+      <section id="mods" style="display: flex; flex-direction: column; gap: 12px">
+        <h2 style="font-size: 15px; font-weight: 600">Mods</h2>
+        <div class="group">
+          <div class="row">
+            <div class="t"><b>One active mod per character</b><span>Turning a mod on turns that character's other mods off. Each character can override this.</span></div>
+            <button class="sw on" aria-pressed="true" aria-label="One active mod per character"></button>
+          </div>
+          <div class="row">
+            <div class="t"><b>Snapshots to keep</b><span>An update keeps the file it replaces so you can roll back.</span></div>
+            <div style="display: flex; align-items: center; gap: 4px; border: 1px solid #2F3239; border-radius: 8px; background: #15171A; padding: 2px">
+              <button class="btn btn-ghost btn-sm ibtn" aria-label="Fewer"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"></path></svg></button>
+              <span class="mono" style="width: 28px; text-align: center">2</span>
+              <button class="btn btn-ghost btn-sm ibtn" aria-label="More"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v12M6 12h12"></path></svg></button>
+            </div>
+          </div>
+          <div class="row">
+            <div class="t"><b>Check for mod updates</b><span>Only mods installed from GameBanana can be checked.</span></div>
+            <button class="sel">When the app starts<svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="color: #80858F"><path d="m6 9 6 6 6-6"></path></svg></button>
+          </div>
+          <div class="row">
+            <div class="t"><b>Remind me to press F10</b><span>Shows the reload key after you change mods while the game is running.</span></div>
+            <button class="sw on" aria-pressed="true" aria-label="Remind me to press F10"></button>
+          </div>
+        </div>
+      </section>
+
+      <section id="gb" style="display: flex; flex-direction: column; gap: 12px">
+        <h2 style="font-size: 15px; font-weight: 600">GameBanana</h2>
+        <div class="group">
+          <div class="row">
+            <div class="t"><b>Mature content</b><span>How Browse shows mods GameBanana flags as mature.</span></div>
+            <div class="seg" role="radiogroup" aria-label="Mature content"><button class="on" role="radio" aria-checked="true">Blur</button><button role="radio" aria-checked="false">Show without blur</button><button role="radio" aria-checked="false">Hide entirely</button></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="look" style="display: flex; flex-direction: column; gap: 12px">
+        <h2 style="font-size: 15px; font-weight: 600">Appearance</h2>
+        <div class="group">
+          <div class="row">
+            <div class="t"><b>Theme</b></div>
+            <div class="seg" role="radiogroup" aria-label="Theme"><button class="on" role="radio" aria-checked="true">Dark</button><button role="radio" aria-checked="false">Light</button><button role="radio" aria-checked="false">System</button></div>
+          </div>
+          <div class="row">
+            <div class="t"><b>Accent</b></div>
+            <div style="display: flex; gap: 8px" role="radiogroup" aria-label="Accent colour">
+              <button class="swatch on" role="radio" aria-checked="true" aria-label="Violet" style="background: #A98BFF"></button>
+              <button class="swatch" role="radio" aria-checked="false" aria-label="Paper" style="background: #F3EFEB"></button>
+              <button class="swatch" role="radio" aria-checked="false" aria-label="Lime" style="background: #C8F031"></button>
+              <button class="swatch" role="radio" aria-checked="false" aria-label="Teal" style="background: #5FE1D9"></button>
+            </div>
+          </div>
+          <div class="row">
+            <div class="t"><b>Language</b></div>
+            <button class="sel">English<svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="color: #80858F"><path d="m6 9 6 6 6-6"></path></svg></button>
+          </div>
+        </div>
+      </section>
+
+      <section id="about" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 20px; border-radius: 14px; border: 1px solid #23262B; flex-wrap: wrap">
+        <div style="display: flex; align-items: center; gap: 14px">
+          <img class="logo" src="../../../mod_manager_flutter/assets/brand/logo-app-icon.png" alt="" style="width: 44px; height: 44px">
+          <div style="display: flex; flex-direction: column">
+            <b style="font-weight: 600">Zenith <span class="mono" style="color: #A9ADB5; font-weight: 400">3.0.0</span></b>
+            <span style="font-size: 12px; color: #80858F">You're on the latest version</span>
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px"><a class="btn btn-ghost" href="https://github.com">Source code</a><a class="btn btn-ghost" href="https://github.com">Report a problem</a></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<footer style="display: flex; align-items: center; gap: 18px; height: 28px; padding: 0 16px; border-top: 1px solid #1E2024; background: #0A0B0D; color: #80858F; font-size: 11px; flex: none">
+  <span class="mono">ZZMI · ~/Games/XXMI/ZZMI</span>
+  <span>14 links active</span>
+  <span>Watching library for changes</span>
+  <span style="margin-left: auto" class="mono">v3.0.0</span>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#A98BFF&quot;,&quot;options&quot;:[&quot;#A98BFF&quot;,&quot;#F3EFEB&quot;,&quot;#C8F031&quot;,&quot;#5FE1D9&quot;]},&quot;platform&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Linux&quot;,&quot;Windows&quot;],&quot;default&quot;:&quot;Linux&quot;},&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { umu: true };
+  }
+  renderVals() {
+    const linux = (this.props.platform ?? 'Linux') === 'Linux';
+    const umu = this.state.umu;
+    const exe = linux ? '~/Games/XXMI Launcher/XXMI Launcher.exe' : 'C:\\Users\\you\\AppData\\Roaming\\XXMI Launcher\\Resources\\Bin\\XXMI Launcher.exe';
+    return {
+      accent: this.props.accent ?? '#A98BFF',
+      linux, windows: !linux,
+      exePath: exe,
+      umu,
+      umuCls: umu ? 'sw on' : 'sw',
+      umuPressed: umu ? 'true' : 'false',
+      toggleUmu: () => this.setState({ umu: !umu }),
+      protonDesc: umu ? 'Which Proton umu-run uses. Found in Steam\'s compatibility tools folders.' : 'Which Proton starts XXMI. Found in Steam\'s compatibility tools folders.'
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -4,7 +4,7 @@ The working plan for rebuilding the UI to the Zenith design. It lives on the `ze
 
 ## Ground rules
 
-- **Target:** the claude.ai Design canvas "Zenith v3 UI", https://claude.ai/artifact/1Sy7dkEKL6RwurthEEpZgv. Read it with the Artifact tool (`action: "read"`, then the `project/*.dc.html` files). It has 30 artboards.
+- **Target:** the design canvas in [`design/v3/`](../design/v3/README.md): one `boards/*.dc.html` file per artboard, `canvas.json` for their titles and sections, and `renders/*.png` for a look without running anything. Read the board files directly. It has 31 artboards.
 - The canvas was designed without seeing the code. It is the target; the current UI is replaced, not preserved. Everything on it gets built, including features the app lacks.
 - Where the canvas has a gap, design the missing piece in its style without asking. Where it moved something (rename is the Name field in Edit info, not a right-click dialog), the canvas placement wins. Ask only when it contradicts a decision written in `docs/`.
 - **Branch:** `zenith-ui`, cut from `development`. Never commit unless the user says so.

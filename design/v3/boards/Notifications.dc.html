@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Notifications</title>
+<script src="../../runtime/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Unbounded:wght@500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#060708}
+a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
+.app,.app *{box-sizing:border-box}
+.app{font-family:'Geist',system-ui,sans-serif;color:#ECEDEE;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+:where(.app) :where(button,input,textarea){font:inherit;color:inherit}
+.app h1,.app h2,.app h3,.app p{margin:0}
+.disp{font-family:'Unbounded','Geist',sans-serif;letter-spacing:-0.01em}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.logo{width:22px;height:22px;display:block;flex:none;object-fit:contain}
+.kbd{font-family:'Geist Mono',monospace;font-size:11px;line-height:1;padding:2px 5px;border-radius:5px;border:1px solid #3A3E46;border-bottom-width:2px;background:#22252A;color:#C9CCD2;white-space:nowrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:30px;padding:0 10px;border-radius:7px;border:1px solid #363A42;background:#1A1C20;color:#ECEDEE;font-weight:500;font-size:12px;cursor:pointer;white-space:nowrap}
+.btn:hover{background:#24272C}
+.sk{background:#15171A;border-radius:7px}
+
+/* the notification */
+.nt{position:relative;overflow:hidden;width:380px;display:flex;gap:12px;align-items:flex-start;padding:12px 10px 12px 12px;border-radius:12px;background:#1B1D21;border:1px solid #30333A;box-shadow:0 14px 40px rgba(0,0,0,.45)}
+.nt .ic{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex:none}
+.nt .tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;padding-top:4px}
+.nt .t{font-weight:600}
+.nt .b{font-size:12px;color:#A9ADB5}
+.nt .acts{display:flex;gap:2px;margin:4px 0 -6px -8px}
+.na{all:unset;cursor:pointer;display:inline-flex;align-items:center;min-height:30px;padding:0 8px;border-radius:7px;font-size:12px;font-weight:600;color:#ECEDEE}
+.na:hover{background:#2A2D33;color:#ECEDEE}.na:focus-visible{outline:2px solid var(--ac);outline-offset:1px}.k-err .na:hover{background:#3A2220}
+.na.pri{color:var(--ac)}
+.nx{width:26px;height:26px;border-radius:7px;border:0;background:transparent;color:#80858F;display:grid;place-items:center;cursor:pointer;padding:0;flex:none}
+.nx:hover{background:#2A2D33;color:#ECEDEE}
+.nx .i{width:14px;height:14px}
+.bar{position:absolute;left:0;right:0;bottom:0;height:3px;background:#2A2D33}
+.bar span{display:block;height:100%;background:var(--ac);transition:width .2s linear}
+.k-ok .ic{background:color-mix(in srgb,var(--ac) 16%,#1B1D21);color:var(--ac)}
+.k-work .ic{background:#24272C;color:#C9CCD2}
+.k-info .ic{background:#24272C;color:#C9CCD2}
+.k-up .ic{background:#3A2A0C;color:#FFC870}
+.k-ask .ic{background:#0F2236;color:#9CCBFF}
+.k-warn .ic{background:#3A2A0C;color:#FFC870}
+.k-err{border-color:#5A2620;background:#1E1514}
+.k-err .ic{background:#3A1512;color:#FF9A8E}
+.spin{animation:spin .9s linear infinite;transform-origin:50% 50%}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}.bar span{transition:none}}
+
+.pic{position:relative;width:32px;height:32px;flex:none;margin-top:1px}
+.pic img{width:32px;height:32px;border-radius:9px;object-fit:cover;object-position:50% 22%;display:block;background:#12303D}
+.pic .st{position:absolute;right:-5px;bottom:-5px;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;border:2px solid #1B1D21}
+.pic .st .i{width:10px;height:10px;stroke-width:2.8}
+.k-err .pic .st{border-color:#1E1514}
+.st-work{background:#2A2D33;color:#ECEDEE}.st-ok{background:var(--ac);color:#0B0C0E}.st-err{background:#FF6B5B;color:#160605}
+.deck{position:relative;width:380px;margin-top:14px}
+.deck .ghost{position:absolute;left:50%;height:20px;border-radius:12px 12px 0 0;background:#17191C;border:1px solid #2A2D33;border-bottom:0;transform:translateX(-50%)}
+.row{display:grid;grid-template-columns:380px minmax(0,1fr);gap:24px;align-items:start}
+.cap{display:flex;flex-direction:column;gap:3px;padding-top:6px}
+.cap .h{font-weight:600}
+.cap .d{font-size:12px;color:#A9ADB5}
+.more{align-self:flex-end;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:999px;background:#1B1D21;border:1px solid #30333A;color:#A9ADB5;font-size:12px;cursor:pointer}
+</style>
+</helmet>
+<div class="app" style="--ac: {{accent}}; position: relative; width: 100%; height: 900px; background: #0B0C0E; display: flex; overflow: hidden">
+
+  <section aria-label="Kinds of notification" style="flex: 0 0 780px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #2A2D33 transparent; padding: 32px 36px; display: flex; flex-direction: column; gap: 18px; border-right: 1px solid #1E2024">
+    <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px">
+      <h1 class="disp" style="font-size: 22px; font-weight: 700">Notifications</h1>
+      <p style="color: #A9ADB5; max-width: 620px">One card for everything. The icon, colour, body, actions and progress bar are all optional, and the colour follows the app's rule: amber for updates and warnings, blue when something waits for you, red when something failed.</p>
+      <p style="color: #A9ADB5; max-width: 620px">A notification about one mod shows its character, with the kind as a small badge on the portrait. One about several mods, or a mod with no character (UI, Unknown), keeps the plain icon.</p>
+    </div>
+
+    <div class="row">
+      <div class="nt k-work">
+        <span class="pic"><img src="../../../mod_manager_flutter/assets/characters/ellen.png" alt="Ellen Joe"><span class="st st-work"><svg class="i spin" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 1 1-8.5 8.5"></path></svg></span></span>
+        <span class="tx"><span class="t">Installing Victorian Ballgown</span><span class="b">Unpacking · 138 of 214 MB</span></span>
+        <button class="nx" aria-label="Hide"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+        <span class="bar"><span style="width: 64%"></span></span>
+      </div>
+      <div class="cap"><span class="h">Working</span><span class="d">Stays while it runs, then turns into its result in place. Unknown length: the bar sweeps instead of filling.</span></div>
+    </div>
+
+    <div class="row">
+      <div class="deck">
+        <span class="ghost" style="top: -14px; width: 340px"></span>
+        <span class="ghost" style="top: -7px; width: 360px; background: #1A1C20"></span>
+        <div class="nt k-work" style="position: relative">
+          <span class="pic"><img src="../../../mod_manager_flutter/assets/characters/ellen.png" alt="Ellen Joe"><span class="st st-work"><svg class="i spin" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 1 1-8.5 8.5"></path></svg></span></span>
+          <span class="tx"><span class="t">Installing Victorian Ballgown</span><span class="b">Unpacking · 138 of 214 MB</span><span class="b" style="color: #80858F">2 more downloading</span></span>
+          <button class="nx" aria-label="Hide"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+          <span class="bar"><span style="width: 64%"></span></span>
+        </div>
+      </div>
+      <div class="cap"><span class="h">Several at once</span><span class="d">The same card as one download, dealt into a deck that takes one slot. Hovering spreads it out. Each download leaves the deck on its own when it's done; a failure or a decision leaves as its own card.</span></div>
+    </div>
+
+    <div class="row">
+      <div class="nt k-ok">
+        <span class="pic"><img src="../../../mod_manager_flutter/assets/characters/ellen.png" alt="Ellen Joe"><span class="st st-ok"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg></span></span>
+        <span class="tx"><span class="t">Victorian Ballgown installed</span><span class="b">Added to Ellen Joe, off for now.</span><span class="acts"><button class="na pri">Turn on</button><button class="na">Open</button></span></span>
+        <button class="nx" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+      </div>
+      <div class="cap"><span class="h">Done</span><span class="d">Only when the result isn't on screen already. Leaves after 5 seconds.</span></div>
+    </div>
+
+    <div class="row">
+      <div class="nt k-info">
+        <span class="pic"><img src="../../../mod_manager_flutter/assets/characters/ellen.png" alt="Ellen Joe"></span>
+        <span class="tx"><span class="t">Winter Maid Uniform is on</span><span class="b">Press <span class="kbd">F10</span> in game to load it.</span><span class="acts"><button class="na">Undo</button></span></span>
+        <button class="nx" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+      </div>
+      <div class="cap"><span class="h">Note</span><span class="d">A plain fact. The F10 reminder shows only while the game runs. Leaves after 5 seconds.</span></div>
+    </div>
+
+    <div class="row">
+      <div class="nt k-up">
+        <span class="ic"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="m8.5 12 3.5-3.5 3.5 3.5M12 8.5V16"></path></svg></span>
+        <span class="tx"><span class="t">3 newer files</span><span class="b">Shark Hoodie Recolor, Crimson Kimono and 1 more.</span><span class="acts"><button class="na pri">Review</button></span></span>
+        <button class="nx" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+      </div>
+      <div class="cap"><span class="h">Update</span><span class="d">After a check that found something. Review opens Updates. Leaves after 8 seconds.</span></div>
+    </div>
+
+    <div class="row">
+      <div class="nt k-ask">
+        <span class="ic"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 10 5 5 5-5"></path><path d="M5 20h14"></path></svg></span>
+        <span class="tx"><span class="t">A download needs a decision</span><span class="b">Victorian Ballgown has several folders.</span><span class="acts"><button class="na pri">Open Downloads</button></span></span>
+        <button class="nx" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+      </div>
+      <div class="cap"><span class="h">Needs you</span><span class="d">Shown once. Closing it is fine: the Downloads badge keeps the count.</span></div>
+    </div>
+
+    <div class="row">
+      <div class="nt k-warn">
+        <span class="ic"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4 2.8 19.5h18.4z"></path><path d="M12 10v4.5M12 17v.01"></path></svg></span>
+        <span class="tx"><span class="t">1.2 GB left on this drive</span><span class="b">The next update may not have room for its snapshot.</span><span class="acts"><button class="na pri">Storage</button></span></span>
+        <button class="nx" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+      </div>
+      <div class="cap"><span class="h">Warning</span><span class="d">Nothing failed yet, something might. Leaves after 8 seconds.</span></div>
+    </div>
+
+    <div class="row">
+      <div class="nt k-err">
+        <span class="pic"><img src="../../../mod_manager_flutter/assets/characters/jane.png" alt="Jane Doe"><span class="st st-err"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 8 8 8M16 8l-8 8"></path></svg></span></span>
+        <span class="tx"><span class="t">Couldn't turn on Lab Coat</span><span class="b">Zenith can't write to ZZMI/Mods. Check the folder's permissions.</span><span class="acts"><button class="na pri">Open folder</button><button class="na">Copy details</button></span></span>
+        <button class="nx" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+      </div>
+      <div class="cap"><span class="h">Error</span><span class="d">Says what failed and what to do. Stays until you close it.</span></div>
+    </div>
+  </section>
+
+  <section aria-label="In the app" style="flex: 1; min-width: 0; padding: 32px 32px 32px 28px; display: flex; flex-direction: column; gap: 14px">
+    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px">
+      <ul style="margin: 0; padding-left: 18px; color: #A9ADB5; font-size: 12px; display: flex; flex-direction: column; gap: 4px">
+        <li>Bottom right, the newest nearest the corner.</li>
+        <li>At most 3. Older ones fold into "+N more".</li>
+        <li>Hovering pauses every timer.</li>
+        <li>A repeat updates its card: "3 mods installed", not three cards.</li>
+        <li>Downloads running together share one slot, as a deck.</li>
+      </ul>
+      <button class="btn" onClick="{{replay}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3L4.5 9"></path><path d="M4.5 4.5V9H9"></path></svg>Replay install</button>
+    </div>
+
+    <div style="position: relative; flex: 1; border-radius: 14px; border: 1px solid #23262B; overflow: hidden; background: #0B0C0E; display: flex; flex-direction: column">
+      <div style="height: 36px; border-bottom: 1px solid #1E2024; background: #0A0B0D; display: flex; align-items: center; gap: 8px; padding-left: 12px; flex: none"><img class="logo" src="../../../mod_manager_flutter/assets/brand/logo-mark-on-dark.png" alt=""><span class="disp" style="font-weight: 700; font-size: 11px; letter-spacing: .08em">ZENITH</span></div>
+      <div aria-hidden="true" style="flex: 1; display: flex; min-height: 0">
+        <div style="width: 120px; background: #0A0B0D; border-right: 1px solid #1E2024; padding: 16px 10px; display: flex; flex-direction: column; gap: 10px">
+          <div class="sk" style="height: 22px"></div><div class="sk" style="height: 22px"></div><div class="sk" style="height: 22px"></div><div class="sk" style="height: 22px"></div>
+        </div>
+        <div style="flex: 1; padding: 20px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-content: start">
+          <div class="sk" style="grid-column: 1 / -1; height: 70px"></div>
+          <div class="sk" style="height: 140px"></div><div class="sk" style="height: 140px"></div><div class="sk" style="height: 140px"></div>
+          <div class="sk" style="height: 140px"></div><div class="sk" style="height: 140px"></div><div class="sk" style="height: 140px"></div>
+        </div>
+      </div>
+      <div style="height: 24px; border-top: 1px solid #1E2024; background: #0A0B0D; flex: none"></div>
+
+      <div role="region" aria-label="Notifications" aria-live="polite" style="position: absolute; right: 14px; bottom: 38px; display: flex; flex-direction: column; gap: 8px; align-items: flex-end">
+        <button class="more">+2 more</button>
+        <div class="nt k-err" role="alert">
+          <span class="pic"><img src="../../../mod_manager_flutter/assets/characters/jane.png" alt="Jane Doe"><span class="st st-err"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 8 8 8M16 8l-8 8"></path></svg></span></span>
+          <span class="tx"><span class="t">Couldn't turn on Lab Coat</span><span class="b">Zenith can't write to ZZMI/Mods. Check the folder's permissions.</span><span class="acts"><button class="na pri">Open folder</button><button class="na">Copy details</button></span></span>
+          <button class="nx" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+        </div>
+        <div class="nt k-up">
+          <span class="ic"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="m8.5 12 3.5-3.5 3.5 3.5M12 8.5V16"></path></svg></span>
+          <span class="tx"><span class="t">3 newer files</span><span class="b">Shark Hoodie Recolor, Crimson Kimono and 1 more.</span><span class="acts"><a class="na pri" href="Updates.dc.html">Review</a></span></span>
+          <button class="nx" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+        </div>
+        <sc-if value="{{working}}" hint-placeholder-val="{{true}}">
+          <div class="nt k-work">
+            <span class="pic"><img src="../../../mod_manager_flutter/assets/characters/ellen.png" alt="Ellen Joe"><span class="st st-work"><svg class="i spin" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 1 1-8.5 8.5"></path></svg></span></span>
+            <span class="tx"><span class="t">Installing Victorian Ballgown</span><span class="b">{{workLbl}}</span></span>
+            <button class="nx" aria-label="Hide"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+            <span class="bar"><span style="width: {{pctW}}"></span></span>
+          </div>
+        </sc-if>
+        <sc-if value="{{done}}" hint-placeholder-val="{{false}}">
+          <div class="nt k-ok">
+            <span class="pic"><img src="../../../mod_manager_flutter/assets/characters/ellen.png" alt="Ellen Joe"><span class="st st-ok"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg></span></span>
+            <span class="tx"><span class="t">Victorian Ballgown installed</span><span class="b">Added to Ellen Joe, off for now.</span><span class="acts"><button class="na pri">Turn on</button><button class="na">Open</button></span></span>
+            <button class="nx" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#A98BFF","options":["#A98BFF","#F3EFEB","#C8F031","#5FE1D9"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { pct: 64, done: false };
+    this.running = false;
+  }
+  renderVals() {
+    const { pct, done } = this.state;
+    const mb = Math.round(214 * pct / 100);
+    return {
+      accent: this.props.accent ?? '#A98BFF',
+      working: !done,
+      done,
+      pctW: pct + '%',
+      workLbl: pct < 100 ? 'Unpacking · ' + mb + ' of 214 MB' : 'Linking into ZZMI/Mods',
+      replay: () => {
+        if (this.running) return;
+        this.running = true;
+        let p = 0;
+        this.setState({ pct: 0, done: false });
+        const step = () => {
+          p = Math.min(100, p + 7);
+          this.setState({ pct: p });
+          if (p < 100) { setTimeout(step, 160); return; }
+          setTimeout(() => { this.running = false; this.setState({ done: true }); }, 500);
+        };
+        setTimeout(step, 300);
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

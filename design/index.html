@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zenith design</title>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Unbounded:wght@700;800&amp;display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0B0C0E;--card:#121316;--line:#23262B;--tx:#ECEDEE;--tx2:#A9ADB5;--tx3:#80858F;--ac:#A98BFF}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 'Geist',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.wrap{max-width:1600px;margin:0 auto;padding:40px 32px 64px}
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-bottom:40px}
+h1{margin:0;font:800 34px/1.05 'Unbounded',sans-serif;text-transform:uppercase;letter-spacing:-.01em}
+header p{margin:0;max-width:520px;color:var(--tx3)}
+section{margin-bottom:48px}
+h2{margin:0 0 16px;font:700 18px/1.2 'Unbounded',sans-serif}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:20px}
+.card{display:flex;flex-direction:column;gap:10px;text-decoration:none;border-radius:14px}
+.card:focus-visible{outline:2px solid var(--ac);outline-offset:4px}
+.thumb{position:relative;aspect-ratio:var(--ratio);overflow:hidden;border-radius:12px;border:1px solid var(--line);background:var(--card)}
+.card:hover .thumb{border-color:#3A3E46}
+.thumb iframe{position:absolute;left:0;top:0;border:0;transform-origin:0 0;pointer-events:none;background:var(--bg)}
+.meta{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.meta b{font-weight:600}
+.meta span{font-size:12px;color:var(--tx3);white-space:nowrap}
+.empty{color:var(--tx3)}
+.head{display:flex;flex-direction:column;gap:14px}
+nav{display:flex;gap:6px;flex-wrap:wrap}
+nav a{height:28px;display:inline-flex;align-items:center;padding:0 12px;border-radius:999px;border:1px solid #2A2D33;background:#15171A;color:var(--tx2);font-size:12px;font-weight:500;text-decoration:none}
+nav a[aria-current="page"]{background:color-mix(in srgb,var(--ac) 14%,#121316);border-color:color-mix(in srgb,var(--ac) 45%,#121316);color:color-mix(in srgb,var(--ac) 70%,#FFFFFF)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="head">
+      <h1 id="heading">Zenith design</h1>
+      <nav id="designs" aria-label="Designs" hidden></nav>
+    </div>
+    <p>Every screen of the design. Open one to use it: links, menus and tweaks work as they would in the app.</p>
+  </header>
+  <main id="sections"><p class="empty">Loading the boards…</p></main>
+</div>
+<script>
+(async () => {
+  const main = document.getElementById('sections');
+  const fail = (what) => {
+    main.innerHTML = `<p class="empty">${what} could not be read. Serve the repository root over HTTP; see design/README.md.</p>`;
+  };
+
+  // designs.json lists the design folders, newest first; the render tool keeps it in step with them.
+  let designs;
+  try {
+    designs = (await (await fetch('designs.json', { cache: 'no-store' })).json()).designs;
+  } catch (e) {
+    fail('designs.json');
+    return;
+  }
+  if (!designs.length) {
+    main.innerHTML = '<p class="empty">No designs yet.</p>';
+    return;
+  }
+  const asked = new URLSearchParams(location.search).get('set');
+  const current = designs.find((d) => d.folder === asked) || designs[0];
+  const set = current.folder;
+  document.getElementById('heading').textContent = current.title;
+  document.title = current.title;
+  if (designs.length > 1) {
+    const nav = document.getElementById('designs');
+    for (const d of designs) {
+      const link = document.createElement('a');
+      link.href = `?set=${encodeURIComponent(d.folder)}`;
+      link.textContent = d.title;
+      if (d === current) link.setAttribute('aria-current', 'page');
+      nav.appendChild(link);
+    }
+    nav.hidden = false;
+  }
+
+  let canvas;
+  try {
+    canvas = await (await fetch(`${set}/canvas.json`, { cache: 'no-store' })).json();
+  } catch (e) {
+    fail(`${set}/canvas.json`);
+    return;
+  }
+
+  // A board belongs to the nearest section title above it, as on the canvas.
+  const titles = Object.values(canvas.notes || {}).filter((n) => n.kind === 'title1').sort((a, b) => a.y - b.y);
+  const groups = titles.map((t) => ({ title: t.text, boards: [] }));
+  const other = { title: 'Other', boards: [] };
+  for (const [file, b] of Object.entries(canvas.boards)) {
+    let group = other;
+    titles.forEach((t, k) => { if (t.y <= b.y) group = groups[k]; });
+    group.boards.push({ file, ...b });
+  }
+  groups.push(other);
+
+  main.innerHTML = '';
+  const frames = [];
+  for (const g of groups) {
+    if (!g.boards.length) continue;
+    g.boards.sort((a, b) => a.y - b.y || a.x - b.x);
+    const sec = document.createElement('section');
+    const h = document.createElement('h2');
+    h.textContent = g.title;
+    const grid = document.createElement('div');
+    grid.className = 'grid';
+    for (const b of g.boards) {
+      const w = b.w || 1440;
+      const hgt = b.h || 900;
+      const card = document.createElement('a');
+      card.className = 'card';
+      card.href = `${set}/boards/${b.file}`;
+      card.innerHTML = `<div class="thumb" style="--ratio:${w}/${hgt}"><iframe loading="lazy" tabindex="-1" aria-hidden="true" width="${w}" height="${hgt}"></iframe></div><div class="meta"><b></b><span></span></div>`;
+      card.querySelector('iframe').src = `${set}/boards/${b.file}?embed=1`;
+      card.querySelector('b').textContent = b.title || b.file;
+      card.querySelector('span').textContent = b.is_interactive ? 'Interactive' : '';
+      frames.push({ box: card.querySelector('.thumb'), frame: card.querySelector('iframe'), w });
+      grid.appendChild(card);
+    }
+    sec.append(h, grid);
+    main.appendChild(sec);
+  }
+
+  const fit = new ResizeObserver(() => {
+    for (const f of frames) f.frame.style.transform = `scale(${f.box.clientWidth / f.w})`;
+  });
+  for (const f of frames) fit.observe(f.box);
+})();
+</script>
+</body>
+</html>

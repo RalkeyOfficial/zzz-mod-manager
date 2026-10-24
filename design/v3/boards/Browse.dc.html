@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Browse GameBanana</title>
+<script src="../../runtime/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Unbounded:wght@500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#060708}
+a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
+.app,.app *{box-sizing:border-box}
+.app{font-family:'Geist',system-ui,sans-serif;color:#ECEDEE;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+:where(.app) :where(button,input,textarea){font:inherit;color:inherit}
+.app h1,.app h2,.app h3,.app p{margin:0}
+.disp{font-family:'Unbounded','Geist',sans-serif;letter-spacing:-0.01em}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.logo{width:26px;height:26px;display:block;flex:none;object-fit:contain}
+.winbtn{width:46px;height:44px;display:grid;place-items:center;background:transparent;border:0;color:#A9ADB5;cursor:pointer}
+.winbtn:hover{background:#1A1C20}.winbtn.x:hover{background:#C4352B;color:#fff}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:8px;border:1px solid #363A42;background:#1A1C20;color:#ECEDEE;font-weight:500;font-size:13px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn:hover{background:#24272C;color:#ECEDEE}
+.btn-pri{background:var(--ac);border-color:var(--ac);color:#0B0C0E;font-weight:600}
+.btn-pri:hover{background:var(--ac);color:#0B0C0E;filter:brightness(1.08)}
+.btn-ghost{background:transparent;border-color:transparent;color:#A9ADB5}
+.btn-sm{height:30px;padding:0 10px;font-size:12px;border-radius:7px}
+.ibtn{width:36px;padding:0}.btn-sm.ibtn{width:30px}
+.chip{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:999px;border:1px solid #2A2D33;background:#15171A;color:#A9ADB5;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap}
+.chip.on{background:color-mix(in srgb,var(--ac) 14%,#121316);border-color:color-mix(in srgb,var(--ac) 45%,#121316);color:color-mix(in srgb,var(--ac) 70%,#FFFFFF)}
+.badge{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;font-size:11px;font-weight:600;letter-spacing:.02em;white-space:nowrap}
+.b-on{background:var(--ac);color:#0B0C0E}
+.b-up{background:#3A2A0C;color:#FFC870;border:1px solid #6A4C14}
+.b-off{background:rgba(11,12,14,.75);color:#C9CCD2;border:1px solid #2A2D33}
+.sw{position:relative;width:38px;height:22px;border-radius:999px;border:1px solid #3A3E46;background:#22252A;cursor:pointer;padding:0;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#80858F}
+.sw.on{background:var(--ac);border-color:var(--ac)}
+.sw.on::after{left:19px;background:#0B0C0E}
+.field{display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;border-radius:8px;border:1px solid #2F3239;background:#101114;color:#80858F}
+.field input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:#ECEDEE}
+.field input::placeholder{color:#80858F}
+.kbd{font-family:'Geist Mono',monospace;font-size:11px;line-height:1;padding:3px 6px;border-radius:5px;border:1px solid #3A3E46;border-bottom-width:2px;background:#1A1C20;color:#C9CCD2;white-space:nowrap}
+.lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#80858F}
+.nav{display:flex;align-items:center;gap:12px;height:38px;padding:0 12px;border-radius:8px;color:#A9ADB5;text-decoration:none;font-weight:500}
+.nav:hover{background:#17191D;color:#ECEDEE}
+.nav.cur{background:#1C1F24;color:#ECEDEE;box-shadow:inset 0 0 0 1px #2A2D33}
+.nav.cur .i{color:var(--ac)}
+.nav .n{margin-left:auto;font-family:'Geist Mono',monospace;font-size:11px;color:#80858F}
+.nav .n.hot{background:#3A2A0C;color:#FFC870;padding:1px 6px;border-radius:5px}
+.nav .n.att{display:inline-flex;align-items:center;gap:4px;background:#3A2A0C;color:#FFC870;padding:1px 6px 1px 5px;border-radius:5px;font-weight:600}
+.nav .n.att .i{width:12px;height:12px;stroke-width:2.2}
+.dots{background-size:9px 9px}
+.t-ice{background-color:#0E1D25;background-image:radial-gradient(#1F4556 1.1px,transparent 1.3px)}
+.t-fire{background-color:#25130D;background-image:radial-gradient(#552B19 1.1px,transparent 1.3px)}
+.t-elec{background-color:#0F1730;background-image:radial-gradient(#243F73 1.1px,transparent 1.3px)}
+.t-ether{background-color:#21112A;background-image:radial-gradient(#4E275E 1.1px,transparent 1.3px)}
+.t-phys{background-color:#221E0D;background-image:radial-gradient(#4F4519 1.1px,transparent 1.3px)}
+.t-misc{background-color:#15171A;background-image:radial-gradient(#2C3038 1.1px,transparent 1.3px)}
+.gcard{display:flex;flex-direction:column;background:#121316;border:1px solid #23262B;border-radius:12px;overflow:hidden;text-decoration:none;color:inherit}
+.gcard:hover{border-color:#3A3E46;color:inherit}
+.stat{display:inline-flex;align-items:center;gap:4px;color:#80858F;font-size:12px}
+.stat .i{width:13px;height:13px}
+.btn.open{background:#24272C;border-color:#4A4E57}
+.bmenu{position:absolute;top:38px;width:236px;padding:6px;border-radius:12px;background:#17191D;border:1px solid #33363D;box-shadow:0 20px 50px rgba(0,0,0,.6);display:flex;flex-direction:column;z-index:6}
+.bmh{padding:6px 10px 4px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#80858F}
+.bmi{display:flex;align-items:center;gap:10px;width:100%;min-height:34px;padding:6px 10px;border:0;border-radius:7px;background:transparent;color:#ECEDEE;text-align:left;cursor:pointer}
+.bmi:hover{background:#24272C}
+.bmi .chk{width:14px;color:var(--ac);font-weight:700;flex:none}
+.mature{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);background:rgba(11,12,14,.55);color:#ECEDEE;font-weight:600;font-size:13px;z-index:1}
+.car-arrow{position:absolute;top:50%;transform:translateY(-50%);background:rgba(11,12,14,.75)}
+.dot{width:8px;height:8px;border-radius:99px;border:0;padding:0;background:rgba(236,237,238,.35);cursor:pointer}
+.dot.on{width:22px;background:var(--ac)}
+.cpick{display:inline-flex;align-items:center;height:30px;width:200px;border-radius:999px;border:1px solid #2A2D33;background:#15171A;color:#A9ADB5;flex:none}
+.cpick:hover{border-color:#3A3E46;color:#ECEDEE}
+.cpick.on{background:color-mix(in srgb,var(--ac) 14%,#121316);border-color:color-mix(in srgb,var(--ac) 45%,#121316);color:color-mix(in srgb,var(--ac) 70%,#FFFFFF)}
+.cpmain{all:unset;flex:1;min-width:0;display:flex;align-items:center;gap:8px;height:100%;padding:0 4px 0 3px;cursor:pointer;font-size:12px;font-weight:500}
+.cpmain:focus-visible,.cpx:focus-visible{outline:2px solid var(--ac);outline-offset:2px;border-radius:999px}
+.cpmain img,.cpface{width:22px;height:22px;border-radius:999px;object-fit:cover;object-position:50% 20%;flex:none;display:grid;place-items:center;font-family:'Unbounded',sans-serif;font-size:8px;font-weight:700}
+.cpface.any{background:#22252A;color:#A9ADB5}
+.cplbl{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cpx{all:unset;width:22px;height:22px;margin-right:3px;border-radius:999px;display:grid;place-items:center;cursor:pointer;flex:none}
+.cpx:hover{background:color-mix(in srgb,var(--ac) 30%,#121316);color:#ECEDEE}
+.av-ice{background:#12303D;color:#9FE1FA}.av-fire{background:#3D1A10;color:#FFA27A}.av-elec{background:#14244A;color:#8DB8FF}.av-ether{background:#331741;color:#EBA0FF}.av-phys{background:#382F10;color:#F5D46A}
+.pt{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;padding:6px 4px 8px;border:0;border-radius:12px;background:transparent;cursor:pointer;color:#C9CCD2;min-width:0}
+.pt:hover{background:#1C1F24;color:#ECEDEE}
+.pt .face{position:relative;width:60px;height:60px;border-radius:14px;overflow:hidden;display:grid;place-items:center;font-family:'Unbounded',sans-serif;font-weight:700;font-size:14px;flex:none}
+.pt .face img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 20%}
+.pt .face .el{position:absolute;left:0;right:0;bottom:0;height:3px}
+.pt .nm{font-size:11px;line-height:1.25;text-align:center;max-width:76px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.pt.on .face{box-shadow:0 0 0 2px #0B0C0E,0 0 0 4px var(--ac)}
+.pt.on .nm{color:color-mix(in srgb,var(--ac) 70%,#FFFFFF);font-weight:600}
+.pt:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
+.pop{position:absolute;z-index:8;border-radius:16px;background:#141619;border:1px solid #33363D;box-shadow:0 30px 80px rgba(0,0,0,.65);display:flex;flex-direction:column;overflow:hidden}
+.pscroll{overflow:auto;scrollbar-width:thin;scrollbar-color:#2A2D33 transparent}
+.az{display:flex;flex-direction:column;align-items:center;gap:1px;padding:8px 4px;border-left:1px solid #22252A}
+.az button{all:unset;cursor:pointer;width:22px;height:19px;display:grid;place-items:center;border-radius:5px;font-family:'Geist Mono',monospace;font-size:10.5px;color:#A9ADB5}
+.az button:hover{background:#24272C;color:#ECEDEE}
+.az button.on{background:var(--ac);color:#0B0C0E;font-weight:700}
+.az button.off{color:#3A3E46;cursor:default;background:transparent}
+.sub{font-size:12px;color:#80858F;font-weight:500}
+.hint{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:#80858F}</style>
+</helmet>
+<div class="app" style="--ac: {{accent}}; position: relative; width: 100%; min-height: 900px; background: #0B0C0E; display: flex; flex-direction: column; overflow: hidden">
+
+<header style="display: flex; align-items: center; gap: 16px; height: 44px; padding-left: 16px; border-bottom: 1px solid #1E2024; background: #0A0B0D; flex: none">
+  <div style="display: flex; align-items: center; gap: 10px; width: 200px">
+    <img class="logo" src="../../../mod_manager_flutter/assets/brand/logo-mark-on-dark.png" alt="Zenith">
+    <span class="disp" style="font-weight: 700; letter-spacing: .08em">ZENITH</span>
+  </div>
+  <a href="Palette.dc.html" class="field" style="width: 440px; max-width: 40%; height: 30px; margin: 0 auto; text-decoration: none; cursor: pointer">
+    <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+    <span style="flex: 1; font-size: 12px">Search mods, characters and actions</span>
+    <span class="kbd">Ctrl K</span>
+  </a>
+  <div style="display: flex">
+    <button class="winbtn" aria-label="Minimize"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"></path></svg></button>
+    <button class="winbtn" aria-label="Maximize"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1.5"></rect></svg></button>
+    <button class="winbtn x" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+  </div>
+</header>
+
+<div style="flex: 1; display: flex; flex-wrap: wrap; min-height: 0">
+  <nav aria-label="Main" style="flex: 0 0 216px; display: flex; flex-direction: column; gap: 2px; padding: 14px 10px; border-right: 1px solid #1E2024; background: #0A0B0D">
+    <span class="lbl" style="padding: 6px 12px 8px">Library</span>
+    <a class="nav" href="Main.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"></rect><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"></rect><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"></rect><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"></rect></svg>Characters<span class="n">48</span></a>
+    <a class="nav" href="AllMods.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"></path></svg>All mods<span class="n">61</span></a>
+    <a class="nav" href="Updates.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="m8.5 12 3.5-3.5 3.5 3.5M12 8.5V16"></path></svg>Updates<span class="n hot">3</span></a>
+    <a class="nav" href="Loadouts.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.5 8.5 4.5-8.5 4.5L3.5 8z"></path><path d="m3.5 12.5 8.5 4.5 8.5-4.5"></path><path d="m3.5 16.5 8.5 4.5 8.5-4.5"></path></svg>Loadouts<span class="n">4</span></a>
+    <span class="lbl" style="padding: 18px 12px 8px">GameBanana</span>
+    <a class="nav cur" href="Browse.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="m15.5 8.5-2 5-5 2 2-5z"></path></svg>Browse</a>
+    <a class="nav" href="Downloads.dc.html" aria-label="Downloads, 3 need your attention"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 10 5 5 5-5"></path><path d="M5 20h14"></path></svg>Downloads<span class="n att" title="3 downloads need your attention"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4 2.8 19.5h18.4z"></path><path d="M12 10v4.5M12 17v.01"></path></svg>3</span></a>
+    <div style="margin-top: auto; display: flex; flex-direction: column; gap: 10px">
+      <div style="padding: 12px; border-radius: 12px; background: #121316; border: 1px solid #23262B; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; align-items: center; gap: 8px">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--ac); box-shadow: 0 0 0 3px color-mix(in srgb,var(--ac) 25%,transparent)"></span>
+          <span style="font-weight: 600; font-size: 12px">ZZMI connected</span>
+        </div>
+        <span style="color: #A9ADB5; font-size: 12px">14 mods active · press <span class="kbd">F10</span> in game after changes</span>
+        <button class="btn btn-pri" style="width: 100%; height: 40px"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="fill: currentColor; stroke: none"><path d="M8 5v14l11-7z"></path></svg>Launch game</button>
+      </div>
+      <a class="nav" href="Settings.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"></path><circle cx="15" cy="6" r="2"></circle><circle cx="9" cy="12" r="2"></circle><circle cx="17" cy="18" r="2"></circle></svg>Settings</a>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; overflow: auto; max-height: 828px">
+    <div style="padding: 24px 32px 0">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap">
+        <div style="display: flex; align-items: baseline; gap: 12px">
+          <h1 class="disp" style="font-size: 26px; font-weight: 700">Browse</h1>
+          <span style="color: #80858F">Zenless Zone Zero mods on GameBanana</span>
+        </div>
+        <label class="field" style="flex: 0 1 420px; height: 40px">
+          <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+          <input placeholder="Search GameBanana, or paste a mod link" aria-label="Search GameBanana">
+        </label>
+      </div>
+    </div>
+
+    <section aria-roledescription="carousel" aria-label="Best of GameBanana" style="padding: 20px 32px 8px">
+      <div>
+        <div class="{{cur.thumbCls}}" role="group" aria-roledescription="slide" aria-label="{{curPos}}" style="position: relative; height: 280px; border-radius: 16px; border: 1px solid #23262B; overflow: hidden; background-size: 10px 10px">
+          <span class="disp" aria-hidden="true" style="position: absolute; right: 8%; top: 50%; transform: translateY(-50%) skewX(-8deg); font-size: 200px; font-weight: 800; line-height: 1; color: transparent; -webkit-text-stroke: 1.5px rgba(255,255,255,.12)">{{cur.ini}}</span>
+          <span class="mono" style="position: absolute; right: 16px; top: 14px; font-size: 11px; color: rgba(255,255,255,.4)">[featured image]</span>
+          <div style="position: absolute; left: 20px; bottom: 20px; max-width: 460px; display: flex; flex-direction: column; gap: 10px; padding: 18px 20px; border-radius: 14px; background: rgba(11,12,14,.86); border: 1px solid #2A2D33">
+            <span style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+              <span class="badge b-on">Best of {{cur.period}}</span>
+              <span class="badge b-off">{{cur.char}}</span>
+            </span>
+            <h3 class="disp" style="font-size: 24px; font-weight: 700; line-height: 1.15">{{cur.name}}</h3>
+            <span style="display: flex; align-items: center; gap: 14px; color: #A9ADB5; font-size: 12px; flex-wrap: wrap">
+              <span>by {{cur.author}}</span>
+              <span class="stat"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19.5s-7-4.3-7-9.5a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.2-7 9.5-7 9.5z"></path></svg>{{cur.likes}}</span>
+              <span class="stat"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 10 5 5 5-5"></path><path d="M5 20h14"></path></svg>{{cur.dls}}</span>
+            </span>
+            <span style="display: flex; gap: 8px; padding-top: 2px">
+              <sc-if value="{{cur.inLib}}" hint-placeholder-val="{{false}}"><a class="btn btn-sm" href="Main.dc.html">In library</a></sc-if>
+              <sc-if value="{{cur.notInLib}}" hint-placeholder-val="{{true}}"><a class="btn btn-sm btn-pri" href="BrowseMod.dc.html">Install</a></sc-if>
+              <a class="btn btn-sm" href="BrowseMod.dc.html">View mod</a>
+            </span>
+          </div>
+          <button class="btn ibtn car-arrow" style="left: 14px" aria-label="Previous slide" onClick="{{prev}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg></button>
+          <button class="btn ibtn car-arrow" style="right: 14px" aria-label="Next slide" onClick="{{next}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></button>
+          <div style="position: absolute; right: 18px; bottom: 18px; display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 99px; background: rgba(11,12,14,.75)">
+            <span style="display: flex; gap: 5px" role="tablist" aria-label="Best of {{cur.period}}">
+              <sc-for list="{{dots}}" as="d" hint-placeholder-count="3">
+                <button class="{{d.cls}}" role="tab" aria-selected="{{d.sel}}" aria-label="{{d.label}}" onClick="{{d.go}}"></button>
+              </sc-for>
+            </span>
+            <span class="mono" style="font-size: 11px; color: #A9ADB5">{{curPos}}</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div style="position: sticky; top: 0; z-index: 3; background: #0B0C0E; padding: 14px 32px; border-bottom: 1px solid #1E2024">
+      <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+        <div class="{{cpCls}}">
+          <button class="cpmain" aria-haspopup="dialog" aria-expanded="{{charsExp}}" onClick="{{toggleChars}}" aria-label="Character: {{chipLbl}}">
+            <sc-if value="{{selHasImg}}" hint-placeholder-val="{{true}}"><img src="{{selImg}}" alt=""></sc-if>
+            <sc-if value="{{selNoImg}}" hint-placeholder-val="{{false}}"><span class="{{selFaceCls}}">{{selIni}}</span></sc-if>
+            <sc-if value="{{noSel}}" hint-placeholder-val="{{false}}"><span class="cpface any"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 13px; height: 13px"><circle cx="12" cy="8.5" r="3.5"></circle><path d="M5 19.5a7 7 0 0 1 14 0"></path></svg></span></sc-if>
+            <span class="cplbl">{{chipLbl}}</span>
+            <svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 13px; height: 13px; margin-left: auto; transform: {{charsChev}}"><path d="m6 9 6 6 6-6"></path></svg>
+          </button>
+          <sc-if value="{{hasSel}}" hint-placeholder-val="{{true}}"><button class="cpx" aria-label="Clear character" onClick="{{clearSel}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 12px; height: 12px"><path d="M7 7l10 10M17 7 7 17"></path></svg></button></sc-if>
+        </div>
+        <sc-if value="{{charsOpen}}" hint-placeholder-val="{{true}}"><div class="pop" role="dialog" aria-label="Pick a character" style="left: 32px; top: 50px; width: 720px; height: 440px">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 14px 14px 10px">
+          <label class="field" style="flex: 1; height: 40px; border-color: var(--ac)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg><input value="{{q}}" onInput="{{onQ}}" placeholder="Type a name" aria-label="Find a character"></label>
+          <span class="hint"><span class="kbd">Enter</span> picks the first</span>
+        </div>
+        <div style="flex: 1; display: flex; min-height: 0">
+          <div class="pscroll" style="flex: 1; padding: 4px 14px 14px; display: flex; flex-direction: column; gap: 14px">
+            <sc-if value="{{showRecent}}" hint-placeholder-val="{{true}}">
+              <div style="display: flex; flex-direction: column; gap: 6px">
+                <span class="sub">Your characters</span>
+                <div style="display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 2px"><sc-for list="{{mine}}" as="m" hint-placeholder-count="6"><button class="{{m.cls}}" aria-pressed="{{m.pressed}}" onClick="{{m.pick}}"><span class="{{m.faceCls}}"><sc-if value="{{m.hasImg}}" hint-placeholder-val="{{true}}"><img src="{{m.img}}" alt=""></sc-if><sc-if value="{{m.noImg}}" hint-placeholder-val="{{false}}">{{m.ini}}</sc-if><span class="el" style="background: {{m.elColor}}"></span></span><span class="nm">{{m.name}}</span></button></sc-for></div>
+              </div>
+            </sc-if>
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <span class="sub">{{allLbl}}</span>
+              <div style="display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 2px"><sc-for list="{{list}}" as="c" hint-placeholder-count="24"><button class="{{c.cls}}" aria-pressed="{{c.pressed}}" onClick="{{c.pick}}"><span class="{{c.faceCls}}"><sc-if value="{{c.hasImg}}" hint-placeholder-val="{{true}}"><img src="{{c.img}}" alt=""></sc-if><sc-if value="{{c.noImg}}" hint-placeholder-val="{{false}}">{{c.ini}}</sc-if><span class="el" style="background: {{c.elColor}}"></span></span><span class="nm">{{c.name}}</span></button></sc-for></div>
+              <sc-if value="{{none}}" hint-placeholder-val="{{false}}"><span style="color: #A9ADB5; padding: 20px 4px">No agent matches "{{q}}".</span></sc-if>
+            </div>
+          </div>
+          <nav class="az" aria-label="Jump to a letter"><sc-for list="{{letters}}" as="l" hint-placeholder-count="26"><button class="{{l.cls}}" onClick="{{l.pick}}" aria-label="Agents starting with {{l.ch}}">{{l.ch}}</button></sc-for></nav>
+        </div>
+      </div></sc-if>
+        <span style="width: 1px; height: 20px; background: #2A2D33; margin: 0 4px"></span>
+        <button class="chip on">Character</button>
+        <button class="chip">UI</button>
+        <button class="chip">Texture</button>
+        <button class="chip">Misc</button>
+        <button class="chip">Audio</button>
+        <button class="chip">Unknown</button>
+        <div style="margin-left: auto; display: flex; align-items: center; gap: 14px">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <button class="sw" aria-pressed="false" aria-label="Hide installed"></button>
+            <span style="font-size: 12px; color: #A9ADB5">Hide installed</span>
+          </div>
+          <div style="position: relative; display: flex; gap: 4px">
+            <button class="{{matBtnCls}}" aria-haspopup="menu" aria-expanded="{{matExp}}" aria-label="Mature content: {{matLbl}}" title="Mature content: {{matLbl}}" onClick="{{toggleMat}}">
+              <sc-if value="{{matBlur}}" hint-placeholder-val="{{true}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5s6 6.2 6 10.5a6 6 0 0 1-12 0c0-4.3 6-10.5 6-10.5z"></path><path d="M9 14.5a3 3 0 0 0 3 3"></path></svg></sc-if>
+              <sc-if value="{{matShow}}" hint-placeholder-val="{{false}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle></svg></sc-if>
+              <sc-if value="{{matHide}}" hint-placeholder-val="{{false}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18"></path><path d="M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.4-1.6"></path><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"></path></svg></sc-if>
+              <svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 12px; height: 12px; color: #80858F"><path d="m6 9 6 6 6-6"></path></svg>
+            </button>
+            <button class="{{sortBtnCls}}" aria-haspopup="menu" aria-expanded="{{sortExp}}" aria-label="Sort: {{sortLbl}}" title="Sort: {{sortLbl}}" onClick="{{toggleSort}}">
+              <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16M3.5 7.5 7 4l3.5 3.5M17 20V4M13.5 16.5 17 20l3.5-3.5"></path></svg>
+              {{sortLbl}}
+              <svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 12px; height: 12px; color: #80858F"><path d="m6 9 6 6 6-6"></path></svg>
+            </button>
+            <button class="btn btn-sm ibtn" aria-label="Refresh" title="Refresh"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 11A7.5 7.5 0 0 0 5.6 7.5L4 9.5"></path><path d="M4 4.5v5h5"></path><path d="M4.5 13a7.5 7.5 0 0 0 13.9 3.5l1.6-2"></path><path d="M20 19.5v-5h-5"></path></svg></button>
+
+            <sc-if value="{{matOpen}}" hint-placeholder-val="{{false}}">
+              <div class="bmenu" role="menu" aria-label="Mature content" style="right: 76px">
+                <span class="bmh">Mature content</span>
+                <sc-for list="{{matOpts}}" as="o" hint-placeholder-count="3">
+                  <button class="bmi" role="menuitemradio" aria-checked="{{o.checked}}" onClick="{{o.pick}}">
+                    <span class="chk">{{o.mark}}</span>
+                    <span style="display: flex; flex-direction: column"><span>{{o.label}}</span><span style="font-size: 11px; color: #80858F">{{o.desc}}</span></span>
+                  </button>
+                </sc-for>
+                <span style="display: block; padding: 6px 10px 4px; font-size: 11px; color: #80858F; border-top: 1px solid #2A2D33; margin-top: 4px">Also changes the setting in Settings</span>
+              </div>
+            </sc-if>
+            <sc-if value="{{sortOpen}}" hint-placeholder-val="{{true}}">
+              <div class="bmenu" role="menu" aria-label="Sort" style="right: 40px">
+                <span class="bmh">Sort by</span>
+                <sc-for list="{{sortOpts}}" as="o" hint-placeholder-count="6">
+                  <button class="bmi" role="menuitemradio" aria-checked="{{o.checked}}" onClick="{{o.pick}}"><span class="chk">{{o.mark}}</span>{{o.label}}</button>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding: 20px 32px 32px">
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 18px">
+        <sc-for list="{{cards}}" as="c" hint-placeholder-count="8">
+          <article class="gcard">
+            <a href="BrowseMod.dc.html" class="{{c.thumbCls}}" style="position: relative; display: block; aspect-ratio: 4 / 3; overflow: hidden" aria-label="Open {{c.name}}">
+              <span class="disp" aria-hidden="true" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) skewX(-8deg); font-size: 60px; font-weight: 800; color: transparent; -webkit-text-stroke: 1px rgba(255,255,255,.14)">{{c.ini}}</span>
+              <span class="mono" style="position: absolute; right: 10px; bottom: 8px; font-size: 10px; color: rgba(255,255,255,.4)">[thumbnail]</span>
+              <div style="position: absolute; left: 10px; top: 10px; display: flex; gap: 6px">
+                <sc-if value="{{c.installed}}" hint-placeholder-val="{{false}}"><span class="badge b-on">Installed</span></sc-if>
+                <sc-if value="{{c.update}}" hint-placeholder-val="{{false}}"><span class="badge b-up">Update ready</span></sc-if>
+              </div>
+              <span class="badge b-off" style="position: absolute; right: 10px; top: 10px">{{c.char}}</span>
+              <sc-if value="{{c.mature}}" hint-placeholder-val="{{false}}">
+                <span class="mature"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 20px; height: 20px"><path d="M3 3l18 18"></path><path d="M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.4-1.6"></path><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"></path></svg>Mature content<span style="font-size: 11px; font-weight: 400; color: #A9ADB5">Blurred in Settings</span></span>
+              </sc-if>
+            </a>
+            <div style="padding: 12px 14px 0; display: flex; flex-direction: column; gap: 3px; flex: 1">
+              <a href="BrowseMod.dc.html" style="font-size: 14px; font-weight: 600; color: #ECEDEE; text-decoration: none">{{c.name}}</a>
+              <span style="color: #80858F; font-size: 12px">{{c.author}} · updated {{c.updated}}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px">
+              <span class="stat"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19.5s-7-4.3-7-9.5a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.2-7 9.5-7 9.5z"></path></svg>{{c.likes}}</span>
+              <span class="stat"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 10 5 5 5-5"></path><path d="M5 20h14"></path></svg>{{c.dls}}</span>
+              <div style="margin-left: auto">
+                <button class="{{c.btnCls}}" onClick="{{c.install}}">{{c.btnLbl}}</button>
+              </div>
+            </div>
+          </article>
+        </sc-for>
+      </div>
+      <div style="display: flex; justify-content: center; padding: 26px 0 0; color: #80858F; font-size: 12px; gap: 10px; align-items: center">
+        <span style="width: 14px; height: 14px; border-radius: 50%; border: 2px solid #2A2D33; border-top-color: var(--ac)"></span>
+        Loading more
+      </div>
+    </div>
+  </main>
+</div>
+
+<footer style="display: flex; align-items: center; gap: 18px; height: 28px; padding: 0 16px; border-top: 1px solid #1E2024; background: #0A0B0D; color: #80858F; font-size: 11px; flex: none">
+  <span class="mono">ZZMI · ~/Games/XXMI/ZZMI</span>
+  <span>14 links active</span>
+  <span>Watching library for changes</span>
+  <span style="margin-left: auto" class="mono">v3.0.0</span>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#A98BFF","options":["#A98BFF","#F3EFEB","#C8F031","#5FE1D9"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { queued: [], slide: 0, menu: 'chars', mature: 'blur', sort: 'Newest', sel: 'Ellen Joe', q: '', letter: null };
+  }
+  menuVals() {
+    const { menu, mature, sort } = this.state;
+    const mat = [
+      ['blur', 'Blur', 'Thumbnails blurred, still listed'],
+      ['show', 'Show without blur', 'Listed like any other mod'],
+      ['hide', 'Hide entirely', 'Left out of Browse']
+    ];
+    const sorts = ['Newest', 'Oldest', 'Most liked', 'Most downloaded', 'Most viewed', 'Recently updated'];
+    return {
+      matOpen: menu === 'mature', sortOpen: menu === 'sort',
+      matExp: menu === 'mature' ? 'true' : 'false',
+      sortExp: menu === 'sort' ? 'true' : 'false',
+      matBtnCls: menu === 'mature' ? 'btn btn-sm open' : 'btn btn-sm',
+      sortBtnCls: menu === 'sort' ? 'btn btn-sm open' : 'btn btn-sm',
+      matBlur: mature === 'blur', matShow: mature === 'show', matHide: mature === 'hide',
+      matLbl: mat.find((m) => m[0] === mature)[1],
+      sortLbl: sort,
+      toggleMat: () => this.setState({ menu: menu === 'mature' ? null : 'mature' }),
+      toggleSort: () => this.setState({ menu: menu === 'sort' ? null : 'sort' }),
+      matOpts: mat.map(([id, label, desc]) => ({
+        label, desc,
+        mark: id === mature ? '✓' : '',
+        checked: id === mature ? 'true' : 'false',
+        pick: () => this.setState({ mature: id, menu: null })
+      })),
+      sortOpts: sorts.map((label) => ({
+        label,
+        mark: label === sort ? '✓' : '',
+        checked: label === sort ? 'true' : 'false',
+        pick: () => this.setState({ sort: label, menu: null })
+      }))
+    };
+  }
+  charVals() {
+    const P = {
+      'Alice Thymefield': '../../../mod_manager_flutter/assets/characters/alice.png', 'Anby Demara': '../../../mod_manager_flutter/assets/characters/anby.png',
+      'Astra Yao': '../../../mod_manager_flutter/assets/characters/astra.png', 'Burnice White': '../../../mod_manager_flutter/assets/characters/burnice.png',
+      'Caesar King': '../../../mod_manager_flutter/assets/characters/caesar.png', 'Ellen Joe': '../../../mod_manager_flutter/assets/characters/ellen.png',
+      'Evelyn Chevalier': '../../../mod_manager_flutter/assets/characters/evelyn.png', 'Hoshimi Miyabi': '../../../mod_manager_flutter/assets/characters/miyabi.png',
+      'Jane Doe': '../../../mod_manager_flutter/assets/characters/jane.png', 'Nicole Demara': '../../../mod_manager_flutter/assets/characters/nicole.png',
+      'Qingyi': '../../../mod_manager_flutter/assets/characters/qingyi.png', 'Tsukishiro Yanagi': '../../../mod_manager_flutter/assets/characters/yanagi.png',
+      'Vivian Banshee': '../../../mod_manager_flutter/assets/characters/vivian.png', 'Zhu Yuan': '../../../mod_manager_flutter/assets/characters/zhuyuan.png'
+    };
+    const FACTIONS = [
+      ['Cunning Hares', [['Anby Demara', 'elec'], ['Nicole Demara', 'ether'], ['Billy Kid', 'phys'], ['Nekomiya Mana', 'phys']]],
+      ['Victoria Housekeeping', [['Ellen Joe', 'ice'], ['Von Lycaon', 'ice'], ['Alexandrina Sebastiane', 'elec'], ['Corin Wickes', 'phys']]],
+      ['Belobog Heavy Industries', [['Koleda Belobog', 'fire'], ['Anton Ivanov', 'elec'], ['Ben Bigger', 'fire'], ['Grace Howard', 'elec']]],
+      ['Hollow Special Operations Section 6', [['Hoshimi Miyabi', 'ice'], ['Tsukishiro Yanagi', 'elec'], ['Asaba Harumasa', 'elec'], ['Soukaku', 'ice']]],
+      ['Criminal Investigation Special Response Team', [['Zhu Yuan', 'ether'], ['Qingyi', 'elec'], ['Jane Doe', 'phys'], ['Seth Lowell', 'elec']]],
+      ['Sons of Calydon', [['Caesar King', 'phys'], ['Burnice White', 'fire'], ['Luciana de Montefio', 'fire'], ['Piper Wheel', 'phys'], ['Lighter', 'fire'], ['Pulchra Fellini', 'phys']]],
+      ['Obol Squad', [['Soldier 11', 'fire'], ['Trigger', 'elec']]],
+      ['Stars of Lyra', [['Evelyn Chevalier', 'fire'], ['Astra Yao', 'ether']]],
+      ['Mockingbird', [['Vivian Banshee', 'ether'], ['Hugo Vlad', 'ice']]],
+      ['Yunkui Summit', [['Yixuan', 'ether'], ['Pan Yinhu', 'phys'], ['Ju Fufu', 'fire']]],
+      ['Spook Shack', [['Ukinami Yuzuha', 'phys'], ['Alice Thymefield', 'phys']]]
+    ];
+    const ELC = { ice: '#7FD4F0', fire: '#FF8A5C', elec: '#6FA2FF', ether: '#E08BFF', phys: '#EAC85A' };
+    const ALL = FACTIONS.flatMap(([f, m]) => m.map(([name, el]) => ({ name, el, faction: f }))).sort((a, b) => a.name.localeCompare(b.name));
+    const MINE = ['Ellen Joe', 'Hoshimi Miyabi', 'Jane Doe', 'Burnice White', 'Anby Demara', 'Tsukishiro Yanagi'];
+    const ini = (n) => n.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+    const sel = this.state.sel;
+    const tile = (c) => ({
+      name: c.name, img: P[c.name] || '', hasImg: !!P[c.name], noImg: !P[c.name], ini: ini(c.name),
+      faceCls: 'face av-' + c.el, elColor: ELC[c.el],
+      cls: c.name === sel ? 'pt on' : 'pt', pressed: c.name === sel ? 'true' : 'false',
+      pick: () => this.setState({ sel: c.name === sel ? null : c.name, menu: null, q: '', letter: null })
+    });
+
+    const { q, letter } = this.state;
+    const ql = q.trim().toLowerCase();
+    const match = (c) => ql ? c.name.toLowerCase().split(' ').some((w) => w.startsWith(ql)) || c.name.toLowerCase().includes(ql) : (letter ? c.name[0] === letter : true);
+    const list = ALL.filter(match).map(tile);
+    const present = new Set(ALL.map((c) => c.name[0]));
+    const selC = ALL.find((c) => c.name === sel);
+    return {
+      q, onQ: (e) => this.setState({ q: e && e.target ? e.target.value : '', letter: null }),
+      list, none: list.length === 0,
+      mine: ALL.filter((c) => MINE.includes(c.name)).map(tile),
+      showRecent: !ql && !letter,
+      allLbl: ql ? list.length + ' found' : (letter ? 'Starting with ' + letter : 'Every agent, A to Z'),
+      letters: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map((ch) => ({
+        ch, cls: !present.has(ch) ? 'off' : (letter === ch ? 'on' : ''),
+        pick: () => { if (present.has(ch)) this.setState({ letter: letter === ch ? null : ch, q: '' }); }
+      })),
+      hasSel: !!sel, selName: sel || '', selImg: selC ? (P[sel] || '') : '', selHasImg: !!(sel && P[sel]),
+      clearSel: () => this.setState({ sel: null }),
+      cpCls: sel ? 'cpick on' : 'cpick', noSel: !sel, chipLbl: sel || 'Any character',
+      selNoImg: !!sel && !P[sel], selIni: sel ? ini(sel) : '', selFaceCls: selC ? 'cpface av-' + selC.el : 'cpface',
+      charsOpen: this.state.menu === 'chars', charsExp: this.state.menu === 'chars' ? 'true' : 'false',
+      charsChev: this.state.menu === 'chars' ? 'rotate(180deg)' : 'none',
+      toggleChars: () => this.setState({ menu: this.state.menu === 'chars' ? null : 'chars' })
+    };
+  }
+  renderVals() {
+    const data = [
+      ['Winter Maid Uniform', 'WM', 'frostbyte', 'ice', '3 days ago', '2.4k', '31k', 'installed'],
+      ['Shark Hoodie Recolor', 'SH', 'tidewalker', 'elec', '1 day ago', '1.9k', '24k', 'update'],
+      ['Victorian Ballgown', 'VB', 'lacequeen', 'ether', '5 days ago', '1.6k', '18k', null],
+      ['Racing Suit', 'RS', 'velo', 'fire', '1 week ago', '1.2k', '15k', null],
+      ['Gothic Lolita', 'GL', 'nyxie', 'ether', '2 weeks ago', '980', '12k', null],
+      ['Classic Long Skirt', 'CL', 'maple.ini', 'phys', '3 weeks ago', '870', '11k', 'installed'],
+      ['Street Hoodie', 'SH', 'kurogane', 'misc', '3 weeks ago', '640', '8.2k', null],
+      ['Idol Stage Outfit', 'IS', 'starlit', 'elec', '1 month ago', '590', '7.7k', null]
+    ];
+    const q = this.state.queued;
+    const cards = data.map(([name, ini, author, t, updated, likes, dls, state], i) => {
+      const queued = q.includes(i);
+      let btnCls = 'btn btn-sm btn-pri', btnLbl = 'Install';
+      if (state === 'installed') { btnCls = 'btn btn-sm btn-ghost'; btnLbl = 'In library'; }
+      if (state === 'update') { btnCls = 'btn btn-sm'; btnLbl = 'Update'; }
+      if (queued) { btnCls = 'btn btn-sm'; btnLbl = 'Queued'; }
+      return {
+        name, ini, author, updated, likes, dls,
+        mature: name === 'Gothic Lolita' && this.state.mature === 'blur',
+        hidden: name === 'Gothic Lolita' && this.state.mature === 'hide',
+        char: 'Ellen Joe',
+        thumbCls: 'dots t-' + t,
+        installed: state === 'installed',
+        update: state === 'update',
+        btnCls, btnLbl,
+        install: () => { if (!queued && state !== 'installed') this.setState({ queued: q.concat(i) }); }
+      };
+    });
+    const periods = ['today', 'this week', 'this month', 'the last 3 months', 'the last 6 months', 'this year', 'all time'];
+    const featured = [
+      ['Shrine Maiden', 'SM', 'yukimura', 'Hoshimi Miyabi', 'ice', '412', '3.1k', false],
+      ['Chef Hats', 'CH', 'bangboo_club', 'Unknown · Bangboo', 'misc', '288', '2.4k', false],
+      ['Biker Jacket', 'BJ', 'velo', 'Burnice White', 'fire', '251', '1.9k', false],
+      ['Victorian Ballgown', 'VB', 'lacequeen', 'Ellen Joe', 'ether', '1.6k', '18k', false],
+      ['Office Lady', 'OL', 'kaori.ini', 'Tsukishiro Yanagi', 'elec', '1.3k', '14k', false],
+      ['Clean HUD Plus', 'UI', 'quietframe', 'UI', 'misc', '1.1k', '22k', true],
+      ['Street Hoodie', 'SH', 'kurogane', 'Anby Demara', 'elec', '3.4k', '39k', false],
+      ['Winter Maid Uniform', 'WM', 'frostbyte', 'Ellen Joe', 'ice', '2.9k', '31k', true],
+      ['Retro CRT Filter', 'TX', 'scanline', 'Texture', 'misc', '2.1k', '28k', false],
+      ['Sailor Uniform', 'SU', 'marin', 'Nicole Demara', 'ether', '5.2k', '61k', false],
+      ['Racing Suit', 'RS', 'velo', 'Burnice White', 'fire', '4.4k', '52k', false],
+      ['Quiet Footsteps', 'AU', 'hushmod', 'Audio', 'misc', '3.0k', '47k', false],
+      ['Gothic Lolita', 'GL', 'nyxie', 'Vivian Banshee', 'ether', '7.8k', '90k', false],
+      ['Lab Coat', 'LC', 'pallet', 'Jane Doe', 'phys', '6.1k', '74k', true],
+      ['Idol Stage Outfit', 'IS', 'starlit', 'Astra Yao', 'ether', '5.5k', '66k', false],
+      ['Crimson Kimono', 'CK', 'yukimura', 'Hoshimi Miyabi', 'fire', '11k', '140k', true],
+      ['Track Suit', 'TS', 'velo', 'Anby Demara', 'elec', '9.4k', '118k', true],
+      ['Butler Outfit', 'BO', 'tailcoat', 'Caesar King', 'phys', '8.0k', '97k', false],
+      ['No Hit Flash', 'NH', 'quietframe', 'Misc', 'misc', '19k', '310k', false],
+      ['Shark Hoodie Recolor', 'SH', 'tidewalker', 'Ellen Joe', 'elec', '16k', '240k', false],
+      ['Police Uniform Remake', 'PU', 'badge9', 'Zhu Yuan', 'ether', '14k', '205k', false]
+    ];
+    const si = this.state.slide;
+    const n = featured.length;
+    const slides = featured.map(([name, ini, author, char, t, likes, dls, inLib], i) => ({
+      name, ini, author, char, likes, dls, inLib, notInLib: !inLib,
+      period: periods[Math.floor(i / 3)],
+      thumbCls: 'dots t-' + t
+    }));
+    const start = Math.floor(si / 3) * 3;
+    const dots = [0, 1, 2].map((k) => ({
+      cls: start + k === si ? 'dot on' : 'dot',
+      sel: start + k === si ? 'true' : 'false',
+      label: slides[start + k].name,
+      go: () => this.setState({ slide: start + k })
+    }));
+    return {
+      accent: this.props.accent ?? '#A98BFF',
+      cards: cards.filter((c) => !c.hidden),
+      dlCount: 2 + q.length,
+      ...this.menuVals(),
+      ...this.charVals(),
+      cur: slides[si],
+      dots,
+      curPos: (si + 1) + ' / ' + n,
+      prev: () => this.setState({ slide: (si + n - 1) % n }),
+      next: () => this.setState({ slide: (si + 1) % n })
+    };
+  }
+}
+</script>
+</body>
+</html>

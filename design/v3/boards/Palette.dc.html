@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Command palette</title>
+<script src="../../runtime/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Unbounded:wght@500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#060708}
+a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
+.app,.app *{box-sizing:border-box}
+.app{font-family:'Geist',system-ui,sans-serif;color:#ECEDEE;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+:where(.app) :where(button,input,textarea){font:inherit;color:inherit}
+.app h1,.app h2,.app h3,.app p{margin:0}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.logo{width:26px;height:26px;display:block;flex:none;object-fit:contain}
+.kbd{font-family:'Geist Mono',monospace;font-size:11px;line-height:1;padding:3px 6px;border-radius:5px;border:1px solid #3A3E46;border-bottom-width:2px;background:#1A1C20;color:#C9CCD2;white-space:nowrap}
+.lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#80858F}
+.sk{background:#15171A;border-radius:8px}
+.badge{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;font-size:11px;font-weight:600}
+.b-on{background:var(--ac);color:#0B0C0E}
+.b-up{background:#3A2A0C;color:#FFC870;border:1px solid #6A4C14}
+.av{position:relative;overflow:hidden;width:28px;height:28px;border-radius:7px;display:grid;place-items:center;font-family:'Unbounded',sans-serif;font-weight:700;font-size:9px;flex:none}
+.av::after{content:"";position:absolute;right:-4px;top:0;width:7px;height:100%;background:currentColor;opacity:.55;transform:skewX(-18deg)}
+.av-ice{background:#12303D;color:#9FE1FA}
+.av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 25%}
+.av.has::after{left:0;right:0;top:auto;bottom:0;width:auto;height:2px;transform:none;opacity:1}
+.t-ice{background-color:#0E1D25;background-image:radial-gradient(#1F4556 1.1px,transparent 1.3px);background-size:6px 6px}
+.t-elec{background-color:#0F1730;background-image:radial-gradient(#243F73 1.1px,transparent 1.3px);background-size:6px 6px}
+.res{display:flex;align-items:center;gap:12px;width:100%;padding:8px 12px;border-radius:9px;border:0;background:transparent;cursor:pointer;text-align:left;text-decoration:none;color:#ECEDEE}
+.res:hover{background:#17191D;color:#ECEDEE}
+.res.cur{background:#1E2125;box-shadow:inset 0 0 0 1px #2F3239}
+.res .ico{width:28px;height:28px;border-radius:7px;display:grid;place-items:center;background:#1A1C20;color:#A9ADB5;flex:none}
+.res .hint{margin-left:auto;font-size:12px;color:#80858F;display:flex;align-items:center;gap:8px}
+mark{background:transparent;color:var(--ac);font-weight:600}
+</style>
+</helmet>
+<div class="app" style="--ac: {{accent}}; position: relative; width: 100%; height: 900px; background: #0B0C0E; overflow: hidden">
+
+<div aria-hidden="true" style="position: absolute; inset: 0; display: flex; flex-direction: column">
+  <div style="height: 44px; border-bottom: 1px solid #1E2024; background: #0A0B0D; display: flex; align-items: center; gap: 10px; padding-left: 16px"><img class="logo" src="../../../mod_manager_flutter/assets/brand/logo-mark-on-dark.png" alt="Zenith"><span class="disp" style="font-weight: 700; letter-spacing: .08em">ZENITH</span></div>
+  <div style="flex: 1; display: flex">
+    <div style="width: 216px; background: #0A0B0D; border-right: 1px solid #1E2024; padding: 22px 14px; display: flex; flex-direction: column; gap: 12px">
+      <div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div>
+    </div>
+    <div style="width: 280px; border-right: 1px solid #1E2024; padding: 18px 14px; display: flex; flex-direction: column; gap: 10px">
+      <div class="sk" style="height: 36px"></div><div class="sk" style="height: 44px"></div><div class="sk" style="height: 44px"></div><div class="sk" style="height: 44px"></div><div class="sk" style="height: 44px"></div>
+    </div>
+    <div style="flex: 1; padding: 28px; display: flex; flex-direction: column; gap: 18px">
+      <div class="sk" style="height: 110px"></div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px"><div class="sk" style="height: 250px"></div><div class="sk" style="height: 250px"></div><div class="sk" style="height: 250px"></div></div>
+    </div>
+  </div>
+</div>
+<div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(4,5,6,.6)"></div>
+
+<div role="dialog" aria-modal="true" aria-label="Command palette" style="position: absolute; left: 50%; top: 110px; transform: translateX(-50%); width: 640px; max-width: calc(100% - 32px); display: flex; flex-direction: column; border-radius: 16px; background: #111214; border: 1px solid #2F3239; box-shadow: 0 30px 80px rgba(0,0,0,.65); overflow: hidden">
+  <label style="display: flex; align-items: center; gap: 12px; padding: 0 18px; height: 56px; border-bottom: 1px solid #1E2024">
+    <svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 18px; height: 18px; color: #80858F"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+    <input value="ell" aria-label="Search" style="flex: 1; background: transparent; border: 0; outline: 0; font-size: 16px; color: #ECEDEE">
+    <span class="kbd">Esc</span>
+  </label>
+
+  <div role="listbox" aria-label="Results" style="padding: 8px; display: flex; flex-direction: column; gap: 2px; max-height: 470px; overflow: auto">
+    <span class="lbl" style="padding: 8px 12px 4px">Characters</span>
+    <a class="res cur" href="Main.dc.html" role="option" aria-selected="true">
+      <span class="av av-ice has"><img src="../../../mod_manager_flutter/assets/characters/ellen.png" alt=""></span>
+      <span style="display: flex; flex-direction: column"><span><mark>Ell</mark>en Joe</span><span style="font-size: 12px; color: #80858F">4 mods · 1 active</span></span>
+      <span class="hint">Open<span class="kbd">Enter</span></span>
+    </a>
+
+    <span class="lbl" style="padding: 12px 12px 4px">Mods</span>
+    <a class="res" href="ModPage.dc.html" role="option" aria-selected="false">
+      <span class="t-ice" style="width: 28px; height: 28px; border-radius: 7px; flex: none"></span>
+      <span style="display: flex; flex-direction: column"><span>Winter Maid Uniform</span><span style="font-size: 12px; color: #80858F"><mark>Ell</mark>en Joe</span></span>
+      <span class="hint"><span class="badge b-on">Active</span></span>
+    </a>
+    <a class="res" href="ModPage.dc.html" role="option" aria-selected="false">
+      <span class="t-elec" style="width: 28px; height: 28px; border-radius: 7px; flex: none"></span>
+      <span style="display: flex; flex-direction: column"><span>Shark Hoodie Recolor</span><span style="font-size: 12px; color: #80858F"><mark>Ell</mark>en Joe</span></span>
+      <span class="hint"><span class="badge b-up">Update</span></span>
+    </a>
+
+    <span class="lbl" style="padding: 12px 12px 4px">Actions</span>
+    <button class="res" role="option" aria-selected="false">
+      <span class="ico"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg></span>
+      <span>Turn on Shark Hoodie Recolor for <mark>Ell</mark>en</span>
+    </button>
+    <a class="res" href="Browse.dc.html" role="option" aria-selected="false">
+      <span class="ico"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="m15.5 8.5-2 5-5 2 2-5z"></path></svg></span>
+      <span>Find <mark>Ell</mark>en Joe mods on GameBanana</span>
+    </a>
+    <button class="res" role="option" aria-selected="false">
+      <span class="ico"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"></path><path d="M9 7V4.5h6V7"></path><path d="M6.5 7l1 12.5h9l1-12.5"></path></svg></span>
+      <span>Turn off every mod for <mark>Ell</mark>en</span>
+    </button>
+  </div>
+
+  <div style="display: flex; align-items: center; gap: 18px; padding: 10px 18px; border-top: 1px solid #1E2024; font-size: 12px; color: #80858F">
+    <span style="display: flex; align-items: center; gap: 6px"><span class="kbd">↑</span><span class="kbd">↓</span>Move</span>
+    <span style="display: flex; align-items: center; gap: 6px"><span class="kbd">Enter</span>Open</span>
+    <span style="display: flex; align-items: center; gap: 6px"><span class="kbd">Space</span>Turn on or off</span>
+    <span style="margin-left: auto">Type <span class="mono" style="color: #C9CCD2">&gt;</span> for actions only</span>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#A98BFF","options":["#A98BFF","#F3EFEB","#C8F031","#5FE1D9"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#A98BFF' };
+  }
+}
+</script>
+</body>
+</html>

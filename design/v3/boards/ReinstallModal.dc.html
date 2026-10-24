@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reinstall a mod</title>
+<script src="../../runtime/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Unbounded:wght@500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#060708}
+a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
+.app,.app *{box-sizing:border-box}
+.app{font-family:'Geist',system-ui,sans-serif;color:#ECEDEE;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+:where(.app) :where(button,input,textarea){font:inherit;color:inherit}
+.app h1,.app h2,.app h3,.app p{margin:0}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.logo{width:26px;height:26px;display:block;flex:none;object-fit:contain}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:8px;border:1px solid #363A42;background:#1A1C20;color:#ECEDEE;font-weight:500;font-size:13px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn:hover{background:#24272C;color:#ECEDEE}
+.btn-pri{background:var(--ac);border-color:var(--ac);color:#0B0C0E;font-weight:600}
+.btn-pri:hover{background:var(--ac);color:#0B0C0E;filter:brightness(1.08)}
+.btn-ghost{background:transparent;border-color:transparent;color:#A9ADB5}
+.lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#80858F}
+.sk{background:#15171A;border-radius:8px}
+.t-ice{background-color:#0E1D25;background-image:radial-gradient(#1F4556 1.1px,transparent 1.3px);background-size:7px 7px}
+.step{display:flex;gap:12px;align-items:flex-start}
+.step .n{width:22px;height:22px;border-radius:6px;background:#1A1C20;border:1px solid #2F3239;display:grid;place-items:center;font-family:'Geist Mono',monospace;font-size:11px;color:#C9CCD2;flex:none}
+</style>
+</helmet>
+<div class="app" style="--ac: {{accent}}; position: relative; width: 100%; height: 900px; background: #0B0C0E; overflow: hidden">
+
+<div aria-hidden="true" style="position: absolute; inset: 0; display: flex; flex-direction: column">
+  <div style="height: 44px; border-bottom: 1px solid #1E2024; background: #0A0B0D; display: flex; align-items: center; gap: 10px; padding-left: 16px"><img class="logo" src="../../../mod_manager_flutter/assets/brand/logo-mark-on-dark.png" alt=""><span class="disp" style="font-weight: 700; letter-spacing: .08em">ZENITH</span></div>
+  <div style="flex: 1; display: flex">
+    <div style="width: 216px; background: #0A0B0D; border-right: 1px solid #1E2024; padding: 22px 14px; display: flex; flex-direction: column; gap: 12px">
+      <div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div>
+    </div>
+    <div style="flex: 1; padding: 28px 32px; display: flex; flex-direction: column; gap: 18px">
+      <div class="sk" style="height: 30px; width: 320px"></div>
+      <div style="display: flex; gap: 28px"><div class="sk" style="flex: 3; height: 300px"></div><div class="sk" style="flex: 2; height: 300px"></div></div>
+      <div class="sk" style="height: 160px"></div>
+    </div>
+  </div>
+</div>
+<div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(4,5,6,.72)"></div>
+
+<div role="dialog" aria-modal="true" aria-labelledby="ri-title" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 520px; max-width: calc(100% - 32px); display: flex; flex-direction: column; gap: 18px; padding: 24px; border-radius: 18px; background: #0F1012; border: 1px solid #2A2D33; box-shadow: 0 30px 80px rgba(0,0,0,.6)">
+  <div style="display: flex; gap: 14px; align-items: center">
+    <span class="t-ice" style="width: 64px; height: 44px; border-radius: 8px; flex: none; border: 1px solid #23262B"></span>
+    <div style="display: flex; flex-direction: column; gap: 2px">
+      <h2 id="ri-title" style="font-size: 17px; font-weight: 600">Reinstall Winter Maid Uniform?</h2>
+      <span style="font-size: 12px; color: #80858F"><span class="mono">WinterMaid_v1.4.zip</span> · “Winter coat” · uploaded 28 Sep 2026 · 186 MB</span>
+    </div>
+  </div>
+  <p style="color: #C9CCD2; line-height: 1.6">Use this when files in the folder got changed or broken. You get a clean copy of the same file, even if newer files are on the page.</p>
+  <div style="display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 12px; border: 1px solid #23262B; background: #0B0C0E">
+    <div class="step"><span class="n">1</span><span style="color: #C9CCD2">The folder as it is now is kept as a snapshot.</span></div>
+    <div class="step"><span class="n">2</span><span style="color: #C9CCD2">It's cleared, and that file is downloaded and unpacked into it again.</span></div>
+    <div class="step"><span class="n">3</span><span style="color: #C9CCD2">Your edits, keys included, are put back. It stays on.</span></div>
+  </div>
+  <div style="display: flex; justify-content: flex-end; gap: 8px; padding-top: 2px">
+    <a class="btn btn-ghost" href="ModPage.dc.html">Cancel</a>
+    <a class="btn btn-pri" href="Downloads.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 10 5 5 5-5"></path><path d="M5 20h14"></path></svg>Reinstall</a>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#A98BFF","options":["#A98BFF","#F3EFEB","#C8F031","#5FE1D9"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#A98BFF' };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Button states</title>
+<script src="../../runtime/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Unbounded:wght@500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#060708}
+.app,.app *{box-sizing:border-box}
+.app{--bg:#0B0C0E;--card:#0D0E10;--raised:#1A1C20;--ln:#1E2024;--ln2:#363A42;--tx:#ECEDEE;--tx2:#A9ADB5;--tx3:#80858F;--dan:#FF6B5B;--danfg:#160605;font-family:'Geist',system-ui,sans-serif;color:var(--tx);background:var(--bg);font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.app.light{--bg:#EFEAE4;--card:#F6F2EE;--raised:#FBF9F6;--ln:#DCD5CD;--ln2:#CBC3BA;--tx:#15161C;--tx2:#55525A;--tx3:#6E6A72;--dan:#D2392B;--danfg:#FFFFFF}
+:where(.app) :where(button,input,textarea){font:inherit;color:inherit}
+.app h1,.app h2,.app h3,.app p{margin:0}
+.disp{font-family:'Unbounded','Geist',sans-serif;letter-spacing:-0.01em}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--tx3)}
+.sec{display:flex;flex-direction:column;gap:16px;padding:22px;border:1px solid var(--ln);border-radius:16px;background:var(--card)}
+.note{font-size:12px;color:var(--tx3)}
+
+/* A button is its fill plus an overlay of its own text colour: 8% on hover, 16% pressed. */
+.b{--fill:var(--raised);--fg:var(--tx);--edge:var(--ln2);--ov:0%;position:relative;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:8px;border:1px solid var(--edge);background-color:var(--fill);background-image:linear-gradient(color-mix(in srgb,var(--fg) var(--ov),transparent),color-mix(in srgb,var(--fg) var(--ov),transparent));color:var(--fg);font-weight:500;font-size:13px;cursor:pointer;white-space:nowrap;transition:transform .15s cubic-bezier(.2,.8,.2,1),background-image .15s}
+.b.pri{--fill:var(--ac);--fg:var(--acfg);--edge:var(--ac);font-weight:600}
+.b.dan{--fill:var(--dan);--fg:var(--danfg);--edge:var(--dan);font-weight:600}
+.b.gh{--fill:transparent;--fg:var(--tx2);--edge:transparent}
+.b.sm{height:30px;padding:0 10px;font-size:12px;border-radius:7px}
+.b.ic{width:36px;padding:0}.b.sm.ic{width:30px}
+.b.s-hover,.live .b:hover{--ov:8%}
+.b.gh.s-hover,.live .b.gh:hover{color:var(--tx)}
+.b.s-press,.live .b:active{--ov:16%;transform:scale(.97);transition-duration:.06s}
+.b.gh.s-press,.live .b.gh:active{color:var(--tx)}
+.b:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+
+/* Working: the spinner takes the icon's place, or the label's when there is no icon. */
+.spin{display:none;width:16px;height:16px;flex:none;animation:turn .8s linear infinite}
+.spin circle{fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-dasharray:22 40}
+@keyframes turn{to{transform:rotate(360deg)}}
+.b.s-work{--ov:8%;cursor:default;pointer-events:none}
+.b.s-work.hi > .i{display:none}
+.b.s-work.hi > .spin{display:block}
+.b.s-work:not(.hi) > :not(.spin){visibility:hidden}
+.b.s-work:not(.hi) > .spin{display:block;position:absolute;left:50%;top:50%;margin:-8px 0 0 -8px}
+
+@media (prefers-reduced-motion:reduce){
+  .b.s-press,.live .b:active{transform:none}
+  .spin{animation-duration:2.4s}
+}
+
+.mx{display:grid;grid-template-columns:150px repeat(4,minmax(0,1fr));align-items:center;row-gap:0}
+.mx > .hd{display:flex;flex-direction:column;gap:2px;padding:0 0 12px}
+.mx > .hd b{font-weight:600;font-size:12px}
+.mx > .hd span{font-size:11px;color:var(--tx3)}
+.mx > .rl{display:flex;flex-direction:column;gap:2px;padding:24px 0;border-top:1px solid var(--ln)}
+.mx > .rl b{font-weight:600}
+.mx > .rl span{font-size:11px;color:var(--tx3)}
+.mx > .cell{display:flex;align-items:center;gap:8px;height:100%;padding:24px 0;border-top:1px solid var(--ln)}
+.rule{display:flex;flex-direction:column;gap:4px;padding-top:14px;border-top:1px solid var(--ln)}
+.rule b{font-weight:600}
+.rule p{color:var(--tx2);font-size:12px;line-height:1.55}
+.tryrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+</style>
+</helmet>
+<div class="{{appCls}}" style="--ac: {{acf}}; --acfg: {{acfg}}; width: 1440px; height: 900px; padding: 40px 48px; display: flex; flex-direction: column; gap: 22px; overflow: hidden">
+
+  <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 40px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <span class="lbl">Foundations</span>
+      <h1 class="disp" style="font-size: 34px; font-weight: 800; text-transform: uppercase">Button states</h1>
+    </div>
+    <span style="color: var(--tx3); max-width: 520px; text-align: right">Every button answers a press on the button itself, and one that starts slow work stays busy until the work is done. One rule for every kind, theme and accent.</span>
+  </div>
+
+  <div style="flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 20px">
+
+    <section class="sec">
+      <div class="mx">
+        <span class="hd"></span>
+        <span class="hd"><b>Rest</b><span>its fill</span></span>
+        <span class="hd"><b>Hover</b><span>text colour over it at 8%</span></span>
+        <span class="hd"><b>Pressed</b><span>at 16%, and 97% size</span></span>
+        <span class="hd"><b>Working</b><span>ignores clicks, keeps its width</span></span>
+
+        <span class="rl"><b>Primary</b><span>Install, Update, Launch</span></span>
+        <span class="cell"><button class="b pri hi"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 10 5 5 5-5"></path><path d="M5 20h14"></path></svg><svg class="spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle></svg>Install 1 file</button></span>
+        <span class="cell"><button class="b pri hi s-hover"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 10 5 5 5-5"></path><path d="M5 20h14"></path></svg><svg class="spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle></svg>Install 1 file</button></span>
+        <span class="cell"><button class="b pri hi s-press"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 10 5 5 5-5"></path><path d="M5 20h14"></path></svg><svg class="spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle></svg>Install 1 file</button></span>
+        <span class="cell"><button class="b pri hi s-work" aria-busy="true"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 10 5 5 5-5"></path><path d="M5 20h14"></path></svg><svg class="spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle></svg>Install 1 file</button></span>
+
+        <span class="rl"><b>Default</b><span>Restore, Check for updates</span></span>
+        <span class="cell"><button class="b">Restore</button></span>
+        <span class="cell"><button class="b s-hover">Restore</button></span>
+        <span class="cell"><button class="b s-press">Restore</button></span>
+        <span class="cell"><button class="b s-work" aria-busy="true"><svg class="spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle></svg><span>Restore</span></button></span>
+
+        <span class="rl"><b>Ghost</b><span>Clear finished, Don't install</span></span>
+        <span class="cell"><button class="b gh">Clear finished</button></span>
+        <span class="cell"><button class="b gh s-hover">Clear finished</button></span>
+        <span class="cell"><button class="b gh s-press">Clear finished</button></span>
+        <span class="cell"><button class="b gh s-work" aria-busy="true"><svg class="spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle></svg><span>Clear finished</span></button></span>
+
+        <span class="rl"><b>Danger</b><span>Delete, Take out</span></span>
+        <span class="cell"><button class="b dan">Delete</button></span>
+        <span class="cell"><button class="b dan s-hover">Delete</button></span>
+        <span class="cell"><button class="b dan s-press">Delete</button></span>
+        <span class="cell"><button class="b dan s-work" aria-busy="true"><svg class="spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle></svg><span>Delete</span></button></span>
+
+        <span class="rl"><b>Icon</b><span>Open folder, Pause</span></span>
+        <span class="cell"><button class="b ic hi" aria-label="Open folder"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.5l2 2h7.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path></svg><svg class="spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle></svg></button><button class="b gh sm ic hi" aria-label="Pause"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6v12M15 6v12"></path></svg><svg class="spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle></svg></button></span>
+        <span class="cell"><button class="b ic hi s-hover" aria-label="Open folder"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.5l2 2h7.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path></svg><svg class="spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle></svg></button><button class="b gh sm ic hi s-hover" aria-label="Pause"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6v12M15 6v12"></path></svg><svg class="spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle></svg></button></span>
+        <span class="cell"><button class="b ic hi s-press" aria-label="Open folder"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.5l2 2h7.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path></svg><svg class="spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle></svg></button><button class="b gh sm ic hi s-press" aria-label="Pause"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6v12M15 6v12"></path></svg><svg class="spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle></svg></button></span>
+        <span class="cell"><button class="b ic hi s-work" aria-label="Open folder" aria-busy="true"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.5l2 2h7.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path></svg><svg class="spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle></svg></button><button class="b gh sm ic hi s-work" aria-label="Pause" aria-busy="true"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6v12M15 6v12"></path></svg><svg class="spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle></svg></button></span>
+      </div>
+      <span class="note" style="margin-top: auto">The spinner takes the icon’s place, so the label stays. A button without an icon swaps its label for the spinner and keeps its width.</span>
+    </section>
+
+    <div style="display: flex; flex-direction: column; gap: 20px; min-height: 0">
+      <section class="sec live">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <b style="font-weight: 600">Try them</b>
+          <span class="note">Press and hold to see the press. Each one then works for two seconds.</span>
+        </div>
+        <div class="tryrow">
+          <button class="{{cInstall}}" aria-busy="{{bInstall}}" onClick="{{runInstall}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 10 5 5 5-5"></path><path d="M5 20h14"></path></svg><svg class="spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle></svg>Install 1 file</button>
+          <button class="{{cCheck}}" aria-busy="{{bCheck}}" onClick="{{runCheck}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3L19.5 9"></path><path d="M19.5 4.5V9H15"></path></svg><svg class="spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle></svg>Check for updates</button>
+        </div>
+        <div class="tryrow">
+          <button class="{{cRestore}}" aria-busy="{{bRestore}}" onClick="{{runRestore}}"><svg class="spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle></svg><span>Restore</span></button>
+          <button class="{{cClear}}" aria-busy="{{bClear}}" onClick="{{runClear}}"><svg class="spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle></svg><span>Clear finished</span></button>
+          <button class="{{cDelete}}" aria-busy="{{bDelete}}" onClick="{{runDelete}}"><svg class="spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle></svg><span>Delete</span></button>
+          <button class="{{cFolder}}" aria-label="Open folder" aria-busy="{{bFolder}}" onClick="{{runFolder}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.5l2 2h7.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path></svg><svg class="spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle></svg></button>
+          <button class="{{cPause}}" aria-label="Pause" aria-busy="{{bPause}}" onClick="{{runPause}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6v12M15 6v12"></path></svg><svg class="spin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle></svg></button>
+        </div>
+      </section>
+
+      <section class="sec" style="flex: 1; gap: 14px">
+        <b style="font-weight: 600">When to show which</b>
+        <div class="rule" style="border-top: 0; padding-top: 0">
+          <b>Pressed, on every button</b>
+          <p>In 60 ms, out in 150 ms, so even a quick click shows. No ripple. The text colour is the overlay, so a dark-text primary darkens and a light-text default lightens, in either theme and with any accent.</p>
+        </div>
+        <div class="rule">
+          <b>Working, only when the action waits</b>
+          <p>On disk, network or the game: install, update, check, restore, delete, launch. Show it once the action has run 200 ms, then keep it at least 500 ms so it never flickers. Instant actions, like opening a folder or a page, never show it.</p>
+        </div>
+        <div class="rule">
+          <b>When it's done</b>
+          <p>The button goes back to rest. What happened shows where it lands: the row, the label, or a notification. A failure is a notification too, never a red button.</p>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;Dark&quot;,&quot;options&quot;:[&quot;Dark&quot;,&quot;Light&quot;]},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#A98BFF&quot;,&quot;options&quot;:[&quot;#A98BFF&quot;,&quot;#F3EFEB&quot;,&quot;#C8F031&quot;,&quot;#5FE1D9&quot;]},&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { busy: {} };
+  }
+  run(id) {
+    if (this.state.busy[id]) return;
+    this.setState({ busy: { ...this.state.busy, [id]: true } });
+    setTimeout(() => this.setState({ busy: { ...this.state.busy, [id]: false } }), 2000);
+  }
+  renderVals() {
+    const light = (this.props.theme ?? 'Dark') === 'Light';
+    const accent = this.props.accent ?? '#A98BFF';
+    // Light theme fills: violet and paper take their on-paper colours, lime and teal stay.
+    const onPaper = { '#A98BFF': ['#6B45D9', '#FFFFFF'], '#F3EFEB': ['#15161C', '#F3EFEB'] };
+    const [acf, acfg] = light && onPaper[accent.toUpperCase()] ? onPaper[accent.toUpperCase()] : [accent, '#0B0C0E'];
+    const btns = {
+      Install: 'b pri hi', Check: 'b hi', Restore: 'b', Clear: 'b gh sm',
+      Delete: 'b dan', Folder: 'b ic hi', Pause: 'b gh sm ic hi'
+    };
+    const vals = {
+      appCls: 'app' + (light ? ' light' : ''),
+      acf, acfg
+    };
+    for (const [id, cls] of Object.entries(btns)) {
+      const on = !!this.state.busy[id];
+      vals['c' + id] = cls + (on ? ' s-work' : '');
+      vals['b' + id] = on ? 'true' : 'false';
+      vals['run' + id] = () => this.run(id);
+    }
+    return vals;
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Colour directions</title>
+<script src="../../runtime/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Unbounded:wght@500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#060708}
+.app,.app *{box-sizing:border-box}
+.app{font-family:'Geist',system-ui,sans-serif;color:#ECEDEE;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+:where(.app) :where(button,input,textarea){font:inherit;color:inherit}
+.app h1,.app h2,.app h3,.app p{margin:0}
+.disp{font-family:'Unbounded','Geist',sans-serif;letter-spacing:-0.01em}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#80858F}
+.chipc{display:flex;flex-direction:column;gap:6px}
+.chipc div{height:56px;border-radius:10px;border:1px solid #23262B}
+.chipc b{font-weight:600;font-size:12px}
+.chipc span{font-family:'Geist Mono',monospace;font-size:11px;color:#80858F}
+.dir{display:flex;flex-direction:column;gap:12px}
+.mock{display:flex;flex-direction:column;border-radius:14px;overflow:hidden;background:var(--bg);color:var(--tx);border:1px solid var(--ln)}
+.mock .bar{display:flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-bottom:1px solid var(--ln);background:var(--chrome);font-weight:600;font-size:12px}
+.mock .bar img{width:22px;height:22px}
+.mock .body{display:flex;flex-direction:column;gap:14px;padding:16px}
+.mock .row{display:flex;align-items:center;gap:12px;padding:10px;border-radius:10px;background:var(--s2);border:1px solid var(--ln)}
+.mock .av{position:relative;overflow:hidden;width:36px;height:36px;border-radius:9px;background:var(--avbg);flex:none}
+.mock .av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 25%}
+.mock .av::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:#7FD3F5}
+.mock .sub{font-size:12px;color:var(--tx2)}
+.mock .chips{display:flex;gap:6px}
+.mock .chip{display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:999px;border:1px solid var(--ln);background:var(--s1);color:var(--tx2);font-size:12px;font-weight:500}
+.mock .chip.on{background:var(--chipbg);border-color:var(--chipln);color:var(--chiptx)}
+.mock .card{border-radius:12px;overflow:hidden;background:var(--s1);border:1.5px solid var(--cardln)}
+.mock .thumb{position:relative;aspect-ratio:16/8;background-color:var(--thumb);background-image:radial-gradient(var(--thumbdot) 1.1px,transparent 1.3px);background-size:8px 8px}
+.mock .badge{position:absolute;left:10px;top:10px;display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:6px;font-size:11px;font-weight:600;background:var(--badgebg);color:var(--badgetx)}
+.mock .cardb{display:flex;align-items:center;justify-content:space-between;padding:10px 12px}
+.mock .sw{position:relative;width:38px;height:22px;border-radius:999px;background:var(--swon);flex:none}
+.mock .sw::after{content:"";position:absolute;top:4px;left:20px;width:14px;height:14px;border-radius:50%;background:var(--knob)}
+.mock .btns{display:flex;gap:8px}
+.mock .btn{display:inline-flex;align-items:center;justify-content:center;height:36px;padding:0 14px;border-radius:8px;font-weight:600;font-size:13px;border:1px solid transparent}
+.mock .pri{background:var(--pribg);color:var(--pritx)}
+.mock .sec{background:var(--s2);border-color:var(--ln2);color:var(--tx);font-weight:500}
+.mock .link{color:var(--link);font-size:12px;font-weight:500}
+.note{font-size:12px;color:#A9ADB5}
+</style>
+</helmet>
+<div class="app" style="width: 1440px; height: 900px; background: #0B0C0E; padding: 40px 48px; display: flex; flex-direction: column; gap: 28px; overflow: hidden">
+
+  <div style="display: flex; gap: 36px; align-items: center">
+    <div style="display: flex; gap: 14px; flex: none">
+      <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px; align-items: center">
+        <img src="../../../mod_manager_flutter/assets/brand/logo-detailed.png" alt="Detailed logo" style="width: 128px; height: 128px">
+        <figcaption class="note">Large, 96px+</figcaption>
+      </figure>
+      <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px; align-items: center">
+        <img src="../../../mod_manager_flutter/assets/brand/logo-app-icon.png" alt="App icon: the mark on a rounded paper tile" style="width: 128px; height: 128px">
+        <figcaption class="note">Window icon</figcaption>
+      </figure>
+      <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px; align-items: center">
+        <span style="width: 128px; height: 128px; border-radius: 22%; border: 1px solid #23262B; display: grid; place-items: center"><img src="../../../mod_manager_flutter/assets/brand/logo-mark-on-dark.png" alt="Mark for dark backgrounds" style="width: 104px; height: 104px"></span>
+        <figcaption class="note">On dark</figcaption>
+      </figure>
+      <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px; align-items: center">
+        <span style="width: 128px; height: 128px; border-radius: 22%; background: #EFEAE4; display: grid; place-items: center"><img src="../../../mod_manager_flutter/assets/brand/logo-mark-on-light.png" alt="Mark for light backgrounds" style="width: 104px; height: 104px"></span>
+        <figcaption class="note">On paper</figcaption>
+      </figure>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 14px; flex: 1">
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <span class="lbl">From the logo</span>
+        <h1 class="disp" style="font-size: 32px; font-weight: 800; text-transform: uppercase">Colour directions</h1>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; max-width: 820px">
+        <div class="chipc"><div style="background: #F3EFEB"></div><b>Paper</b><span>#F3EFEB</span></div>
+        <div class="chipc"><div style="background: #15161C"></div><b>Ink</b><span>#15161C</span></div>
+        <div class="chipc"><div style="background: #680BF9"></div><b>Logo violet</b><span>#680BF9</span></div>
+        <div class="chipc"><div style="background: #A98BFF"></div><b>Violet on dark</b><span>#A98BFF</span></div>
+        <div class="chipc"><div style="background: #6B45D9"></div><b>Violet on paper</b><span>#6B45D9</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; flex: 1">
+
+    <section class="dir">
+      <div style="display: flex; align-items: baseline; justify-content: space-between"><h2 style="font-size: 15px; font-weight: 600">A · Ink + violet</h2><span class="lbl" style="color: #A98BFF">Chosen · on every screen</span></div>
+      <div class="mock" style="--bg: #0B0C0E; --chrome: #0A0B0D; --s1: #121316; --s2: #15171A; --ln: #23262B; --ln2: #363A42; --tx: #ECEDEE; --tx2: #A9ADB5; --avbg: #12303D; --chipbg: #231C3A; --chipln: #4E3F86; --chiptx: #D2C4FF; --cardln: #6C58B0; --thumb: #0E1D25; --thumbdot: #1F4556; --badgebg: #A98BFF; --badgetx: #0B0C0E; --swon: #A98BFF; --knob: #0B0C0E; --pribg: #A98BFF; --pritx: #0B0C0E; --link: #A98BFF">
+        <div class="bar"><img src="../../../mod_manager_flutter/assets/brand/logo-mark-on-dark.png" alt="">Zenith</div>
+        <div class="body">
+          <div class="row"><span class="av"><img src="../../../mod_manager_flutter/assets/characters/ellen.png" alt=""></span><span style="display: flex; flex-direction: column"><b style="font-weight: 600">Ellen Joe</b><span class="sub">4 mods · 1 active</span></span></div>
+          <div class="chips"><span class="chip on">All 4</span><span class="chip">Active 1</span><span class="chip">Updates 1</span></div>
+          <div class="card"><div class="thumb"><span class="badge">Active</span></div><div class="cardb"><span style="display: flex; flex-direction: column"><b style="font-weight: 600">Winter Maid Uniform</b><span class="sub">frostbyte · file from 28 Sep</span></span><span class="sw"></span></div></div>
+          <div class="btns"><span class="btn pri">Launch game</span><span class="btn sec">Add mod</span><span class="link" style="align-self: center; margin-left: auto">GameBanana</span></div>
+        </div>
+      </div>
+      <p class="note">Violet does everything the lime did: buttons, switches, the active badge, links.</p>
+    </section>
+
+    <section class="dir">
+      <div style="display: flex; align-items: baseline; justify-content: space-between"><h2 style="font-size: 15px; font-weight: 600">B · Ink + paper</h2><span class="lbl">Mock only</span></div>
+      <div class="mock" style="--bg: #0B0C0E; --chrome: #0A0B0D; --s1: #121316; --s2: #15171A; --ln: #23262B; --ln2: #363A42; --tx: #ECEDEE; --tx2: #A9ADB5; --avbg: #12303D; --chipbg: #F3EFEB; --chipln: #F3EFEB; --chiptx: #15161C; --cardln: #A98BFF; --thumb: #0E1D25; --thumbdot: #1F4556; --badgebg: #A98BFF; --badgetx: #0B0C0E; --swon: #A98BFF; --knob: #0B0C0E; --pribg: #F3EFEB; --pritx: #15161C; --link: #A98BFF">
+        <div class="bar"><img src="../../../mod_manager_flutter/assets/brand/logo-mark-on-dark.png" alt="">Zenith</div>
+        <div class="body">
+          <div class="row"><span class="av"><img src="../../../mod_manager_flutter/assets/characters/ellen.png" alt=""></span><span style="display: flex; flex-direction: column"><b style="font-weight: 600">Ellen Joe</b><span class="sub">4 mods · 1 active</span></span></div>
+          <div class="chips"><span class="chip on">All 4</span><span class="chip">Active 1</span><span class="chip">Updates 1</span></div>
+          <div class="card"><div class="thumb"><span class="badge">Active</span></div><div class="cardb"><span style="display: flex; flex-direction: column"><b style="font-weight: 600">Winter Maid Uniform</b><span class="sub">frostbyte · file from 28 Sep</span></span><span class="sw"></span></div></div>
+          <div class="btns"><span class="btn pri">Launch game</span><span class="btn sec">Add mod</span><span class="link" style="align-self: center; margin-left: auto">GameBanana</span></div>
+        </div>
+      </div>
+      <p class="note">Paper-white buttons like the logo's ground; violet only marks what's on. Closest to the logo's black-and-white-with-a-slash look.</p>
+    </section>
+
+    <section class="dir">
+      <div style="display: flex; align-items: baseline; justify-content: space-between"><h2 style="font-size: 15px; font-weight: 600">C · Paper</h2><span class="lbl">Light theme</span></div>
+      <div class="mock" style="--bg: #EFEAE4; --chrome: #E8E2DB; --s1: #F8F5F1; --s2: #F8F5F1; --ln: #DCD5CD; --ln2: #CBC3BA; --tx: #15161C; --tx2: #55525A; --avbg: #CFE6EF; --chipbg: #E6DEFB; --chipln: #B9A6F0; --chiptx: #3D2496; --cardln: #6B45D9; --thumb: #DCEAF0; --thumbdot: #B5D0DB; --badgebg: #6B45D9; --badgetx: #FFFFFF; --swon: #6B45D9; --knob: #FFFFFF; --pribg: #15161C; --pritx: #F3EFEB; --link: #5A35C8">
+        <div class="bar"><img src="../../../mod_manager_flutter/assets/brand/logo-mark-on-light.png" alt="">Zenith</div>
+        <div class="body">
+          <div class="row"><span class="av"><img src="../../../mod_manager_flutter/assets/characters/ellen.png" alt=""></span><span style="display: flex; flex-direction: column"><b style="font-weight: 600">Ellen Joe</b><span class="sub">4 mods · 1 active</span></span></div>
+          <div class="chips"><span class="chip on">All 4</span><span class="chip">Active 1</span><span class="chip">Updates 1</span></div>
+          <div class="card"><div class="thumb"><span class="badge">Active</span></div><div class="cardb"><span style="display: flex; flex-direction: column"><b style="font-weight: 600">Winter Maid Uniform</b><span class="sub">frostbyte · file from 28 Sep</span></span><span class="sw"></span></div></div>
+          <div class="btns"><span class="btn pri">Launch game</span><span class="btn sec">Add mod</span><span class="link" style="align-self: center; margin-left: auto">GameBanana</span></div>
+        </div>
+      </div>
+      <p class="note">The logo itself as a theme: paper ground, ink buttons, deep violet for on-states. The Light option in Settings.</p>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

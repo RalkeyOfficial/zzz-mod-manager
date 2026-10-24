@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Foundations</title>
+<script src="../../runtime/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Unbounded:wght@500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#060708}
+.app,.app *{box-sizing:border-box}
+.app{font-family:'Geist',system-ui,sans-serif;color:#ECEDEE;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+:where(.app) :where(button,input,textarea){font:inherit;color:inherit}
+.app h1,.app h2,.app h3,.app p{margin:0}
+.disp{font-family:'Unbounded','Geist',sans-serif;letter-spacing:-0.01em}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:8px;border:1px solid #363A42;background:#1A1C20;color:#ECEDEE;font-weight:500;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn-pri{background:var(--ac);border-color:var(--ac);color:#0B0C0E;font-weight:600}
+.btn-ghost{background:transparent;border-color:transparent;color:#A9ADB5}
+.btn-danger{background:#FF6B5B;border-color:#FF6B5B;color:#160605;font-weight:600}
+.btn-sm{height:30px;padding:0 10px;font-size:12px;border-radius:7px}
+.ibtn{width:36px;padding:0}
+.chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:999px;border:1px solid #2A2D33;background:#15171A;color:#A9ADB5;font-size:12px;font-weight:500;cursor:pointer}
+.chip.on{background:color-mix(in srgb,var(--ac) 14%,#121316);border-color:color-mix(in srgb,var(--ac) 45%,#121316);color:color-mix(in srgb,var(--ac) 70%,#FFFFFF)}
+.badge{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;font-size:11px;font-weight:600;letter-spacing:.02em}
+.b-on{background:var(--ac);color:#0B0C0E}
+.b-up{background:#3A2A0C;color:#FFC870;border:1px solid #6A4C14}
+.b-miss{background:#3A1512;color:#FF9A8E;border:1px solid #6B2620}
+.b-off{background:#1A1C20;color:#A9ADB5;border:1px solid #2A2D33}
+.b-info{background:#0F2236;color:#9CCBFF;border:1px solid #1F4468}
+.sw{position:relative;width:38px;height:22px;border-radius:999px;border:1px solid #3A3E46;background:#22252A;cursor:pointer;padding:0;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#80858F}
+.sw.on{background:var(--ac);border-color:var(--ac)}
+.sw.on::after{left:19px;background:#0B0C0E}
+.field{display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;border-radius:8px;border:1px solid #2F3239;background:#101114;color:#80858F}
+.field input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:#ECEDEE}
+.field input::placeholder{color:#80858F}
+.kbd{font-family:'Geist Mono',monospace;font-size:11px;line-height:1;padding:3px 6px;border-radius:5px;border:1px solid #3A3E46;border-bottom-width:2px;background:#1A1C20;color:#C9CCD2}
+.lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#80858F}
+.av{position:relative;overflow:hidden;width:40px;height:40px;border-radius:10px;display:grid;place-items:center;font-family:'Unbounded',sans-serif;font-weight:700;font-size:12px;flex:none}
+.av::after{content:"";position:absolute;right:-5px;top:0;width:10px;height:100%;background:currentColor;opacity:.55;transform:skewX(-18deg)}
+.av-ice{background:#12303D;color:#9FE1FA}.av-fire{background:#3D1A10;color:#FFA27A}.av-elec{background:#14244A;color:#8DB8FF}.av-ether{background:#331741;color:#EBA0FF}.av-phys{background:#382F10;color:#F5D46A}.av-misc{background:#1E2126;color:#A9ADB5}
+.av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 25%}
+.av.has::after{left:0;right:0;top:auto;bottom:0;width:auto;height:2px;transform:none;opacity:1}
+.sec{display:flex;flex-direction:column;gap:14px;padding:22px;border:1px solid #1E2024;border-radius:16px;background:#0D0E10}
+.sw-tile{display:flex;flex-direction:column;gap:6px}
+.sw-tile div{height:52px;border-radius:10px;border:1px solid #23262B}
+.sw-tile b{font-weight:600;font-size:12px}
+.sw-tile span{font-family:'Geist Mono',monospace;font-size:11px;color:#80858F}
+.dots{background-size:9px 9px}
+.t-ice{background-color:#0E1D25;background-image:radial-gradient(#1F4556 1.1px,transparent 1.3px)}
+.t-fire{background-color:#25130D;background-image:radial-gradient(#552B19 1.1px,transparent 1.3px)}
+.t-ether{background-color:#21112A;background-image:radial-gradient(#4E275E 1.1px,transparent 1.3px)}
+</style>
+</helmet>
+<div class="app" style="--ac: {{accent}}; width: 1440px; height: 900px; background: #0B0C0E; padding: 40px 48px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: auto 1fr 1fr; gap: 20px; overflow: hidden">
+
+  <div style="grid-column: 1 / -1; display: flex; align-items: flex-end; justify-content: space-between">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <span class="lbl">Zenith · v3</span>
+      <h1 class="disp" style="font-size: 34px; font-weight: 800; text-transform: uppercase">Foundations</h1>
+    </div>
+    <span style="color: #80858F; max-width: 440px; text-align: right">Dark ground, one violet accent taken from the logo, element colours only where a character is involved. Unbounded for display, Geist for UI, Geist Mono for paths, versions and keys.</span>
+  </div>
+
+  <section class="sec">
+    <span class="lbl">Surfaces &amp; text</span>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
+      <div class="sw-tile"><div style="background: #0A0B0D"></div><b>Chrome</b><span>#0A0B0D</span></div>
+      <div class="sw-tile"><div style="background: #0B0C0E"></div><b>Ground</b><span>#0B0C0E</span></div>
+      <div class="sw-tile"><div style="background: #121316"></div><b>Card</b><span>#121316</span></div>
+      <div class="sw-tile"><div style="background: #1A1C20"></div><b>Raised</b><span>#1A1C20</span></div>
+      <div class="sw-tile"><div style="background: #2A2D33"></div><b>Line</b><span>#2A2D33</span></div>
+      <div class="sw-tile"><div style="background: #ECEDEE"></div><b>Text</b><span>#ECEDEE</span></div>
+      <div class="sw-tile"><div style="background: #A9ADB5"></div><b>Text 2</b><span>#A9ADB5</span></div>
+      <div class="sw-tile"><div style="background: #80858F"></div><b>Text 3</b><span>#80858F</span></div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <span class="lbl">Signal</span>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
+      <div class="sw-tile"><div style="background: var(--ac)"></div><b>Accent</b><span>active, primary</span></div>
+      <div class="sw-tile"><div style="background: #FFB547"></div><b>Amber</b><span>update</span></div>
+      <div class="sw-tile"><div style="background: #FF6B5B"></div><b>Red</b><span>missing, delete</span></div>
+      <div class="sw-tile"><div style="background: #6CB6FF"></div><b>Blue</b><span>source, info</span></div>
+    </div>
+    <span class="lbl" style="margin-top: 6px">Agent icons</span>
+    <div style="display: flex; gap: 10px">
+      <span class="av av-ice has"><img src="../../../mod_manager_flutter/assets/characters/ellen.png" alt="Ellen Joe, Ice"></span><span class="av av-fire has"><img src="../../../mod_manager_flutter/assets/characters/burnice.png" alt="Burnice White, Fire"></span><span class="av av-elec has"><img src="../../../mod_manager_flutter/assets/characters/anby.png" alt="Anby Demara, Electric"></span><span class="av av-ether has"><img src="../../../mod_manager_flutter/assets/characters/vivian.png" alt="Vivian Banshee, Ether"></span><span class="av av-phys has"><img src="../../../mod_manager_flutter/assets/characters/jane.png" alt="Jane Doe, Physical"></span><span class="av av-misc">UI</span>
+    </div>
+    <span style="font-size: 12px; color: #80858F">The transparent portrait sits on its element colour, with a 2px element bar along the bottom. No portrait: initials on the same tile.</span>
+  </section>
+
+  <section class="sec">
+    <span class="lbl">Type</span>
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <span class="disp" style="font-size: 34px; font-weight: 800; text-transform: uppercase; line-height: 1">Ellen Joe</span>
+      <span class="disp" style="font-size: 24px; font-weight: 700">Page title</span>
+      <span style="font-size: 15px; font-weight: 600">Section heading · Geist 15/600</span>
+      <span>Body and controls · Geist 13/400</span>
+      <span style="font-size: 12px; color: #80858F">Secondary line · Geist 12</span>
+      <span class="lbl">Label · 11 caps</span>
+      <span class="mono" style="font-size: 12px; color: #C9CCD2">~/ZZZ Mods/Ellen Joe · WinterMaid_v1.4.zip</span>
+    </div>
+  </section>
+
+  <section class="sec">
+    <span class="lbl">Buttons</span>
+    <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center">
+      <button class="btn btn-pri">Primary</button>
+      <button class="btn">Secondary</button>
+      <button class="btn btn-ghost">Ghost</button>
+      <button class="btn btn-danger">Delete</button>
+    </div>
+    <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center">
+      <button class="btn btn-sm btn-pri">Install</button>
+      <button class="btn btn-sm">Restore</button>
+      <button class="btn ibtn" aria-label="Open folder"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.5l2 2h7.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path></svg></button>
+      <span class="kbd">Ctrl</span><span class="kbd">K</span><span class="kbd">F10</span>
+    </div>
+    <span class="lbl" style="margin-top: 6px">Inputs</span>
+    <label class="field"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg><input placeholder="Filter characters" aria-label="Example search field"></label>
+    <div style="display: flex; gap: 18px; align-items: center">
+      <span style="display: flex; gap: 8px; align-items: center"><button class="sw on" aria-pressed="true" aria-label="Switch on"></button>On</span>
+      <span style="display: flex; gap: 8px; align-items: center"><button class="sw" aria-pressed="false" aria-label="Switch off"></button>Off</span>
+    </div>
+  </section>
+
+  <section class="sec">
+    <span class="lbl">Chips &amp; status</span>
+    <div style="display: flex; gap: 6px; flex-wrap: wrap">
+      <button class="chip on">All 61</button><button class="chip">Active 14</button><button class="chip">Updates 3</button>
+    </div>
+    <div style="display: flex; gap: 6px; flex-wrap: wrap">
+      <span class="badge b-on">Active</span>
+      <span class="badge b-off">Off</span>
+      <span class="badge b-up">Newer file</span>
+      <span class="badge b-miss">Folder missing</span>
+      <span class="badge b-info">GameBanana</span>
+      <span class="badge b-off">Local</span>
+    </div>
+    <span class="lbl" style="margin-top: 6px">Toast</span>
+    <div role="status" style="display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 14px; border-radius: 12px; background: #1E2125; border: 1px solid #353941">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--ac)"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg>
+      <span style="flex: 1; font-size: 12px">Beach Day is on. Press <span class="kbd">F10</span> in game.</span>
+      <button class="btn btn-sm">Undo</button>
+    </div>
+  </section>
+
+  <section class="sec">
+    <span class="lbl">Mod card</span>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+      <article style="background: #121316; border: 1px solid color-mix(in srgb,var(--ac) 60%,#23262B); border-radius: 12px; overflow: hidden">
+        <div class="dots t-ice" style="aspect-ratio: 16 / 10; position: relative"><span class="badge b-on" style="position: absolute; left: 8px; top: 8px">Active</span></div>
+        <div style="padding: 10px 12px; display: flex; flex-direction: column"><b style="font-weight: 600">Winter Maid</b><span style="font-size: 12px; color: #80858F">frostbyte · file from 28 Sep</span></div>
+        <div style="padding: 8px 12px; border-top: 1px solid #1E2024; display: flex; align-items: center; gap: 8px"><button class="sw on" aria-pressed="true" aria-label="Enabled"></button><span style="font-size: 12px; color: #A9ADB5">Active</span></div>
+      </article>
+      <article style="background: #121316; border: 1px solid #23262B; border-radius: 12px; overflow: hidden">
+        <div class="dots t-ether" style="aspect-ratio: 16 / 10; position: relative"><span class="badge b-up" style="position: absolute; left: 8px; top: 8px">Newer file</span></div>
+        <div style="padding: 10px 12px; display: flex; flex-direction: column"><b style="font-weight: 600">Shark Hoodie</b><span style="font-size: 12px; color: #80858F">tidewalker · file from 12 Aug</span></div>
+        <div style="padding: 8px 12px; border-top: 1px solid #1E2024; display: flex; align-items: center; gap: 8px"><button class="sw" aria-pressed="false" aria-label="Disabled"></button><span style="font-size: 12px; color: #A9ADB5">Off</span></div>
+      </article>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#A98BFF","options":["#A98BFF","#F3EFEB","#C8F031","#5FE1D9"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#A98BFF' };
+  }
+}
+</script>
+</body>
+</html>

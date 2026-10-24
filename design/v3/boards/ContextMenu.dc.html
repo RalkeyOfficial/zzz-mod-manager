@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mod context menu</title>
+<script src="../../runtime/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Unbounded:wght@500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#060708}
+a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
+.app,.app *{box-sizing:border-box}
+.app{font-family:'Geist',system-ui,sans-serif;color:#ECEDEE;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+:where(.app) :where(button,input,textarea){font:inherit;color:inherit}
+.app h1,.app h2,.app h3,.app p{margin:0}
+.disp{font-family:'Unbounded','Geist',sans-serif;letter-spacing:-0.01em}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.logo{width:26px;height:26px;display:block;flex:none;object-fit:contain}
+.kbd{font-family:'Geist Mono',monospace;font-size:11px;line-height:1;padding:3px 6px;border-radius:5px;border:1px solid #3A3E46;border-bottom-width:2px;background:#1A1C20;color:#C9CCD2;white-space:nowrap}
+.sk{background:#15171A;border-radius:8px}
+.badge{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;font-size:11px;font-weight:600;letter-spacing:.02em;white-space:nowrap}
+.b-on{background:var(--ac);color:#0B0C0E}
+.b-up{background:#3A2A0C;color:#FFC870;border:1px solid #6A4C14}
+.sw{position:relative;width:38px;height:22px;border-radius:999px;border:1px solid #3A3E46;background:#22252A;padding:0;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#80858F}
+.sw.on{background:var(--ac);border-color:var(--ac)}
+.sw.on::after{left:19px;background:#0B0C0E}
+.card{background:#121316;border:1px solid #23262B;border-radius:12px;overflow:hidden}
+.card.cur{border-color:color-mix(in srgb,var(--ac) 60%,#23262B);box-shadow:0 0 0 1px color-mix(in srgb,var(--ac) 60%,#23262B)}
+.dots{background-size:9px 9px}
+.t-ice{background-color:#0E1D25;background-image:radial-gradient(#1F4556 1.1px,transparent 1.3px)}
+.t-elec{background-color:#0F1730;background-image:radial-gradient(#243F73 1.1px,transparent 1.3px)}
+.t-phys{background-color:#221E0D;background-image:radial-gradient(#4F4519 1.1px,transparent 1.3px)}
+.fav{position:absolute;right:8px;top:8px;width:30px;height:30px;border-radius:8px;border:0;background:rgba(11,12,14,.65);color:#C9CCD2;display:grid;place-items:center;padding:0}
+.fav.on{color:var(--ac)}.fav.on .i{fill:currentColor}
+.menu{position:absolute;width:268px;padding:6px;border-radius:12px;background:#17191D;border:1px solid #33363D;box-shadow:0 20px 50px rgba(0,0,0,.6);display:flex;flex-direction:column}
+.mi{display:flex;align-items:center;gap:10px;width:100%;height:34px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:#ECEDEE;text-align:left;cursor:pointer;text-decoration:none}
+.mi:hover,.mi.hot{background:#24272C;color:#ECEDEE}
+.mi .i{color:#A9ADB5}
+.mi .k{margin-left:auto;font-family:'Geist Mono',monospace;font-size:11px;color:#80858F}
+.mi.danger,.mi.danger .i{color:#FF8A7D}
+.sep{height:1px;background:#2A2D33;margin:5px 4px}
+.mh{padding:8px 10px 6px;font-size:11px;color:#80858F;display:flex;flex-direction:column;gap:1px}
+</style>
+</helmet>
+<div class="app" style="--ac: {{accent}}; position: relative; width: 100%; height: 900px; background: #0B0C0E; overflow: hidden">
+
+<div aria-hidden="true" style="position: absolute; inset: 0; display: flex; flex-direction: column">
+  <div style="height: 44px; border-bottom: 1px solid #1E2024; background: #0A0B0D; display: flex; align-items: center; gap: 10px; padding-left: 16px"><img class="logo" src="../../../mod_manager_flutter/assets/brand/logo-mark-on-dark.png" alt=""><span class="disp" style="font-weight: 700; letter-spacing: .08em">ZENITH</span></div>
+  <div style="flex: 1; display: flex">
+    <div style="width: 216px; background: #0A0B0D; border-right: 1px solid #1E2024; padding: 22px 14px; display: flex; flex-direction: column; gap: 12px">
+      <div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div>
+    </div>
+    <div style="width: 280px; border-right: 1px solid #1E2024; padding: 18px 14px; display: flex; flex-direction: column; gap: 10px">
+      <div class="sk" style="height: 36px"></div><div class="sk" style="height: 44px"></div><div class="sk" style="height: 44px"></div><div class="sk" style="height: 44px"></div><div class="sk" style="height: 44px"></div>
+    </div>
+    <div style="flex: 1; display: flex; flex-direction: column">
+      <div class="sk" style="height: 150px; border-radius: 0"></div>
+    </div>
+    <div style="width: 340px; border-left: 1px solid #1E2024; padding: 18px; display: flex; flex-direction: column; gap: 12px">
+      <div class="sk" style="height: 190px"></div><div class="sk" style="height: 30px"></div><div class="sk" style="height: 60px"></div>
+    </div>
+  </div>
+</div>
+
+<div style="position: absolute; left: 524px; top: 230px; width: 548px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+  <article class="card cur">
+    <div class="dots t-ice" style="position: relative; aspect-ratio: 16 / 10">
+      <div style="position: absolute; left: 10px; top: 10px"><span class="badge b-on">Active</span></div>
+      <span class="fav on" aria-hidden="true"><svg class="i" viewBox="0 0 24 24"><path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"></path></svg></span>
+    </div>
+    <div style="padding: 12px 14px 10px; display: flex; flex-direction: column; gap: 2px">
+      <h3 style="font-size: 14px; font-weight: 600">Winter Maid Uniform</h3>
+      <span style="color: #80858F; font-size: 12px">frostbyte · file from 28 Sep</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid #1E2024"><span class="sw on"></span><span style="font-size: 12px; color: #A9ADB5">Active</span></div>
+  </article>
+  <article class="card" style="opacity: .55">
+    <div class="dots t-elec" style="position: relative; aspect-ratio: 16 / 10"><div style="position: absolute; left: 10px; top: 10px"><span class="badge b-up">Newer file</span></div></div>
+    <div style="padding: 12px 14px 10px; display: flex; flex-direction: column; gap: 2px">
+      <h3 style="font-size: 14px; font-weight: 600">Shark Hoodie Recolor</h3>
+      <span style="color: #80858F; font-size: 12px">tidewalker · file from 12 Aug</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid #1E2024"><span class="sw"></span><span style="font-size: 12px; color: #A9ADB5">Off</span></div>
+  </article>
+</div>
+
+<div class="menu" role="menu" aria-label="Winter Maid Uniform" style="left: 700px; top: 330px">
+  <div class="mh"><b style="font-weight: 600; color: #ECEDEE; font-size: 12px">Winter Maid Uniform</b><span>Ellen Joe · tracked on GameBanana</span></div>
+  <button class="mi" role="menuitem"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg>Turn off<span class="k">Space</span></button>
+  <button class="mi" role="menuitem"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="fill: currentColor"><path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"></path></svg>Remove from favorites<span class="k">F</span></button>
+  <div class="sep"></div>
+  <a class="mi" role="menuitem" href="EditModal.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path><path d="m13.5 6.5 4 4"></path></svg>Edit info…<span class="k">E</span></a>
+  <button class="mi" role="menuitem"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.5l2 2h7.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path></svg>Open in file explorer</button>
+  <div class="sep"></div>
+  <button class="mi hot" role="menuitem"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 11A7.5 7.5 0 0 0 5.6 7.5L4 9.5"></path><path d="M4 4.5v5h5"></path><path d="M4.5 13a7.5 7.5 0 0 0 13.9 3.5l1.6-2"></path><path d="M20 19.5v-5h-5"></path></svg>Check for updates</button>
+  <a class="mi" role="menuitem" href="ReinstallModal.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 10 5 5 5-5"></path><path d="M5 20h14"></path></svg>Reinstall this file…</a>
+  <a class="mi" role="menuitem" href="TrackingModal.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 15l-2 2a3 3 0 0 1-4.2-4.2l3-3a3 3 0 0 1 4.2 0"></path><path d="M15 9l2-2a3 3 0 0 1 4.2 4.2l-3 3a3 3 0 0 1-4.2 0"></path></svg>Update tracking…</a>
+  <a class="mi" role="menuitem" href="MakePatchModal.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.5 8.5 4.5-8.5 4.5L3.5 8z"></path><path d="m3.5 12.5 8.5 4.5 8.5-4.5"></path><path d="M19 15.5v5M16.5 18h5"></path></svg>Make this a patch for…</a>
+  <div class="sep"></div>
+  <a class="mi danger" role="menuitem" href="DeleteModal.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"></path><path d="M9 7V4.5h6V7"></path><path d="M6.5 7l1 12.5h9l1-12.5"></path></svg>Delete…<span class="k">Del</span></a>
+</div>
+
+<div role="status" style="position: absolute; left: 524px; top: 760px; display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 12px; background: #1E2125; border: 1px solid #353941; box-shadow: 0 12px 40px rgba(0,0,0,.5)">
+  <span style="width: 14px; height: 14px; border-radius: 50%; border: 2px solid #3A3E46; border-top-color: var(--ac)"></span>
+  <span>Checking <b style="font-weight: 600">Winter Maid Uniform</b> on GameBanana…</span>
+</div>
+<div role="status" style="position: absolute; left: 524px; top: 818px; display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 12px; background: #1E2125; border: 1px solid #353941; box-shadow: 0 12px 40px rgba(0,0,0,.5)">
+  <svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--ac)"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg>
+  <span><b style="font-weight: 600">Winter Maid Uniform</b> has no newer files on GameBanana</span>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#A98BFF","options":["#A98BFF","#F3EFEB","#C8F031","#5FE1D9"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#A98BFF' };
+  }
+}
+</script>
+</body>
+</html>

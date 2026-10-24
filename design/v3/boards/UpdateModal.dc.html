@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Update mods</title>
+<script src="../../runtime/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Unbounded:wght@500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#060708}
+a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
+.app,.app *{box-sizing:border-box}
+.app{font-family:'Geist',system-ui,sans-serif;color:#ECEDEE;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+:where(.app) :where(button,input,textarea){font:inherit;color:inherit}
+.app h1,.app h2,.app h3,.app p{margin:0}
+.disp{font-family:'Unbounded','Geist',sans-serif;letter-spacing:-0.01em}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.logo{width:26px;height:26px;display:block;flex:none;object-fit:contain}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:8px;border:1px solid #363A42;background:#1A1C20;color:#ECEDEE;font-weight:500;font-size:13px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn:hover{background:#24272C;color:#ECEDEE}
+.btn-pri{background:var(--ac);border-color:var(--ac);color:#0B0C0E;font-weight:600}
+.btn-pri:hover{background:var(--ac);color:#0B0C0E;filter:brightness(1.08)}
+.btn-pri[disabled]{opacity:.45;cursor:not-allowed;filter:none}
+.btn-ghost{background:transparent;border-color:transparent;color:#A9ADB5}
+.btn-sm{height:30px;padding:0 10px;font-size:12px;border-radius:7px}
+.ibtn{width:36px;padding:0}.btn-sm.ibtn{width:30px}
+.lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#80858F}
+.sk{background:#15171A;border-radius:8px}
+.t-fire{background-color:#25130D;background-image:radial-gradient(#552B19 1.1px,transparent 1.3px);background-size:7px 7px}
+.t-elec{background-color:#0F1730;background-image:radial-gradient(#243F73 1.1px,transparent 1.3px);background-size:7px 7px}
+.mod{border:1px solid #23262B;border-radius:12px;background:#121316;overflow:hidden}
+.mhead{display:flex;align-items:center;gap:12px;padding:12px 14px}
+.have{display:flex;align-items:center;gap:10px;padding:8px 14px;background:#0F1012;border-top:1px solid #1A1C20;border-bottom:1px solid #1A1C20;font-size:12px;color:#A9ADB5}
+.frow{display:flex;align-items:center;padding-right:10px;border-bottom:1px solid #1A1C20}
+.frow:last-child{border-bottom:0}
+.frow.on{background:color-mix(in srgb,var(--ac) 8%,#121316)}
+.file{display:flex;align-items:center;gap:12px;flex:1;min-width:0;padding:9px 4px 9px 14px;border:0;background:transparent;cursor:pointer;text-align:left}.radio{width:18px;height:18px;border-radius:50%;border:1.5px solid #4A4E57;flex:none;position:relative}
+.file.on .radio{border-color:var(--ac)}
+.file.on .radio::after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--ac)}
+.variant{display:block;font-size:12px;line-height:1.4;color:#8E939C;white-space:normal;overflow-wrap:anywhere}
+.variant.none{color:#6E737C;font-style:italic}
+.ign{border:0;background:transparent;color:#80858F;font-size:12px;cursor:pointer;padding:4px 6px;border-radius:6px}
+.ign:hover{color:#ECEDEE;background:#1E2125}
+</style>
+</helmet>
+<div class="app" style="--ac: {{accent}}; position: relative; width: 100%; height: 900px; background: #0B0C0E; overflow: hidden">
+
+<div aria-hidden="true" style="position: absolute; inset: 0; display: flex; flex-direction: column">
+  <div style="height: 44px; border-bottom: 1px solid #1E2024; background: #0A0B0D; display: flex; align-items: center; gap: 10px; padding-left: 16px"><img class="logo" src="../../../mod_manager_flutter/assets/brand/logo-mark-on-dark.png" alt=""><span class="disp" style="font-weight: 700; letter-spacing: .08em">ZENITH</span></div>
+  <div style="flex: 1; display: flex">
+    <div style="width: 216px; background: #0A0B0D; border-right: 1px solid #1E2024; padding: 22px 14px; display: flex; flex-direction: column; gap: 12px">
+      <div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div><div class="sk" style="height: 26px"></div>
+    </div>
+    <div style="flex: 1; padding: 28px 32px; display: flex; flex-direction: column; gap: 10px">
+      <div class="sk" style="height: 34px; width: 200px; margin-bottom: 14px"></div>
+      <div class="sk" style="height: 46px"></div><div class="sk" style="height: 46px"></div><div class="sk" style="height: 46px"></div><div class="sk" style="height: 46px"></div><div class="sk" style="height: 46px"></div><div class="sk" style="height: 46px"></div><div class="sk" style="height: 46px"></div>
+    </div>
+  </div>
+</div>
+<div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(4,5,6,.72)"></div>
+
+<div role="dialog" aria-modal="true" aria-labelledby="up-title" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 760px; max-width: calc(100% - 32px); max-height: 860px; display: flex; flex-direction: column; border-radius: 18px; background: #0F1012; border: 1px solid #2A2D33; box-shadow: 0 30px 80px rgba(0,0,0,.6)">
+  <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 24px 14px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <h2 id="up-title" class="disp" style="font-size: 20px; font-weight: 700">3 mods have newer files</h2>
+      <span style="color: #A9ADB5; max-width: 600px">These files were uploaded after the one you have. GameBanana has no version numbers, so some of them may be other variants rather than updates. Pick the one you want, or ignore it.</span>
+    </div>
+    <a class="btn btn-ghost btn-sm ibtn" href="AllMods.dc.html" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></a>
+  </div>
+
+  <div style="flex: 1; min-height: 0; overflow: auto; padding: 4px 24px 18px; display: flex; flex-direction: column; gap: 12px">
+    <sc-for list="{{mods}}" as="m" hint-placeholder-count="3">
+      <section class="mod">
+        <div class="mhead">
+          <span class="{{m.thumb}}" style="width: 48px; height: 32px; border-radius: 6px; flex: none"></span>
+          <div style="flex: 1; display: flex; flex-direction: column; min-width: 0">
+            <b style="font-weight: 600">{{m.name}}</b>
+            <span style="font-size: 12px; color: #80858F">{{m.char}}</span>
+          </div>
+          <sc-if value="{{m.ignoredAll}}" hint-placeholder-val="{{false}}">
+            <span style="font-size: 12px; color: #80858F">Update ignored · <button class="ign" style="color: var(--ac)" onClick="{{m.undo}}">Undo</button></span>
+          </sc-if>
+          <sc-if value="{{m.open}}" hint-placeholder-val="{{true}}">
+            <button class="btn btn-sm btn-ghost" onClick="{{m.ignoreAll}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18"></path><path d="M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.4-1.6"></path><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"></path></svg>Ignore</button>
+          </sc-if>
+        </div>
+        <sc-if value="{{m.open}}" hint-placeholder-val="{{true}}">
+          <div>
+            <div class="have">
+              <span class="lbl" style="width: 76px; flex: none">You have</span>
+              <span style="flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0">
+                <span class="mono" style="color: #ECEDEE">{{m.haveFile}}</span>
+                <span class="{{m.haveVarCls}}">{{m.haveVar}}</span>
+              </span>
+              <span style="white-space: nowrap">{{m.haveDate}}</span>
+            </div>
+            <div role="radiogroup" aria-label="Newer files for {{m.name}}">
+              <sc-for list="{{m.files}}" as="f" hint-placeholder-count="2">
+                <div class="{{f.rowCls}}">
+                  <button class="file" role="radio" aria-checked="{{f.checked}}" onClick="{{f.pick}}">
+                    <span class="radio"></span>
+                    <span style="flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0">
+                      <span class="mono" style="font-size: 12px">{{f.name}}</span>
+                      <span class="{{f.varCls}}">{{f.variant}}</span>
+                    </span>
+                    <span style="font-size: 12px; color: #A9ADB5; white-space: nowrap">{{f.date}}</span>
+                    <span class="mono" style="font-size: 11px; color: #80858F; width: 52px; text-align: right">{{f.size}}</span>
+                  </button>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+      </section>
+    </sc-for>
+    <p style="font-size: 12px; color: #80858F">Ignoring an update means those files are never offered again; a file uploaded later still is. You can undo it from the mod's History tab.</p>
+  </div>
+
+  <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 24px; border-top: 1px solid #1E2024; flex-wrap: wrap">
+    <span style="font-size: 12px; color: #A9ADB5; max-width: 380px">Each update keeps the file you have now as a snapshot, then replaces the folder's contents.</span>
+    <div style="display: flex; gap: 8px">
+      <a class="btn" href="AllMods.dc.html">Later</a>
+      <sc-if value="{{canGo}}" hint-placeholder-val="{{true}}"><a class="btn btn-pri" href="Downloads.dc.html">{{goLbl}}</a></sc-if>
+      <sc-if value="{{cantGo}}" hint-placeholder-val="{{false}}"><button class="btn btn-pri" disabled>Update</button></sc-if>
+    </div>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#A98BFF","options":["#A98BFF","#F3EFEB","#C8F031","#5FE1D9"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { picks: { 0: 0 }, ignored: [2] };
+  }
+  renderVals() {
+    const data = [
+      {
+        name: 'Shark Hoodie Recolor', char: 'Ellen Joe · off', thumb: 't-elec',
+        have: ['SharkHoodie_v2.zip', 'Hood up', 'uploaded 12 Aug 2026'],
+        files: [
+          ['SharkHoodie_v2.1.7z', 'Hood up', '1 Oct 2026', '142 MB'],
+          ['SharkHoodie_HoodDown.7z', 'Hood down', '1 Oct 2026', '139 MB']
+        ]
+      },
+      {
+        name: 'Crimson Kimono', char: 'Hoshimi Miyabi · active', thumb: 't-fire',
+        have: ['CrimsonKimono.zip', 'Main', 'uploaded 21 Aug 2026'],
+        files: [
+          ['CrimsonKimono_fixed.zip', 'fixed hair clipping!!', '9 Oct 2026', '233 MB']
+        ]
+      },
+      {
+        name: 'Pastel Burnice', char: 'Burnice White · active', thumb: 't-fire',
+        have: ['PastelBurnice.zip', '', 'uploaded 15 Jul 2026'],
+        files: [
+          ['PastelBurnice_NoJacket.zip', 'No jacket version, for people who asked in the comments. Use this instead of the main file, not together with it!', '30 Sep 2026', '118 MB']
+        ]
+      }
+    ];
+    const { picks, ignored } = this.state;
+    const unpick = (mi) => { const next = { ...picks }; delete next[mi]; return next; };
+    const mods = data.map((m, mi) => {
+      const isIgnored = ignored.includes(mi);
+      return {
+        name: m.name, char: m.char, thumb: m.thumb,
+        haveFile: m.have[0],
+        haveVar: m.have[1] || 'no variant text',
+        haveVarCls: m.have[1] ? 'variant' : 'variant none',
+        haveDate: m.have[2],
+        open: !isIgnored,
+        ignoredAll: isIgnored,
+        ignoreAll: () => this.setState({ ignored: ignored.concat(mi), picks: unpick(mi) }),
+        undo: () => this.setState({ ignored: ignored.filter((x) => x !== mi) }),
+        files: m.files.map(([name, variant, date, size], fi) => {
+          const on = picks[mi] === fi;
+          return {
+            name, size,
+            variant: variant || 'no variant text',
+            varCls: variant ? 'variant' : 'variant none',
+            date: 'uploaded ' + date,
+            rowCls: on ? 'frow on' : 'frow',
+            checked: on ? 'true' : 'false',
+            pick: () => this.setState({ picks: { ...picks, [mi]: fi } })
+          };
+        })
+      };
+    });
+    const n = Object.keys(picks).length;
+    return {
+      accent: this.props.accent ?? '#A98BFF',
+      mods,
+      canGo: n > 0, cantGo: n === 0,
+      goLbl: n === 1 ? 'Update 1 mod' : 'Update ' + n + ' mods'
+    };
+  }
+}
+</script>
+</body>
+</html>
