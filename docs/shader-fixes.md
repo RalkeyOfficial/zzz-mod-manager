@@ -186,5 +186,5 @@ naming the mods. Changes arriving together, like an update's off-and-on, become 
 - **A shader folder inside a zip inside the archive** (Recolored Aegis addon) is not looked into: import unpacks one level, so the inner zip lands as an ordinary file and turning the mod on places nothing.
 - **A folder dragged in, rather than an archive,** is installed as it is; only an unpacked archive goes through the shader-folder rule.
 - **A "shader" folder the mod loads in any other way is moved.** Only an `.ini`'s `filename`, `include` and `include_recursive` lines hold a folder back, and a `filename` in a resource section nothing uses does not, so a folder loaded through `CustomShader`, `ShaderRegex` or any other key ends up in `ShaderFixes/` and the mod no longer finds it there; the measurement found no such folder.
-- Placed copies are not counted in the Storage tab; they live in the ZZMI folder, not the app's.
+- Placed copies are not counted in Settings' Storage section; they live in the ZZMI folder, not the app's.
 - Not verified on Windows.

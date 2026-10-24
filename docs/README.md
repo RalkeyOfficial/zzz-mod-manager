@@ -20,8 +20,9 @@ the root [`README.md`](../README.md).
 | [`applying-updates.md`](applying-updates.md) | How a newer download is **written over an installed mod**: the wipe and rewrite, patch detection, putting a recorded patch back, replaying the install layout, snapshots and rollback |
 | [`shader-fixes.md`](shader-fixes.md) | **Mods that replace the game's shaders**: how ZZMI finds a replacement, what mods actually ship, how an install lays it out, and copying files into and out of ZZMI's shader folder |
 | [`patch-destinations.md`](patch-destinations.md) | **Which mod folder a patch is installed into**: the filename fingerprint, the author's declared requirement, what each is measured to be worth, and why the list is ordered rather than narrowed |
-| [`disk-usage.md`](disk-usage.md) | **What the app is keeping on disk**: the Storage tab's six categories and why they are disjoint, apparent size versus free space, the shared directory walk, and what the reclaim may delete |
-| [`configuration.md`](configuration.md) | The app's **own settings**: `config.json`, the SharedPreferences mirror, the dual-storage pattern, and how to add a setting |
+| [`disk-usage.md`](disk-usage.md) | **What the app is keeping on disk**, in Settings' Storage section: its six categories and why they are disjoint, apparent size versus free space, the shared directory walk, and what the reclaim may delete |
+| [`configuration.md`](configuration.md) | The app's **own settings**: `config.json`, the SharedPreferences mirror, the dual-storage pattern, how to add a setting, and the Settings page's sections |
+| [`app-updates.md`](app-updates.md) | The **app's own update check**: why it runs only when pressed, what it asks GitHub, how it compares versions, and what it never does |
 | [`logging.md`](logging.md) | **What the app records about itself**: the levels and tags, what each area logs, the rotating file and its header, and what redaction does and does not promise |
 | [`mod-reload.md`](mod-reload.md) | **Why the app does not press F10 for you**: what 3DMigoto actually needs, what was measured on Wayland, and why the feature was removed rather than fixed |
 | [`desktop-integration.md`](desktop-integration.md) | **The window itself** — the application id, the desktop entry and the icon that depends on it, and the drawn title bar and what keeps the window resizable |

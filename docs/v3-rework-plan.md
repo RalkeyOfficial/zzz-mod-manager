@@ -19,7 +19,7 @@ The working plan for rebuilding the UI to the Zenith design. It lives on the `ze
   - has no `fontSize:` or `Color(0x…)` literals in new code (roles from `core/type_scale.dart`, colours from `ZenithPalette.of(context)`);
   - keeps platform behaviour in `PlatformService`;
   - updates the doc that owns the area.
-- New features with real logic (Loadouts, notes, favourites rework, palette, per-character mode, library watcher, Move library, archive passwords, Pause) get a short design note in `docs/` **before** their code.
+- New features with real logic (Loadouts, notes, favourites rework, palette, per-character mode, archive passwords, Pause) get a short design note in `docs/` **before** their code.
 
 ## Decisions already made
 
@@ -33,10 +33,11 @@ The memory note `v3-canvas-vs-docs-decisions` holds these. In short:
   - amber = update, blue = tracking and information;
   - Snapshots to keep is a per-mod count, default 3, with no separate age number;
   - delete goes to the system trash, with "also delete snapshots";
-  - Pause, archive passwords, a library file watcher, Move library…;
+  - Pause, archive passwords;
   - 13px body text.
 - **Combine choice:** the combine-or-separate option stays when a download's files look like a base mod plus a patch.
 - **Mod page:** no file-tree preview anywhere. "In the folder" keeps its note and the Stored at / Linked as / Tracking facts.
+- **Not built, decided with the user:** a library file watcher (so no "Watching library for changes" in the status bar, and no Settings switch for it) and Move library…. The library is read again when the window regains focus, and a user who wants the library elsewhere moves the folder themselves and changes the path in Settings, which re-points the links.
 - **Rename to Zenith:** application id, window title and app-data folder, as the last phase with a migration. The UI already says Zenith.
 - **Paper accent:** the canvas's option B. Paper fills the primary button and a selected chip; links, switches, badges and other on-states stay violet.
 - **Install decisions wait in Downloads:** a background download that needs a decision (looks like a patch, several folders in the archive, a password) doesn't open a dialog. It waits in the Downloads panel's "Needs your attention" group with a button that opens its dialog, and the sidebar's Downloads item shows an amber warning badge with that count.
@@ -206,26 +207,31 @@ The memory note `v3-canvas-vs-docs-decisions` holds these. In short:
   - Browse's `ExcludeFocus` around hidden pages is gone: `IndexedStack` already keeps them out of focus, pinned in `test/indexed_stack_focus_test.dart`.
   - No CHANGELOG line: everything here is on screens and flows not yet released.
 
+- **Phase 7, Settings, Storage, About** (artboards `Settings`, `Storage`, `About`): built, not reviewed, not committed. Checked in widget tests and renders, not yet in the running app. Written up in `configuration.md` §5, `disk-usage.md`, `app-updates.md`, `applying-updates.md` §5, `notifications.md` §1 and `launch-game.md`.
+  - Settings is a list of sections beside the section in view (`SettingsSection`, `settingsSectionProvider`): Game & folders, Launching, Mods, GameBanana, Appearance on one scrolling page that the list scrolls to and follows, and Storage and About as panes. There is no Save button: a folder pick applies at once. Open Settings cards open the section that holds the setting. The page ends with the canvas's small Zenith card, with the version, what the last update check found and links to the source and to reporting a problem.
+  - Built to the canvas's copy, colours and sizes, row by row. The deviations: no Move library button and no General section; the Mod library line has no "N used" half and does not say "one folder per character", which the flat library makes false; Snapshots to keep says "folder", not "file", for the same reason; Automatic tagging is a row the canvas doesn't draw; Reset on the launch rows, amber warnings, Open on the prefix and Open on the library are additions; the swatches are painted in the current theme's colours; below 760px the section list is a row that scrolls sideways; About's status line waits for a check, since the app never checks on its own, and its three link cards stack below 560px. A row's control drops under its text when the control's own width would leave the text under 280px, as the canvas's wrapping flex does (`RowOrStack`), so a wider control in another language stacks sooner.
+  - Decided with the user: no library file watcher and no Move library… (so no "Watching library for changes" line and no switch for it); the library is read again on focus, and a user who moves the folder picks it again with Change.
+  - Decided without asking:
+    - There is no General section: the canvas lists it and draws nothing in it. The language sits under Appearance, as drawn.
+    - Snapshots to keep is a strict count per mod, 1 to 10 and 3 until changed, with the newest never pruned and the 5 GB budget behind it, and no age number, since the canvas has none. A lower count clears extra snapshots of every mod at the next one taken, which a note says when the count is lowered. The History tab's retention line states the count with a Change link.
+    - One active mod per character (`one_at_a_time_default`) is the default for agents only; categories stay off, and a per-character choice wins.
+    - Check for mod updates is a choice between "When the app starts" and "Only when I press Check", over the existing bool.
+    - The F10 note is raised by a single switch press only, from a card, the panel or a mod's page, while `PlatformService.isGameRunning` says the game runs (a `ZenlessZoneZero.exe` process; it replaces `findGameProcesses`, whose `zzz` match caught the app itself). Bulk actions and installs already report.
+    - Automatic tagging is a row with a Working button and reports in a notification instead of a dialog. It is not on the canvas, and the plan puts it under Mods.
+    - The Launching section shows where `umu-run` was found (`PlatformService.findUmuRun`) and has Open on the prefix. Use umu-launcher shows for every runner, as drawn, and its missing-umu warning only for a Proton runner.
+    - The ZZMI folder row says "d3dx.ini and Mods folder found", the canvas's words, although only `d3dx.ini` and the shader folder are checked. A folder that isn't ZZMI is still saved as picked, with the existing warning under it.
+    - Lowering Snapshots to keep raises a note saying older saved versions of every mod go the next time one is saved, since the canvas's sentence doesn't say it. The F10 note has no Undo when the press also turned off another of the character's mods, since pressing back would leave none on.
+    - Storage: per-category actions (Leftovers Clean up, Downloads Clear, Logs Clear, Saved versions Manage with a button for versions of mods no longer in the library) over a reclaim that takes a set of targets. Covers & metadata has no Clear, since the sidecar holds tracking and the user's own covers, which cannot be fetched again; the canvas's "fetched again when needed" is false. The Logs row says the last 7 runs are kept, not 14 days.
+    - About: the app's update check calls GitHub only when pressed, never downloads or installs, and reads the repository RalkeyOfficial/zzz-mod-manager.
+  - Not done: "of N on this drive" in Storage's hero line (it needs a capacity probe on both platforms, and the Windows one is untried), a LICENSE file (the README says MIT and the repo has none, so the License card opens the repository), and a Windows session for Open on the Mod library and the F10 note (the `tasklist` match).
+  - For a native Ukrainian speaker to check: the `settings.mods.*`, `settings.launch.umu_*`, `about.*` and `storage.*` strings written in this phase.
+
 ## Phases left
 
 Each is reviewable on its own and ends with tests green, docs and changelog updated, and the user's go-ahead.
 
-6c. **Review follow-ups, what is left** (before phase 7 starts):
-   - Older buttons outside the press and ring rules until their screens are rebuilt: `settings_screen.dart` and `auto_tag_section.dart` (phase 7) and `welcome_screen.dart` (phase 10) set their own shape or foreground; `delete_mod_dialog.dart` (phase 8) and `reclaim_button.dart` (phase 7) have `Colors.red` danger buttons.
-7. **Settings, Storage, About** (artboards `Settings`, `Storage`, `About`).
-   - Section nav (General, Game & folders, Launching, Mods, GameBanana, Storage, Appearance, About), and Game & folders including Move library… (design note first). Game & folders holds only the ZZMI folder and the mod library.
-     - Move library… re-points links with the rule a changed Mod library already follows ([`configuration.md`](configuration.md#changing-the-mod-library), `ModManagerService.relinkLibrary`): a link whose target is exactly `<old>/<its own name>`, live or dead, follows when the new library has that folder; a mod the new library lacks keeps its link; a refused shader placement keeps the old link and names the mod.
-     - Across drives the order is copy, re-point, then delete the old folder, so every link always points at a whole copy and a failed copy deletes nothing.
-     - Open question for the designer: how Move… behaves when the current library folder is already gone because the player moved it by hand. Saving the new path in Settings already re-points the dead links and copies nothing.
-   - Launching: its own section for phase 2's launch settings, laid out per platform (the artboard's Platform tweak shows both).
-     - Both: XXMI Launcher (`launch_target`, path with a Found line and Change) and Launch arguments (`launch_arguments`, a text field; empty opens the launcher's window).
-     - Linux only, under the line "On Linux the game runs through Proton, so Zenith needs to know how to start XXMI": Use umu-launcher (`wine_use_umu`, with where `umu-run` was found), Proton (`wine_runner`, a dropdown of the builds found plus a folder button) and Wine prefix (`wine_prefix`, Open and Change).
-     - No preview of the command that Launch game runs.
-   - Mods: One active per character, Snapshots to keep, Check for mod updates, Remind me to press F10. The reminder's "while the game runs" reads `PlatformService.findGameProcesses`.
-   - GameBanana mature content, Appearance, Language.
-   - Storage: the bar meter, per-category actions and Largest mods. Storage then leaves the sidebar.
-   - About: version, an app update check (GitHub releases, a new network call), links, and app data / logs / system info.
-   - Existing settings without a canvas place: auto-tagging goes to Mods, the file-logging switch to About.
+6c. **Review follow-ups, what is left:**
+   - Older buttons outside the press and ring rules until their screens are rebuilt: `welcome_screen.dart` (phase 10) sets its own shape or foreground, and `delete_mod_dialog.dart` (phase 8) has a `Colors.red` danger button.
 8. **Dialogs and overlays** (artboards `ImportModal`, `UpdateModal`, `UpdateOneModal`, `ReinstallModal`, `TrackingModal`, `EditModal`, `DeleteModal`, `ContextMenu`, `Palette`, `PatchModal`, `FoldersModal`, `MakePatchModal`).
    - Update several mods at once (`UpdateModal`): every mod with a newer file, a file picked per mod (nothing preselected unless a mod has one newer file), Ignore with Undo, then each update in turn. It brings the primary "Update N" button beside Check all for updates on All mods and on the Updates page, shown while the last check found updates. On the Updates page, a newer file's Update then opens `UpdateOneModal`. Rewrite `applying-updates.md` §7 with it.
    - Edit info: rename, cover, author, tags, "Use GameBanana text", key recording, add and remove keys, "Restore the author's keys".
@@ -257,10 +263,8 @@ Each is reviewable on its own and ends with tests green, docs and changelog upda
 - Offer the user a correction of the keybind copy on the canvas's Edit info and Reinstall artboards.
 - The install links in `OnboardingLaunch`'s no-Proton state point at a placeholder; the user supplies the real Proton-GE, Proton-Cachy and DWProton pages. The Proton-Cachy folder name on the canvas is a guess.
 - Ask the user whether the Settings Proton dropdown also marks the recommended builds.
-- The status bar's "Watching library for changes" and the library file watcher behind it have no phase yet; give them one before phase 7, whose Settings may want a switch for it.
 - The existing screens still hold about 177 `Color(0x…)` literals and sky-blue gradients. Each goes when its screen is rebuilt.
 - The canvas's search field in the title bar waits for the palette in phase 8.
 - **Launch game follow-up: the app knows whether the game is running.** Design note first, in `launch-game.md`.
   - A launch log: the runner's stdout and stderr go to a file in the app-data folder, never to a pipe the app holds, since closing the app must not kill the game. A Proton or Wine failure is then readable, and one that quits within a few seconds can be reported instead of passing as started.
-  - A running state: the app tracks the game from the press until it closes, whether it quits or crashes. While it runs, Launch game is disabled, and the "Remind me to press F10" toast from phase 7 has its "while the game runs" signal.
-  - `PlatformService.findGameProcesses` can't be that signal as it stands: its match on `zzz` also catches the app's own `zzz-mod-manager`. It needs fixing or replacing. On Linux, the screen locks already follow the runner's process id and then the prefix's wineserver, which is the same lifetime.
+  - A running state: the app tracks the game from the press until it closes, whether it quits or crashes. While it runs, Launch game is disabled. Phase 7's F10 reminder already asks `PlatformService.isGameRunning` once per switch press; the tracking would build on it, and on Linux the screen locks already follow the runner's process id and then the prefix's wineserver, which is the same lifetime.

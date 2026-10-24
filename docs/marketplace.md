@@ -348,7 +348,7 @@ Nothing retries on its own: the scroll check waits until Try again is pressed, s
 Only `hide` can produce this state, so there is one transition and no branch.
 
 It writes through a **`ContentFilterWriter`** seam (the typedef
-`components/settings/marketplace_section.dart` already defines, reused so there is
+`components/settings/gamebanana_section.dart` already defines, reused so there is
 one signature for this write rather than two), defaulting to
 `ApiService.setContentFilter`. Not optional: `ApiService` lazily builds a
 `ConfigService` against the developer's real `<appData>/config.json`, so a widget

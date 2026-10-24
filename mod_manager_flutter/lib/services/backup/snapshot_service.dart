@@ -253,13 +253,12 @@ class SnapshotService {
 
   /// Applies [policy] across every mod. Returns the plan it carried out, so the
   /// caller can report an over-budget remainder rather than pretend it pruned.
-  Future<RetentionPlan> prune({DateTime? now}) async {
+  Future<RetentionPlan> prune() async {
     final snapshots = await listAll();
     final byRef = {for (final s in snapshots) s.ref: s};
     final plan = planRetention(
       snapshots.map((s) => s.ref).toList(),
       policy: policy,
-      now: now ?? DateTime.now(),
     );
     for (final ref in plan.prune) {
       final snapshot = byRef[ref];

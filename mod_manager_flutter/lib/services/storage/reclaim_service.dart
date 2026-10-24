@@ -100,9 +100,11 @@ class ReclaimService {
   /// The library as it is right now. Null means it could not be read, which is
   /// what stops the legacy-image sweep rather than letting it run against an
   /// empty list and delete everything.
+  ///
+  /// Only asked while the library folder is set, exists, can be listed and holds no dead link, since a library scan answers an empty list rather than an error for a folder it cannot find or list.
   final Future<Set<String>?> Function() modNames;
 
-  /// The uid of every mod in the library, or null when it could not be read.
+  /// The uid of every mod in the library, or null when it could not be read. Asked on the same condition as [modNames].
   final Future<Set<String>?> Function() claimedSnapshotUids;
 
   final ReclaimRules rules;
@@ -114,18 +116,26 @@ class ReclaimService {
   final DateTime Function() _now;
   final Future<int?> Function(String path)? _freeSpace;
 
-  Future<ReclaimOutcome> run() async {
+  /// Deletes what [planReclaim] allows among [targets], and nothing in any other store.
+  /// The library is read only for the targets that are decided against it.
+  Future<ReclaimOutcome> run(Set<ReclaimTarget> targets) async {
     final before = await _readFreeSpace();
 
-    final library = await modNames();
-    final claimed = await claimedSnapshotUids();
-    final inventory = await _gather();
+    // A library scan answers an empty list, not an error, for a folder that is unset, missing (an unmounted drive) or unreadable, and an empty list makes every image and every saved-versions group look unclaimed.
+    // A mod linked to a folder that is gone is absent from the scan too, though its images and versions are the only copy.
+    // So the folder has to be listable and free of such a link before either answer is believed, whatever the callbacks return.
+    final decidedByLibrary = targets.contains(ReclaimTarget.legacyImages) || targets.contains(ReclaimTarget.unclaimedSnapshots);
+    final problem = decidedByLibrary ? await _libraryProblem() : null;
+    final library = targets.contains(ReclaimTarget.legacyImages) && problem == null ? await modNames() : null;
+    final claimed = targets.contains(ReclaimTarget.unclaimedSnapshots) && problem == null ? await claimedSnapshotUids() : null;
+    final inventory = await _gather(targets);
     final reachable = await _reachableLegacyImages(library);
 
     // Read as late as possible, and again below: the gate is about this moment,
-    // not about when the page was drawn.
+    // not about when the section was drawn.
     final plan = planReclaim(
       inventory,
+      targets: targets,
       now: _now(),
       downloadsBusy: downloadsBusy(),
       installBusy: installBusy(),
@@ -137,6 +147,7 @@ class ReclaimService {
       libraryReadable: library != null && reachable != null,
       reachableLegacyImages: reachable ?? const <String>{},
       claimedSnapshotUids: claimed,
+      libraryProblem: problem ?? ReclaimSkipReason.libraryUnreadable,
       currentLogFile: roots.currentLogFile == null
           ? null
           : path.basename(roots.currentLogFile!),
@@ -145,7 +156,7 @@ class ReclaimService {
 
     final results = <ReclaimTargetResult>[];
     for (final target in ReclaimTarget.values) {
-      results.add(await _apply(target, plan));
+      if (targets.contains(target)) results.add(await _apply(target, plan));
     }
 
     final after = await _readFreeSpace();
@@ -224,8 +235,7 @@ class ReclaimService {
           false,
       };
 
-  /// **The file, never a shared directory.** `<appData>/downloads` holds every other archive and every in-flight partial,
-  /// so removing the parent would take all of them.
+  /// **The file, never a shared directory.** `<appData>/downloads` holds every other archive and every in-flight partial, so removing the parent would take all of them.
   /// The two directories deleted whole are a temp extraction whose name is ours, and a backup group directly under `backups/`.
   Future<bool> _delete(ReclaimCandidate candidate) async {
     try {
@@ -253,16 +263,20 @@ class ReclaimService {
         _ => false,
       };
 
-  Future<List<ReclaimCandidate>> _gather() async {
+  /// The candidates of the stores in [targets]; a store nobody asked about is not listed, let alone measured.
+  Future<List<ReclaimCandidate>> _gather(Set<ReclaimTarget> targets) async {
     final inventory = <ReclaimCandidate>[];
-    inventory.addAll(await _gatherDownloads());
-    inventory.addAll(await _gatherTempExtracts());
-    inventory.addAll(await _gatherSnapshotGroups());
-    inventory.addAll(await _gatherFlat(
-      roots.legacyImages,
-      ReclaimTarget.legacyImages,
-    ));
-    inventory.addAll(await _gatherFlat(roots.logs, ReclaimTarget.oldLogs));
+    if (targets.contains(ReclaimTarget.completedArchives) || targets.contains(ReclaimTarget.abandonedPartials)) {
+      inventory.addAll(await _gatherDownloads());
+    }
+    if (targets.contains(ReclaimTarget.tempExtracts)) inventory.addAll(await _gatherTempExtracts());
+    if (targets.contains(ReclaimTarget.unclaimedSnapshots)) inventory.addAll(await _gatherSnapshotGroups());
+    if (targets.contains(ReclaimTarget.legacyImages)) {
+      inventory.addAll(await _gatherFlat(roots.legacyImages, ReclaimTarget.legacyImages));
+    }
+    if (targets.contains(ReclaimTarget.oldLogs)) {
+      inventory.addAll(await _gatherFlat(roots.logs, ReclaimTarget.oldLogs));
+    }
     return inventory;
   }
 
@@ -421,6 +435,28 @@ class ReclaimService {
       return null;
     }
     return reachable;
+  }
+
+  /// Why the library's answer cannot be believed, or null when it can.
+  ///
+  /// The folder has to be set, exist and be listable, and hold no link to a folder that is missing: such a link is not in the scan, and may come back to life with its drive.
+  /// Names starting with `.` or `__` are skipped as the scan skips them.
+  Future<ReclaimSkipReason?> _libraryProblem() async {
+    final folder = roots.modsLibrary;
+    if (folder == null) return ReclaimSkipReason.libraryUnreadable;
+    try {
+      if (!await folder.exists()) return ReclaimSkipReason.libraryUnreadable;
+      await for (final entity in folder.list(followLinks: false)) {
+        final name = path.basename(entity.path);
+        if (name.startsWith('.') || name.startsWith('__')) continue;
+        if (entity is Link && await FileSystemEntity.type(entity.path) == FileSystemEntityType.notFound) {
+          return ReclaimSkipReason.libraryHasDeadLink;
+        }
+      }
+    } catch (_) {
+      return ReclaimSkipReason.libraryUnreadable;
+    }
+    return null;
   }
 
   Future<int?> _readFreeSpace() async {

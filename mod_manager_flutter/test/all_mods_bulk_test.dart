@@ -9,46 +9,64 @@ void main() {
 
   List<String> ids(Iterable<ModInfo> mods) => [for (final m in mods) m.id];
 
+  /// With Settings' One active mod per character on, as it starts.
+  BulkEnablePlan plan(List<ModInfo> selected, [Map<String, bool> choices = const {}, bool agentsDefault = true]) =>
+      planBulkEnable(selected, choices, agentsDefault: agentsDefault);
+
   test('two mods of one agent with One at a time on are both left off', () {
     // Which one to keep is the user's choice, never the app's.
-    final plan = planBulkEnable([mod('a'), mod('b')], const {});
+    final result = plan([mod('a'), mod('b')]);
 
-    expect(plan.enable, isEmpty);
-    expect(plan.leftOff.keys, ['ellen']);
-    expect(ids(plan.leftOff['ellen']!), ['a', 'b']);
+    expect(result.enable, isEmpty);
+    expect(result.leftOff.keys, ['ellen']);
+    expect(ids(result.leftOff['ellen']!), ['a', 'b']);
   });
 
   test('one mod per agent is enabled', () {
-    final plan = planBulkEnable([mod('a'), mod('b', characterId: 'miyabi')], const {});
+    final result = plan([mod('a'), mod('b', characterId: 'miyabi')]);
 
-    expect(ids(plan.enable), ['a', 'b']);
-    expect(plan.leftOff, isEmpty);
+    expect(ids(result.enable), ['a', 'b']);
+    expect(result.leftOff, isEmpty);
   });
 
   test('a category, One at a time off by default, enables together', () {
-    final plan = planBulkEnable([mod('hud', characterId: 'cat_ui'), mod('font', characterId: 'cat_ui')], const {});
+    final result = plan([mod('hud', characterId: 'cat_ui'), mod('font', characterId: 'cat_ui')]);
 
-    expect(ids(plan.enable), ['hud', 'font']);
-    expect(plan.leftOff, isEmpty);
+    expect(ids(result.enable), ['hud', 'font']);
+    expect(result.leftOff, isEmpty);
   });
 
   test("an agent whose One at a time the user switched off enables together", () {
-    final plan = planBulkEnable([mod('a'), mod('b')], const {'ellen': false});
+    final result = plan([mod('a'), mod('b')], const {'ellen': false});
 
-    expect(ids(plan.enable), ['a', 'b']);
+    expect(ids(result.enable), ['a', 'b']);
+  });
+
+  test("with Settings' default off, an agent the user hasn't switched enables together", () {
+    final result = plan([mod('a'), mod('b')], const {}, false);
+
+    expect(ids(result.enable), ['a', 'b']);
+    expect(result.leftOff, isEmpty);
+  });
+
+  test("with Settings' default off, an agent the user switched on is still left off", () {
+    final result = plan([mod('a'), mod('b')], const {'ellen': true}, false);
+
+    expect(result.enable, isEmpty);
+    expect(ids(result.leftOff['ellen']!), ['a', 'b']);
   });
 
   test('a mod already on is left as it is, and does not count against the others', () {
-    final plan = planBulkEnable([mod('on', active: true), mod('b')], const {});
+    final result = plan([mod('on', active: true), mod('b')]);
 
-    expect(ids(plan.enable), ['b']);
-    expect(plan.leftOff, isEmpty);
+    expect(ids(result.enable), ['b']);
+    expect(result.leftOff, isEmpty);
   });
 
   test('the left-off agent does not hold back another', () {
-    final plan = planBulkEnable([mod('a'), mod('b'), mod('c', characterId: 'miyabi')], const {});
+    final result = plan([mod('a'), mod('b'), mod('c', characterId: 'miyabi')]);
 
-    expect(ids(plan.enable), ['c']);
-    expect(plan.leftOff.keys, ['ellen']);
+    expect(ids(result.enable), ['c']);
+    expect(result.leftOff.keys, ['ellen']);
   });
 }

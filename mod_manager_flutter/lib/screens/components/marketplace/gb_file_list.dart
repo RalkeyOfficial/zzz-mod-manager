@@ -9,7 +9,7 @@ import '../../../services/installed_mods_index.dart';
 import '../../../utils/byte_format.dart';
 import '../mod_detail_parts.dart' show SectionHeading;
 import '../zenith_controls.dart';
-import 'gb_mod_card.dart' show relativeAgeLabel;
+import '../../../utils/relative_age.dart';
 
 /// The files picked when a mod page opens: its one current file, or none when it publishes several, since which one
 /// the user wants can't be told from what GameBanana publishes (`selectDefaultFile`).

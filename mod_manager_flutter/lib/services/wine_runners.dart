@@ -11,7 +11,7 @@ enum WineRunnerKind { proton, wine }
 /// Which tool installed a build. `system` is a distro package.
 enum WineRunnerSource { steam, heroic, lutris, bottles, system }
 
-/// A Wine or Proton build found on disk, offered in Settings › Wine or Proton. See `docs/launch-game.md`.
+/// A Wine or Proton build found on disk, offered in Settings › Launching › Proton. See `docs/launch-game.md`.
 class WineRunner {
   const WineRunner({required this.path, required this.name, required this.kind, required this.source});
 

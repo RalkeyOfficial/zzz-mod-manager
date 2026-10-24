@@ -33,6 +33,53 @@ void main() {
     return loc!;
   }
 
+  group('opening a folder', () {
+    testWidgets('says nothing when the file manager opens it', (tester) async {
+      final loc = await localizations(tester);
+      String? opened;
+
+      await openFolderOrReport(loc, center(), '/home/al/ZZZ Mods', opener: (folder) async {
+        opened = folder;
+        return true;
+      });
+
+      expect(opened, '/home/al/ZZZ Mods');
+      expect(container.read(notificationsProvider), isEmpty);
+    });
+
+    testWidgets('names the folder in an error when it does not open', (tester) async {
+      final loc = await localizations(tester);
+
+      await openFolderOrReport(loc, center(), '/gone/folder', opener: (_) async => false);
+
+      final card = container.read(notificationsProvider).single;
+      expect(card.kind, NotificationKind.error);
+      expect(card.title, "Couldn't open the folder");
+      expect(card.body, '/gone/folder');
+      await tester.pump(const Duration(seconds: 1));
+    });
+
+    testWidgets('says so too when opening it throws', (tester) async {
+      final loc = await localizations(tester);
+
+      await openFolderOrReport(loc, center(), '/gone/folder', opener: (_) async => throw StateError('no xdg-open'));
+
+      expect(container.read(notificationsProvider).single.title, "Couldn't open the folder");
+      await tester.pump(const Duration(seconds: 1));
+    });
+
+    testWidgets('the Open folder action reports the same way', (tester) async {
+      final loc = await localizations(tester);
+
+      final action = openFolderAction(loc, center(), '/gone/folder', opener: (_) async => false);
+      action.onPressed();
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+
+      expect(container.read(notificationsProvider).single.title, "Couldn't open the folder");
+      await tester.pump(const Duration(seconds: 1));
+    });
+  });
+
   testWidgets('Copy details says so when the clipboard refuses the write', (tester) async {
     final loc = await localizations(tester);
     clipboard((call) => throw PlatformException(code: 'unavailable'));

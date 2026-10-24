@@ -25,28 +25,29 @@ void main() {
     // makes the update path's accepted losses undefendable.
     final plan = planRetention(
       [snap('ellen', 900, sizeMb: 4000)],
-      now: now,
-      policy: const RetentionPolicy(
-        minAge: Duration(days: 1),
-        keepPerMod: 1,
-        maxTotalBytes: mb,
-      ),
+      policy: const RetentionPolicy(keepPerMod: 1, maxTotalBytes: mb),
     );
     expect(plan.prune, isEmpty);
     expect(plan.overBudgetBytes, greaterThan(0));
   });
 
-  test('age beats the count cap', () {
-    // Six snapshots taken this afternoon: the count cap says keep three, the age
-    // floor says keep them all, and age wins because none of them is old.
+  test('a mod keeps exactly the count it is set to, however recent they are', () {
     final plan = planRetention(
       [for (var i = 0; i < 6; i++) snap('ellen', 0, id: 'a$i')],
-      now: now,
+      policy: const RetentionPolicy(keepPerMod: 2),
     );
-    expect(plan.prune, isEmpty);
+    expect(plan.prune.map((s) => s.id), ['a0', 'a1', 'a2', 'a3']);
   });
 
-  test('beyond the count cap AND older than the floor is pruned', () {
+  test('the newest of several is kept even with a count of one', () {
+    final plan = planRetention(
+      [snap('ellen', 1), snap('ellen', 2), snap('ellen', 3)],
+      policy: const RetentionPolicy(keepPerMod: 1),
+    );
+    expect(plan.prune.map((s) => s.id), ['d2', 'd3']);
+  });
+
+  test('beyond the count is pruned at any age', () {
     final plan = planRetention(
       [
         snap('ellen', 1),
@@ -55,37 +56,17 @@ void main() {
         snap('ellen', 100),
         snap('ellen', 200),
       ],
-      now: now,
     );
     expect(plan.prune.map((s) => s.id), ['d100', 'd200']);
   });
 
-  test('size pressure reaches the young over-cap snapshots first', () {
-    // Tier 2 before tier 3: a snapshot the count cap already wanted gone is a
-    // better casualty than one inside it.
-    final plan = planRetention(
-      [
-        snap('ellen', 0, sizeMb: 600),
-        snap('ellen', 1, sizeMb: 600),
-        snap('ellen', 2, sizeMb: 600),
-        snap('ellen', 3, sizeMb: 600),
-        snap('ellen', 4, sizeMb: 600),
-      ],
-      now: now,
-      policy: const RetentionPolicy(maxTotalBytes: 2000 * mb),
-    );
-    expect(plan.prune.map((s) => s.id), ['d3', 'd4']);
-    expect(plan.overBudgetBytes, 0);
-  });
-
-  test('size pressure then eats into the count cap, oldest first', () {
+  test('size pressure reaches the snapshots inside the count, oldest first', () {
     final plan = planRetention(
       [
         snap('ellen', 0, sizeMb: 600),
         snap('ellen', 1, sizeMb: 600),
         snap('ellen', 2, sizeMb: 600),
       ],
-      now: now,
       policy: const RetentionPolicy(maxTotalBytes: 700 * mb),
     );
     expect(plan.prune.map((s) => s.id), ['d1', 'd2']);
@@ -100,7 +81,6 @@ void main() {
         snap('lycaon', 0, sizeMb: 900),
         snap('lycaon', 6, sizeMb: 900),
       ],
-      now: now,
       policy: const RetentionPolicy(maxTotalBytes: 2000 * mb),
     );
     expect(plan.prune.map((s) => '${s.modUid}/${s.id}'), [
@@ -116,7 +96,6 @@ void main() {
     // honest answer is to say so, not to leave someone with no rollback.
     final plan = planRetention(
       [snap('ellen', 0, sizeMb: 1200), snap('lycaon', 0, sizeMb: 1200)],
-      now: now,
       policy: const RetentionPolicy(maxTotalBytes: 2000 * mb),
     );
     expect(plan.prune, isEmpty);
@@ -124,6 +103,6 @@ void main() {
   });
 
   test('an empty library plans nothing', () {
-    expect(planRetention(const [], now: now).isEmpty, isTrue);
+    expect(planRetention(const []).isEmpty, isTrue);
   });
 }

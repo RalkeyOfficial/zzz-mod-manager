@@ -97,6 +97,7 @@ than which file noticed it.
 | `update` | The update dialog and the apply flow's own steps, such as a failed scan for a sibling group |
 | `update.apply` | The applier's phases |
 | `update.check` | The startup update check failing |
+| `update.app` | The About page's check for a newer release of the app ([`app-updates.md`](app-updates.md)) |
 | `update.reinstall` | The reinstall flow |
 | `snapshot` | Capture, restore, retention |
 | `metadata` | Sidecars, origins, autofill |
@@ -235,12 +236,9 @@ leads with a full sortable timestamp.
 
 ## 9. Settings
 
-Three rows under **Diagnostics**: the on/off switch, *Open folder*, and *Copy
-diagnostics*.
+The log's settings are in Settings > **About**, in its *For bug reports* group: the on/off switch (*Write a log file*), *Logs* with *Open log folder*, and *System info* with *Copy*. *App data* beside them opens the app's data folder, which holds the `logs/` folder. The group says how many runs are kept, from the same `keptLogFiles` seven that §7 describes. A folder that does not open is reported with its path and the likely reasons for that folder: for the logs, that nothing has been written there yet or the file manager did not start; for the app data, that the folder is gone or the file manager did not start.
 
-**On by default.** A log reaches nothing and costs kilobytes, and is worthless if
-it happened to be switched off on the run that broke — the opposite call from the
-startup update check, which reaches the network unasked and is therefore opt-in.
+**On by default.** A log reaches nothing and costs kilobytes, and is worthless if it happened to be switched off on the run that broke — the opposite call from the startup update check, which reaches the network unasked and is therefore opt-in.
 
 **There is no level setting**, and that is a decision: letting the verbosity be
 tuned means the one report you needed detail from is the one where it was turned
@@ -257,9 +255,7 @@ lines worth keeping. Any failure to read it means yes: a missing or corrupt
 config is the state a first run and a broken install share, and both are exactly
 when somebody wants the log.
 
-*Copy diagnostics* is built from the in-memory ring buffer, not by reading the
-file: it works with the file switched off, cannot be slow, and the lines are
-already redacted.
+*Open log folder* opens the folder rather than the newest file: the run that broke is picked out of all seven. *Copy* puts `diagnosticsText()` on the clipboard, built from the in-memory ring buffer, not by reading the file: it works with the file switched off, cannot be slow, and the lines are already redacted. The System info row's one-line summary ("2.2.2 · Linux · ZZMI found · 61 mods") is only a glance at what the copy is about; the copy is the version, the system and the recent log lines.
 
 ## 10. Where it lives
 

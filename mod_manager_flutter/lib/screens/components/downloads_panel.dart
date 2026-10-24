@@ -24,11 +24,11 @@ import '../../utils/byte_format.dart';
 import '../../utils/categories.dart';
 import '../../utils/notification_actions.dart';
 import '../../utils/notifications.dart';
+import '../../utils/relative_age.dart';
 import '../../utils/state_providers.dart';
 import '../../utils/zzz_characters.dart';
 import 'character_tile.dart';
 import 'download_queue_host.dart';
-import 'marketplace/gb_mod_card.dart';
 import 'marketplace/gb_thumbnail.dart';
 import 'network_link_notice.dart';
 import 'resolve/resolve_fragments.dart';
@@ -242,6 +242,7 @@ class _DownloadsPanelState extends ConsumerState<DownloadsPanel> {
         mod,
         container.read(oneAtATimeProvider),
         beingWritten: container.read(modWritesInProgressProvider),
+        agentsDefault: container.read(oneAtATimeDefaultProvider),
       );
       final failedTitle = loc.t('library.card.enable_failed_title');
       try {

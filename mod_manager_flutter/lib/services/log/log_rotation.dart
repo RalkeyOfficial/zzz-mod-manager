@@ -32,6 +32,9 @@ String logFileName(DateTime when, {int collision = 0}) {
   return '$logFilePrefix$stamp$suffix$logFileSuffix';
 }
 
+/// How many runs' log files are kept, the default of every rotation and the number About tells the user.
+const int keptLogFiles = 7;
+
 const String logFilePrefix = 'zzz-mod-manager_';
 const String logFileSuffix = '.log';
 
@@ -50,7 +53,7 @@ bool isLogFileName(String name) => _logFileName.hasMatch(name);
 /// stating: asked to keep 7 with 7 already there, this returns 1 to delete, not
 /// 0. Called at open rather than at exit, because a process that crashes never
 /// reaches exit — and a crash is when the directory most needs pruning.
-List<String> planLogRotation(Iterable<String> names, {int keep = 7}) {
+List<String> planLogRotation(Iterable<String> names, {int keep = keptLogFiles}) {
   final ours = [
     for (final name in names)
       if (isLogFileName(name)) name,
@@ -65,29 +68,15 @@ List<String> planLogRotation(Iterable<String> names, {int keep = 7}) {
 
 /// What to delete when pruning the directory **mid-session**, on request.
 ///
-/// Two differences from [planLogRotation], and both are bugs if they are missed:
+/// Every log file this app wrote except [current], which is what clearing the logs takes.
+/// Launch rotation already keeps [keptLogFiles] runs, so a clear that left some of them would often have nothing to take.
 ///
-/// - **No room is reserved.** Nothing is about to be opened, so reserving a slot
-///   here deletes one file more than the user asked to keep.
-/// - **[current] never goes.** On Windows deleting the open file fails; on Linux
-///   it *succeeds*, the sink keeps writing to an unlinked inode, the space is
-///   not returned until the app exits, and the user loses the log of the run
-///   they are about to report a problem from.
+/// **[current] never goes.** On Windows deleting the open file fails; on Linux it *succeeds*, the sink keeps writing to an unlinked inode, the space is not returned until the app exits, and the user loses the log of the run they are about to report a problem from.
 ///
-/// The rule about unrecognised names is [planLogRotation]'s and is inherited:
-/// the user is invited into this directory, and whatever they left there is
-/// theirs.
-List<String> planLogReclaim(
-  Iterable<String> names, {
-  String? current,
-  int keep = 7,
-}) {
-  final ours = [
+/// The rule about unrecognised names is [planLogRotation]'s and is inherited: the user is invited into this directory, and whatever they left there is theirs.
+List<String> planLogReclaim(Iterable<String> names, {String? current}) {
+  return [
     for (final name in names)
       if (isLogFileName(name) && name != current) name,
   ]..sort();
-
-  if (keep <= 0) return ours;
-  if (ours.length <= keep) return const <String>[];
-  return ours.take(ours.length - keep).toList();
 }

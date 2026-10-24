@@ -308,7 +308,7 @@ Tags help organize mods by character. The system automatically detects character
 
 **Manual assignment**: right-click a mod → **Edit** and pick a character or a non-character category (UI, Texture, Audio, Misc) from the searchable picker. You can also drag a mod onto a character or category in the character list.
 
-**Bulk auto-tagging**: Go to Settings → Auto-tagging → "Tag all mods" to automatically tag all untagged mods.
+**Bulk auto-tagging**: Go to Settings → Mods → Automatic tagging → "Detect tags for all mods" to tag every mod that has no character yet.
 
 ### Filtering Mods
 
@@ -322,13 +322,15 @@ Configuration is stored in: `~/.local/share/zzz-mod-manager/config.json`
 
 ### Settings Panel
 
-Access via the ⚙️ button:
+Open **Settings** from the sidebar. Every change applies as you make it:
 
-- **Mod library**: Where your mod library is stored
-- **ZZMI folder**: Your ZZMI install; active mods are linked into its `Mods` folder
-- **Theme**: Dark/Light/Auto
-- **Language**: English/Ukrainian
-- **Auto-tagging**: Enable/disable automatic character detection
+- **Game & folders**: Your ZZMI install, whose `Mods` folder active mods are linked into, and where your mod library is stored
+- **Launching**: The XXMI Launcher, its arguments and, on Linux, umu-launcher, Proton and the Wine prefix
+- **Mods**: One active mod per character, how many saved versions each mod keeps, when to check for mod updates, the F10 reminder and automatic character detection
+- **GameBanana**: How Browse shows mature content
+- **Storage**: What the app keeps on disk, and cleaning it up
+- **Appearance**: Theme (Dark/Light/System), accent colour and language (English/Ukrainian)
+- **About**: The version, an update check, and where to find the logs for a bug report
 
 ### Advanced Configuration
 

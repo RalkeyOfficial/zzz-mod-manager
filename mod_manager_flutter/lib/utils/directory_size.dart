@@ -2,7 +2,7 @@
 ///
 /// Its own file because three callers want the same walk for three unrelated
 /// reasons — what a snapshot came to, whether an import will fit, and what the
-/// Storage page reports — and the rules about links below are the kind that get
+/// Storage section reports — and the rules about links below are the kind that get
 /// half-remembered when they are copied.
 library;
 

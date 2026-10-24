@@ -33,8 +33,10 @@ The rest of the long work that nothing else on screen shows raises one as well, 
 
 Work under a window that blocks the app, such as the drop's import itself or an update's download, raises none: the window is its report.
 
-**The F10 reminder is not raised.** A Note with a keycap in its body and an Undo exists for "Ellen Swimsuit is on / Press F10 in game to load it", and a widget test draws that card.
-Nothing raises it until the "Remind me to press F10" setting and the signal that the game is running exist, since turning a mod on is a change the user can see.
+**The F10 reminder is the one success a switch speaks.** Turning a mod on or off is a change the user can see, so it says nothing, except while the game is running: the game only picks the change up on F10, which the app never presses ([`mod-reload.md`](mod-reload.md)), and the switch gives no sign of that.
+Then a Note says "Ellen Swimsuit is on" or "is off" over "Press F10 in game to apply the change", with the keycap and an Undo that presses the switch again.
+It is raised by a single switch press, from a card, the details panel or a mod's page, and by nothing else: a bulk action or an install already reports, and says what happened without the reminder.
+Settings' **Remind me to press F10** turns it off, and whether the game is running is `PlatformService.isGameRunning` ([`launch-game.md`](launch-game.md)).
 
 ## 2. The two levels
 

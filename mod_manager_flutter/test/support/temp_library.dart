@@ -122,10 +122,12 @@ class TempLibrary {
   }
 
   /// The overrides a widget test mounts, for the two dependencies read through
-  /// `ref` rather than through the static facade.
+  /// `ref` rather than through the static facade. The game is never running, so a toggle in a test doesn't scan this
+  /// machine's processes and raise the F10 note when the developer happens to be playing.
   List<Override> get overrides => [
         modManagerServiceProvider.overrideWith((ref) async => service),
         snapshotServiceProvider.overrideWithValue(snapshots),
+        isGameRunningProvider.overrideWithValue(() async => false),
       ];
 
   Directory modFolder(String modName) => Directory(p.join(mods.path, modName));

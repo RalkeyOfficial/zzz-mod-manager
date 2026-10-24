@@ -138,7 +138,7 @@ void main() {
     });
 
     test('still keeps recent lines in memory with the file off', () {
-      // "Copy diagnostics" has to work for the user who turned the file off —
+      // System info > Copy in About has to work for the user who turned the file off —
       // it is how they report a bug without one.
       Log.install(buildProductionRouter(
         fileLogging: false,

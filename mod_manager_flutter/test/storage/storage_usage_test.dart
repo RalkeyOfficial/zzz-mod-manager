@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/services/storage/storage_usage.dart';
 
@@ -39,44 +37,130 @@ void main() {
         325,
       );
     });
+
+    test('an item named to keep stays in the rows however small, in size order', () {
+      final items = [for (var i = 0; i < 25; i++) item('m$i', i + 1)];
+
+      final folded = foldTail(items, cap: 20, keep: (i) => i.id == 'm0' || i.id == 'm2');
+
+      expect(folded.items.length, 22);
+      expect(folded.items.map((i) => i.id).toList().sublist(20), ['m2', 'm0'], reason: 'largest first, kept ones included');
+      expect(folded.tailCount, 3);
+      expect(folded.tailBytes, 2 + 4 + 5);
+    });
   });
 
-  group('donutSweeps', () {
-    const fullCircle = 2 * math.pi;
+  group('meterWidths', () {
+    double used(List<double> widths, {double gap = 2}) =>
+        widths.fold<double>(0, (sum, w) => sum + w) + gap * (widths.where((w) => w > 0).length - 1);
 
-    test('nothing to draw is no slices rather than a division by zero', () {
-      expect(donutSweeps([0, 0, 0]), [0, 0, 0]);
+    test('nothing to draw is no segments rather than a division by zero', () {
+      expect(meterWidths([0, 0, 0], 400), [0, 0, 0]);
     });
 
-    test('proportional when every slice is already visible', () {
-      final sweeps = donutSweeps([50, 50]);
+    test('proportional when every segment is already visible', () {
+      final widths = meterWidths([50, 50], 402);
 
-      expect(sweeps[0], closeTo(math.pi, 0.0001));
-      expect(sweeps[1], closeTo(math.pi, 0.0001));
+      expect(widths[0], closeTo(200, 0.0001));
+      expect(widths[1], closeTo(200, 0.0001));
     });
 
-    test('a slice too small to see is lifted to the floor', () {
-      // 12 MB beside 3.1 GB is about a hundredth of a degree: invisible, and a
-      // category the chart silently omits is worse than one slightly out of
-      // proportion.
-      final sweeps = donutSweeps([3100 * 1024 * 1024, 12 * 1024 * 1024]);
+    test('a segment too small to see is lifted to the floor', () {
+      // 12 MB beside 7.9 GB is a hair wide, and a category the meter silently omits is worse than one slightly out of proportion.
+      final widths = meterWidths([7900 * 1024 * 1024, 12 * 1024 * 1024], 600);
 
-      expect(sweeps[1], greaterThanOrEqualTo(0.035));
-      expect(sweeps.reduce((a, b) => a + b), closeTo(fullCircle, 0.0001));
+      expect(widths[1], 4);
+      expect(used(widths), closeTo(600, 0.0001));
     });
 
-    test('a zero category still gets no slice at all', () {
-      final sweeps = donutSweeps([100, 0, 5]);
+    test('a category with no bytes gets no width and no gap', () {
+      final widths = meterWidths([100, 0, 100], 402);
 
-      expect(sweeps[1], 0);
-      expect(sweeps[0], greaterThan(0));
-      expect(sweeps[2], greaterThan(0));
+      expect(widths[1], 0);
+      expect(widths[0], closeTo(200, 0.0001));
     });
 
-    test('the circle is still whole after lifting', () {
-      final sweeps = donutSweeps([900000, 3, 4, 5, 6]);
+    test('the bar is still whole after several are lifted', () {
+      final widths = meterWidths([900000, 3, 4, 5, 6], 500);
 
-      expect(sweeps.reduce((a, b) => a + b), closeTo(fullCircle, 0.0001));
+      expect(widths.skip(1), everyElement(4));
+      expect(used(widths), closeTo(500, 0.0001));
+    });
+  });
+
+  group('percentLabel', () {
+    test('rounds to a whole percent', () {
+      expect(percentLabel(25, 100), '25%');
+    });
+
+    test('says under one percent rather than zero for something that is there', () {
+      expect(percentLabel(3, 1000), '<1%');
+    });
+
+    test('is zero for nothing, and for no total', () {
+      expect(percentLabel(0, 100), '0%');
+      expect(percentLabel(5, 0), '0%');
+    });
+  });
+
+  group('largestMods', () {
+    StorageItem folder(String id, int bytes, {bool linked = false}) => StorageItem(
+          id: id,
+          label: id,
+          path: '/lib/$id',
+          bytes: bytes,
+          kind: linked ? StorageItemKind.linked : StorageItemKind.modFolder,
+        );
+
+    StorageItem group(String uid, int bytes, int count) => StorageItem(
+          id: uid,
+          label: uid,
+          path: '/backups/$uid',
+          bytes: bytes,
+          fileCount: count,
+          kind: StorageItemKind.snapshotGroup,
+        );
+
+    String? uidOf(String folder) => {'Ellen': 'u-ellen', 'Nicole': 'u-nicole', 'Linked': 'u-linked'}[folder];
+
+    test('ranks the installed files plus the saved versions', () {
+      final ranked = largestMods(
+        [folder('Ellen', 100), folder('Nicole', 150)],
+        [group('u-ellen', 80, 2)],
+        uidOf,
+      );
+
+      expect(ranked.map((m) => m.item.id), ['Ellen', 'Nicole']);
+      expect(ranked.first.totalBytes, 180);
+      expect(ranked.first.savedCount, 2);
+    });
+
+    test('keeps the five largest', () {
+      final ranked = largestMods([for (var i = 1; i <= 8; i++) folder('m$i', i * 10)], const [], uidOf);
+
+      expect(ranked.map((m) => m.item.id), ['m8', 'm7', 'm6', 'm5', 'm4']);
+    });
+
+    test('a mod with no uid has no saved versions', () {
+      final ranked = largestMods([folder('Stray', 10)], [group('u-ellen', 80, 2)], uidOf);
+
+      expect(ranked.single.savedBytes, 0);
+      expect(ranked.single.savedCount, 0);
+    });
+
+    test('a mod that takes nothing is not listed', () {
+      expect(largestMods([folder('Empty', 0)], const [], uidOf), isEmpty);
+    });
+
+    test('a link is marked as one, and ranks on its saved versions alone', () {
+      final ranked = largestMods(
+        [folder('Linked', 0, linked: true), folder('Ellen', 50)],
+        [group('u-linked', 70, 1)],
+        uidOf,
+      );
+
+      expect(ranked.first.item.id, 'Linked');
+      expect(ranked.first.isLinked, isTrue);
     });
   });
 

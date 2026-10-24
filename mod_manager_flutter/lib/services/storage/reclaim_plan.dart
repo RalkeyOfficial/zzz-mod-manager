@@ -1,4 +1,4 @@
-/// What "free up space" is allowed to delete, decided without touching a disk.
+/// What a Storage action is allowed to delete, decided without touching a disk.
 ///
 /// Pure, and deliberately the whole of the safety argument: a planner over a
 /// list of records and a clock can be tested exhaustively, where the same rules
@@ -49,6 +49,9 @@ enum ReclaimSkipReason {
 
   /// The library could not be read, so what is reachable cannot be worked out.
   libraryUnreadable,
+
+  /// A mod in the library is linked to a folder that is missing, so it is absent from the library and what it owns would read as unclaimed.
+  libraryHasDeadLink,
 
   /// Not a file this app wrote.
   notOurs,
@@ -119,7 +122,8 @@ class ReclaimPlan {
           (entry.reason == ReclaimSkipReason.downloadsActive ||
               entry.reason == ReclaimSkipReason.installInProgress ||
               entry.reason == ReclaimSkipReason.downloadWaiting ||
-              entry.reason == ReclaimSkipReason.libraryUnreadable)) {
+              entry.reason == ReclaimSkipReason.libraryUnreadable ||
+              entry.reason == ReclaimSkipReason.libraryHasDeadLink)) {
         return entry.reason;
       }
     }
@@ -129,10 +133,7 @@ class ReclaimPlan {
 
 /// The thresholds, in one place so the doc comments sit next to the numbers.
 class ReclaimRules {
-  const ReclaimRules({
-    this.tempGrace = const Duration(hours: 1),
-    this.keepLogs = 7,
-  });
+  const ReclaimRules({this.tempGrace = const Duration(hours: 1)});
 
   /// How long an extraction directory must have been untouched.
   ///
@@ -145,9 +146,6 @@ class ReclaimRules {
   /// still writing megabytes underneath, so the outside looks idle exactly when
   /// the inside is busiest.
   final Duration tempGrace;
-
-  /// How many of this app's log files survive, not counting the running one.
-  final int keepLogs;
 }
 
 /// Decides the sweep.
@@ -177,8 +175,12 @@ class ReclaimRules {
 /// about to resume. If nothing is active, nothing can be resuming.
 ///
 /// Logs and leftovers are not gated on downloads at all.
+///
+/// Only the candidates of [targets] are planned: a category's action names the stores it may touch, and every other candidate is left out of the plan rather than recorded as skipped.
+/// Every gate applies to a target whichever action asks for it.
 ReclaimPlan planReclaim(
   List<ReclaimCandidate> inventory, {
+  required Set<ReclaimTarget> targets,
   required DateTime now,
   required bool downloadsBusy,
   required bool installBusy,
@@ -189,6 +191,9 @@ ReclaimPlan planReclaim(
   /// The uid of every mod in the library, or null when it could not be read.
   /// A saved-versions group not in here has no mod left to claim it.
   required Set<String>? claimedSnapshotUids,
+
+  /// What a target decided against the library says when it is refused for the library.
+  ReclaimSkipReason libraryProblem = ReclaimSkipReason.libraryUnreadable,
 
   /// The **basename** of this run's log file, which never goes.
   String? currentLogFile,
@@ -207,10 +212,10 @@ ReclaimPlan planReclaim(
   final logsToDrop = planLogReclaim(
     logCandidates.map((candidate) => candidate.name),
     current: currentLogFile,
-    keep: rules.keepLogs,
   ).toSet();
 
   for (final candidate in inventory) {
+    if (!targets.contains(candidate.target)) continue;
     switch (candidate.target) {
       case ReclaimTarget.completedArchives:
       case ReclaimTarget.abandonedPartials:
@@ -226,8 +231,7 @@ ReclaimPlan planReclaim(
         if (installBusy) {
           refuse(candidate, ReclaimSkipReason.installInProgress);
         } else if (downloadWaiting) {
-          // A waiting download's folders can be older than the grace below, and so can the folder its finish copies
-          // from after a long wait.
+          // A waiting download's folders can be older than the grace below, and so can the folder its finish copies from after a long wait.
           refuse(candidate, ReclaimSkipReason.downloadWaiting);
         } else if (now.difference(candidate.modified) < rules.tempGrace) {
           refuse(candidate, ReclaimSkipReason.tooRecent);
@@ -242,7 +246,7 @@ ReclaimPlan planReclaim(
         // image look unreachable and take the lot — so it is not swept at all
         // rather than swept against a list that cannot be trusted.
         if (!libraryReadable) {
-          refuse(candidate, ReclaimSkipReason.libraryUnreadable);
+          refuse(candidate, libraryProblem);
         } else if (reachableLegacyImages.contains(candidate.name)) {
           refuse(candidate, ReclaimSkipReason.stillReferenced);
         } else {
@@ -252,7 +256,7 @@ ReclaimPlan planReclaim(
       case ReclaimTarget.unclaimedSnapshots:
         // Same edge as the legacy images: an unreadable library makes every group look unclaimed.
         if (claimedSnapshotUids == null) {
-          refuse(candidate, ReclaimSkipReason.libraryUnreadable);
+          refuse(candidate, libraryProblem);
         } else if (claimedSnapshotUids.contains(candidate.name)) {
           refuse(candidate, ReclaimSkipReason.stillReferenced);
         } else {

@@ -20,7 +20,6 @@ import 'screens/settings_screen.dart';
 import 'screens/shell/app_sidebar.dart';
 import 'screens/shell/status_bar.dart';
 import 'screens/shell/title_bar.dart';
-import 'screens/storage_screen.dart';
 import 'screens/welcome_screen.dart';
 import 'screens/marketplace_screen.dart';
 import 'utils/state_providers.dart';
@@ -303,7 +302,6 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
                               AppDestination.allMods ||
                               AppDestination.updates => const ModsScreen(key: ValueKey('mods')),
                               AppDestination.browse => const MarketplaceScreen(key: ValueKey('marketplace')),
-                              AppDestination.storage => const StorageScreen(key: ValueKey('storage')),
                               AppDestination.settings => const SettingsScreen(key: ValueKey('settings')),
                             },
                           ),

@@ -14,7 +14,7 @@ doc. This file is the map; the rules that must never be missed are in the
 
 - **`main.dart`** — app entry. Initializes `window_manager` with a hidden title bar and wraps the app in a Riverpod `ProviderScope`.
   `MaterialApp.builder` puts `ZenithTitleBar` (`screens/shell/`) above every page, the first-run screen included, since nothing else can move the window.
-  `MainScreen` is `AppSidebar` + `AnimatedSwitcher` + `AppStatusBar`; the switcher shows the page for the `AppDestination` in `destinationProvider` (characters, all mods, updates, browse, storage, settings).
+  `MainScreen` is `AppSidebar` + `AnimatedSwitcher` + `AppStatusBar`; the switcher shows the page for the `AppDestination` in `destinationProvider` (characters, all mods, updates, browse, settings). Settings holds its own list of sections, Storage and About among them ([`configuration.md`](configuration.md) §5).
   Characters, All mods and Updates are the Library's three views and one page, `ModsScreen` under one key, so moving between them keeps it ([`library-screen.md`](library-screen.md) §1).
   **The pages are keyed children with no keep-alive**, so the inactive page's `State` is *disposed* — which is why nothing a page owns may be the only copy of something another surface needs.
   The library is the case that decided the rule: it belongs to `libraryProvider` (§3), not to the Library page.

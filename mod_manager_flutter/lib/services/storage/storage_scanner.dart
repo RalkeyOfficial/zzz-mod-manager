@@ -20,9 +20,7 @@ const String archiveExtractPrefix = 'zzz_archive_extract_';
 
 /// Measures what the app is storing.
 ///
-/// **No method here throws.** A category that could not be read comes back
-/// saying so, because the page has to draw the other five either way and a
-/// thrown exception would take the whole screen with it.
+/// **No method here throws.** A category that could not be read comes back saying so, because the section has to draw the other five either way and a thrown exception would take the whole screen with it.
 class StorageScanner {
   StorageScanner(this.roots, {SnapshotService? snapshots, PlatformService? platform})
       : _snapshots = snapshots,
@@ -32,11 +30,14 @@ class StorageScanner {
   final SnapshotService? _snapshots;
   final PlatformService? _platform;
 
-  /// The library walk, kept so [mods] and [sidecars] cost one traversal between
-  /// them however they are asked for. Two providers want two halves of one
-  /// answer, and walking a multi-gigabyte library twice to give it to them
-  /// would be the most expensive thing on the page.
+  /// The library walk, kept so [mods] and [sidecars] cost one traversal between them however they are asked for.
+  /// Two providers want two halves of one answer, and walking a multi-gigabyte library twice to give it to them would be the most expensive thing in the section.
   Future<List<ModFolderSize>?>? _library;
+
+  DateTime? _libraryMeasuredAt;
+
+  /// When the library walk finished, or null while it has not or the library could not be walked.
+  DateTime? get libraryMeasuredAt => _libraryMeasuredAt;
 
   /// The library's own files: everything under each mod folder **except** its
   /// `.zzz-mod-manager` sidecar, which is [sidecars].
@@ -91,14 +92,10 @@ class StorageScanner {
 
   /// Saved versions, from the manifests rather than a walk.
   ///
-  /// One `readdir` per group plus one small JSON each, against re-walking
-  /// gigabytes this app measured itself at capture time. Two things that buys
-  /// are the reason it is not a walk: the drill-down's dates, reasons and
-  /// version labels come free, and a page open costs milliseconds.
+  /// One `readdir` per group plus one small JSON each, against re-walking gigabytes this app measured itself at capture time.
+  /// Two things that buys are the reason it is not a walk: the drill-down's dates, reasons and version labels come free, and opening the section costs milliseconds.
   ///
-  /// What it trades: `manifest.json` itself is not counted (hundreds of bytes
-  /// per snapshot), and the figure drifts if someone edits `<appData>/backups`
-  /// by hand.
+  /// What it trades: `manifest.json` itself is not counted (hundreds of bytes per snapshot), and the figure drifts if someone edits `<appData>/backups` by hand.
   Future<StorageCategory> savedVersions() async {
     final snapshots = _snapshots;
     if (snapshots == null) {
@@ -180,8 +177,6 @@ class StorageScanner {
       roots.legacyImages,
       absentIsEmpty: true,
       kindOf: (_) => StorageItemKind.file,
-      detailKey: 'storage.item.legacy_image',
-      cap: 1 << 30,
     );
     items.addAll(legacy.items);
     unreadable += legacy.unreadableCount;
@@ -201,9 +196,6 @@ class StorageScanner {
             fileCount: size.fileCount,
             modified: await newestWriteWithin(entity),
             kind: StorageItemKind.directory,
-            // `zzz_archive_extract_7f3a` tells the reader nothing about what it
-            // is or why it is safe to remove.
-            detailKey: 'storage.item.extraction',
           ));
           unreadable += size.unreadable;
         }
@@ -264,7 +256,9 @@ class StorageScanner {
   /// not report `0 B`, because that reads as "your mods are gone".
   Future<List<ModFolderSize>?> _walkLibrary(Directory library) async {
     if (!await library.exists()) return null;
-    return Isolate.run(() => measureLibrarySync(library.path));
+    final measured = await Isolate.run(() => measureLibrarySync(library.path));
+    _libraryMeasuredAt = DateTime.now();
+    return measured;
   }
 
   StorageCategory _libraryUnavailable(StorageCategoryId id) {
@@ -279,9 +273,7 @@ class StorageScanner {
     StorageCategoryId id,
     Directory directory, {
     required StorageItemKind Function(String name) kindOf,
-    String? detailKey,
     bool absentIsEmpty = false,
-    int cap = 20,
   }) async {
     if (!await directory.exists()) {
       return absentIsEmpty
@@ -310,7 +302,6 @@ class StorageScanner {
             fileCount: 1,
             modified: stat.modified,
             kind: kindOf(name),
-            detailKey: detailKey,
           ));
         } catch (_) {
           unreadable++;
@@ -327,27 +318,24 @@ class StorageScanner {
       );
     }
 
-    return _build(id, items,
-        unreadable: unreadable, rootPath: directory.path, cap: cap);
+    return _build(id, items, unreadable: unreadable, rootPath: directory.path);
   }
 
+  /// Every item, largest first.
+  /// Nothing is folded away here: a caller that shows a short list folds it itself, and the ones that count items or look one up need all of them.
   StorageCategory _build(
     StorageCategoryId id,
     List<StorageItem> items, {
     int unreadable = 0,
     String? rootPath,
-    int cap = 20,
   }) {
-    final folded = foldTail(items, cap: cap);
     return StorageCategory(
       id: id,
       read: unreadable > 0 ? StorageRead.partial : StorageRead.ok,
       bytes: items.fold<int>(0, (sum, item) => sum + item.bytes),
       fileCount: items.fold<int>(0, (sum, item) => sum + item.fileCount),
       unreadableCount: unreadable,
-      items: folded.items,
-      tailBytes: folded.tailBytes,
-      tailCount: folded.tailCount,
+      items: [...items]..sort((a, b) => b.bytes.compareTo(a.bytes)),
       rootPath: rootPath,
     );
   }

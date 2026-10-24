@@ -28,10 +28,13 @@ ReclaimPlan plan(
   bool libraryReadable = true,
   Set<String> reachable = const <String>{},
   Set<String>? claimed = const <String>{},
+  ReclaimSkipReason problem = ReclaimSkipReason.libraryUnreadable,
   String? currentLog,
+  Set<ReclaimTarget>? targets,
 }) =>
     planReclaim(
       inventory,
+      targets: targets ?? ReclaimTarget.values.toSet(),
       now: now,
       downloadsBusy: downloadsBusy,
       installBusy: installBusy,
@@ -39,10 +42,45 @@ ReclaimPlan plan(
       libraryReadable: libraryReadable,
       reachableLegacyImages: reachable,
       claimedSnapshotUids: claimed,
+      libraryProblem: problem,
       currentLogFile: currentLog,
     );
 
 void main() {
+  group('the targets asked for', () {
+    final inventory = [
+      candidate(ReclaimTarget.completedArchives, 'mod.rar'),
+      candidate(ReclaimTarget.abandonedPartials, 'old.rar.part'),
+      candidate(ReclaimTarget.legacyImages, 'Gone.png'),
+      candidate(ReclaimTarget.unclaimedSnapshots, 'dead', isDirectory: true),
+      candidate(ReclaimTarget.tempExtracts, 'zzz_archive_extract_a', isDirectory: true),
+    ];
+
+    test('only their candidates are planned, and the rest are not even recorded as skipped', () {
+      final result = plan(inventory, targets: {ReclaimTarget.legacyImages, ReclaimTarget.tempExtracts});
+
+      expect(result.remove.map((c) => c.target).toSet(), {ReclaimTarget.legacyImages, ReclaimTarget.tempExtracts});
+      expect(result.skip, isEmpty);
+    });
+
+    test('no targets plan nothing', () {
+      expect(plan(inventory, targets: const {}).remove, isEmpty);
+    });
+
+    test('a gate applies to a target whichever action asks for it', () {
+      final result = plan(
+        inventory,
+        targets: {ReclaimTarget.completedArchives, ReclaimTarget.legacyImages},
+        downloadsBusy: true,
+        libraryReadable: false,
+      );
+
+      expect(result.remove, isEmpty);
+      expect(result.refusalFor(ReclaimTarget.completedArchives), ReclaimSkipReason.downloadsActive);
+      expect(result.refusalFor(ReclaimTarget.legacyImages), ReclaimSkipReason.libraryUnreadable);
+    });
+  });
+
   group('the download gate', () {
     test('an idle queue lets archives and partials go', () {
       final result = plan([
@@ -222,6 +260,17 @@ void main() {
       expect(result.skip.single.reason, ReclaimSkipReason.stillReferenced);
     });
 
+    test('a library with a dead link refuses them under its own reason', () {
+      final result = plan(
+        [candidate(ReclaimTarget.legacyImages, 'Ellen.png')],
+        libraryReadable: false,
+        problem: ReclaimSkipReason.libraryHasDeadLink,
+      );
+
+      expect(result.remove, isEmpty);
+      expect(result.refusalFor(ReclaimTarget.legacyImages), ReclaimSkipReason.libraryHasDeadLink);
+    });
+
     test('an unreadable library sweeps none of them', () {
       // The sharpest edge in the feature: reachability is decided against the
       // library, so an empty or unreadable one makes every image look dead and
@@ -248,16 +297,9 @@ void main() {
             candidate(ReclaimTarget.oldLogs, logFileName(DateTime(2026, 1, i + 1))),
         ];
 
-    test('the seven newest are kept and the rest go', () {
-      final result = plan(logs(10));
-
-      expect(result.forTarget(ReclaimTarget.oldLogs).length, 3);
-    });
-
-    test('seven or fewer means nothing goes', () {
-      final result = plan(logs(7));
-
-      expect(result.forTarget(ReclaimTarget.oldLogs), isEmpty);
+    test('every log goes, however few there are', () {
+      expect(plan(logs(10)).forTarget(ReclaimTarget.oldLogs).length, 10);
+      expect(plan(logs(2)).forTarget(ReclaimTarget.oldLogs).length, 2);
     });
 
     test('the running session\'s own log is never deleted', () {
@@ -273,6 +315,7 @@ void main() {
         result.forTarget(ReclaimTarget.oldLogs).map((c) => c.name),
         isNot(contains(current)),
       );
+      expect(result.forTarget(ReclaimTarget.oldLogs).length, 9);
       expect(
         result.skip.any((s) => s.reason == ReclaimSkipReason.currentSession),
         isTrue,

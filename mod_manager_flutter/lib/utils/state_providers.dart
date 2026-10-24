@@ -10,12 +10,14 @@ import '../core/constants.dart';
 import '../core/palette.dart';
 import '../models/character_info.dart';
 import '../services/api_service.dart';
+import '../services/app_update_service.dart';
 import '../services/bulk_assume_current.dart';
 import '../services/bulk_resolution.dart';
 import '../models/gamebanana/gb_enums.dart';
 import '../models/gamebanana/gb_mod.dart';
 import '../services/gamebanana/content_filter.dart';
 import '../services/gamebanana/gamebanana_client.dart';
+import '../services/backup/retention.dart';
 import '../services/backup/snapshot_service.dart';
 import '../services/bulk_update_check.dart';
 import '../services/download_names.dart';
@@ -88,7 +90,7 @@ final gameBananaClientProvider = Provider<GameBananaClient>((ref) {
 
 // `downloadQueueProvider` and `downloadServiceProvider` live in
 // `services/download/download_queue.dart`, for the same reason the notification
-// stack lives in `notifications.dart`. The Storage tab's providers live in
+// stack lives in `notifications.dart`. The Storage section's providers live in
 // `services/storage/storage_providers.dart` on the same terms — they are one
 // feature's state, and holding them here would pull the whole storage service
 // graph into this file's imports.
@@ -258,7 +260,15 @@ final installedModsIndexProvider =
 
 /// The pages the sidebar switches between. [characters], [allMods] and [updates] are the Library's three views, one
 /// page that stays mounted between them.
-enum AppDestination { characters, allMods, updates, browse, storage, settings }
+enum AppDestination { characters, allMods, updates, browse, settings }
+
+/// The sections of the Settings page, in the order its side list shows them. Every section but [storage] and [about]
+/// shares one scrolling page that the list scrolls to; those two each take the page's whole width.
+enum SettingsSection { folders, launching, mods, gamebanana, storage, appearance, about }
+
+/// The Settings section in view, or being asked for: a card's Open Settings sets it before it sets
+/// [destinationProvider], and the page scrolls to it.
+final settingsSectionProvider = StateProvider<SettingsSection>((ref) => SettingsSection.folders);
 
 /// The page the main area shows. Its pages are keyed `AnimatedSwitcher` children
 /// with no keep-alive, so the page left behind is disposed.
@@ -411,7 +421,7 @@ final currentCharacterSkinsProvider = Provider<List<ModInfo>>((ref) {
   ];
 });
 
-/// How much a mod's own files take, its sidecar left out as the Storage page leaves it out of Mods
+/// How much a mod's own files take, its sidecar left out as the Storage section leaves it out of Mods
 /// (`docs/disk-usage.md`). Null while there is no library to look in.
 ///
 /// Measured on demand for the mods on screen, off the UI isolate, and again when the mod changes; a walk is
@@ -627,14 +637,19 @@ final modNotesProvider = StateProvider<Map<String, String>>((ref) => const {});
 /// `ApiService.initialize`, written through `ApiService.setOneAtATime`. Read through [isOneAtATime].
 final oneAtATimeProvider = StateProvider<Map<String, bool>>((ref) => const {});
 
+/// The One at a time default for every character the user hasn't switched: Settings' "One active mod per character".
+/// Hydrated in `ApiService.initialize`, written through `ApiService.setOneAtATimeDefault`.
+final oneAtATimeDefaultProvider = StateProvider<bool>((ref) => true);
+
 /// Whether [groupId] has a One at a time switch at all: unassigned mods belong to no one character, so there are no
 /// "others" to turn off (`docs/library-screen.md` §10).
 bool hasOneAtATime(String groupId) => groupId != unknownCharacterId;
 
-/// The switch's state for [groupId]: the user's choice, or the default, on for agents and off for categories.
-bool isOneAtATime(Map<String, bool> choices, String groupId) {
+/// The switch's state for [groupId]: the user's choice, or the default. The default is [agentsDefault] for a
+/// character and off for a category.
+bool isOneAtATime(Map<String, bool> choices, String groupId, {required bool agentsDefault}) {
   if (!hasOneAtATime(groupId)) return false;
-  return choices[groupId] ?? !isBuiltInCategory(groupId);
+  return choices[groupId] ?? (!isBuiltInCategory(groupId) && agentsDefault);
 }
 
 /// The mods turning [mod] on turns off: with its group's One at a time on, every other mod of the group that is on.
@@ -647,9 +662,10 @@ Set<String> modsToSwitchOff(
   ModInfo mod,
   Map<String, bool> oneAtATime, {
   Set<String> beingWritten = const {},
+  required bool agentsDefault,
 }) {
   final group = libraryGroupOf(mod.characterId);
-  if (mod.isActive || !isOneAtATime(oneAtATime, group)) return const {};
+  if (mod.isActive || !isOneAtATime(oneAtATime, group, agentsDefault: agentsDefault)) return const {};
   return {
     for (final other in library)
       if ((other.isActive || beingWritten.contains(other.id)) &&
@@ -738,7 +754,7 @@ final wineRunnerProvider = StateProvider<String>((ref) => '');
 /// Linux only: whether a Proton runner starts through umu-launcher rather than directly. On by default.
 final wineUseUmuProvider = StateProvider<bool>((ref) => true);
 
-/// The Wine and Proton builds on this machine, for Settings › Wine or Proton. Looked for again each time Settings
+/// The Wine and Proton builds on this machine, for Settings › Launching › Proton. Looked for again each time Settings
 /// opens, so a build installed meanwhile shows up.
 final wineRunnersProvider = FutureProvider.autoDispose<List<WineRunner>>(
   (ref) => PlatformServiceFactory.getInstance().findWineRunners(),
@@ -1213,7 +1229,20 @@ final libraryHasUpdatesProvider = Provider<bool>((ref) {
 /// config, so it needs no async initialisation — the path comes from
 /// [PathHelper], the same way the downloads folder does.
 final snapshotServiceProvider = Provider<SnapshotService>(
-  (ref) => SnapshotService(),
+  (ref) => SnapshotService(policy: RetentionPolicy(keepPerMod: ref.watch(snapshotsToKeepProvider))),
+);
+
+/// How many saved versions each mod keeps: Settings' "Snapshots to keep". Hydrated in `ApiService.initialize`,
+/// written through `ApiService.setSnapshotsToKeep`. A lower number clears the extra ones the next time a saved
+/// version is taken.
+final snapshotsToKeepProvider = StateProvider<int>((ref) => defaultSnapshotsToKeep);
+
+/// Whether a mod turned on or off while the game runs says to press F10: Settings' "Remind me to press F10".
+final remindF10Provider = StateProvider<bool>((ref) => true);
+
+/// Asks whether the game is running, as `PlatformService.isGameRunning`. A provider so a test can answer for it.
+final isGameRunningProvider = Provider<Future<bool> Function()>(
+  (ref) => () => PlatformServiceFactory.getInstance().isGameRunning(),
 );
 
 /// Which mods have a snapshot to roll back to, **by uid**.
@@ -1312,3 +1341,10 @@ final modSnapshotsProvider = FutureProvider.autoDispose.family<List<SnapshotEntr
       ),
   ];
 });
+
+/// Asks GitHub whether the app has a newer release. Overridden in tests with one that has no network.
+final appUpdateServiceProvider = Provider<AppUpdateService>((ref) => AppUpdateService());
+
+/// The answer to the last press of About's Check for updates, kept for the session so it survives leaving the page.
+/// Null until the first press (`docs/app-updates.md`).
+final appUpdateResultProvider = StateProvider<AppUpdateResult?>((ref) => null);

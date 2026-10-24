@@ -98,22 +98,16 @@ void main() {
   });
 
   group('planLogReclaim', () {
-    test('reserves no room, because nothing is about to be opened', () {
-      // The difference from rotation, and an off-by-one the other way: asked
-      // to keep 7 with 7 present, a mid-session prune deletes none.
-      final names = [for (var h = 1; h <= 7; h++) at(h)];
+    test('takes every file but the running one, however few there are', () {
+      final names = [for (var h = 1; h <= 3; h++) at(h)];
 
-      expect(planLogReclaim(names, keep: 7), isEmpty);
-      expect(planLogRotation(names, keep: 7), hasLength(1));
+      expect(planLogReclaim(names, current: at(3)), [at(1), at(2)]);
     });
 
-    test('drops the oldest beyond the cap', () {
+    test('takes the whole folder when nothing is running', () {
       final names = [for (var h = 1; h <= 10; h++) at(h)];
 
-      final deleted = planLogReclaim(names, keep: 7);
-
-      expect(deleted, hasLength(3));
-      expect(deleted, containsAll([at(1), at(2), at(3)]));
+      expect(planLogReclaim(names), hasLength(10));
     });
 
     test('never the running session, even when it is the oldest', () {
@@ -122,22 +116,16 @@ void main() {
       // run they are about to report a problem from.
       final names = [for (var h = 1; h <= 10; h++) at(h)];
 
-      final deleted = planLogReclaim(names, current: at(1), keep: 7);
+      final deleted = planLogReclaim(names, current: at(1));
 
       expect(deleted, isNot(contains(at(1))));
-    });
-
-    test('the running session does not use up a slot', () {
-      final names = [for (var h = 1; h <= 8; h++) at(h)];
-
-      // Seven others plus the current one: the seven stay.
-      expect(planLogReclaim(names, current: at(8), keep: 7), isEmpty);
+      expect(deleted, hasLength(9));
     });
 
     test('leaves a file we did not write where it is', () {
       final names = [for (var h = 1; h <= 10; h++) at(h), 'notes.txt'];
 
-      expect(planLogReclaim(names, keep: 7), isNot(contains('notes.txt')));
+      expect(planLogReclaim(names), isNot(contains('notes.txt')));
     });
   });
 }

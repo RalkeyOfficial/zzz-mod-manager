@@ -99,7 +99,7 @@ class FileLogSink implements LogSink {
   FileLogSink({
     required this.directory,
     required DateTime Function() now,
-    this.keep = 7,
+    this.keep = keptLogFiles,
     this.maxBytes = 16 * 1024 * 1024,
     String? lineEnding,
     IOSink Function(File file)? openSink,
@@ -266,7 +266,7 @@ class FileLogSink implements LogSink {
 
 IOSink _defaultOpen(File file) => file.openWrite(mode: FileMode.writeOnlyAppend);
 
-/// Keeps the last [capacity] lines in memory, for "Copy diagnostics".
+/// Keeps the last [capacity] lines in memory, for System info > Copy in About.
 ///
 /// Holds **rendered, redacted lines** rather than records, so what reaches the
 /// clipboard is censored by the same single guarantee as the file rather than by

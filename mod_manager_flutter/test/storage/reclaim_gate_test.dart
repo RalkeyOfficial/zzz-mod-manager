@@ -7,6 +7,7 @@ import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
 import 'package:mod_manager_flutter/services/download/download_job.dart';
 import 'package:mod_manager_flutter/services/download/download_queue.dart';
 import 'package:mod_manager_flutter/services/download/download_request.dart';
+import 'package:mod_manager_flutter/services/log/log_rotation.dart';
 import 'package:mod_manager_flutter/services/storage/reclaim_plan.dart';
 import 'package:mod_manager_flutter/services/storage/storage_providers.dart';
 import 'package:mod_manager_flutter/services/storage/storage_roots.dart';
@@ -59,9 +60,7 @@ void main() {
     ]);
     addTearDown(container.dispose);
 
-    // Built first: a press while its build is loading is taken for a press while a sweep runs.
-    await container.read(reclaimControllerProvider.future);
-    await container.read(reclaimControllerProvider.notifier).run();
+    await container.read(reclaimControllerProvider.notifier).run({ReclaimTarget.tempExtracts});
     final outcome = container.read(reclaimControllerProvider).requireValue!;
     final temp = outcome.targets.where((result) => result.target == ReclaimTarget.tempExtracts).firstOrNull;
     return (unpack.existsSync(), temp?.refusal);
@@ -79,6 +78,26 @@ void main() {
 
     expect(kept, isTrue);
     expect(refusal, ReclaimSkipReason.installInProgress);
+  });
+
+  test('a second press while a sweep runs is refused rather than run beside it', () async {
+    File(path.join(root.path, 'appdata', 'logs', logFileName(DateTime(2026, 1, 1))))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('log');
+    final container = ProviderContainer(overrides: [
+      storageRootsProvider.overrideWithValue(roots()),
+      downloadQueueProvider.overrideWith(() => _SeededQueue(const [])),
+      libraryOf(const []),
+    ]);
+    addTearDown(container.dispose);
+    final notifier = container.read(reclaimControllerProvider.notifier);
+
+    final first = notifier.run({ReclaimTarget.oldLogs});
+    final second = notifier.run({ReclaimTarget.oldLogs});
+
+    expect(await second, isNull, reason: 'the first is still deleting, so a second would plan against what it removes');
+    expect((await first)!.removedCount, 1);
+    expect(container.read(reclaimControllerProvider).isLoading, isFalse);
   });
 
   test('a finished download uses nothing, so an abandoned unpack goes', () async {

@@ -75,7 +75,17 @@ class ModHistoryTab extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 12,
       children: [
-        PageHeading(loc.t('library.history.installed_files'), aside: loc.t('library.history.retention')),
+        PageHeading(
+          loc.t('library.history.installed_files'),
+          aside: loc.t('library.history.retention', params: {'count': '${ref.watch(snapshotsToKeepProvider)}'}),
+          asideLink: (
+            label: loc.t('library.history.retention_change'),
+            onTap: () {
+              ref.read(settingsSectionProvider.notifier).state = SettingsSection.mods;
+              ref.read(destinationProvider.notifier).state = AppDestination.settings;
+            },
+          ),
+        ),
         _Box(
           children: [
             _CurrentRow(mod: mod, records: records, onReinstall: unlessBusy(onReinstall)),

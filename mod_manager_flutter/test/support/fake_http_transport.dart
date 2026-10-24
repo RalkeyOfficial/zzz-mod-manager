@@ -14,6 +14,9 @@ class FakeHttpTransport implements HttpTransport {
   /// The headers sent with each request, index-aligned with [requests].
   final List<Map<String, String>> sentHeaders = <Map<String, String>>[];
 
+  /// The timeout passed with each request, index-aligned with [requests].
+  final List<Duration> sentTimeouts = <Duration>[];
+
   final Map<String, List<_Scripted>> _queues = <String, List<_Scripted>>{};
   _Scripted? _fallback;
 
@@ -78,6 +81,7 @@ class FakeHttpTransport implements HttpTransport {
   }) async {
     requests.add(url);
     sentHeaders.add(Map<String, String>.from(headers));
+    sentTimeouts.add(timeout);
 
     final queue = _queues[_key(url)];
     final scripted = _next(queue) ?? _fallback;

@@ -75,6 +75,7 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     required this.menu,
     required this.chip,
     required this.track,
+    required this.barTrack,
     required this.divider,
     required this.rowDivider,
     required this.outline,
@@ -126,6 +127,9 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     required this.coverageWhich,
     required this.hatch,
     required this.infoWash,
+    required this.sectionSelected,
+    required this.sectionHover,
+    required this.storageCategories,
   });
 
   final Brightness brightness;
@@ -164,6 +168,10 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
 
   /// The track of a switch that is off.
   final Color track;
+
+  /// The empty part of a bar: the Largest mods bars and the storage meter's placeholder.
+  /// Drawn on [field] and [card], so it is a step off both on paper, where [raised] is the same colour as [field].
+  final Color barTrack;
 
   /// Between the chrome and the page.
   final Color divider;
@@ -282,7 +290,8 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
   /// The scrim over the page behind the Downloads panel, lighter than a dialog's [overlay].
   final Color downloadsScrim;
 
-  /// The shadow the Downloads panel casts over the page to its left.
+  /// The shadow the Downloads panel casts over the page to its left, and the one under the Storage meter's tooltip
+  /// and About's logo.
   final Color downloadsShadow;
 
   /// The note that explains a missing mod folder.
@@ -304,6 +313,14 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
   /// The top of an information card's wash, fading into [card].
   final Color infoWash;
 
+  /// The section on show in Settings' list of sections, and the one under the pointer.
+  final Color sectionSelected;
+  final Color sectionHover;
+
+  /// The six categories of Settings' Storage section, in the canvas's order: installed mods, saved versions,
+  /// leftovers, downloads, covers & metadata, logs. The same in both themes, as the canvas draws them.
+  final List<Color> storageCategories;
+
   /// The accent washed into the card, behind something focused.
   Color get accentWash => Color.lerp(card, accent, 0.14)!;
 
@@ -324,6 +341,15 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
   /// The app's palette, or the default dark one where no app theme is installed (a bare test harness).
   static ZenithPalette of(BuildContext context) =>
       Theme.of(context).extension<ZenithPalette>() ?? ZenithPalette.dark(AccentChoice.violet);
+
+  static const List<Color> _storageCategories = [
+    Color(0xFF3987E5),
+    Color(0xFFD95926),
+    Color(0xFF199E70),
+    Color(0xFFC98500),
+    Color(0xFFD55181),
+    Color(0xFF008300),
+  ];
 
   factory ZenithPalette.forBrightness(Brightness brightness, AccentChoice accent) =>
       brightness == Brightness.dark ? ZenithPalette.dark(accent) : ZenithPalette.light(accent);
@@ -354,6 +380,7 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       menu: const Color(0xFF17191D),
       chip: const Color(0xFF15171A),
       track: const Color(0xFF22252A),
+      barTrack: const Color(0xFF1A1C20),
       divider: const Color(0xFF1E2024),
       rowDivider: const Color(0xFF1A1C20),
       outline: const Color(0xFF23262B),
@@ -429,6 +456,9 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       coverageWhich: const Color(0xFF3D7BC0),
       hatch: const TonePair(Color(0xFF16181B), Color(0xFF2A2D33)),
       infoWash: const Color(0xFF0D1926),
+      sectionSelected: const Color(0xFF16181C),
+      sectionHover: const Color(0xFF141619),
+      storageCategories: _storageCategories,
     );
   }
 
@@ -477,6 +507,7 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       menu: const Color(0xFFFDFBF8),
       chip: const Color(0xFFF8F5F1),
       track: const Color(0xFFE2DBD3),
+      barTrack: const Color(0xFFE2DBD3),
       divider: const Color(0xFFDCD5CD),
       rowDivider: const Color(0xFFE9E3DC),
       outline: const Color(0xFFDCD5CD),
@@ -547,6 +578,9 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       coverageWhich: const Color(0xFF5B93D6),
       hatch: const TonePair(Color(0xFFF2EDE7), Color(0xFFD3CBC2)),
       infoWash: const Color(0xFFE4EDF8),
+      sectionSelected: const Color(0xFFF8F5F1),
+      sectionHover: const Color(0xFFF2EDE7),
+      storageCategories: _storageCategories,
     );
   }
 
@@ -565,6 +599,7 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     menu: menu,
     chip: chip,
     track: track,
+    barTrack: barTrack,
     divider: divider,
     rowDivider: rowDivider,
     outline: outline,
@@ -616,6 +651,9 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     coverageWhich: coverageWhich,
     hatch: hatch,
     infoWash: infoWash,
+    sectionSelected: sectionSelected,
+    sectionHover: sectionHover,
+    storageCategories: storageCategories,
   );
 
   @override
@@ -636,6 +674,7 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       menu: c(menu, other.menu),
       chip: c(chip, other.chip),
       track: c(track, other.track),
+      barTrack: c(barTrack, other.barTrack),
       divider: c(divider, other.divider),
       rowDivider: c(rowDivider, other.rowDivider),
       outline: c(outline, other.outline),
@@ -693,6 +732,11 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       coverageWhich: c(coverageWhich, other.coverageWhich),
       hatch: TonePair.lerp(hatch, other.hatch, t),
       infoWash: c(infoWash, other.infoWash),
+      sectionSelected: c(sectionSelected, other.sectionSelected),
+      sectionHover: c(sectionHover, other.sectionHover),
+      storageCategories: [
+        for (var i = 0; i < storageCategories.length; i++) c(storageCategories[i], other.storageCategories[i]),
+      ],
     );
   }
 }

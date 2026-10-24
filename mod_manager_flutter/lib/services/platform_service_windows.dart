@@ -276,30 +276,19 @@ class WindowsPlatformService implements PlatformService {
   }
   
   @override
-  Future<List<String>> findGameProcesses() async {
+  Future<bool> isGameRunning() async {
     try {
-      // Використовуємо tasklist для пошуку процесів
-      final result = await Process.run('tasklist', ['/FI', 'IMAGENAME eq ZenlessZoneZero.exe']);
-      final processes = <String>[];
-      
-      if (result.exitCode == 0) {
-        final lines = result.stdout.toString().split('\n');
-        for (final line in lines) {
-          if (line.toLowerCase().contains('zenless') || 
-              line.toLowerCase().contains('zzz')) {
-            processes.add(line.trim());
-          }
-        }
-      }
-      
-      _log.debug('game processes', fields: {'found': processes.length});
-      return processes;
+      final result = await Process.run('tasklist', ['/FI', 'IMAGENAME eq ZenlessZoneZero.exe', '/NH']);
+      return result.exitCode == 0 && tasklistShowsGame(result.stdout.toString());
     } catch (error, stack) {
-      _log.warning('could not list processes', error: error, stack: stack);
-      return [];
+      _log.warning('could not look for the game', error: error, stack: stack);
+      return false;
     }
   }
-  
+
+  @override
+  Future<String?> findUmuRun() async => null;
+
   @override
   String getDisplayServerType() {
     // Windows завжди використовує DWM (Desktop Window Manager)
@@ -488,6 +477,9 @@ class WindowsPlatformService implements PlatformService {
 
   @override
   String? get osUserName => Platform.environment['USERNAME'];
+
+  @override
+  String get platformName => 'Windows';
 
   /// `USERPROFILE` — `C:\Users\<name>`, the prefix of both the library paths a
   /// user picks and `%APPDATA%`, which is why censoring it covers nearly every

@@ -32,7 +32,7 @@ class BulkEnablePlan {
 }
 
 /// Plans turning [selected] on. A mod already on is left as it is.
-BulkEnablePlan planBulkEnable(List<ModInfo> selected, Map<String, bool> oneAtATime) {
+BulkEnablePlan planBulkEnable(List<ModInfo> selected, Map<String, bool> oneAtATime, {required bool agentsDefault}) {
   final off = selected.where((m) => !m.isActive).toList();
   final byGroup = <String, List<ModInfo>>{};
   for (final mod in off) {
@@ -40,7 +40,7 @@ BulkEnablePlan planBulkEnable(List<ModInfo> selected, Map<String, bool> oneAtATi
   }
   final leftOff = {
     for (final entry in byGroup.entries)
-      if (entry.value.length > 1 && isOneAtATime(oneAtATime, entry.key)) entry.key: entry.value,
+      if (entry.value.length > 1 && isOneAtATime(oneAtATime, entry.key, agentsDefault: agentsDefault)) entry.key: entry.value,
   };
   return BulkEnablePlan(
     enable: [for (final mod in off) if (!leftOff.containsKey(libraryGroupOf(mod.characterId))) mod],
@@ -110,7 +110,11 @@ void _endBulk(
 Future<void> bulkEnable(BuildContext context, ProviderContainer container, List<ModInfo> selected) async {
   final loc = context.loc;
   final notify = context.notify;
-  final plan = planBulkEnable(selected, container.read(oneAtATimeProvider));
+  final plan = planBulkEnable(
+    selected,
+    container.read(oneAtATimeProvider),
+    agentsDefault: container.read(oneAtATimeDefaultProvider),
+  );
   _log.info('bulk enable', fields: {
     'mods': plan.enable.length,
     'left_off': plan.leftOff.values.fold<int>(0, (sum, mods) => sum + mods.length),
@@ -137,6 +141,7 @@ Future<void> bulkEnable(BuildContext context, ProviderContainer container, List<
           mod,
           container.read(oneAtATimeProvider),
           beingWritten: container.read(modWritesInProgressProvider),
+          agentsDefault: container.read(oneAtATimeDefaultProvider),
         );
         bool done;
         try {

@@ -347,6 +347,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
         mod,
         container.read(oneAtATimeProvider),
         beingWritten: container.read(modWritesInProgressProvider),
+        agentsDefault: container.read(oneAtATimeDefaultProvider),
       );
       final failedTitle = loc.t(turnOn ? 'library.card.enable_failed_title' : 'library.card.disable_failed_title');
       final done = turnOn
@@ -377,6 +378,9 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
               candidate,
         ]);
       }
+      if (container.read(remindF10Provider)) {
+        unawaited(_remindF10(container, notify, loc, mod, turnedOn: turnOn, switchedOthersOff: switchOff.isNotEmpty));
+      }
     } on ShaderPlacementRefused catch (refusal) {
       reportShaderRefusal(loc, notify, refusal, characterId: mod.characterId, container: container);
       // The dry run passed and the enable was still refused, possibly after
@@ -394,6 +398,38 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       ]);
       await reload();
     }
+  }
+
+  /// Says to press F10 after [mod] was turned on or off, when the game is running: the game only picks the change up
+  /// then. Undo presses the switch again, in [toggleMod]'s own queue so it lands after any press still waiting. A press
+  /// that turned the character's other mods off has no Undo, since pressing back would leave none of them on.
+  Future<void> _remindF10(
+    ProviderContainer container,
+    NotificationCenter notify,
+    AppLocalizations loc,
+    ModInfo mod, {
+    required bool turnedOn,
+    required bool switchedOthersOff,
+  }) async {
+    if (!await container.read(isGameRunningProvider)()) return;
+    notify.note(
+      loc.t(turnedOn ? 'notifications.f10.on_title' : 'notifications.f10.off_title', params: {'name': mod.name}),
+      body: loc.t('notifications.f10.body'),
+      keycap: 'F10',
+      characterId: mod.characterId,
+      actions: [
+        if (!switchedOthersOff)
+          undoAction(loc, () {
+            // The switches stand still while a bulk action runs, and so does this.
+            if (container.read(allModsBulkRunningProvider)) return;
+            unawaited(
+              container
+                  .read(libraryTogglesProvider.notifier)
+                  .run(mod.id, () => _toggle(container, notify, loc, mod.id, turnOn: !turnedOn)),
+            );
+          }),
+      ],
+    );
   }
 
   /// Whether a bulk action is turning mods on or off, so the switches are greyed out.

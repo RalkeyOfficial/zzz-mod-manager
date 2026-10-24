@@ -57,9 +57,8 @@ class StorageRoots {
 
   final Directory backups;
 
-  /// Where archive extraction unpacks. On most Linux desktops this is tmpfs,
-  /// so what leaks here costs RAM rather than disk — which the page has to say
-  /// rather than fold into a disk figure.
+  /// Where archive extraction unpacks.
+  /// On most Linux desktops this is tmpfs, so what leaks here costs RAM rather than disk — which the section has to say rather than fold into a disk figure.
   final Directory temp;
 
   /// Null when no library is configured. Distinct from a configured path that

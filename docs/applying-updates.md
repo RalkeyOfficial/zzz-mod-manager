@@ -570,8 +570,8 @@ A snapshot answers "put this mod back as it was". Taking a patch out asks
 something narrower and needs to answer it **years later**: give me back the
 handful of the mod's own files this patch wrote over. A snapshot cannot be relied
 on for that, because retention will eventually eat it — only the *newest* per mod
-is protected, so the pre-patch one is prunable the moment a later snapshot
-exists.
+is protected whatever the count, so the pre-patch one is prunable the moment
+enough later snapshots exist.
 
 So `applyPatchInto` keeps each displaced file on its own, under the mod folder:
 
@@ -690,21 +690,14 @@ before the update.
 
 ### Retention
 
-`services/backup/retention.dart` is pure and takes an injected clock. Three numbers:
-**30 days**, **3 per mod**, **5 GB total**.
+`services/backup/retention.dart` is pure. Two numbers: **how many snapshots each mod keeps**, which the user sets in Settings' Mods section (1 to 10, **3** until changed), and a **5 GB total** budget that is fixed.
 
-**Retention has to outlive *discovery*, which is a stronger constraint than any cap.**
-None of the accepted losses announce themselves during the update. They surface the
-next time the user launches the game and finds a hotkey dead or a texture back to
-default — plausibly days and several further updates later. So "keep the newest
-snapshot per mod" throws away exactly the one they come looking for.
+**A mod keeps exactly its newest N snapshots, however recent the older ones are.** The count is the user's to set: the setting is one number with a sentence saying what it keeps, and the History tab's line states it with a link to the setting.
+The accepted losses of an update (a reverted keybind, an overwritten patch, a hand edit) surface the next time the user launches the game, plausibly days and several updates later, so a user who wants to be able to go back that far raises the number. At the default of 3, an older snapshot is gone as soon as three newer ones exist.
 
-**The age floor beats the count cap, and where they conflict, age wins.** The cap is
-also **size-aware rather than purely count-based**: the median mod archive is ~22 MB,
-so three per mod costs almost every library nothing, but the tail reaches 1.24 GB and
-a handful of those quietly eat several gigabytes.
+The budget is **size-aware rather than count-based**: the median mod archive is ~22 MB, so three per mod costs almost every library nothing, but the tail reaches 1.24 GB and a handful of those quietly eat several gigabytes. A count cannot bound that, so the budget is applied *after* the count rather than instead of it.
 
-Deletion walks four tiers in order and stops as soon as the budget is met:
+Deletion walks three tiers in order and stops as soon as the budget is met:
 
 Grouping is **per uid**, not per folder name — so a mod renamed between two updates
 is one mod here rather than two, each keeping a tier-0 entry of its own forever.
@@ -712,11 +705,12 @@ is one mod here rather than two, each keeping a tier-0 entry of its own forever.
 | Tier | What | When it is pruned |
 |---|---|---|
 | 0 | the newest snapshot of each mod | **never** |
-| 1 | beyond the count cap **and** older than the age floor | unconditionally |
-| 2 | beyond the count cap, inside the age floor | only under size pressure, oldest first |
-| 3 | inside the count cap | only after tier 2, oldest first |
+| 1 | beyond the count | unconditionally |
+| 2 | inside the count, not the newest | only under size pressure, oldest first |
 
-If the budget is still exceeded after tier 3, the plan **reports the overage**
+A lower count takes effect the next time a snapshot is taken, since that is when pruning runs; changing the number deletes nothing by itself.
+
+If the budget is still exceeded after tier 2, the plan **reports the overage**
 (`RetentionPlan.overBudgetBytes`) rather than reaching into tier 0. A user with one
 1.2 GB mod is over any sane budget by keeping a single snapshot of it, and the honest
 answer is to say so, not to leave them with no rollback.
@@ -733,7 +727,7 @@ into several folders prunes between them rather than once at the end
 ([§4](#one-archive-several-mods-one-download)), and that a rollback's own safety copy
 is pruned on the same terms as any other.
 
-The numbers are **not user-configurable**; add a setting only if it is actually asked for. A setting like this is easy to add and hard to remove, and if one is ever exposed the screen has to keep the age floor beating the count cap, never show them as two independent numbers that invite the configuration this section argues against.
+The count is configurable and the budget is not. There is no separate age number: a mod that is not touched for months keeps its saved versions, and a mod that is updated often loses its oldest ones sooner, which is what a count means.
 
 ### Rollback
 

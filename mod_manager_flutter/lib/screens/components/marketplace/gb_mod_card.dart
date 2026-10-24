@@ -11,7 +11,7 @@ import '../../../services/gamebanana/file_selection.dart';
 import '../../../services/update_check.dart';
 import '../../../utils/marketplace_providers.dart';
 import '../../../utils/notifications.dart';
-import '../../../utils/relative_time.dart';
+import '../../../utils/relative_age.dart';
 import '../../../utils/state_providers.dart';
 import '../../dialogs/mod_update_dialog.dart';
 import '../zenith_controls.dart';
@@ -458,21 +458,6 @@ String compactCount(int n) {
   if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
   if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}k';
   return '$n';
-}
-
-/// How long ago [instant] was, in words: "3 days ago", "1 week ago", "just now". [relativeAge] picks the unit.
-String relativeAgeLabel(AppLocalizations loc, DateTime instant, DateTime now) {
-  final age = relativeAge(instant, now: now);
-  final params = {'count': '${age.count}'};
-  return switch (age.unit) {
-    RelativeUnit.justNow => loc.t('time.just_now'),
-    RelativeUnit.minutes => loc.plural('time.minutes_ago', age.count, params: params),
-    RelativeUnit.hours => loc.plural('time.hours_ago', age.count, params: params),
-    RelativeUnit.days => loc.plural('time.days_ago', age.count, params: params),
-    RelativeUnit.weeks => loc.plural('time.weeks_ago', age.count, params: params),
-    RelativeUnit.months => loc.plural('time.months_ago', age.count, params: params),
-    RelativeUnit.years => loc.plural('time.years_ago', age.count, params: params),
-  };
 }
 
 /// Shows the mod in the Library's Characters view with its details panel open: the first of [folders] in library

@@ -613,6 +613,7 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
             mod,
             container.read(oneAtATimeProvider),
             beingWritten: container.read(modWritesInProgressProvider),
+            agentsDefault: container.read(oneAtATimeDefaultProvider),
           );
           try {
             final done = await widget.enabler(

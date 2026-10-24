@@ -15,7 +15,7 @@ import '../../../utils/zzz_characters.dart';
 import '../character_avatar.dart';
 import '../character_tile.dart' show elementToneOf;
 import '../page_crumbs.dart';
-import '../settings/marketplace_section.dart' show ContentFilterWriter;
+import '../settings/gamebanana_section.dart' show ContentFilterWriter;
 import '../zenith_controls.dart';
 import 'gb_browse_view.dart';
 import 'gb_mod_card.dart';

@@ -58,8 +58,6 @@ void main() {
   /// missing — e.g. renaming the `GbModSort` enum without renaming the keys.
   const interpolatedKeyPrefixes = <String>[
     'marketplace.sort_',
-    // One per `WineRunnerSource`, named by the enum value.
-    'settings.launch.source.',
     // Chosen at runtime by a `_single` / `_plural` suffix on the count.
     'mods.assume_current.title_',
     'mods.details.shader_fixes_files_',
@@ -81,6 +79,9 @@ void main() {
     'storage.free.',
     // One name per `AccentChoice`, keyed by its enum name.
     'settings.appearance.accent_',
+    'settings.appearance.theme_',
+    // One per `SettingsSection`, keyed by its enum name.
+    'settings.nav.',
     // One per `AgentAttribute` and `AgentSpecialty`, keyed by the enum name.
     'library.attribute.',
     'library.specialty.',

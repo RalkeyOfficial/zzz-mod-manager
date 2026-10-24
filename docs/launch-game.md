@@ -8,7 +8,7 @@ The XXMI Launcher, never the game's own exe. XXMI is what injects ZZMI into the 
 
 The launcher sits next to ZZMI in every XXMI install: `<XXMI>/ZZMI` is the ZZMI folder and `<XXMI>/Resources/Bin/XXMI Launcher.exe` is the launcher. So with nothing chosen, the button starts the `XXMI Launcher.exe` beside the configured ZZMI folder (`xxmiLauncherBeside` in `services/shader_fixes/zzmi_layout.dart`). The folder names are matched in exact case, since XXMI's own installer writes them.
 
-**Settings › Launch game with** shows the file that will start and can choose another, stored as `launch_target` ([`configuration.md`](configuration.md)). Reset clears it and goes back to the launcher beside ZZMI. A chosen file that has gone is reported as gone; the button never falls back to the other one behind the user's back.
+**Settings › Launching › XXMI Launcher** shows the file that will start and can choose another, stored as `launch_target` ([`configuration.md`](configuration.md)). Reset clears it and goes back to the launcher beside ZZMI. A chosen file that has gone is reported as gone; the button never falls back to the other one behind the user's back.
 
 A chosen path is kept exactly as picked: never resolved through a symlink and never normalised. XXMI finds its config and its importer folders from the path it was started with, and a setup that runs XXMI through a link inside the game folder depends on that path reaching it unchanged.
 
@@ -42,8 +42,8 @@ Windows refuses nothing by type: a `.lnk` or a `.bat` the user chose starts the 
 
 XXMI is a Windows program, so the app runs it under Wine or Proton. XXMI starts the game inside its own prefix, so that has to be the prefix the game is installed and set up in. These settings say how, all shown only where `PlatformService.launchesThroughWine` is true:
 
-- **Wine or Proton** (`wine_runner`): a menu of the builds on the machine, named the way Steam, Heroic and Lutris name them (`dwproton-11.0-5`), since people remember which version they use and not where it lives. System Wine is first and **Other file…** is last, for a build in a place the list doesn't look. Typing filters it. What is stored is the build's file, whose name says which kind it is.
-- **Run Proton through umu-launcher** (`wine_use_umu`): shown for a Proton runner, on by default.
+- **Use umu-launcher** (`wine_use_umu`): on by default, with where `umu-run` was found beneath it, or a warning when a Proton runner is chosen and it isn't installed. It only matters to a Proton runner, and is shown whichever runner is chosen.
+- **Proton** (`wine_runner`): a select of the builds on the machine, named the way Steam, Heroic and Lutris name them (`dwproton-11.0-5`), since people remember which version they use and not where it lives. System Wine is first, and a folder button beside it picks a build in a place the list doesn't look, which then joins the list. What is stored is the build's file, whose name says which kind it is.
 - **Wine prefix** (`wine_prefix`): a folder. Empty means the runner's own default prefix. Settings warns, without refusing, when the folder holds neither `drive_c` nor `pfx/drive_c`: a wrong prefix starts XXMI in a fresh Wine install where the game isn't, and nothing else would say so. For Wine, it also warns about a Proton prefix folder, with `drive_c` only under a real `pfx/`: Wine would build a new prefix at the top of the folder, so the prefix to choose is that `pfx` folder. The folder is checked again each time Settings opens, so a prefix a runner has filled since loses its warning.
 
 | Runner setting | Program started | Arguments before the exe | Environment added |
@@ -178,9 +178,17 @@ A game started through umu-run also has its container checked for name lookups, 
 
 The process is started detached and never waited on: the app has no business holding the game's lifetime, and closing the app must not take the game with it.
 
+## Whether the game is running
+
+`PlatformService.isGameRunning` answers whether a process of the game exists, and the F10 reminder asks it when a mod is switched ([`notifications.md`](notifications.md) §1).
+The game is a process of `ZenlessZoneZero.exe`, under Wine and Proton as on Windows. The match is on that file name and never on `zzz`, which also appears in the app's own `zzz-mod-manager` folder and process.
+Linux reads `/proc/<pid>/cmdline` and takes a process whose first or second argument is a path ending in that file name, the program itself or the file Wine was given. A program that only mentions the file, such as `less ZenlessZoneZero.exe.log`, or a search for its bare name, doesn't count. Windows asks `tasklist` for that image name and looks for a row that starts with it.
+A failed look reads as not running, since the answer only gates a reminder. It is asked once per switch press and is never polled.
+Linux is measured by its matcher alone: the process's command line under Proton has not been read from a running game.
+
 ## Not done
 
-- Detecting whether the game is already running before starting it again. `PlatformService.findGameProcesses` would answer that, but its match on `zzz` also catches the app's own `zzz-mod-manager` folder.
+- Tracking the game from the press until it closes, so Launch game can be off while it runs and a launch that quits within seconds can be reported, with the runner's output going to a file in the app-data folder rather than a pipe the app holds, since closing the app must not kill the game.
 - Not yet run on Windows. A declined UAC prompt most likely reports `failed`.
 - No lock on Windows. Whether the game holds one itself is not checked.
 - No lock where the idle daemon honours only Wayland's idle-inhibit protocol, such as sway's swayidle: that protocol needs a window of the app's own. XFCE, Cinnamon, MATE and others get one only where one of the three programs is installed and the desktop reads its lock.

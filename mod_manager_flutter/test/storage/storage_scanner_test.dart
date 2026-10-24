@@ -52,7 +52,7 @@ void main() {
       expect(mods.bytes, 600, reason: 'the mods own files only');
       expect(sidecars.bytes, 100, reason: 'the sidecars only');
       expect(mods.bytes + sidecars.bytes, 700,
-          reason: 'the slices must sum to the library, never past it');
+          reason: 'the segments must sum to the library, never past it');
     });
 
     test('both halves come from one walk', () async {
@@ -138,7 +138,7 @@ void main() {
 
       expect(mods.read, StorageRead.notConfigured);
       expect(mods.hasMeasurement, isFalse,
-          reason: '"not set" must not draw a slice or read as "you have none"');
+          reason: '"not set" must not draw a segment or read as "you have none"');
     });
 
     test('a configured library that is gone reads as absent', () async {

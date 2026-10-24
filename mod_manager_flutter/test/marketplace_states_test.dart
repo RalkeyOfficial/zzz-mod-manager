@@ -198,7 +198,7 @@ void main() {
         filter: ContentFilterMode.hide,
       );
 
-      expect(find.text('Every result is hidden by your adult-content filter.'), findsOneWidget);
+      expect(find.text('Every result is hidden by your mature-content filter.'), findsOneWidget);
       expect(find.text('No mods found.'), findsNothing);
     });
 

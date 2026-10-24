@@ -185,7 +185,7 @@ Two things it deliberately does not fix:
   caught. Filed, and pinned by a test so it is a known shape rather than a
   surprise.
 - **A deleted sidecar orphans the history it named.** The mod takes a fresh uid on its next scan,
-  and the old group is swept the next time the user frees up space from the Storage tab.
+  and the old group is cleared the next time the user clears the saved versions of mods they no longer have, in Settings' Storage section.
 
 ### The `origin` block
 

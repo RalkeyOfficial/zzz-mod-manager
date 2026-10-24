@@ -155,30 +155,37 @@ class LinuxPlatformService implements PlatformService {
   }
   
   @override
-  Future<List<String>> findGameProcesses() async {
+  Future<bool> isGameRunning() async {
     try {
-      final result = await Process.run('ps', ['aux']);
-      final processes = <String>[];
-      
-      if (result.exitCode == 0) {
-        final lines = result.stdout.toString().split('\n');
-        for (final line in lines) {
-          if (line.toLowerCase().contains('zenless') || 
-              line.toLowerCase().contains('zzz') ||
-              line.contains('ZenlessZoneZero.exe')) {
-            processes.add(line.trim());
-          }
+      await for (final entry in Directory('/proc').list(followLinks: false)) {
+        final pid = path.basename(entry.path);
+        if (int.tryParse(pid) == null) continue;
+        try {
+          final cmdline = await File('${entry.path}/cmdline').readAsString();
+          if (commandRunsGame(cmdline)) return true;
+        } on FileSystemException {
+          // The process ended between the listing and the read, or isn't ours to read.
         }
       }
-      
-      _log.debug('game processes', fields: {'found': processes.length});
-      return processes;
+      return false;
     } catch (error, stack) {
-      _log.warning('could not list processes', error: error, stack: stack);
-      return [];
+      _log.warning('could not look for the game', error: error, stack: stack);
+      return false;
     }
   }
-  
+
+  @override
+  Future<String?> findUmuRun() async {
+    try {
+      final result = await Process.run('which', ['umu-run']);
+      final found = result.stdout.toString().trim();
+      return result.exitCode == 0 && found.isNotEmpty ? found : null;
+    } catch (error, stack) {
+      _log.warning('could not look for umu-run', error: error, stack: stack);
+      return null;
+    }
+  }
+
   @override
   String getDisplayServerType() {
     final sessionType = Platform.environment['XDG_SESSION_TYPE'];
@@ -659,6 +666,9 @@ class LinuxPlatformService implements PlatformService {
   @override
   String? get osUserName =>
       Platform.environment['USER'] ?? Platform.environment['LOGNAME'];
+
+  @override
+  String get platformName => 'Linux';
 
   @override
   String? get homeDirectoryPath => Platform.environment['HOME'];

@@ -86,8 +86,8 @@ Future<void> launchGame(
 
   final loc = context.loc;
   final file = p.basename(target);
-  // Every outcome but a failed start is fixed by a setting on the Settings page.
-  final settings = [openSettingsAction(loc, container)];
+  // Every outcome but a failed start is fixed by a setting in Settings' Launching section.
+  final settings = [openSettingsAction(loc, container, section: SettingsSection.launching)];
   switch (result.outcome) {
     case LaunchOutcome.started:
       // Captured before the wait, so the warning still shows if the button has gone by then. It stays until closed,

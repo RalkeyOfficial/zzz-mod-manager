@@ -7,6 +7,7 @@ import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/services/platform_service.dart';
 import 'package:mod_manager_flutter/services/update_check.dart';
 import 'package:mod_manager_flutter/screens/components/settings/launch_section.dart';
+import 'package:mod_manager_flutter/screens/components/settings/settings_widgets.dart';
 import 'package:mod_manager_flutter/screens/components/sidebar_nav_item.dart';
 import 'package:mod_manager_flutter/screens/components/zenith_switch.dart';
 import 'package:mod_manager_flutter/screens/shell/app_sidebar.dart';
@@ -394,7 +395,7 @@ void main() {
     });
   });
 
-  group('Settings › Launch game with', () {
+  group('Settings › Launching', () {
     const dwproton = WineRunner(
       path: '/home/al/.local/share/Steam/compatibilitytools.d/dwproton-11.0-5/proton',
       name: 'dwproton-11.0-5',
@@ -424,12 +425,15 @@ void main() {
       String runner = '',
       String prefix = '',
       bool useUmu = true,
+      String? umuRun = '/usr/bin/umu-run',
     }) async {
       container = ProviderContainer(
         overrides: [
           xxmiLauncherProvider.overrideWith((ref) async => launcherBeside),
           winePrefixLayoutProvider.overrideWith((ref) async => prefixLayout),
           wineRunnersProvider.overrideWith((ref) async => runners),
+          // Where umu-run is, not a lookup on the machine the tests run on.
+          umuRunProvider.overrideWith((ref) async => umuRun),
         ],
       );
       addTearDown(container.dispose);
@@ -474,7 +478,7 @@ void main() {
       expect(find.text('~/XXMI Launcher/Resources/Bin/XXMI Launcher.exe'), findsOneWidget);
       expect(find.text('Reset'), findsNothing);
 
-      await tester.tap(find.text('Change…').first);
+      await tester.tap(find.text('Change').first);
       await tester.pump();
       expect(writes, [(LaunchSetting.target, '/games/start.sh')]);
       expect(find.text('/games/start.sh'), findsOneWidget);
@@ -510,46 +514,63 @@ void main() {
       expect(tester.widget<TextField>(field).controller!.text, '--nogui --xxmi ZZMI');
     });
 
-    testWidgets('Wine or Proton and the prefix are not shown where the launcher runs natively', (tester) async {
+    testWidgets('Proton, umu-launcher and the prefix are not shown where the launcher runs natively', (tester) async {
       await pumpSection(tester, throughWine: false);
-      expect(find.text('Wine or Proton'), findsNothing);
+      expect(find.text('XXMI Launcher'), findsOneWidget, reason: 'the section is there, so the finds below mean something');
+      expect(find.text('Proton'), findsNothing);
+      expect(find.text('Use umu-launcher'), findsNothing);
       expect(find.text('Wine prefix'), findsNothing);
+    });
+
+    testWidgets('says where umu-run was found', (tester) async {
+      await pumpSection(tester, umuRun: '/usr/bin/umu-run');
+      expect(find.textContaining('umu-run found at', findRichText: true), findsOneWidget);
+      expect(find.textContaining('/usr/bin/umu-run', findRichText: true), findsOneWidget);
+    });
+
+    const umuMissing =
+        "umu-run isn't installed, so Launch game can't start Proton through it. Install umu-launcher or turn this off.";
+
+    testWidgets('warns that umu-run is missing for a Proton runner', (tester) async {
+      await pumpSection(tester, umuRun: null, runner: dwproton.path);
+      expect(find.text(umuMissing), findsOneWidget);
+    });
+
+    testWidgets('does not warn that umu-run is missing for Wine, which never goes through it', (tester) async {
+      await pumpSection(tester, umuRun: null);
+      expect(find.text('Use umu-launcher'), findsOneWidget);
+      expect(find.text(umuMissing), findsNothing);
     });
 
     testWidgets('where it runs under Wine, both start at their defaults', (tester) async {
       await pumpSection(tester);
-      expect(find.text('Wine or Proton'), findsOneWidget);
+      expect(find.text('Proton'), findsOneWidget);
       expect(find.text('System Wine (wine)'), findsWidgets);
       expect(find.text("The runner's default prefix"), findsOneWidget);
-      // The umu-launcher switch is about Proton only.
-      expect(find.text('Run Proton through umu-launcher'), findsNothing);
+      expect(find.text('Use umu-launcher'), findsOneWidget);
     });
 
-    testWidgets('Wine or Proton lists the builds by name, and picking one saves its path', (tester) async {
+    testWidgets('Proton lists the builds by name, and picking one saves its path', (tester) async {
       await pumpSection(tester);
-      await tester.tap(find.byType(DropdownMenu<String>));
+      await tester.tap(find.byType(SettingsSelect<String>));
       await tester.pumpAndSettle();
       expect(find.text('GE-Proton10-34'), findsWidgets);
-      expect(find.text('Other file…'), findsWidgets);
 
       await tester.tap(find.text('dwproton-11.0-5').last);
       await tester.pumpAndSettle();
       expect(writes, [(LaunchSetting.runner, dwproton.path)]);
-      expect(find.text('~/.local/share/Steam/compatibilitytools.d/dwproton-11.0-5/proton'), findsOneWidget);
     });
 
-    testWidgets('Other file… asks for a file, and a chosen file the scan missed is still listed', (tester) async {
+    testWidgets('the folder button asks for a file, and a chosen file the scan missed is still listed', (tester) async {
       await pumpSection(tester, picked: '/opt/My-Proton/proton');
-      await tester.tap(find.byType(DropdownMenu<String>));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Other file…').last);
+      await tester.tap(find.byTooltip('Choose wine or proton'));
       await tester.pumpAndSettle();
       expect(writes, [(LaunchSetting.runner, '/opt/My-Proton/proton')]);
+    });
 
-      await tester.tap(find.byType(DropdownMenu<String>));
-      await tester.pumpAndSettle();
-      expect(find.text('My-Proton'), findsWidgets);
-      expect(find.text('Chosen file'), findsWidgets);
+    testWidgets('a stored runner the scan missed is named in the select', (tester) async {
+      await pumpSection(tester, runner: '/opt/My-Proton/proton');
+      expect(find.text('My-Proton'), findsOneWidget);
     });
 
     testWidgets('a prefix without drive_c is shown with a warning', (tester) async {
@@ -605,16 +626,6 @@ void main() {
     testWidgets('Proton takes a Proton prefix folder without a warning', (tester) async {
       await pumpSection(tester, runner: dwproton.path, prefix: steamPrefix, prefixLayout: WinePrefixLayout.protonOnly);
       expect(find.text(protonOnlyWarning), findsNothing);
-    });
-
-    testWidgets('picking the stored file again through Other file… shows its name, not Other file…', (tester) async {
-      await pumpSection(tester, runner: '/opt/My-Proton/proton', picked: '/opt/My-Proton/proton');
-      await tester.tap(find.byType(DropdownMenu<String>));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Other file…').last);
-      await tester.pumpAndSettle();
-      final menuField = find.descendant(of: find.byType(DropdownMenu<String>), matching: find.byType(TextField));
-      expect(tester.widget<TextField>(menuField).controller!.text, 'My-Proton');
     });
 
     testWidgets('the default typed back is saved as no value, so it keeps following the default', (tester) async {

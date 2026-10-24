@@ -1,83 +1,63 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/button_feedback.dart';
 import '../../../core/palette.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../services/api_service.dart';
+import '../../../utils/notification_actions.dart';
+import '../../../utils/notifications.dart';
 import '../../../utils/state_providers.dart';
-import 'settings_row.dart';
+import 'settings_widgets.dart';
 
-/// Persists the theme choice. Production is [ApiService].
+/// Persists the theme choice. Production is [ApiService.setThemeMode].
 ///
-/// A seam for the same reason [UpdatesSettingsSection]'s is — see
-/// `updates_section.dart`.
+/// The writers are seams: a test that pressed a choice must not write the developer's real `config.json`.
 typedef ThemeModeWriter = Future<void> Function(ThemeMode mode);
 
 /// Persists the accent choice. Production is [ApiService.setAccent].
 typedef AccentWriter = Future<void> Function(AccentChoice accent);
 
-/// The Settings tab's **Appearance** section: light, system, or dark, and the accent.
+/// Persists the language. Production is [ApiService.setLanguage].
+typedef LanguageWriter = Future<void> Function(String languageCode);
+
+/// Settings' **Appearance** section: the theme, the accent and the language.
 ///
-/// Three states rather than a switch, because the third one is the default and
-/// a switch cannot express it. *System* is not "dark off" — it is the app
-/// deferring to the desktop, which is the only setting that stays right when
-/// the desktop changes on a schedule.
-///
-/// Laid out in the order the brightness runs, light on the left and dark on the
-/// right, so *system* sits between the two things it chooses from.
-class AppearanceSettingsSection extends ConsumerWidget {
-  const AppearanceSettingsSection({super.key, this.writer, this.accentWriter});
+/// Dark, light or system. System is not "dark off": it defers to the desktop, which is the only choice that stays
+/// right when the desktop changes on a schedule. Each choice goes to its provider first so the app repaints this
+/// frame, then to disk so it survives a restart.
+class AppearanceSection extends ConsumerWidget {
+  const AppearanceSection({super.key, this.writer, this.accentWriter, this.languageWriter});
 
   final ThemeModeWriter? writer;
   final AccentWriter? accentWriter;
+  final LanguageWriter? languageWriter;
 
-  static const _order = [ThemeMode.light, ThemeMode.system, ThemeMode.dark];
+  static const _themes = [ThemeMode.dark, ThemeMode.light, ThemeMode.system];
+  static const _languages = ['en', 'uk'];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final loc = context.loc;
-    final mode = ref.watch(themeModeProvider);
+    final locale = ref.watch(localeProvider).languageCode;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return SettingsSectionBlock(
+      title: loc.t('settings.nav.appearance'),
       children: [
         SettingsRow(
           label: loc.t('settings.appearance.theme'),
-          description: loc.t('settings.appearance.theme_hint'),
-          // Words rather than sun/moon icons: nothing else on this tab is
-          // iconographic, and each icon costs the description beside it 30px of
-          // width at the narrowest window for a label that is already one word.
-          trailing: KeyboardFocusRing(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-            child: SegmentedButton<ThemeMode>(
-              segments: [
-                for (final value in _order)
-                  ButtonSegment(
-                    value: value,
-                    label: Text(loc.t('settings.appearance.theme_${value.name}')),
-                  ),
-              ],
-              selected: {mode},
-              // The tick says what the fill already says, and it is only ever on one
-              // segment — so it widens whichever one is selected and the labels
-              // shuffle sideways on every press.
-              showSelectedIcon: false,
-              onSelectionChanged: (selection) {
-                final value = selection.first;
-                // The provider first so the app repaints this frame, then the write
-                // so the choice survives a restart — the same order and the same
-                // reason as the marketplace's content filter.
-                ref.read(themeModeProvider.notifier).state = value;
-                (writer ?? ApiService.setThemeMode)(value);
-              },
-            ),
+          description: null,
+          trailing: SettingsSegments<ThemeMode>(
+            value: ref.watch(themeModeProvider),
+            options: [for (final mode in _themes) (mode, loc.t('settings.appearance.theme_${mode.name}'))],
+            onChanged: (mode) {
+              ref.read(themeModeProvider.notifier).state = mode;
+              (writer ?? ApiService.setThemeMode)(mode);
+            },
           ),
         ),
-        const SizedBox(height: 12),
         SettingsRow(
           label: loc.t('settings.appearance.accent'),
-          description: loc.t('settings.appearance.accent_hint'),
+          description: null,
           trailing: _AccentPicker(
             selected: ref.watch(accentProvider),
             onPicked: (accent) {
@@ -86,8 +66,31 @@ class AppearanceSettingsSection extends ConsumerWidget {
             },
           ),
         ),
+        SettingsRow(
+          label: loc.t('settings.language.label'),
+          description: null,
+          trailing: SettingsSelect<String>(
+            value: _languages.contains(locale) ? locale : 'en',
+            semanticLabel: loc.t('settings.language.label'),
+            options: [for (final code in _languages) (code, loc.t('language_names.$code'))],
+            onChanged: (code) => _changeLanguage(context, ref, code),
+          ),
+        ),
       ],
     );
+  }
+
+  Future<void> _changeLanguage(BuildContext context, WidgetRef ref, String code) async {
+    if (code == ref.read(localeProvider).languageCode) return;
+    final notify = context.notify;
+    final loc = context.loc;
+    ref.read(localeProvider.notifier).state = Locale(code);
+    try {
+      await (languageWriter ?? ApiService.setLanguage)(code);
+    } catch (e) {
+      final title = loc.t('settings.language.error_title');
+      notify.error(title, body: '$e', actions: [copyDetailsAction(loc, notify, title: title, body: '$e')]);
+    }
   }
 }
 
@@ -111,8 +114,6 @@ class _AccentPicker extends StatelessWidget {
             label: context.loc.t('settings.appearance.accent_${accent.name}'),
             color: _swatchColor(ZenithPalette.forBrightness(palette.brightness, accent), accent),
             ring: palette.text,
-            gap: palette.card,
-            outline: palette.control,
             selected: accent == selected,
             onTap: () => onPicked(accent),
           ),
@@ -129,8 +130,6 @@ class _Swatch extends StatelessWidget {
     required this.label,
     required this.color,
     required this.ring,
-    required this.gap,
-    required this.outline,
     required this.selected,
     required this.onTap,
   });
@@ -138,8 +137,6 @@ class _Swatch extends StatelessWidget {
   final String label;
   final Color color;
   final Color ring;
-  final Color gap;
-  final Color outline;
   final bool selected;
   final VoidCallback onTap;
 
@@ -154,21 +151,14 @@ class _Swatch extends StatelessWidget {
         excludeSemantics: true,
         child: InkWell(
           onTap: onTap,
-          customBorder: const CircleBorder(),
+          borderRadius: BorderRadius.circular(8),
           child: Container(
             width: 30,
             height: 30,
-            padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
+              color: color,
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(color: selected ? ring : Colors.transparent, width: 2),
-            ),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: color,
-                border: Border.all(color: selected ? gap : outline),
-              ),
             ),
           ),
         ),

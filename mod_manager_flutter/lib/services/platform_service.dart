@@ -206,8 +206,15 @@ abstract class PlatformService {
   /// Отримує шлях до директорії даних додатку
   String getAppDataPath();
   
-  /// Знаходить процеси гри
-  Future<List<String>> findGameProcesses();
+  /// Whether the game is running: a process of `ZenlessZoneZero.exe` ([commandRunsGame], [tasklistShowsGame]).
+  ///
+  /// Under Wine and Proton the game is still a `ZenlessZoneZero.exe` process. Matching on the executable's name rather
+  /// than on "zzz" keeps the app's own `zzz-mod-manager` out of the answer. A failed look reads as not running, since
+  /// the answer only gates a reminder. Never throws.
+  Future<bool> isGameRunning();
+
+  /// The path of `umu-run`, or null when it isn't installed or the platform has none. Never throws.
+  Future<String?> findUmuRun();
   
   /// Визначає тип дисплейного сервера (для Linux)
   String getDisplayServerType() => 'unknown';
@@ -276,6 +283,9 @@ abstract class PlatformService {
   /// must not be able to delay or break a launch.
   Future<SystemReport> describeSystem({ProcessProbe probe});
 
+  /// The operating system's name as the About page shows it: "Linux" or "Windows".
+  String get platformName;
+
   /// The user's home directory, or null when the environment does not say.
   ///
   /// Same purpose and the same constraint as [osUserName]: every app-owned path
@@ -299,3 +309,21 @@ abstract class PlatformService {
   /// not be able to hang the thing it is checking.
   Future<int?> freeSpaceBytes(String forPath, {ProcessProbe probe});
 }
+
+const String _gameImage = 'zenlesszonezero.exe';
+
+/// The last part of [path], whether it is spelled with `/` or `\`, in lower case.
+String _lastPart(String path) => path.split(RegExp(r'[\\/]')).last.toLowerCase();
+
+/// Whether a process with the command line [cmdline] (its arguments separated by NUL, as `/proc/<pid>/cmdline` has
+/// them) is the game: the game's file, as a path, is the program itself or the one Wine was given, so the first or the
+/// second argument. A program that merely mentions the file, such as `less ZenlessZoneZero.exe.log` or a search for
+/// its bare name, is not the game.
+bool commandRunsGame(String cmdline) {
+  final arguments = cmdline.split('\u0000');
+  return arguments.take(2).any((argument) => argument.contains(RegExp(r'[\\/]')) && _lastPart(argument) == _gameImage);
+}
+
+/// Whether `tasklist /NH` output has a row for the game: a line that starts with its image name.
+bool tasklistShowsGame(String output) =>
+    output.split('\n').any((line) => line.trimLeft().toLowerCase().startsWith(_gameImage));

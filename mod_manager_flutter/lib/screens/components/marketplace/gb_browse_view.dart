@@ -14,7 +14,7 @@ import '../../../services/gamebanana/content_filter.dart';
 import '../../../services/installed_mods_index.dart';
 import '../../../utils/marketplace_providers.dart';
 import '../../../utils/state_providers.dart';
-import '../settings/marketplace_section.dart' show ContentFilterWriter;
+import '../settings/gamebanana_section.dart' show ContentFilterWriter;
 import '../zenith_controls.dart';
 import '../zenith_switch.dart';
 import 'gb_character_picker.dart';

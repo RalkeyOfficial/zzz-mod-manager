@@ -116,7 +116,7 @@ FileLogSink? buildFileSink({
       directory = Directory(PathHelper.getLogsPath());
     } catch (_) {
       // No home directory to put it in. The terminal and the memory sink still
-      // work, and "Copy diagnostics" still has something to copy.
+      // work, and System info > Copy in About still has something to copy.
       return null;
     }
   }
@@ -146,7 +146,7 @@ void applyFileLogging(bool enabled, {Directory? logsDirectory}) {
   }
 }
 
-/// What "Copy diagnostics" puts on the clipboard.
+/// What System info > Copy in About puts on the clipboard.
 ///
 /// A short header plus the lines still in memory. **Not read from the file**:
 /// this has to work with the file switched off, must not be slow, and the ring

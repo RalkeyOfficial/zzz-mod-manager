@@ -7,6 +7,7 @@ import 'package:mod_manager_flutter/utils/theme_setting.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/character_info.dart';
+import 'backup/retention.dart' show clampSnapshotsToKeep;
 import 'config_service.dart';
 import 'log/log_setup.dart';
 import '../models/gamebanana/gb_enums.dart';
@@ -92,6 +93,9 @@ class ApiService {
       _container!.read(updateCheckOnLaunchProvider.notifier).state =
           _configService!.updateCheckOnLaunch;
       _container!.read(hideEmptyCharactersProvider.notifier).state = _configService!.hideEmptyCharacters;
+      _container!.read(oneAtATimeDefaultProvider.notifier).state = _configService!.oneAtATimeDefault;
+      _container!.read(snapshotsToKeepProvider.notifier).state = _configService!.snapshotsToKeep;
+      _container!.read(remindF10Provider.notifier).state = _configService!.remindF10;
       _container!.read(modNotesProvider.notifier).state = _configService!.modNotes;
       _container!.read(oneAtATimeProvider.notifier).state = _configService!.oneAtATime;
       _container!.read(fileLoggingProvider.notifier).state =
@@ -435,6 +439,29 @@ class ApiService {
     _container?.read(updateCheckOnLaunchProvider.notifier).state = enabled;
   }
 
+  /// Persists whether turning a mod on turns its character's other mods off, for characters the user hasn't switched.
+  static Future<void> setOneAtATimeDefault(bool enabled) async {
+    await initialize();
+    // Published before the write, as for the other settings a press can repeat quickly.
+    _container?.read(oneAtATimeDefaultProvider.notifier).state = enabled;
+    await _configService!.setOneAtATimeDefault(enabled);
+  }
+
+  /// Persists how many saved versions each mod keeps.
+  static Future<void> setSnapshotsToKeep(int count) async {
+    await initialize();
+    // Published before the write, so a press made while an earlier write is still running isn't overwritten by it.
+    _container?.read(snapshotsToKeepProvider.notifier).state = clampSnapshotsToKeep(count);
+    await _configService!.setSnapshotsToKeep(count);
+  }
+
+  /// Persists whether a mod turned on or off while the game runs says to press F10.
+  static Future<void> setRemindF10(bool enabled) async {
+    await initialize();
+    _container?.read(remindF10Provider.notifier).state = enabled;
+    await _configService!.setRemindF10(enabled);
+  }
+
   /// Persists whether the Library's character list hides the rows with no mods.
   static Future<void> setHideEmptyCharacters(bool hide) async {
     await initialize();
@@ -476,7 +503,7 @@ class ApiService {
           ? const <String>[]
           : await _modManager!.relinkLibrary(previousLibrary, modsPath, networkRefused: networkRefused);
       // Repointing the library has to reach the providers that derive from it,
-      // or the Storage tab keeps measuring the folder that was set at launch.
+      // or the Storage section keeps measuring the folder that was set at launch.
       _container?.read(modsPathProvider.notifier).state = modsPath;
       _container?.read(zzmiPathProvider.notifier).state = zzmiPath;
       // An unchanged path doesn't rebuild the check, and ZZMI may have been installed into it since.

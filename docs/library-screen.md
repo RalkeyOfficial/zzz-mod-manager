@@ -62,7 +62,7 @@ Being a Proxy is its own flag, `isProxy`, never read off a missing attribute: an
 
 The character's element as a dotted ground with their initials outlined over it, the portrait, the attribute badge, faction and role, the name, and "4 mods · 1 active · 412 MB".
 
-**The size is each mod's own files, measured on demand** (`modSizeProvider`): the folder minus its sidecar, which is how the Storage page counts Mods ([`disk-usage.md`](disk-usage.md)), apparent size, off the UI isolate.
+**The size is each mod's own files, measured on demand** (`modSizeProvider`): the folder minus its sidecar, which is how Settings' Storage section counts Mods ([`disk-usage.md`](disk-usage.md)), apparent size, off the UI isolate.
 A walk is about half a millisecond a mod, and only the mods on screen are measured. The total joins the line once every one of them has been, rather than growing as they arrive.
 
 **Find mods** opens Browse. **Add mod**, and pressing the drop tile at the end of the grid, say how: drop or paste a folder or a .zip, .7z or .rar archive onto the page.
@@ -197,8 +197,9 @@ Only the mods left ticked are written. See [`origin-tracking.md`](origin-trackin
 The **One at a time** switch above a character's mods decides what turning one of them on does. On, the character's other mods go off; off, any number stay on together.
 
 **It belongs to the character, not to the app.** One outfit per agent is the usual case, but a built-in category holds mods made to stack: a HUD mod beside a font mod, two texture packs that touch different things. One global switch makes the user flip it on the way into every such group and back on the way out.
+Settings' **One active mod per character** is the default for the agents only, so a user who never wants two of a character's mods on turns it on once, and a user who always does turns it off once; each character's own switch overrides it.
 
-- **The defaults:** on for every agent, off for the four built-in categories.
+- **The defaults:** for every agent, Settings' **One active mod per character** (`one_at_a_time_default`, on until changed); off for the four built-in categories, whatever it says.
 - **Unassigned mods have no switch.** They belong to no one character, so "the others" would be mods for anyone, and turning one on never turns another off.
 - **Stored in `config.json` as `one_at_a_time`**, a map from group id to a bool, written only for a group the user has switched. The id is the canonical roster id or the category id. A choice is per install, like a favourite: whether two of Ellen's mods can be on together is this user's preference, and it is about the character rather than any one mod. The value is the user's explicit choice, never "differs from the default", so a later change to a default leaves every stored choice meaning what it meant.
 - **Flipping the switch changes nothing on disk.** It governs the next time a mod is turned on. A character with three mods on keeps all three until the user turns on another; turning all but one off at the press would mean the app picking which one to keep.
@@ -353,7 +354,7 @@ The canvas's "Manager data holds your note, the source link and version history"
 - **Installed files**: the file in use, then each snapshot newest first (`modSnapshotsProvider`, rebuilt whenever `modBackupsProvider` is invalidated).
   The file in use is named from the page in hand, for a file on record (§5), with "File not known yet" otherwise. Reinstall shows under the same gate as the right-click menu's, `canReinstall`: a recorded file id, confirmed or worked out, and tracking on ([`applying-updates.md`](applying-updates.md) §6).
   A snapshot is named by the file its own copy of the sidecar recorded, when that copy has a file on record and its page is in hand, and otherwise by the time it was saved, with why ("before an update", "before a restore", "before a patch was taken out") and its size. Restore runs `restoreSnapshotFlow`, the same confirmation and write as the backups dialog.
-  The line above says only what holds whatever the retention does: older snapshots are cleared as the store fills, and the newest is always kept ([`applying-updates.md`](applying-updates.md) §5). The age floor, the count and the 5 GB budget can all prune, so no number is stated. Snapshots are of the whole folder, so the canvas's "an update keeps the file it replaces" is not said, and the canvas's "change" link has no setting to open.
+  The line above states the number of snapshots each mod keeps (Settings' **Snapshots to keep**), and its Change link opens that setting. The 5 GB budget can prune inside the count, so the line makes no promise about the newest N beyond what the setting says ([`applying-updates.md`](applying-updates.md) §5). Snapshots are of the whole folder, so the canvas's "an update keeps the file it replaces" is not said.
 - **Latest update post**: the newest post in the base mod's feed that has text or a change list, its title, change list and text folded to three lines.
 - **Patches on top**, in stack order, "applied over the current file" as the canvas says: each patch's name, file, author, upload date, its files added and replaced counted from its file registry, and whether it is tracked. Take out shows only for a patch `removablePatches` lists and runs `removePatchFlow`; a patch with no file registry, or no page on record, says why it can't be taken out here ([`origin-tracking.md`](origin-tracking.md) §10).
 - **Ignored update**, one row per download with `updates_dismissed_until`: the files this session's check listed, when it did, and "Ignoring files uploaded up to <date>". **Stop ignoring** takes the dismissal back (`stopIgnoringUpdate`): the same `withDismissal` write as the update dialog, and the session's verdict re-folded with `refoldDismissal` as the dialog's undo does, since the badge reads that verdict and a rescan alone would leave it quiet until the next check.
@@ -381,7 +382,7 @@ When the library fails to load, the table shows what the character view shows in
 "All mods", and under it "N mods across N characters · N active · <size> · updates checked <ago>", with Check all for updates beside it.
 
 - **Characters are the agents with a mod**: the built-in categories and Unassigned are not characters, as the sidebar's Characters count leaves them out.
-- **The size is every mod's own files, from one walk of the library** (`librarySizesProvider`): `measureLibrarySync` off the UI isolate, the walk the Storage page runs for Mods ([`disk-usage.md`](disk-usage.md) §4).
+- **The size is every mod's own files, from one walk of the library** (`librarySizesProvider`): `measureLibrarySync` off the UI isolate, the walk Settings' Storage section runs for Mods ([`disk-usage.md`](disk-usage.md) §4).
   The table shows every mod's size and their total at once, and the character view's per-mod measure (§3) would be an isolate per mod for the same answer.
   The library is walked again when a mod is added or removed or its origin changes, as an update or a restore changes it. A toggle or a favourite changes neither, so it walks nothing. The total joins the line once the walk returns.
 - **"Updates checked <ago>" is there only after a check of the whole library finished this session** (`libraryCheckedAtProvider`), whether the user's Check all for updates or the startup check ([`update-checks.md`](update-checks.md) §5.1).

@@ -4,6 +4,7 @@ import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
 import '../utils/path_helper.dart';
+import 'backup/retention.dart';
 import 'log/logger.dart';
 import 'mod_metadata_repository.dart';
 import 'shader_fixes/zzmi_layout.dart';
@@ -37,6 +38,9 @@ class ConfigService implements ModCharacterTagStore {
   static const String _keyMarketplaceSort = 'marketplace_sort';
   static const String _keyUpdateCheckOnLaunch = 'update_check_on_launch';
   static const String _keyHideEmptyCharacters = 'hide_empty_characters';
+  static const String _keyOneAtATimeDefault = 'one_at_a_time_default';
+  static const String _keySnapshotsToKeep = 'snapshots_to_keep';
+  static const String _keyRemindF10 = 'remind_f10';
   static const String _keyMarketplaceHideInstalled = 'marketplace_hide_installed';
   static const String _keyMarketplaceTurnOnAfterInstall = 'marketplace_turn_on_after_install';
 
@@ -187,6 +191,16 @@ class ConfigService implements ModCharacterTagStore {
 
   /// Whether the Library's character list hides the characters and categories with no mods.
   bool get hideEmptyCharacters => _prefs.getBool(_keyHideEmptyCharacters) ?? false;
+
+  /// Whether turning a mod on turns its character's other mods off, for every character the user hasn't switched
+  /// themselves. Categories are not characters and stay off unless switched.
+  bool get oneAtATimeDefault => _prefs.getBool(_keyOneAtATimeDefault) ?? true;
+
+  /// How many saved versions each mod keeps.
+  int get snapshotsToKeep => clampSnapshotsToKeep(_prefs.getInt(_keySnapshotsToKeep) ?? defaultSnapshotsToKeep);
+
+  /// Whether turning a mod on or off while the game runs says to press F10.
+  bool get remindF10 => _prefs.getBool(_keyRemindF10) ?? true;
 
   /// Whether Browse leaves out the mods already in the library.
   bool get marketplaceHideInstalled => _prefs.getBool(_keyMarketplaceHideInstalled) ?? false;
@@ -568,6 +582,36 @@ class ConfigService implements ModCharacterTagStore {
     }
   }
 
+  Future<bool> setOneAtATimeDefault(bool enabled) async {
+    try {
+      await _prefs.setBool(_keyOneAtATimeDefault, enabled);
+      await _saveToFile();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> setSnapshotsToKeep(int count) async {
+    try {
+      await _prefs.setInt(_keySnapshotsToKeep, clampSnapshotsToKeep(count));
+      await _saveToFile();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<bool> setRemindF10(bool enabled) async {
+    try {
+      await _prefs.setBool(_keyRemindF10, enabled);
+      await _saveToFile();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<bool> setHideEmptyCharacters(bool hide) async {
     try {
       await _prefs.setBool(_keyHideEmptyCharacters, hide);
@@ -698,6 +742,15 @@ class ConfigService implements ModCharacterTagStore {
       if (config['hide_empty_characters'] is bool) {
         await _prefs.setBool(_keyHideEmptyCharacters, config['hide_empty_characters']);
       }
+      if (config['one_at_a_time_default'] is bool) {
+        await _prefs.setBool(_keyOneAtATimeDefault, config['one_at_a_time_default']);
+      }
+      if (config['snapshots_to_keep'] is int) {
+        await _prefs.setInt(_keySnapshotsToKeep, clampSnapshotsToKeep(config['snapshots_to_keep']));
+      }
+      if (config['remind_f10'] is bool) {
+        await _prefs.setBool(_keyRemindF10, config['remind_f10']);
+      }
       if (config['marketplace_hide_installed'] is bool) {
         await _prefs.setBool(_keyMarketplaceHideInstalled, config['marketplace_hide_installed']);
       }
@@ -745,6 +798,9 @@ class ConfigService implements ModCharacterTagStore {
         'marketplace_turn_on_after_install': marketplaceTurnOnAfterInstall,
         'update_check_on_launch': updateCheckOnLaunch,
         'hide_empty_characters': hideEmptyCharacters,
+        'one_at_a_time_default': oneAtATimeDefault,
+        'snapshots_to_keep': snapshotsToKeep,
+        'remind_f10': remindF10,
         'file_logging': fileLogging,
         'mod_character_tags': modCharacterTags,
         'first_run': false,

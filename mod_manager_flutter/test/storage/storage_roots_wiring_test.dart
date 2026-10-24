@@ -8,7 +8,7 @@ import 'package:mod_manager_flutter/utils/state_providers.dart';
 
 import '../support/temp_library.dart';
 
-/// The chain from the configured library to the folder the Storage tab measures.
+/// The chain from the configured library to the folder Settings' Storage section measures.
 ///
 /// It gets its own file because the bug it exists to catch is invisible from
 /// either end: `modsPathProvider` was declared, never written by anything, and

@@ -1,17 +1,13 @@
-/// What the Storage page reports, and the arithmetic behind it.
+/// What Settings' Storage section reports, and the arithmetic behind it.
 ///
-/// Pure — no `dart:io`, no widgets. The page's every derived number is a
-/// function in here, so the parts that decide what the user reads are tested
-/// without a filesystem.
+/// Pure — no `dart:io`, no widgets.
+/// The section's every derived number is a function in here, so the parts that decide what the user reads are tested without a filesystem.
 library;
 
-/// The six things the app stores, which are also the donut's slices.
+/// The six things the app stores, which are also the meter's segments.
 ///
-/// **They are disjoint, and that is load-bearing.** [mods] is the library
-/// *minus* the sidecars and [sidecars] is the sidecars, because they live
-/// inside the same folders: counting the library whole and the sidecars again
-/// makes the slices sum past the total, and a chart whose parts exceed its
-/// whole is not reporting, it is lying.
+/// **They are disjoint, and that is load-bearing.**
+/// [mods] is the library *minus* the sidecars and [sidecars] is the sidecars, because they live inside the same folders: counting the library whole and the sidecars again makes the segments sum past the total, and a chart whose parts exceed its whole is not reporting, it is lying.
 enum StorageCategoryId { mods, savedVersions, downloads, sidecars, logs, leftovers }
 
 /// Whether a category's number is a fact.
@@ -37,7 +33,7 @@ enum StorageRead {
   notConfigured,
 }
 
-/// What one row in a category's drill-down is.
+/// What one item of a category is.
 enum StorageItemKind {
   modFolder,
   snapshotGroup,
@@ -52,7 +48,7 @@ enum StorageItemKind {
   linked,
 }
 
-/// One row of a category's drill-down.
+/// One item of a category: a mod folder, a group of saved versions, a file.
 class StorageItem {
   const StorageItem({
     required this.id,
@@ -62,7 +58,6 @@ class StorageItem {
     required this.kind,
     this.fileCount = 0,
     this.modified,
-    this.detailKey,
   });
 
   final String id;
@@ -72,15 +67,9 @@ class StorageItem {
   final StorageItemKind kind;
   final int fileCount;
   final DateTime? modified;
-
-  /// A localization **key** for a second line where the row needs one, such as
-  /// why a snapshot was taken. A key rather than a string because the scanner
-  /// is a service and has no business holding an `AppLocalizations`; dates come
-  /// through [modified] and are formatted by the row.
-  final String? detailKey;
 }
 
-/// One slice, and everything its drill-down shows.
+/// One category, and everything it holds.
 class StorageCategory {
   const StorageCategory({
     required this.id,
@@ -89,8 +78,6 @@ class StorageCategory {
     this.fileCount = 0,
     this.unreadableCount = 0,
     this.items = const <StorageItem>[],
-    this.tailBytes = 0,
-    this.tailCount = 0,
     this.rootPath,
   });
 
@@ -101,8 +88,6 @@ class StorageCategory {
         fileCount = 0,
         unreadableCount = 0,
         items = const <StorageItem>[],
-        tailBytes = 0,
-        tailCount = 0,
         rootPath = null;
 
   /// Configured and not there.
@@ -111,9 +96,7 @@ class StorageCategory {
         bytes = 0,
         fileCount = 0,
         unreadableCount = 0,
-        items = const <StorageItem>[],
-        tailBytes = 0,
-        tailCount = 0;
+        items = const <StorageItem>[];
 
   final StorageCategoryId id;
   final StorageRead read;
@@ -125,18 +108,13 @@ class StorageCategory {
   final int fileCount;
   final int unreadableCount;
 
-  /// The biggest items, largest first, capped by [foldTail].
+  /// Every item, largest first.
   final List<StorageItem> items;
-
-  /// Everything below the cap, folded into one row so the drill-down still adds
-  /// up to [bytes].
-  final int tailBytes;
-  final int tailCount;
 
   final String? rootPath;
 
-  /// Whether this category contributes a slice. A category nobody has
-  /// configured is not a zero-sized slice, it is absent from the chart.
+  /// Whether this category contributes a segment.
+  /// A category nobody has configured is not a zero-sized segment, it is absent from the meter.
   bool get hasMeasurement =>
       read == StorageRead.ok || read == StorageRead.partial;
 
@@ -146,10 +124,7 @@ class StorageCategory {
 
 /// Free space on one volume.
 ///
-/// A list rather than a number because the library commonly lives on a
-/// different disk than app data, so there is no single answer — and Dart cannot
-/// portably compare two paths' devices, so the page labels the lines by what
-/// they hold rather than pretending to identify the volume.
+/// A list rather than a number because the library commonly lives on a different disk than app data, so there is no single answer — and Dart cannot portably compare two paths' devices, so the section labels the lines by what they hold rather than pretending to identify the volume.
 class VolumeFreeSpace {
   const VolumeFreeSpace({
     required this.label,
@@ -167,7 +142,7 @@ class VolumeFreeSpace {
   final int? freeBytes;
 }
 
-/// The whole page's arithmetic over however many categories have landed.
+/// The whole section's arithmetic over however many categories have landed.
 class StorageTotals {
   const StorageTotals({
     required this.bytes,
@@ -176,8 +151,7 @@ class StorageTotals {
     required this.anyFloor,
   });
 
-  /// Sums only what has arrived, so a page mid-scan shows a growing real number
-  /// rather than nothing.
+  /// Sums only what has arrived, so a section mid-scan shows a growing real number rather than nothing.
   factory StorageTotals.from(Iterable<StorageCategory?> categories) {
     var bytes = 0;
     var measured = 0;
@@ -214,91 +188,132 @@ class StorageTotals {
 
 /// Each category's share of [total], as a fraction.
 ///
-/// Zero when there is nothing to divide — a donut of a zero-byte library is
-/// drawn empty rather than by dividing by zero.
+/// Zero when there is nothing to divide — an empty meter is drawn empty rather than by dividing by zero.
 double shareOf(int bytes, int total) {
   if (total <= 0 || bytes <= 0) return 0;
   return bytes / total;
 }
 
-/// Sweep angles for a donut, in radians, guaranteeing every non-zero slice is
-/// actually visible.
+/// A share as a whole percentage, or `<1%` for a share that is not nothing but rounds to it.
 ///
-/// **A 12 MB category beside a 3.1 GB one is a slice about a hundredth of a
-/// degree wide** — it renders as nothing, and a chart that silently omits a
-/// category is worse than one that is slightly out of proportion. So each
-/// non-zero slice gets at least [minSweep], and the overshoot is taken back
-/// from the slices that can afford it, in proportion to their size. The exact
-/// figures are in the legend either way.
-List<double> donutSweeps(
-  List<int> byteValues, {
-  double minSweep = 0.035,
-  double fullCircle = 6.283185307179586,
-}) {
-  final total = byteValues.fold<int>(0, (sum, value) => sum + (value > 0 ? value : 0));
-  if (total <= 0) return List<double>.filled(byteValues.length, 0);
-
-  final sweeps = <double>[
-    for (final value in byteValues)
-      value <= 0 ? 0.0 : (value / total) * fullCircle,
-  ];
-
-  final needsLift = <int>[];
-  var owed = 0.0;
-  for (var i = 0; i < sweeps.length; i++) {
-    if (sweeps[i] > 0 && sweeps[i] < minSweep) {
-      owed += minSweep - sweeps[i];
-      needsLift.add(i);
-    }
-  }
-  if (needsLift.isEmpty) return sweeps;
-
-  // Only slices that stay visible after giving can give.
-  final donors = <int>[
-    for (var i = 0; i < sweeps.length; i++)
-      if (sweeps[i] > minSweep) i,
-  ];
-  final donatable =
-      donors.fold<double>(0, (sum, i) => sum + (sweeps[i] - minSweep));
-  if (donatable <= 0) {
-    // Everything is tiny: an even split says "several categories, all small",
-    // which is the honest reading.
-    final even = fullCircle / (needsLift.length + donors.length);
-    return [
-      for (final sweep in sweeps) sweep <= 0 ? 0.0 : even,
-    ];
-  }
-
-  final scale = (owed > donatable ? donatable : owed) / donatable;
-  for (final i in donors) {
-    sweeps[i] -= (sweeps[i] - minSweep) * scale;
-  }
-  for (final i in needsLift) {
-    sweeps[i] = minSweep;
-  }
-  return sweeps;
+/// A category of a few megabytes beside gigabytes would otherwise read `0%`, which says it is empty.
+String percentLabel(int bytes, int total) {
+  final share = shareOf(bytes, total);
+  if (share <= 0) return '0%';
+  final percent = (share * 100).round();
+  return percent < 1 ? '<1%' : '$percent%';
 }
 
-/// The biggest [cap] items, with the rest folded into a tail.
+/// The widths of the meter's segments across [available] pixels, one per entry of [byteValues], with [gap] between them.
 ///
-/// A library of 300 mods must not render 300 rows: the question the drill-down
-/// answers is "what is big", and the tail exists so the visible rows still add
-/// up to the category total rather than quietly losing the remainder.
+/// **A 12 MB category beside a 7.9 GB one is a hair wide** — it would draw as nothing, and a meter that silently omits a category is worse than one slightly out of proportion.
+/// So each category with bytes gets at least [minWidth], and the rest share what is left in proportion.
+/// A category with no bytes gets no width. The exact figures are in the rows either way.
+List<double> meterWidths(
+  List<int> byteValues,
+  double available, {
+  double gap = 2,
+  double minWidth = 4,
+}) {
+  final shown = [for (var i = 0; i < byteValues.length; i++) if (byteValues[i] > 0) i];
+  if (shown.isEmpty || available <= 0) return List<double>.filled(byteValues.length, 0);
+
+  final room = available - gap * (shown.length - 1);
+  final widths = List<double>.filled(byteValues.length, 0);
+  var fixed = <int>{};
+  // A segment lifted to the minimum takes room from the others, which can push one of them under it in turn.
+  while (true) {
+    final left = room - fixed.length * minWidth;
+    final flexTotal = shown.where((i) => !fixed.contains(i)).fold<int>(0, (sum, i) => sum + byteValues[i]);
+    final lifted = {
+      for (final i in shown)
+        if (!fixed.contains(i) && flexTotal > 0 && left * byteValues[i] / flexTotal < minWidth) i,
+    };
+    if (lifted.isEmpty) {
+      for (final i in shown) {
+        widths[i] = fixed.contains(i) ? minWidth : (flexTotal > 0 ? left * byteValues[i] / flexTotal : 0);
+      }
+      return widths;
+    }
+    fixed = {...fixed, ...lifted};
+    if (fixed.length == shown.length) {
+      for (final i in shown) {
+        widths[i] = room / shown.length;
+      }
+      return widths;
+    }
+  }
+}
+
+/// One entry of the Largest mods list.
+class LargestMod {
+  const LargestMod({
+    required this.item,
+    required this.savedBytes,
+    required this.savedCount,
+  });
+
+  /// The mod's folder as the Mods category measured it, which is a link when the folder lives elsewhere.
+  final StorageItem item;
+
+  /// What its saved versions take, and how many there are.
+  final int savedBytes;
+  final int savedCount;
+
+  bool get isLinked => item.kind == StorageItemKind.linked;
+
+  /// The installed files plus the saved versions. A link has no installed files of its own.
+  int get totalBytes => item.bytes + savedBytes;
+}
+
+/// The [count] mods that take the most, installed files plus saved versions, largest first.
+///
+/// [mods] is the Mods category's items and [savedGroups] the Saved versions category's, one per mod keyed by its uid;
+/// [uidOf] says which uid a mod folder carries, or null for a folder with none, which has no saved versions.
+/// A mod that takes nothing at all is not listed.
+List<LargestMod> largestMods(
+  List<StorageItem> mods,
+  List<StorageItem> savedGroups,
+  String? Function(String folder) uidOf, {
+  int count = 5,
+}) {
+  final groups = {for (final group in savedGroups) group.id: group};
+  final ranked = [
+    for (final mod in mods)
+      LargestMod(
+        item: mod,
+        savedBytes: groups[uidOf(mod.id)]?.bytes ?? 0,
+        savedCount: groups[uidOf(mod.id)]?.fileCount ?? 0,
+      ),
+  ].where((mod) => mod.totalBytes > 0).toList()
+    ..sort((a, b) {
+      final bySize = b.totalBytes.compareTo(a.totalBytes);
+      return bySize != 0 ? bySize : a.item.label.toLowerCase().compareTo(b.item.label.toLowerCase());
+    });
+  return ranked.take(count).toList();
+}
+
+/// The biggest [cap] items largest first, and every item [keep] names, with the rest folded into a tail.
+///
+/// The tail exists so the visible rows still add up to the category total rather than quietly losing the remainder.
 ({List<StorageItem> items, int tailBytes, int tailCount}) foldTail(
   List<StorageItem> items, {
   int cap = 20,
+  bool Function(StorageItem item)? keep,
 }) {
   final sorted = [...items]..sort((a, b) => b.bytes.compareTo(a.bytes));
-  if (sorted.length <= cap) {
-    return (items: sorted, tailBytes: 0, tailCount: 0);
+  final head = <StorageItem>[];
+  var tailBytes = 0;
+  var tailCount = 0;
+  for (final (i, item) in sorted.indexed) {
+    if (i < cap || (keep?.call(item) ?? false)) {
+      head.add(item);
+    } else {
+      tailBytes += item.bytes;
+      tailCount++;
+    }
   }
-  final head = sorted.take(cap).toList();
-  final tail = sorted.skip(cap);
-  return (
-    items: head,
-    tailBytes: tail.fold<int>(0, (sum, item) => sum + item.bytes),
-    tailCount: tail.length,
-  );
+  return (items: head, tailBytes: tailBytes, tailCount: tailCount);
 }
 
 /// Collapses volume lines that are telling the user the same thing twice.

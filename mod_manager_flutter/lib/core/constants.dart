@@ -15,6 +15,10 @@ class AppConstants {
   /// version bump can't leave one of them claiming the old release.
   static const String httpUserAgent = 'zzz-mod-manager/$appVersion';
 
+  /// The app's repository: the Source code link, the base of the issue and releases pages, and the owner and name the
+  /// app's update check asks GitHub about (`docs/app-updates.md`).
+  static const String repositoryUrl = 'https://github.com/RalkeyOfficial/zzz-mod-manager';
+
   /// What Launch game passes the XXMI Launcher until the user edits it: start the game with ZZMI and no launcher
   /// window (`docs/launch-game.md`).
   static const String defaultLaunchArguments = '--nogui --xxmi ZZMI';

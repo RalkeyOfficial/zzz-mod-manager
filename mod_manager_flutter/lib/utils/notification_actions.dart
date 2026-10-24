@@ -17,21 +17,31 @@ import 'state_providers.dart';
 /// Opens a folder in the system file manager. Production is `PlatformService.openFolderInFileManager`.
 typedef NotificationFolderOpener = Future<bool> Function(String folder);
 
+/// Shows [folder] in the file manager, and says so in an error card when it can't be opened.
+Future<void> openFolderOrReport(
+  AppLocalizations loc,
+  NotificationCenter notify,
+  String folder, {
+  NotificationFolderOpener? opener,
+}) async {
+  final open = opener ?? PlatformServiceFactory.getInstance().openFolderInFileManager;
+  var ok = false;
+  try {
+    ok = await open(folder);
+  } catch (_) {}
+  if (!ok) notify.error(loc.t('notifications.open_folder_failed_title'), body: folder);
+}
+
 /// **Open folder**: shows [folder] in the file manager. For a file, pass the folder it is in.
 NotificationAction openFolderAction(
   AppLocalizations loc,
   NotificationCenter notify,
   String folder, {
   NotificationFolderOpener? opener,
-}) =>
-    NotificationAction(loc.t('notifications.actions.open_folder'), () async {
-      final open = opener ?? PlatformServiceFactory.getInstance().openFolderInFileManager;
-      var ok = false;
-      try {
-        ok = await open(folder);
-      } catch (_) {}
-      if (!ok) notify.error(loc.t('notifications.open_folder_failed_title'), body: folder);
-    });
+}) => NotificationAction(
+  loc.t('notifications.actions.open_folder'),
+  () => openFolderOrReport(loc, notify, folder, opener: opener),
+);
 
 /// **Copy details**: puts an error's [title] and [body] on the clipboard, for an error whose body is a raw exception
 /// the user may want to paste into a bug report. The clipboard can't be seen, so a Done card says it worked.
@@ -51,12 +61,16 @@ NotificationAction copyDetailsAction(
       notify.done(loc.t('notifications.copied_title'), body: title);
     });
 
-/// **Open Settings**: for a card that tells the user to fix a setting. Settings is one column with no anchors, so
-/// this opens the page rather than the field.
-NotificationAction openSettingsAction(AppLocalizations loc, ProviderContainer container) =>
-    NotificationAction(loc.t('notifications.actions.open_settings'), () {
-      container.read(destinationProvider.notifier).state = AppDestination.settings;
-    });
+/// **Open Settings**: for a card that tells the user to fix a setting. It opens the [section] holding it, Game &
+/// folders unless told otherwise, not the field itself.
+NotificationAction openSettingsAction(
+  AppLocalizations loc,
+  ProviderContainer container, {
+  SettingsSection section = SettingsSection.folders,
+}) => NotificationAction(loc.t('notifications.actions.open_settings'), () {
+  container.read(settingsSectionProvider.notifier).state = section;
+  container.read(destinationProvider.notifier).state = AppDestination.settings;
+});
 
 /// **Open Downloads**: opens the sidebar's Downloads panel, which keeps the per-download view.
 NotificationAction openDownloadsAction(AppLocalizations loc, ProviderContainer container) =>

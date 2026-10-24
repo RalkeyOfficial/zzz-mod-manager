@@ -56,25 +56,35 @@ void main() {
   });
 
   group('One at a time', () {
+    // With Settings' One active mod per character on, its starting value.
+    bool one(Map<String, bool> choices, String group) => isOneAtATime(choices, group, agentsDefault: true);
+
     test('is on by default for an agent and off for a category', () {
-      expect(isOneAtATime(const {}, 'ellen'), isTrue);
+      expect(one(const {}, 'ellen'), isTrue);
       for (final category in builtInCategories) {
-        expect(isOneAtATime(const {}, category.id), isFalse, reason: category.id);
+        expect(one(const {}, category.id), isFalse, reason: category.id);
       }
     });
 
     test('unassigned mods have no switch and never turn each other off', () {
       expect(hasOneAtATime(unknownCharacterId), isFalse);
-      expect(isOneAtATime(const {}, unknownCharacterId), isFalse);
-      expect(isOneAtATime(const {unknownCharacterId: true}, unknownCharacterId), isFalse);
+      expect(one(const {}, unknownCharacterId), isFalse);
+      expect(one(const {unknownCharacterId: true}, unknownCharacterId), isFalse);
       expect(hasOneAtATime('ellen'), isTrue);
       expect(hasOneAtATime('cat_ui'), isTrue);
     });
 
     test('a stored choice wins over the default', () {
-      expect(isOneAtATime(const {'ellen': false}, 'ellen'), isFalse);
-      expect(isOneAtATime(const {'cat_ui': true}, 'cat_ui'), isTrue);
-      expect(isOneAtATime(const {'cat_ui': true}, 'cat_audio'), isFalse, reason: 'a choice is per group');
+      expect(one(const {'ellen': false}, 'ellen'), isFalse);
+      expect(one(const {'cat_ui': true}, 'cat_ui'), isTrue);
+      expect(one(const {'cat_ui': true}, 'cat_audio'), isFalse, reason: 'a choice is per group');
+    });
+
+    test('the Settings default covers only the agents the user has not switched', () {
+      expect(isOneAtATime(const {}, 'ellen', agentsDefault: false), isFalse);
+      expect(isOneAtATime(const {'ellen': true}, 'ellen', agentsDefault: false), isTrue, reason: 'a choice wins');
+      expect(isOneAtATime(const {'ellen': false}, 'ellen', agentsDefault: true), isFalse);
+      expect(isOneAtATime(const {}, 'cat_ui', agentsDefault: true), isFalse, reason: 'a category is not an agent');
     });
   });
 
@@ -89,36 +99,48 @@ void main() {
       mod('Loose', '', active: true),
     ];
 
+    Set<String> off(List<ModInfo> mods, ModInfo pressed, Map<String, bool> choices, {bool agents = true}) =>
+        modsToSwitchOff(mods, pressed, choices, agentsDefault: agents);
+
     test("the group's other mods that are on, and nothing else", () {
-      expect(modsToSwitchOff(library, library.first, const {}), {'School', 'Beach'});
+      expect(off(library, library.first, const {}), {'School', 'Beach'});
+      expect(
+        off(library, library.first, const {}, agents: false),
+        isEmpty,
+        reason: 'with the Settings default off, nothing turns off unless the character is switched',
+      );
     });
 
     test('never the mod itself', () {
       final on = mod('School', 'ellen');
-      expect(modsToSwitchOff(library, on, const {}), {'Beach'});
+      expect(off(library, on, const {}), {'Beach'});
     });
 
     test('nothing when the press turns the mod off', () {
-      expect(modsToSwitchOff(library, library[1], const {}), isEmpty);
+      expect(off(library, library[1], const {}), isEmpty);
     });
 
     test('nothing with the switch off for the group', () {
-      expect(modsToSwitchOff(library, library.first, const {'ellen': false}), isEmpty);
-      expect(modsToSwitchOff(library, mod('Font', 'cat_ui'), const {}), isEmpty, reason: 'off by default for a category');
+      expect(off(library, library.first, const {'ellen': false}), isEmpty);
+      expect(off(library, mod('Font', 'cat_ui'), const {}), isEmpty, reason: 'off by default for a category');
+    });
+
+    test('a character switched on turns its mods off even with the Settings default off', () {
+      expect(off(library, library.first, const {'ellen': true}, agents: false), {'School', 'Beach'});
     });
 
     test('a category with the switch on turns its own mods off', () {
-      expect(modsToSwitchOff(library, mod('Font', 'cat_ui'), const {'cat_ui': true}), {'Hud'});
+      expect(off(library, mod('Font', 'cat_ui'), const {'cat_ui': true}), {'Hud'});
     });
 
     test('a legacy id counts with the character it was renamed to, both ways', () {
       final withLegacy = [mod('Old', 'quinqiy', active: true), mod('New', 'qingyi', active: true)];
-      expect(modsToSwitchOff(withLegacy, mod('Newer', 'qingyi'), const {}), {'Old', 'New'});
-      expect(modsToSwitchOff(withLegacy, mod('Older', 'quinqiy'), const {}), {'Old', 'New'});
+      expect(off(withLegacy, mod('Newer', 'qingyi'), const {}), {'Old', 'New'});
+      expect(off(withLegacy, mod('Older', 'quinqiy'), const {}), {'Old', 'New'});
     });
 
     test('unassigned mods never turn each other off', () {
-      expect(modsToSwitchOff(library, mod('Other loose', ''), const {unknownCharacterId: true}), isEmpty);
+      expect(off(library, mod('Other loose', ''), const {unknownCharacterId: true}), isEmpty);
     });
   });
 

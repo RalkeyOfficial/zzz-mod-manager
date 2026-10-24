@@ -52,8 +52,7 @@ class AppSidebar extends ConsumerWidget {
         color: palette.chrome,
         border: Border(right: BorderSide(color: palette.divider)),
       ),
-      // Storage and Settings sit at the bottom when there is room, and the whole column scrolls when the window is
-      // shorter than it.
+      // Settings sits at the bottom when there is room, and the whole column scrolls when the window is shorter than it.
       child: CustomScrollView(
         slivers: [
           SliverFillRemaining(
@@ -99,16 +98,13 @@ class AppSidebar extends ConsumerWidget {
                   const _ZzmiCard(),
                   const SizedBox(height: 8),
                   SidebarNavItem(
-                    icon: Icons.pie_chart_outline_rounded,
-                    label: loc.t('navigation.storage'),
-                    selected: destination == AppDestination.storage,
-                    onTap: () => go(AppDestination.storage),
-                  ),
-                  SidebarNavItem(
                     icon: Icons.tune_rounded,
                     label: loc.t('navigation.settings'),
                     selected: destination == AppDestination.settings,
-                    onTap: () => go(AppDestination.settings),
+                    onTap: () {
+                      ref.read(settingsSectionProvider.notifier).state = SettingsSection.folders;
+                      go(AppDestination.settings);
+                    },
                   ),
                 ],
               ),

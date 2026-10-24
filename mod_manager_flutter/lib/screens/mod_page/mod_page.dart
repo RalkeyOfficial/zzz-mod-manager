@@ -447,7 +447,11 @@ class _Summary extends ConsumerWidget {
     final author = page?.submitter?.name;
 
     final character = characterById(group);
-    final oneAtATime = character != null && isOneAtATime(ref.watch(oneAtATimeProvider), group);
+    final oneAtATime = character != null && isOneAtATime(
+          ref.watch(oneAtATimeProvider),
+          group,
+          agentsDefault: ref.watch(oneAtATimeDefaultProvider),
+        );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -803,10 +807,13 @@ class _InTheFolder extends ConsumerWidget {
 
 /// A tab's heading in the canvas's 15px weight, with a quieter remark on the right.
 class PageHeading extends StatelessWidget {
-  const PageHeading(this.label, {super.key, this.aside});
+  const PageHeading(this.label, {super.key, this.aside, this.asideLink});
 
   final String label;
   final String? aside;
+
+  /// A link after [aside]: its words and what pressing it does.
+  final ({String label, VoidCallback onTap})? asideLink;
 
   @override
   Widget build(BuildContext context) {
@@ -820,10 +827,13 @@ class PageHeading extends StatelessWidget {
         Text(label, style: text.titleMedium?.copyWith(color: palette.text)),
         if (aside != null)
           Expanded(
-            child: Text(
-              aside!,
-              textAlign: TextAlign.right,
-              style: text.bodySmall?.copyWith(color: palette.text3),
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 6,
+              children: [
+                Text(aside!, textAlign: TextAlign.right, style: text.bodySmall?.copyWith(color: palette.text3)),
+                if (asideLink != null) ZenithLink(asideLink!.label, onTap: asideLink!.onTap, style: text.bodySmall),
+              ],
             ),
           )
         else

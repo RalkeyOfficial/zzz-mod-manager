@@ -194,7 +194,7 @@ class Log {
 
   static Logger of(String source) => Logger(source);
 
-  /// The recent lines held in memory, for "Copy diagnostics" — already
+  /// The recent lines held in memory, for System info > Copy in About — already
   /// redacted, because that is what a [MemoryLogSink] stores.
   static List<String> get recent {
     for (final sink in router.sinks) {

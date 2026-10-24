@@ -555,7 +555,7 @@ void main() {
 
       expect(find.text('You have every one of these installed.'), findsNothing);
       expect(find.text('Show installed'), findsNothing);
-      expect(find.text('Every result is hidden by your adult-content filter or by Hide installed.'), findsOneWidget);
+      expect(find.text('Every result is hidden by your mature-content filter or by Hide installed.'), findsOneWidget);
       expect(find.text('Blur them instead'), findsOneWidget);
     });
   });

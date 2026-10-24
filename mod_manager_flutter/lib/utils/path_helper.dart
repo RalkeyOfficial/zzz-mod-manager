@@ -1,10 +1,26 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as path;
 
 /// Helper class to get correct paths for assets depending on the environment
 class PathHelper {
   static String? _modImagesPath;
   static String? _appDataPath;
+
+  /// Points the app-data folder, and the legacy images under it, at [directory], so a test that scans a library
+  /// cannot reach the developer's real `<appData>/mod_images`, which a scan sweeps.
+  @visibleForTesting
+  static void useAppDataForTests(String directory) {
+    _appDataPath = directory;
+    _modImagesPath = path.join(directory, 'mod_images');
+  }
+
+  /// Forgets what [useAppDataForTests] set, so the next ask works the real location out again.
+  @visibleForTesting
+  static void resetForTests() {
+    _appDataPath = null;
+    _modImagesPath = null;
+  }
 
   /// Get the path for application data directory
   /// Platform-aware: uses APPDATA on Windows, XDG on Linux

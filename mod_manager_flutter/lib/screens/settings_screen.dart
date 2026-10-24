@@ -1,22 +1,27 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
-import '../core/constants.dart';
-import '../services/api_service.dart';
-import '../utils/notification_actions.dart';
-import '../utils/notifications.dart';
-import '../utils/state_providers.dart';
-import '../l10n/app_localizations.dart';
-import 'components/network_link_notice.dart';
-import 'components/zzmi_folder_field.dart';
-import 'components/settings/appearance_section.dart';
-import 'components/settings/auto_tag_section.dart';
-import 'components/settings/diagnostics_section.dart';
-import 'components/settings/launch_section.dart';
-import 'components/settings/marketplace_section.dart';
-import 'components/settings/updates_section.dart';
+import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../core/button_feedback.dart';
+import '../core/palette.dart';
+import '../l10n/app_localizations.dart';
+import '../utils/state_providers.dart';
+import 'components/settings/about_card.dart';
+import 'components/settings/about_section.dart';
+import 'components/settings/appearance_section.dart';
+import 'components/settings/folders_section.dart';
+import 'components/settings/gamebanana_section.dart';
+import 'components/settings/launch_section.dart';
+import 'components/settings/mods_section.dart';
+import 'components/settings/storage_section.dart';
+
+/// The Settings page: a list of its sections beside the section in view.
+///
+/// Everything but Storage and About is one scrolling page that the list scrolls to, and follows as the page scrolls.
+/// Storage and About each take the page's whole width in place of it. [settingsSectionProvider] names the section in
+/// view and is how another screen asks for one.
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
@@ -24,496 +29,284 @@ class SettingsScreen extends ConsumerStatefulWidget {
   ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends ConsumerState<SettingsScreen> with TickerProviderStateMixin {
-  final _modsPathController = TextEditingController();
-  final _zzmiController = TextEditingController();
-  String? _storedZzmiPath;
-  String? _storedLinksFolder;
-  /// Whether the first read of the config has landed. Flipped once, and never
-  /// back: while it is false the whole page body is the loading spinner, and
-  /// swapping the body disposes the [AnimationLimiter] below, so anything that
-  /// cleared it later would make every section replay its staggered entrance.
-  /// A long-running *action* reports on the control that started it instead.
-  bool _loaded = false;
-  String _selectedLanguage = 'en';
-  bool _isUpdatingLanguage = false;
-  late AnimationController _loadingAnimationController;
-  late Animation<double> _loadingAnimation;
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  /// How wide each pane draws: the page and About at 820, Storage at 860.
+  static const double _pageWidth = 820;
+  static const double _storageWidth = 860;
+  static const double _navWidth = 210;
+
+  /// The width under which the list of sections sits above the page instead of beside it.
+  static const double _narrow = 760;
+
+  /// The sections that share the scrolling page, in the order it shows them.
+  static const List<SettingsSection> _page = [
+    SettingsSection.folders,
+    SettingsSection.launching,
+    SettingsSection.mods,
+    SettingsSection.gamebanana,
+    SettingsSection.appearance,
+  ];
+
+  final ScrollController _scroll = ScrollController();
+  final Map<SettingsSection, GlobalKey> _keys = {for (final section in _page) section: GlobalKey()};
+
+  /// Keeps the body's state, the scroll position included, when a resize moves it between the two layouts.
+  final GlobalKey _bodyKey = GlobalKey();
+
+  /// The section the scroll position just named, so the list following the page isn't taken for a request to scroll.
+  /// The provider's listener takes it back as soon as it sees the change.
+  SettingsSection? _followed;
+
+  /// Whether a scroll to a section is under way, which the page's own scrolling must not be read as a new position.
+  /// [_revealToken] tells a scroll that was overtaken by a later one.
+  bool _scrolling = false;
+  int _revealToken = 0;
+
+  static bool _isPane(SettingsSection section) =>
+      section == SettingsSection.storage || section == SettingsSection.about;
 
   @override
   void initState() {
     super.initState();
-    _loadingAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 1500),
-      vsync: this,
-    );
-    _loadingAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _loadingAnimationController,
-      curve: Curves.easeInOut,
-    ));
-    loadConfig();
+    _scroll.addListener(_follow);
+    final requested = ref.read(settingsSectionProvider);
+    if (!_isPane(requested) && requested != _page.first) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _reveal(requested, animate: false));
+    }
   }
 
   @override
   void dispose() {
-    _loadingAnimationController.dispose();
-    _modsPathController.dispose();
-    _zzmiController.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
-  Future<void> loadConfig() async {
-    try {
-      final config = await ApiService.getConfig();
-      if (!mounted) return;
-      setState(() {
-        _modsPathController.text = config['mods_path'] ?? '';
-        _zzmiController.text = config['zzmi_path'] ?? '';
-        _storedZzmiPath = config['zzmi_path'];
-        _storedLinksFolder = config['save_mods_path'];
-        _selectedLanguage = config['language'] ?? 'en';
-        _loaded = true;
-      });
-    } catch (e) {
-      if (mounted) setState(() => _loaded = true);
+  /// Scrolls the page to [section]. Waits a frame when the page isn't built yet, as after leaving Storage or About.
+  void _reveal(SettingsSection section, {required bool animate}) {
+    if (!mounted) return;
+    final context = _keys[section]?.currentContext;
+    if (context == null || !_scroll.hasClients) return;
+    final token = ++_revealToken;
+    _scrolling = true;
+    if (!animate) {
+      Scrollable.ensureVisible(context, duration: Duration.zero);
+      _scrolling = false;
+      return;
+    }
+    unawaited(
+      Scrollable.ensureVisible(context, duration: const Duration(milliseconds: 250), curve: Curves.easeOutCubic)
+          .whenComplete(() {
+            if (token == _revealToken) _scrolling = false;
+          }),
+    );
+  }
+
+  /// A press on a section in the list. Pressing the one in view scrolls to its top again, which the provider can't
+  /// say, since it holds the same value.
+  void _pick(SettingsSection picked) {
+    final notifier = ref.read(settingsSectionProvider.notifier);
+    if (notifier.state != picked) {
+      notifier.state = picked;
+    } else if (!_isPane(picked)) {
+      _reveal(picked, animate: true);
     }
   }
 
-  Future<void> pickModsPath() async {
-    final result = await FilePicker.platform.getDirectoryPath();
-    if (result != null) {
-      setState(() => _modsPathController.text = result);
-    }
-  }
-
-  Future<void> saveConfig() async {
-    final loc = context.loc;
-    final notify = context.notify;
-    final library = ref.read(libraryProvider.notifier);
-    try {
-      final onNetwork = <String>{};
-      final failed = await ApiService.updateConfig(
-        modsPath: _modsPathController.text,
-        zzmiPath: _zzmiController.text,
-        networkRefused: onNetwork,
-      );
-      // Either path changes which mods read as on.
-      await library.rescan();
-      // A mod refused for its network folder is told why on its own, and named only there.
-      if (onNetwork.isNotEmpty) reportNetworkLinkRefused(loc, notify, onNetwork);
-      final notRelinked = [for (final name in failed) if (!onNetwork.contains(name)) name];
-      if (notRelinked.isNotEmpty) {
-        notify.warning(
-          loc.plural('settings.relink_failed_title', notRelinked.length, params: {'count': '${notRelinked.length}'}),
-          body: loc.t('settings.relink_failed_body', params: {'names': notRelinked.join(', ')}),
-        );
+  /// Names the section at the top of the page as the one in view.
+  void _follow() {
+    if (_scrolling || !_scroll.hasClients) return;
+    var current = _page.first;
+    if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 1) {
+      current = _page.last;
+    } else {
+      for (final section in _page) {
+        final box = _keys[section]?.currentContext?.findRenderObject();
+        if (box is! RenderBox || !box.attached) continue;
+        final top = RenderAbstractViewport.of(box).getOffsetToReveal(box, 0).offset;
+        if (top <= _scroll.position.pixels + 80) current = section;
       }
-      if (mounted) {
-        context.notify.done(
-          loc.t('settings.save_success_title'),
-          body: loc.t('settings.save_success_body'),
-        );
-      }
-    } on LibraryOverlapsLinksFolder catch (refusal) {
-      notify.error(
-        loc.t('settings.library_is_links_folder_title'),
-        body: loc.t(refusal.bodyKey, params: {'folder': refusal.folder}),
-      );
-    } catch (e) {
-      final title = loc.t('settings.errors.generic_title');
-      notify.error(title, body: '$e', actions: [copyDetailsAction(loc, notify, title: title, body: '$e')]);
     }
+    if (current == ref.read(settingsSectionProvider)) return;
+    _followed = current;
+    ref.read(settingsSectionProvider.notifier).state = current;
   }
 
   @override
   Widget build(BuildContext context) {
-    final loc = context.loc;
-    final isDarkMode = ref.watch(isDarkModeProvider);
-
-    return Column(
-      children: [
-        // Header
-        Container(
-          padding: EdgeInsets.all(AppConstants.defaultPadding * 1.5),
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardColor,
-            border: Border(
-              bottom: BorderSide(
-                color: isDarkMode ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
-              ),
-            ),
-          ),
-          child: Row(
-            children: [
-              Text(
-                loc.t('settings.title'),
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-        // Content
-        Expanded(
-          child: !_loaded
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      AnimatedBuilder(
-                        animation: _loadingAnimation,
-                        builder: (context, child) {
-                          return Transform.scale(
-                            scale: 0.8 + (_loadingAnimation.value * 0.2),
-                            child: Container(
-                              padding: const EdgeInsets.all(20),
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [Color(0xFF0EA5E9), Color(0xFF06B6D4)],
-                                ),
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFF0EA5E9).withValues(alpha: 0.3),
-                                    blurRadius: 20,
-                                    spreadRadius: 5,
-                                  ),
-                                ],
-                              ),
-                              child: const CircularProgressIndicator(
-                                strokeWidth: 3,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 24),
-                      AnimatedBuilder(
-                        animation: _loadingAnimation,
-                        builder: (context, child) {
-                          return Opacity(
-                            opacity: _loadingAnimation.value,
-                            child: Text(
-                              loc.t('settings.loading'),
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                color: Colors.grey[600],
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                )
-              : AnimationLimiter(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: AnimationConfiguration.toStaggeredList(
-                        duration: const Duration(milliseconds: 375),
-                        childAnimationBuilder: (widget) => SlideAnimation(
-                          verticalOffset: 50.0,
-                          child: FadeInAnimation(child: widget),
-                        ),
-                        children: [
-                          // Paths Section
-                          _buildSectionTitle(loc.t('settings.sections.paths')),
-                          const SizedBox(height: 16),
-                          _buildPathField(
-                            label: loc.t('settings.paths.mods'),
-                            hint: loc.t('settings.paths.mods_hint'),
-                            controller: _modsPathController,
-                            onBrowse: pickModsPath,
-                            isDarkMode: isDarkMode,
-                            loc: loc,
-                          ),
-                          const SizedBox(height: 16),
-                          ZzmiFolderField(
-                            controller: _zzmiController,
-                            storedZzmiPath: _storedZzmiPath,
-                            storedLinksFolder: _storedLinksFolder,
-                            builder: (onBrowse, status) => _buildPathField(
-                              label: loc.t('settings.paths.zzmi'),
-                              hint: loc.t('settings.paths.zzmi_hint'),
-                              controller: _zzmiController,
-                              onBrowse: onBrowse,
-                              isDarkMode: isDarkMode,
-                              loc: loc,
-                              footer: status,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          const LaunchSettingsSection(),
-                          const SizedBox(height: 32),
-                          // Language Section
-                          _buildSectionTitle(loc.t('settings.sections.language')),
-                          const SizedBox(height: 16),
-                          _buildLanguageSelector(loc, isDarkMode),
-                          const SizedBox(height: 32),
-                          // Updates Section
-                          _buildSectionTitle(loc.t('settings.sections.updates')),
-                          const SizedBox(height: 16),
-                          const UpdatesSettingsSection(),
-                          const SizedBox(height: 32),
-                          // Marketplace Section
-                          _buildSectionTitle(
-                            loc.t('settings.sections.marketplace'),
-                          ),
-                          const SizedBox(height: 16),
-                          const MarketplaceSettingsSection(),
-                          const SizedBox(height: 32),
-                          // Auto-Tagging Section
-                          _buildSectionTitle(loc.t('settings.sections.auto_tag')),
-                          const SizedBox(height: 16),
-                          const AutoTagSettingsSection(),
-                          const SizedBox(height: 32),
-                          // Appearance Section
-                          _buildSectionTitle(loc.t('settings.sections.appearance')),
-                          const SizedBox(height: 16),
-                          const AppearanceSettingsSection(),
-                          const SizedBox(height: 32),
-                          // Diagnostics — last, because it is about the app
-                          // rather than about the user's mods.
-                          _buildSectionTitle(
-                            loc.t('settings.sections.diagnostics'),
-                          ),
-                          const SizedBox(height: 16),
-                          const DiagnosticsSettingsSection(),
-                          const SizedBox(height: 32),
-                          // Save Button
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              onPressed: saveConfig,
-                              icon: const Icon(Icons.save_outlined, size: 18),
-                              label: Text(loc.t('settings.actions.save_configuration')),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: const Color(0xFF0EA5E9),
-                                padding: const EdgeInsets.symmetric(vertical: 16),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          // Info Card
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF0EA5E9).withValues(alpha: 0.05),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: const Color(0xFF0EA5E9).withValues(alpha: 0.1),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.info_outline,
-                                  size: 20,
-                                  color: const Color(0xFF0EA5E9),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    loc.t('settings.info.symlinks'),
-                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildLanguageSelector(AppLocalizations loc, bool isDarkMode) {
-    final languageItems = {
-      'en': loc.t('language_names.en'),
-      'uk': loc.t('language_names.uk'),
-    };
-
-    return _buildSettingRow(
-      label: loc.t('settings.language.label'),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: _selectedLanguage,
-              onChanged: _isUpdatingLanguage
-                  ? null
-                  : (value) => _changeLanguage(value, loc),
-              items: languageItems.entries
-                  .map(
-                    (entry) => DropdownMenuItem<String>(
-                      value: entry.key,
-                      child: Text(entry.value),
-                    ),
-                  )
-                  .toList(),
-            ),
-          ),
-          if (_isUpdatingLanguage) ...[
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 16,
-              height: 16,
-              child: const CircularProgressIndicator(strokeWidth: 2),
-            ),
-          ],
-        ],
-      ),
-      isDarkMode: isDarkMode,
-    );
-  }
-
-  Future<void> _changeLanguage(String? languageCode, AppLocalizations loc) async {
-    if (languageCode == null || languageCode == _selectedLanguage) {
-      return;
-    }
-
-    setState(() {
-      _selectedLanguage = languageCode;
-      _isUpdatingLanguage = true;
+    final section = ref.watch(settingsSectionProvider);
+    ref.listen(settingsSectionProvider, (previous, next) {
+      final fromScroll = next == _followed;
+      _followed = null;
+      if (_isPane(next) || fromScroll) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _reveal(next, animate: !_isPane(previous ?? next)));
     });
 
-    ref.read(localeProvider.notifier).state = Locale(languageCode);
-
-    try {
-      await ApiService.setLanguage(languageCode);
-    } catch (e) {
-      if (mounted) {
-        final current = context.loc;
-        final notify = context.notify;
-        final title = current.t('settings.language.error_title');
-        notify.error(title, body: '$e', actions: [copyDetailsAction(current, notify, title: title, body: '$e')]);
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isUpdatingLanguage = false);
-      }
-    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final narrow = constraints.maxWidth < _narrow;
+        final list = _SectionList(selected: section, horizontal: narrow, onPick: _pick);
+        final body = KeyedSubtree(key: _bodyKey, child: _isPane(section) ? _pane(section) : _preferences());
+        if (narrow) {
+          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [list, Expanded(child: body)]);
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(width: _navWidth, child: list),
+            Expanded(child: body),
+          ],
+        );
+      },
+    );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.5,
+  Widget _preferences() {
+    return SingleChildScrollView(
+      controller: _scroll,
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: _pageWidth),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(32, 28, 32, 48),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: 28,
+              children: [
+                KeyedSubtree(key: _keys[SettingsSection.folders], child: const FoldersSection()),
+                KeyedSubtree(key: _keys[SettingsSection.launching], child: const LaunchSettingsSection()),
+                KeyedSubtree(key: _keys[SettingsSection.mods], child: const ModsSection()),
+                KeyedSubtree(key: _keys[SettingsSection.gamebanana], child: const GameBananaSection()),
+                KeyedSubtree(key: _keys[SettingsSection.appearance], child: const AppearanceSection()),
+                const SettingsAboutCard(),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildPathField({
-    required String label,
-    required String hint,
-    required TextEditingController controller,
-    required VoidCallback onBrowse,
-    required bool isDarkMode,
-    required AppLocalizations loc,
-    Widget? footer,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w500,
-            color: Colors.grey[600],
+  Widget _pane(SettingsSection section) {
+    return SingleChildScrollView(
+      key: ValueKey(section),
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: section == SettingsSection.storage ? _storageWidth : _pageWidth),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(32, 28, 32, 48),
+            child: section == SettingsSection.storage ? const StorageSection() : const AboutSection(),
           ),
         ),
-        const SizedBox(height: 8),
-        Row(
+      ),
+    );
+  }
+}
+
+/// The page title over the list of sections: a column beside the page, a row of words above it when narrow.
+class _SectionList extends StatelessWidget {
+  const _SectionList({required this.selected, required this.horizontal, required this.onPick});
+
+  final SettingsSection selected;
+  final bool horizontal;
+  final ValueChanged<SettingsSection> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = context.loc;
+    final theme = Theme.of(context);
+    final items = [
+      for (final section in SettingsSection.values)
+        _SectionItem(
+          label: loc.t('settings.nav.${section.name}'),
+          selected: section == selected,
+          onTap: () => onPick(section),
+        ),
+    ];
+    final title = Text(loc.t('settings.title'), style: theme.textTheme.headlineMedium);
+
+    if (horizontal) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: 12,
           children: [
-            Expanded(
-              child: TextField(
-                controller: controller,
-                decoration: InputDecoration(
-                  hintText: hint,
-                  hintStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[500]),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(
-                      color: isDarkMode ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.1),
-                    ),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(
-                      color: isDarkMode ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.1),
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFF0EA5E9)),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                  isDense: true,
-                ),
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ),
-            const SizedBox(width: 8),
-            OutlinedButton.icon(
-              onPressed: onBrowse,
-              icon: const Icon(Icons.folder_outlined, size: 18),
-              label: Text(loc.t('settings.paths.browse')),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
+            title,
+            SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(spacing: 4, children: items)),
           ],
         ),
-        if (footer != null) footer,
-      ],
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 28, 12, 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 2,
+        children: [
+          Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 16), child: title),
+          ...items,
+        ],
+      ),
     );
   }
+}
 
-  Widget _buildSettingRow({
-    required String label,
-    required Widget trailing,
-    required bool isDarkMode,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: isDarkMode ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w500),
+class _SectionItem extends StatefulWidget {
+  const _SectionItem({required this.label, required this.selected, required this.onTap});
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  State<_SectionItem> createState() => _SectionItemState();
+}
+
+class _SectionItemState extends State<_SectionItem> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = widget.label;
+    final selected = widget.selected;
+    final onTap = widget.onTap;
+    final palette = ZenithPalette.of(context);
+    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(7));
+    return Semantics(
+      button: true,
+      selected: selected,
+      excludeSemantics: true,
+      label: label,
+      child: KeyboardFocusRing(
+        shape: shape,
+        child: Material(
+          color: selected ? palette.sectionSelected : Colors.transparent,
+          shape: shape,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            onHover: (hovered) => setState(() => _hovered = hovered),
+            hoverColor: palette.sectionHover,
+            child: Stack(
+              children: [
+                if (selected)
+                  Positioned(left: 0, top: 0, bottom: 0, width: 2, child: ColoredBox(color: palette.accent)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  child: Text(
+                    label,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: selected || _hovered ? palette.text : palette.text2,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-          trailing,
-        ],
+        ),
       ),
     );
   }

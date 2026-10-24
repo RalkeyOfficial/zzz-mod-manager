@@ -24,8 +24,9 @@ This file is rules and pointers only. Every subject below has a doc in [`../docs
 | [`mod-reload.md`](../docs/mod-reload.md) | Why the app does not press F10 for you — what was measured, and why the feature is removed rather than fixed |
 | [`desktop-integration.md`](../docs/desktop-integration.md) | The window itself — the application id, the desktop entry and the icon that depends on it, and the drawn title bar and what keeps the window resizable |
 | [`launch-game.md`](../docs/launch-game.md) | The sidebar's Launch game button — the XXMI Launcher and its arguments, how each platform starts it (Wine or Proton on Linux), what it refuses, and the locks that keep the screen awake while the game runs |
-| [`disk-usage.md`](../docs/disk-usage.md) | What the app is keeping on disk — the Storage tab's categories, apparent size vs free space, the shared directory walk, and what the reclaim may delete |
-| [`configuration.md`](../docs/configuration.md) | The app's own settings |
+| [`disk-usage.md`](../docs/disk-usage.md) | What the app is keeping on disk — Settings' Storage section's categories, apparent size vs free space, the shared directory walk, and what the reclaim may delete |
+| [`configuration.md`](../docs/configuration.md) | The app's own settings, and the Settings page's sections |
+| [`app-updates.md`](../docs/app-updates.md) | The app's own update check — manual only, what it asks GitHub, what it never does |
 
 ## How mods work
 
@@ -33,7 +34,7 @@ Two configured paths drive everything: `modsPath` (where mod folders live — th
 Activating a mod creates a link `saveModsPath/<mod>` → `modsPath/<mod>`; deactivating removes it. A mod is on only while the link of its name points at its own folder: any other link of that name reads off, is replaced when the mod is turned on (and left as it was when the new link can't be made), and is never removed by turning it off.
 The app never removes a dead link on its own: the folder may be on an unmounted drive, and the mod is active again once it returns. Such a link changes only when the user turns on a mod of that name, when a mod that is on is renamed to that name while the link is dead (a working link of that name refuses the rename), or when it follows a library change to a library that has that mod ([`configuration.md`](../docs/configuration.md#changing-the-mod-library)).
 
-One at a time is per character (`oneAtATimeProvider`, `isOneAtATime`): with it on, turning a mod on turns the character's other mods off. Every enable from the library goes through `ApiService.enableMod`, dry run first ([`library-screen.md`](../docs/library-screen.md) §10).
+One at a time is per character (`oneAtATimeProvider`, `isOneAtATime`, with Settings' `oneAtATimeDefaultProvider` as the default for agents): with it on, turning a mod on turns the character's other mods off. Every enable from the library goes through `ApiService.enableMod`, dry run first ([`library-screen.md`](../docs/library-screen.md) §10).
 
 Characters and built-in categories (`cat_ui`, `cat_texture`, `cat_audio`, `cat_misc`) share one id namespace, stored in `ModInfo.characterId`.
 Anything resolving a character from an id must handle both, plus the `unknown` placeholder.
@@ -120,7 +121,7 @@ The library is `libraryProvider` and belongs to no screen. It owns the scan; `mo
 So: whoever changes a mod folder invalidates `libraryProvider`, never only something derived from it — invalidating the index alone rebuilds it from the same cached scan.
 One walk of the folder at a time: a `rescan()` during a running scan waits for it and then walks once more, since the running one may predate the caller's change. A scan never overwrites an edit (`put`) or an invalidate that came in while it was walking; it walks again instead, until a walk ends with nothing come in. The read an invalidate starts does the same, rather than keeping the edit's list.
 The sidebar's pages (`AppDestination`) are keyed `AnimatedSwitcher` children with no keep-alive, so the inactive page's `State` is disposed and nothing a page owns may be the only copy of something another surface needs.
-A provider in the root container is not disposed with it, which is how the Storage tab's scan survives a tab switch without a host widget.
+A provider in the root container is not disposed with it, which is how the Storage section's scan survives leaving Settings without a host widget.
 A question asked mid-install reads the disk instead — nothing has invalidated anything yet (`test/modal_freshness_test.dart`).
 
 Work that outlives the press that started it must not be owned by a tab. Its `BuildContext` dies on the next tab switch, silently and mid-await.

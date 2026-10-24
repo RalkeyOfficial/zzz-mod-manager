@@ -796,6 +796,137 @@ void main() {
       expect(Link(p.join(temp.saveMods.path, 'Winter Maid')).existsSync(), isTrue);
     });
 
+    group('with the game running', () {
+      Future<ProviderContainer> pumpRunning(WidgetTester tester, {required bool running}) async {
+        temp.createMod('Winter Maid');
+        temp.write('Winter Maid', 'Winter Maid.ini', '[TextureOverrideBody]\n');
+        return pumpModsScreen(
+          tester,
+          temp,
+          [mod('Winter Maid')],
+          services: [...temp.overrides, isGameRunningProvider.overrideWithValue(() async => running)],
+        );
+      }
+
+      testWidgets('turning a mod on says to press F10, and Undo turns it off again', (tester) async {
+        final container = await pumpRunning(tester, running: true);
+
+        await tapWithIo(tester, switchOf('Winter Maid'));
+
+        final card = container.read(notificationsProvider).single;
+        expect(card.kind, NotificationKind.note);
+        expect(card.title, 'Winter Maid is on');
+        expect(card.keycap, 'F10');
+        expect(card.actions.map((a) => a.label), ['Undo']);
+        expect(container.read(modsProvider).single.isActive, isTrue);
+
+        await tapWithIo(tester, find.text('Undo'));
+
+        expect(container.read(modsProvider).single.isActive, isFalse);
+        expect(Link(p.join(temp.saveMods.path, 'Winter Maid')).existsSync(), isFalse);
+      });
+
+      testWidgets('Undo does its own toggle, which says so with an Undo of its own', (tester) async {
+        final container = await pumpRunning(tester, running: true);
+        await tapWithIo(tester, switchOf('Winter Maid'));
+
+        await tapWithIo(tester, find.text('Undo'));
+
+        final titles = container.read(notificationsProvider).map((n) => n.title);
+        expect(titles, contains('Winter Maid is off'));
+      });
+
+      testWidgets('a press that turned the character\'s other mod off has no Undo, since pressing back leaves none on', (
+        tester,
+      ) async {
+        temp.createMod('Beach');
+        temp.write('Beach', 'Beach.ini', '[TextureOverrideBody]\n');
+        await tester.runAsync(() => temp.service.activateMod('Beach'));
+        temp.createMod('Winter Maid');
+        temp.write('Winter Maid', 'Winter Maid.ini', '[TextureOverrideBody]\n');
+        final container = await pumpModsScreen(
+          tester,
+          temp,
+          [mod('Winter Maid'), mod('Beach', isActive: true)],
+          services: [...temp.overrides, isGameRunningProvider.overrideWithValue(() async => true)],
+        );
+
+        await tapWithIo(tester, switchOf('Winter Maid'));
+
+        final card = container.read(notificationsProvider).single;
+        expect(card.title, 'Winter Maid is on');
+        expect(card.actions, isEmpty);
+        expect(container.read(modsProvider).firstWhere((m) => m.id == 'Beach').isActive, isFalse);
+      });
+
+      testWidgets('Undo pressed while a bulk action runs does nothing', (tester) async {
+        final container = await pumpRunning(tester, running: true);
+        await tapWithIo(tester, switchOf('Winter Maid'));
+        container.read(allModsBulkRunningProvider.notifier).state = true;
+
+        await tapWithIo(tester, find.text('Undo'));
+
+        expect(container.read(modsProvider).single.isActive, isTrue);
+      });
+
+      testWidgets('turning one off says so too', (tester) async {
+        final container = await pumpRunning(tester, running: true);
+        await tapWithIo(tester, switchOf('Winter Maid'));
+        container.read(notificationsProvider.notifier).clear();
+
+        await tapWithIo(tester, switchOf('Winter Maid'));
+
+        expect(container.read(notificationsProvider).map((n) => n.title), contains('Winter Maid is off'));
+      });
+
+      testWidgets('with the game closed a toggle says nothing', (tester) async {
+        final container = await pumpRunning(tester, running: false);
+
+        await tapWithIo(tester, switchOf('Winter Maid'));
+
+        expect(container.read(notificationsProvider), isEmpty);
+        expect(container.read(modsProvider).single.isActive, isTrue);
+      });
+
+      testWidgets('with Remind me to press F10 off a toggle says nothing', (tester) async {
+        final container = await pumpRunning(tester, running: true);
+        container.read(remindF10Provider.notifier).state = false;
+
+        await tapWithIo(tester, switchOf('Winter Maid'));
+
+        expect(container.read(notificationsProvider), isEmpty);
+      });
+    });
+
+    testWidgets("with Settings' One active mod per character off, another of the character's mods stays on", (
+      tester,
+    ) async {
+      for (final name in ['Beach', 'Winter Maid']) {
+        temp.createMod(name);
+        temp.write(name, '$name.ini', '[TextureOverrideBody]\n');
+      }
+      await tester.runAsync(() => temp.service.activateMod('Beach'));
+      final container = await pumpModsScreen(tester, temp, [mod('Winter Maid'), mod('Beach', isActive: true)]);
+      container.read(oneAtATimeDefaultProvider.notifier).state = false;
+
+      await tapWithIo(tester, switchOf('Winter Maid'));
+
+      expect(container.read(modsProvider).where((m) => m.isActive).map((m) => m.id), unorderedEquals(['Beach', 'Winter Maid']));
+    });
+
+    testWidgets("with Settings' One active mod per character on, the same press turns the other off", (tester) async {
+      for (final name in ['Beach', 'Winter Maid']) {
+        temp.createMod(name);
+        temp.write(name, '$name.ini', '[TextureOverrideBody]\n');
+      }
+      await tester.runAsync(() => temp.service.activateMod('Beach'));
+      final container = await pumpModsScreen(tester, temp, [mod('Winter Maid'), mod('Beach', isActive: true)]);
+
+      await tapWithIo(tester, switchOf('Winter Maid'));
+
+      expect(container.read(modsProvider).where((m) => m.isActive).map((m) => m.id), ['Winter Maid']);
+    });
+
     testWidgets('the switch is greyed out and a press ignored while a bulk action runs', (tester) async {
       temp.createMod('Winter Maid');
       temp.write('Winter Maid', 'Winter Maid.ini', '[TextureOverrideBody]\n');

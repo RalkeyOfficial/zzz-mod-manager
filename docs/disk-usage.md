@@ -1,6 +1,6 @@
 # Disk usage
 
-**Scope:** what the Storage tab measures and how, and what the reclaim is allowed to delete.
+**Scope:** what Settings' Storage section measures and how, what its buttons are allowed to delete, and what its Largest mods list ranks.
 Where each store lives and what it is *for* belongs to the doc that owns it — [`downloads.md`](downloads.md), [`applying-updates.md`](applying-updates.md) §4.2, [`metadata-schema.md`](metadata-schema.md), [`logging.md`](logging.md), [`configuration.md`](configuration.md).
 
 ## 1. Six categories, and why they are disjoint
@@ -14,7 +14,9 @@ Where each store lives and what it is *for* belongs to the doc that owns it — 
 | Logs | `<appData>/logs/` | one `stat` each |
 | Leftovers | `<appData>/mod_images/` + `<systemTemp>/zzz_archive_extract_*` | a walk each |
 
-**Mods and the sidecars are one traversal split by path, not two walks.** The sidecar lives *inside* the mod folder, so measuring the library whole and the sidecars again would make the slices sum past the total — and a chart whose parts exceed its whole is not reporting, it is lying. `StorageScanner` memoises the walk so whichever of the two providers asks second is free.
+**Mods and the sidecars are one traversal split by path, not two walks.** The sidecar lives *inside* the mod folder, so measuring the library whole and the sidecars again would make the segments sum past the total — and a chart whose parts exceed its whole is not reporting, it is lying. `StorageScanner` memoises the walk so whichever of the two providers asks second is free.
+
+The meter draws the categories in a fixed order and colour (installed mods, saved versions, leftovers, downloads, covers and metadata, logs; `ZenithPalette.storageCategories`), each segment as wide as its share. A category with bytes is never narrower than a few pixels, since a segment that rounds to nothing would leave the category out of the picture; the exact figure is in its row either way.
 
 ## 2. Every number here is apparent size
 
@@ -22,21 +24,21 @@ Sizes are the sum of file lengths. Free space is what the OS reports. **The two 
 
 Three consequences, all of them load-bearing:
 
-- The page never says "delete these to free X".
+- The section never says "delete these to free X", and no confirmation promises a figure.
 - The reclaim reports the **measured** free-space delta where it can read one, and falls back to the apparent sum only when it cannot.
 - A hardlinked file is counted once per path, and there is no fix — Dart's `FileStat` exposes no link count.
 
 ## 3. Zero and "could not look" are different states
 
-`StorageRead` carries which: `ok`, `partial`, `unreadable`, `absent`, `notConfigured`. The reason this is not a nullable int is that **`0 B` beside Mods reads as "your mods are gone"**, which is a far more alarming statement than "no folder is chosen". A category with no measurement draws no slice at all rather than a zero-width one.
+`StorageRead` carries which: `ok`, `partial`, `unreadable`, `absent`, `notConfigured`. The reason this is not a nullable int is that **`0 B` beside Mods reads as "your mods are gone"**, which is a far more alarming statement than "no folder is chosen". A category with no measurement draws no segment at all rather than a zero-width one.
 
-`partial` means the walk skipped something, so the byte count is a floor and the UI says "at least". One partial category makes the page total a floor too.
+`partial` means the walk skipped something, so the byte count is a floor and the UI says "at least". One partial category makes the total a floor too.
 
 The import preflight treats partial differently and more strictly: `ModManagerService._bytesUnder` returns **null** rather than a smaller number, because a total short by one unreadable folder would approve a copy that then fills the disk.
 
 ## 4. The walk
 
-`utils/directory_size.dart` is the one recursive size walk, shared by the snapshot capture, the import preflight, this page and the Library's sizes. The All mods table takes every mod's size from one `measureLibrarySync` walk, the one this page's Mods category runs ([`library-screen.md` §16](library-screen.md#16-the-all-mods-table)).
+`utils/directory_size.dart` is the one recursive size walk, shared by the snapshot capture, the import preflight, this section and the Library's sizes. The All mods table takes every mod's size from one `measureLibrarySync` walk, the one this section's Mods category runs ([`library-screen.md` §16](library-screen.md#16-the-all-mods-table)).
 
 - **Catches per entity.** A folder deleted by a concurrent rescan must not end the walk and have the truncated total reported as fact.
 - **Containment is decided by resolved path, not by entity type.** `followLinks: false` yields a symlink, and on Windows a junction or any other reparse point, as a `Link` and skips it, but a bind mount lists as a plain `Directory` and the walk would descend it. Since mods are activated by linking them into the game folder, descending a folder that leads elsewhere either counts a mod twice or leaves the library; one pointing at an ancestor recurses until something gives. Resolving each directory before descending catches all of them, at one syscall per directory.
@@ -51,17 +53,17 @@ The import preflight treats partial differently and more strictly: `ModManagerSe
 
 What it trades: `manifest.json` itself is uncounted, and the figure drifts if someone edits `<appData>/backups` by hand.
 
-## 6. Free space is a list, not a slice
+## 6. Free space is a list, not a segment
 
-The library is routinely on a different disk than app data, so there is no single "free" number and it cannot be a wedge of the same ring. One line per volume, labelled by what it holds. Two probes answering identically collapse to one line — identity cannot be tested portably from Dart, since `parseDfAvailableBytes` keeps only the byte count, so equal free space is the available approximation and it errs towards one line rather than inventing a distinction.
+The library is routinely on a different disk than app data, so there is no single "free" number and it cannot be a part of the same meter. Beside the total, one line when there is one volume ("N free"), one line per volume, labelled by what it holds, when there are more. Two probes answering identically collapse to one line — identity cannot be tested portably from Dart, since `parseDfAvailableBytes` keeps only the byte count, so equal free space is the available approximation and it errs towards one line rather than inventing a distinction. The size of the drive is not shown: `PlatformService` reads free space only.
 
 On Windows the API needs an existing **directory**, so the probe is `<appData>` itself rather than a subfolder that may not have been created yet.
 
 ## 7. Freshness
 
-Tab entry re-reads only the cheap categories — saved versions, downloads, logs, leftovers, free space. **The library walk is not re-run**, because bouncing off the tab must not re-walk gigabytes; it sits behind an explicit Rescan, and the page compares the mod count it scanned against the current library to say "your library has changed since this scan" rather than quietly showing an old number.
+Opening the section re-reads only the cheap categories — saved versions, downloads, logs, leftovers, free space. **The library walk is not re-run**, because bouncing off the section must not re-walk gigabytes; it sits behind an explicit Rescan, whose button says when the walk finished ("Measured 12 minutes ago", counted again every minute). The section compares the mod folders the walk saw against the mods the library holds, by name, and says "your library has changed since this scan" when either has one the other lacks, rather than quietly showing an old number. A link in the library folder that points nowhere is in the walk and never in the library, so it does not count as a change.
 
-The category providers are **not `autoDispose`**, and that is what makes the tab work: tabs are keyed `AnimatedSwitcher` children with no keep-alive, so the screen's `State` is disposed the moment the user switches away. A container-owned provider is not, so a walk finishes while the user is elsewhere and the answer is waiting on the way back. Nothing needs hosting above the switcher.
+The category providers are **not `autoDispose`**, and that is what makes the section work: pages are keyed `AnimatedSwitcher` children with no keep-alive, so the section's `State` is disposed the moment the user switches away. A container-owned provider is not, so a walk finishes while the user is elsewhere and the answer is waiting on the way back. Nothing needs hosting above the switcher.
 
 **Nothing watches `libraryProvider`.** Because these providers live for the session, that link would stay live all session: every mod toggle, rename and install anywhere in the app would kick off a multi-gigabyte re-walk for a user standing on the Library page who has never opened Storage.
 
@@ -71,7 +73,24 @@ The category providers are **not `autoDispose`**, and that is what makes the tab
 
 Six targets: completed archives, abandoned partials, temp extractions, legacy images, old logs, and saved-versions groups no mod claims. **The library and the sidecars are absent from the enum**, so no future edit here can reach them. `<appData>/backups` is reachable through the one target, and only for a group whose uid no mod in the library carries.
 
-**The game's mods folder is absent too, and the app never removes a dead link there on its own or offers it for removal, by this or anything else.** A link whose target is missing is not garbage:
+### What each button takes
+
+A reclaim is always asked for a set of targets, never for everything: the planner plans only the candidates of that set, and the service lists and measures only those stores. Every gate below applies to a target whichever button asks for it.
+
+| Button | Targets |
+|---|---|
+| Leftovers: Clean up | legacy images, temp extractions |
+| Downloads: Clear | completed archives, abandoned partials |
+| Logs: Clear | old logs |
+| Saved versions: Manage, then Clear versions of mods you no longer have | unclaimed saved-versions groups |
+
+Installed mods and Covers & metadata have no button, only an icon that opens the library folder: the sidecars live inside each mod's folder, so both open the same one, and the Covers & metadata tooltip says so. **Covers & metadata has no Clear on purpose.** The sidecar holds a mod's origin tracking and the user's own covers, which cannot be fetched again, and the sidecars are deliberately absent from the enum, so a button there would have nothing it could be allowed to take. The Installed mods row has none either, since the library is never swept.
+
+Every button asks first, in a confirmation that says what goes and promises no figure. A press that waits shows the working spinner on the button that was pressed, and the other buttons stand still until it ends, since a second sweep would plan against an inventory the first is in the middle of removing. The result is one notification: the space the volume gave back where it could be read, otherwise the sum of file lengths, with a line for each store that was left alone and why (a transfer in progress, an install in progress, a download waiting for an answer, an unreadable library, a mod linked to a missing folder). Each line names only the stores of the pressed button, and a refusal stands in for "nothing to remove" rather than sitting beside it.
+
+The logs row says the last 7 runs are kept, as About does: that is the launch rotation's count (`keptLogFiles`). Clear takes every log file except the running one, and its confirmation says so, because the rotation already keeps 7 and a Clear that left some of them would often have nothing to take.
+
+**The game's mods folder is not a target either, and the app never removes a dead link there on its own or offers it for removal, by this or anything else.** A link whose target is missing is not garbage:
 the library may be on a drive that is not mounted, restored from a backup or moved back, and the link works again the moment the folder returns.
 Removing it would silently lose the fact that the mod was on, and nothing would ever put it back.
 Such a link changes only when the user turns on a mod of that name, which replaces it with the mod's own, renames a mod that is on to that name ([`library-screen.md`](library-screen.md) §10), or when it follows a change of the Mod library to a library that has that mod ([`configuration.md`](configuration.md#changing-the-mod-library)).
@@ -91,11 +110,14 @@ The same gate covers the partials, which look safe and are not: a paused, resuma
 
 The gate is re-read immediately before the phase that depends on it. Nothing blocks `enqueue` for housekeeping — holding up a user's download for this is the worse trade, and the worst case of losing the race is a re-download.
 
-### Two rules that are data-loss bugs if missed
+### Rules that are data-loss bugs if missed
 
 - **Legacy images.** A mod with no sidecar still reaches its cover through `<appData>/mod_images`. Reachability is decided against the library, and `sweepLegacyImages` handed an empty list considers *every* image unreachable — so an unset, missing or unreadable library skips the target entirely rather than running against a list that cannot be trusted.
 - **Saved versions.** The same edge: a group is unclaimed when no mod in the library carries its uid, so an unreadable library would make every group unclaimed and take every saved version the user has. It skips the target on the same condition as the images.
-- **Logs.** Only names `isLogFileName` recognises: the user is invited into that folder to attach a log to a report and may have left something of their own. And **never the running session's file** — on Windows the delete fails; on Linux it succeeds, the sink writes on to an unlinked inode, no space returns until exit, and the user loses the log of the run they are about to report. `planLogRotation` reserves a slot for a file about to be opened, so `planLogReclaim` is a separate function rather than a reused one.
+- **What "readable" means.** The library scan answers an empty list, never an error, when no library folder is set, when it is missing (an unmounted drive), when it exists but cannot be listed, and when no ZZMI folder is set. A cached list may also be an empty one from when the drive was away. So a list is believed only while the library folder is set, exists and can be listed, a ZZMI folder is set, and the library has just been walked again.
+  `ReclaimService` checks the folder itself for both targets, so no caller can run them against an empty answer; the ZZMI folder is checked, and the walk done, where the library is read. A target refused on this ground says so, and its groups and images stay.
+- **A link to a folder that is gone.** A mod whose folder is a link to a drive that is not mounted is shown as "Linked elsewhere" in the walk and is absent from the library list, so its images and saved versions would read as nobody's, and a dead link may come back to life. Both library-decided targets are refused whole, with a reason of their own, while the library folder holds such a link; names the scan skips (starting with `.` or `__`) do not count.
+- **Logs.** Only names `isLogFileName` recognises: the user is invited into that folder to attach a log to a report and may have left something of their own. And **never the running session's file** — on Windows the delete fails; on Linux it succeeds, the sink writes on to an unlinked inode, no space returns until exit, and the user loses the log of the run they are about to report. `planLogReclaim` takes every recognised file except that one, where `planLogRotation` keeps 7 and reserves a slot for a file about to be opened.
 
 ### The grace on an extraction directory
 
@@ -109,4 +131,15 @@ What licenses accepting a millisecond race instead of building a lock: the sweep
 
 An unclaimed snapshot group — a mod deleted outside the app, a sidecar deleted by hand — is the one thing the sweep deletes that cannot be fetched again. It goes anyway, because nothing else can reach it: the saved-versions dialog opens from the mod's own row, and this mod has no row. Retention protects each group's newest entry forever, so without the button a deleted mod's history would sit in the store for good, counting against the 5 GB budget.
 
-It is never swept on a schedule. The user presses the button, and the confirmation says that saved versions of mods no longer in the library are included. A mod moved out of the library and back in after the press has lost its history, and that is accepted: it takes three deliberate steps to arrive there, and a checkbox for it would cost every other user a decision.
+Manage opens the groups in place under the Saved versions row, largest first, each with its mod's name, how many versions it holds and what they take.
+Twenty groups are listed before the rest fold into one "and N more" row, except that every group the button would take is listed however small, so the fold never hides one.
+A group whose uid no mod in the library carries says so, once the library has been read and the Mods category is measured, and the button "Clear versions of mods you no longer have" appears unless the Mods category is unmeasured or the library is read and every group has its mod: with no library to look at, the scan's empty list would tag every group.
+The button is the same one the dead-link rule in §8 can refuse, and the report says why. Its confirmation says that deleted saved versions cannot be fetched again.
+
+It is never swept on a schedule. The user presses the button. A mod moved out of the library and back in after the press has lost its history, and that is accepted: it takes three deliberate steps to arrive there, and a checkbox for it would cost every other user a decision.
+
+## 10. Largest mods
+
+The five mods that take the most, each with its name, its character ("Unassigned" when it has none), how many saved versions it has, a bar against the largest of the five and its size. **The size is the installed files plus the mod's saved versions**, the two figures the Mods and Saved versions categories already hold, joined by the mod's uid: the number is what leaving the library would give back, and the subtitle says so. A mod with no uid has no saved versions. A mod whose folder is a link shows "Linked elsewhere" where its size would be, never `0 B`, and ranks on its saved versions alone. A mod that takes nothing is not listed.
+
+Pressing a row opens the mod's page in the Library's Characters view, since Settings is a page of its own. The list is absent while there is no measured library to rank.

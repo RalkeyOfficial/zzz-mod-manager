@@ -228,6 +228,9 @@ void main() {
     await service.setMarketplaceSort('mostDownloaded');
     await service.setUpdateCheckOnLaunch(true);
     await service.setHideEmptyCharacters(true);
+    await service.setOneAtATimeDefault(false);
+    await service.setSnapshotsToKeep(5);
+    await service.setRemindF10(false);
     await service.setMarketplaceHideInstalled(true);
     await service.setMarketplaceTurnOnAfterInstall(true);
     await service.addActiveMod('SomeMod');
@@ -258,6 +261,9 @@ void main() {
       'marketplace_sort': next.marketplaceSort,
       'update_check_on_launch': next.updateCheckOnLaunch,
       'hide_empty_characters': next.hideEmptyCharacters,
+      'one_at_a_time_default': next.oneAtATimeDefault,
+      'snapshots_to_keep': next.snapshotsToKeep,
+      'remind_f10': next.remindF10,
       'marketplace_hide_installed': next.marketplaceHideInstalled,
       'marketplace_turn_on_after_install': next.marketplaceTurnOnAfterInstall,
       'file_logging': next.fileLogging,
@@ -276,7 +282,7 @@ void main() {
       if (entry.key == 'first_run') continue;
       // A bool cannot be "empty", so the emptiness probe says nothing about one
       // and is asserted directly below instead.
-      if (entry.value is bool) continue;
+      if (entry.value is bool || entry.value is int) continue;
       expect(entry.value, isNot(anyOf(isNull, '', isEmpty)),
           reason: '${entry.key} did not survive the restart');
     }
@@ -284,9 +290,44 @@ void main() {
         reason: 'update_check_on_launch did not survive the restart');
     expect(next.wineUseUmu, isFalse, reason: 'wine_use_umu did not survive the restart');
     expect(next.hideEmptyCharacters, isTrue, reason: 'hide_empty_characters did not survive the restart');
+    expect(next.oneAtATimeDefault, isFalse, reason: 'one_at_a_time_default did not survive the restart');
+    expect(next.snapshotsToKeep, 5, reason: 'snapshots_to_keep did not survive the restart');
+    expect(next.remindF10, isFalse, reason: 'remind_f10 did not survive the restart');
     expect(next.marketplaceHideInstalled, isTrue, reason: 'marketplace_hide_installed did not survive the restart');
     expect(next.marketplaceTurnOnAfterInstall, isTrue,
         reason: 'marketplace_turn_on_after_install did not survive the restart');
+  });
+
+  test('the Mods settings start on their defaults, and a value of the wrong kind is ignored', () async {
+    final fresh = await build();
+    expect(fresh.oneAtATimeDefault, isTrue);
+    expect(fresh.snapshotsToKeep, 3);
+    expect(fresh.remindF10, isTrue);
+
+    await configFile().writeAsString(jsonEncode({
+      'one_at_a_time_default': 'no',
+      'snapshots_to_keep': 'many',
+      'remind_f10': 0,
+      'file_logging': false,
+    }));
+    final service = await build();
+    expect(await service.loadFromFile(), isTrue);
+    expect(service.oneAtATimeDefault, isTrue);
+    expect(service.snapshotsToKeep, 3);
+    expect(service.remindF10, isTrue);
+  });
+
+  test('Snapshots to keep stays between one and ten, however it is written', () async {
+    final service = await build();
+    await service.setSnapshotsToKeep(0);
+    expect(service.snapshotsToKeep, 1);
+    await service.setSnapshotsToKeep(40);
+    expect(service.snapshotsToKeep, 10);
+
+    await configFile().writeAsString(jsonEncode({'snapshots_to_keep': 99, 'file_logging': false}));
+    final next = await build();
+    expect(await next.loadFromFile(), isTrue);
+    expect(next.snapshotsToKeep, 10);
   });
 
   test('Turn on after installing is off until switched on, and a value that is not a bool is ignored', () async {

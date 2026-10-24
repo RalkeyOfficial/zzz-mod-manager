@@ -11,7 +11,6 @@
     "gamebanana": "GameBanana",
     "browse": "Browse",
     "downloads": "Downloads",
-    "storage": "Storage",
     "settings": "Settings"
   },
   "library": {
@@ -332,7 +331,8 @@
     },
     "history": {
       "installed_files": "Installed files",
-      "retention": "Each update, restore and patch removal saves the whole folder first. Older snapshots are cleared as the store fills; the newest is always kept.",
+      "retention": "Each update, restore and patch removal saves the whole folder first. Snapshots kept per mod: {count}.",
+      "retention_change": "Change",
       "current": "Current",
       "file_unknown": "File not known yet",
       "no_variant": "no variant text",
@@ -396,45 +396,99 @@
     }
   },
   "storage": {
-    "title": "Storage",
-    "total": "Stored by this app",
+    "hero_label": "Storage used by the manager",
+    "only_counts": "Only counts what the manager stores. ZZMI itself and the game are not included.",
+    "by_category": "Storage by category",
+    "meter_label": "Storage breakdown: {parts}",
+    "tip_share": "{percent} of the total",
     "measuring": "Measuring…",
+    "measured_now": "Measured just now",
+    "measured_minutes_single": "Measured {count} minute ago",
+    "measured_minutes_plural": "Measured {count} minutes ago",
+    "measured_hours_single": "Measured {count} hour ago",
+    "measured_hours_plural": "Measured {count} hours ago",
+    "measured_days_single": "Measured {count} day ago",
+    "measured_days_plural": "Measured {count} days ago",
     "at_least": "at least {size}",
     "rescan": "Rescan the library",
+    "open_folder": "Open {name} folder",
+    "open_sidecars_folder": "Open the library folder, where each mod keeps its covers and metadata",
     "library_changed": "Your library has changed since this scan.",
     "more_single": "and {count} more",
     "more_plural": "and {count} more",
     "empty": "Nothing stored yet.",
+    "actions": {
+      "clean_up": "Clean up",
+      "clear": "Clear",
+      "manage": "Manage",
+      "clear_versions": "Clear versions of mods you no longer have"
+    },
+    "confirm": {
+      "leftovers_title": "Clean up leftovers?",
+      "leftovers_body": "This deletes unpacked copies that installs left behind, and cover images from older versions that no mod uses. Copies from the last hour are kept.",
+      "leftovers_note": "Your mods and their covers are not touched.",
+      "leftovers_confirm": "Clean up",
+      "downloads_title": "Clear downloads?",
+      "downloads_body": "This deletes downloaded archives waiting to be installed, and downloads that were left unfinished. Each of them can be downloaded again from GameBanana.",
+      "downloads_note": "Nothing is deleted while a download or an install is running.",
+      "downloads_confirm": "Clear downloads",
+      "logs_title": "Clear old logs?",
+      "logs_body": "This deletes every log file except this run's.",
+      "logs_confirm": "Clear logs",
+      "versions_title": "Clear saved versions of mods you no longer have?",
+      "versions_body": "This deletes the saved versions of mods that are no longer in your library. Saved versions of mods you still have are not touched.",
+      "versions_note": "Deleted saved versions cannot be fetched again.",
+      "versions_confirm": "Clear versions"
+    },
+    "rows": {
+      "mods_single": "{count} mod in your library",
+      "mods_plural": "{count} mods in your library",
+      "snapshots_single": "{count} snapshot kept by updates",
+      "snapshots_plural": "{count} snapshots kept by updates",
+      "across_single": "across {count} mod",
+      "across_plural": "across {count} mods",
+      "archives_single": "{count} archive waiting to install",
+      "archives_plural": "{count} archives waiting to install",
+      "partials_single": "{count} partly downloaded",
+      "partials_plural": "{count} partly downloaded",
+      "logs_single": "The last {count} run is kept",
+      "logs_plural": "The last {count} runs are kept"
+    },
+    "largest": {
+      "title": "Largest mods",
+      "subtitle": "Installed version plus its saved versions",
+      "no_versions": "no saved versions"
+    },
     "reclaim": {
-      "action": "Free up space",
-      "working": "Freeing up space…",
-      "title": "Free up space?",
-      "body": "This deletes downloaded archives you've already installed, abandoned downloads, leftover extraction folders, old logs, and the saved versions of mods that are no longer in your library.",
-      "safe": "Your mods, and the saved versions of mods you still have, are not touched.",
-      "confirm": "Free up space",
+      "failed_title": "Couldn't free the space",
       "cancel": "Cancel",
       "done_title": "Freed {size}",
-      "done_body": "Removed {count} items.",
+      "done_body_single": "Removed {count} item.",
+      "done_body_plural": "Removed {count} items.",
       "nothing_title": "Nothing to free up",
       "nothing_body": "There was no leftover data to remove.",
       "skipped_downloads": "Left your downloads alone — a transfer is in progress.",
       "skipped_install": "Left the unpacked files alone — an install is in progress.",
       "skipped_waiting": "Left the unpacked files alone — a download is waiting for your answer in Downloads.",
-      "skipped_library": "Left the old images and the saved versions of deleted mods alone — your mods folder could not be read."
+      "skipped_downloads_install": "Left your downloads alone — an install is in progress.",
+      "skipped_dead_link_images": "Left the old images alone — a mod in your library is linked to a folder that is missing.",
+      "skipped_dead_link_versions": "Left the saved versions alone — a mod in your library is linked to a folder that is missing.",
+      "skipped_library_images":"Left the old images alone — your mods folder could not be read.",
+      "skipped_library_versions": "Left the saved versions alone — your mods folder could not be read."
     },
     "categories": {
-      "mods": "Mods",
+      "mods": "Installed mods",
       "mods_hint": "Your mod folders, without their covers and metadata.",
       "saved_versions": "Saved versions",
       "saved_versions_hint": "What each mod looked like before an update.",
       "downloads": "Downloads",
       "downloads_hint": "Archives waiting to be installed, and partly-fetched ones.",
       "sidecars": "Covers & metadata",
-      "sidecars_hint": "Screenshots, descriptions and the files a patch replaced.",
+      "sidecars_hint": "Covers, descriptions, where each mod came from and the files a patch replaced. They cannot be fetched again, so they are never cleared here.",
       "logs": "Logs",
       "logs_hint": "This run's log and the ones kept beside it.",
       "leftovers": "Leftovers",
-      "leftovers_hint": "Unpacked copies left behind by installing mods, and cover images from older versions. Nothing needs these."
+      "leftovers_hint": "Unpacked copies from past installs and covers from older versions. Nothing uses them."
     },
     "read": {
       "not_configured": "No folder set",
@@ -450,8 +504,7 @@
     },
     "item": {
       "linked": "Linked elsewhere",
-      "extraction": "Unpacked copy left behind by an install",
-      "legacy_image": "Cover image from an older version",
+      "orphan": "No longer in your library",
       "versions_single": "{count} saved version",
       "versions_plural": "{count} saved versions"
     }
@@ -557,7 +610,7 @@
     "type_ui": "UI",
     "type_misc": "Misc",
     "hide_installed": "Hide installed",
-    "content_filter": "Adult content",
+    "content_filter": "Mature content",
     "content_filter_blur": "Blur",
     "content_filter_show": "Show without blur",
     "content_filter_hide": "Hide entirely",
@@ -608,8 +661,8 @@
     "card_byline_added": "{author} · added {age}",
     "empty_results": "No mods found.",
     "empty_search_action": "Clear search",
-    "empty_filtered": "Every result is hidden by your adult-content filter.",
-    "empty_filtered_and_installed": "Every result is hidden by your adult-content filter or by Hide installed.",
+    "empty_filtered": "Every result is hidden by your mature-content filter.",
+    "empty_filtered_and_installed": "Every result is hidden by your mature-content filter or by Hide installed.",
     "empty_filtered_action": "Blur them instead",
     "empty_all_installed": "You have every one of these installed.",
     "show_installed": "Show installed",
@@ -1247,9 +1300,7 @@
   },
   "settings": {
     "title": "Settings",
-    "loading": "Loading settings...",
-    "save_success_title": "Settings saved",
-    "save_success_body": "Your folder paths have been updated.",
+    "open": "Open",
     "relink_failed_title_single": "{count} mod couldn't be linked to the new library folder",
     "relink_failed_title_plural": "{count} mods couldn't be linked to the new library folder",
     "relink_failed_body": "{names}",
@@ -1261,96 +1312,89 @@
     "errors": {
       "generic_title": "Couldn't save your settings"
     },
-    "sections": {
-      "paths": "Mod directories",
-      "language": "Language",
-      "auto_tag": "Automatic tagging",
+    "about_card": {
+      "latest": "You're on the latest version",
+      "newer": "Version {version} is available"
+    },
+    "nav": {
+      "folders": "Game & folders",
+      "launching": "Launching",
+      "mods": "Mods",
+      "gamebanana": "GameBanana",
+      "storage": "Storage",
       "appearance": "Appearance",
-      "updates": "Updates",
-      "marketplace": "Marketplace",
-      "diagnostics": "Diagnostics"
+      "about": "About"
     },
-    "diagnostics": {
-      "write_log": "Write a log file",
-      "write_log_hint": "Records what the app does — the mods it touches, the folders it writes to and the pages it fetches — so a problem can be looked into afterwards. Your username is removed and file paths are shortened. The last seven runs are kept.",
-      "open_folder": "Log files",
-      "open_folder_hint": "One file per run, newest last. This is the one to attach to a bug report.",
-      "open_folder_action": "Open folder",
-      "open_failed_title": "Couldn't open the log folder",
-      "open_failed_body": "Nothing has been written there yet, or the file manager didn't start.",
-      "copy": "Copy diagnostics",
-      "copy_hint": "Your system details and the most recent log lines, ready to paste into a bug report.",
-      "copy_action": "Copy",
-      "copied_title": "Copied",
-      "copied_body": "Your system details and the most recent log lines are on the clipboard."
+    "mods": {
+      "one_at_a_time": "One active mod per character",
+      "one_at_a_time_hint": "Turning a mod on turns that character's other mods off. Each character can override this.",
+      "snapshots": "Snapshots to keep",
+      "snapshots_hint": "An update keeps the folder it replaces so you can roll back.",
+      "snapshots_lowered_title": "Older saved versions will be cleared",
+      "snapshots_lowered_body_single": "The next time a saved version is made, every mod is cut down to {count} saved version.",
+      "snapshots_lowered_body_plural": "The next time a saved version is made, every mod is cut down to {count} saved versions.",
+      "snapshots_fewer": "Keep fewer",
+      "snapshots_more": "Keep more",
+      "update_check": "Check for mod updates",
+      "update_check_hint": "Only mods installed from GameBanana can be checked.",
+      "update_check_start": "When the app starts",
+      "update_check_press": "Only when I press Check",
+      "remind_f10": "Remind me to press F10",
+      "remind_f10_hint": "Shows the reload key after you change mods while the game is running."
     },
-    "updates": {
-      "check_on_launch": "Check for updates when the app starts",
-      "check_on_launch_hint": "Contacts GameBanana once at startup and marks mods that have a newer version published. Nothing is downloaded or installed — updates are always applied by you."
-    },
-    "marketplace": {
-      "content_filter_hint": "How mods GameBanana flags as adult appear while you browse. The same setting as the one in the Marketplace toolbar."
+    "gamebanana": {
+      "content_filter_hint": "How Browse shows mods GameBanana flags as mature."
     },
     "paths": {
       "mods": "Mod library",
-      "mods_hint": "Where the mods you've installed are kept",
+      "mods_hint": "Where your mods actually live.",
+      "mods_unset": "No Mod library chosen.",
+      "free": "{free} free on this drive",
       "zzmi": "ZZMI folder",
-      "zzmi_hint": "The folder with d3dx.ini in it. Mods are linked into its Mods folder.",
+      "zzmi_hint": "Where the game loads mods from. Turning a mod on puts a link here.",
+      "zzmi_found": "d3dx.ini and Mods folder found",
+      "zzmi_unset": "No ZZMI folder chosen.",
       "zzmi_status_found": "Links go in {links} · Shader fixes go in {shaders}",
-      "zzmi_status_missing": "No d3dx.ini in this folder, so it doesn't look like ZZMI. Shader fixes can't be installed.",
-      "browse": "Browse"
+      "zzmi_status_missing": "No d3dx.ini in this folder, so it doesn't look like ZZMI. Shader fixes can't be installed."
     },
     "language": {
-      "title": "Language",
-      "label": "App language",
-      "english": "English",
-      "ukrainian": "Ukrainian",
+      "label": "Language",
       "error_title": "Couldn't change the language"
-    },
-    "actions": {
-      "save_configuration": "Save configuration"
-    },
-    "info": {
-      "symlinks": "This app uses symbolic links to safely manage mods without copying files."
     },
     "appearance": {
       "theme": "Theme",
-      "theme_hint": "System follows your desktop's light or dark setting, and changes with it.",
       "theme_light": "Light",
       "theme_system": "System",
       "theme_dark": "Dark",
       "accent": "Accent",
-      "accent_hint": "Marks what's turned on, the main button on each screen, and links.",
       "accent_violet": "Violet",
       "accent_paper": "Paper",
       "accent_lime": "Lime",
       "accent_teal": "Teal"
     },
     "launch": {
-      "label": "Launch game with",
-      "hint": "What the Launch game button starts: the XXMI Launcher beside the ZZMI folder, unless you choose another.",
+      "subtitle_linux": "On Linux the game runs through Proton, so Zenith needs to know how to start XXMI.",
+      "subtitle_windows": "What the Launch game button starts.",
+      "found": "Found",
+      "umu_found": "umu-run found at ",
+      "umu_missing": "umu-run isn't installed, so Launch game can't start Proton through it. Install umu-launcher or turn this off.",
+      "title": "Launching the game",
+      "label": "XXMI Launcher",
+      "hint": "The launcher's .exe. Zenith starts it, and it starts the game with mods loaded.",
       "missing": "No XXMI Launcher beside the ZZMI folder. Choose it.",
-      "change": "Change…",
+      "change": "Change",
       "reset": "Reset",
       "arguments": "Launch arguments",
-      "arguments_hint": "Passed to the XXMI Launcher. --nogui starts the game without its window, --xxmi ZZMI picks Zenless Zone Zero.",
-      "runner": "Wine or Proton",
-      "runner_hint": "What runs the XXMI Launcher: the same Proton or Wine build the game runs with.",
-      "umu": "Run Proton through umu-launcher",
-      "umu_hint": "Runs the game the way Steam does, which works more reliably. Needs umu-launcher installed.",
+      "arguments_hint": "Passed to XXMI Launcher. Leave empty to open its window instead.",
+      "runner": "Proton",
+      "runner_hint": "Which Proton starts XXMI. Found in Steam's compatibility tools folders.",
+      "runner_hint_umu": "Which Proton umu-run uses. Found in Steam's compatibility tools folders.",
+      "umu": "Use umu-launcher",
+      "umu_hint": "Runs Proton the way Steam does, including its per-game fixes.",
       "runner_default": "System Wine (wine)",
-      "runner_chosen": "Chosen file",
-      "runner_other": "Other file…",
-      "source": {
-        "steam": "Steam",
-        "heroic": "Heroic",
-        "lutris": "Lutris",
-        "bottles": "Bottles",
-        "system": "System"
-      },
       "runner_choose": "Choose wine or proton",
       "prefix": "Wine prefix",
-      "prefix_hint": "The prefix the game is set up in. XXMI starts the game inside it.",
+      "prefix_hint": "The Windows environment XXMI runs in. An empty folder is set up on first launch.",
       "prefix_default": "The runner's default prefix",
       "prefix_missing": "This folder doesn't look like a Wine prefix: it has no drive_c.",
       "prefix_required": "Proton started directly has no prefix of its own. Choose the game's.",
@@ -1360,25 +1404,63 @@
     },
     "auto_tag": {
       "title": "Automatic tagging",
-      "description": "The system detects characters from mod folder names and sets tags automatically.",
-      "import_hint": "Automatically when importing new mods",
-      "characters_supported": "Recognizes {count} characters",
-      "naming_hint": "Folder name should include character name (e.g. \"Ellen_Summer\")",
-      "example": "Example: folder \"Miyabi_Kimono\" will be tagged as Miyabi",
+      "description": "Gives a mod its character when its folder name names one, such as Ellen_Summer. New imports are tagged on their own; this goes through the mods you already have.",
       "run_action": "Detect tags for all mods",
-      "running": "Detecting tags...",
       "no_mods_title": "Nothing to tag",
       "no_mods_body": "Every mod already has a character, or your library is empty.",
-      "success_title": "Tags detected!",
-      "success_message": "Mods grouped by characters!",
-      "ok": "Great!",
-      "note": "This function analyzes all mods without tags and tries to determine characters automatically",
       "summary": "Automatically assigned {count} {plural}",
       "tag_single": "tag",
       "tag_plural": "tags",
-      "list_title": "Detected tags:",
       "error_title": "Auto-tagging failed"
     }
+  },
+  "about": {
+    "tagline": "Mod manager for Zenless Zone Zero",
+    "logo_label": "Zenith logo",
+    "version": "Version {version} · {platform}",
+    "check": "Check for updates",
+    "release_notes": "Release notes",
+    "update": {
+      "latest": "You're on the latest version · checked {age}",
+    "latest_stable": "Nothing newer than this pre-release is published as a stable release · checked {age}",
+      "newer": "Version {version} is available · checked {age}",
+      "offline": "Couldn't check: no connection to GitHub",
+      "rate_limited": "Couldn't check: GitHub is limiting requests from this address, try again later",
+      "no_release": "Couldn't check: no release is published yet",
+      "unreadable": "Couldn't check: GitHub's answer wasn't a release the app can read"
+    },
+    "links": {
+      "source": "Source code",
+      "source_hint": "GitHub",
+      "report": "Report a problem",
+      "report_hint": "Opens a GitHub issue",
+      "license": "License",
+      "license_name": "MIT",
+      "open_failed": "Couldn't open the link"
+    },
+    "bug_reports": {
+      "title": "For bug reports",
+      "app_data": "App data",
+      "open": "Open",
+      "open_failed": "Couldn't open the folder",
+      "open_failed_app_data_hint": "{path} — the folder is gone, or the file manager didn't start.",
+      "open_failed_logs_hint": "{path} — nothing has been written there yet, or the file manager didn't start.",
+      "write_log": "Write a log file",
+      "write_log_hint": "Records what the app does — the mods it touches, the folders it writes to and the pages it fetches — so a problem can be looked into afterwards. Your username is removed and file paths are shortened.",
+      "logs": "Logs",
+      "logs_hint_single": "The last {count} run is kept. Attach the newest file to a bug report.",
+      "logs_hint_plural": "The last {count} runs are kept. Attach the newest file to a bug report.",
+      "open_logs": "Open log folder",
+      "system_info": "System info",
+      "copy": "Copy",
+      "copied_title": "Copied",
+      "copied_body": "Your system details and the most recent log lines are on the clipboard.",
+      "zzmi_found": "ZZMI found",
+      "zzmi_missing": "ZZMI not found",
+      "mods_single": "{count} mod",
+      "mods_plural": "{count} mods"
+    },
+    "disclaimer": "Made by RalkeyOfficial. Not affiliated with HoYoverse or GameBanana. Zenless Zone Zero and its characters belong to HoYoverse; mods belong to their authors."
   },
   "language_names": {
     "en": "English",
@@ -1423,7 +1505,12 @@
     "copied_title": "Details copied",
     "copy_failed_title": "Couldn't copy the details",
     "open_folder_failed_title": "Couldn't open the folder",
-    "character_portrait": "Portrait of {name}"
+    "character_portrait": "Portrait of {name}",
+    "f10": {
+      "on_title": "{name} is on",
+      "off_title": "{name} is off",
+      "body": "Press {key} in game to apply the change."
+    }
   },
   "welcome": {
     "title": "Welcome to ZZZ Mod Manager!",

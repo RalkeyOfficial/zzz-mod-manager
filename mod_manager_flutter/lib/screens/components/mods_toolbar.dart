@@ -126,7 +126,11 @@ class _OneAtATime extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final loc = context.loc;
     final palette = ZenithPalette.of(context);
-    final on = isOneAtATime(ref.watch(oneAtATimeProvider), groupId);
+    final on = isOneAtATime(
+      ref.watch(oneAtATimeProvider),
+      groupId,
+      agentsDefault: ref.watch(oneAtATimeDefaultProvider),
+    );
     final label = loc.t('library.grid.one_at_a_time');
 
     return Tooltip(
