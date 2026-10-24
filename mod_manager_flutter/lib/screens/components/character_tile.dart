@@ -10,7 +10,7 @@ import '../../utils/zzz_characters.dart';
 import 'character_avatar.dart';
 
 /// The element tile for a row of the character list: the agent's attribute, or [ElementTone.neutral] for a
-/// category, the protagonists and unassigned mods.
+/// category, the Proxies, an agent whose attribute is not announced yet and unassigned mods.
 ElementTone elementToneOf(String groupId) => switch (characterById(groupId)?.attribute) {
   AgentAttribute.physical => ElementTone.physical,
   AgentAttribute.fire => ElementTone.fire,

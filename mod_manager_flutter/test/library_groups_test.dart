@@ -189,15 +189,22 @@ void main() {
   });
 
   group('roster', () {
-    test('every agent but the two protagonists has an attribute, a specialty and a faction', () {
+    test('every agent but the two Proxies has an attribute, a specialty and a faction', () {
+      // Fill in the attribute and drop the id from here once it is announced.
+      const unannounced = {'sunbringer'};
+      expect(zzzCharactersData.where((c) => c.isProxy).map((c) => c.id), ['belle', 'wise']);
       for (final c in zzzCharactersData) {
         expect(c.faction, isNotNull, reason: '${c.id} has no faction');
-        if (c.id == 'belle' || c.id == 'wise') {
+        if (c.isProxy) {
           expect(c.attribute, isNull, reason: c.id);
           expect(c.specialty, isNull, reason: c.id);
           continue;
         }
-        expect(c.attribute, isNotNull, reason: '${c.id} has no attribute');
+        if (unannounced.contains(c.id)) {
+          expect(c.attribute, isNull, reason: '${c.id} has an attribute now; drop it from unannounced');
+        } else {
+          expect(c.attribute, isNotNull, reason: '${c.id} has no attribute');
+        }
         expect(c.specialty, isNotNull, reason: '${c.id} has no specialty');
       }
     });

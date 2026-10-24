@@ -138,14 +138,16 @@ class _Identity extends StatelessWidget {
 
     final attribute = c.attribute;
     final specialty = c.specialty;
+    final badgeKey = c.isProxy
+        ? 'library.hero.protagonist'
+        : attribute == null
+        ? null
+        : 'library.attribute.${attribute.name}';
     return Row(
       mainAxisSize: MainAxisSize.min,
       spacing: 8,
       children: [
-        ZenithBadge(
-          label: loc.t(attribute == null ? 'library.hero.protagonist' : 'library.attribute.${attribute.name}'),
-          tone: palette.element(elementToneOf(groupId)),
-        ),
+        if (badgeKey != null) ZenithBadge(label: loc.t(badgeKey), tone: palette.element(elementToneOf(groupId))),
         Flexible(
           child: Text(
             [?c.faction, if (specialty != null) loc.t('library.specialty.${specialty.name}')].join(' · '),

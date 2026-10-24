@@ -34,10 +34,13 @@ class CharacterData {
   /// character from a folder/file name — e.g. no-space variants.
   final List<String> aliases;
 
-  /// Null for the two protagonists, who don't fight.
+  /// One of the two protagonists, who don't fight.
+  final bool isProxy;
+
+  /// Null for the Proxies, and for an agent whose attribute is not announced yet.
   final AgentAttribute? attribute;
 
-  /// Null for the two protagonists.
+  /// Null for the Proxies.
   final AgentSpecialty? specialty;
 
   /// The official English name, shortened the way the game's own menus shorten it. A proper noun, so never
@@ -50,6 +53,7 @@ class CharacterData {
     this.briefName,
     this.asset,
     this.aliases = const [],
+    this.isProxy = false,
     this.attribute,
     this.specialty,
     this.faction,
@@ -96,6 +100,7 @@ const _external = 'External Strategy Department';
 const _metropolitan = 'Metropolitan Order Division';
 const _flint = 'Flint Workshop';
 const _phaethon = 'Phaethon';
+const _unknownRealm = 'Unknown Realm';
 
 /// All ZZZ characters, alphabetical by display name.
 const List<CharacterData> zzzCharactersData = [
@@ -145,7 +150,7 @@ const List<CharacterData> zzzCharactersData = [
     specialty: AgentSpecialty.rupture,
     faction: _krampus,
   ),
-  CharacterData(id: 'belle', briefName: 'Belle', faction: _phaethon),
+  CharacterData(id: 'belle', briefName: 'Belle', isProxy: true, faction: _phaethon),
   CharacterData(
     id: 'ben',
     realName: 'Ben Bigger',
@@ -267,6 +272,13 @@ const List<CharacterData> zzzCharactersData = [
     attribute: AgentAttribute.fire,
     specialty: AgentSpecialty.stun,
     faction: _yunkui,
+  ),
+  CharacterData(
+    id: 'kafka',
+    briefName: 'Kafka',
+    attribute: AgentAttribute.electric,
+    specialty: AgentSpecialty.anomaly,
+    faction: _unknownRealm,
   ),
   CharacterData(
     id: 'koleda',
@@ -437,6 +449,13 @@ const List<CharacterData> zzzCharactersData = [
     faction: _victoria,
   ),
   CharacterData(
+    id: 'robin',
+    briefName: 'Robin',
+    attribute: AgentAttribute.ether,
+    specialty: AgentSpecialty.defense,
+    faction: _unknownRealm,
+  ),
+  CharacterData(
     id: 'roxy',
     realName: 'Roxy Ifrita Pryce',
     briefName: 'Roxy',
@@ -518,6 +537,12 @@ const List<CharacterData> zzzCharactersData = [
     faction: _angels,
   ),
   CharacterData(
+    id: 'sunbringer',
+    briefName: 'Sunbringer',
+    specialty: AgentSpecialty.armorer,
+    faction: 'Roscaelifer',
+  ),
+  CharacterData(
     id: 'trigger',
     briefName: 'Trigger',
     attribute: AgentAttribute.electric,
@@ -540,7 +565,7 @@ const List<CharacterData> zzzCharactersData = [
     specialty: AgentSpecialty.anomaly,
     faction: _mockingbird,
   ),
-  CharacterData(id: 'wise', briefName: 'Wise', faction: _phaethon),
+  CharacterData(id: 'wise', briefName: 'Wise', isProxy: true, faction: _phaethon),
   CharacterData(
     id: 'yanagi',
     realName: 'Tsukishiro Yanagi',

@@ -126,6 +126,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - RAR and 7z mods install with no setup: 7-Zip ships with the app, and the Arch package installs it.
 - The Arch package pulls in what "open mod page" and "open mod folder" need, and lists xdotool and ydotool as optional.
 - Claret, Phoenix, Roxy and Severian are in the character list, with portraits, and mods named after them are sorted to them on import.
+- Kafka, Robin and Sunbringer are in the character list, with portraits, and mods named after them are sorted to them on import. Sunbringer's page shows no element until it is announced.
 - Repeated notifications are counted on one card, such as "3 mods installed".
 - When an update check finds newer files, its notification has a Review button that opens the Updates page.
 - The notification for an installed mod has an Open button that shows it in the Library.
