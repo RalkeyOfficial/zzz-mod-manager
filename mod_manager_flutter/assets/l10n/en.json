@@ -875,7 +875,9 @@
       "blocked_name": "Fix the name of {name} to continue",
       "blocked_name_more": "Fix the name of {name} and {count} more to continue",
       "updated_single": "Updated {count} mod from the dropped files",
-      "updated_plural": "Updated {count} mods from the dropped files"
+      "updated_plural": "Updated {count} mods from the dropped files",
+      "update_skipped_title": "Not updated",
+      "update_skipped_body": "{mod} was being changed when its turn came, so the dropped files were not written into it. Drop them again once that is done."
     },
     "import_working": {
       "unpacking_single": "Unpacking {count} archive…",

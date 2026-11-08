@@ -93,15 +93,30 @@ class UpdateApplier {
   /// [folders] maps each source folder to the subfolder of the mod it goes into, empty for the mod folder itself.
   /// One folder is the mod; several combined into one mod each take a subfolder named after them, as a combined
   /// install lays them (`docs/importing-mods.md` §5).
+  ///
+  /// Folders with the same name, dropped from different places, each keep their files: the later ones take a free
+  /// `Name (2)`, `Name (3)`, as the source and as the subfolder.
   Future<UpdatePreview> previewDropped(Map<String, String> folders) {
-    final byName = {for (final folder in folders.keys) path.basename(folder): folder};
-    final layout = UpdateLayout(
-      mappings: [
-        for (final entry in folders.entries)
-          UpdateFolderMapping(source: path.basename(entry.key), targetSubPath: entry.value),
-      ],
-    );
-    return _previewOf(layout, byName);
+    final sourceNames = <String>{};
+    final subfolders = <String>{};
+    String free(Set<String> taken, String name) {
+      var candidate = name;
+      for (var n = 2; !taken.add(candidate.toLowerCase()); n++) {
+        candidate = '$name ($n)';
+      }
+      return candidate;
+    }
+
+    final byName = <String, String>{};
+    final mappings = <UpdateFolderMapping>[];
+    for (final entry in folders.entries) {
+      final source = free(sourceNames, path.basename(entry.key));
+      byName[source] = entry.key;
+      mappings.add(
+        UpdateFolderMapping(source: source, targetSubPath: entry.value.isEmpty ? '' : free(subfolders, entry.value)),
+      );
+    }
+    return _previewOf(UpdateLayout(mappings: mappings), byName);
   }
 
   Future<UpdatePreview> _previewOf(UpdateLayout layout, Map<String, String> byName) async {

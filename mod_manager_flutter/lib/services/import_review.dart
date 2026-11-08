@@ -185,16 +185,28 @@ bool isInvalidModName(String name) =>
 /// Evaluates [items] against [library].
 ///
 /// **A clash is library-wide and ignores letter case**: the library is flat, so a folder of that name exists whatever
-/// character it is filed under. The final names are settled in two passes, so a row that keeps both takes the first
-/// `Name (n)` that no folder and no other row has.
+/// character it is filed under. Where the filesystem tells `Foo` and `foo` apart and the library has both, the exact
+/// spelling is the match, and a name spelled a third way matches neither. The final names are settled in two passes,
+/// so a row that keeps both takes the first `Name (n)` that no folder and no other row has.
 ImportReview evaluateImport(List<ImportItem> items, Iterable<ExistingMod> library) {
-  final byName = {for (final mod in library) mod.id.toLowerCase(): mod};
+  final exact = {for (final mod in library) mod.id: mod};
+  final folded = <String, List<ExistingMod>>{};
+  for (final mod in exact.values) {
+    folded.putIfAbsent(mod.id.toLowerCase(), () => []).add(mod);
+  }
+  final taken = folded.keys.toSet();
+  ExistingMod? matching(String name) {
+    final same = folded[name.toLowerCase()];
+    if (same == null) return null;
+    return exact[name] ?? (same.length == 1 ? same.single : null);
+  }
+
   final names = <String>[for (final item in items) item.name.trim()];
 
   final existing = <ExistingMod?>[];
   final choices = <OnClash>[];
   for (var i = 0; i < items.length; i++) {
-    final mod = names[i].isEmpty ? null : byName[names[i].toLowerCase()];
+    final mod = names[i].isEmpty ? null : matching(names[i]);
     existing.add(mod);
     choices.add(mod == null || mod.busy ? OnClash.keepBoth : items[i].choice);
   }
@@ -212,7 +224,7 @@ ImportReview evaluateImport(List<ImportItem> items, Iterable<ExistingMod> librar
   for (var i = 0; i < items.length; i++) {
     if (existing[i] == null || choices[i] != OnClash.keepBoth) continue;
     var n = 2;
-    while (byName.containsKey('${names[i]} ($n)'.toLowerCase()) || claimed.containsKey('${names[i]} ($n)'.toLowerCase())) {
+    while (taken.contains('${names[i]} ($n)'.toLowerCase()) || claimed.containsKey('${names[i]} ($n)'.toLowerCase())) {
       n++;
     }
     finals[i] = '${names[i]} ($n)';

@@ -25,7 +25,6 @@ import '../services/log/logger.dart';
 import '../services/mod_manager_service.dart' show ModManagerService;
 import '../services/platform_service.dart' show NetworkLinkRefused;
 import '../services/shader_fixes/shader_fixes_service.dart';
-import '../services/update_apply/local_update.dart';
 import '../services/update_apply/mod_activation_port.dart';
 import '../services/update_apply/update_applier.dart';
 import '../utils/directory_size.dart';
@@ -47,12 +46,12 @@ import 'components/network_link_notice.dart';
 import 'components/shader_fixes_notices.dart';
 import 'components/zenith_controls.dart';
 import 'all_mods/all_mods_view.dart';
-import 'dialogs/apply_update_flow.dart' show updateFailureMessage;
 import 'dialogs/archive_password_dialog.dart';
 import 'dialogs/delete_mod_dialog.dart';
 import 'dialogs/duplicate_archive_dialog.dart';
 import 'dialogs/edit_mod/edit_mod_dialog.dart';
 import 'dialogs/import_progress_dialog.dart';
+import 'dialogs/import_update_flow.dart';
 import 'dialogs/import_review_dialog.dart';
 import 'dialogs/import_selection_dialog.dart';
 import 'dialogs/mod_context_menu.dart';
@@ -1375,8 +1374,9 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
             );
 
       // **Update it**, inside the same blocking card: each is a snapshot and a rewrite of a folder in the library.
-      final updates = await _updateFromDropped(
+      final updates = await updateFromDropped(
         container: container,
+        loc: loc,
         service: modManagerService,
         modsPath: modsPath,
         rows: updateRows,
@@ -1391,6 +1391,19 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       final importedMods = importResult.imported;
       if (mounted && updates.failures.isNotEmpty) showNotificationLines(context, updates.failures);
 
+      // A refusal says what it was, beside whatever the updates came to. Only a genuine "you already have these"
+      // carries no failure.
+      if (importResult.failure case final failure? when mounted && importedMods.isEmpty) {
+        final lines = importFailureMessage(
+          loc,
+          failure,
+          requiredBytes: importResult.requiredBytes,
+          availableBytes: importResult.availableBytes,
+          container: container,
+        );
+        notify.error(lines.title, body: lines.body, actions: lines.actions);
+      }
+
       // Nothing imported *and* nothing to write into an existing mod. With a
       // patch write pending this is an install going fine, not a duplicate.
       if (importedMods.isEmpty && updates.updated.isEmpty && (patchDecision?.writes.isEmpty ?? true)) {
@@ -1402,24 +1415,11 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
         }
 
         // A row set to Update it was reported by its own card, whatever came of it.
-        if (mounted && updateRows.isEmpty) {
-          // A refusal says what it was. Only a genuine "you already have these"
-          // carries no failure, and that is the one case this wording fits.
-          if (importResult.failure case final failure?) {
-            final lines = importFailureMessage(
-              loc,
-              failure,
-              requiredBytes: importResult.requiredBytes,
-              availableBytes: importResult.availableBytes,
-              container: container,
-            );
-            notify.error(lines.title, body: lines.body, actions: lines.actions);
-          } else {
-            context.notify.note(
-              loc.t('mods.snackbar.import_duplicates_title'),
-              body: loc.t('mods.snackbar.import_duplicates_body'),
-            );
-          }
+        if (mounted && updateRows.isEmpty && importResult.failure == null) {
+          context.notify.note(
+            loc.t('mods.snackbar.import_duplicates_title'),
+            body: loc.t('mods.snackbar.import_duplicates_body'),
+          );
         }
         return;
       }
@@ -1707,10 +1707,11 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       return size.complete ? size.bytes : null;
     }
 
+    // The folders are measured together, since every row waits for the slowest.
+    final sizes = await Future.wait([for (final folder in folders) sizeOf(folder)]);
     if (combine) {
       int? total = 0;
-      for (final folder in folders) {
-        final bytes = await sizeOf(folder);
+      for (final bytes in sizes) {
         total = bytes == null || total == null ? null : total + bytes;
       }
       return [
@@ -1732,16 +1733,11 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       if (archive != null) foldersPerArchive.update(archive.path, (n) => n + 1, ifAbsent: () => 1);
     }
     final items = <ImportItem>[];
-    for (final folder in folders) {
+    for (var i = 0; i < folders.length; i++) {
+      final folder = folders[i];
       final name = path.basename(folder);
       final archive = archiveOf[folder];
       final alone = archive != null && foldersPerArchive[archive.path] == 1;
-      int? bytes;
-      try {
-        bytes = archive != null && alone ? await File(archive.path).length() : await sizeOf(folder);
-      } on FileSystemException {
-        bytes = null;
-      }
       items.add(
         ImportItem(
           id: folder,
@@ -1749,85 +1745,12 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
           label: archive == null ? name : (alone ? archive.name : '${archive.name}/$name'),
           kind: archive == null ? ImportSourceKind.folder : ImportSourceKind.archive,
           name: name,
-          bytes: bytes,
+          bytes: sizes[i],
           guessedCharacter: droppedOn ?? service.guessCharacter(name, hint: detectionHints[folder]),
         ),
       );
     }
     return items;
-  }
-
-  /// Writes the dropped folders of the rows set to Update it into the mods they matched, one after another
-  /// (`docs/importing-mods.md` §5). Answers the names of the mods that were updated and a card for each that was not.
-  ///
-  /// Reads providers through [container], since the write outlives this page. A failure does not stop the rest:
-  /// each mod has its own snapshot and its own copy.
-  Future<({List<String> updated, List<NotificationLines> failures})> _updateFromDropped({
-    required ProviderContainer container,
-    required ModManagerService service,
-    required String? modsPath,
-    required List<ImportRow> rows,
-    required Map<String, ModOriginSeed> originSeeds,
-  }) async {
-    final updated = <String>[];
-    final failures = <NotificationLines>[];
-    if (rows.isEmpty || modsPath == null) return (updated: updated, failures: failures);
-
-    final snapshots = container.read(snapshotServiceProvider);
-    final applier = UpdateApplier(
-      snapshots: snapshots,
-      activation: ModManagerActivationPort(service, leaveOff: (m) => leftOffAfterWrite(container, m)),
-    );
-    for (final row in rows) {
-      final target = row.existing!.id;
-      final mod = container.read(modsProvider).where((m) => m.id == target).firstOrNull;
-      if (mod == null) {
-        _log.warning('a mod to update is gone', fields: {'mod': target});
-        failures.add(
-          NotificationLines(
-            loc.t('mods.update_apply.mod_missing_title'),
-            loc.t('mods.update_apply.mod_missing', params: {'mod': target}),
-            kind: NotificationKind.error,
-          ),
-        );
-        continue;
-      }
-      final combined = row.item.kind == ImportSourceKind.combined;
-      final seed = combined
-          ? IngestOriginBuilder.combineSeeds(row.item.sources.map((folder) => originSeeds[folder]))
-          : originSeeds[row.item.sources.single] ?? ModOriginSeed.importedFolder;
-      final outcome = await whileWritingMod(
-        container,
-        mod.id,
-        () => applyLocalUpdate(
-          applier: applier,
-          amend: service.updateModOrigin,
-          mod: mod,
-          modsPath: modsPath,
-          folders: {for (final folder in row.item.sources) folder: combined ? path.basename(folder) : ''},
-          seed: seed,
-        ),
-      );
-      // Whether the write landed or not: a failed copy may have changed the folder part-way.
-      service.invalidateKeybinds(mod.id);
-      if (outcome.write.snapshot != null) {
-        container.invalidate(modBackupsProvider);
-        await snapshots.prune();
-      }
-      if (!outcome.success) {
-        failures.add(updateFailureMessage(loc, outcome.write, mod));
-        continue;
-      }
-      // A verdict names the folder's layers and its file, and both just changed.
-      forgetUpdateCheck(container, mod.id);
-      // Only a character the user changed in the row: a guess never moves a mod.
-      final character = row.character;
-      if (character != null && character != mod.characterId) {
-        await service.setModCharacter(mod.id, character);
-      }
-      updated.add(mod.name);
-    }
-    return (updated: updated, failures: failures);
   }
 
   /// Explains how to add a mod: drop or paste a folder or an archive onto the page.

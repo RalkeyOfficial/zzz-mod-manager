@@ -260,6 +260,28 @@ void main() {
     expect(ingest.folders, ['Body', 'Hair']);
   });
 
+  test('two dropped folders with the same name, from different places, both keep their files', () async {
+    final mod = await installedMod(tracked());
+    final first = dropped('Body', {'a.ini': 'from the first'});
+    final second = Directory(p.join(temp.root.path, 'elsewhere', 'Body'))..createSync(recursive: true);
+    File(p.join(second.path, 'b.ini')).writeAsStringSync('from the second');
+
+    final result = await applyLocalUpdate(
+      applier: applier,
+      amend: temp.service.updateModOrigin,
+      mod: mod,
+      modsPath: temp.mods.path,
+      folders: {first.path: 'Body', second.path: 'Body'},
+      seed: ModOriginSeed.importedFolder,
+      now: now,
+    );
+
+    expect(result.success, isTrue);
+    expect(temp.read('Ellen Maid', 'Body/a.ini'), 'from the first');
+    expect(temp.read('Ellen Maid', 'Body (2)/b.ini'), 'from the second');
+    expect(temp.originOf('Ellen Maid')!.ingest!.folders, ['Body', 'Body (2)']);
+  });
+
   group('originAfterLocalUpdate', () {
     test('never invents an identity for a layer that had none', () {
       final after = originAfterLocalUpdate(

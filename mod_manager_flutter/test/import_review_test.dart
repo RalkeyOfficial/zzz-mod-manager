@@ -91,6 +91,26 @@ void main() {
       expect(row.existing!.id, 'Winter Maid');
     });
 
+    test('where the library holds Foo and foo, each name matches its own folder', () {
+      final library = [existing('Foo', character: 'ellen'), existing('foo', character: 'nicole')];
+
+      final review = evaluateImport([item('foo', id: 'a'), item('Foo', id: 'b')], library);
+
+      expect(review.rows[0].existing!.characterId, 'nicole');
+      expect(review.rows[0].finalName, 'foo');
+      expect(review.rows[1].existing!.characterId, 'ellen');
+      expect(review.rows[1].finalName, 'Foo');
+    });
+
+    test('where the library holds Foo and foo, a third spelling matches neither rather than the wrong one', () {
+      final library = [existing('Foo'), existing('foo')];
+
+      final review = evaluateImport([item('FOO', guess: 'ellen')], library);
+
+      expect(review.rows.single.clashes, isFalse);
+      expect(review.rows.single.finalName, 'FOO');
+    });
+
     test('Update it is the default and takes the existing mod\'s folder and character', () {
       final review = evaluateImport([item('winter maid', guess: 'nicole')], [existing('Winter Maid')]);
 

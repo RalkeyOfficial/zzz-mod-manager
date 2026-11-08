@@ -34,13 +34,14 @@ A row is the mod that will exist, not the folder that was dropped. A drop of thr
 
 | Part | Rule |
 |---|---|
-| Source line | The archive's file name or the folder's, and its size, as the user knows it. |
+| Source line | The archive's file name or the folder's, and the size of what will be copied in, which is the unpacked folder's for an archive too, so every row is measured the same way. |
 | Character | The character the user dropped on, when they dropped on one they picked. Otherwise the app's guess from the name and the archive's name. Otherwise no answer, drawn in the amber needs-a-choice look. Unassigned is an answer. |
 | Name | The folder the mod will be, defaulting to the dropped folder's name. It follows the rename rules (no `\ / < > : " | ? *`, no leading `.` or `__`), checked as the user types. |
 
 Importing is enabled when every row has a character and no row has an empty, invalid or repeated name. The button names how many mods the press will write, updates included. While it is disabled, a line under the card names the first row that stops it, and how many more do.
 
 **A name clash is library-wide.** The library is flat, so a folder of that name exists whatever character it is filed under, and the check ignores letter case, as the filesystem of the other platform would. Two rows with the same name are told apart the same way, and stop the import until one changes.
+Where the filesystem tells `Foo` and `foo` apart and the library holds both, a row matches the folder spelled exactly like it. A name spelled a third way matches neither, rather than one picked at random, and is a new mod.
 
 The guess is drawn as a plain answer the user can change, never locked in. Dropping on a character the user picked is the user saying where, and it replaces the guess.
 
@@ -51,6 +52,8 @@ A row whose name matches a folder in the library says so, with the character it 
 That default is the user's decision. The argument against it is that a guess must never drive a write, and a name match is a guess. It is held anyway for three reasons: the user dropped the files and the dialog is the user being present, the dropped mod has the name of the one they have so an update is the likelier intent, and the snapshot taken before the write is the way back. Keep both is one press away and leaves the library as it is.
 
 A mod whose folder is being written at that moment cannot be updated, so the segment is off for that row and the row says why. Keep both still works.
+
+The check is made again when the update starts, since a write can begin on that mod from another screen while the review or the patch question is open, and the copy of the new mods runs first. A row whose mod is busy then is **skipped, not turned into Keep both**: a card names the mod and says the dropped files were not written into it, and the other rows go ahead. Keep both would install the mod under a new name after the user chose Update it, which is a second decision made for them, and the files are one drop away when the other write is done.
 
 ## 4. Keep both
 
@@ -65,7 +68,7 @@ Update it writes the dropped folder into the existing mod's folder, and it is an
 1. The mod is turned off for the duration (open file handles only) and put back exactly as it was.
 2. **A snapshot of the whole folder is taken.** If it cannot be, nothing is written.
 3. **Everything but the sidecar is deleted.** No file is kept because it looks like the user's, none is removed because it looks old, and nothing is overwritten file by file. What the folder holds afterwards is the dropped folder's contents and nothing of the old version, and a hand edit goes with it into the snapshot ([`applying-updates.md`](applying-updates.md) §1).
-4. **The dropped folder's contents are copied in.** For a drop of several folders combined into one mod, each goes into a subfolder named after it, as a combined install lays them. A `.zzz-mod-manager/` inside the dropped folder is never copied, since it would replace the user's own metadata with a stranger's.
+4. **The dropped folder's contents are copied in.** For a drop of several folders combined into one mod, each goes into a subfolder named after it, as a combined install lays them; two with the same name take `Name`, then `Name (2)`, so neither loses its files. A `.zzz-mod-manager/` inside the dropped folder is never copied, since it would replace the user's own metadata with a stranger's.
 5. **A recorded patch is put back** on the new layout, by placement, as for any base update. When the patch is recorded and the placement cannot be settled, nothing is written, because a patch with nowhere to go is not a reason to lose it. When a patch is on the folder and its files are not recorded, it goes with the old version, and the row says so before the write.
 6. The mod is turned back on if it was on.
 
@@ -125,3 +128,4 @@ The Importing dialog is blocking, because a copy of a large mod is the one momen
 It does not close on Escape or on a press outside it.
 
 A mod that was created is listed in the existing success dialog. An update reports a success of its own, because a rewritten folder looks the same on the grid as it did before; a failed one reports the error and points at the History tab, where the snapshot is.
+A refusal of the new mods' copy (no space, a folder that cannot be written) is reported by its own card whatever the updates came to, so neither hides the other.
