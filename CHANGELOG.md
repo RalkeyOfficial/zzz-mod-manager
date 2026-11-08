@@ -146,8 +146,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Keys are changed by pressing the new combination; a key can be removed, and "Restore the author's keys" puts back what the author shipped.
   - The labels given to keys are shown in the panel and on the page; they are kept with the app, not the mod's folder.
 
+- Dropped or pasted mods open a review before anything is copied: each one's character and name, editable, with "Update it" or "Keep both" for a mod you already have, and "Turn on after import".
+  - "Update it" writes the dropped files into the mod you have, after saving a copy of it; the mod keeps its folder, link and settings, and its GameBanana page, and asks "Which file?" afterwards.
+
 ### Changed
 
+- The Importing window while a mod is copied is drawn like the other windows.
 - Delete moves a mod's folder to your system trash instead of removing it from the disk. If the drive has no trash, nothing is deleted until you choose "Delete for good…". Delete in All mods does the same, and both ask whether the mod's snapshots go too.
 - The right-click menu lists a mod's actions with their keys: Space turns it on or off, F favourites it, E opens Edit info and Del deletes it, while the menu is open. It also has a Make this a patch entry, and one Remove patch entry per patch.
 - Dialogs, and the choice of a mod's character in them, share one new look: a card with a header and footer, and a searchable list of characters and types.
@@ -188,6 +192,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- The list of auto-detected characters after an import, since the review shows each one first.
 - Details, Rename, Edit keybinds, Open source page and Restore a previous version from the right-click menu; the History tab restores, and Edit info is where a mod is renamed and its keys are changed.
 - The embedded webview (Windows) and the Downloads-folder watcher (Linux), replaced by the built-in browser.
 - F10 auto-reload — the F10 button, the auto-reload toggle and the "Automatic mod reload" settings section — because a keypress the app sends never reaches a game running under Proton, so it only ever claimed to work. Press F10 in the game; xdotool is no longer needed.

@@ -1365,6 +1365,12 @@ class ModManagerService {
     }
   }
 
+  /// The character the app would file a mod under from its name, and from [hint] (the archive's name) when the name
+  /// holds none. A guess for the import review to show, never a fact: the user confirms or changes it before anything
+  /// is written.
+  String? guessCharacter(String name, {String? hint}) =>
+      _detectCharacterFromName(name, extraNames: [if (hint != null && hint.isNotEmpty) hint]);
+
   /// Визначає персонажа за назвами моду — спершу за назвою папки, далі за
   /// [extraNames] (зазвичай ім'я архіву). Раніше метод також сканував вміст
   /// .ini файлів та імена підпапок, але назви персонажів там не стандартизовані

@@ -233,6 +233,7 @@ void main() {
     await service.setRemindF10(false);
     await service.setMarketplaceHideInstalled(true);
     await service.setMarketplaceTurnOnAfterInstall(true);
+    await service.setImportTurnOnAfter(true);
     await service.addActiveMod('SomeMod');
     await service.addFavoriteMod('SomeMod');
     await service.setModCharacterTag('SomeMod', 'ellen');
@@ -267,6 +268,7 @@ void main() {
       'remind_f10': next.remindF10,
       'marketplace_hide_installed': next.marketplaceHideInstalled,
       'marketplace_turn_on_after_install': next.marketplaceTurnOnAfterInstall,
+      'import_turn_on_after': next.importTurnOnAfter,
       'file_logging': next.fileLogging,
       'active_mods': next.activeMods,
       'favorite_mods': next.favoriteMods,
@@ -298,6 +300,7 @@ void main() {
     expect(next.marketplaceHideInstalled, isTrue, reason: 'marketplace_hide_installed did not survive the restart');
     expect(next.marketplaceTurnOnAfterInstall, isTrue,
         reason: 'marketplace_turn_on_after_install did not survive the restart');
+    expect(next.importTurnOnAfter, isTrue, reason: 'import_turn_on_after did not survive the restart');
   });
 
   test('the Mods settings start on their defaults, and a value of the wrong kind is ignored', () async {
@@ -340,6 +343,15 @@ void main() {
     expect(await service.loadFromFile(), isTrue);
     expect(service.marketplaceTurnOnAfterInstall, isFalse);
     expect(service.fileLogging, isFalse);
+  });
+
+  test('Turn on after import is off until switched on, and a value that is not a bool is ignored', () async {
+    expect((await build()).importTurnOnAfter, isFalse);
+
+    await configFile().writeAsString(jsonEncode({'import_turn_on_after': 'yes', 'file_logging': false}));
+    final service = await build();
+    expect(await service.loadFromFile(), isTrue);
+    expect(service.importTurnOnAfter, isFalse);
   });
 
   test('Hide installed is off until switched on, and a value that is not a bool is ignored', () async {

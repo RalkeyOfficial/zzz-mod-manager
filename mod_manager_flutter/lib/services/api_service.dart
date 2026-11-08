@@ -84,6 +84,8 @@ class ApiService {
           _configService!.marketplaceHideInstalled;
       _container!.read(marketplaceTurnOnAfterInstallProvider.notifier).state =
           _configService!.marketplaceTurnOnAfterInstall;
+      _container!.read(importTurnOnAfterProvider.notifier).state =
+          _configService!.importTurnOnAfter;
       // Parsed rather than looked up, for the same reason as the filter above:
       // the key predates the setting and holds a palette name in a config any
       // older build wrote.
@@ -384,6 +386,13 @@ class ApiService {
     await initialize();
     await _configService!.setMarketplaceTurnOnAfterInstall(turnOn);
     _container?.read(marketplaceTurnOnAfterInstallProvider.notifier).state = turnOn;
+  }
+
+  /// Persists the import review's Turn on after import switch and applies it.
+  static Future<void> setImportTurnOnAfter(bool turnOn) async {
+    await initialize();
+    await _configService!.setImportTurnOnAfter(turnOn);
+    _container?.read(importTurnOnAfterProvider.notifier).state = turnOn;
   }
 
   /// Persists the theme choice and applies it immediately.

@@ -240,10 +240,11 @@ class ZenithDialog extends StatelessWidget {
             ],
           ),
           Flexible(child: SingleChildScrollView(child: body)),
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Row(mainAxisAlignment: MainAxisAlignment.end, spacing: 8, children: actions),
-          ),
+          if (actions.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Row(mainAxisAlignment: MainAxisAlignment.end, spacing: 8, children: actions),
+            ),
         ],
       ),
     );

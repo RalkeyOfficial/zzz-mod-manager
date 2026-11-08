@@ -15,6 +15,7 @@ import 'package:mod_manager_flutter/models/installed_file.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/components/character_hero.dart';
 import 'package:mod_manager_flutter/screens/components/character_list.dart';
+import 'package:mod_manager_flutter/screens/components/character_pick.dart';
 import 'package:mod_manager_flutter/screens/components/mod_card_widget.dart';
 import 'package:mod_manager_flutter/screens/components/mod_details_panel.dart';
 import 'package:mod_manager_flutter/screens/components/mods_toolbar.dart';
@@ -141,6 +142,25 @@ void main() {
       if (settle) await tester.pumpAndSettle();
     }
 
+    /// The review every import opens: waits for it, files a row that has no character under Unassigned when
+    /// [pickUnassigned] says so, and presses Import.
+    Future<void> confirmReview(WidgetTester tester, {bool pickUnassigned = false}) async {
+      final confirm = find.byKey(const ValueKey('import_confirm'));
+      for (var i = 0; i < 40 && confirm.evaluate().isEmpty; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(confirm, findsOneWidget, reason: 'the review is the step before the copy');
+      if (pickUnassigned) {
+        await tester.tap(find.byType(CharacterPick));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Unassigned').last);
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(confirm);
+      await tester.pump();
+    }
+
     const noValid = 'No mod folders or archives found';
 
     String nowhere() => p.join(temp.root.path, 'not a folder');
@@ -165,8 +185,9 @@ void main() {
       clipboardHolds(tester, zip.path);
 
       await pressPaste(tester, settle: false);
+      await confirmReview(tester, pickUnassigned: true);
       // The import raises a progress dialog between its disk steps, so frames and real time take turns. Its
-      // spinner never settles.
+      // bar never settles.
       final done = find.text('Imported successfully!');
       for (var i = 0; i < 40 && done.evaluate().isEmpty; i++) {
         await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
@@ -228,6 +249,7 @@ void main() {
       }
 
       await pressPaste(tester, settle: false);
+      await confirmReview(tester);
       await pumpUntil(find.text('Install it into an existing mod'));
       await tester.tap(find.text('Install it into an existing mod'));
       await tester.pumpAndSettle();
@@ -245,6 +267,40 @@ void main() {
       expect(card.id, working.id, reason: 'the Working card became the patch applied rather than raising a second card');
       expect(card.kind, NotificationKind.done);
       // Past the Done card's clock, so the test ends with nothing on one.
+      await tester.pump(const Duration(seconds: 6));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('of a folder named like a mod the library has updates that mod, snapshot first, and says so', (tester) async {
+      temp.write('Ellen Maid', 'Ellen Maid.ini', 'old ini');
+      temp.write('Ellen Maid', 'old_only.dds', 'old');
+      final dropped = Directory(p.join(temp.root.path, 'drop', 'Ellen Maid'));
+      File(p.join(dropped.path, 'Ellen Maid.ini'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync('new ini');
+      final container = await pumpModsScreen(tester, temp, [mod('Ellen Maid')]);
+      container.read(modUpdateChecksProvider.notifier).state = {
+        'Ellen Maid': const UpdateCheck(outcome: UpdateOutcome.upToDate),
+      };
+      clipboardHolds(tester, dropped.path);
+
+      await pressPaste(tester, settle: false);
+      await confirmReview(tester);
+      final updated = find.descendant(
+        of: find.byType(NotificationOverlay),
+        matching: find.text('Updated 1 mod from the dropped files'),
+      );
+      for (var i = 0; i < 60 && updated.evaluate().isEmpty; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      expect(updated, findsOneWidget);
+      expect(temp.read('Ellen Maid', 'Ellen Maid.ini'), 'new ini');
+      expect(temp.has('Ellen Maid', 'old_only.dds'), isFalse);
+      expect(temp.snapshotsOf('Ellen Maid'), hasLength(1), reason: 'the copy of the old mod was taken first');
+      expect(Directory(p.join(temp.mods.path, 'Ellen Maid (2)')).existsSync(), isFalse, reason: 'it was not kept beside');
+      expect(container.read(modUpdateChecksProvider), isEmpty, reason: 'the verdict named the old file');
       await tester.pump(const Duration(seconds: 6));
       await tester.pumpAndSettle();
     });
@@ -274,6 +330,7 @@ void main() {
       }
 
       await pressPaste(tester, settle: false);
+      await confirmReview(tester);
       await pumpUntil(find.text('Install it into an existing mod'));
       await tester.tap(find.text('Install it into an existing mod'));
       await tester.pumpAndSettle();

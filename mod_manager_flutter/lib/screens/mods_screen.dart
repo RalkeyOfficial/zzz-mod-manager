@@ -18,13 +18,17 @@ import '../models/mod_origin_seed.dart';
 import '../services/api_service.dart';
 import '../services/archive_service.dart';
 import '../services/import_result.dart';
+import '../services/import_review.dart';
 import '../services/ingest_origin_builder.dart';
 import '../services/log/confirmations.dart';
 import '../services/log/logger.dart';
+import '../services/mod_manager_service.dart' show ModManagerService;
 import '../services/platform_service.dart' show NetworkLinkRefused;
 import '../services/shader_fixes/shader_fixes_service.dart';
+import '../services/update_apply/local_update.dart';
 import '../services/update_apply/mod_activation_port.dart';
 import '../services/update_apply/update_applier.dart';
+import '../utils/directory_size.dart';
 import '../utils/notification_actions.dart';
 import '../utils/notifications.dart';
 import '../utils/state_providers.dart';
@@ -33,6 +37,7 @@ import '../utils/zzz_characters.dart';
 import 'components/character_hero.dart';
 import 'components/character_list.dart';
 import 'components/character_tile.dart';
+import 'components/download_queue_host.dart' show turnOnNewMods;
 import 'components/import_failure_message.dart';
 import 'components/install_result_feedback.dart';
 import 'components/mod_card_widget.dart';
@@ -42,10 +47,13 @@ import 'components/network_link_notice.dart';
 import 'components/shader_fixes_notices.dart';
 import 'components/zenith_controls.dart';
 import 'all_mods/all_mods_view.dart';
+import 'dialogs/apply_update_flow.dart' show updateFailureMessage;
 import 'dialogs/archive_password_dialog.dart';
 import 'dialogs/delete_mod_dialog.dart';
 import 'dialogs/duplicate_archive_dialog.dart';
 import 'dialogs/edit_mod/edit_mod_dialog.dart';
+import 'dialogs/import_progress_dialog.dart';
+import 'dialogs/import_review_dialog.dart';
 import 'dialogs/import_selection_dialog.dart';
 import 'dialogs/mod_context_menu.dart';
 import 'dialogs/mod_update_dialog.dart';
@@ -1034,6 +1042,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       // Extracted-folder path -> originating archive base name, used as an extra
       // character-detection hint (the character is often in the archive name).
       final detectionHints = <String, String>{};
+      // Extracted-folder path -> the archive it came out of, for the review's source line.
+      final archiveOf = <String, XFile>{};
       // Same shape and the same reason: one drop can mix folders from several
       // archives with folders dragged in directly, so provenance is per-folder.
       final originSeeds = <String, ModOriginSeed>{};
@@ -1179,6 +1189,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
           );
           for (final folder in result.extractedFolders!) {
             detectionHints[folder] = archiveBaseName;
+            archiveOf[folder] = archiveFile;
             originSeeds[folder] = ModOriginSeed.importedArchive(
               archiveMd5: result.archiveMd5,
             );
@@ -1231,7 +1242,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
         ..clear()
         ..addAll(plan.folders);
       final combine = plan.combine;
-      final combinedName = plan.combinedName;
+      var combinedName = plan.combinedName;
       final combinedHint = sharedHint;
 
       // Read here rather than after the copy: the patch question below needs
@@ -1240,6 +1251,67 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
         modManagerServiceProvider.future,
       );
       final modsPath = modManagerService.modsPath;
+
+      // **The review, before anything is copied** (`docs/importing-mods.md` §2): each mod's name and character as
+      // they will be, and what to do about one the library already has. Shown for every drop.
+      if (!mounted) {
+        await cleanupTempFolders();
+        return;
+      }
+      final writing = ref.read(modWritesInProgressProvider);
+      final items = await _importItems(
+        folders: folderPaths,
+        combine: combine,
+        combinedName: combinedName,
+        combinedHint: combinedHint,
+        archiveOf: archiveOf,
+        detectionHints: detectionHints,
+        droppedOn: droppedOn,
+        service: modManagerService,
+      );
+      if (!mounted) {
+        await cleanupTempFolders();
+        return;
+      }
+      final review = await showImportReviewDialog(
+        context,
+        items: items,
+        library: [for (final mod in ref.read(modsProvider)) ExistingMod.of(mod, busy: writing.contains(mod.id))],
+      );
+      if (review == null) {
+        logConfirmation('import.review', accepted: false, subject: items.map((item) => item.name).join(', '));
+        await cleanupTempFolders();
+        return;
+      }
+      logConfirmation(
+        'import.review',
+        accepted: true,
+        subject: items.map((item) => item.name).join(', '),
+        fields: {'mods': review.rows.length, 'updates': review.rows.where((row) => row.updates).length},
+      );
+      final updateRows = [for (final row in review.rows) if (row.updates) row];
+      final newRows = [for (final row in review.rows) if (!row.updates) row];
+      // What each new mod is called and filed under, by the folder it comes from: the review's answers reach the
+      // copy and the patch question through these.
+      final reviewedNames = <String, String>{};
+      final reviewedCharacters = <String, String>{};
+      final targetNames = <String, String>{};
+      String? combinedCharacter;
+      for (final row in newRows) {
+        if (combine) {
+          combinedName = row.finalName;
+          combinedCharacter = row.character;
+          continue;
+        }
+        final folder = row.item.sources.single;
+        reviewedNames[folder] = row.finalName;
+        reviewedCharacters[folder] = row.character!;
+        if (row.finalName != path.basename(folder)) targetNames[folder] = row.finalName;
+      }
+      folderPaths
+        ..clear()
+        ..addAll([for (final row in newRows) ...row.item.sources]);
+      final reviewedPlan = ImportPlan(folders: List.of(folderPaths), combine: combine, combinedName: combinedName);
 
       // **The patch question, before anything is copied.** The same prompt the
       // marketplace install raises, so a patch dragged in gets the same offer:
@@ -1250,16 +1322,17 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       // the write into an existing mod places the files and records nothing
       // about where they came from. Nothing else about the two flows differs.
       PatchInstallDecision? patchDecision;
-      if (modsPath != null) {
+      if (modsPath != null && folderPaths.isNotEmpty) {
         if (!mounted) {
           await cleanupTempFolders();
           return;
         }
         patchDecision = await decidePatchInstall(
           context,
-          plan: plan,
+          plan: reviewedPlan,
           folders: folderPaths,
           modsPath: modsPath,
+          names: reviewedNames,
         );
         // Only this prompt can offer "don't install it at all", and only here,
         // where nothing has been written yet.
@@ -1269,7 +1342,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
         }
         // A folder going into an existing mod creates no new mod folder, so it
         // leaves the import entirely and is written afterwards.
-        folderPaths.removeWhere(patchDecision.excludes);
+        final decision = patchDecision;
+        folderPaths.removeWhere((folder) => decision.excludes(folder, names: reviewedNames));
       }
 
       // Merging folders from different sources yields a mod that is only partly
@@ -1280,47 +1354,14 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
         folderPaths.map((folder) => originSeeds[folder]),
       );
 
-      final expectedCount = combine ? 1 : folderPaths.length;
+      // Every mod the write touches, the updated ones included.
+      final expectedCount = (combine ? (folderPaths.isEmpty ? 0 : 1) : folderPaths.length) + updateRows.length;
 
-      // Показуємо діалог з прогресом
       if (mounted) {
         dialogShown = true;
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => PopScope(
-            canPop: false,
-            child: AlertDialog(
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(
-                    width: 50,
-                    height: 50,
-                    child: CircularProgressIndicator(strokeWidth: 4),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    loc.plural('mods.dialog.import_progress', expectedCount, params: {'count': '$expectedCount'}),
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    loc.t('mods.dialog.import_progress_hint'),
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: ZenithPalette.of(context).text2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
+        showImportProgressDialog(context, count: expectedCount);
       }
 
-      // Імпортуємо моди
       final importResult = folderPaths.isEmpty
           // Every folder went into a mod that already exists. Calling
           // `importMods` with nothing answers "no mods imported", which the
@@ -1333,28 +1374,36 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
               combinedName,
               detectionHint: combinedHint,
               origin: combinedSeed,
-              knownCharacter: droppedOn,
+              knownCharacter: combinedCharacter,
             )
           : await modManagerService.importMods(
               folderPaths,
               detectionHints: detectionHints,
               originSeeds: originSeeds,
-              knownCharacters: droppedOn == null ? null : {for (final folder in folderPaths) folder: droppedOn},
+              knownCharacters: {for (final folder in folderPaths) folder: reviewedCharacters[folder]!},
+              targetNames: targetNames,
             );
 
-      // Закриваємо діалог прогресу
+      // **Update it**, inside the same blocking card: each is a snapshot and a rewrite of a folder in the library.
+      final updates = await _updateFromDropped(
+        container: container,
+        service: modManagerService,
+        modsPath: modsPath,
+        rows: updateRows,
+        originSeeds: originSeeds,
+      );
+
       if (mounted && dialogShown) {
         Navigator.of(context).pop();
         dialogShown = false;
       }
 
       final importedMods = importResult.imported;
-      // Only names the app worked out are worth listing; a drop on a character says where they went.
-      final autoTags = droppedOn == null ? importResult.autoTags : const <String, String>{};
+      if (mounted && updates.failures.isNotEmpty) showNotificationLines(context, updates.failures);
 
       // Nothing imported *and* nothing to write into an existing mod. With a
       // patch write pending this is an install going fine, not a duplicate.
-      if (importedMods.isEmpty && (patchDecision?.writes.isEmpty ?? true)) {
+      if (importedMods.isEmpty && updates.updated.isEmpty && (patchDecision?.writes.isEmpty ?? true)) {
         // Очищаємо тимчасові папки якщо імпорт не вдався
         if (tempFoldersToCleanup.isNotEmpty) {
           _files.debug('cleaning up after a failed import',
@@ -1362,7 +1411,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
           await cleanupTempFolders();
         }
 
-        if (mounted) {
+        // A row set to Update it was reported by its own card, whatever came of it.
+        if (mounted && updateRows.isEmpty) {
           // A refusal says what it was. Only a genuine "you already have these"
           // carries no failure, and that is the one case this wording fits.
           if (importResult.failure case final failure?) {
@@ -1386,6 +1436,15 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
 
       // Перезавантажуємо список модів
       await loadMods();
+
+      // A rewritten folder looks the same on the grid as it did, so its success is said.
+      if (updates.updated.isNotEmpty && mounted) {
+        final count = updates.updated.length;
+        context.notify.done(
+          loc.plural('mods.import.updated', count, params: {'count': '$count'}),
+          body: subjectList(loc, updates.updated),
+        );
+      }
 
       // **Everything the patch answers imply, now the folders exist.** Writes
       // into an existing mod are update-shaped — deactivate, snapshot, place,
@@ -1455,6 +1514,15 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
         if (mounted) await ref.read(libraryProvider.notifier).rescan();
       }
 
+      // **Turn on after import**, for the mods this import created and not for the ones it updated, which are put
+      // back as they were.
+      if (review.turnOn && importedMods.isNotEmpty && mounted) {
+        final leftOff = await turnOnNewMods(context, importedMods);
+        if (leftOff.isNotEmpty && mounted) {
+          context.notify.warning(loc.t('marketplace.turn_on_failed_title'), body: leftOff.join(', '));
+        }
+      }
+
       // Reported once, here: nothing re-attempts an origin write, because it
       // happens at ingest and never during a scan. Without this the mod would
       // just be silently untracked for updates with no explanation.
@@ -1508,7 +1576,6 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       // "0 mods imported" over it is worse than no dialog.
       if (mounted && importedMods.isNotEmpty) {
         // Показуємо детальне повідомлення про успіх
-        final hasAutoTags = autoTags.isNotEmpty;
         final palette = ZenithPalette.of(context);
         showDialog(
           context: context,
@@ -1581,70 +1648,6 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
                     ),
                   ),
                 ],
-                if (hasAutoTags) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: palette.blue.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: palette.blue.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.auto_awesome,
-                              color: palette.blue,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              loc.t('mods.dialog.import_auto_tags'),
-                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: palette.blue,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        ...autoTags.entries
-                            .take(5)
-                            .map(
-                              (entry) => Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 2,
-                                ),
-                                child: Text(
-                                  '• ${entry.key} → ${getCharacterDisplayName(entry.value)}',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ),
-                            ),
-                        if (autoTags.length > 5)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text(
-                              loc.t(
-                                'mods.import.auto_tag_and_more',
-                                params: {
-                                  'count': (autoTags.length - 5).toString(),
-                                },
-                              ),
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: palette.text3,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
                 // Left out when something was refused: a patch installed as its
                 // own mod is not ready to use, and saying so under the
                 // explanation of why contradicts it.
@@ -1694,6 +1697,147 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
         });
       }
     }
+  }
+
+  /// The review's rows: one per mod the import will create, with the name and character the app would give it.
+  ///
+  /// The character is the one the user dropped on, else the guess from the names, else none, and the review asks.
+  Future<List<ImportItem>> _importItems({
+    required List<String> folders,
+    required bool combine,
+    required String combinedName,
+    required String? combinedHint,
+    required Map<String, XFile> archiveOf,
+    required Map<String, String> detectionHints,
+    required String? droppedOn,
+    required ModManagerService service,
+  }) async {
+    Future<int?> sizeOf(String folder) async {
+      final size = await measureDirectory(folder);
+      return size.complete ? size.bytes : null;
+    }
+
+    if (combine) {
+      int? total = 0;
+      for (final folder in folders) {
+        final bytes = await sizeOf(folder);
+        total = bytes == null || total == null ? null : total + bytes;
+      }
+      return [
+        ImportItem(
+          id: 'combined',
+          sources: folders,
+          label: combinedName,
+          kind: ImportSourceKind.combined,
+          name: combinedName,
+          bytes: total,
+          guessedCharacter: droppedOn ?? service.guessCharacter(combinedName, hint: combinedHint),
+        ),
+      ];
+    }
+
+    final foldersPerArchive = <String, int>{};
+    for (final folder in folders) {
+      final archive = archiveOf[folder];
+      if (archive != null) foldersPerArchive.update(archive.path, (n) => n + 1, ifAbsent: () => 1);
+    }
+    final items = <ImportItem>[];
+    for (final folder in folders) {
+      final name = path.basename(folder);
+      final archive = archiveOf[folder];
+      final alone = archive != null && foldersPerArchive[archive.path] == 1;
+      int? bytes;
+      try {
+        bytes = archive != null && alone ? await File(archive.path).length() : await sizeOf(folder);
+      } on FileSystemException {
+        bytes = null;
+      }
+      items.add(
+        ImportItem(
+          id: folder,
+          sources: [folder],
+          label: archive == null ? name : (alone ? archive.name : '${archive.name}/$name'),
+          kind: archive == null ? ImportSourceKind.folder : ImportSourceKind.archive,
+          name: name,
+          bytes: bytes,
+          guessedCharacter: droppedOn ?? service.guessCharacter(name, hint: detectionHints[folder]),
+        ),
+      );
+    }
+    return items;
+  }
+
+  /// Writes the dropped folders of the rows set to Update it into the mods they matched, one after another
+  /// (`docs/importing-mods.md` §5). Answers the names of the mods that were updated and a card for each that was not.
+  ///
+  /// Reads providers through [container], since the write outlives this page. A failure does not stop the rest:
+  /// each mod has its own snapshot and its own copy.
+  Future<({List<String> updated, List<NotificationLines> failures})> _updateFromDropped({
+    required ProviderContainer container,
+    required ModManagerService service,
+    required String? modsPath,
+    required List<ImportRow> rows,
+    required Map<String, ModOriginSeed> originSeeds,
+  }) async {
+    final updated = <String>[];
+    final failures = <NotificationLines>[];
+    if (rows.isEmpty || modsPath == null) return (updated: updated, failures: failures);
+
+    final snapshots = container.read(snapshotServiceProvider);
+    final applier = UpdateApplier(
+      snapshots: snapshots,
+      activation: ModManagerActivationPort(service, leaveOff: (m) => leftOffAfterWrite(container, m)),
+    );
+    for (final row in rows) {
+      final target = row.existing!.id;
+      final mod = container.read(modsProvider).where((m) => m.id == target).firstOrNull;
+      if (mod == null) {
+        _log.warning('a mod to update is gone', fields: {'mod': target});
+        failures.add(
+          NotificationLines(
+            loc.t('mods.update_apply.mod_missing_title'),
+            loc.t('mods.update_apply.mod_missing', params: {'mod': target}),
+            kind: NotificationKind.error,
+          ),
+        );
+        continue;
+      }
+      final combined = row.item.kind == ImportSourceKind.combined;
+      final seed = combined
+          ? IngestOriginBuilder.combineSeeds(row.item.sources.map((folder) => originSeeds[folder]))
+          : originSeeds[row.item.sources.single] ?? ModOriginSeed.importedFolder;
+      final outcome = await whileWritingMod(
+        container,
+        mod.id,
+        () => applyLocalUpdate(
+          applier: applier,
+          amend: service.updateModOrigin,
+          mod: mod,
+          modsPath: modsPath,
+          folders: {for (final folder in row.item.sources) folder: combined ? path.basename(folder) : ''},
+          seed: seed,
+        ),
+      );
+      // Whether the write landed or not: a failed copy may have changed the folder part-way.
+      service.invalidateKeybinds(mod.id);
+      if (outcome.write.snapshot != null) {
+        container.invalidate(modBackupsProvider);
+        await snapshots.prune();
+      }
+      if (!outcome.success) {
+        failures.add(updateFailureMessage(loc, outcome.write, mod));
+        continue;
+      }
+      // A verdict names the folder's layers and its file, and both just changed.
+      forgetUpdateCheck(container, mod.id);
+      // Only a character the user changed in the row: a guess never moves a mod.
+      final character = row.character;
+      if (character != null && character != mod.characterId) {
+        await service.setModCharacter(mod.id, character);
+      }
+      updated.add(mod.name);
+    }
+    return (updated: updated, failures: failures);
   }
 
   /// Explains how to add a mod: drop or paste a folder or an archive onto the page.

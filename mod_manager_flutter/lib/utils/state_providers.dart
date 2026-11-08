@@ -832,6 +832,12 @@ final marketplaceHideInstalledProvider = StateProvider<bool>((ref) => false);
 /// default.
 final marketplaceTurnOnAfterInstallProvider = StateProvider<bool>((ref) => false);
 
+/// Whether the mods an import creates are turned on once they are in the library, the review's **Turn on after import**
+/// ([`docs/importing-mods.md`](../../docs/importing-mods.md) §6).
+///
+/// A persisted preference, written through `ApiService.setImportTurnOnAfter`. Off by default.
+final importTurnOnAfterProvider = StateProvider<bool>((ref) => false);
+
 /// Whether the whole-library update check runs on its own at startup.
 ///
 /// Hydrated from `config.json` in `ApiService.initialize` and written through

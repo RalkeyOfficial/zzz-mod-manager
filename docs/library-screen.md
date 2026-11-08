@@ -32,7 +32,7 @@ A different parent for each would throw the page away on every press of a card, 
 **Ctrl+V on the page imports the folders and the .zip, .7z and .rar archives whose paths are on the clipboard**, except while a text field has the caret: in the note or the filter field it is that field's paste.
 A click outside a text field gives keyboard focus back to the page, so after typing a note or a filter the next Ctrl+V imports again.
 The page takes focus back only from its own route's scope: focus at the root of the app is the window being inactive, which Flutter hands back to the field or dialog that had it when the window returns, and a dialog over the page keeps its focus.
-A pasted archive is deleted once its mod is installed, as a dropped one is: the archive is the install's input, and the library keeps the mod.
+A pasted archive is deleted once its mod is installed, as a dropped one is: the archive is the install's input, and the library keeps the mod. A paste and a drop open the same review ([`importing-mods.md`](importing-mods.md)).
 
 ## 2. The character list
 
@@ -313,6 +313,10 @@ File, Variant and Uploaded also need a file on record, confirmed or accepted in 
   - **Tracking** reads the mod's origin and the page the session holds, as the details panel's Tracking fact does; Update tracking… opens the tracking screen and the box follows what it saved.
   - **In-game keys** are [`key-editing.md`](key-editing.md). The footer says how many keys Save writes and into which file, and that an update replaces key changes with the author's keys.
   - A drop on the cover is taken by Edit info alone: the Library page's own drop target is off while any dialog or menu is over it, because every enabled drop target receives every drop.
+- **The import review** (`dialogs/import_review_dialog.dart`, [`importing-mods.md`](importing-mods.md)) opens for every drop or paste before anything is copied, 720 wide: one card per mod to be created, with its source, its character pill and its name field.
+  A row with no character is amber and stops the primary button, which names how many mods it will write; a line under the card says which row to fix. A name that matches a mod the library has, in any letter case, offers **Update it** (selected) and **Keep both**, with the character and date of the mod it matches; the footer's **Turn on after import** is remembered.
+  The names and characters it settles are the ones the copy uses, so a drop on a picked character is preselected in it, and the old list of auto-detected characters after an import is gone.
+- **The Importing card** (`dialogs/import_progress_dialog.dart`) is the blocking compact card with an indeterminate bar that stays up while an import writes, updates included.
 - **`components/dialog_section.dart` shapes the update flow's dialogs until they move onto the card.**
   Sizes come from the theme — `bodyMedium` for anything meant to be read, `bodySmall` for the line explaining it, `titleSmall` for a heading — and a group of facts always arrives under a heading saying what the group is for, since text with no marked boundary between ideas reads as one undifferentiated block.
   `DialogNotice(emphasis: true)` is the one "read this" state, in the palette's amber; **at most one per view**, or it stops being emphasis.

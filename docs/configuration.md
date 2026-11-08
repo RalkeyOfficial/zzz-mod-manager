@@ -49,6 +49,7 @@ App-data locations are `~/.local/share/zzz-mod-manager` (Linux) and
   "marketplace_sort": "newest",
   "marketplace_hide_installed": false,
   "marketplace_turn_on_after_install": false,
+  "import_turn_on_after": false,
   "update_check_on_launch": false,
   "hide_empty_characters": false,
   "file_logging": true,
@@ -84,6 +85,7 @@ App-data locations are `~/.local/share/zzz-mod-manager` (Linux) and
 | `marketplace_sort` | `marketplace_sort` | The **marketplace browse** sort, as a `GbModSort` Dart name (`newest`, `latestModified`, …). Empty until chosen ([§3](#3-parsing-a-stored-value)). `latestComment`, which the Sort menu doesn't offer, reads as the default |
 | `marketplace_hide_installed` | `marketplace_hide_installed` | Bool, **default `false`**. Browse's **Hide installed** switch: whether the grid leaves out the mods already in the library ([`marketplace.md` §2](marketplace.md#2-state)). A value that is not a bool is ignored |
 | `marketplace_turn_on_after_install` | `marketplace_turn_on_after_install` | Bool, **default `false`**. The mod page's **Turn on after installing** switch: whether an install from Browse, the mod page's or a card's and the carousel's, turns its new mods on once they are in the library ([`marketplace.md` §5](marketplace.md#5-what-pressing-install-actually-does)). A value that is not a bool is ignored |
+| `import_turn_on_after` | `import_turn_on_after` | Bool, **default `false`**. The import review's **Turn on after import** switch: whether the mods a drop or paste creates are turned on once they are in the library, and only those ([`importing-mods.md`](importing-mods.md) §6). Not listed in Settings. A value that is not a bool is ignored |
 | `update_check_on_launch` | `update_check_on_launch` | Bool, **default `false`**. Whether the whole-library update check runs by itself at startup ([`update-checks.md` §5.1](update-checks.md#51-checking-at-startup)). The default is the safety property: the standing rule is that a check never runs unpressed, and this is the only opt-in out of it. It governs *checking* — nothing here consents to an update being applied |
 | `hide_empty_characters` | `hide_empty_characters` | Bool, **default `false`**. Whether the Library's character list hides the characters and categories with no mods, the **Hide empty** switch ([`library-screen.md` §2](library-screen.md#2-the-character-list)). A value that is not a bool is ignored |
 | `one_at_a_time_default` | `one_at_a_time_default` | Bool, **default `true`**. Settings' **One active mod per character**: the One at a time state of every character the user hasn't switched themselves. Categories are not characters and stay off unless switched ([`library-screen.md` §10](library-screen.md#10-one-at-a-time-per-character)). A value that is not a bool is ignored |

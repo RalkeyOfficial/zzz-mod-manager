@@ -52,6 +52,8 @@ fail against them. It is put back exactly as it was afterwards, active or not.
 
 **Unless the user turned it off meanwhile.** Under One at a time, turning on another of the character's mods turns this one off at once, write or no write ([`library-screen.md`](library-screen.md) §10): turning off is only the link and the shader files coming out, and nothing about the write needs them. The mod is then marked (`turnOffDuringWrite`, beside `whileWritingMod`), and the write's turn back on, on success or failure, leaves it off and places no shader files (`ModManagerActivationPort`'s `leaveOff`). The mark ends with the write. The result then says nothing about turning it back on, so no notice claims a failure. This holds for every write that turns a mod off and back on: an update or Reinstall, a patch installed into it or taken out, and a restore.
 
+A folder the user drops onto a mod they already have is written the same way, with the record afterwards kept apart from a downloaded file's ([`importing-mods.md`](importing-mods.md) §5).
+
 `UpdateApplier._wipe` is the delete: every entry at the folder's root except
 `.zzz-mod-manager/`, recursively. `utils/directory_copy.dart` is the copy into the
 emptied folder.

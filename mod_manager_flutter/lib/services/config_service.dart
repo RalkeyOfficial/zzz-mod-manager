@@ -44,6 +44,7 @@ class ConfigService implements ModCharacterTagStore {
   static const String _keyRemindF10 = 'remind_f10';
   static const String _keyMarketplaceHideInstalled = 'marketplace_hide_installed';
   static const String _keyMarketplaceTurnOnAfterInstall = 'marketplace_turn_on_after_install';
+  static const String _keyImportTurnOnAfter = 'import_turn_on_after';
 
   /// Mirrored by `services/log/log_setup.dart`, which reads the same key
   /// straight off `config.json` during bootstrap — `SharedPreferences` does not
@@ -208,6 +209,9 @@ class ConfigService implements ModCharacterTagStore {
 
   /// Whether a mod installed from Browse is turned on once it is in the library.
   bool get marketplaceTurnOnAfterInstall => _prefs.getBool(_keyMarketplaceTurnOnAfterInstall) ?? false;
+
+  /// Whether a mod an import created is turned on once it is in the library, the review's **Turn on after import**.
+  bool get importTurnOnAfter => _prefs.getBool(_keyImportTurnOnAfter) ?? false;
 
   /// Whether each run writes a log file.
   ///
@@ -683,6 +687,16 @@ class ConfigService implements ModCharacterTagStore {
     }
   }
 
+  Future<bool> setImportTurnOnAfter(bool turnOn) async {
+    try {
+      await _prefs.setBool(_keyImportTurnOnAfter, turnOn);
+      await _saveToFile();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<bool> setFileLogging(bool enabled) async {
     try {
       await _prefs.setBool(_keyFileLogging, enabled);
@@ -801,6 +815,9 @@ class ConfigService implements ModCharacterTagStore {
       if (config['marketplace_turn_on_after_install'] is bool) {
         await _prefs.setBool(_keyMarketplaceTurnOnAfterInstall, config['marketplace_turn_on_after_install']);
       }
+      if (config['import_turn_on_after'] is bool) {
+        await _prefs.setBool(_keyImportTurnOnAfter, config['import_turn_on_after']);
+      }
       if (config.containsKey('file_logging')) {
         await _prefs.setBool(_keyFileLogging, config['file_logging']);
       }
@@ -841,6 +858,7 @@ class ConfigService implements ModCharacterTagStore {
         'marketplace_sort': marketplaceSort,
         'marketplace_hide_installed': marketplaceHideInstalled,
         'marketplace_turn_on_after_install': marketplaceTurnOnAfterInstall,
+        'import_turn_on_after': importTurnOnAfter,
         'update_check_on_launch': updateCheckOnLaunch,
         'hide_empty_characters': hideEmptyCharacters,
         'one_at_a_time_default': oneAtATimeDefault,

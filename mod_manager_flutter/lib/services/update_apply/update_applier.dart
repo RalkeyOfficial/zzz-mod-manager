@@ -85,7 +85,26 @@ class UpdateApplier {
     if (!layout.canProceed) {
       return UpdatePreview(layout: layout, sources: const {});
     }
+    return _previewOf(layout, byName);
+  }
 
+  /// The preview of folders the user **dropped**, where nothing is replayed: the mapping is what the review settled.
+  ///
+  /// [folders] maps each source folder to the subfolder of the mod it goes into, empty for the mod folder itself.
+  /// One folder is the mod; several combined into one mod each take a subfolder named after them, as a combined
+  /// install lays them (`docs/importing-mods.md` §5).
+  Future<UpdatePreview> previewDropped(Map<String, String> folders) {
+    final byName = {for (final folder in folders.keys) path.basename(folder): folder};
+    final layout = UpdateLayout(
+      mappings: [
+        for (final entry in folders.entries)
+          UpdateFolderMapping(source: path.basename(entry.key), targetSubPath: entry.value),
+      ],
+    );
+    return _previewOf(layout, byName);
+  }
+
+  Future<UpdatePreview> _previewOf(UpdateLayout layout, Map<String, String> byName) async {
     // What the download would lay down, expressed relative to the **mod folder
     // root** — so a combined install's subfolder prefixes are applied once,
     // here, and every rule downstream compares like with like.

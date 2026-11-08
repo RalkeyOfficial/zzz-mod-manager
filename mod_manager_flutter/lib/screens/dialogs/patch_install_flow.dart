@@ -52,7 +52,9 @@ import 'patch_install_prompt.dart';
 /// one makes a single mod whose subfolders are named after each source — the
 /// same names `importMods` and `importCombinedMod` produce, which is what keeps
 /// a pre-import answer and a post-import one about the same folder in agreement.
-List<PlannedMod> plannedMods(ImportPlan plan, List<String> folders) =>
+///
+/// [names] maps a source folder to the name the import review gave its mod, where that is not the folder's own.
+List<PlannedMod> plannedMods(ImportPlan plan, List<String> folders, {Map<String, String> names = const {}}) =>
     plan.combine
         ? [
             PlannedMod(
@@ -64,7 +66,7 @@ List<PlannedMod> plannedMods(ImportPlan plan, List<String> folders) =>
           ]
         : [
             for (final dir in folders)
-              PlannedMod(name: path.basename(dir), sources: {dir: ''}),
+              PlannedMod(name: names[dir] ?? path.basename(dir), sources: {dir: ''}),
           ];
 
 /// The patch's **own** remote identity, for the installs that have one.
@@ -168,7 +170,10 @@ class PatchInstallDecision {
 
   /// Whether [folder] must be left out of the import — its contents are going
   /// into a mod that already exists, so no new folder is created for it.
-  bool excludes(String folder) => writes.containsKey(path.basename(folder));
+  ///
+  /// [names] is the import review's name for a folder's mod, where it is not the folder's own.
+  bool excludes(String folder, {Map<String, String> names = const {}}) =>
+      writes.containsKey(names[folder] ?? path.basename(folder));
 
   /// What the user said each new folder patches, where they said. Only the
   /// new-folder destination has one; the other answer *is* the destination.
@@ -229,11 +234,12 @@ Future<PatchInstallDecision?> decidePatchInstall(
   int? patchModId,
   List<GbRequirement> patchRequirements = const <GbRequirement>[],
   PatchDestinationPrompt prompt = showPatchInstallPrompt,
+  Map<String, String> names = const {},
 }) async {
   // Scoped by the import picker, which is what decides where one resulting mod
   // ends and the next begins: judged folder by folder, an ordinary mod that
   // ships its textures in one folder and its `.ini` in another reads as a patch.
-  final scan = await scanPlannedMods(plannedMods(plan, folders));
+  final scan = await scanPlannedMods(plannedMods(plan, folders, names: names));
   if (scan.patchShaped.isEmpty) return PatchInstallDecision(scan: scan);
 
   final question = await preparePatchQuestion(
@@ -265,6 +271,7 @@ Future<PatchInstallDecision?> decidePatchInstall(
     destinations: answered,
     folders: folders,
     modsPath: modsPath,
+    names: names,
   );
 }
 
@@ -441,9 +448,10 @@ Future<PatchInstallDecision> resolvePatchDestinations({
   required Map<String, PatchDestination> destinations,
   required List<String> folders,
   required String modsPath,
+  Map<String, String> names = const {},
 }) async {
   final sourceOfPlanned = <String, String>{
-    for (final dir in folders) path.basename(dir): dir,
+    for (final dir in folders) names[dir] ?? path.basename(dir): dir,
   };
 
   final writes = <String, PatchWrite>{};

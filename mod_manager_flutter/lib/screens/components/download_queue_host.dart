@@ -51,6 +51,84 @@ Future<void> bulkActionEnded(ProviderContainer container) async {
   }
 }
 
+/// Turns each of [modIds], new mods an install or an import just created, on: in turn, as the library's switch does,
+/// so a character's One at a time applies to them as to any enable, and after a running bulk action of the All mods
+/// table has ended. Answers the mods that could not be turned on, which stay installed and off; an enable refused for
+/// its shader files or a network folder says why instead, as the Library does. Never throws: the install is done
+/// whatever this comes to.
+Future<List<String>> turnOnNewMods(
+  BuildContext context,
+  List<String> modIds, {
+  ModEnabler enabler = ApiService.enableMod,
+}) async {
+  final container = ProviderScope.containerOf(context, listen: false);
+  final loc = context.loc;
+  final notify = context.notify;
+  final library = container.read(libraryProvider.notifier);
+  final leftOff = <String>[];
+  // Every mod this has come to a conclusion about, so a throw part-way leaves the rest named as left off.
+  final settled = <String>{};
+  try {
+    await bulkActionEnded(container);
+    // The new folders are not in the library until it is read again.
+    await library.rescan();
+    for (final modId in modIds) {
+      await container.read(libraryTogglesProvider.notifier).run(modId, () async {
+        settled.add(modId);
+        final mods = container.read(modsProvider);
+        final mod = mods.where((m) => m.id == modId).firstOrNull;
+        if (mod == null) {
+          leftOff.add(modId);
+          return;
+        }
+        if (mod.isActive) return;
+        final switchOff = modsToSwitchOff(
+          mods,
+          mod,
+          container.read(oneAtATimeProvider),
+          beingWritten: container.read(modWritesInProgressProvider),
+          agentsDefault: container.read(oneAtATimeDefaultProvider),
+        );
+        try {
+          final done = await enabler(
+            modId,
+            switchOff: switchOff,
+            whileWritten: (other) => turnOffDuringWrite(container, other),
+          );
+          if (!done) {
+            leftOff.add(modId);
+            return;
+          }
+        } on ShaderPlacementRefused catch (refusal) {
+          reportShaderRefusal(loc, notify, refusal, characterId: mod.characterId, container: container);
+          return;
+        } on NetworkLinkRefused {
+          reportNetworkLinkRefused(loc, notify, [mod.name], characterId: mod.characterId);
+          return;
+        } catch (error) {
+          _log.warning('mod not turned on after install', error: error, fields: {'mod': modId});
+          leftOff.add(modId);
+          return;
+        }
+        // The next mod's One at a time has to see this one on.
+        library.put([
+          for (final m in container.read(modsProvider))
+            if (m.id == modId)
+              m.copyWith(isActive: true)
+            else if (switchOff.contains(m.id))
+              m.copyWith(isActive: false)
+            else
+              m,
+        ]);
+      });
+    }
+  } catch (error, stack) {
+    _log.error('new mods not turned on after install', error: error, stack: stack, fields: {'mods': modIds});
+    leftOff.addAll(modIds.where((m) => !settled.contains(m)));
+  }
+  return leftOff;
+}
+
 /// The way from a panel row to the questions [DownloadQueueHost] asks.
 ///
 /// The host asks from its own context, which is below the `Navigator` and outlives the panel; the panel is a route
@@ -587,71 +665,8 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
   /// result carries a warning naming it; an enable refused for its shader files or a network folder says why instead,
   /// as the Library does. Never throws: the install is done whatever this comes to.
   Future<InstallResult> _turnOn(InstallResult result) async {
-    final container = ProviderScope.containerOf(context, listen: false);
     final loc = context.loc;
-    final notify = context.notify;
-    final library = container.read(libraryProvider.notifier);
-    final leftOff = <String>[];
-    // Every mod this has come to a conclusion about, so a throw part-way leaves the rest named as left off.
-    final settled = <String>{};
-    try {
-      await bulkActionEnded(container);
-      // The new folders are not in the library until it is read again.
-      await library.rescan();
-      for (final modId in result.mods) {
-        await container.read(libraryTogglesProvider.notifier).run(modId, () async {
-          settled.add(modId);
-          final mods = container.read(modsProvider);
-          final mod = mods.where((m) => m.id == modId).firstOrNull;
-          if (mod == null) {
-            leftOff.add(modId);
-            return;
-          }
-          if (mod.isActive) return;
-          final switchOff = modsToSwitchOff(
-            mods,
-            mod,
-            container.read(oneAtATimeProvider),
-            beingWritten: container.read(modWritesInProgressProvider),
-            agentsDefault: container.read(oneAtATimeDefaultProvider),
-          );
-          try {
-            final done = await widget.enabler(
-              modId,
-              switchOff: switchOff,
-              whileWritten: (other) => turnOffDuringWrite(container, other),
-            );
-            if (!done) {
-              leftOff.add(modId);
-              return;
-            }
-          } on ShaderPlacementRefused catch (refusal) {
-            reportShaderRefusal(loc, notify, refusal, characterId: mod.characterId, container: container);
-            return;
-          } on NetworkLinkRefused {
-            reportNetworkLinkRefused(loc, notify, [mod.name], characterId: mod.characterId);
-            return;
-          } catch (error) {
-            _log.warning('mod not turned on after install', error: error, fields: {'mod': modId});
-            leftOff.add(modId);
-            return;
-          }
-          // The next mod's One at a time has to see this one on.
-          library.put([
-            for (final m in container.read(modsProvider))
-              if (m.id == modId)
-                m.copyWith(isActive: true)
-              else if (switchOff.contains(m.id))
-                m.copyWith(isActive: false)
-              else
-                m,
-          ]);
-        });
-      }
-    } catch (error, stack) {
-      _log.error('new mods not turned on after install', error: error, stack: stack, fields: {'mods': result.mods});
-      leftOff.addAll(result.mods.where((m) => !settled.contains(m)));
-    }
+    final leftOff = await turnOnNewMods(context, result.mods, enabler: widget.enabler);
     if (leftOff.isEmpty) return result;
     return InstallResult.success(
       result.mods,

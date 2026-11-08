@@ -451,7 +451,7 @@ Future<bool> applyUpdateFlow(
       // **The folder that was written, not the one the dialog was opened on.**
       // With the primary unticked the sole attempt is a sibling, and naming the
       // wrong mod sends the user to restore something never touched.
-      final lines = _failureMessage(loc, only.result, only.mod);
+      final lines = updateFailureMessage(loc, only.result, only.mod);
       end = UpdateFailed(lines.title);
       final card = writing;
       writing = null;
@@ -675,7 +675,7 @@ Future<bool> applyPatchUpdateFlow(
     }
 
     if (!result.success) {
-      final lines = _failureMessage(loc, result, mod);
+      final lines = updateFailureMessage(loc, result, mod);
       end = UpdateFailed(lines.title);
       if (!context.mounted) return result.snapshot != null;
       fail(lines.title, lines.body);
@@ -1149,7 +1149,9 @@ Future<void> _recordOrigin({
   });
 }
 
-NotificationLines _failureMessage(
+/// What a write that did not land says, by how it failed: the snapshot, a mod gone, the copy, or a layout that could
+/// not be settled.
+NotificationLines updateFailureMessage(
   AppLocalizations loc,
   UpdateApplyResult result,
   ModInfo mod,
