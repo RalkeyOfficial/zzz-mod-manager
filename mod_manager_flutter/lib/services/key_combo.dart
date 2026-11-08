@@ -94,9 +94,40 @@ final List<LogicalKeyboardKey> _functionKeys = [
   LogicalKeyboardKey.f24,
 ];
 
-/// The keys that carry a digit or punctuation mark, by position. With Shift held Flutter reports the shifted
-/// character as the logical key, which has no name here, so these answer for it.
+const List<PhysicalKeyboardKey> _letterKeys = [
+  PhysicalKeyboardKey.keyA,
+  PhysicalKeyboardKey.keyB,
+  PhysicalKeyboardKey.keyC,
+  PhysicalKeyboardKey.keyD,
+  PhysicalKeyboardKey.keyE,
+  PhysicalKeyboardKey.keyF,
+  PhysicalKeyboardKey.keyG,
+  PhysicalKeyboardKey.keyH,
+  PhysicalKeyboardKey.keyI,
+  PhysicalKeyboardKey.keyJ,
+  PhysicalKeyboardKey.keyK,
+  PhysicalKeyboardKey.keyL,
+  PhysicalKeyboardKey.keyM,
+  PhysicalKeyboardKey.keyN,
+  PhysicalKeyboardKey.keyO,
+  PhysicalKeyboardKey.keyP,
+  PhysicalKeyboardKey.keyQ,
+  PhysicalKeyboardKey.keyR,
+  PhysicalKeyboardKey.keyS,
+  PhysicalKeyboardKey.keyT,
+  PhysicalKeyboardKey.keyU,
+  PhysicalKeyboardKey.keyV,
+  PhysicalKeyboardKey.keyW,
+  PhysicalKeyboardKey.keyX,
+  PhysicalKeyboardKey.keyY,
+  PhysicalKeyboardKey.keyZ,
+];
+
+/// The keys that carry a letter, digit or punctuation mark, by position. A logical key that is none of those names
+/// (the shifted character with Shift held, a Cyrillic letter on a Ukrainian layout) is answered by where the key is:
+/// the game's virtual-key code for a letter is the Latin letter at that position, whatever layout is active.
 final Map<PhysicalKeyboardKey, String> _positionKeys = {
+  for (final (i, key) in _letterKeys.indexed) key: String.fromCharCode(0x61 + i),
   PhysicalKeyboardKey.digit0: '0',
   PhysicalKeyboardKey.digit1: '1',
   PhysicalKeyboardKey.digit2: '2',
@@ -140,7 +171,7 @@ final Set<LogicalKeyboardKey> _modifierKeys = {
 bool isModifierKey(LogicalKeyboardKey key) => _modifierKeys.contains(key);
 
 /// The name 3DMigoto knows [key] by, or null when it has none the app writes. [physical] is looked at only for a
-/// digit or punctuation key whose logical key is not one (Shift held, or a layout that puts it elsewhere).
+/// letter, digit or punctuation key whose logical key is not one (Shift held, or a non-Latin layout).
 String? iniKeyName(LogicalKeyboardKey key, {PhysicalKeyboardKey? physical}) {
   final id = key.keyId;
   // Letters and digits are their own character, in lower case.

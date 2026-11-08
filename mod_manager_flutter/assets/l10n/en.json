@@ -935,7 +935,7 @@
       "keys_unsupported": "That key can't be written to an .ini.",
       "keys_empty": "This mod binds no keys.",
       "keys_not_saved_title": "Some keys weren't saved",
-      "keys_not_saved_body": "{files} couldn't be changed: it isn't UTF-8 text, can't be written, or changed after you opened this window.",
+      "keys_not_saved_body": "{files} couldn't be changed: it isn't UTF-8 text, can't be written, or changed after you opened this window. Your other edits aren't saved yet, so you can try again or undo those keys.",
       "labels_not_saved_title": "The key labels weren't saved",
       "save": "Save changes",
       "foot_keys_single": "Saving writes {count} changed key to {file}.",

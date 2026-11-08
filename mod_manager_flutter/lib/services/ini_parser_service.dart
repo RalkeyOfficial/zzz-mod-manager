@@ -41,7 +41,7 @@ class IniParserService {
       }
 
       final relative = modFolder == null ? null : p.posix.joinAll(p.split(p.relative(filePath, from: modFolder)));
-      final lines = await file.readAsLines();
+      final lines = [for (final line in IniLine.split(await IniKeyFiles.readText(filePath))) line.body];
       final keybinds = <KeybindInfo>[];
       final seen = <String, int>{};
       String? currentSection;

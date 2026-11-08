@@ -22,6 +22,19 @@ class IniLine {
   /// [trimmed] is the line without its surrounding whitespace.
   static String? sectionName(String trimmed) => _section.firstMatch(trimmed)?.group(1);
 
+  /// [text] cut into lines at `\n` and `\r\n`, each with its own ending (empty for a last line that has none). A
+  /// lone `\r` is not a line break, so the parser and the editor count the same lines.
+  static List<({String body, String eol})> split(String text) {
+    final lines = <({String body, String eol})>[];
+    var start = 0;
+    for (final m in RegExp(r'\r\n|\n').allMatches(text)) {
+      lines.add((body: text.substring(start, m.start), eol: m.group(0)!));
+      start = m.end;
+    }
+    if (start < text.length) lines.add((body: text.substring(start), eol: ''));
+    return lines;
+  }
+
   /// Splits the text after `=` into its value and the comment that follows it. A comment starts at a `;` that is
   /// the first character or comes after whitespace. [tail] is what follows the value's last character, spacing and
   /// comment together, for writing back.
@@ -162,6 +175,23 @@ class IniKeyEditor {
     );
   }
 
+  /// One edit per section and per block: the edits that would touch the same lines are reduced to the one that wins.
+  /// An [Unbind] beats a [SetKey] of the same section whichever comes first, since the key is gone with the section;
+  /// between two of the same kind the later wins.
+  static List<IniKeyEdit> _onePerTarget(List<IniKeyEdit> edits) {
+    final byTarget = <String, IniKeyEdit>{};
+    for (final edit in edits) {
+      final target = switch (edit) {
+        SetKey() => 's:${edit.section.toLowerCase()}#${edit.occurrence}',
+        Unbind() => 's:${edit.section.toLowerCase()}#${edit.occurrence}',
+        RestoreBlock() => 'b:${edit.index}',
+      };
+      if (edit is SetKey && byTarget[target] is Unbind) continue;
+      byTarget[target] = edit;
+    }
+    return byTarget.values.toList();
+  }
+
   /// [text] with [edits] applied, each against the sections as they are in [text]. An edit whose section or key
   /// line is not there is left out and returned in [IniEditResult.missing].
   static IniEditResult apply(String text, List<IniKeyEdit> edits) {
@@ -174,7 +204,7 @@ class IniKeyEditor {
     // Each edit is resolved against the text as it was, then they run from the bottom up so a line added or taken
     // out never moves one still to come.
     final resolved = <({int start, void Function() run})>[];
-    for (final edit in edits) {
+    for (final edit in _onePerTarget(edits)) {
       switch (edit) {
         case SetKey():
           final section = _find(sections, edit.section, edit.occurrence);
@@ -208,16 +238,7 @@ class IniKeyEditor {
   }
 
   // Lines keep their own endings, so a file with mixed endings is written back with mixed endings.
-  static List<_Line> _split(String text) {
-    final lines = <_Line>[];
-    var start = 0;
-    for (final m in RegExp(r'\r\n|\n').allMatches(text)) {
-      lines.add(_Line(text.substring(start, m.start), m.group(0)!));
-      start = m.end;
-    }
-    if (start < text.length) lines.add(_Line(text.substring(start), ''));
-    return lines;
-  }
+  static List<_Line> _split(String text) => [for (final line in IniLine.split(text)) _Line(line.body, line.eol)];
 
   static bool _isCommentOrBlank(String trimmed) =>
       trimmed.isEmpty || trimmed.startsWith(';') || trimmed.startsWith('#');
@@ -366,6 +387,10 @@ class IniKeyFiles {
   const IniKeyFiles._();
 
   static const List<int> _bom = [0xEF, 0xBB, 0xBF];
+
+  /// The file's text without its byte-order mark, which is how the parser and the editor both read an `.ini`. Throws
+  /// [FormatException] for a file that is not UTF-8.
+  static Future<String> readText(String path) async => (await _read(path)).text;
 
   /// The file's text and whether it began with a byte-order mark. Throws [FormatException] for a file that is not
   /// UTF-8.

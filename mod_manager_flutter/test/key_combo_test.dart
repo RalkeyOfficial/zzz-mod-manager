@@ -56,6 +56,26 @@ void main() {
       expect(record(LogicalKeyboardKey.exclamation), isNull);
     });
 
+    test('a letter on a non-Latin layout is the Latin letter at its position', () {
+      // Cyrillic ф is the logical key for the physical A key on a Ukrainian layout.
+      const cyrillicA = LogicalKeyboardKey(0x00000444);
+      expect(record(cyrillicA, physical: PhysicalKeyboardKey.keyA), 'a');
+      expect(record(cyrillicA, physical: PhysicalKeyboardKey.keyA, ctrl: true, shift: true), 'ctrl shift a');
+      expect(record(const LogicalKeyboardKey(0x0000044f), physical: PhysicalKeyboardKey.keyZ), 'z');
+      expect(record(cyrillicA), isNull, reason: 'without a position there is nothing to name it by');
+    });
+
+    test('every letter position is named', () {
+      final letters = {
+        PhysicalKeyboardKey.keyA: 'a',
+        PhysicalKeyboardKey.keyM: 'm',
+        PhysicalKeyboardKey.keyZ: 'z',
+      };
+      for (final entry in letters.entries) {
+        expect(iniKeyName(const LogicalKeyboardKey(0x00000444), physical: entry.key), entry.value);
+      }
+    });
+
     test('a key with no name is refused', () {
       expect(record(LogicalKeyboardKey.mediaPlay), isNull);
       expect(record(LogicalKeyboardKey.escape), isNull);

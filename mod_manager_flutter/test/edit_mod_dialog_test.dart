@@ -1103,7 +1103,7 @@ void main() {
       expect(find.textContaining('Saving writes 2 changed keys to mod.ini.'), findsOneWidget);
     });
 
-    testEdit('a file that has become something else since the dialog opened is reported, and the others are still written', (
+    testEdit('a file that has become something else since the dialog opened keeps the dialog open, and the others are still written', (
       tester,
     ) async {
       temp.createMod('Winter Maid');
@@ -1114,6 +1114,8 @@ void main() {
 
       await record(tester, keysButton('KeyA', file: 'a.ini'), LogicalKeyboardKey.digit5);
       await record(tester, keysButton('KeyB', file: 'b.ini'), LogicalKeyboardKey.digit6);
+      await tester.enterText(find.widgetWithText(TextField, 'B'), 'Bow');
+      await tester.pump();
       // Saved in another program as Latin-1 while the dialog was open.
       File(
         p.join(temp.modFolder('Winter Maid').path, 'b.ini'),
@@ -1121,9 +1123,52 @@ void main() {
       await pressSave(tester);
 
       expect(temp.read('Winter Maid', 'a.ini'), contains('key = 5'));
-      final warning = container.read(notificationsProvider).single;
-      expect(warning.title, "Some keys weren't saved");
-      expect(warning.body, contains('b.ini'));
+      final card = container.read(notificationsProvider).single;
+      expect(card.title, "Some keys weren't saved");
+      expect(card.body, contains('b.ini'));
+      expect(closed, isFalse, reason: 'the edits are still staged, so the user can try again');
+      expect(find.byType(EditModDialog), findsOneWidget);
+      expect(saveEnabled(tester), isTrue);
+      expect(temp.config.modKeyLabels, isEmpty, reason: 'labels are saved with a save that went through');
+    });
+
+    testEdit('a refused file is tried again on Save, and what was written before is not written twice', (tester) async {
+      temp.createMod('Winter Maid');
+      temp.write('Winter Maid', 'a.ini', '[KeyA]\nkey = 1\n\n;zenith: [KeyOld]\n;zenith: key = 4\n');
+      temp.write('Winter Maid', 'b.ini', '[KeyB]\nkey = 2\n');
+      final keybinds = await keysOf(tester, 'Winter Maid');
+      final container = await openEdit(tester, mod('Winter Maid', keybinds: keybinds), ioRounds: 40);
+
+      // Written twice, a.ini's edits would find KeyA gone and take its block, now the first one, for the old one.
+      await tester.tap(find.widgetWithText(TextButton, "Restore the author's keys"));
+      await tester.pump();
+      await tester.tap(find.byTooltip('Remove action 1'));
+      await tester.pump();
+      await record(tester, keysButton('KeyB', file: 'b.ini'), LogicalKeyboardKey.digit6);
+      await tester.enterText(find.widgetWithText(TextField, 'B'), 'Bow');
+      await tester.pump();
+      File(
+        p.join(temp.modFolder('Winter Maid').path, 'b.ini'),
+      ).writeAsBytesSync([...latin1.encode('[KeyB]\nkey = 2\n; caf'), 0xE9, 0x0A]);
+      await pressSave(tester);
+      expect(closed, isFalse);
+      final aAfterFirst = temp.read('Winter Maid', 'a.ini');
+      expect(aAfterFirst, ';zenith: [KeyA]\n;zenith: key = 1\n\n[KeyOld]\nkey = 4\n');
+
+      // The card sits over the Save button until it is closed.
+      container.read(notificationsProvider.notifier).clear();
+      await tester.pumpAndSettle();
+      // The file is UTF-8 again.
+      File(p.join(temp.modFolder('Winter Maid').path, 'b.ini')).writeAsStringSync('[KeyB]\nkey = 2\n');
+      await pressSave(tester);
+
+      expect(closed, isTrue);
+      expect(temp.read('Winter Maid', 'a.ini'), aAfterFirst);
+      expect(temp.read('Winter Maid', 'b.ini'), '[KeyB]\n;zenith: key = 2\nkey = 6\n');
+      expect(temp.config.modKeyLabels, {
+        'Winter Maid': {'keyb': 'Bow'},
+      });
+      expect(result?.keysWritten, isTrue);
     });
 
     testEdit('Change keys opens with the keys in view', (tester) async {

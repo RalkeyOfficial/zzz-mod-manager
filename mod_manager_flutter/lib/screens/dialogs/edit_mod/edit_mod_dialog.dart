@@ -92,6 +92,11 @@ class _EditModDialogState extends ConsumerState<EditModDialog> {
   String _typedTag = '';
   bool _saving = false;
 
+  /// The `.ini` files a Save has written already, which a retry leaves alone: their edits are on disk, and applying
+  /// them again would find the sections and blocks they changed gone.
+  final Set<String> _keysDone = {};
+  bool _keysWritten = false;
+
   /// The mod page's text as this app would have written it into the description; null until it is known, or when the
   /// mod has no page, is not tracked, or the page could not be fetched.
   String? _pageText;
@@ -273,6 +278,8 @@ class _EditModDialogState extends ConsumerState<EditModDialog> {
       final result = await whileWritingMod(container, _mod.id, () => _write(container, notify, loc, tags: tags));
       if (mounted) Navigator.pop(context, result);
     } on _SaveRefused {
+      // A file written before the refusal is on disk whether or not the dialog is saved, so the library reads it.
+      if (_keysWritten) unawaited(container.read(libraryProvider.notifier).rescan());
       if (mounted) setState(() => _saving = false);
     } catch (e) {
       final title = loc.t('mods.edit.save_failed_title');
@@ -286,9 +293,10 @@ class _EditModDialogState extends ConsumerState<EditModDialog> {
     }
   }
 
-  /// The save, in the order that leaves the most standing when a step fails: what goes into the folder as it is
-  /// (pictures, sidecar, `.ini` keys, labels), then the character, and the rename last, so one that fails leaves
-  /// every other edit saved and the folder where it was.
+  /// The save, in the order that leaves the most standing when a step fails: the `.ini` keys first, since a file that
+  /// refuses keeps the dialog open for another try and nothing else is written yet; then what goes into the folder as
+  /// it is (pictures, sidecar, labels), then the character, and the rename last, so one that fails leaves every other
+  /// edit saved and the folder where it was.
   Future<EditResult?> _write(
     ProviderContainer container,
     NotificationCenter notify,
@@ -305,6 +313,31 @@ class _EditModDialogState extends ConsumerState<EditModDialog> {
         characterId: _mod.characterId,
       );
       return null;
+    }
+
+    final edits = {
+      for (final entry in _keys.keyEdits().entries)
+        if (!_keysDone.contains(entry.key)) entry.key: entry.value,
+    };
+    if (edits.isNotEmpty) {
+      final results = await ApiService.writeKeyFiles(_mod.id, edits);
+      for (final r in results) {
+        if (r.status != IniWriteStatus.written) continue;
+        _keysDone.add(r.file);
+        _keysWritten = true;
+      }
+      final failed = [
+        for (final r in results)
+          if (r.problem) r.file,
+      ];
+      if (failed.isNotEmpty) {
+        notify.error(
+          loc.t('mods.edit.keys_not_saved_title'),
+          body: loc.t('mods.edit.keys_not_saved_body', params: {'files': failed.join(', ')}),
+          characterId: _mod.characterId,
+        );
+        throw const _SaveRefused();
+      }
     }
 
     final images = await _commitGalleryImages(modManager, _mod, _images);
@@ -331,30 +364,13 @@ class _EditModDialogState extends ConsumerState<EditModDialog> {
       throw const _SaveRefused();
     }
 
-    final edits = _keys.keyEdits();
-    var keysWritten = false;
-    if (edits.isNotEmpty) {
-      final results = await ApiService.writeKeyFiles(_mod.id, edits);
-      keysWritten = results.any((r) => r.status == IniWriteStatus.written);
-      final failed = [
-        for (final r in results)
-          if (r.problem) r.file,
-      ];
-      if (failed.isNotEmpty) {
-        notify.warning(
-          loc.t('mods.edit.keys_not_saved_title'),
-          body: loc.t('mods.edit.keys_not_saved_body', params: {'files': failed.join(', ')}),
-          characterId: _mod.characterId,
-        );
-      }
-    }
     if (_keys.labelsChanged && !await ApiService.setModKeyLabels(_mod.id, _keys.labels())) {
       notify.warning(loc.t('mods.edit.labels_not_saved_title'), body: _mod.name, characterId: _mod.characterId);
     }
 
     if (_characterId != _mod.characterId) await ApiService.setModCharacter(_mod.id, _characterId);
 
-    if (keysWritten && container.read(remindF10Provider) && await container.read(isGameRunningProvider)()) {
+    if (_keysWritten && container.read(remindF10Provider) && await container.read(isGameRunningProvider)()) {
       notify.note(
         loc.t('notifications.f10.keys_title', params: {'name': _mod.name}),
         body: loc.t('notifications.f10.body'),
@@ -364,7 +380,7 @@ class _EditModDialogState extends ConsumerState<EditModDialog> {
     }
 
     final renamedTo = await _rename(container, notify, loc, _name.text.trim());
-    return EditResult(updated: updated, renamedTo: renamedTo, keysWritten: keysWritten);
+    return EditResult(updated: updated, renamedTo: renamedTo, keysWritten: _keysWritten);
   }
 
   /// Renames the folder when the Name field says so. Returns the folder's new name when it has one, and says why in

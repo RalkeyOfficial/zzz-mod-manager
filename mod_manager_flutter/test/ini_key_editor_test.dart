@@ -15,6 +15,9 @@ void main() {
 
   String edit(String text, List<IniKeyEdit> edits) => IniKeyEditor.apply(text, edits).text;
 
+  // What can follow a section's last line: a blank line, a comment, another blank line.
+  const trailing = '\n; about B\n\n';
+
   group('changing a key', () {
     test('rewrites the key line and leaves a marker with the old value above it', () {
       final result = edit(fixture, [const SetKey('KeyHair', 0, 'ctrl 1')]);
@@ -110,6 +113,40 @@ void main() {
       );
     });
 
+    test('two changes to one section leave one, the later key winning', () {
+      const text = '[KeyA]\nkey = 1\n\n[KeyB]\nkey = 2\n';
+
+      expect(
+        edit(text, [const SetKey('KeyA', 0, '5'), const SetKey('keya', 0, '6')]),
+        '[KeyA]\n;zenith: key = 1\nkey = 6\n\n[KeyB]\nkey = 2\n',
+      );
+      expect(edit(text, [const Unbind('KeyA', 0), const Unbind('KeyA', 0)]), edit(text, [const Unbind('KeyA', 0)]));
+    });
+
+    test('Remove beats a key change to the same section, in either order', () {
+      const text = '[KeyA]\nkey = 1\ntype = cycle\n\n[KeyB]\nkey = 2\n';
+      final removed = edit(text, [const Unbind('KeyA', 0)]);
+
+      expect(removed, ';zenith: [KeyA]\n;zenith: key = 1\n;zenith: type = cycle\n\n[KeyB]\nkey = 2\n');
+      expect(edit(text, [const SetKey('KeyA', 0, '5'), const Unbind('KeyA', 0)]), removed);
+      expect(edit(text, [const Unbind('KeyA', 0), const SetKey('KeyA', 0, '5')]), removed);
+    });
+
+    test('a key change and a Restore in one file each reach their own lines', () {
+      const text = '[KeyA]\nkey = 1\n\n;zenith: [KeyB]\n;zenith: key = 2\n\n[KeyC]\nkey = 3\n';
+
+      expect(
+        edit(text, [const RestoreBlock(0, key: '7'), const SetKey('KeyA', 0, '5'), const SetKey('KeyC', 0, '6')]),
+        '[KeyA]\n;zenith: key = 1\nkey = 5\n\n[KeyB]\n;zenith: key = 2\nkey = 7\n\n[KeyC]\n;zenith: key = 3\nkey = 6\n',
+      );
+    });
+
+    test('a Restore named twice uncomments its block once', () {
+      const text = ';zenith: [KeyB]\n;zenith: key = 2\n';
+
+      expect(edit(text, [const RestoreBlock(0, key: '7'), const RestoreBlock(0, key: '8')]), '[KeyB]\n;zenith: key = 2\nkey = 8\n');
+    });
+
     test('lines it was not asked about stay as they are, hand edits included', () {
       const text = '; mine\n[KeyA]\nkey = 1\n  condition=  \$x==1   \n\n[Other]\nkey = not a key section\n';
 
@@ -184,6 +221,27 @@ void main() {
       expect(edit(removed, [const RestoreBlock(1), const RestoreBlock(0)]), text);
     });
 
+    test('comments and blank lines after a removed section stay where they are, and Restore is complete', () {
+      const text = '[KeyA]\nkey = 1\n$trailing[KeyB]\nkey = 2\n';
+      final removed = edit(text, [const Unbind('KeyA', 0)]);
+
+      expect(removed, ';zenith: [KeyA]\n;zenith: key = 1\n$trailing[KeyB]\nkey = 2\n');
+      expect(IniKeyEditor.inspect(removed).blocks.map((b) => (b.section, b.key)), [('KeyA', '1')]);
+      expect(edit(removed, [const RestoreBlock(0)]), text);
+      expect(
+        edit(removed, [const RestoreBlock(0, key: '9')]),
+        contains('[KeyA]\n;zenith: key = 1\nkey = 9\n$trailing[KeyB]'),
+      );
+    });
+
+    test('a removed section\'s own blank and comment lines come back with it', () {
+      const text = '[KeyA]\nkey = 1\n\n; inner note\n\$v = 0,1\n\n; about B\n\n[KeyB]\nkey = 2\n';
+      final removed = edit(text, [const Unbind('KeyA', 0)]);
+
+      expect(removed, startsWith(';zenith: [KeyA]\n;zenith: key = 1\n;zenith:\n;zenith: ; inner note\n;zenith: \$v = 0,1\n\n; about B'));
+      expect(edit(removed, [const RestoreBlock(0)]), text);
+    });
+
     test('a hand edit made between Remove and Restore is kept', () {
       final removed = edit(fixture, [const Unbind('KeyHair', 0)]);
       final handEdited = removed.replaceFirst(';zenith: type = cycle', ';zenith: type = cycle ; my note');
@@ -225,6 +283,40 @@ void main() {
       expect([for (final k in keys) (k.occurrence, k.keyValue)], [(0, '1'), (1, '2')]);
       expect(edit('[Key]\nkey = 1\n[Key]\nkey = 2\n', [const SetKey('Key', 1, '9')]), contains('key = 9'));
       expect(edit('[Key]\nkey = 1\n[Key]\nkey = 2\n', [const SetKey('Key', 1, '9')]), contains('\nkey = 1\n'));
+    });
+
+    test('on a file that starts with a byte-order mark and repeats a section name', () async {
+      final dir = Directory.systemTemp.createTempSync('zzz_ini_editor_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      const text = '[KeyA]\r\nkey = 1\r\n\r\n[KeyA]\r\nkey = 2\r\n';
+      final file = File(p.join(dir.path, 'mod.ini'))..writeAsBytesSync([0xEF, 0xBB, 0xBF, ...utf8.encode(text)]);
+
+      final keys = await IniParserService().parseIniFile(file.path, modFolder: dir.path);
+      expect([for (final k in keys) (k.section, k.occurrence, k.keyValue)], [('KeyA', 0, '1'), ('KeyA', 1, '2')]);
+
+      // Each row's edit lands on the section the row was read from.
+      final result = await IniKeyFiles.write(file.path, 'mod.ini', [
+        for (final k in keys) SetKey(k.section, k.occurrence, 'f${k.occurrence + 5}'),
+      ]);
+      expect(result.status, IniWriteStatus.written);
+      expect(result.missing, isEmpty);
+      expect(
+        utf8.decode(file.readAsBytesSync().skip(3).toList()),
+        '[KeyA]\r\n;zenith: key = 1\r\nkey = f5\r\n\r\n[KeyA]\r\n;zenith: key = 2\r\nkey = f6\r\n',
+      );
+    });
+
+    test('a lone carriage return is no line break for either', () async {
+      final dir = Directory.systemTemp.createTempSync('zzz_ini_editor_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final file = File(p.join(dir.path, 'mod.ini'))
+        ..writeAsStringSync('[KeyA]\nkey = 1\n[KeyB]\rkey = 2\n[KeyB]\nkey = 3\n');
+
+      final keys = await IniParserService().parseIniFile(file.path, modFolder: dir.path);
+
+      // `[KeyB]\rkey = 2` is one line to the editor, so it is not a section there and not a row here.
+      expect([for (final k in keys) (k.section, k.occurrence, k.keyValue)], [('KeyA', 0, '1'), ('KeyB', 0, '3')]);
+      expect(IniKeyEditor.apply(file.readAsStringSync(), [const SetKey('KeyB', 0, '9')]).missing, isEmpty);
     });
 
     test('a non-key section\'s lines do not leak into the next key section', () async {
