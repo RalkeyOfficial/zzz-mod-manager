@@ -97,6 +97,17 @@ void main() {
     expect(await snapshots.list(miyabi), hasLength(2));
   });
 
+  test('the names given to its keys go with it, and another mod keeps its own', () async {
+    await modWithHistory('Ellen', count: 1);
+    await modWithHistory('Miyabi', count: 1);
+    await config.setModKeyLabels('Ellen', {'keyhair': 'Hairpin style'});
+    await config.setModKeyLabels('Miyabi', {'keyhair': 'Hair'});
+
+    await service.deleteMod('Ellen');
+
+    expect(config.modKeyLabels.keys, ['Miyabi']);
+  });
+
   test('a mod that was never snapshotted deletes cleanly', () async {
     // No uid, nothing filed under one — and nothing to go wrong.
     final folder = Directory(p.join(mods.path, 'Ellen'))..createSync();

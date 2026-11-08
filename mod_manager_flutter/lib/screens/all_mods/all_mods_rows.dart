@@ -72,8 +72,8 @@ class AllModsContext {
   final Map<String, int> sizes;
   final AppLocalizations loc;
 
-  /// The mod page's author, once this session holds the page.
-  String? authorOf(ModInfo mod) => installedRecord(mod, pages).page?.submitter?.name;
+  /// The mod's author: the one stored for it, else the mod page's once this session holds the page.
+  String? authorOf(ModInfo mod) => modAuthor(mod, installedRecord(mod, pages).page);
 
   String characterOf(ModInfo mod) => libraryGroupName(libraryGroupOf(mod.characterId), loc);
 

@@ -45,9 +45,8 @@ import 'all_mods/all_mods_view.dart';
 import 'dialogs/archive_password_dialog.dart';
 import 'dialogs/delete_mod_dialog.dart';
 import 'dialogs/duplicate_archive_dialog.dart';
-import 'dialogs/edit_mod_dialog.dart';
+import 'dialogs/edit_mod/edit_mod_dialog.dart';
 import 'dialogs/import_selection_dialog.dart';
-import 'dialogs/keybinds_dialog.dart';
 import 'dialogs/mod_context_menu.dart';
 import 'dialogs/mod_update_dialog.dart';
 import 'dialogs/patch_install_flow.dart';
@@ -212,8 +211,6 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
   /// already happened; only the library needs the id/name swap — plus a rewrite
   /// of the cached image paths, which are absolute and still point at the old
   /// folder (otherwise the thumbnail can't load until a refresh).
-  // The Name field of Edit info calls this once it is built.
-  // ignore: unused_element
   Future<void> _onModRenamed(String oldId, String newName) async {
     final allMods = _currentAllMods();
     final index = allMods?.indexWhere((m) => m.id == oldId) ?? -1;
@@ -277,6 +274,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       isActive: existing.isActive,
       imagePath: updated.images.isNotEmpty ? updated.images.first : null,
       description: updated.description,
+      author: updated.author,
       tags: updated.tags,
       images: updated.images,
       isFavorite: existing.isFavorite,
@@ -490,8 +488,18 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
     }
   }
 
-  void _showEditDialog(ModInfo mod) {
-    showEditModDialog(context, mod, onSaved: _onModEdited);
+  /// Opens Edit info and brings the library in line with what it saved. A rename or a written `.ini` reads the disk
+  /// again, since the folder or its keys changed; anything else is applied to the list in hand.
+  Future<void> _showEditDialog(ModInfo mod, {EditSection section = EditSection.info}) async {
+    final result = await showEditModDialog(context, mod, section: section);
+    if (result == null || !mounted) return;
+    final renamedTo = result.renamedTo;
+    if (renamedTo != null) await _onModRenamed(mod.id, renamedTo);
+    if (renamedTo != null || result.keysWritten) {
+      await loadMods();
+    } else {
+      _onModEdited(result.updated);
+    }
   }
 
   void _select(ModInfo mod) => ref.read(selectedModIdProvider.notifier).state = mod.id;
@@ -625,6 +633,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
         .where((m) => m.id == selectedId)
         .firstOrNull;
 
+    // False while a dialog or a menu is over the page.
+    final routeIsCurrent = ModalRoute.isCurrentOf(context) ?? true;
     final request = ref.watch(openModPageProvider);
     final pageMod = request == null ? null : ref.watch(modsProvider).where((m) => m.id == request.modId).firstOrNull;
     // A mod gone from a scanned library, removed outside the app, takes its page with it.
@@ -640,8 +650,9 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       key: ValueKey('character_$current'),
       child: DropTarget(
         // Off under a mod's page: the hidden view still has its bounds, and a drop there would import under a
-        // character the user can't see.
-        enable: pageMod == null,
+        // character the user can't see. Off under a dialog too, which has drop targets of its own: every enabled
+        // target gets every drop.
+        enable: pageMod == null && routeIsCurrent,
         onDragEntered: (_) => setState(() => _isDragging = true),
         onDragExited: (_) => setState(() => _isDragging = false),
         onDragDone: (details) => _importModsFromFolders(details.files),
@@ -691,7 +702,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
           ExcludeFocus(
             excluding: pageMod != null,
             child: switch (destination) {
-              AppDestination.allMods => _allModsView(enableDrop: pageMod == null),
+              AppDestination.allMods => _allModsView(enableDrop: pageMod == null && routeIsCurrent),
               AppDestination.updates => UpdatesPage(
                 onOpenPage: (mod) => _openPage(mod, ModPageTab.overview),
                 onShowUpdate: (mod) => unawaited(_checkForUpdate(mod)),
@@ -713,7 +724,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
               onToggle: _bulkRunning ? null : () => toggleMod(pageMod),
               onFavoriteToggle: () => _toggleFavorite(pageMod),
               onEdit: () => _showEditDialog(pageMod),
-              onEditKeys: () => showKeybindsDialog(context, pageMod, onSaved: () => unawaited(loadMods())),
+              onEditKeys: () => _showEditDialog(pageMod, section: EditSection.keys),
               onOpenFolder: () => _openModFolder(pageMod),
               onCheckForUpdate: () => unawaited(_checkForUpdate(pageMod)),
               onResolveOrigin: () => unawaited(_resolveOrigin(pageMod)),

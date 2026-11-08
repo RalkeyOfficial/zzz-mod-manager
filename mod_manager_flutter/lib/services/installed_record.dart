@@ -12,6 +12,15 @@ import '../models/mod_download.dart';
 ({GbMod? page, GbFile? file}) installedRecord(ModInfo mod, Map<int, GbMod> records) =>
     downloadRecord(mod.origin?.base, records);
 
+/// Who made [mod]: what is stored in its sidecar (Edit info, or the install), else the submitter of the mod page
+/// the session holds ([page], from [installedRecord]).
+String? modAuthor(ModInfo mod, GbMod? page) {
+  final stored = mod.author?.trim();
+  if (stored != null && stored.isNotEmpty) return stored;
+  final submitted = page?.submitter?.name?.trim();
+  return submitted == null || submitted.isEmpty ? null : submitted;
+}
+
 /// [installedRecord] for one layer of a folder's stack, a patch included.
 ({GbMod? page, GbFile? file}) downloadRecord(ModDownload? download, Map<int, GbMod> records) {
   final page = download?.modId == null ? null : records[download!.modId];

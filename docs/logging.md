@@ -107,7 +107,7 @@ than which file noticed it.
 | `shaders` | The shader-fix service |
 | `storage` | The disk-usage scan and reclaiming space |
 | `mods` | Library-level actions |
-| `ini` | Parsing |
+| `ini` | Parsing, and the key editor refusing a file that is not UTF-8 (the files it writes are `fileops`) |
 | `config` | The app's own settings and reading an older build's `config.json` |
 | `platform` | Symlinks, browser, folders, the system description |
 | `fileops` | **Every mutation of the filesystem**, whoever made it |

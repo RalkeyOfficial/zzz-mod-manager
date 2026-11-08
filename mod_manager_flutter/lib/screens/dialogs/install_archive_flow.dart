@@ -443,6 +443,7 @@ Future<InstallResult> _finish(BuildContext context, WidgetRef ref, DownloadJob j
     final page = RemoteModMetadata.fromMod(mod);
     final remote = RemoteModMetadata(
       description: page.description,
+      author: page.author,
       tags: page.tags,
       // Unassigned is stored as absence, so the autofill never writes the placeholder.
       characterId: storedCharacterId(character),

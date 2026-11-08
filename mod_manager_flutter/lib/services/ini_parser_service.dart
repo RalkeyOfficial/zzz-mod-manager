@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import '../core/constants.dart';
 import '../models/keybind_info.dart';
+import 'ini_key_editor.dart';
 import 'log/logger.dart';
 
 final Logger _log = Logger('ini');
@@ -9,12 +10,9 @@ final Logger _log = Logger('ini');
 /// Крос-платформний сервіс для парсингу INI файлів
 /// Працює як на Windows, так і на Linux
 class IniParserService {
-  /// Регулярний вираз для знаходження секцій (напр. [keySwap], [KeyUP])
-  static final RegExp _sectionRegex = RegExp(r'^\[([^\]]+)\]$');
-  
   /// Регулярний вираз для знаходження пар ключ=значення
   static final RegExp _keyValueRegex = RegExp(r'^([^=]+)=(.*)$');
-  
+
   /// Список типових назв секцій з keybinds (case-insensitive)
   static const List<String> keybindSections = [
     'keyswap',
@@ -31,17 +29,37 @@ class IniParserService {
 
   /// Парсить INI файл і повертає список keybinds
   /// Шукає секції, що містять в назві ключові слова для keybinds
-  Future<List<KeybindInfo>> parseIniFile(String filePath) async {
+  ///
+  /// [modFolder], when given, is what each section's [KeybindInfo.file] is made relative to. A section's
+  /// [KeybindInfo.occurrence] counts every section header of its name in the file, key sections or not, so it names
+  /// the same section the key editor finds.
+  Future<List<KeybindInfo>> parseIniFile(String filePath, {String? modFolder}) async {
     try {
       final file = File(filePath);
       if (!await file.exists()) {
         return [];
       }
 
+      final relative = modFolder == null ? null : p.posix.joinAll(p.split(p.relative(filePath, from: modFolder)));
       final lines = await file.readAsLines();
       final keybinds = <KeybindInfo>[];
+      final seen = <String, int>{};
       String? currentSection;
+      var currentOccurrence = 0;
       final currentKeys = <String, String>{};
+
+      void finishSection() {
+        final section = currentSection;
+        if (section != null && currentKeys.isNotEmpty && _isKeybindSection(section)) {
+          keybinds.add(KeybindInfo(
+            section: section,
+            keys: Map.from(currentKeys),
+            file: relative,
+            occurrence: currentOccurrence,
+          ));
+        }
+        currentKeys.clear();
+      }
 
       for (var line in lines) {
         // Видаляємо пробіли на початку та в кінці
@@ -53,21 +71,11 @@ class IniParserService {
         }
 
         // Перевіряємо чи це секція
-        final sectionMatch = _sectionRegex.firstMatch(line);
-        if (sectionMatch != null) {
-          // Зберігаємо попередню секцію якщо вона була keybind-секцією
-          if (currentSection != null && _isKeybindSection(currentSection)) {
-            if (currentKeys.isNotEmpty) {
-              keybinds.add(KeybindInfo(
-                section: currentSection,
-                keys: Map.from(currentKeys),
-              ));
-              currentKeys.clear();
-            }
-          }
-
-          // Починаємо нову секцію
-          currentSection = sectionMatch.group(1);
+        final section = IniLine.sectionName(line);
+        if (section != null) {
+          finishSection();
+          currentSection = section;
+          currentOccurrence = seen.update(section.toLowerCase(), (n) => n + 1, ifAbsent: () => 0);
           continue;
         }
 
@@ -75,8 +83,8 @@ class IniParserService {
         final keyValueMatch = _keyValueRegex.firstMatch(line);
         if (keyValueMatch != null && currentSection != null) {
           final key = keyValueMatch.group(1)?.trim() ?? '';
-          final value = keyValueMatch.group(2)?.trim() ?? '';
-          
+          final value = IniLine.splitComment(keyValueMatch.group(2) ?? '').value;
+
           if (key.isNotEmpty) {
             currentKeys[key] = value;
           }
@@ -84,14 +92,7 @@ class IniParserService {
       }
 
       // Зберігаємо останню секцію якщо вона була keybind-секцією
-      if (currentSection != null && _isKeybindSection(currentSection)) {
-        if (currentKeys.isNotEmpty) {
-          keybinds.add(KeybindInfo(
-            section: currentSection,
-            keys: Map.from(currentKeys),
-          ));
-        }
-      }
+      finishSection();
 
       return keybinds;
     } catch (e) {
@@ -157,9 +158,10 @@ class IniParserService {
     return !segments.any((segment) => segment.toLowerCase().startsWith('disabled'));
   }
 
-  /// The keybinds of [iniFiles], in their order, for a caller that has already listed the folder.
-  Future<List<KeybindInfo>> parseIniFiles(List<String> iniFiles) async => [
-        for (final iniFile in iniFiles) ...await parseIniFile(iniFile),
+  /// The keybinds of [iniFiles], in their order, for a caller that has already listed the folder. [modFolder] makes
+  /// each section's file relative to it.
+  Future<List<KeybindInfo>> parseIniFiles(List<String> iniFiles, {String? modFolder}) async => [
+        for (final iniFile in iniFiles) ...await parseIniFile(iniFile, modFolder: modFolder),
       ];
 
   /// Парсить всі INI файли в директорії персонажа
@@ -174,7 +176,7 @@ class IniParserService {
         return null;
       }
 
-      final allKeybinds = await parseIniFiles(iniFiles);
+      final allKeybinds = await parseIniFiles(iniFiles, modFolder: directoryPath);
 
       if (allKeybinds.isEmpty) {
         return null;

@@ -11,6 +11,7 @@ import 'gamebanana/remote_mod_metadata.dart';
 class MetadataAutofillPlan {
   const MetadataAutofillPlan({
     this.description,
+    this.author,
     this.tags,
     this.characterId,
     this.imageUrls = const [],
@@ -18,6 +19,7 @@ class MetadataAutofillPlan {
   });
 
   final String? description;
+  final String? author;
 
   final List<String>? tags;
   final String? characterId;
@@ -34,6 +36,7 @@ class MetadataAutofillPlan {
 
   bool get isEmpty =>
       description == null &&
+      author == null &&
       tags == null &&
       characterId == null &&
       imageUrls.isEmpty;
@@ -114,6 +117,8 @@ MetadataAutofillPlan planMetadataAutofill({
       ? remote.description
       : null;
 
+  final author = (existing.author == null || existing.author!.isEmpty) ? remote.author : null;
+
   final tags = existing.tags.isEmpty && remote.tags.isNotEmpty
       ? List<String>.unmodifiable(remote.tags)
       : null;
@@ -130,6 +135,7 @@ MetadataAutofillPlan planMetadataAutofill({
 
   return MetadataAutofillPlan(
     description: description,
+    author: author,
     tags: tags,
     characterId: characterId,
     imageUrls: wantsImages ? List<Uri>.unmodifiable(remote.imageUrls) : const [],

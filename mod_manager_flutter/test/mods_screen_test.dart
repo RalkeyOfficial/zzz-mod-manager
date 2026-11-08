@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -41,9 +42,6 @@ import 'support/temp_library.dart';
 
 /// The Library page as a whole: the page's one scroll view, the details panel beside or over it, the drop tile, the
 /// paste key, and what a toggle that fails says (`docs/library-screen.md`).
-/// The right-click menu no longer has Rename: the Name field of Edit info does it.
-const _renameInEditInfo = true;
-
 void main() {
   late TempLibrary temp;
 
@@ -542,7 +540,28 @@ void main() {
     }
   });
 
-  testWidgets('a renamed mod keeps its All mods tick under its new name', skip: _renameInEditInfo, (tester) async {
+  /// Opens Edit info from the card's right-click menu and sets the Name field to [name].
+  Future<void> renameInEditInfo(WidgetTester tester, String from, String name) async {
+    await tester.tap(cardOf(from), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit info…').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('edit_name')), name);
+    await tester.pump();
+  }
+
+  Finder saveChanges() => find.widgetWithText(FilledButton, 'Save changes');
+
+  /// Presses Save changes and waits for the save, which writes the sidecar, renames the folder and moves the config.
+  Future<void> saveEditInfo(WidgetTester tester) async {
+    await tapWithIo(tester, saveChanges());
+    for (var round = 0; round < 10; round++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
+      await tester.pumpAndSettle();
+    }
+  }
+
+  testWidgets('a renamed mod keeps its All mods tick under its new name', (tester) async {
     // The menu's items are sized for the app's font, not the test font's full-em glyphs.
     await loadTableFonts(tester);
     temp.createMod('Winter Maid');
@@ -550,19 +569,14 @@ void main() {
     container.read(allModsSelectionProvider.notifier).state = {'Winter Maid'};
     await tester.pumpAndSettle();
 
-    await tester.tap(cardOf('Winter Maid'), buttons: kSecondaryButton);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Rename').last);
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).last, 'Winter Maid Blue');
-    await tester.pump();
-    await tapWithIo(tester, find.widgetWithText(FilledButton, 'Rename'));
+    await renameInEditInfo(tester, 'Winter Maid', 'Winter Maid Blue');
+    await saveEditInfo(tester);
 
     expect(temp.modFolder('Winter Maid Blue').existsSync(), isTrue);
     expect(container.read(allModsSelectionProvider), {'Winter Maid Blue'});
   });
 
-  testWidgets('a rename left off under its new name moves the tick and the selection with it', skip: _renameInEditInfo, (tester) async {
+  testWidgets('a rename left off under its new name moves the tick and the selection with it', (tester) async {
     await loadTableFonts(tester);
     final platform = LinkFailsUnder('Winter Maid Blue');
     final left = (await tester.runAsync(() => TempLibrary.create(prefix: 'zzz_left_off_', platform: platform)))!;
@@ -574,20 +588,15 @@ void main() {
     container.read(selectedModIdProvider.notifier).state = 'Winter Maid';
     await tester.pumpAndSettle();
 
-    await tester.tap(cardOf('Winter Maid'), buttons: kSecondaryButton);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Rename').last);
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).last, 'Winter Maid Blue');
-    await tester.pump();
-    await tapWithIo(tester, find.widgetWithText(FilledButton, 'Rename'));
+    await renameInEditInfo(tester, 'Winter Maid', 'Winter Maid Blue');
+    await saveEditInfo(tester);
 
     expect(left.modFolder('Winter Maid Blue').existsSync(), isTrue);
     expect(container.read(allModsSelectionProvider), {'Winter Maid Blue'});
     expect(container.read(selectedModIdProvider), 'Winter Maid Blue');
   });
 
-  testWidgets('a rename that leaves the mod off raises a warning that stays until closed', skip: _renameInEditInfo, (tester) async {
+  testWidgets('a rename that leaves the mod off raises a warning that stays until closed', (tester) async {
     // The mod won't load until it is turned back on, so the warning must not leave on its own.
     await loadTableFonts(tester);
     final platform = LinkFailsUnder('Winter Maid Blue');
@@ -597,13 +606,8 @@ void main() {
     expect(await tester.runAsync(() => left.service.activateMod('Winter Maid')), isTrue);
     final container = await pumpModsScreen(tester, left, [mod('Winter Maid', isActive: true)]);
 
-    await tester.tap(cardOf('Winter Maid'), buttons: kSecondaryButton);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Rename').last);
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).last, 'Winter Maid Blue');
-    await tester.pump();
-    await tapWithIo(tester, find.widgetWithText(FilledButton, 'Rename'));
+    await renameInEditInfo(tester, 'Winter Maid', 'Winter Maid Blue');
+    await saveEditInfo(tester);
 
     final warning = container.read(notificationsProvider).single;
     expect(warning.kind, NotificationKind.warning);
@@ -612,24 +616,51 @@ void main() {
     expect(warning.hasClock, isFalse);
   });
 
-  testWidgets('a mod whose folder is being written is not renamed, and the dialog says why', skip: _renameInEditInfo, (tester) async {
+  testWidgets('a mod whose folder is being written is not renamed, and the dialog says why', (tester) async {
     await loadTableFonts(tester);
     temp.createMod('Winter Maid');
     final container = await pumpModsScreen(tester, temp, [mod('Winter Maid')]);
     // Never released: the test ends with the write still running.
     holdWrite(container, 'Winter Maid');
 
-    await tester.tap(cardOf('Winter Maid'), buttons: kSecondaryButton);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Rename').last);
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).last, 'Winter Maid Blue');
-    await tester.pump();
+    await renameInEditInfo(tester, 'Winter Maid', 'Winter Maid Blue');
 
-    expect(find.textContaining('is being changed by an update'), findsOneWidget);
-    await tapWithIo(tester, find.widgetWithText(FilledButton, 'Rename'));
+    expect(find.textContaining('is being changed by an update'), findsWidgets);
+    await tapWithIo(tester, saveChanges());
     expect(temp.modFolder('Winter Maid').existsSync(), isTrue);
     expect(temp.modFolder('Winter Maid Blue').existsSync(), isFalse);
+  });
+
+  testWidgets('a drop meant for Edit info\'s cover is not also imported as a mod', (tester) async {
+    // desktop_drop gives every enabled target every drop, so the page under a dialog must not be one.
+    await loadTableFonts(tester);
+    temp.createMod('Winter Maid');
+    final container = await pumpModsScreen(tester, temp, [mod('Winter Maid')]);
+    bool pageTakesDrops() => tester.widgetList<DropTarget>(find.byType(DropTarget)).first.enable;
+    expect(pageTakesDrops(), isTrue);
+
+    await tester.tap(cardOf('Winter Maid'), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit info…').last);
+    await tester.pumpAndSettle();
+
+    final targets = tester.widgetList<DropTarget>(find.byType(DropTarget)).toList();
+    expect(targets, hasLength(2), reason: 'the page and the dialog\'s cover');
+    expect(targets.first.enable, isFalse, reason: 'the page is under the dialog');
+    expect(targets.last.enable, isTrue);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(pageTakesDrops(), isTrue, reason: 'and takes drops again once the dialog is gone');
+
+    container.read(destinationProvider.notifier).state = AppDestination.allMods;
+    await tester.pumpAndSettle();
+    expect(pageTakesDrops(), isTrue);
+    await tester.tap(find.text('Winter Maid').first, buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit info…').last);
+    await tester.pumpAndSettle();
+    expect(tester.widgetList<DropTarget>(find.byType(DropTarget)).first.enable, isFalse, reason: 'All mods too');
   });
 
   testWidgets('a right-click names each patch by the page the session already has', (tester) async {

@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/character_info.dart';
 import 'backup/retention.dart' show clampSnapshotsToKeep;
 import 'config_service.dart';
+import 'ini_key_editor.dart' show IniFileWrite, IniKeyEdit, IniKeyState;
 import 'log/log_setup.dart';
 import '../models/gamebanana/gb_enums.dart';
 import 'gamebanana/content_filter.dart';
@@ -97,6 +98,7 @@ class ApiService {
       _container!.read(snapshotsToKeepProvider.notifier).state = _configService!.snapshotsToKeep;
       _container!.read(remindF10Provider.notifier).state = _configService!.remindF10;
       _container!.read(modNotesProvider.notifier).state = _configService!.modNotes;
+      _container!.read(modKeysProvider.notifier).state = _configService!.modKeyLabels;
       _container!.read(oneAtATimeProvider.notifier).state = _configService!.oneAtATime;
       _container!.read(fileLoggingProvider.notifier).state =
           _configService!.fileLogging;
@@ -187,6 +189,12 @@ class ApiService {
     }
   }
 
+  /// Publishes what is kept by folder name, after a rename or a delete moved or removed it.
+  static void _publishModNames() {
+    _container?.read(modNotesProvider.notifier).state = _configService!.modNotes;
+    _container?.read(modKeysProvider.notifier).state = _configService!.modKeyLabels;
+  }
+
   /// Renames a mod's folder, migrating its active/favorite/note/category state and
   /// the active link. Returns false on collision or failure.
   static Future<bool> renameMod(String oldName, String newName) async {
@@ -194,14 +202,14 @@ class ApiService {
       await initialize();
       final renamed = await _modManager!.renameMod(oldName, newName);
       // The note moved with the rename; the provider still has it under the old name.
-      if (renamed) _container?.read(modNotesProvider.notifier).state = _configService!.modNotes;
+      if (renamed) _publishModNames();
       return renamed;
     } on RenameRefused {
       rethrow;
     } on RenameFolderFailed {
       rethrow;
     } on RenameLinkFailed catch (failure) {
-      if (failure.renamed) _container?.read(modNotesProvider.notifier).state = _configService!.modNotes;
+      if (failure.renamed) _publishModNames();
       rethrow;
     } catch (e) {
       throw Exception('Помилка перейменування моду: $e');
@@ -214,7 +222,7 @@ class ApiService {
     try {
       await initialize();
       final outcome = await _modManager!.deleteMod(modId, deleteSnapshots: deleteSnapshots, forGood: forGood);
-      if (outcome.deleted) _container?.read(modNotesProvider.notifier).state = _configService!.modNotes;
+      if (outcome.deleted) _publishModNames();
       return outcome;
     } catch (e) {
       throw Exception('Помилка видалення моду: $e');
@@ -541,6 +549,26 @@ class ApiService {
   static Future<void> invalidateKeybinds(String modId) async {
     await initialize();
     _modManager!.invalidateKeybinds(modId);
+  }
+
+  /// The app's own key comments in each `.ini` of [modId] (`docs/key-editing.md` §5).
+  static Future<Map<String, IniKeyState>> inspectKeyFiles(String modId) async {
+    await initialize();
+    return _modManager!.inspectKeyFiles(modId);
+  }
+
+  /// Writes [edits], by file, into [modId]'s `.ini` files. The caller holds the mod in `whileWritingMod`.
+  static Future<List<IniFileWrite>> writeKeyFiles(String modId, Map<String, List<IniKeyEdit>> edits) async {
+    await initialize();
+    return _modManager!.writeKeyFiles(modId, edits);
+  }
+
+  /// Saves the names given to [modId]'s keys, and publishes them. An empty map removes them.
+  static Future<bool> setModKeyLabels(String modId, Map<String, String> labels) async {
+    await initialize();
+    final saved = await _configService!.setModKeyLabels(modId, labels);
+    if (saved) _container?.read(modKeysProvider.notifier).state = _configService!.modKeyLabels;
+    return saved;
   }
 
   static Future<ConfigService> getConfigService() async {

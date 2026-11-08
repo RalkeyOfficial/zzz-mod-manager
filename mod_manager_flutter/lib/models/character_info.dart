@@ -12,6 +12,10 @@ class ModInfo {
   final String? imagePath;
   final String? description;
 
+  /// Who made the mod, as stored in its sidecar: what the user typed in Edit info, or the submitter's name the
+  /// install copied. Null until either. Show it through `modAuthor`, which falls back to the page the session holds.
+  final String? author;
+
   /// User tags.
   final List<String> tags;
 
@@ -54,6 +58,7 @@ class ModInfo {
     required this.isActive,
     this.imagePath,
     this.description,
+    this.author,
     this.tags = const [],
     this.images = const [],
     this.isFavorite = false,
@@ -69,6 +74,7 @@ class ModInfo {
     bool? isActive,
     String? imagePath,
     String? description,
+    String? author,
     List<String>? tags,
     List<String>? images,
     bool? isFavorite,
@@ -83,6 +89,7 @@ class ModInfo {
       isActive: isActive ?? this.isActive,
       imagePath: imagePath ?? this.imagePath,
       description: description ?? this.description,
+      author: author ?? this.author,
       tags: tags ?? this.tags,
       images: images ?? this.images,
       isFavorite: isFavorite ?? this.isFavorite,
@@ -118,6 +125,7 @@ class ModInfo {
           other.isActive == isActive &&
           other.imagePath == imagePath &&
           other.description == description &&
+          other.author == author &&
           other.isFavorite == isFavorite &&
           other.origin == origin &&
           other.uid == uid &&
@@ -133,6 +141,7 @@ class ModInfo {
         isActive,
         imagePath,
         description,
+        author,
         isFavorite,
         origin,
         uid,

@@ -204,6 +204,7 @@ void main() {
       bool isActive = false,
       String? imagePath = '/img/a.png',
       String? description = 'notes',
+      String? author = 'frostbyte',
       List<String> tags = const ['x'],
       List<String> images = const ['/img/a.png'],
       bool isFavorite = false,
@@ -218,6 +219,7 @@ void main() {
           isActive: isActive,
           imagePath: imagePath,
           description: description,
+          author: author,
           tags: tags,
           images: images,
           isFavorite: isFavorite,
@@ -239,6 +241,7 @@ void main() {
         'isActive': full(isActive: true),
         'imagePath': full(imagePath: '/img/b.png'),
         'description': full(description: 'other'),
+        'author': full(author: 'someone else'),
         'tags': full(tags: const ['y']),
         'images': full(images: const ['/img/b.png']),
         'isFavorite': full(isFavorite: true),
@@ -268,7 +271,7 @@ void main() {
       // case above fails here.
       const compared = {
         'id', 'name', 'characterId', 'isActive', 'imagePath', 'description',
-        'tags', 'images', 'isFavorite', 'keybinds', 'origin', 'uid',
+        'author', 'tags', 'images', 'isFavorite', 'keybinds', 'origin', 'uid',
       };
       final source = File('lib/models/character_info.dart').readAsStringSync();
       final body = source.substring(source.indexOf('class ModInfo'));

@@ -91,6 +91,7 @@ dependency at all: see `test/origin_backfill_test.dart` and
   "schema_version": 2,
   "uid": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
   "description": "Ellen swimsuit retexture.\n\nSupports **markdown**.",
+  "author": "frostbyte",
   "tags": ["swimsuit", "4k"],
   "character_id": "ellen",
   "images": [".zzz-mod-manager/images/01.png", "Preview.png"],
@@ -118,6 +119,7 @@ dependency at all: see `test/origin_backfill_test.dart` and
 | `schema_version` | `int` | always | On-disk format version. Missing → assumed `ModMetadata.assumedSchemaVersion`. See [§4](#4-versioning-and-migration). |
 | `uid` | `string?` | non-null only | This folder's **identity**, for what has to outlive its name. Opaque, machine-owned, written at install and migrated onto everything else by the scan. See below. |
 | `description` | `string?` | non-null only | Free-form, **rendered as markdown** in the UI (`utils/markdown_description.dart`). Users can paste rich text and get markdown — see the clipboard-HTML note in `CLAUDE.md`. |
+| `author` | `string?` | non-null only | Who made the mod, as the user wants it shown. Written by Edit info and by an install from the mod page's submitter ([`metadata-autofill.md`](metadata-autofill.md)); shown in place of the submitter of a page the session holds. Cleared by saving it empty. |
 | `source_url` | `string?` | **read-only legacy** | The mod's page URL as older builds wrote it. Nothing produces it now; it is the offline backfill's only input, and it is written back only while the `origin` block names no mod — see [§4.1](#41-a-key-that-is-only-read). |
 | `tags` | `string[]` | **always** (even `[]`) | Arbitrary user tags. Shown as badges on the Library's details panel and edited in *Edit info*; the metadata autofill fills them from the mod page when empty. Nothing filters on them. |
 | `character_id` | `string?` | non-null only | Canonical character/category id. Normalised through `canonicalCharacterId()` (`utils/zzz_characters.dart`) on read. |
@@ -439,7 +441,7 @@ from `ModInfo`:
 
 | Class | Examples | Save behaviour |
 |---|---|---|
-| **User-editable** | `description`, `tags`, `character_id`, `images` | Replaced wholesale from `ModInfo` — clearing must work |
+| **User-editable** | `description`, `author`, `tags`, `character_id`, `images` | Replaced wholesale from `ModInfo` — clearing must work |
 | **Machine-owned** | `schema_version`, `origin`, `source_url` | Carried over from the file on disk, never sourced from `ModInfo` |
 | **Unknown / future** | any key this build doesn't recognise | Passed through verbatim via `ModMetadata.extra` |
 
@@ -453,7 +455,7 @@ what `ModMetadataRepository.save()` calls on the copy read from disk:
 ```dart
 final existing = await _metadataService.read(modFolder);
 final metadata = (existing ?? const ModMetadata()).replaceUserFields(
-  description: …, tags: …, characterId: …, images: …,
+  description: …, author: …, tags: …, characterId: …, images: …,
 );
 ```
 

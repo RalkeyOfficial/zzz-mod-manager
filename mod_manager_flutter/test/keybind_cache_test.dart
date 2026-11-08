@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/keybind_info.dart';
-import 'package:mod_manager_flutter/screens/dialogs/keybinds_dialog.dart';
 import 'package:mod_manager_flutter/services/ini_files_stamp.dart';
+import 'package:mod_manager_flutter/services/ini_key_editor.dart';
 import 'package:mod_manager_flutter/services/ini_parser_service.dart';
 import 'package:mod_manager_flutter/services/log/log_format.dart';
 import 'package:mod_manager_flutter/services/log/log_level.dart';
@@ -219,59 +219,63 @@ void main() {
     expect(await keysOf('Ellen'), ['VK_9']);
   });
 
-  group('Change keys', () {
-    test('never writes into a DISABLED file', () async {
-      library.write('Ellen', 'DISABLED_old.ini', ini('VK_1'));
+  group('keys written through Edit info', () {
+    test('a section carries the file and occurrence it was parsed from', () async {
+      library.write('Ellen', 'a.ini', '[KeySwap]\nkey = VK_1\n');
+      library.write('Ellen', 'parts/b.ini', '[KeySwap]\nkey = VK_2\n\n[KeySwap]\nkey = VK_3\n');
+
+      final keybinds = (await library.service.getModKeybinds('Ellen'))!;
+
+      expect(
+        [for (final k in keybinds) (k.file, k.occurrence, k.keyValue)],
+        [('a.ini', 0, 'VK_1'), ('parts/b.ini', 0, 'VK_2'), ('parts/b.ini', 1, 'VK_3')],
+      );
+    });
+
+    test('inspects only the files ZZMI loads', () async {
+      library.write('Ellen', 'mod.ini', ini('VK_1'));
+      library.write('Ellen', 'DISABLED_old.ini', ';zenith: [KeyA]\n;zenith: key = VK_2\n');
       library.write('Ellen', 'DISABLED/inner.ini', ini('VK_1'));
+
+      final states = await library.service.inspectKeyFiles('Ellen');
+
+      expect(states.keys, ['mod.ini']);
+    });
+
+    test('writes into the file named, and never into a DISABLED one', () async {
+      library.write('Ellen', 'DISABLED_old.ini', ini('VK_1'));
       library.write('Ellen', 'mod.ini', ini('VK_1'));
 
-      final result = await writeKeybind(
-        library.modFolder('Ellen').path,
-        'KeySwap',
-        'VK_F5',
-      );
+      final results = await library.service.writeKeyFiles('Ellen', {
+        'mod.ini': [const SetKey('KeySwap', 0, 'VK_F5')],
+      });
 
-      expect(result, KeybindWrite.written);
-      expect(library.read('Ellen', 'mod.ini'), ini('VK_F5'));
-      expect(library.read('Ellen', 'DISABLED_old.ini'), ini('VK_1'));
-      expect(library.read('Ellen', 'DISABLED/inner.ini'), ini('VK_1'));
-    });
-
-    test('finds no section when only a DISABLED file has it', () async {
-      library.write('Ellen', 'DISABLED_old.ini', ini('VK_1'));
-      library.write('Ellen', 'mod.ini', '[TextureOverride]\nhash = 1\n');
-
-      final result = await writeKeybind(
-        library.modFolder('Ellen').path,
-        'KeySwap',
-        'VK_F5',
-      );
-
-      expect(result, KeybindWrite.sectionNotFound);
+      expect(results.single.status, IniWriteStatus.written);
+      expect(library.read('Ellen', 'mod.ini'), contains('key = VK_F5'));
       expect(library.read('Ellen', 'DISABLED_old.ini'), ini('VK_1'));
     });
 
-    test('finds no .ini when every one is DISABLED', () async {
-      library.write('Ellen', 'DISABLED_old.ini', ini('VK_1'));
+    test('refuses a path that leaves the mod folder', () async {
+      library.write('Ellen', 'mod.ini', ini('VK_1'));
+      File(p.join(library.root.path, 'outside.ini')).writeAsStringSync(ini('VK_1'));
 
-      final result = await writeKeybind(
-        library.modFolder('Ellen').path,
-        'KeySwap',
-        'VK_F5',
-      );
+      final results = await library.service.writeKeyFiles('Ellen', {
+        '../../outside.ini': [const SetKey('KeySwap', 0, 'VK_F5')],
+      });
 
-      expect(result, KeybindWrite.noIniFiles);
-      expect(library.read('Ellen', 'DISABLED_old.ini'), ini('VK_1'));
+      expect(results.single.status, IniWriteStatus.failed);
+      expect(File(p.join(library.root.path, 'outside.ini')).readAsStringSync(), ini('VK_1'));
     });
 
-    test('writes the first file in sorted order', () async {
-      library.write('Ellen', 'b.ini', ini('VK_1'));
-      library.write('Ellen', 'a.ini', ini('VK_1'));
+    test('drops the cached keys, so the next read shows the change', () async {
+      writeAged('Ellen', 'mod.ini', ini('VK_1'), const Duration(hours: 1));
+      expect(await keysOf('Ellen'), ['VK_1']);
 
-      await writeKeybind(library.modFolder('Ellen').path, 'KeySwap', 'VK_F5');
+      await library.service.writeKeyFiles('Ellen', {
+        'mod.ini': [const SetKey('KeySwap', 0, 'VK_F5')],
+      });
 
-      expect(library.read('Ellen', 'a.ini'), ini('VK_F5'));
-      expect(library.read('Ellen', 'b.ini'), ini('VK_1'));
+      expect(await keysOf('Ellen'), ['VK_F5']);
     });
   });
 }

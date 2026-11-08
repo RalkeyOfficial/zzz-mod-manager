@@ -62,6 +62,24 @@ void main() {
       expect(bind({'key': 'VK_F7'}), isNot(bind({'key': 'VK_F9'})));
     });
 
+    test('the file and the occurrence are part of what a binding is', () {
+      KeybindInfo at(String? file, int occurrence) =>
+          KeybindInfo(section: 'KeySwap', keys: const {'key': 'VK_F7'}, file: file, occurrence: occurrence);
+
+      expect(at('a.ini', 0), at('a.ini', 0));
+      expect(at('a.ini', 0).hashCode, at('a.ini', 0).hashCode);
+      expect(at('a.ini', 0), isNot(at('b.ini', 0)), reason: 'the same section name in another file');
+      expect(at('a.ini', 0), isNot(at('a.ini', 1)), reason: 'the second section of the name');
+      expect(at('a.ini', 0), isNot(at(null, 0)));
+    });
+
+    test('the file and the occurrence survive the JSON round trip', () {
+      final bind = KeybindInfo(section: 'KeySwap', keys: const {'key': 'VK_F7'}, file: 'parts/a.ini', occurrence: 2);
+
+      expect(KeybindInfo.fromJson(bind.toJson()), bind);
+      expect(KeybindInfo.fromJson(KeybindInfo(section: 'A', keys: const {}).toJson()).file, isNull);
+    });
+
     test('a different section is not equal', () {
       expect(
         KeybindInfo(section: 'KeySwap', keys: const {'key': 'VK_F7'}),

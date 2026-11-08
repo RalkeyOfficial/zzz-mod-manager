@@ -79,6 +79,7 @@ void main() {
       mod.path,
       onDisk.replaceUserFields(
         description: 'edited later',
+        author: null,
         tags: const ['x'],
         characterId: 'ellen',
         images: const [],

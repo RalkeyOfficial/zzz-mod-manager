@@ -26,6 +26,7 @@ import 'platform_service_factory.dart';
 import 'shader_fixes/shader_fixes_plan.dart';
 import 'shader_fixes/shader_fixes_service.dart';
 import 'ini_files_stamp.dart';
+import 'ini_key_editor.dart';
 import 'ini_parser_service.dart';
 
 /// Головний сервіс для керування модами через symbolic links
@@ -340,6 +341,7 @@ class ModManagerService {
       isActive: isActive,
       imagePath: images.isNotEmpty ? images.first : null,
       description: metadata.description,
+      author: metadata.author,
       tags: metadata.tags,
       images: images,
       isFavorite: favoriteSet.contains(modName),
@@ -977,6 +979,7 @@ class ModManagerService {
       await _configService.removeActiveMod(modName);
       await _configService.removeFavoriteMod(modName);
       await _configService.setModNote(modName, '');
+      await _configService.setModKeyLabels(modName, const {});
       await _configService.removeModCharacterTag(modName);
       invalidateKeybinds(modName);
 
@@ -1431,7 +1434,7 @@ class ModManagerService {
         return cached.keys;
       }
 
-      final keybinds = await _iniParser.parseIniFiles(before.paths);
+      final keybinds = await _iniParser.parseIniFiles(before.paths, modFolder: modPath);
 
       // Stored only when nothing changed during the parse, so keys read
       // before a write are never kept under the stamp of what was written.
@@ -1445,6 +1448,52 @@ class ModManagerService {
     } catch (e) {
       return null;
     }
+  }
+
+  /// What each `.ini` ZZMI loads from the mod folder `modId` holds of the app's own key comments, by its path inside
+  /// the folder with `/` separators. A file that cannot be read as UTF-8 is left out, and so is a folder that cannot
+  /// be listed.
+  Future<Map<String, IniKeyState>> inspectKeyFiles(String modId) async {
+    final folder = _keyFolder(modId);
+    if (folder == null) return {};
+    final states = <String, IniKeyState>{};
+    try {
+      for (final full in await IniParserService.listLoadedIniFiles(folder)) {
+        final relative = path.posix.joinAll(path.split(path.relative(full, from: folder)));
+        if (await IniKeyFiles.inspect(full) case final state?) states[relative] = state;
+      }
+    } on FileSystemException {
+      return states;
+    }
+    return states;
+  }
+
+  /// Writes [edits], by file (a path inside the mod folder with `/` separators), into the mod's `.ini` files and
+  /// drops the mod's cached keys. The caller holds the mod in `whileWritingMod`.
+  Future<List<IniFileWrite>> writeKeyFiles(String modId, Map<String, List<IniKeyEdit>> edits) async {
+    final results = <IniFileWrite>[];
+    final folder = _keyFolder(modId);
+    try {
+      for (final entry in edits.entries) {
+        final full = folder == null ? null : _keyFile(folder, entry.key);
+        results.add(
+          full == null
+              ? IniFileWrite(entry.key, IniWriteStatus.failed)
+              : await IniKeyFiles.write(full, entry.key, entry.value),
+        );
+      }
+    } finally {
+      invalidateKeybinds(modId);
+    }
+    return results;
+  }
+
+  String? _keyFolder(String modId) => modsPath == null ? null : path.join(modsPath!, modId);
+
+  /// [relative] below [folder], or null when it would leave it.
+  String? _keyFile(String folder, String relative) {
+    final full = path.normalize(path.joinAll([folder, ...relative.split('/')]));
+    return path.isWithin(folder, full) ? full : null;
   }
 
   /// Drops a single mod's cached keybinds (call after editing its .ini).

@@ -17,6 +17,7 @@ import '../../utils/zzz_characters.dart';
 class RemoteModMetadata {
   const RemoteModMetadata({
     this.description,
+    this.author,
     this.tags = const [],
     this.characterId,
     this.imageUrls = const [],
@@ -25,6 +26,9 @@ class RemoteModMetadata {
   /// [GbMod.text] converted from HTML to markdown, which is the only form this
   /// app's descriptions come in.
   final String? description;
+
+  /// The submitter's display name.
+  final String? author;
 
   /// Author tags, flattened to `"title: value"` — minus the credit family, see
   /// [_creditTagTitle].
@@ -44,6 +48,7 @@ class RemoteModMetadata {
   /// here at all.
   bool get isEmpty =>
       description == null &&
+      author == null &&
       tags.isEmpty &&
       characterId == null &&
       imageUrls.isEmpty;
@@ -98,8 +103,10 @@ class RemoteModMetadata {
     final html = mod.text;
     final markdown = html == null ? null : htmlToMarkdown(html);
 
+    final author = mod.submitter?.name?.trim();
     return RemoteModMetadata(
       description: (markdown == null || markdown.isEmpty) ? null : markdown,
+      author: (author == null || author.isEmpty) ? null : author,
       tags: [
         for (final tag in mod.tags)
           if (!_isCreditTag(tag)) tag,

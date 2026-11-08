@@ -139,6 +139,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Settings' Mods section has **One active mod per character**, which sets the default for every character you haven't switched yourself.
 - **Remind me to press F10** says "Ellen Swimsuit is on, press F10 in game to apply the change" after you turn a mod on or off while the game is running, with an Undo.
 - Settings › About shows the version and links to the source code, the issue tracker and the repository's page for the license, and **Check for updates** asks GitHub for a newer release when pressed. Nothing is downloaded or installed.
+- Edit info edits a mod's name, cover, author, tags, description and in-game keys in one window.
+  - Name renames the folder; the mod keeps its on or off state, favourite, note and place in the list.
+  - Author is stored with the mod and shown on its card, panel and page; an install fills it from the mod page.
+  - "Use GameBanana text" puts the mod page's description in, and "Edited" marks one that differs from it.
+  - Keys are changed by pressing the new combination; a key can be removed, and "Restore the author's keys" puts back what the author shipped.
+  - The labels given to keys are shown in the panel and on the page; they are kept with the app, not the mod's folder.
 
 ### Changed
 
@@ -182,7 +188,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-- Details, Rename, Edit keybinds, Open source page and Restore a previous version from the right-click menu; the History tab restores, and Edit info is where a mod is renamed.
+- Details, Rename, Edit keybinds, Open source page and Restore a previous version from the right-click menu; the History tab restores, and Edit info is where a mod is renamed and its keys are changed.
 - The embedded webview (Windows) and the Downloads-folder watcher (Linux), replaced by the built-in browser.
 - F10 auto-reload — the F10 button, the auto-reload toggle and the "Automatic mod reload" settings section — because a keypress the app sends never reaches a game running under Proton, so it only ever claimed to work. Press F10 in the game; xdotool is no longer needed.
 - The Source link box in a mod's Edit dialog. Which mod page a mod belongs to is set by "Update tracking…" now, which is also what decides where updates are checked.
@@ -219,7 +225,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Saving a mod with no character no longer records "unknown" as its character.
 - The theme you pick is still there the next time you start the app.
 - A saved version's size is measured past a file the app can't read, instead of stopping there and reporting the short total as the whole.
-- A mod's keys leave out `.ini` files the game ignores (names starting with `DISABLED`, and `desktop.ini`), and Change keys no longer writes into them.
+- A mod's keys leave out `.ini` files the game ignores (names starting with `DISABLED`, and `desktop.ini`), and Edit info never writes into them.
 - A mod whose link points at another folder's copy reads as off, instead of on while the game loads the other copy, and turning it off no longer removes that link.
 - Renaming a mod that is on no longer deletes a working link of the new name in ZZMI's Mods folder; the rename is refused instead.
 - Renaming a mod whose folder can't be renamed, such as one with a file open in the game, says so instead of saying the name is taken, and a mod that is on stays on.

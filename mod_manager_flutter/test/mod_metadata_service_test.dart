@@ -30,6 +30,7 @@ const _fullyPopulatedJson = <String, dynamic>{
   'schema_version': 2,
   'uid': 'a1b2c3d4e5f60718293a4b5c6d7e8f90',
   'description': 'd',
+  'author': 'a',
   'source_url': 'u',
   'tags': ['t'],
   'character_id': 'ellen',
@@ -204,6 +205,7 @@ void main() {
       });
       final saved = onDisk.replaceUserFields(
         description: null,
+        author: null,
         tags: const [],
         characterId: null,
         images: const [],
@@ -234,6 +236,7 @@ void main() {
       for (final placeholder in [unknownCharacterId, '']) {
         final json = const ModMetadata().replaceUserFields(
           description: null,
+          author: null,
           tags: const [],
           characterId: placeholder,
           images: const [],
@@ -258,6 +261,7 @@ void main() {
         final onDisk = ModMetadata.fromJson({'schema_version': 1, 'tags': ['a']});
         final saved = onDisk.replaceUserFields(
           description: 'new',
+          author: null,
           tags: const [],
           characterId: null,
           images: const [],

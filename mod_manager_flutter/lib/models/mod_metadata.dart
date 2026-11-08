@@ -24,6 +24,7 @@ class ModMetadata {
     'schema_version',
     'uid',
     'description',
+    'author',
     'source_url',
     'tags',
     'character_id',
@@ -62,6 +63,12 @@ class ModMetadata {
 
   /// Free-form description.
   final String? description;
+
+  /// Who made the mod, as the user wants it shown.
+  ///
+  /// Edited in Edit info and filled at install from the mod page's submitter. Shown instead of the submitter the
+  /// session's copy of the page names, which is only there once something fetched it.
+  final String? author;
 
   /// **Read from the file, and written back only while nothing else names the
   /// mod** — the one input the offline backfill has.
@@ -148,6 +155,7 @@ class ModMetadata {
     this.schemaVersion = currentSchemaVersion,
     this.uid,
     this.description,
+    this.author,
     this.sourceUrl,
     this.tags = const [],
     this.characterId,
@@ -164,6 +172,7 @@ class ModMetadata {
   /// holding only that has nothing this build would put back.
   bool get isEmpty =>
       (description == null || description!.isEmpty) &&
+      (author == null || author!.isEmpty) &&
       tags.isEmpty &&
       (characterId == null || characterId!.isEmpty) &&
       images.isEmpty &&
@@ -183,6 +192,7 @@ class ModMetadata {
       schemaVersion: json['schema_version'] as int? ?? assumedSchemaVersion,
       uid: json['uid'] as String?,
       description: json['description'] as String?,
+      author: json['author'] as String?,
       sourceUrl: json['source_url'] as String?,
       tags: (json['tags'] as List?)?.map((e) => e.toString()).toList() ?? const [],
       characterId: json['character_id'] as String?,
@@ -197,6 +207,7 @@ class ModMetadata {
       'schema_version': schemaVersion,
       if (uid != null) 'uid': uid,
       if (description != null) 'description': description,
+      if (author != null) 'author': author,
       // **Kept only while it is still the only thing that names the mod.** Once
       // the block carries an id the key has done its job and leaves the file on
       // this save; until then dropping it would throw away the backfill's only
@@ -241,6 +252,7 @@ class ModMetadata {
   /// (the marketplace install) can't reintroduce the placeholder by omission.
   ModMetadata replaceUserFields({
     required String? description,
+    required String? author,
     required List<String> tags,
     required String? characterId,
     required List<String> images,
@@ -252,6 +264,7 @@ class ModMetadata {
       sourceUrl: sourceUrl, // legacy input: from disk, see [sourceUrl]
       extra: extra, // unknown: from disk
       description: description,
+      author: author,
       tags: tags,
       characterId: storedCharacterId(characterId),
       images: images,
@@ -262,6 +275,7 @@ class ModMetadata {
     int? schemaVersion,
     String? uid,
     String? description,
+    String? author,
     List<String>? tags,
     String? characterId,
     List<String>? images,
@@ -272,6 +286,7 @@ class ModMetadata {
       schemaVersion: schemaVersion ?? this.schemaVersion,
       uid: uid ?? this.uid,
       description: description ?? this.description,
+      author: author ?? this.author,
       sourceUrl: sourceUrl, // no parameter: nothing in this build sets one
       tags: tags ?? this.tags,
       characterId: characterId ?? this.characterId,
@@ -302,6 +317,7 @@ class ModMetadata {
                 : currentSchemaVersion),
         uid: uid,
         description: description,
+        author: author,
         sourceUrl: sourceUrl,
         tags: tags,
         characterId: characterId,

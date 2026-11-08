@@ -31,6 +31,7 @@ class ConfigService implements ModCharacterTagStore {
   static const String _keyModCharacterTags = 'mod_character_tags';
   static const String _keyFavoriteMods = 'favorite_mods';
   static const String _keyModNotes = 'mod_notes';
+  static const String _keyModKeys = 'mod_keys';
   static const String _keyOneAtATime = 'one_at_a_time';
   static const String _keyFirstRun = 'first_run';
   static const String _keySortMode = 'sort_mode';
@@ -221,6 +222,18 @@ class ConfigService implements ModCharacterTagStore {
   /// The user's note on each mod, by folder name. Per install, never in the sidecar (`docs/library-screen.md` §11).
   Map<String, String> get modNotes => _readMap(_keyModNotes, (v) => v is String && v.isNotEmpty ? v : null);
 
+  /// The user's name for each of a mod's in-game keys, by folder name and then lower-case section name. Per install,
+  /// never in the sidecar (`docs/key-editing.md` §2). Stored as `{ "<folder>": { "labels": { "<section>": "…" } } }`.
+  Map<String, Map<String, String>> get modKeyLabels => _readMap(_keyModKeys, (v) {
+    final labels = v is Map ? v['labels'] : null;
+    if (labels is! Map) return null;
+    final kept = <String, String>{
+      for (final e in labels.entries)
+        if (e.key is String && e.value is String && (e.value as String).isNotEmpty) e.key as String: e.value as String,
+    };
+    return kept.isEmpty ? null : kept;
+  });
+
   /// Whether turning one of a character's mods on turns the others off, for the groups the user has switched. Groups
   /// absent here take their default (`docs/library-screen.md` §10).
   Map<String, bool> get oneAtATime => _readMap(_keyOneAtATime, (v) => v is bool ? v : null);
@@ -346,6 +359,28 @@ class ConfigService implements ModCharacterTagStore {
     }
   }
 
+  /// Replaces the names given to [modId]'s keys. An empty map removes the mod's entry. False when `config.json` could
+  /// not be written, so the labels would be gone after a restart.
+  Future<bool> setModKeyLabels(String modId, Map<String, String> labels) async {
+    try {
+      final all = modKeyLabels;
+      if (labels.isEmpty) {
+        if (all.remove(modId) == null) return true;
+      } else {
+        all[modId] = labels;
+      }
+      await _prefs.setString(_keyModKeys, jsonEncode(_modKeysJson(all)));
+      return await _saveToFile();
+    } catch (e) {
+      _log.warning('key labels not stored', error: e, fields: {'mod': modId});
+      return false;
+    }
+  }
+
+  Map<String, Object> _modKeysJson(Map<String, Map<String, String>> all) => {
+    for (final e in all.entries) e.key: {'labels': e.value},
+  };
+
   /// False when `config.json` could not be written, so the choice would be gone after a restart.
   Future<bool> setOneAtATime(String groupId, bool on) async {
     try {
@@ -397,7 +432,7 @@ class ConfigService implements ModCharacterTagStore {
   }
 
   /// Migrates all per-mod config keyed by folder name when a mod is renamed
-  /// (active_mods, favorite_mods, mod_notes, mod_character_tags). Preserves state so a
+  /// (active_mods, favorite_mods, mod_notes, mod_keys, mod_character_tags). Preserves state so a
   /// renamed mod stays active/favorited/noted/tagged.
   Future<bool> migrateModName(String oldId, String newId) async {
     try {
@@ -417,6 +452,12 @@ class ConfigService implements ModCharacterTagStore {
       if (notes.containsKey(oldId)) {
         notes[newId] = notes.remove(oldId)!;
         await _prefs.setString(_keyModNotes, jsonEncode(notes));
+      }
+
+      final keyLabels = modKeyLabels;
+      if (keyLabels.containsKey(oldId)) {
+        keyLabels[newId] = keyLabels.remove(oldId)!;
+        await _prefs.setString(_keyModKeys, jsonEncode(_modKeysJson(keyLabels)));
       }
 
       final tags = modCharacterTags;
@@ -730,6 +771,9 @@ class ConfigService implements ModCharacterTagStore {
       if (config['mod_notes'] is Map) {
         await _prefs.setString(_keyModNotes, jsonEncode(config['mod_notes']));
       }
+      if (config['mod_keys'] is Map) {
+        await _prefs.setString(_keyModKeys, jsonEncode(config['mod_keys']));
+      }
       if (config['one_at_a_time'] is Map) {
         await _prefs.setString(_keyOneAtATime, jsonEncode(config['one_at_a_time']));
       }
@@ -781,6 +825,7 @@ class ConfigService implements ModCharacterTagStore {
         'active_mods': activeMods,
         'favorite_mods': favoriteMods,
         'mod_notes': modNotes,
+        'mod_keys': _modKeysJson(modKeyLabels),
         'one_at_a_time': oneAtATime,
         'theme': theme,
         'accent': accent,

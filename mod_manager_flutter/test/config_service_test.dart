@@ -237,6 +237,7 @@ void main() {
     await service.addFavoriteMod('SomeMod');
     await service.setModCharacterTag('SomeMod', 'ellen');
     await service.setModNote('SomeMod', 'use with the white hairpin');
+    await service.setModKeyLabels('SomeMod', {'keyhair': 'Hairpin style'});
     await service.setOneAtATime('cat_ui', true);
 
     final written = (await readFile()).keys.toSet();
@@ -271,6 +272,7 @@ void main() {
       'favorite_mods': next.favoriteMods,
       'mod_character_tags': next.modCharacterTags,
       'mod_notes': next.modNotes,
+      'mod_keys': next.modKeyLabels,
       'one_at_a_time': next.oneAtATime,
       // `first_run` is always serialised as false and has no round-trip value.
       'first_run': false,
@@ -473,6 +475,47 @@ void main() {
       expect(json['zzmi_path'], zzmi);
       expect(json['save_mods_path'], '$zzmi/mods');
       expect(service.saveModsPath, '$zzmi/mods');
+    });
+  });
+
+  group('the names given to a mod\'s keys', () {
+    test('are kept by folder and section, and an empty set removes the mod\'s entry', () async {
+      final service = await build();
+      await service.setModKeyLabels('Winter Maid', {'keyhair': 'Hairpin style', 'keycoat': 'Coat on / off'});
+      await service.setModKeyLabels('Other', {'keyhair': 'Hair'});
+
+      expect(service.modKeyLabels['Winter Maid'], {'keyhair': 'Hairpin style', 'keycoat': 'Coat on / off'});
+      expect((await readFile())['mod_keys'], {
+        'Winter Maid': {'labels': {'keyhair': 'Hairpin style', 'keycoat': 'Coat on / off'}},
+        'Other': {'labels': {'keyhair': 'Hair'}},
+      });
+
+      await service.setModKeyLabels('Other', const {});
+      expect(service.modKeyLabels.keys, ['Winter Maid']);
+    });
+
+    test('move with the mod when it is renamed', () async {
+      final service = await build();
+      await service.setModKeyLabels('Winter Maid', {'keyhair': 'Hairpin style'});
+
+      await service.migrateModName('Winter Maid', 'Winter Maid 2');
+
+      expect(service.modKeyLabels, {'Winter Maid 2': {'keyhair': 'Hairpin style'}});
+    });
+
+    test('survive a restart, and a wrong value in a hand-edited file costs only its entry', () async {
+      await configFile().writeAsString(jsonEncode({
+        'file_logging': false,
+        'mod_keys': {
+          'Good': {'labels': {'keya': 'A', 'keyb': 5, 'keyc': ''}},
+          'NoLabels': {'notes': []},
+          'Wrong': 'text',
+        },
+      }));
+      final service = await build();
+      expect(await service.loadFromFile(), isTrue);
+
+      expect(service.modKeyLabels, {'Good': {'keya': 'A'}});
     });
   });
 

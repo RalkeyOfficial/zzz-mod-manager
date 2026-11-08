@@ -64,6 +64,26 @@ void main() {
       expect(plan.tags, isNull);
     });
 
+    test('fills an absent author and keeps one that is set', () {
+      final withAuthor = planMetadataAutofill(
+        existing: const ModMetadata(),
+        remote: const RemoteModMetadata(author: 'frostbyte'),
+      );
+      expect(withAuthor.author, 'frostbyte');
+      expect(withAuthor.isEmpty, isFalse);
+
+      final kept = planMetadataAutofill(
+        existing: const ModMetadata(author: 'me'),
+        remote: const RemoteModMetadata(author: 'frostbyte'),
+      );
+      expect(kept.author, isNull);
+      expect(kept.isEmpty, isTrue);
+      expect(
+        planMetadataAutofill(existing: const ModMetadata(author: ''), remote: const RemoteModMetadata(author: 'x')).author,
+        'x',
+      );
+    });
+
     test('keeps an assigned character', () {
       expect(planFor(const ModMetadata(characterId: 'jane')).characterId, isNull);
     });

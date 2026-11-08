@@ -34,6 +34,7 @@ App-data locations are `~/.local/share/zzz-mod-manager` (Linux) and
   "active_mods": ["Ellen Swimsuit"],
   "favorite_mods": ["Ellen Swimsuit"],
   "mod_notes": { "Ellen Swimsuit": "Use with the white hairpin." },
+  "mod_keys": { "Ellen Swimsuit": { "labels": { "keycoat": "Coat on / off" } } },
   "one_at_a_time": { "cat_ui": true },
   "theme": "system",
   "accent": "violet",
@@ -68,6 +69,7 @@ App-data locations are `~/.local/share/zzz-mod-manager` (Linux) and
 | `active_mods` | `active_mods` | String list of mod folder names |
 | `favorite_mods` | `favorite_mods` | String list of mod folder names |
 | `mod_notes` | `mod_notes` | Object from mod folder name to the note the user wrote in the details panel; JSON-encoded string in SharedPreferences. Moved by an in-app rename, removed with the mod, absent when empty. Per install, never in the sidecar ([`library-screen.md` §11](library-screen.md#11-notes)). A value that is not a string is dropped and the rest kept |
+| `mod_keys` | `mod_keys` | Object from mod folder name to `{ "labels": { "<section, lower case>": "<name>" } }`, the names the user gave a mod's in-game keys in Edit info; JSON-encoded string in SharedPreferences. Moved by an in-app rename, removed with the mod, absent when empty, and a label equal to the section's default is not stored. Per install, never in the sidecar ([`key-editing.md`](key-editing.md) §2). An entry that is not that shape is dropped and the rest kept |
 | `one_at_a_time` | `one_at_a_time` | Object from a character or category id to a bool: whether turning one of its mods on turns the others off. Holds only groups the user has switched; the rest take the default, `one_at_a_time_default` for agents and off for categories ([`library-screen.md` §10](library-screen.md#10-one-at-a-time-per-character)). JSON-encoded string in SharedPreferences. A value that is not a bool is dropped and the rest kept |
 | `theme` | `theme` | The theme, as a `ThemeMode` Dart name (`light` \| `system` \| `dark`). Empty until chosen ([§3](#3-parsing-a-stored-value)), and parsed by `parseThemeMode`, which **degrades anything unrecognised to `system`** — the key is older than the setting and holds a palette name (`dark-blue`) in any config an earlier build wrote, so the tolerance is what an upgrade lands on |
 | `accent` | `accent` | The accent, as an `AccentChoice` Dart name (`violet` \| `paper` \| `lime` \| `teal`). Empty until chosen, and parsed by `AccentChoice.parse`, which degrades anything unrecognised to `violet` |

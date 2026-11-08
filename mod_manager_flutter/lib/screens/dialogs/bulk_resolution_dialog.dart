@@ -568,6 +568,7 @@ class _BulkResolutionDialogState extends State<BulkResolutionDialog> {
         isActive: mod.isActive,
         imagePath: mod.imagePath,
         description: mod.description,
+        author: mod.author,
         tags: mod.tags,
         images: mod.images,
         isFavorite: mod.isFavorite,

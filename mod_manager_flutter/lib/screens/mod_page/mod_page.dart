@@ -444,7 +444,7 @@ class _Summary extends ConsumerWidget {
       if (origin?.installedAt case final date?)
         loc.t('library.page.installed', params: {'date': formatResolveDate(date)}),
     ];
-    final author = page?.submitter?.name;
+    final author = modAuthor(mod, page);
 
     final character = characterById(group);
     final oneAtATime = character != null && isOneAtATime(
@@ -495,7 +495,7 @@ class _Summary extends ConsumerWidget {
             context,
             template: [loc.t('library.details.by'), ...facts].join(' · '),
             author: author,
-            onTap: () => openModLink(context, mod),
+            onTap: modPageUrl(mod) == null ? null : () => openModLink(context, mod),
           )
         else if (facts.isNotEmpty)
           Text(facts.join(' · '), style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: palette.text2)),
@@ -681,18 +681,18 @@ class _Overview extends StatelessWidget {
 }
 
 /// Every key the mod's `.ini` binds, and the way to change them.
-class _Keys extends StatelessWidget {
+class _Keys extends ConsumerWidget {
   const _Keys({required this.mod, required this.onEditKeys});
 
   final ModInfo mod;
   final VoidCallback onEditKeys;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final loc = context.loc;
     final palette = ZenithPalette.of(context);
     final text = Theme.of(context).textTheme;
-    final keys = modKeyRows(mod);
+    final keys = modKeyRows(mod, labels: ref.watch(modKeysProvider.select((all) => all[mod.id] ?? const {})));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 12,

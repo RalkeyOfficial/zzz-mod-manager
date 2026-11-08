@@ -641,7 +641,7 @@ class _NewerFileRow extends ConsumerWidget {
     final text = Theme.of(context).textTheme;
     final writing = ref.watch(modWritesInProgressProvider).contains(mod.id);
     final ignorable = check.subjectModId != null && check.dismissableUpTo != null;
-    final author = installedRecord(mod, ref.watch(knownModPagesProvider)).page?.submitter?.name;
+    final author = modAuthor(mod, installedRecord(mod, ref.watch(knownModPagesProvider)).page);
     final character = libraryGroupName(libraryGroupOf(mod.characterId), loc);
 
     final name = Row(

@@ -1,7 +1,7 @@
 # Metadata autofill at install
 
 Reference for what a marketplace install copies from a mod's GameBanana page into the
-new mod folder — description, character, tags and gallery — and the rules that keep
+new mod folder — description, author, character, tags and gallery — and the rules that keep
 it from overwriting something better.
 
 **This documents what the code does today.** Where behaviour is planned but not
@@ -53,6 +53,7 @@ description still gets a gallery.
 | Field | Source | Notes |
 |---|---|---|
 | `description` | `_sText`, converted | HTML upstream, markdown here, through `utils/html_to_markdown.dart` — shared with the editors' paste-as-markdown so the two conversions can't drift. |
+| `author` | `_aSubmitter._sName` | Filled when the sidecar has none, so a mod shows who made it before any check has fetched its page. The user's own edit in Edit info replaces it and is never overwritten. |
 | `character_id` | the **category** name | Not the mod name, not the tags. Under Character Skins the category is the character's full in-world name, picked from a list; `detectCharacterId()` resolves it. On a marketplace install it is passed *into* the import and replaces folder-name detection — see below — and the user's pick under the mod page's Install for replaces the category ([`marketplace.md`](marketplace.md) §5). |
 | `tags` | `_aTags`, flattened | All-or-nothing: a non-empty local list is a curation, and merging into it would produce a set nobody chose. |
 | `images` | `_aPreviewContent`, fetched | The only field that needs the network, because our `images` are paths inside the mod folder. Comes from the mod's **profile**, which is what carries the full gallery — a listing record holds only the cover. |

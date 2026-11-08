@@ -3,9 +3,19 @@ class KeybindInfo {
   final String section; // Назва секції (напр. keySwap, KeyUP)
   final Map<String, String> keys; // Ключі та їх значення
 
+  /// The `.ini` this section is in, as a path inside the mod folder with `/` separators. Null for a section parsed
+  /// without a folder to be relative to.
+  final String? file;
+
+  /// How many sections of this name, case-insensitively, come before this one in [file]. With [file] and [section]
+  /// it says which section an edit means (`docs/key-editing.md`).
+  final int occurrence;
+
   KeybindInfo({
     required this.section,
     required this.keys,
+    this.file,
+    this.occurrence = 0,
   });
 
   /// Отримує значення клавіші з секції (поле 'key', незалежно від регістру).
@@ -47,6 +57,8 @@ class KeybindInfo {
     return KeybindInfo(
       section: json['section'] as String,
       keys: Map<String, String>.from(json['keys'] as Map),
+      file: json['file'] as String?,
+      occurrence: json['occurrence'] as int? ?? 0,
     );
   }
 
@@ -54,16 +66,22 @@ class KeybindInfo {
     return {
       'section': section,
       'keys': keys,
+      if (file != null) 'file': file,
+      if (occurrence != 0) 'occurrence': occurrence,
     };
   }
 
   KeybindInfo copyWith({
     String? section,
     Map<String, String>? keys,
+    String? file,
+    int? occurrence,
   }) {
     return KeybindInfo(
       section: section ?? this.section,
       keys: keys ?? this.keys,
+      file: file ?? this.file,
+      occurrence: occurrence ?? this.occurrence,
     );
   }
 
@@ -84,11 +102,15 @@ class KeybindInfo {
       identical(this, other) ||
       other is KeybindInfo &&
           other.section == section &&
+          other.file == file &&
+          other.occurrence == occurrence &&
           _sameEntries(other.keys, keys);
 
   @override
   int get hashCode => Object.hash(
         section,
+        file,
+        occurrence,
         Object.hashAllUnordered(
           [for (final e in keys.entries) Object.hash(e.key, e.value)],
         ),

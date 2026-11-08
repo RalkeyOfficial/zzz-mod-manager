@@ -633,6 +633,10 @@ final openModPageProvider = StateProvider<ModPageRequest?>((ref) => null);
 /// `ApiService.setModNote` (`docs/library-screen.md` §11).
 final modNotesProvider = StateProvider<Map<String, String>>((ref) => const {});
 
+/// The user's name for each of a mod's in-game keys, by folder id and then lower-case section name. Hydrated in
+/// `ApiService.initialize`, written through `ApiService.setModKeyLabels` (`docs/key-editing.md` §2).
+final modKeysProvider = StateProvider<Map<String, Map<String, String>>>((ref) => const {});
+
 /// Whether turning one of a group's mods on turns the others off, for the groups the user has switched. Hydrated in
 /// `ApiService.initialize`, written through `ApiService.setOneAtATime`. Read through [isOneAtATime].
 final oneAtATimeProvider = StateProvider<Map<String, bool>>((ref) => const {});

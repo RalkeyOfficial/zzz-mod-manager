@@ -193,7 +193,7 @@ class _ModCardWidgetState extends ConsumerState<ModCardWidget> {
     final palette = ZenithPalette.of(context);
     final style = Theme.of(context).textTheme.bodySmall?.copyWith(color: palette.text3);
     final (:page, :file) = installedRecord(mod, ref.watch(knownModPagesProvider));
-    final author = page?.submitter?.name;
+    final author = modAuthor(mod, page);
     final named = mod.origin?.base?.versionConfidence.namesFile ?? false;
     final uploaded = named ? file?.dateAdded : null;
     final added = mod.origin?.installedAt;

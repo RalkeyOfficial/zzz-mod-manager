@@ -774,6 +774,8 @@ conflict logic and no write path. A reset keybind is otherwise self-announcing i
 worst way: the user finds out by pressing the old key in-game and having nothing
 happen.
 
+Key changes made in Edit info are not carried over either. The `;zenith:` marker comments they leave in the `.ini` ([`key-editing.md`](key-editing.md)) are replaced with the file, so after an update the author's keys are back and the result dialog's list is how the user learns what moved.
+
 **A diff, not an inventory** (`services/update_apply/keybind_changes.dart`). The first
 version listed every keybind the mod had before the update, which is unreadable — a
 column of `Skin — F7` with no context asks the reader to remember what it used to be

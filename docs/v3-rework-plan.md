@@ -26,7 +26,7 @@ The working plan for rebuilding the UI to the Zenith design. It lives on the `ze
 The memory note `v3-canvas-vs-docs-decisions` holds these. In short:
 
 - **Toggle toast:** the "X is on… press F10" reminder shows only while the game is running, gated by a "Remind me to press F10" setting. Undo is an optional action added to `context.notify` in one place.
-- **Keybind edits:** not carried over an update (`applying-updates.md` §8 stands). Correct the canvas copy in Edit info and Reinstall ("keys included, are put back") to say what happens.
+- **Keybind edits:** not carried over an update (`applying-updates.md` §5 stands; Edit info's baseline for "Restore the author's keys" is the `;zenith:` marker of `key-editing.md`). Correct the canvas copy in Edit info and Reinstall ("keys included, are put back") to say what happens. Edit info has no "Add a key": a section the app adds does nothing without logic the app cannot invent.
 - **Browse cards:** follow the canvas, with "Update ready" and an Update button. Rewrite `marketplace.md` §7.
 - **Bulk update:** allowed, with a file picked per mod and nothing preselected unless a mod has one newer file. Rewrite `applying-updates.md` §7.
 - **Built as drawn:**
@@ -234,7 +234,7 @@ Each is reviewable on its own and ends with tests green, docs and changelog upda
    - Older buttons outside the press and ring rules until their screens are rebuilt: `welcome_screen.dart` (phase 10) sets its own shape or foreground, and `delete_mod_dialog.dart` (phase 8) has a `Colors.red` danger button.
 8. **Dialogs and overlays** (artboards `ImportModal`, `UpdateModal`, `UpdateOneModal`, `ReinstallModal`, `TrackingModal`, `EditModal`, `DeleteModal`, `ContextMenu`, `Palette`, `PatchModal`, `FoldersModal`, `MakePatchModal`).
    - Update several mods at once (`UpdateModal`): every mod with a newer file, a file picked per mod (nothing preselected unless a mod has one newer file), Ignore with Undo, then each update in turn. It brings the primary "Update N" button beside Check all for updates on All mods and on the Updates page, shown while the last check found updates. On the Updates page, a newer file's Update then opens `UpdateOneModal`. Rewrite `applying-updates.md` §7 with it.
-   - Edit info: rename, cover, author, tags, "Use GameBanana text", key recording, add and remove keys, "Restore the author's keys".
+   - Edit info: rename, cover, author, tags, "Use GameBanana text", key recording, remove keys, "Restore the author's keys" (design note: `key-editing.md`).
    - Delete goes to the trash (`deleting-mods.md`).
      - Needs a Windows session before release: a mod trashed to the Recycle Bin and restorable from it; a mod on a mapped network drive raising Windows' own permanent-delete prompt; a folder with a file open in the game refused and left intact; a path over 260 characters reported as failed; the prompt cancelled. The call is written and tested against a fake only. Also on Linux: a library on a second drive trashing to `$mount/.Trash-<uid>`, and one on a drive with no trash offering Delete for good.
    - Right-click menu with Space / F / E / Del shortcuts. Remove patch goes into History and the menu. The menu also has "Make this a patch for…".
@@ -258,10 +258,10 @@ Each is reviewable on its own and ends with tests green, docs and changelog upda
 
 ## Open items
 
+- Reinstall's footer carries the canvas's wrong "keys included, are put back" too; its corrected text is "Your cover, text and tags stay. Key changes are replaced by the author's keys." (`ReinstallModal`).
 - Ask the user how the keyboard reaches the notification stack (for example F6 to move between the page and the stack, as desktop apps move between panes), or whether it doesn't.
 - A notification's shadow is clipped: the card's size transition and the stack's scroll view cut it at the card's edge, leaving a darker square outside each rounded bottom corner, clearest on paper. Fixing it means changing how the stack clips its cards (`notification_overlay.dart`).
 
-- Offer the user a correction of the keybind copy on the canvas's Edit info and Reinstall artboards.
 - The install links in `OnboardingLaunch`'s no-Proton state point at a placeholder; the user supplies the real Proton-GE, Proton-Cachy and DWProton pages. The Proton-Cachy folder name on the canvas is a guess.
 - Ask the user whether the Settings Proton dropdown also marks the recommended builds.
 - The existing screens still hold about 177 `Color(0x…)` literals and sky-blue gradients. Each goes when its screen is rebuilt.

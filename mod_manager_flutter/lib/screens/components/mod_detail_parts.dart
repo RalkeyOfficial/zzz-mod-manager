@@ -16,6 +16,7 @@ import '../../models/origin_enums.dart';
 import '../../services/api_service.dart';
 import '../../services/gamebanana/file_selection.dart';
 import '../../services/installed_record.dart';
+import '../../services/key_combo.dart';
 import '../../services/update_check.dart';
 import '../../utils/byte_format.dart';
 import '../../utils/gamebanana_url.dart';
@@ -68,19 +69,22 @@ class SmallLink extends StatelessWidget {
 }
 
 /// [template] with its `{author}` placeholder replaced by a link to [author], so each language puts the name where
-/// its word order wants it.
-Widget authorLine(BuildContext context, {required String template, required String author, required VoidCallback onTap}) {
+/// its word order wants it. The name is plain text while there is nowhere for [onTap] to go.
+Widget authorLine(BuildContext context, {required String template, required String author, required VoidCallback? onTap}) {
   final palette = ZenithPalette.of(context);
   return Text.rich(
     TextSpan(
       children: [
         for (final (i, part) in template.split('{author}').indexed) ...[
           if (i > 0)
-            WidgetSpan(
-              alignment: PlaceholderAlignment.baseline,
-              baseline: TextBaseline.alphabetic,
-              child: ModTextLink(author, onTap: onTap),
-            ),
+            if (onTap == null)
+              TextSpan(text: author, style: TextStyle(color: palette.text))
+            else
+              WidgetSpan(
+                alignment: PlaceholderAlignment.baseline,
+                baseline: TextBaseline.alphabetic,
+                child: ModTextLink(author, onTap: onTap),
+              ),
           if (part.isNotEmpty) TextSpan(text: part),
         ],
       ],
@@ -251,10 +255,11 @@ class ModActiveBox extends StatelessWidget {
   }
 }
 
-/// The keys [mod]'s `.ini` binds, as (name, keys) pairs, leaving out entries with no key.
-List<(String, String)> modKeyRows(ModInfo mod) => [
+/// The keys [mod]'s `.ini` binds, as (name, keys) pairs, leaving out entries with no key. A section's name is the
+/// user's own label for it when [labels] (by lower-case section name) has one.
+List<(String, String)> modKeyRows(ModInfo mod, {Map<String, String> labels = const {}}) => [
   for (final k in mod.keybinds ?? const <KeybindInfo>[])
-    if (k.displayKeyValue case final value? when value.isNotEmpty) (k.displayName, value),
+    if (k.displayKeyValue case final value? when value.isNotEmpty) (labels[k.section.toLowerCase()] ?? k.displayName, value),
 ];
 
 /// The keys a mod's `.ini` binds, each as keycaps. Tokens such as `no_shift` say which modifier must **not** be
@@ -269,12 +274,6 @@ class ModKeysList extends StatelessWidget {
 
   /// 10 in the panel, 12 on the mod's page.
   final double radius;
-
-  static List<String> _caps(String value) => [
-    for (final token in value.split(RegExp(r'\s+')))
-      if (token.isNotEmpty && !token.toLowerCase().startsWith('no_'))
-        token.length == 1 ? token.toUpperCase() : '${token[0].toUpperCase()}${token.substring(1)}',
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -310,7 +309,7 @@ class ModKeysList extends StatelessWidget {
                           style: text.bodyMedium?.copyWith(color: palette.text),
                         ),
                       ),
-                      Wrap(spacing: 4, children: [for (final cap in _caps(keys[i].$2)) Keycap(cap)]),
+                      Wrap(spacing: 4, children: [for (final cap in keyCaps(keys[i].$2)) Keycap(cap)]),
                     ],
                   ),
                 ),

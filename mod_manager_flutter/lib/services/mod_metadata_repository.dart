@@ -356,6 +356,7 @@ class ModMetadataRepository {
         String? orNull(String? v) => (v == null || v.isEmpty) ? null : v;
         final metadata = (existing ?? const ModMetadata()).replaceUserFields(
           description: orNull(mod.description),
+          author: orNull(mod.author),
           tags: mod.tags,
           characterId: mod.characterId, // normalised by replaceUserFields
           images: relImages,
@@ -640,6 +641,7 @@ class ModMetadataRepository {
     // a folder that had none, breaking the don't-litter rule for no gain.
     if (plan.description == null &&
         plan.tags == null &&
+        plan.author == null &&
         plan.characterId == null &&
         storedImages == 0) {
       return null;
@@ -647,6 +649,7 @@ class ModMetadataRepository {
 
     final metadata = fresh.replaceUserFields(
       description: plan.description ?? fresh.description,
+      author: plan.author ?? fresh.author,
       tags: plan.tags ?? fresh.tags,
       characterId: plan.characterId ?? fresh.characterId,
       images: galleryImages,
@@ -693,6 +696,7 @@ class ModMetadataRepository {
           modFolder,
           existing.replaceUserFields(
             description: existing.description,
+            author: existing.author,
             tags: existing.tags,
             characterId: canonical,
             images: existing.images,

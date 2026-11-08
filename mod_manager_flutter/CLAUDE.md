@@ -18,6 +18,7 @@ This file is rules and pointers only. Every subject below has a doc in [`../docs
 | [`metadata-autofill.md`](../docs/metadata-autofill.md) | What an install copies from a mod page |
 | [`update-checks.md`](../docs/update-checks.md) | Whether a mod has a newer version |
 | [`applying-updates.md`](../docs/applying-updates.md) | How an update is written over an installed mod |
+| [`key-editing.md`](../docs/key-editing.md) | Edit info's in-game keys — the rows, labels in `config.json`, recording a combination, the `.ini` editor's guarantees, the `;zenith:` marker behind "Restore the author's keys", why there is no Add a key |
 | [`shader-fixes.md`](../docs/shader-fixes.md) | Mods that replace the game's shaders — how their `ShaderFixes/` is copied into ZZMI's shader folder while on, and taken back out |
 | [`patch-destinations.md`](../docs/patch-destinations.md) | Which mod folder a patch goes into — the signals and their measurements; ranked, never narrowed or preselected |
 | [`logging.md`](../docs/logging.md) | What the app records about itself — levels, tags, the rotating file, redaction |

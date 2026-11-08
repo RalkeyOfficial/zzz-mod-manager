@@ -77,8 +77,8 @@ class ModDetailsPanel extends ConsumerWidget {
     final palette = ZenithPalette.of(context);
     final text = Theme.of(context).textTheme;
     final (:page, file: _) = installedRecord(mod, ref.watch(knownModPagesProvider));
-    final author = page?.submitter?.name;
-    final keys = modKeyRows(mod);
+    final author = modAuthor(mod, page);
+    final keys = modKeyRows(mod, labels: ref.watch(modKeysProvider.select((all) => all[mod.id] ?? const {})));
 
     return Container(
       width: width,
@@ -142,7 +142,7 @@ class ModDetailsPanel extends ConsumerWidget {
                     context,
                     template: loc.t('library.details.by'),
                     author: author,
-                    onTap: () => openModLink(context, mod),
+                    onTap: modPageUrl(mod) == null ? null : () => openModLink(context, mod),
                   ),
                 ],
                 if (mod.description?.trim().isNotEmpty ?? false) ...[

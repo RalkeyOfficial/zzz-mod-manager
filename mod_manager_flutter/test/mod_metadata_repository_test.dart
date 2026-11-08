@@ -754,6 +754,24 @@ void main() {
       );
     });
 
+    test('stores the author, and an emptied one is removed from the file', () async {
+      makeMod('Author Mod');
+      ModInfo mod(String? author) => ModInfo(
+            id: 'Author Mod',
+            name: 'Author Mod',
+            characterId: 'ellen',
+            isActive: false,
+            author: author,
+          );
+
+      await repo.save(mod('frostbyte'));
+      expect(sidecarOf('Author Mod')!['author'], 'frostbyte');
+      expect((await repo.loadOrMigrate('Author Mod', path.join(modsDir.path, 'Author Mod'))).author, 'frostbyte');
+
+      await repo.save(mod(''));
+      expect(sidecarOf('Author Mod')!.containsKey('author'), isFalse, reason: 'clearing must work');
+    });
+
     test('stores gallery paths relative and drops ones outside the mod folder', () async {
       final dir = makeMod('Gallery Mod');
       final inside = File(path.join(dir.path, 'Preview.png'))..writeAsBytesSync([1]);

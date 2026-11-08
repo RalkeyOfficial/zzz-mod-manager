@@ -472,7 +472,7 @@ class _ModList extends ConsumerWidget {
               itemBuilder: (context, index) {
                 final mod = eligible[index];
                 final on = !off.contains(mod.id);
-                final author = installedRecord(mod, pages).page?.submitter?.name;
+                final author = modAuthor(mod, installedRecord(mod, pages).page);
                 final added = mod.origin?.installedAt;
                 final byline = [libraryGroupName(libraryGroupOf(mod.characterId), loc), ?author].join(' · ');
                 return Opacity(

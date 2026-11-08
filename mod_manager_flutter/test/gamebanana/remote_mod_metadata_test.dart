@@ -41,6 +41,19 @@ void main() {
     });
   });
 
+  group('author', () {
+    test('is the submitter\'s display name on a real profile', () {
+      final mod = profile('mod_profile_tagged');
+
+      expect(mod.submitter?.name, isNotNull, reason: 'the fixture names its submitter');
+      expect(RemoteModMetadata.fromMod(mod).author, mod.submitter!.name!.trim());
+    });
+
+    test('is null when the page names no one', () {
+      expect(RemoteModMetadata.fromMod(const GbMod(idRow: 1)).author, isNull);
+    });
+  });
+
   group('tags', () {
     test('keeps an author tag, flattened to "title: value"', () {
       // The live profile shape, probed directly. Authors fill both halves
