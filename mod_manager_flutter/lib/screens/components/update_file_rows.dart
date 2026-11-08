@@ -9,6 +9,7 @@ import '../../models/gamebanana/gamebanana.dart';
 import '../../services/gamebanana/file_selection.dart';
 import '../../utils/byte_format.dart';
 import 'resolve/resolve_fragments.dart' show formatResolveDate;
+import 'zenith_controls.dart' show ZenithBadge;
 
 /// Below this width a file's date and size move under its name, where beside it they would squeeze the name to a
 /// column of letters.
@@ -61,7 +62,7 @@ class FileRadioGroup extends StatelessWidget {
 /// uploaded, and its size.
 ///
 /// [chip] sits after the name: why the app suggests this file, which says nothing about whether it is the right one.
-/// A null [onTap] leaves the row as it is and unpressable.
+/// A screen reader hears it, and the size, with the name. A null [onTap] leaves the row as it is and unpressable.
 class FileRadioRow extends StatelessWidget {
   const FileRadioRow({
     super.key,
@@ -75,7 +76,7 @@ class FileRadioRow extends StatelessWidget {
   final GbFile file;
   final bool selected;
   final VoidCallback? onTap;
-  final Widget? chip;
+  final ZenithBadge? chip;
 
   /// 11 in a dialog of one mod, 9 in the cards of several.
   final double verticalPadding;
@@ -97,8 +98,10 @@ class FileRadioRow extends StatelessWidget {
       excludeSemantics: true,
       label: [
         fileDisplayName(file),
+        ?chip?.label,
         ?fileDisplayDetail(file),
         if (date != null) loc.t('mods.update.uploaded', params: {'date': formatResolveDate(date)}),
+        if (size != null) formatBytes(size),
       ].join(', '),
       child: Material(
         color: selected ? palette.rowPicked : Colors.transparent,

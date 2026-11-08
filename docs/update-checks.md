@@ -767,6 +767,8 @@ behalf:
 - **An ignored update is still installable.** The user waved the badge away, not
   the file, and this dialog is where they come to change their mind.
 
+A verdict about a mod the folder does not record is refused by the write, so its files are listed and there is no Update button, rather than one that could never be pressed.
+
 The chip on a row the user chose says `your choice` rather than
 `matches your variant` or `newest published` — those are the app's grounds for
 its own pick, and reusing them for the user's would be taking credit for a
@@ -829,7 +831,8 @@ Scoping it to posts newer than the installed file is the point: a mod with
 forty update posts is not offering to tell you about all of them, it is offering
 to tell you what you would be getting. With no date to compare against — an
 `assumed_latest` install, or a page whose files carry none — the newest post is
-shown rather than nothing.
+shown rather than nothing. The reverse does not hold: a post with no date of its own cannot be shown to be newer than a file that has one, so it is left out rather than shown as news.
+In a folder with a patch each layer that has a finding carries its own page's post and the link, once per page when two layers share one, and the posts of every page the folder's layers come from are fetched on open.
 
 ### One file gets a line; several get a list
 

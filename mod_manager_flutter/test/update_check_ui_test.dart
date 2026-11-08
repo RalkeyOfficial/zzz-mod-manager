@@ -1206,15 +1206,15 @@ void main() {
             dateAdded: DateTime.utc(2026, 6, 1, 0, id),
           );
 
-      Future<void> pumpChecked(WidgetTester tester, UpdateCheck check) async {
+      Future<void> pumpChecked(WidgetTester tester, UpdateCheck check, {DownloadKey? subject, ModInfo? folder}) async {
         await tester.pumpWidget(const SizedBox());
         final (client, _) = fakeClient();
-        final target = mod('Ellen', origin: origin(fileId: 10));
+        final target = folder ?? mod('Ellen', origin: origin(fileId: 10));
         final container = ProviderContainer(overrides: [gameBananaClientProvider.overrideWithValue(client)]);
         addTearDown(container.dispose);
         // As a real check carries it: the layer it is about, which is what lets Update write.
         container.read(modUpdateChecksProvider.notifier).state = {
-          'Ellen': check.asSubject(DownloadKey.base(531649), const []),
+          'Ellen': check.asSubject(subject ?? DownloadKey.base(531649), const []),
         };
         await pumpLocalized(
           tester,
@@ -1294,6 +1294,40 @@ void main() {
         expect(find.text('An update is available'), findsOneWidget);
         expect(find.textContaining('no longer offered'), findsOneWidget);
         expect(find.text('Update'), findsNothing);
+      });
+
+      testWidgets('a verdict about a mod the folder does not hold lists its files and has no Update button', (tester) async {
+        // The write is refused for a layer the record does not key, so a button here could never be pressed.
+        await pumpChecked(
+          tester,
+          UpdateCheck(
+            outcome: UpdateOutcome.updateAvailable,
+            candidate: file(20, 'SFW'),
+            newerFiles: [file(20, 'SFW')],
+          ),
+          subject: DownloadKey.base(777),
+        );
+
+        expect(find.text('SFW'), findsOneWidget);
+        expect(find.byKey(const ValueKey('update_apply')), findsNothing);
+        expect(find.text('Later'), findsOneWidget);
+      });
+
+      testWidgets('a folder whose record names no page says it is not tracked, whatever the session holds', (tester) async {
+        // The dialog never reads a layer's keyed answer for a record with no page, so nothing there can offer Update.
+        await pumpChecked(
+          tester,
+          UpdateCheck(
+            outcome: UpdateOutcome.updateAvailable,
+            candidate: file(20, 'SFW'),
+            newerFiles: [file(20, 'SFW')],
+          ),
+          folder: mod('Ellen', origin: origin(modId: null)),
+        );
+
+        expect(find.text('Not tracked for updates'), findsOneWidget);
+        expect(find.byKey(const ValueKey('update_apply')), findsNothing);
+        expect(find.text('SFW'), findsNothing);
       });
     });
 
@@ -1789,6 +1823,57 @@ void main() {
 
         expect(find.text('Possibly outdated'), findsOneWidget);
         expect(find.text('Update'), findsOneWidget);
+      });
+
+      testWidgets("a layer with an update shows its page's latest post and the link to compare, on open and on reopening",
+          (tester) async {
+        final transport = FakeHttpTransport();
+        final endpoints = GameBananaEndpoints(gameId: 19567);
+        const empty = '{"_aMetadata":{"_nRecordCount":0},"_aRecords":[]}';
+        transport.stub(endpoints.modsMulti(const [531649], updateCheckProperties), body: gbMultiRecordFixture(531649));
+        transport.stub(endpoints.modUpdates(531649), body: empty);
+        transport.stub(endpoints.modsMulti(const [528481], updateCheckProperties), body: gbMultiRecordFixture(528481));
+        // Dated 2030, so newer than any file on the page; the second one has no date and is no news.
+        transport.stub(
+          endpoints.modUpdates(528481),
+          body: '{"_aMetadata":{"_nRecordCount":2},"_aRecords":['
+              '{"_idRow":901,"_sName":"Patch notes v9","_tsDateAdded":1900000000,"_sText":"<p>Fixed the hem</p>"},'
+              '{"_idRow":902,"_sName":"Undated notes","_sText":"<p>Who knows when</p>"}]}',
+        );
+        final container = ProviderContainer(
+          overrides: [
+            gameBananaClientProvider.overrideWithValue(
+              GameBananaClient(transport: transport, endpoints: endpoints),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        final target = mixedMod();
+
+        Future<void> open() async {
+          await tester.pumpWidget(const SizedBox());
+          await pumpLocalized(
+            tester,
+            ModUpdateDialog(mod: target, gateway: _RecordingGateway(target.origin, <ModOrigin?>[])),
+            container: container,
+          );
+          await tester.pumpAndSettle();
+        }
+
+        void expectPost() {
+          expect(find.text('Possibly outdated'), findsOneWidget);
+          expect(find.text('Patch notes v9'), findsOneWidget);
+          expect(find.textContaining('Fixed the hem'), findsOneWidget);
+          expect(find.text('Undated notes'), findsNothing);
+          expect(find.text('Open the mod page to compare screenshots'), findsOneWidget, reason: 'the layer without an update has none');
+        }
+
+        await open();
+        expectPost();
+        expect(container.read(modUpdateChecksProvider)[target.id], isNotNull, reason: 'the second open must not check');
+
+        await open();
+        expectPost();
       });
 
 

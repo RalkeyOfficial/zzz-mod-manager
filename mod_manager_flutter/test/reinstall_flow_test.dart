@@ -174,7 +174,7 @@ void main() {
   testWidgets('the question names the file from the real page, and says what the repair does', (tester) async {
     await press(tester, modWith(tracked(fileId: 1732269)));
 
-    final facts = find.textContaining('v77.zip · “Main file” · uploaded 2026-', findRichText: true);
+    final facts = find.textContaining('v77.zip · 7.7 · Main file · uploaded 2026-', findRichText: true);
     expect(facts, findsOneWidget);
     expect(find.textContaining('· 8.8 KB', findRichText: true), findsOneWidget);
     expect(find.text('The folder as it is now is saved as a snapshot.'), findsOneWidget);

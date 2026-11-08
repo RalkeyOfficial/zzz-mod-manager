@@ -315,18 +315,21 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     }
   }
 
-  /// The author's update posts for the card under the file list, when this dialog opens on a verdict a check already
-  /// made and so has fetched nothing. One request, which the client caches for ten minutes; a feed that will not load
-  /// leaves the card out and the verdict as it is.
+  /// The author's update posts for the cards under the file lists, when this dialog opens on a verdict a check already
+  /// made and so has fetched nothing. One request for each page the folder's layers come from, which the client caches
+  /// for ten minutes; a feed that will not load leaves its card out and the verdict as it is.
   void _lookUpPost() {
     final check = verdictWithoutAsking(widget.mod.origin) ?? ref.read(modUpdateChecksProvider)[widget.mod.id];
-    final modId = widget.mod.origin?.base?.modId;
-    if (check == null || !(check.hasUpdate || check.dismissed) || modId == null) return;
-    if (!_feedAsked.add(modId)) return;
-    ref.read(gameBananaClientProvider).modUpdates(modId).then((updates) {
-      if (!mounted) return;
-      setState(() => _updatesByMod = {..._updatesByMod, modId: updates});
-    }).catchError((Object _) {});
+    if (check == null || !(check.hasUpdate || check.dismissed)) return;
+    final client = ref.read(gameBananaClientProvider);
+    for (final download in widget.mod.origin?.downloads ?? const <ModDownload>[]) {
+      final modId = download.modId;
+      if (modId == null || !_feedAsked.add(modId)) continue;
+      client.modUpdates(modId).then((updates) {
+        if (!mounted) return;
+        setState(() => _updatesByMod = {..._updatesByMod, modId: updates});
+      }).catchError((Object _) {});
+    }
   }
 
   /// Names for the section headers, when no check is going to fetch them.
@@ -920,14 +923,15 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
         );
     final modId = widget.mod.origin?.base?.modId;
     if (!(check.hasUpdate || check.dismissed)) return _quietView(section, modId);
-    if (_ignoredHere) return _ignoredView(check, sole);
+    if (_ignoredHere) return _ignoredView(check, section);
 
     // **A verdict about either half of the folder can be installed**, because the write is chosen by which half it is:
     // base by layout with the patch placed back on top, patch by placement over the base. What is refused is a verdict
     // about a mod this folder does not claim to hold, which no write could apply without overwriting one mod with
-    // another.
+    // another. There the files are listed and there is no Update, rather than a button that can never be pressed.
     final route = updateWriteRoute(origin: widget.mod.origin, subject: check.subject);
-    final installable = modId == null || route.kind == UpdateWriteKind.none ? null : _fileToInstall(sole);
+    final writable = modId != null && route.kind != UpdateWriteKind.none;
+    final installable = writable ? _fileToInstall(section) : null;
     final files = check.newerFiles;
     final post = modId == null ? null : latestUpdatePost(_updatesByMod[modId], since: check.comparedAgainst);
 
@@ -941,13 +945,13 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
         if (modId != null) _postOrLink(post, modId),
         if (installable case final file?) ..._siblingNotice(file),
       ],
-      footerStart: _ignoreButton(sole, check, collapse: true),
+      footerStart: _ignoreButton(section, check, collapse: true),
       actions: [
         _laterButton(),
-        if (files.isNotEmpty)
+        if (files.isNotEmpty && writable)
           FilledButton(
             key: const ValueKey('update_apply'),
-            onPressed: _busy || installable == null ? null : () => _applyUpdate(sole, installable),
+            onPressed: _busy || installable == null ? null : () => _applyUpdate(section, installable),
             child: Text(loc.t('mods.update_apply.action')),
           ),
       ],
@@ -955,7 +959,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   }
 
   /// The collapsed state after Ignore: what was ignored, and Undo.
-  _View _ignoredView(UpdateCheck check, _Section? sole) {
+  _View _ignoredView(UpdateCheck check, _Section section) {
     final count = check.newerFiles.isEmpty ? 1 : check.newerFiles.length;
     return _View(
       title: loc.t('mods.update.ignored_title'),
@@ -969,7 +973,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       ],
       footerStart: TextButton(
         key: const ValueKey('update_undo'),
-        onPressed: _busy ? null : () => _setDismissed(sole, false, collapse: true),
+        onPressed: _busy ? null : () => _setDismissed(section, false, collapse: true),
         child: Text(loc.t('library.updates.undo')),
       ),
       actions: [FilledButton(onPressed: () => Navigator.of(context).pop(), child: Text(loc.t('mods.update.done')))],
@@ -994,20 +998,28 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// A folder holding a patch as well as the mod it patches: one block for each, with its own Ignore and Update
   /// beside its own files, because a shared button would have to pick which mod it means and picking wrong writes
   /// another mod's archive over this folder.
-  _View _mixedView(List<_Section> sections) => _View(
-    title: loc.t('mods.update.title', params: {'mod': widget.mod.name}),
-    body: [
-      for (final (index, section) in sections.indexed) ...[
-        if (index > 0) Divider(height: 1, color: ZenithPalette.of(context).divider),
-        _layerHeader(section),
-        if (section.check.hasUpdate || section.check.dismissed)
-          ..._layerBody(section, verdict: true)
-        else
-          ..._quietBody(section, verdict: true),
-        if (section.check.hasUpdate || section.check.dismissed) _layerActions(section),
+  ///
+  /// Each layer with a finding carries its page's latest update post and the link to compare on it. Two layers of one
+  /// page share a feed, so the second one leaves both to the first.
+  _View _mixedView(List<_Section> sections) {
+    final postedFor = <int>{};
+    return _View(
+      title: loc.t('mods.update.title', params: {'mod': widget.mod.name}),
+      body: [
+        for (final (index, section) in sections.indexed) ...[
+          if (index > 0) Divider(height: 1, color: ZenithPalette.of(context).divider),
+          _layerHeader(section),
+          if (section.check.hasUpdate || section.check.dismissed) ...[
+            ..._layerBody(section, verdict: true),
+            if (section.modId case final id? when postedFor.add(id))
+              _postOrLink(latestUpdatePost(_updatesByMod[id], since: section.check.comparedAgainst), id),
+            _layerActions(section),
+          ] else
+            ..._quietBody(section, verdict: true),
+        ],
       ],
-    ],
-  );
+    );
+  }
 
   /// The part of a block that is about its files: the "You have" box, and the newer ones to pick from. [verdict] says
   /// the layer's verdict in words first, for a block of a mixed folder with no title of its own to carry it.
@@ -1064,7 +1076,7 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
 
   /// The grounds of the row the Update button would install: why the app picked it, or that the user did. Only where
   /// there is a choice to make.
-  Widget? _pickChip(_Section section, GbFile file, GbFile? picked) {
+  ZenithBadge? _pickChip(_Section section, GbFile file, GbFile? picked) {
     final check = section.check;
     if (check.newerFiles.length < 2 || picked == null || file.idRow != picked.idRow) return null;
     final palette = ZenithPalette.of(context);

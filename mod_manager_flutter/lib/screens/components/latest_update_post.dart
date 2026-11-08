@@ -8,13 +8,13 @@ import 'mod_detail_parts.dart';
 import 'resolve/resolve_fragments.dart' show formatResolveDate;
 
 /// The newest post of [updates] that says something: a post with no text and no change list is a file upload, not news.
-/// With [since], one older than that date is not news about anything newer than it.
+/// With [since], only a post dated after it counts: one with no date cannot be shown to be newer.
 GbUpdate? latestUpdatePost(List<GbUpdate>? updates, {DateTime? since}) {
   GbUpdate? latest;
   for (final update in updates ?? const <GbUpdate>[]) {
     if (!update.hasNotes) continue;
     final date = update.dateAdded;
-    if (since != null && date != null && !date.isAfter(since)) continue;
+    if (since != null && (date == null || !date.isAfter(since))) continue;
     final best = latest?.dateAdded;
     if (latest == null || (date != null && (best == null || date.isAfter(best)))) latest = update;
   }

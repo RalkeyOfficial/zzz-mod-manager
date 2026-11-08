@@ -28,11 +28,10 @@ class ReinstallDialog extends StatelessWidget {
     final palette = ZenithPalette.of(context);
     final text = Theme.of(context).textTheme;
     final mono = ZenithType.of(context).mono;
-    final variant = file.description?.trim();
     final date = file.dateAdded;
     final size = file.filesize;
     final facts = [
-      if (variant != null && variant.isNotEmpty) loc.t('library.updates.variant', params: {'label': variant}),
+      ?fileDisplayDetail(file),
       if (date != null) loc.t('library.details.uploaded_on', params: {'date': formatResolveDate(date)}),
       if (size != null) formatBytes(size),
     ];
