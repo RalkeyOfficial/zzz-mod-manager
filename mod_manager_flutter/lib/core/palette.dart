@@ -102,6 +102,10 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     required this.windowClose,
     required this.blue,
     required this.overlay,
+    required this.dialogShadow,
+    required this.tagChip,
+    required this.needsPick,
+    required this.itemWarn,
     required this.badgeUpdate,
     required this.badgeMissing,
     required this.badgeInfo,
@@ -239,6 +243,18 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
 
   /// The scrim behind a dialog.
   final Color overlay;
+
+  /// The shadow a dialog and a context menu cast.
+  final Color dialogShadow;
+
+  /// A tag in Edit info's tag box.
+  final Color tagChip;
+
+  /// A character pill that still needs a choice: Import's "Choose a character or type".
+  final TonePair needsPick;
+
+  /// The border of an Import row that needs the user's attention, such as one that duplicates a mod you have.
+  final Color itemWarn;
 
   final TonePair badgeUpdate;
   final TonePair badgeMissing;
@@ -412,7 +428,11 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       redText: const Color(0xFFFF8A7D),
       windowClose: const Color(0xFFC4352B),
       blue: const Color(0xFF6CB6FF),
-      overlay: const Color(0xB3060708),
+      overlay: const Color(0xB8040506),
+      dialogShadow: const Color(0x99000000),
+      tagChip: const Color(0xFF1E2125),
+      needsPick: const TonePair(Color(0xFF1F1708), Color(0xFFFFC870), Color(0xFF6A4C14)),
+      itemWarn: const Color(0xFF3D3216),
       badgeUpdate: const TonePair(Color(0xFF3A2A0C), Color(0xFFFFC870), Color(0xFF6A4C14)),
       badgeMissing: const TonePair(Color(0xFF3A1512), Color(0xFFFF9A8E), Color(0xFF6B2620)),
       badgeInfo: const TonePair(Color(0xFF0F2236), Color(0xFF9CCBFF), Color(0xFF1F4468)),
@@ -535,6 +555,10 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       windowClose: const Color(0xFFC4352B),
       blue: const Color(0xFF1D63B8),
       overlay: const Color(0x6615161C),
+      dialogShadow: const Color(0x6615161C),
+      tagChip: const Color(0xFFE9E3DC),
+      needsPick: const TonePair(Color(0xFFFBF1DF), Color(0xFF7A4600), Color(0xFFE8C98E)),
+      itemWarn: const Color(0xFFF0DFBF),
       badgeUpdate: const TonePair(Color(0xFFF8E6C4), Color(0xFF7A4600), Color(0xFFE8C98E)),
       badgeMissing: const TonePair(Color(0xFFF8DDD8), Color(0xFF9E2A17), Color(0xFFEDB7AD)),
       badgeInfo: const TonePair(Color(0xFFDCE9F8), Color(0xFF1B4F8F), Color(0xFFB5CDEB)),
@@ -626,6 +650,10 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
     windowClose: windowClose,
     blue: blue,
     overlay: overlay,
+    dialogShadow: dialogShadow,
+    tagChip: tagChip,
+    needsPick: needsPick,
+    itemWarn: itemWarn,
     badgeUpdate: badgeUpdate,
     badgeMissing: badgeMissing,
     badgeInfo: badgeInfo,
@@ -701,6 +729,10 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
       windowClose: c(windowClose, other.windowClose),
       blue: c(blue, other.blue),
       overlay: c(overlay, other.overlay),
+      dialogShadow: c(dialogShadow, other.dialogShadow),
+      tagChip: c(tagChip, other.tagChip),
+      needsPick: TonePair.lerp(needsPick, other.needsPick, t),
+      itemWarn: c(itemWarn, other.itemWarn),
       badgeUpdate: TonePair.lerp(badgeUpdate, other.badgeUpdate, t),
       badgeMissing: TonePair.lerp(badgeMissing, other.badgeMissing, t),
       badgeInfo: TonePair.lerp(badgeInfo, other.badgeInfo, t),

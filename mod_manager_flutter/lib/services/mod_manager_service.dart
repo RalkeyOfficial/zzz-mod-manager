@@ -73,6 +73,35 @@ class RenameLinkFailed implements Exception {
   String toString() => 'the link of $mod under the name $name could not be made';
 }
 
+/// What [ModManagerService.deleteMod] did.
+enum DeleteStatus {
+  /// The folder is in the trash, or gone from the disk when it was deleted for good.
+  deleted,
+
+  /// The trash did not take the folder, which is where it was, with the mod on again if it was on. [DeleteOutcome.trash]
+  /// says why.
+  notTrashed,
+
+  /// There was no such folder.
+  missing,
+
+  /// Something threw, and is in the log.
+  failed,
+}
+
+class DeleteOutcome {
+  const DeleteOutcome(this.status, {this.trash});
+
+  const DeleteOutcome.notTrashed(TrashResult this.trash) : status = DeleteStatus.notTrashed;
+
+  final DeleteStatus status;
+
+  /// For [DeleteStatus.notTrashed], what the platform answered.
+  final TrashResult? trash;
+
+  bool get deleted => status == DeleteStatus.deleted;
+}
+
 /// How a Mod library overlaps ZZMI's Mods folder, where the links go. Any overlap refuses the library.
 enum LibraryOverlap {
   /// The library is the links folder by its path: every link there would point at itself.
@@ -164,6 +193,9 @@ class ModManagerService {
   /// cannot fill a disk to ask the question.
   final Future<int?> Function(String path) _freeSpace;
 
+  /// Moves a folder to the system trash. Injectable because a test must never reach the developer's real trash.
+  final Future<TrashResult> Function(String path) _moveToTrash;
+
   /// [snapshots] and [uids] are defaulted rather than required because they
   /// need no configuration — one reads the folder's own sidecar, the other is
   /// rooted in app-data. They are parameters at all so `deleteMod` can be
@@ -175,12 +207,14 @@ class ModManagerService {
     ModUid? uids,
     ShaderFixesService? shaderFixes,
     Future<int?> Function(String path)? freeSpace,
+    Future<TrashResult> Function(String path)? moveToTrash,
     PlatformService? platform,
   })  : _snapshots = snapshots ?? SnapshotService(),
         _uids = uids ?? ModUid(),
         _shaderFixes = shaderFixes ?? ShaderFixesService(),
         _freeSpace =
             freeSpace ?? PlatformServiceFactory.getInstance().freeSpaceBytes,
+        _moveToTrash = moveToTrash ?? (platform ?? PlatformServiceFactory.getInstance()).moveToTrash,
         _platformService = platform ?? PlatformServiceFactory.getInstance(),
         _iniParser = IniParserService(),
         // modsPath is read through a closure, not captured by value: the user
@@ -899,41 +933,46 @@ class ModManagerService {
     throw RenameRefused(path.basename(linkPath));
   }
 
-  /// Permanently deletes a mod: removes its active link (if any), deletes the
-  /// on-disk folder with all its files, clears its config state
-  /// (active/favorite/note/category), and **deletes every saved version of it**. The
-  /// in-folder metadata is destroyed with the folder. Returns false if the mod
-  /// folder is missing or on any failure.
+  /// Deletes a mod: moves its folder to the system trash, clears its config state (active/favorite/note/category),
+  /// and deletes its saved versions when [deleteSnapshots] says so. [forGood] removes the folder from the disk
+  /// instead, which is only asked for after the trash has said it is [TrashResult.unavailable]
+  /// (`docs/deleting-mods.md`).
   ///
-  /// The saved versions go with the mod deliberately: keeping gigabytes of a
-  /// mod the user has just deleted is a surprise, and nothing would ever offer
-  /// them again — the rollback list is per mod, and this mod is gone.
+  /// **The uid is read before the folder is touched**: it lives in the sidecar inside the folder, so afterwards there is
+  /// nowhere to read it from and the saved versions could be neither deleted nor claimed.
   ///
-  /// **The identity is read before the folder is touched**, and that ordering is
-  /// the whole trick: the uid lives in the sidecar *inside* the folder being
-  /// deleted, so reading it afterwards is impossible and the operation meant to
-  /// reclaim the space would be the one that orphaned it forever.
-  Future<bool> deleteMod(String modName) async {
+  /// **The folder moves before any setting is cleared.** A trash that refuses leaves the mod in the library with its
+  /// favourite, note and character, and turned back on if it was on; nothing but the link and the shader files were
+  /// touched, and both are put back.
+  Future<DeleteOutcome> deleteMod(String modName, {bool deleteSnapshots = true, bool forGood = false}) async {
+    var wasOn = false;
+    Directory? modDir;
     try {
-      if (modsPath == null) return false;
+      if (modsPath == null) return const DeleteOutcome(DeleteStatus.failed);
 
-      final modDir = Directory(path.join(modsPath!, modName));
-      if (!await modDir.exists()) return false;
+      modDir = Directory(path.join(modsPath!, modName));
+      if (!await modDir.exists()) return const DeleteOutcome(DeleteStatus.missing);
 
-      // **Before anything is removed.** See above: after the delete there is
-      // nowhere left to read this from.
       final uid = await _uids.read(modDir);
 
-      // Remove the active link first so we don't leave a dangling link in the
-      // game's mods folder once the source folder is gone.
-      if (saveModsPath != null && await isModActive(modName)) {
-        await _platformService.removeModLink(
-          path.join(saveModsPath!, modName),
-        );
-      }
+      // Remove the active link first so we don't leave a dangling link in the game's mods folder once the source
+      // folder is gone, and the game's loader lets go of the files.
+      wasOn = saveModsPath != null && await isModActive(modName);
+      if (wasOn) await _platformService.removeModLink(path.join(saveModsPath!, modName));
       if (uid != null) await _shaderFixes.remove(uid: uid, mod: modName, retryFailed: false);
 
-      await modDir.delete(recursive: true);
+      if (forGood) {
+        await modDir.delete(recursive: true);
+        _files.info('deleted for good', fields: {'mod': modName});
+      } else {
+        final trashed = await _moveToTrash(modDir.path);
+        if (trashed != TrashResult.trashed) {
+          _files.warning('could not be moved to the trash', fields: {'mod': modName, 'result': trashed.name});
+          if (wasOn) await _turnBackOn(modName);
+          return DeleteOutcome.notTrashed(trashed);
+        }
+        _files.info('moved to the trash', fields: {'mod': modName});
+      }
 
       await _configService.removeActiveMod(modName);
       await _configService.removeFavoriteMod(modName);
@@ -941,17 +980,23 @@ class ModManagerService {
       await _configService.removeModCharacterTag(modName);
       invalidateKeybinds(modName);
 
-      // **After the folder, and never gating the delete.** The mod is already
-      // gone by here, so a group that could not be removed is wasted space
-      // rather than a failure to report — and reporting one would tell the user
-      // their delete failed when it did not. A mod with no uid never had a
-      // saved version to remove.
-      if (uid != null) await _snapshots.deleteGroup(uid);
-      return true;
+      // After the folder, and never gating the delete: the mod is already gone by here, so a group that could not be
+      // removed is wasted space rather than a failure to report. A mod with no uid never had a saved version.
+      if (deleteSnapshots && uid != null) await _snapshots.deleteGroup(uid);
+      return const DeleteOutcome(DeleteStatus.deleted);
     } catch (error, stack) {
-      _files.error('delete failed',
-          error: error, stack: stack, fields: {'mod': modName});
-      return false;
+      _files.error('delete failed', error: error, stack: stack, fields: {'mod': modName});
+      if (wasOn && modDir != null && await modDir.exists()) await _turnBackOn(modName);
+      return const DeleteOutcome(DeleteStatus.failed);
+    }
+  }
+
+  /// Puts a mod that a delete turned off back on. A mod that cannot be turned on stays off and is logged.
+  Future<void> _turnBackOn(String modName) async {
+    try {
+      if (!await activateMod(modName)) _files.warning('could not be turned back on', fields: {'mod': modName});
+    } catch (error, stack) {
+      _files.warning('could not be turned back on', error: error, stack: stack, fields: {'mod': modName});
     }
   }
 

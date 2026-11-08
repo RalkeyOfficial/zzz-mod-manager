@@ -17,6 +17,124 @@ ButtonStyle smallButtonStyle(BuildContext context, {bool iconOnly = false}) => B
   shape: pressShape(RoundedRectangleBorder(borderRadius: BorderRadius.circular(7))),
 );
 
+/// A destructive button's look over a `FilledButton`: [ZenithPalette.red] with its ink text. Hover and press come
+/// from the button feedback layer, so the overlay stays off.
+ButtonStyle dangerButtonStyle(BuildContext context) {
+  final palette = ZenithPalette.of(context);
+  return FilledButton.styleFrom(
+    backgroundColor: palette.red,
+    foregroundColor: palette.onRed,
+    overlayColor: Colors.transparent,
+  );
+}
+
+/// A few words in a row, one picked: the theme and mature-content choices in Settings, and Import's "Update it" or
+/// "Keep both". [dense] is the 28px form a dialog row carries beside its own text.
+class ZenithSegments<T> extends StatelessWidget {
+  const ZenithSegments({
+    super.key,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+    this.dense = false,
+    this.semanticLabel,
+  });
+
+  final T value;
+  final List<(T, String)> options;
+  final ValueChanged<T> onChanged;
+  final bool dense;
+
+  /// What the group is a choice of, for a screen reader.
+  final String? semanticLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ZenithPalette.of(context);
+    // The canvas's `.seg`: a 9px pill on the ground with 3px inside it, and the picked word on a 7px chip.
+    return Semantics(
+      container: true,
+      role: ui.SemanticsRole.radioGroup,
+      label: semanticLabel,
+      child: Container(
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          color: palette.ground,
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: palette.outline),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final (option, text) in options)
+              Flexible(
+                child: _Segment(
+                  label: text,
+                  selected: option == value,
+                  dense: dense,
+                  onTap: () => onChanged(option),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Segment extends StatelessWidget {
+  const _Segment({required this.label, required this.selected, required this.dense, required this.onTap});
+
+  final String label;
+  final bool selected;
+  final bool dense;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ZenithPalette.of(context);
+    final text = Theme.of(context).textTheme;
+    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(7));
+    return Semantics(
+      inMutuallyExclusiveGroup: true,
+      checked: selected,
+      selected: selected,
+      label: label,
+      excludeSemantics: true,
+      onTap: onTap,
+      child: KeyboardFocusRing(
+        shape: shape,
+        child: Material(
+          color: selected ? palette.hover : Colors.transparent,
+          shape: shape,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            hoverColor: palette.hover.withValues(alpha: selected ? 0 : 0.5),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: dense ? 28 : 30),
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: dense ? 12 : 14),
+                child: Center(
+                  widthFactor: 1,
+                  heightFactor: 1,
+                  child: Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    style: (dense ? text.labelMedium : text.labelLarge)?.copyWith(
+                      color: selected ? palette.text : palette.text2,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// A 28px filter chip, with an optional count after its label. Selected takes [ZenithPalette.selected].
 class ZenithChip extends StatelessWidget {
   const ZenithChip({

@@ -29,7 +29,6 @@ import '../utils/notification_actions.dart';
 import '../utils/notifications.dart';
 import '../utils/state_providers.dart';
 import 'components/folder_downloads_summary.dart';
-import '../utils/url_utils.dart';
 import '../utils/zzz_characters.dart';
 import 'components/character_hero.dart';
 import 'components/character_list.dart';
@@ -49,13 +48,11 @@ import 'dialogs/duplicate_archive_dialog.dart';
 import 'dialogs/edit_mod_dialog.dart';
 import 'dialogs/import_selection_dialog.dart';
 import 'dialogs/keybinds_dialog.dart';
-import 'dialogs/mod_backups_dialog.dart';
 import 'dialogs/mod_context_menu.dart';
 import 'dialogs/mod_update_dialog.dart';
 import 'dialogs/patch_install_flow.dart';
 import 'dialogs/reinstall_flow.dart';
 import 'dialogs/remove_patch_flow.dart';
-import 'dialogs/rename_mod_dialog.dart';
 import 'dialogs/resolve_origin_dialog.dart';
 import 'dialogs/restore_snapshot_flow.dart';
 import 'mod_page/mod_page.dart';
@@ -215,6 +212,8 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
   /// already happened; only the library needs the id/name swap — plus a rewrite
   /// of the cached image paths, which are absolute and still point at the old
   /// folder (otherwise the thumbnail can't load until a refresh).
+  // The Name field of Edit info calls this once it is built.
+  // ignore: unused_element
   Future<void> _onModRenamed(String oldId, String newName) async {
     final allMods = _currentAllMods();
     final index = allMods?.indexWhere((m) => m.id == oldId) ?? -1;
@@ -529,26 +528,22 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
     }
   }
 
-  /// Asks, then deletes the mod and every saved version of it.
+  /// Asks, then moves the mod to the system trash, with its saved versions when the user says so.
   ///
-  /// The count is read here rather than in the dialog: it is one `readdir` of
-  /// the mod's own group, and the confirmation must say how much history the
-  /// delete takes with it — the only place the user could otherwise find that
-  /// out is the entry that stops existing.
+  /// The count and size are read here rather than in the dialog: it is one `readdir` of the mod's own group, and the
+  /// question must say how much history the delete can take with it.
   Future<void> _deleteMod(ModInfo mod, {WorkSpan work = noWorkSpan}) async {
-    final saved =
-        (await ref.read(snapshotServiceProvider).list(mod.uid)).length;
+    final saved = await ref.read(snapshotServiceProvider).list(mod.uid);
     if (!mounted) return;
     await showDeleteModDialog(
       context,
       mod,
-      savedVersions: saved,
+      savedVersions: saved.length,
+      savedBytes: saved.fold<int>(0, (sum, snapshot) => sum + snapshot.sizeBytes),
       work: work,
       onDeleted: () {
         _onModDeleted(mod.id);
-        // The group is gone with the mod, so the cached set of uids that have
-        // one is stale — and it is what decides whether a *rollback* entry is
-        // offered on every other card.
+        // The cached set of uids that have a saved version is stale when the versions went too.
         ref.invalidate(modBackupsProvider);
       },
     );
@@ -558,14 +553,6 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
   /// the files change even though the recorded version does not.
   Future<void> _reinstall(ModInfo mod, {WorkSpan work = noWorkSpan}) async {
     if (await reinstallFlow(context, ref, mod: mod, work: work)) {
-      await loadMods();
-    }
-  }
-
-  /// Opens the rollback list and rescans if anything was restored — the folder
-  /// itself changes, not just the sidecar.
-  Future<void> _restoreBackup(ModInfo mod) async {
-    if (await showModBackupsDialog(context, mod)) {
       await loadMods();
     }
   }
@@ -608,55 +595,27 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       context,
       mod,
       position,
-      onResolveOrigin: () => unawaited(_resolveOrigin(mod)),
-      onCheckForUpdate: () => unawaited(_checkForUpdate(mod)),
-      onReinstall: () => unawaited(_reinstall(mod)),
-      onRestoreBackup: () => unawaited(_restoreBackup(mod)),
-      onRemovePatch: (patch) => unawaited(_removePatch(mod, patch)),
+      ModMenuActions(
+        toggle: () => unawaited(toggleMod(mod)),
+        toggleFavorite: () => unawaited(_toggleFavorite(mod)),
+        edit: () => _showEditDialog(mod),
+        openFolder: () => unawaited(_openModFolder(mod)),
+        checkForUpdate: () => unawaited(_checkForUpdate(mod)),
+        reinstall: () => unawaited(_reinstall(mod)),
+        updateTracking: () => unawaited(_resolveOrigin(mod)),
+        removePatch: (patch) => unawaited(_removePatch(mod, patch)),
+        delete: () => unawaited(_deleteMod(mod)),
+      ),
       // Whatever this session already knows. Nothing is fetched for a menu.
       patchNames: {
         for (final entry in ref.read(knownModPagesProvider).entries)
           if (entry.value.name case final name?) entry.key: name,
       },
-      // `valueOrNull` rather than a `when`: the listing is one readdir and
-      // resolves long before a right-click, and a menu that waited on it would
-      // be a menu that sometimes did not open.
-      // By uid: the store is keyed by the folder's identity so a rename cannot
-      // strand it, and a mod with no uid has never had a snapshot taken.
-      hasBackups: mod.uid != null &&
-          (ref.read(modBackupsProvider).valueOrNull?.contains(mod.uid) ??
-              false),
-      // The table has no details panel, so Details there is the mod's page.
-      onDetails: () => ref.read(destinationProvider) == AppDestination.allMods
-          ? _openPage(mod, ModPageTab.overview)
-          : _select(mod),
-      onEdit: () => _showEditDialog(mod),
-      onRename: () => showRenameModDialog(
-        context,
-        ref,
-        mod,
-        onRenamed: (newName) => unawaited(_onModRenamed(mod.id, newName)),
-      ),
-      onOpenFolder: () => _openModFolder(mod),
-      onOpenLink: () => openModLink(context, mod),
-      onEditKeybinds: () => showKeybindsDialog(
-        context,
-        mod,
-        onSaved: () => unawaited(loadMods()),
-      ),
-      onToggleFavorite: () => _toggleFavorite(mod),
-      onDelete: () => unawaited(_deleteMod(mod)),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Watched, not read on demand: the context menu asks whether this mod has a
-    // rollback to offer, and a `read` from inside the menu builder would start
-    // the listing at that moment and answer "no" the first time. Watching it
-    // here costs one rebuild when a single readdir resolves.
-    ref.watch(modBackupsProvider);
-
     final destination = ref.watch(destinationProvider);
     final current = ref.watch(currentCharacterIdProvider);
     final selectedId = ref.watch(selectedModIdProvider);

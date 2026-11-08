@@ -5,22 +5,18 @@ import 'package:mod_manager_flutter/services/backup/snapshot_service.dart';
 import 'package:mod_manager_flutter/services/config_service.dart';
 import 'package:mod_manager_flutter/services/mod_manager_service.dart';
 import 'package:mod_manager_flutter/services/mod_uid.dart';
+import 'package:mod_manager_flutter/services/platform_service.dart';
 import 'package:mod_manager_flutter/services/shader_fixes/shader_fixes_service.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// **Deleting a mod takes its saved versions with it.**
+import 'support/temp_library.dart' show FakeTrash;
+
+/// **Deleting a mod moves it to the trash, and takes its saved versions along when asked.**
 ///
-/// Keeping gigabytes of a mod the user has just deleted is a surprise, and
-/// nothing would ever offer them again — the rollback list is per mod, and this
-/// mod is gone.
-///
-/// The whole risk is an ordering one, and it is the reason this file exists:
-/// **the identity lives in the sidecar inside the folder being deleted.** Read
-/// it afterwards and it is unreadable, so the operation meant to reclaim the
-/// space would be the one that orphaned it forever — under a uid nothing can
-/// ever claim again, and exempt from pruning, which protects each group's
-/// newest entry.
+/// The risks are ordering ones. **The identity lives in the sidecar inside the folder being moved**: read afterwards
+/// it is unreadable, so the delete meant to reclaim the space would orphan it under a uid nothing can claim. And
+/// **the folder moves before any setting is cleared**, so a trash that refuses leaves the mod whole.
 ///
 /// Real directories and a real `ConfigService` over a temp file, so the
 /// developer's own library and app-data are never touched.
@@ -29,16 +25,20 @@ void main() {
   late Directory mods;
   late SnapshotService snapshots;
   late ModManagerService service;
+  late ConfigService config;
+  late Directory zzmi;
+  late FakeTrash trash;
   final uids = ModUid();
 
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('zzz_delete_mod_');
     mods = await Directory(p.join(temp.path, 'mods')).create();
-    final zzmi = await Directory(p.join(temp.path, 'zzmi')).create();
+    zzmi = await Directory(p.join(temp.path, 'zzmi')).create();
+    trash = FakeTrash(p.join(temp.path, 'trash'));
     snapshots = SnapshotService(rootPath: p.join(temp.path, 'backups'));
 
     SharedPreferences.setMockInitialValues({});
-    final config = ConfigService(
+    config = ConfigService(
       await SharedPreferences.getInstance(),
       configFile: File(p.join(temp.path, 'config.json')),
     );
@@ -47,6 +47,7 @@ void main() {
       config,
       snapshots: snapshots,
       uids: uids,
+      moveToTrash: trash.move,
       shaderFixes: ShaderFixesService(recordPath: p.join(temp.path, 'shader_fixes.json')),
     );
   });
@@ -76,9 +77,10 @@ void main() {
   test('the saved versions go with the mod', () async {
     final uid = await modWithHistory('Ellen');
 
-    expect(await service.deleteMod('Ellen'), isTrue);
+    expect((await service.deleteMod('Ellen')).deleted, isTrue);
 
     expect(Directory(p.join(mods.path, 'Ellen')).existsSync(), isFalse);
+    expect(trash.names, ['Ellen'], reason: 'in the trash, not gone from the disk');
     expect(await snapshots.list(uid), isEmpty);
     expect(await snapshots.uidsWithSnapshots(), isEmpty,
         reason: 'and the group itself is gone, not left empty');
@@ -100,7 +102,7 @@ void main() {
     final folder = Directory(p.join(mods.path, 'Ellen'))..createSync();
     File(p.join(folder.path, 'mod.ini')).writeAsStringSync('[Constants]\n');
 
-    expect(await service.deleteMod('Ellen'), isTrue);
+    expect((await service.deleteMod('Ellen')).deleted, isTrue);
     expect(folder.existsSync(), isFalse);
   });
 
@@ -131,5 +133,70 @@ void main() {
     expect(await snapshots.deleteGroup(uid), isTrue);
     expect(await snapshots.deleteGroup(''), isFalse,
         reason: 'no identity is not an empty group — it is not a group at all');
+  });
+
+  test('a mod deleted with the box unticked keeps its saved versions, claimed by no mod', () async {
+    final uid = await modWithHistory('Ellen');
+
+    expect((await service.deleteMod('Ellen', deleteSnapshots: false)).deleted, isTrue);
+
+    expect(trash.names, ['Ellen']);
+    expect(await snapshots.list(uid), hasLength(2));
+    expect(await snapshots.uidsWithSnapshots(), {uid});
+    expect(uids.read(Directory(p.join(trash.root, 'Ellen'))), completion(uid),
+        reason: 'the folder in the trash still names its history');
+  });
+
+  group('when the trash cannot take the folder', () {
+    Future<(String, Link)> activeMod(String name) async {
+      final uid = await modWithHistory(name);
+      await config.addFavoriteMod(name);
+      await config.setModNote(name, 'keep me');
+      final link = Link(p.join(zzmi.path, 'Mods', name))..createSync(p.join(mods.path, name), recursive: true);
+      return (uid, link);
+    }
+
+    for (final answer in [TrashResult.unavailable, TrashResult.failed]) {
+      test('${answer.name} leaves the mod, its link, its settings and its saved versions as they were', () async {
+        final (uid, link) = await activeMod('Ellen');
+        trash.answer = answer;
+
+        final outcome = await service.deleteMod('Ellen');
+
+        expect(outcome.status, DeleteStatus.notTrashed);
+        expect(outcome.trash, answer);
+        expect(Directory(p.join(mods.path, 'Ellen')).existsSync(), isTrue);
+        expect(link.existsSync(), isTrue, reason: 'a mod that was on is turned back on');
+        expect(config.favoriteMods, contains('Ellen'));
+        expect(config.modNotes['Ellen'], 'keep me');
+        expect(await snapshots.list(uid), hasLength(2));
+        expect(trash.names, isEmpty);
+      });
+    }
+
+    test('a mod that was off stays off', () async {
+      await modWithHistory('Ellen');
+      trash.answer = TrashResult.unavailable;
+
+      await service.deleteMod('Ellen');
+
+      expect(Directory(p.join(zzmi.path, 'Mods', 'Ellen')).existsSync(), isFalse);
+    });
+  });
+
+  test('deleting for good removes the folder from the disk and never asks the trash', () async {
+    final uid = await modWithHistory('Ellen');
+
+    expect((await service.deleteMod('Ellen', forGood: true)).deleted, isTrue);
+
+    expect(Directory(p.join(mods.path, 'Ellen')).existsSync(), isFalse);
+    expect(trash.calls, isEmpty);
+    expect(trash.names, isEmpty);
+    expect(await snapshots.list(uid), isEmpty);
+  });
+
+  test('a folder that is not there is reported as missing', () async {
+    expect((await service.deleteMod('Nobody')).status, DeleteStatus.missing);
+    expect(trash.calls, isEmpty);
   });
 }

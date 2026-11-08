@@ -458,7 +458,7 @@ void main() {
     installShaderMod('Jiggle', {hashA: 'shader a'});
     await temp.service.activateMod('Jiggle');
 
-    expect(await temp.service.deleteMod('Jiggle'), isTrue);
+    expect((await temp.service.deleteMod('Jiggle')).deleted, isTrue);
 
     expect(shader(hashA).existsSync(), isFalse);
   });

@@ -133,7 +133,7 @@ void main() {
       expect(Link(linkOf('Ellen')).targetSync(), other.path);
       expect(FileSystemEntity.isLinkSync(linkOf('Ellen Renamed')), isFalse);
 
-      expect(await temp.service.deleteMod('Ellen Renamed'), isTrue);
+      expect((await temp.service.deleteMod('Ellen Renamed')).deleted, isTrue);
       expect(Link(linkOf('Ellen')).targetSync(), other.path);
     });
 

@@ -5,6 +5,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../services/api_service.dart';
 import '../../../services/gamebanana/content_filter.dart';
 import '../../../utils/state_providers.dart';
+import '../zenith_controls.dart';
 import 'settings_widgets.dart';
 
 /// Persists the content filter. Production is [ApiService.setContentFilter].
@@ -28,7 +29,7 @@ class GameBananaSection extends ConsumerWidget {
         SettingsRow(
           label: loc.t('marketplace.content_filter'),
           description: loc.t('settings.gamebanana.content_filter_hint'),
-          trailing: SettingsSegments<ContentFilterMode>(
+          trailing: ZenithSegments<ContentFilterMode>(
             value: ref.watch(contentFilterProvider),
             options: [
               for (final mode in ContentFilterMode.values) (mode, loc.t('marketplace.content_filter_${mode.wire}')),

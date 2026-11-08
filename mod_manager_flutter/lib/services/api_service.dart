@@ -208,14 +208,14 @@ class ApiService {
     }
   }
 
-  /// Permanently deletes a mod: its folder, active link, and config state.
-  /// Returns false if the mod is missing or on failure.
-  static Future<bool> deleteMod(String modId) async {
+  /// Deletes a mod: its folder goes to the system trash, and its active link and config state go with it, and its
+  /// saved versions when [deleteSnapshots] says so. [forGood] deletes the folder from the disk instead.
+  static Future<DeleteOutcome> deleteMod(String modId, {bool deleteSnapshots = true, bool forGood = false}) async {
     try {
       await initialize();
-      final deleted = await _modManager!.deleteMod(modId);
-      if (deleted) _container?.read(modNotesProvider.notifier).state = _configService!.modNotes;
-      return deleted;
+      final outcome = await _modManager!.deleteMod(modId, deleteSnapshots: deleteSnapshots, forGood: forGood);
+      if (outcome.deleted) _container?.read(modNotesProvider.notifier).state = _configService!.modNotes;
+      return outcome;
     } catch (e) {
       throw Exception('Помилка видалення моду: $e');
     }

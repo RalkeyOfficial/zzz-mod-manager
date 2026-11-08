@@ -235,7 +235,8 @@ Each is reviewable on its own and ends with tests green, docs and changelog upda
 8. **Dialogs and overlays** (artboards `ImportModal`, `UpdateModal`, `UpdateOneModal`, `ReinstallModal`, `TrackingModal`, `EditModal`, `DeleteModal`, `ContextMenu`, `Palette`, `PatchModal`, `FoldersModal`, `MakePatchModal`).
    - Update several mods at once (`UpdateModal`): every mod with a newer file, a file picked per mod (nothing preselected unless a mod has one newer file), Ignore with Undo, then each update in turn. It brings the primary "Update N" button beside Check all for updates on All mods and on the Updates page, shown while the last check found updates. On the Updates page, a newer file's Update then opens `UpdateOneModal`. Rewrite `applying-updates.md` §7 with it.
    - Edit info: rename, cover, author, tags, "Use GameBanana text", key recording, add and remove keys, "Restore the author's keys".
-   - Delete goes to the trash.
+   - Delete goes to the trash (`deleting-mods.md`).
+     - Needs a Windows session before release: a mod trashed to the Recycle Bin and restorable from it; a mod on a mapped network drive raising Windows' own permanent-delete prompt; a folder with a file open in the game refused and left intact; a path over 260 characters reported as failed; the prompt cancelled. The call is written and tested against a fake only. Also on Linux: a library on a second drive trashing to `$mount/.Trash-<uid>`, and one on a drive with no trash offering Delete for good.
    - Right-click menu with Space / F / E / Del shortcuts. Remove patch goes into History and the menu. The menu also has "Make this a patch for…".
    - Registering a patch by hand, for when detection misses one:
      - Make this a patch (`MakePatchModal`): turns an installed mod into a patch. Two radio cards, the same split as the install-time patch dialog, each with its own "What happens":

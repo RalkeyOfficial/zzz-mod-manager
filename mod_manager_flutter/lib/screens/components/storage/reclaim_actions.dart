@@ -10,6 +10,7 @@ import '../../../services/storage/reclaim_service.dart';
 import '../../../services/storage/storage_providers.dart';
 import '../../../utils/byte_format.dart';
 import '../../../utils/notifications.dart';
+import '../zenith_controls.dart';
 
 /// Runs a reclaim over [targets]. Production goes through [reclaimControllerProvider]; a widget test passes a closure,
 /// so a press needs no temp directory and cannot reach the developer's own app data.
@@ -179,12 +180,7 @@ class _Confirmation extends StatelessWidget {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context, false), child: Text(loc.t('storage.reclaim.cancel'))),
         FilledButton(
-          // A transparent overlay, so the theme's press is drawn rather than Material's ink for the foreground.
-          style: FilledButton.styleFrom(
-            backgroundColor: palette.red,
-            foregroundColor: palette.onRed,
-            overlayColor: Colors.transparent,
-          ),
+          style: dangerButtonStyle(context),
           onPressed: () => Navigator.pop(context, true),
           child: Text(confirm),
         ),

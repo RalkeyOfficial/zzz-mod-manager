@@ -19,7 +19,7 @@ import '../../../utils/marketplace_providers.dart';
 import '../../../utils/relative_age.dart';
 import '../../../utils/state_providers.dart';
 import '../../../utils/zzz_characters.dart';
-import '../category_picker.dart';
+import '../character_pick.dart';
 import '../character_tile.dart';
 import '../mod_detail_parts.dart' show SectionHeading;
 import '../page_crumbs.dart';
@@ -38,9 +38,9 @@ typedef GbQueueFiles =
 /// Asks which character or built-in category to install for, or Unassigned; null keeps the current one.
 typedef CharacterPicker = Future<String?> Function(BuildContext context, {required String currentId});
 
-/// The picker an install offers: `showCategoryPicker` with Unassigned among the categories.
+/// The picker an install offers: `showCharacterPicker` with Unassigned in its list.
 Future<String?> pickInstallTarget(BuildContext context, {required String currentId}) =>
-    showCategoryPicker(context, currentId: currentId, offerUnassigned: true);
+    showCharacterPicker(context, currentId: currentId, offerUnassigned: true);
 
 /// Saves the Turn on after installing switch.
 typedef TurnOnAfterInstallWriter = Future<void> Function(bool turnOn);

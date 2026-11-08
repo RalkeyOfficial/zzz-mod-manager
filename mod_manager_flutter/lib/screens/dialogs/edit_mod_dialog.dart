@@ -14,7 +14,7 @@ import '../../utils/markdown_editor.dart';
 import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
 import '../../utils/zzz_characters.dart';
-import '../components/category_picker.dart';
+import '../components/character_pick.dart';
 
 /// Edits a mod's character tag, source URL, description, tags, and gallery.
 /// Nothing touches disk until Save. [onSaved] runs after a successful save with
@@ -124,7 +124,7 @@ Future<void> showEditModDialog(
                   return InkWell(
                     borderRadius: BorderRadius.circular(8),
                     onTap: () async {
-                      final picked = await showCategoryPicker(
+                      final picked = await showCharacterPicker(
                         context,
                         currentId: value,
                       );

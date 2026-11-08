@@ -6,7 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/screens/components/zenith_controls.dart';
+import 'package:mod_manager_flutter/screens/components/zenith_dialog.dart';
 import 'package:mod_manager_flutter/services/backup/snapshot_service.dart';
+import 'package:mod_manager_flutter/services/mod_uid.dart';
+import 'package:mod_manager_flutter/services/platform_service.dart' show TrashResult;
 import 'package:mod_manager_flutter/services/update_apply/mod_activation_port.dart';
 import 'package:mod_manager_flutter/utils/notifications.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
@@ -26,7 +29,9 @@ void main() {
   List<(String, String)> notified(ProviderContainer container) =>
       [for (final n in container.read(notificationsProvider)) (n.title, n.body)];
 
-  Finder dialogText(String text) => find.descendant(of: find.byType(AlertDialog), matching: find.text(text));
+  Finder dialogBox() => find.descendant(of: find.byType(ZenithDialog), matching: find.byType(Checkbox));
+
+  Finder dialogText(String text) => find.descendant(of: find.byType(ZenithDialog), matching: find.text(text));
 
   /// Holds [id]'s folder as being written, as an update or a restore does while it runs. Never released: the test
   /// ends with the write still running.
@@ -76,7 +81,7 @@ void main() {
     /// Presses the bar's Delete, which reads the saved versions off disk before it asks, then the dialog's confirm.
     Future<void> deleteTicked(WidgetTester tester, ProviderContainer container, String confirm) async {
       await tapWithIo(tester, barButton('Delete'));
-      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.byType(ZenithDialog), findsOneWidget);
       await pressBulk(tester, container, find.widgetWithText(FilledButton, confirm));
     }
 
@@ -458,11 +463,67 @@ void main() {
         expect(temp.modFolder('Ellen School').existsSync(), isFalse);
         expect(temp.modFolder('Miyabi Kimono').existsSync(), isFalse);
         expect(temp.modFolder('Kept').existsSync(), isTrue);
+        expect(temp.trash.names, ['Ellen School', 'Miyabi Kimono'], reason: 'moved to the trash, not deleted');
         expect(linked('Ellen School'), isFalse);
         expect(container.read(allModsSelectionProvider), isEmpty);
         expect(container.read(selectedModIdProvider), isNull, reason: 'the details panel let go of a deleted mod');
         expect(notified(container), isEmpty);
         expect(container.read(libraryScansProvider), scans + 1);
+      });
+
+      /// A saved version of [name], taken as an update would.
+      Future<String> withSnapshot(WidgetTester tester, String name) async {
+        installMod(name);
+        late String uid;
+        await tester.runAsync(() async {
+          uid = (await ModUid().ensure(temp.modFolder(name)))!;
+          await temp.snapshots.capture(
+            modName: name,
+            modUid: uid,
+            modFolder: temp.modFolder(name),
+            reason: SnapshotReason.beforeUpdate,
+            now: DateTime.now(),
+          );
+        });
+        return uid;
+      }
+
+      testWidgets('with the snapshots box ticked deletes them too, and unticked keeps them', (tester) async {
+        final gone = await withSnapshot(tester, 'Ellen School');
+        final kept = await withSnapshot(tester, 'Miyabi Kimono');
+        final container = await pumpTable(tester, [mod('Ellen School', uid: gone)]);
+        await tick(tester, ['Ellen School']);
+
+        await tapWithIo(tester, barButton('Delete'));
+        expect(find.textContaining('Also delete its 1 snapshot'), findsOneWidget);
+        await pressBulk(tester, container, find.widgetWithText(FilledButton, 'Delete 1 mod'));
+        expect(await tester.runAsync(() => temp.snapshots.list(gone)), isEmpty);
+
+        final second = await pumpTable(tester, [mod('Miyabi Kimono', characterId: 'miyabi', uid: kept)]);
+        await tick(tester, ['Miyabi Kimono']);
+        await tapWithIo(tester, barButton('Delete'));
+        await tester.tap(dialogBox());
+        await tester.pump();
+        await pressBulk(tester, second, find.widgetWithText(FilledButton, 'Delete 1 mod'));
+        expect(await tester.runAsync(() => temp.snapshots.list(kept)), hasLength(1), reason: 'the box was unticked');
+        expect(temp.trash.names, ['Ellen School', 'Miyabi Kimono']);
+      });
+
+      testWidgets('a mod the trash cannot take stays, and is named once with Copy details', (tester) async {
+        installMod('Ellen School');
+        installMod('Miyabi Kimono');
+        final container = await pumpTable(tester, [mod('Ellen School'), mod('Miyabi Kimono', characterId: 'miyabi')]);
+        await tick(tester, ['Ellen School', 'Miyabi Kimono']);
+        temp.trash.answer = TrashResult.unavailable;
+
+        await deleteTicked(tester, container, 'Delete 2 mods');
+
+        expect(temp.modFolder('Ellen School').existsSync(), isTrue);
+        expect(temp.modFolder('Miyabi Kimono').existsSync(), isTrue);
+        expect(notified(container), [("2 mods couldn't be moved to the trash", 'Ellen School, Miyabi Kimono')]);
+        expect(container.read(allModsSelectionProvider), {'Ellen School', 'Miyabi Kimono'}, reason: 'ticked, to retry');
+        final actions = container.read(notificationsProvider).first.actions;
+        expect([for (final a in actions) a.label], ['Copy details'], reason: 'no Delete for good in bulk');
       });
 
       testWidgets('shows its Working card once confirmed, and dismisses it on success', (tester) async {
@@ -548,7 +609,7 @@ void main() {
       await tick(tester, ticked ?? [for (final m in mods) m.name]);
       await tester.tap(barButton('Delete'));
       await tester.pumpAndSettle();
-      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.byType(ZenithDialog), findsOneWidget);
     }
 
     testWidgets('names six, counts the rest, and says the size, how many are on and the saved versions',
@@ -575,11 +636,13 @@ void main() {
       expect(dialogText('not ticked'), findsNothing);
       expect(dialogText('and 2 more'), findsOneWidget);
       expect(
-        dialogText("Their folders and every file in them, 8.0 MB in all, are deleted from disk. This can't be undone."),
+        dialogText('Their folders, 8.0 MB in all, go to your system trash.'),
         findsOneWidget,
       );
       expect(dialogText('2 of them are on in the game right now.'), findsOneWidget);
-      expect(dialogText('3 saved versions go with them, so there will be nothing left to restore.'), findsOneWidget);
+      expect(find.textContaining('Also delete their 3 snapshots'), findsOneWidget);
+      expect(find.textContaining('(3.0 MB)'), findsOneWidget, reason: 'the size of the saved versions, in text3');
+      expect(tester.widget<Checkbox>(dialogBox()).value, isTrue, reason: 'ticked by default');
       expect(find.widgetWithText(FilledButton, 'Delete 8 mods'), findsOneWidget);
     });
 
@@ -590,11 +653,11 @@ void main() {
       expect(dialogText('Alpha'), findsOneWidget);
       expect(find.textContaining('more'), findsNothing);
       expect(
-        dialogText("Its folder and every file in it are deleted from disk. This can't be undone."),
+        dialogText('Its folder goes to your system trash.'),
         findsOneWidget,
       );
       expect(find.textContaining('on in the game'), findsNothing);
-      expect(find.textContaining('saved version'), findsNothing);
+      expect(dialogBox(), findsNothing, reason: 'nothing saved, nothing to ask');
       expect(find.widgetWithText(FilledButton, 'Delete 1 mod'), findsOneWidget);
     });
 
@@ -602,7 +665,7 @@ void main() {
       await openConfirmation(tester, [mod('Alpha', active: true, uid: 'uid-a')], savedVersions: {'uid-a': 1});
 
       expect(dialogText('It is on in the game right now.'), findsOneWidget);
-      expect(dialogText('1 saved version goes with it, so there will be nothing left to restore.'), findsOneWidget);
+      expect(find.textContaining('Also delete its 1 snapshot'), findsOneWidget);
     });
 
     testWidgets('one of two mods on and one saved version read in the singular', (tester) async {
@@ -613,7 +676,14 @@ void main() {
       );
 
       expect(dialogText('1 of them is on in the game right now.'), findsOneWidget);
-      expect(dialogText('1 saved version goes with them, so there will be nothing left to restore.'), findsOneWidget);
+      expect(find.textContaining('Also delete their 1 snapshot'), findsOneWidget);
+    });
+
+    testWidgets('Cancel has the focus, so Enter never deletes', (tester) async {
+      await openConfirmation(tester, [mod('Alpha', uid: 'uid-a')]);
+
+      final cancel = tester.widget<TextButton>(find.widgetWithText(TextButton, 'Cancel'));
+      expect(cancel.autofocus, isTrue);
     });
 
     testWidgets('seven mods name six and one more', (tester) async {
@@ -640,7 +710,7 @@ class _SavedVersions extends SnapshotService {
             modUid: modUid!,
             id: '$i',
             takenAt: DateTime.utc(2026),
-            sizeBytes: 0,
+            sizeBytes: 1024 * 1024,
             directory: Directory('unused'),
           ),
       ];

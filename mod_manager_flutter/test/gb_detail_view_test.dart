@@ -9,7 +9,7 @@ import 'package:mod_manager_flutter/core/palette.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gamebanana.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
-import 'package:mod_manager_flutter/screens/components/category_picker.dart';
+import 'package:mod_manager_flutter/screens/components/character_pick.dart';
 import 'package:mod_manager_flutter/screens/components/marketplace/gb_detail_view.dart';
 import 'package:mod_manager_flutter/screens/components/page_crumbs.dart';
 import 'package:mod_manager_flutter/screens/components/zenith_controls.dart';
@@ -544,7 +544,7 @@ void main() {
                 child: const Text('install'),
               ),
               TextButton(
-                onPressed: () => showCategoryPicker(context, currentId: 'ellen'),
+                onPressed: () => showCharacterPicker(context, currentId: 'ellen'),
                 child: const Text('edit'),
               ),
             ],
@@ -559,7 +559,7 @@ void main() {
 
       await tester.tap(find.text('edit'));
       await tester.pumpAndSettle();
-      expect(find.text('Select category'), findsOneWidget);
+      expect(find.text('TYPES'), findsOneWidget);
       expect(find.text('Unassigned'), findsNothing);
     });
   });

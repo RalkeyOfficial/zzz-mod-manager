@@ -642,7 +642,7 @@ so unlike the store above there is no renaming that could make it safe.
 **Keyed by the mod's `uid`** ([`metadata-schema.md`](metadata-schema.md)), and that
 is the whole design rather than a detail. A group named after the folder is stranded
 by any rename the app does not itself perform — a rename in a file manager runs no
-hook, so every rollback point becomes unreachable from "Restore a previous version…"
+hook, so every rollback point becomes unreachable from the History tab
 *and* exempt from the budget below, which protects each group's newest entry forever.
 Keyed by the uid in the folder's own sidecar, a rename is a non-event however it
 happens, and there is no migration hook to write.
@@ -731,10 +731,8 @@ The count is configurable and the budget is not. There is no separate age number
 
 ### Rollback
 
-Reachable from a mod's right-click menu, and only for mods that have a snapshot (one
-`readdir` of the backups root answers that for the whole library), and from the
-History tab of the mod's page, which lists each snapshot with a Restore
-([`library-screen.md`](library-screen.md) §15). Both run `restoreSnapshotFlow`. If restoring meant
+Reachable from the History tab of the mod's page, which lists each snapshot with a Restore
+([`library-screen.md`](library-screen.md) §15), through `restoreSnapshotFlow`. If restoring meant
 finding `<appData>/backups/` in a file manager, "recoverable from the snapshot" would
 not be a real answer to a user who has just lost a mesh fix.
 
@@ -745,11 +743,9 @@ and the backups dialog says so. The sidecar comes back with the copy, unlike on 
 **The rollback list is refreshed whenever a snapshot was taken, not only when the
 update succeeded** — and the failure path is the one that matters. A copy that broke
 halfway leaves the folder half-old and half-new, and the error message sends the user
-straight to "Restore a previous version…". That entry is drawn from
-`modBackupsProvider`'s cached set, so for a mod being updated for the first time it
-was absent: the single moment the rollback is needed was the one moment it was missing
-from the menu. `applyUpdateFlow` invalidates *before* the success check, so there is
-one call rather than one per branch.
+to the History tab. The tab is drawn from `modBackupsProvider`'s cached set, so for a mod
+being updated for the first time it would have had nothing to list at the single moment the rollback is needed.
+`applyUpdateFlow` invalidates *before* the success check, so there is one call rather than one per branch.
 
 ### What survives of "preserve the user's `.ini` edits"
 

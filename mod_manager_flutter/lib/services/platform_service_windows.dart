@@ -12,6 +12,7 @@ import 'log/system_report.dart';
 import 'platform_service.dart';
 import 'windows/windows_links.dart';
 import 'windows/windows_paths.dart';
+import 'windows/windows_trash.dart';
 
 /// Windows-специфічна реалізація PlatformService
 /// The same two tags the Linux implementation uses, and the same event names
@@ -30,10 +31,25 @@ Future<List<DeadModLink>> readWindowsDeadModLinks(
     readDeadModLinks(linksFolder, isLinkEntry: (entry) async => entry is Link, readTarget: readTarget);
 
 class WindowsPlatformService implements PlatformService {
-  /// [calls] is the seam a test replaces the Win32 calls through.
-  WindowsPlatformService({WindowsLinkCalls calls = const WindowsLinkCalls()}) : _calls = calls;
+  /// [calls] and [trash] are the seams a test replaces the Win32 calls through.
+  WindowsPlatformService({WindowsLinkCalls calls = const WindowsLinkCalls(), WindowsTrashCalls trash = const WindowsTrashCalls()})
+    : _calls = calls,
+      _trash = trash;
 
   final WindowsLinkCalls _calls;
+  final WindowsTrashCalls _trash;
+
+  @override
+  Future<TrashResult> moveToTrash(String folderPath) async {
+    try {
+      final result = trashResultOf(await _trash.recycle(folderPath));
+      if (result == TrashResult.failed) _log.warning('the Recycle Bin did not take the folder');
+      return result;
+    } catch (error, stack) {
+      _log.warning('sending the folder to the Recycle Bin threw', error: error, stack: stack);
+      return TrashResult.failed;
+    }
+  }
 
   @override
   Future<bool> createModLink(String sourcePath, String linkPath) async {

@@ -22,9 +22,29 @@ typedef PrefixServer = ({String server, Map<String, String> environment});
 /// Linux-специфічна реалізація PlatformService
 class LinuxPlatformService implements PlatformService {
   /// [environment] is the one umu-run inherits, read for umu's data folder; a test passes its own.
-  LinuxPlatformService({Map<String, String>? environment}) : _environment = environment ?? Platform.environment;
+  ///
+  /// [runProcess] is how `gio` is run; a test passes one that records the arguments.
+  LinuxPlatformService({Map<String, String>? environment, Future<ProcessResult> Function(String, List<String>)? runProcess})
+    : _environment = environment ?? Platform.environment,
+      _runProcess = runProcess ?? Process.run;
 
   final Map<String, String> _environment;
+  final Future<ProcessResult> Function(String executable, List<String> arguments) _runProcess;
+
+  @override
+  Future<TrashResult> moveToTrash(String folderPath) async {
+    try {
+      final result = await _runProcess('gio', ['trash', '--', folderPath]);
+      if (result.exitCode == 0) return TrashResult.trashed;
+      // The message is translated, so it is only logged. The likeliest cause is a drive with no trash.
+      _log.warning('gio could not trash the folder', fields: {'exit': result.exitCode, 'message': '${result.stderr}'.trim()});
+    } on ProcessException catch (error) {
+      _log.warning('gio is not installed, nothing can be trashed', error: error);
+    } catch (error, stack) {
+      _log.warning('trashing the folder threw', error: error, stack: stack);
+    }
+    return TrashResult.unavailable;
+  }
 
   @override
   Future<bool> createModLink(String sourcePath, String linkPath) async {

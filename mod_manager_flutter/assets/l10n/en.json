@@ -164,19 +164,17 @@
       "delete_title_plural": "Delete {count} mods?",
       "delete_more_single": "and {count} more",
       "delete_more_plural": "and {count} more",
-      "delete_body_one": "Its folder and every file in it are deleted from disk. This can't be undone.",
-      "delete_body_one_size": "Its folder and every file in it, {size} in all, are deleted from disk. This can't be undone.",
-      "delete_body": "Their folders and every file in them are deleted from disk. This can't be undone.",
-      "delete_body_size": "Their folders and every file in them, {size} in all, are deleted from disk. This can't be undone.",
+      "delete_body_one": "Its folder goes to your system trash.",
+      "delete_body_one_size": "Its folder, {size} in all, goes to your system trash.",
+      "delete_body": "Their folders go to your system trash.",
+      "delete_body_size": "Their folders, {size} in all, go to your system trash.",
       "delete_active_single": "{count} of them is on in the game right now.",
       "delete_active_plural": "{count} of them are on in the game right now.",
-      "delete_saved_single": "{count} saved version goes with them, so there will be nothing left to restore.",
-      "delete_saved_plural": "{count} saved versions go with them, so there will be nothing left to restore.",
       "delete_active_one": "It is on in the game right now.",
-      "delete_saved_one_single": "{count} saved version goes with it, so there will be nothing left to restore.",
-      "delete_saved_one_plural": "{count} saved versions go with it, so there will be nothing left to restore.",
       "delete_confirm_single": "Delete {count} mod",
-      "delete_confirm_plural": "Delete {count} mods"
+      "delete_confirm_plural": "Delete {count} mods",
+      "snapshots_single": "Also delete their {count} snapshot",
+      "snapshots_plural": "Also delete their {count} snapshots"
     },
     "list": {
       "filter_hint": "Filter characters",
@@ -473,7 +471,7 @@
       "skipped_downloads_install": "Left your downloads alone — an install is in progress.",
       "skipped_dead_link_images": "Left the old images alone — a mod in your library is linked to a folder that is missing.",
       "skipped_dead_link_versions": "Left the saved versions alone — a mod in your library is linked to a folder that is missing.",
-      "skipped_library_images":"Left the old images alone — your mods folder could not be read.",
+      "skipped_library_images": "Left the old images alone — your mods folder could not be read.",
       "skipped_library_versions": "Left the saved versions alone — your mods folder could not be read."
     },
     "categories": {
@@ -763,7 +761,6 @@
       "edit_title": "Edit Mod",
       "character_tag": "Category:",
       "no_category": "No category",
-      "select_category": "Select category",
       "search_category": "Search characters & categories…",
       "rename_title": "Rename mod",
       "rename_label": "Mod name",
@@ -777,10 +774,6 @@
       "rename_link_failed": "{name} is unchanged and still on: its link under the new name couldn't be made in ZZMI's Mods folder.",
       "rename_left_off_title": "The mod is renamed, but off",
       "rename_left_off_body": "{name}: its link couldn't be made in ZZMI's Mods folder, and its folder couldn't be given its old name back.",
-      "delete_title": "Delete mod",
-      "delete_message": "Permanently delete \"{mod}\"? This removes the mod folder and all its files from disk and cannot be undone.",
-      "delete_saved_single": "{count} saved version of it goes too, so there will be nothing left to restore.",
-      "delete_saved_plural": "{count} saved versions of it go too, so there will be nothing left to restore.",
       "delete_confirm": "Delete",
       "description": "Description:",
       "description_hint": "Notes about this mod... (markdown supported)",
@@ -822,19 +815,10 @@
       "saving_tag": "Saving tag…"
     },
     "context_menu": {
-      "details": "Details",
-      "edit": "Edit",
-      "rename": "Rename",
-      "edit_keybinds": "Edit keybinds ({count})",
-      "open_link": "Open source page",
       "open_folder": "Open in file explorer",
       "favorite_add": "Add to favorites",
       "favorite_remove": "Remove from favorites",
-      "delete": "Delete",
       "resolve_origin": "Update tracking…",
-      "check_update": "Check for updates…",
-      "reinstall": "Reinstall this version…",
-      "restore_backup": "Restore a previous version…",
       "remove_patch": "Remove patch…",
       "remove_patch_named": "Remove patch: {patch}"
     },
@@ -871,9 +855,7 @@
       "shader_fixes_files_single": "{count} file, copied into ZZMI's shader folder while this mod is on.",
       "shader_fixes_files_plural": "{count} files, copied into ZZMI's shader folder while this mod is on."
     },
-    "toolbar": {
-      "no_results": "No mods match your filters"
-    },
+    "toolbar": {},
     "sort": {
       "added": "Recently added",
       "name_asc": "Name (A–Z)",
@@ -1246,11 +1228,7 @@
       "failed_title": "The update failed"
     },
     "backups": {
-      "title": "Previous versions of {mod}",
-      "intro": "Saved automatically before each update. Restoring puts the old files back and removes anything added to the folder since; a copy of the current state is saved first, so this can be undone.",
-      "empty": "There's nothing saved for this mod yet. A copy is saved automatically the first time you update it from inside the app.",
       "restore": "Restore",
-      "delete": "Delete",
       "reason_update": "before an update",
       "reason_restore": "before a restore",
       "reason_patch_removal": "before a patch was taken out",
@@ -1288,6 +1266,41 @@
       "adopted_body_plural": "{mod} uses {count} files that were already in ZZMI's shader folder. They stay there when the mod is off.",
       "adopted_many_single": "{count} mod uses files that were already in ZZMI's shader folder. They stay there when the mod is off.",
       "adopted_many_plural": "{count} mods use files that were already in ZZMI's shader folder. They stay there when the mods are off."
+    },
+    "menu": {
+      "sub_tracked": "{character} · tracked on GameBanana",
+      "sub_local": "{character} · Local",
+      "sub_untracked": "{character} · Not tracked",
+      "turn_off": "Turn off",
+      "turn_on": "Turn on",
+      "edit_info": "Edit info…",
+      "check_updates": "Check for updates",
+      "reinstall": "Reinstall this file…",
+      "make_patch": "Make this a patch for…",
+      "delete": "Delete…"
+    },
+    "picker": {
+      "types": "Types",
+      "agents": "Agents",
+      "choose": "Choose a character or type",
+      "aria": "Character: {name}",
+      "no_results": "No characters or types match"
+    },
+    "delete": {
+      "title": "Delete {mod}?",
+      "body": "The mod folder goes to your system trash.",
+      "active_agent": "It's active right now, so {character} goes back to the default look until you turn another mod on.",
+      "active_other": "It's active right now, so the game stops using it.",
+      "snapshots_single": "Also delete its {count} snapshot",
+      "snapshots_plural": "Also delete its {count} snapshots",
+      "trash_failed_title": "Couldn't move the mod to the trash",
+      "trash_failed_body": "{mod} is still where it was. Its drive may have no trash, or a file in it may be open in another program.",
+      "for_good": "Delete for good…",
+      "for_good_title": "Delete {mod} for good?",
+      "for_good_body": "The folder can't go to the trash here, so it is deleted from the disk and can't be brought back.",
+      "for_good_confirm": "Delete for good",
+      "trash_failed_many_title_single": "{count} mod couldn't be moved to the trash",
+      "trash_failed_many_title_plural": "{count} mods couldn't be moved to the trash"
     }
   },
   "clipboard": {
@@ -1422,7 +1435,7 @@
     "release_notes": "Release notes",
     "update": {
       "latest": "You're on the latest version · checked {age}",
-    "latest_stable": "Nothing newer than this pre-release is published as a stable release · checked {age}",
+      "latest_stable": "Nothing newer than this pre-release is published as a stable release · checked {age}",
       "newer": "Version {version} is available · checked {age}",
       "offline": "Couldn't check: no connection to GitHub",
       "rate_limited": "Couldn't check: GitHub is limiting requests from this address, try again later",
@@ -1470,12 +1483,11 @@
     "ui": "UI",
     "texture": "Texture",
     "audio": "Audio",
-    "misc": "Misc",
-    "section_characters": "Characters",
-    "section_categories": "Categories"
+    "misc": "Misc"
   },
   "common": {
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    "close": "Close"
   },
   "notifications": {
     "close": "Close",

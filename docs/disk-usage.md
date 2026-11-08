@@ -137,6 +137,7 @@ A group whose uid no mod in the library carries says so, once the library has be
 The button is the same one the dead-link rule in §8 can refuse, and the report says why. Its confirmation says that deleted saved versions cannot be fetched again.
 
 It is never swept on a schedule. The user presses the button. A mod moved out of the library and back in after the press has lost its history, and that is accepted: it takes three deliberate steps to arrive there, and a checkbox for it would cost every other user a decision.
+A mod deleted with "Also delete its snapshots" unticked leaves its group unclaimed by design, and the uid stays in the sidecar of the folder in the trash, so a folder put back from the trash has its history back until this button is pressed ([`deleting-mods.md`](deleting-mods.md) §4).
 
 ## 10. Largest mods
 

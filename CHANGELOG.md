@@ -66,10 +66,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The dialog lists every newer file and marks the one it would pick.
   - Updating replaces the mod's files with the new version's. Old files are removed.
   - An update empties the mod folder before writing the new version, so nothing of the old one is left loading. Anything you added to the folder by hand goes with it, and the saved copy still has all of it.
-  - Every update saves a copy of the mod first, and "Restore a previous version…" or Restore on the mod's History tab puts it back. The confirmation says that anything added to the folder since is removed.
+  - Every update saves a copy of the mod first, and Restore on the mod's History tab puts it back. The confirmation says that anything added to the folder since is removed.
   - Saved versions survive renaming a mod, including renaming its folder outside the app.
-  - Deleting a mod deletes every saved version of it too, and the confirmation says how many.
-  - "Reinstall this version…" in a mod's right-click menu, or Reinstall on its History tab, empties the folder and puts the author's files back, without changing which version you have. It is offered once the mod names the file you have, and not for a mod marked Local.
+  - Deleting a mod asks whether its saved versions go too, with their count and size, and keeps them listed under Settings' Storage when they stay.
+  - "Reinstall this file…" in a mod's right-click menu, or Reinstall on its History tab, empties the folder and puts the author's files back, without changing which version you have. It is offered once the mod names the file you have, and not for a mod marked Local.
   - A mod whose file has been taken off GameBanana says so instead of quietly reinstalling a different version.
   - The dialog shows the author's release notes for anything published since your version.
   - Hotkeys the new version moved are listed after an update.
@@ -142,6 +142,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Delete moves a mod's folder to your system trash instead of removing it from the disk. If the drive has no trash, nothing is deleted until you choose "Delete for good…". Delete in All mods does the same, and both ask whether the mod's snapshots go too.
+- The right-click menu lists a mod's actions with their keys: Space turns it on or off, F favourites it, E opens Edit info and Del deletes it, while the menu is open. It also has a Make this a patch entry, and one Remove patch entry per patch.
+- Dialogs, and the choice of a mod's character in them, share one new look: a card with a header and footer, and a searchable list of characters and types.
 - The app has a new look: a dark ink background with a violet accent, or a light paper theme, set in the Geist and Unbounded typefaces, with a new app and window icon.
 - The same kind of text is the same size on every screen.
 - A button reached with Tab shows an accent ring around it.
@@ -167,7 +170,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The favourites filter is a Favorites chip beside the other filters above a character's mods, and one filter applies at a time.
 - A status bar along the bottom shows the ZZMI folder, how many links are active, and the version.
 - Settings offers Light, System or Dark in place of the dark-mode switch. System is what the app starts on, and it follows your desktop's own light or dark setting for as long as you leave it there.
-- A mod's right-click "Open source page" and the GameBanana link in its details panel open the page it's tracked against, so a mod you linked through "Update tracking…" has them without you typing a link.
+- The GameBanana link in a mod's details panel opens the page it's tracked against, so a mod you linked through "Update tracking…" has it without you typing a link.
 - Settings and first-run setup ask for the ZZMI folder instead of the links folder, and first-run setup shows where links and shader fixes go.
 - The "Mods folder" setting is called "Mod library".
 - Settings is a list of sections, Game & folders, Launching, Mods, GameBanana, Storage, Appearance and About, in place of one long page.
@@ -179,13 +182,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- Details, Rename, Edit keybinds, Open source page and Restore a previous version from the right-click menu; the History tab restores, and Edit info is where a mod is renamed.
 - The embedded webview (Windows) and the Downloads-folder watcher (Linux), replaced by the built-in browser.
 - F10 auto-reload — the F10 button, the auto-reload toggle and the "Automatic mod reload" settings section — because a keypress the app sends never reaches a game running under Proton, so it only ever claimed to work. Press F10 in the game; xdotool is no longer needed.
 - The Source link box in a mod's Edit dialog. Which mod page a mod belongs to is set by "Update tracking…" now, which is also what decides where updates are checked.
 - Collapsing the sidebar.
 - The Library's Refresh button.
 - The tag filter above the mods.
-- The ↗ button on mod cards. A mod's GameBanana page opens from its right-click menu and its details panel.
+- The ↗ button on mod cards. A mod's GameBanana page opens from its details panel.
 - Editing a description from a mod's details. Edit info edits it.
 - Tags on mod cards. A mod's tags are in its details panel.
 

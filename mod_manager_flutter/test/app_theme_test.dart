@@ -65,8 +65,26 @@ void main() {
       for (final palette in [dark, ZenithPalette.light(AccentChoice.violet)]) {
         expect(palette.badgeOverArt.background, const Color(0xBF0B0C0E));
       }
-      expect(dark.overlay, const Color(0xB3060708), reason: "a dialog's scrim is not the panel's");
+      // The dialog boards: rgba(4,5,6,.72) scrim, rgba(0,0,0,.6) shadow.
+      expect(dark.overlay, const Color(0xB8040506), reason: "a dialog's scrim is not the panel's");
+      expect(dark.dialogShadow, const Color(0x99000000));
       expect(dark.artworkScrim, const Color(0xA60B0C0E), reason: 'the veil and the arrows over art keep theirs');
+    });
+
+    test("the dialog boards' tag chip, need-a-choice pill and duplicate border are in both palettes", () {
+      final dark = ZenithPalette.dark(AccentChoice.violet);
+      expect(dark.tagChip, const Color(0xFF1E2125));
+      expect(dark.needsPick.background, const Color(0xFF1F1708));
+      expect(dark.needsPick.foreground, dark.badgeUpdate.foreground);
+      expect(dark.needsPick.border, dark.badgeUpdate.border);
+      expect(dark.itemWarn, const Color(0xFF3D3216));
+      final light = ZenithPalette.light(AccentChoice.violet);
+      expect(light.needsPick.foreground, light.badgeUpdate.foreground);
+      expect(light.needsPick.border, light.badgeUpdate.border);
+      expect(light.dialogShadow, light.downloadsShadow);
+      final mid = dark.lerp(light, 0.5);
+      expect(mid.itemWarn, Color.lerp(dark.itemWarn, light.itemWarn, 0.5));
+      expect(dark.copyWith(accent: light.accent).tagChip, dark.tagChip);
     });
 
     test('accent text on ink is the accent mixed 70% into white, violet with the Paper accent', () {

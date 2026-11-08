@@ -102,7 +102,7 @@ Folding changing state into one turns every update into a teardown.
 
 The cover, or the character's dotted ground with the mod's initials when there is none; the Active badge and the status badge over its top-left, the favourite star top-right; the name; one line under it; the switch and the ⋯ menu along the bottom.
 
-- **A press selects the mod**, which opens the details panel. The switch turns it on and off, the star favourites it, and a right-click or ⋯ opens the context menu.
+- **A press selects the mod**, which opens the details panel. The switch turns it on and off, the star favourites it, and a right-click or ⋯ opens the context menu (§5.1).
   The card's border lightens under the pointer.
 - **The line under the name** is the author and "file from <date>" once this session holds the mod page (§12) and a file is on record, and "added <date>" otherwise. The sidecar records neither the file's name nor its upload date, and the card never fetches to find out.
   A file on record is one confirmed or one worked out and accepted in the tracking screen (`namesFile`), and the two are named alike here and on every other surface: the user agreed to the guessed one, and whether it was guessed doesn't matter to them. A date with no file (Dated only) names none.
@@ -110,6 +110,18 @@ The cover, or the character's dotted ground with the mod's initials when there i
 - **A drop tile ends the grid**, and stays out of a filtered one, where it would read as a result, unless the character has no mods at all.
 - **The Active badge is the switch shown on the cover**, not a status: it says what the switch says, where the artwork is.
 - **Turning a mod on or off and starring it report only a failure** ([`notifications.md`](notifications.md) §1): the switch and the star are the feedback.
+
+### 5.1 The context menu
+
+A right-click on a card or a table row, or its ⋯, opens a menu of the canvas's design (`components/zenith_menu.dart`, `dialogs/mod_context_menu.dart`): a header with the mod's name over "<character> · tracked on GameBanana", "· Local" for a mod tracking is off for, or "· Not tracked", then the entries below.
+It opens at the pointer and keeps 8px inside the window, flipping left or up when it would pass it.
+
+- **The entries**, in order: Turn on or Turn off, Add to or Remove from favorites, Edit info…, Open in file explorer, Check for updates (a folder with a remote identity), Reinstall this file… (a file on record, `canReinstall`), Update tracking…, Make this a patch for…, one Remove patch entry per patch the app can take out (named when there are several), and Delete….
+  Make this a patch for… is shown only where its flow is wired.
+- **Space, F, E and Del act on the mod while the menu is open**, whichever row is hot, as each shortcut at its row's end says. The menu takes focus when it opens, since Material's menus put nothing in focus and a key pressed straight away would do nothing. Up and Down move the hot row and wrap, Home and End jump, Enter runs the hot row, and Escape or a press outside closes the menu.
+  The keys do not act on a focused card or row: on one, Enter or Space selects it, as above.
+- **The action runs once the menu has closed**, so a dialog it opens does not open over the menu.
+- **What is not in the menu, and where it is:** Details (a card press selects the mod and a table row press opens its page), Rename and the keybinds (Edit info), Open source page (the details panel and the mod page's header), and Restore a previous version (the History tab).
 
 ## 6. The status badge
 
@@ -287,7 +299,10 @@ File, Variant and Uploaded also need a file on record, confirmed or accepted in 
 
 ## 13. Dialogs
 
-- **`components/dialog_section.dart` is where these dialogs get their shape and type sizes.**
+- **`components/zenith_dialog.dart` is the card every dialog is drawn on**, with the canvas's 18px radius, border and shadow over the scrim: `ZenithDialog.sectioned` (a header, a body that scrolls, a footer) for a form or a list, and `ZenithDialog.compact` (one padded column, no dividers) for a question.
+  The card gives way to the window, 16px a side and 24px above and below, so a body that is too tall scrolls inside it while the header and footer stay. `busy` makes the close button, Escape and the scrim do nothing while work runs that closing would not stop. Enter presses the primary action only from a single-line text field, never from a field of several lines or from a button. The compact kind is announced as an alert.
+  The danger button is `dangerButtonStyle`, the segmented choice is `ZenithSegments`, and a character or type is picked with `CharacterPick`, a pill that opens a popover of a search field over Unassigned, the types and the agents A to Z.
+- **`components/dialog_section.dart` shapes the update flow's dialogs until they move onto the card.**
   Sizes come from the theme — `bodyMedium` for anything meant to be read, `bodySmall` for the line explaining it, `titleSmall` for a heading — and a group of facts always arrives under a heading saying what the group is for, since text with no marked boundary between ideas reads as one undifferentiated block.
   `DialogNotice(emphasis: true)` is the one "read this" state, in the palette's amber; **at most one per view**, or it stops being emphasis.
 - **`bulk_resolution_dialog.dart`** groups rows by their *leading* question so a mod is listed once, and its intro states the one thing not visible from the controls — nothing is written until Save.
@@ -295,7 +310,7 @@ File, Variant and Uploaded also need a file on record, confirmed or accepted in 
   The header doubles as the section divider and as the thing that *fetches* on the badge path, so one gesture does both.
 - **`update_confirm_dialog.dart` is the last screen before a live install is touched**, and everything on it is something that cannot be said afterwards: the snapshot, the accepted keybind loss, a patch-shaped download, and the one question it asks.
   It offers **no way to proceed** against an unreconcilable layout — an "install anyway" there would invite the user to guess where the app refused to.
-- **`mod_backups_dialog.dart`** is the rollback, reachable from the context menu only for mods that have a snapshot (`modBackupsProvider`, one readdir for the whole library). The History tab of a mod's page (§15) restores one snapshot through the same `restoreSnapshotFlow`, and the confirmation says a restore removes what was added to the folder since, files the user put there included.
+- **A rollback is the History tab's Restore** (§15), through `restoreSnapshotFlow`, and its confirmation says a restore removes what was added to the folder since, files the user put there included. The context menu has no entry for it.
 - **`dialogs/download_with_progress.dart` is the app's last *foreground* download**, and the exception rather than the rule — every marketplace download runs in the background queue.
   Applying an update is a conversation (fetch, show what is about to be written over a live mod, write only if they agree), and holding that open across a page switch would mean asking about a mod the user has navigated away from.
   It still goes through the queue, exempt from the concurrency cap on the way in — see [`downloads.md`](downloads.md) §7.
@@ -436,7 +451,7 @@ Mod (the thumbnail, the name, a star for a favourite, and the author once the pa
 
 ### The rows
 
-- **A row pressed opens the mod's page** (§15). A right-click or ⋯ opens the mod's menu, the card's own; its Details opens the mod's page, since the table has no details panel.
+- **A row pressed opens the mod's page** (§15). A right-click or ⋯ opens the mod's menu, the card's own (§5.1).
 - **The box ticks a mod for the bulk actions.** Shift-click ticks or clears every row from the last box pressed to this one. The heading's box covers the rows shown: it ticks them all unless all are ticked, then clears them, and shows a dash while some are.
 - **Only the rows on screen are built**, the group headings and rows being one list, so a large library costs no more than a screenful.
 
@@ -471,8 +486,8 @@ An action that reaches mods the user can't see is the failure §9 exists to prev
   The pages it fetches go to `fetchedModPagesProvider` and add no record to the check's (§8): a record there means the library was checked, and opening the tracking screen would then skip its check and call every other tracked mod unreached.
   A record the check already holds, and a page fetched before, is replaced with the fetched page unless that page is older, by its newest file or its last update. The same goes for every page the app fetches, a mod's page and the update dialog included: they read through the response cache, which the whole check bypasses, so a page fetched after the check can still be the older one.
 - **Mark N as current** is §9.
-- **Delete** asks first: the names (six, then "and N more"), the total size when the walk has it, how many are on in the game, and how many saved versions go with them, so there will be nothing left to restore.
-  Each mod is deleted as the single delete does it, permanently and with its snapshots. The deleted mods' ticks are cleared, and so is the details panel's selection when it was one of them.
+- **Delete** asks first: the names (six, then "and N more"), the total size when the walk has it, that the folders go to the system trash, how many are on in the game, and whether their saved versions go too.
+  The box "Also delete their N snapshots", with their size, is ticked by default and shown only when there are snapshots. Each mod is deleted as the single delete does it, into the system trash ([`deleting-mods.md`](deleting-mods.md)); a mod the trash can't take stays and is named once in one notification, with no Delete for good in bulk. The deleted mods' ticks are cleared, and so is the details panel's selection when it was one of them.
 - **A ticked mod whose folder is being written is skipped** by Enable, Disable, Delete and Mark N as current: an update or Reinstall, a patch installed into it or taken out, or a restore (`modWritesInProgressProvider`, §15). Each is checked as its turn comes, the others are acted on at once, and one warning names the skipped mods so the user can do them again; a skipped mod stays ticked. Only the ticked mod itself counts: an Enable whose One at a time turns off another of the character's mods while that one is being written goes ahead, and that write leaves it off (§10). Waiting would hold the whole action for the length of someone else's write, and acting would race it: an Enable or Disable against the write's own turning off and back on, a Delete against files being copied in, a Mark against the record the write is about to put down. Check for updates writes nothing for the mods it checks, but the page names it saves afterwards (`ModDownload.name`) leave a mod being written out, silently, since the next fetch of its page saves them.
 - **While an action runs the bar's action buttons are disabled** (`allModsBulkRunningProvider`), so a second can't start over the same folders. The flag outlives the page, so leaving for the character view and coming back mid-run doesn't free them. The actions read the app's container rather than the page's `ref`, so leaving the page mid-run still reports and rescans.
   A switch and a bulk Enable never run together, since under One at a time the two could leave two mods on. A mod's switch, on its card, in the details panel and on its page, is greyed out while a bulk action runs; a switch press greys out only the bar's actions (`libraryTogglesProvider`), until it lands.

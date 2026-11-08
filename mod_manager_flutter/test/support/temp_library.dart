@@ -64,6 +64,7 @@ class TempLibrary {
     required this.config,
     required this.service,
     required this.snapshots,
+    required this.trash,
   });
 
   /// The temp directory holding everything below. Deleted on tear-down.
@@ -79,6 +80,10 @@ class TempLibrary {
   final ConfigService config;
   final ModManagerService service;
   final SnapshotService snapshots;
+
+  /// The trash this library's service sends folders to: `<root>/trash`, standing in for the system's, which a test
+  /// must never reach.
+  final FakeTrash trash;
 
   /// Builds the library, installs it, and registers its tear-down.
   ///
@@ -99,6 +104,7 @@ class TempLibrary {
     // One store for the service and the tests: a delete removes a mod's saved versions, and the service's default
     // store is the developer's real `<appData>/backups`.
     final snapshots = SnapshotService(rootPath: p.join(root.path, 'backups'));
+    final trash = FakeTrash(p.join(root.path, 'trash'));
     final library = TempLibrary._(
       root: root,
       mods: mods,
@@ -108,9 +114,11 @@ class TempLibrary {
         config,
         shaderFixes: ShaderFixesService(recordPath: p.join(root.path, 'shader_fixes.json')),
         snapshots: snapshots,
+        moveToTrash: trash.move,
         platform: platform,
       ),
       snapshots: snapshots,
+      trash: trash,
     );
 
     ApiService.useLibraryForTests(config, service: library.service);
@@ -216,4 +224,33 @@ class TempLibrary {
 
   File _file(String modName, String relative) =>
       File(p.joinAll([modFolder(modName).path, ...relative.split('/')]));
+}
+
+/// A stand-in for the system trash: a folder "trashed" is renamed into [root], and the calls are recorded.
+class FakeTrash {
+  FakeTrash(this.root);
+
+  final String root;
+
+  /// What the next [move] answers. Anything but [TrashResult.trashed] leaves the folder where it was.
+  TrashResult answer = TrashResult.trashed;
+
+  /// The paths asked about, in order.
+  final calls = <String>[];
+
+  /// The names of the folders in the trash.
+  List<String> get names {
+    final dir = Directory(root);
+    if (!dir.existsSync()) return const [];
+    return [for (final entity in dir.listSync()) p.basename(entity.path)]..sort();
+  }
+
+  /// Does its file work synchronously, so it also finishes in a test's fake-async zone.
+  Future<TrashResult> move(String folder) async {
+    calls.add(folder);
+    if (answer != TrashResult.trashed) return answer;
+    Directory(root).createSync(recursive: true);
+    Directory(folder).renameSync(p.join(root, p.basename(folder)));
+    return TrashResult.trashed;
+  }
 }

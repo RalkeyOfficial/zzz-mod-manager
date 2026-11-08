@@ -7,6 +7,7 @@ import '../../models/character_info.dart';
 import '../../services/api_service.dart';
 import '../../services/log/confirmations.dart';
 import '../../services/log/logger.dart';
+import '../../services/mod_manager_service.dart' show DeleteStatus;
 import '../../services/platform_service.dart' show NetworkLinkRefused;
 import '../../services/shader_fixes/shader_fixes_service.dart';
 import '../../utils/byte_format.dart';
@@ -17,6 +18,9 @@ import '../../utils/state_providers.dart';
 import '../components/character_tile.dart';
 import '../components/network_link_notice.dart';
 import '../components/shader_fixes_notices.dart';
+import '../components/zenith_controls.dart';
+import '../components/zenith_dialog.dart';
+import '../dialogs/delete_mod_dialog.dart';
 
 final Logger _log = Logger('mods');
 
@@ -248,16 +252,22 @@ Future<void> bulkDisable(BuildContext context, ProviderContainer container, List
   }
 }
 
-/// Asks, then deletes [selected] and every saved version of them, as the single delete does. Returns whether it
-/// went ahead.
+/// Asks, then moves [selected] to the system trash, with their saved versions when the user says so, each as the
+/// single delete does it. Returns whether it went ahead.
+///
+/// A mod the trash could not take stays as it was and is named once in one notification. Delete for good is only
+/// offered for a single mod (`docs/deleting-mods.md` §6).
 Future<bool> bulkDelete(BuildContext context, ProviderContainer container, List<ModInfo> selected) async {
   if (selected.isEmpty) return false;
   final loc = context.loc;
   final notify = context.notify;
   final snapshots = container.read(snapshotServiceProvider);
   var saved = 0;
+  var savedBytes = 0;
   for (final mod in selected) {
-    saved += (await snapshots.list(mod.uid)).length;
+    final versions = await snapshots.list(mod.uid);
+    saved += versions.length;
+    savedBytes += versions.fold<int>(0, (sum, snapshot) => sum + snapshot.sizeBytes);
   }
   if (!context.mounted) return false;
   final sizes = container.read(librarySizesProvider).valueOrNull;
@@ -266,13 +276,14 @@ Future<bool> bulkDelete(BuildContext context, ProviderContainer container, List<
       ? null
       : selected.fold<int>(0, (sum, m) => sum + sizes[m.id]!);
 
-  final confirmed = await showDialog<bool>(
+  final choice = await showDialog<DeleteChoice>(
     context: context,
-    builder: (_) => _BulkDeleteDialog(mods: selected, savedVersions: saved, totalBytes: total),
+    builder: (_) => _BulkDeleteDialog(mods: selected, savedVersions: saved, savedBytes: savedBytes, totalBytes: total),
   );
-  if (confirmed != true) return false;
+  if (choice == null) return false;
 
   final failed = <ModInfo>[];
+  final notTrashed = <ModInfo>[];
   final writing = <ModInfo>[];
   final card = _working(loc, notify, 'library.all.deleting', selected);
   var ended = false;
@@ -282,18 +293,27 @@ Future<bool> bulkDelete(BuildContext context, ProviderContainer container, List<
         writing.add(mod);
       } else {
         logConfirmation('mod.delete', accepted: true, subject: mod.id);
-        bool done;
         try {
-          done = await ApiService.deleteMod(mod.id);
+          final outcome = await ApiService.deleteMod(mod.id, deleteSnapshots: choice.deleteSnapshots);
+          switch (outcome.status) {
+            case DeleteStatus.deleted:
+              break;
+            case DeleteStatus.notTrashed:
+              notTrashed.add(mod);
+            case DeleteStatus.missing || DeleteStatus.failed:
+              failed.add(mod);
+          }
         } catch (e, stack) {
           _log.warning('bulk delete failed', error: e, stack: stack, fields: {'mod': mod.id});
-          done = false;
+          failed.add(mod);
         }
-        if (!done) failed.add(mod);
       }
       card?.update(progress: (i + 1) / selected.length);
     }
-    final deleted = {for (final mod in selected) if (!failed.contains(mod) && !writing.contains(mod)) mod.id};
+    final deleted = {
+      for (final mod in selected)
+        if (!failed.contains(mod) && !notTrashed.contains(mod) && !writing.contains(mod)) mod.id,
+    };
     final selectedMod = container.read(selectedModIdProvider.notifier);
     if (deleted.contains(selectedMod.state)) selectedMod.state = null;
     final selection = container.read(allModsSelectionProvider.notifier);
@@ -302,6 +322,20 @@ Future<bool> bulkDelete(BuildContext context, ProviderContainer container, List<
     await container.read(libraryProvider.notifier).rescan();
 
     reportSkippedWhileWriting(loc, notify, writing);
+    if (notTrashed.isNotEmpty) {
+      final title = loc.plural(
+        'mods.delete.trash_failed_many_title',
+        notTrashed.length,
+        params: {'count': '${notTrashed.length}'},
+      );
+      final body = notTrashed.map((m) => m.name).join(', ');
+      notify.error(
+        title,
+        body: body,
+        characterId: _soleCharacter(notTrashed),
+        actions: [copyDetailsAction(loc, notify, title: title, body: body)],
+      );
+    }
     _endBulk(loc, notify, card, titleKey: 'library.all.delete_failed_title', failed: failed);
     ended = true;
   } finally {
@@ -310,90 +344,104 @@ Future<bool> bulkDelete(BuildContext context, ProviderContainer container, List<
   return true;
 }
 
-/// The confirmation for deleting several mods: how many, which, how much, and what goes with them.
-class _BulkDeleteDialog extends StatelessWidget {
-  const _BulkDeleteDialog({required this.mods, required this.savedVersions, required this.totalBytes});
+/// The confirmation for deleting several mods: how many, which, how much, and whether their saved versions go too.
+class _BulkDeleteDialog extends StatefulWidget {
+  const _BulkDeleteDialog({
+    required this.mods,
+    required this.savedVersions,
+    required this.savedBytes,
+    required this.totalBytes,
+  });
 
   final List<ModInfo> mods;
   final int savedVersions;
+  final int savedBytes;
   final int? totalBytes;
 
   /// Names listed before the rest are counted.
   static const _listed = 6;
 
   @override
+  State<_BulkDeleteDialog> createState() => _BulkDeleteDialogState();
+}
+
+class _BulkDeleteDialogState extends State<_BulkDeleteDialog> {
+  bool _deleteSnapshots = true;
+
+  @override
   Widget build(BuildContext context) {
     final loc = context.loc;
     final palette = ZenithPalette.of(context);
     final text = Theme.of(context).textTheme;
+    final mods = widget.mods;
+    final totalBytes = widget.totalBytes;
     final count = mods.length;
     final active = mods.where((m) => m.isActive).length;
-    final rest = count - _listed;
+    final rest = count - _BulkDeleteDialog._listed;
 
-    return AlertDialog(
-      title: Text(loc.plural('library.all.delete_title', count, params: {'count': '$count'})),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          spacing: 12,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: 2,
-              children: [
-                for (final mod in mods.take(_listed))
-                  Text(mod.name, style: text.bodyMedium?.copyWith(color: palette.text, fontWeight: FontWeight.w600)),
-                if (rest > 0)
-                  Text(
-                    loc.plural('library.all.delete_more', rest, params: {'count': '$rest'}),
-                    style: text.bodySmall?.copyWith(color: palette.text3),
-                  ),
-              ],
+    return ZenithDialog.compact(
+      alert: true,
+      width: 480,
+      title: loc.plural('library.all.delete_title', count, params: {'count': '$count'}),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 12,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 2,
+            children: [
+              for (final mod in mods.take(_BulkDeleteDialog._listed))
+                Text(mod.name, style: text.bodyMedium?.copyWith(color: palette.text, fontWeight: FontWeight.w600)),
+              if (rest > 0)
+                Text(
+                  loc.plural('library.all.delete_more', rest, params: {'count': '$rest'}),
+                  style: text.bodySmall?.copyWith(color: palette.text3),
+                ),
+            ],
+          ),
+          Text(
+            // "Its folder" or "their folders" is about one mod or several, not a plural form: Ukrainian's singular
+            // form also covers 21 mods.
+            loc.t(
+              switch ((count == 1, totalBytes == null)) {
+                (true, true) => 'library.all.delete_body_one',
+                (true, false) => 'library.all.delete_body_one_size',
+                (false, true) => 'library.all.delete_body',
+                (false, false) => 'library.all.delete_body_size',
+              },
+              params: {if (totalBytes != null) 'size': formatBytes(totalBytes)},
             ),
+            style: text.bodyMedium?.copyWith(color: palette.textProse, height: 1.6),
+          ),
+          // "It" for one mod and "them" for several, as the folder line above.
+          if (active > 0)
             Text(
-              // "Its folder" or "their folders" is about one mod or several, not a plural form: Ukrainian's singular
-              // form also covers 21 mods.
-              loc.t(
-                switch ((count == 1, totalBytes == null)) {
-                  (true, true) => 'library.all.delete_body_one',
-                  (true, false) => 'library.all.delete_body_one_size',
-                  (false, true) => 'library.all.delete_body',
-                  (false, false) => 'library.all.delete_body_size',
-                },
-                params: {if (totalBytes != null) 'size': formatBytes(totalBytes!)},
-              ),
-              style: text.bodyMedium?.copyWith(color: palette.textProse),
+              count == 1
+                  ? loc.t('library.all.delete_active_one')
+                  : loc.plural('library.all.delete_active', active, params: {'count': '$active'}),
+              style: text.bodyMedium?.copyWith(color: palette.textProse, height: 1.6),
             ),
-            // "It" for one mod and "them" for several, as the folder line above.
-            if (active > 0)
-              Text(
-                count == 1
-                    ? loc.t('library.all.delete_active_one')
-                    : loc.plural('library.all.delete_active', active, params: {'count': '$active'}),
-                style: text.bodyMedium?.copyWith(color: palette.textProse),
+          if (widget.savedVersions > 0)
+            DeleteSnapshotsBox(
+              label: loc.plural(
+                count == 1 ? 'mods.delete.snapshots' : 'library.all.snapshots',
+                widget.savedVersions,
+                params: {'count': '${widget.savedVersions}'},
               ),
-            if (savedVersions > 0)
-              Text(
-                loc.plural(count == 1 ? 'library.all.delete_saved_one' : 'library.all.delete_saved', savedVersions,
-                    params: {'count': '$savedVersions'}),
-                style: text.bodyMedium?.copyWith(color: palette.text, fontWeight: FontWeight.w600),
-              ),
-          ],
-        ),
+              bytes: widget.savedBytes,
+              value: _deleteSnapshots,
+              onChanged: (value) => setState(() => _deleteSnapshots = value),
+            ),
+        ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(loc.t('mods.dialog.cancel'))),
-        FilledButton(
-          // A transparent overlay, so the theme's press is drawn rather than Material's ink for the foreground.
-          style: FilledButton.styleFrom(
-            backgroundColor: palette.red,
-            foregroundColor: palette.onRed,
-            overlayColor: Colors.transparent,
-          ),
-          onPressed: () => Navigator.pop(context, true),
-          child: Text(loc.plural('library.all.delete_confirm', count, params: {'count': '$count'})),
+        TextButton(autofocus: true, onPressed: () => Navigator.pop(context), child: Text(loc.t('mods.dialog.cancel'))),
+        FilledButton.icon(
+          style: dangerButtonStyle(context),
+          onPressed: () => Navigator.pop(context, DeleteChoice(deleteSnapshots: _deleteSnapshots)),
+          icon: const Icon(Icons.delete_outline_rounded),
+          label: Text(loc.plural('library.all.delete_confirm', count, params: {'count': '$count'})),
         ),
       ],
     );

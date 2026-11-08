@@ -25,6 +25,7 @@ This file is rules and pointers only. Every subject below has a doc in [`../docs
 | [`desktop-integration.md`](../docs/desktop-integration.md) | The window itself — the application id, the desktop entry and the icon that depends on it, and the drawn title bar and what keeps the window resizable |
 | [`launch-game.md`](../docs/launch-game.md) | The sidebar's Launch game button — the XXMI Launcher and its arguments, how each platform starts it (Wine or Proton on Linux), what it refuses, and the locks that keep the screen awake while the game runs |
 | [`disk-usage.md`](../docs/disk-usage.md) | What the app is keeping on disk — Settings' Storage section's categories, apparent size vs free space, the shared directory walk, and what the reclaim may delete |
+| [`deleting-mods.md`](../docs/deleting-mods.md) | Deleting a mod — the system trash on each platform, the order of the steps, the saved-versions checkbox, what happens when the trash can't take it, and the bulk Delete |
 | [`configuration.md`](../docs/configuration.md) | The app's own settings, and the Settings page's sections |
 | [`app-updates.md`](../docs/app-updates.md) | The app's own update check — manual only, what it asks GitHub, what it never does |
 

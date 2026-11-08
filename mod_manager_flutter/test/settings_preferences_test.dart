@@ -9,7 +9,7 @@ import 'package:mod_manager_flutter/screens/components/settings/appearance_secti
 import 'package:mod_manager_flutter/screens/components/settings/auto_tag_section.dart';
 import 'package:mod_manager_flutter/screens/components/settings/gamebanana_section.dart';
 import 'package:mod_manager_flutter/screens/components/settings/mods_section.dart';
-import 'package:mod_manager_flutter/screens/components/settings/settings_widgets.dart';
+import 'package:mod_manager_flutter/screens/components/zenith_controls.dart';
 import 'package:mod_manager_flutter/screens/components/zenith_switch.dart';
 import 'package:mod_manager_flutter/services/gamebanana/content_filter.dart';
 import 'package:mod_manager_flutter/utils/notifications.dart';
@@ -40,7 +40,7 @@ void main() {
       for (final label in ['Dark', 'Light', 'System']) {
         expect(find.text(label), findsOneWidget, reason: label);
       }
-      final segments = tester.widget<SettingsSegments<ThemeMode>>(find.byType(SettingsSegments<ThemeMode>));
+      final segments = tester.widget<ZenithSegments<ThemeMode>>(find.byType(ZenithSegments<ThemeMode>));
       expect(segments.value, ThemeMode.system, reason: 'nobody has chosen yet, so the desktop decides');
     });
 
@@ -355,8 +355,8 @@ void main() {
       for (final label in ['Blur', 'Show without blur', 'Hide entirely']) {
         expect(find.text(label), findsOneWidget, reason: label);
       }
-      final segments = tester.widget<SettingsSegments<ContentFilterMode>>(
-        find.byType(SettingsSegments<ContentFilterMode>),
+      final segments = tester.widget<ZenithSegments<ContentFilterMode>>(
+        find.byType(ZenithSegments<ContentFilterMode>),
       );
       expect(segments.value, ContentFilterMode.blur);
     });
@@ -393,7 +393,7 @@ void main() {
       );
       expect(tester.takeException(), isNull, reason: 'overflow at $width px');
       final text = tester.getRect(find.text('Контент для дорослих'));
-      final control = tester.getRect(find.byType(SettingsSegments<ContentFilterMode>));
+      final control = tester.getRect(find.byType(ZenithSegments<ContentFilterMode>));
       expect(text.overlaps(control), isFalse, reason: 'the label sits over the control at $width px');
       expect(text.width, greaterThan(100), reason: 'the label is squeezed to a sliver at $width px');
     }

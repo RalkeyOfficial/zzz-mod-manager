@@ -7,6 +7,7 @@ import '../../../services/api_service.dart';
 import '../../../utils/notification_actions.dart';
 import '../../../utils/notifications.dart';
 import '../../../utils/state_providers.dart';
+import '../zenith_controls.dart';
 import 'settings_widgets.dart';
 
 /// Persists the theme choice. Production is [ApiService.setThemeMode].
@@ -46,7 +47,7 @@ class AppearanceSection extends ConsumerWidget {
         SettingsRow(
           label: loc.t('settings.appearance.theme'),
           description: null,
-          trailing: SettingsSegments<ThemeMode>(
+          trailing: ZenithSegments<ThemeMode>(
             value: ref.watch(themeModeProvider),
             options: [for (final mode in _themes) (mode, loc.t('settings.appearance.theme_${mode.name}'))],
             onChanged: (mode) {

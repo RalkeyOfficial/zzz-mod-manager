@@ -71,6 +71,18 @@ class LaunchRequest {
   final bool useUmu;
 }
 
+/// What [PlatformService.moveToTrash] did. Whatever the result but [trashed], the folder is where it was.
+enum TrashResult {
+  trashed,
+
+  /// The platform has no trash for this folder: a drive without one, or no `gio` to ask. The only result after which
+  /// deleting the folder for good is offered.
+  unavailable,
+
+  /// The platform refused or the user cancelled its prompt, so deleting for good is not offered either.
+  failed,
+}
+
 /// A link in ZZMI's mods folder whose target folder is missing.
 @immutable
 class DeadModLink {
@@ -308,6 +320,10 @@ abstract class PlatformService {
   /// Never throws, and bounded like every other probe here: a preflight must
   /// not be able to hang the thing it is checking.
   Future<int?> freeSpaceBytes(String forPath, {ProcessProbe probe});
+
+  /// Moves the folder [folderPath] to the system trash: `gio trash` on Linux, the Recycle Bin on Windows. Never
+  /// throws, and leaves the folder alone unless it returns [TrashResult.trashed]. See `docs/deleting-mods.md` §2.
+  Future<TrashResult> moveToTrash(String folderPath);
 }
 
 const String _gameImage = 'zenlesszonezero.exe';
