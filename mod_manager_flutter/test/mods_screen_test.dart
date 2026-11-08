@@ -776,7 +776,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Check for updates'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Ignore this update'));
+    await tester.tap(find.text('Ignore'));
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();

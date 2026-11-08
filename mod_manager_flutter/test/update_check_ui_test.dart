@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/core/palette.dart';
 import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_exceptions.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
@@ -719,7 +720,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('An update is available'), findsOneWidget);
+      expect(find.text('6 newer files on GameBanana'), findsOneWidget);
       // Both sides of the comparison are named, not just the verdict.
       expect(find.textContaining('7.4'), findsWidgets);
       expect(find.textContaining('7.7'), findsWidgets);
@@ -761,8 +762,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('This is the latest file'), findsOneWidget);
-      // The marketplace shortcut is for a mod that has somewhere to go.
-      expect(find.text('View in marketplace'), findsNothing);
+      expect(find.text('Update'), findsNothing);
+      expect(find.text('Ignore'), findsNothing);
     });
 
     testWidgets('a guessed answer is labelled as one', (tester) async {
@@ -779,7 +780,7 @@ void main() {
       await pumpDialog(tester, mod('Ellen', origin: guessed));
       await tester.pumpAndSettle();
 
-      expect(find.text('Possibly outdated'), findsOneWidget);
+      expect(find.text('6 newer files on GameBanana'), findsOneWidget);
       expect(find.textContaining('best guess'), findsOneWidget);
     });
 
@@ -844,8 +845,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('What counts as new'), findsOneWidget);
-      expect(find.textContaining('counts as an update'), findsOneWidget);
+      expect(find.text('Marked as current'), findsOneWidget);
+      expect(find.text('the newest on 2026-05-01'), findsOneWidget);
     });
 
     testWidgets('a retry appears only when the check actually failed',
@@ -895,7 +896,7 @@ void main() {
       await tester.tap(find.text('Try again'));
       await tester.pumpAndSettle();
 
-      expect(find.text('An update is available'), findsOneWidget);
+      expect(find.text('6 newer files on GameBanana'), findsOneWidget);
       expect(find.text('Try again'), findsNothing);
     });
 
@@ -907,21 +908,33 @@ void main() {
       final target = mod('Ellen', origin: origin(fileId: 1696178));
       final written = await pumpDialog(tester, target);
       await tester.pumpAndSettle();
-      expect(find.text('An update is available'), findsOneWidget);
+      expect(find.text('6 newer files on GameBanana'), findsOneWidget);
       expect(written.single?.base?.name, isNotNull, reason: "the check saves the page's title first");
 
       written.clear();
-      await tester.tap(find.text('Ignore this update'));
+      await tester.tap(find.text('Ignore'));
       await tester.pumpAndSettle();
 
       // Written as the date of the thing dismissed, not as "now" — anything
       // published later must still speak up.
       expect(written, hasLength(1));
       expect(written.single?.updatesDismissedUntil, DateTime.utc(2026, 6, 19, 12, 39, 6));
-      // The verdict stays on screen; only the badge goes quiet.
-      expect(find.text('An update is available'), findsOneWidget);
-      expect(find.textContaining("You're ignoring this update"), findsOneWidget);
-      expect(find.text('Stop ignoring it'), findsOneWidget);
+      // The dialog says what was ignored, and in words that do not promise the file is never offered again.
+      expect(find.text('Update ignored'), findsOneWidget);
+      expect(
+        find.text("These 6 files won't show as an update for Ellen again; anything uploaded after them will."),
+        findsOneWidget,
+      );
+      expect(find.text('You can undo this here or from the mod\'s History tab.'), findsOneWidget);
+      expect(find.text('Undo'), findsOneWidget);
+      expect(find.text('Done'), findsOneWidget);
+
+      // Undo opens the files again, with the pick cleared.
+      written.clear();
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(written.single?.updatesDismissedUntil, isNull);
+      expect(find.text('6 newer files on GameBanana'), findsOneWidget);
     });
 
     testWidgets('…including when the dialog was opened from the card badge',
@@ -955,20 +968,24 @@ void main() {
         container: container,
       );
       await tester.pumpAndSettle();
-      expect(transport.callCount, 0, reason: 'the badge path fetches nothing');
+      expect(
+        transport.requests.map((r) => r.path),
+        everyElement(endsWith('/Updates')),
+        reason: 'the badge path fetches no mod page, only the update posts for the card',
+      );
 
-      await tester.tap(find.text('Ignore this update'));
+      await tester.tap(find.text('Ignore'));
       await tester.pumpAndSettle();
 
       expect(written, hasLength(1));
-      expect(find.text('Stop ignoring it'), findsOneWidget);
+      expect(find.text('Update ignored'), findsOneWidget);
       // The three surfaces that were stale: this dialog, the card badge and the
       // toolbar count all read the same map.
       expect(container.read(modUpdateChecksProvider)['Ellen']?.dismissed, isTrue);
       expect(container.read(modUpdateChecksProvider)['Ellen']?.hasUpdate, isFalse);
 
       // And it undoes from the same place.
-      await tester.tap(find.text('Stop ignoring it'));
+      await tester.tap(find.text('Undo'));
       await tester.pumpAndSettle();
       expect(container.read(modUpdateChecksProvider)['Ellen']?.hasUpdate, isTrue);
       expect(written.last?.updatesDismissedUntil, isNull);
@@ -1018,7 +1035,7 @@ void main() {
       testWidgets('closing with $how after ignoring reports the write', (tester) async {
         // The caller rescans only on true, and the dismissal lives in the sidecar the library reads.
         final reported = await openFromBadge(tester);
-        await tester.tap(find.text('Ignore this update'));
+        await tester.tap(find.text('Ignore'));
         await tester.pumpAndSettle();
 
         await close(tester);
@@ -1031,7 +1048,7 @@ void main() {
       testWidgets('closing with $how while ignoring still writes reports it once written', (tester) async {
         final write = Completer<void>();
         final reported = await openFromBadge(tester, hold: write.future);
-        await tester.tap(find.text('Ignore this update'));
+        await tester.tap(find.text('Ignore'));
         await tester.pump();
 
         await close(tester);
@@ -1048,7 +1065,7 @@ void main() {
         // As it is when the dialog stays open: the card badge, the toolbar count and the Updates page read this map.
         final write = Completer<void>();
         await openFromBadge(tester, hold: write.future);
-        await tester.tap(find.text('Ignore this update'));
+        await tester.tap(find.text('Ignore'));
         await tester.pump();
         await close(tester);
         await tester.pumpAndSettle();
@@ -1178,6 +1195,106 @@ void main() {
 
       expect(find.text('newest published'), findsOneWidget);
       expect(find.text('matches your variant'), findsNothing);
+    });
+
+    group('the file list', () {
+      GbFile file(int id, String description, {int size = 1048576}) => GbFile(
+            idRow: id,
+            file: 'f$id.zip',
+            description: description,
+            filesize: size,
+            dateAdded: DateTime.utc(2026, 6, 1, 0, id),
+          );
+
+      Future<void> pumpChecked(WidgetTester tester, UpdateCheck check) async {
+        await tester.pumpWidget(const SizedBox());
+        final (client, _) = fakeClient();
+        final target = mod('Ellen', origin: origin(fileId: 10));
+        final container = ProviderContainer(overrides: [gameBananaClientProvider.overrideWithValue(client)]);
+        addTearDown(container.dispose);
+        // As a real check carries it: the layer it is about, which is what lets Update write.
+        container.read(modUpdateChecksProvider.notifier).state = {
+          'Ellen': check.asSubject(DownloadKey.base(531649), const []),
+        };
+        await pumpLocalized(
+          tester,
+          ModUpdateDialog(mod: target, gateway: _RecordingGateway(target.origin, <ModOrigin?>[])),
+          container: container,
+        );
+        await tester.pumpAndSettle();
+      }
+
+      bool updateEnabled(WidgetTester tester) =>
+          tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Update')).onPressed != null;
+
+      testWidgets('the app\'s own pick starts selected, so Update is on, and a tap moves the pick and says it is yours',
+          (tester) async {
+        await pumpChecked(
+          tester,
+          UpdateCheck(
+            outcome: UpdateOutcome.updateAvailable,
+            candidateMatchesVariant: true,
+            candidate: file(20, 'SFW'),
+            newerFiles: [file(21, 'NSFW'), file(20, 'SFW')],
+          ),
+        );
+
+        expect(updateEnabled(tester), isTrue);
+        expect(find.text('2 newer files on GameBanana'), findsOneWidget);
+        expect(find.text('matches your variant'), findsOneWidget);
+
+        await tester.tap(find.text('NSFW'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('your choice'), findsOneWidget);
+        expect(find.text('matches your variant'), findsNothing);
+        expect(updateEnabled(tester), isTrue);
+      });
+
+      testWidgets('with several files and no candidate nothing is picked and Update waits', (tester) async {
+        await pumpChecked(
+          tester,
+          UpdateCheck(
+            outcome: UpdateOutcome.updateAvailable,
+            newerFiles: [file(21, 'NSFW'), file(20, 'SFW')],
+          ),
+        );
+
+        expect(updateEnabled(tester), isFalse);
+        expect(find.text('matches your variant'), findsNothing);
+        expect(find.text('newest published'), findsNothing);
+
+        await tester.tap(find.text('SFW'));
+        await tester.pumpAndSettle();
+
+        expect(updateEnabled(tester), isTrue);
+      });
+
+      testWidgets('a mod already ignored when the dialog opens keeps its files, says so, and stops ignoring from the footer',
+          (tester) async {
+        await pumpChecked(
+          tester,
+          UpdateCheck(
+            outcome: UpdateOutcome.updateAvailable,
+            dismissed: true,
+            candidate: file(20, 'SFW'),
+            newerFiles: [file(21, 'NSFW'), file(20, 'SFW')],
+          ),
+        );
+
+        expect(find.textContaining("You're ignoring this update"), findsOneWidget);
+        expect(find.text('Stop ignoring it'), findsOneWidget);
+        expect(find.text('Update ignored'), findsNothing, reason: 'the collapsed state is for an Ignore pressed here');
+        expect(updateEnabled(tester), isTrue, reason: 'an ignored update is still installable');
+      });
+
+      testWidgets('a verdict with no file to install has no Update button and says why', (tester) async {
+        await pumpChecked(tester, const UpdateCheck(outcome: UpdateOutcome.updateAvailable));
+
+        expect(find.text('An update is available'), findsOneWidget);
+        expect(find.textContaining('no longer offered'), findsOneWidget);
+        expect(find.text('Update'), findsNothing);
+      });
     });
 
     testWidgets('an already-checked mod is not re-fetched on open',
@@ -1507,7 +1624,7 @@ void main() {
         );
         expect(find.text('Mod'), findsOneWidget);
         expect(find.text('Patch'), findsOneWidget);
-        expect(find.text('You have'), findsNWidgets(2));
+        expect(find.text('YOU HAVE'), findsNWidgets(2));
       });
 
       testWidgets('a base and a patch from one page: each section is named by its file',
@@ -1541,7 +1658,7 @@ void main() {
         expect(find.text('Patch'), findsOneWidget);
         final variant = find.text('Glow demo').first;
         expect(find.text('anbisworddemonew.zip'), findsWidgets);
-        expect(tester.widget<Text>(variant).style?.color, Theme.of(tester.element(variant)).colorScheme.onSurfaceVariant);
+        expect(tester.widget<Text>(variant).style?.color, ZenithPalette.of(tester.element(variant)).text3);
       });
 
       testWidgets('reopening the dialog does not lose the other mod\'s name',
@@ -1672,9 +1789,6 @@ void main() {
 
         expect(find.text('Possibly outdated'), findsOneWidget);
         expect(find.text('Update'), findsOneWidget);
-        // Still offered beside it: installing the other mod as a second folder
-        // is occasionally what somebody wants.
-        expect(find.text('View in marketplace'), findsOneWidget);
       });
 
 
@@ -1739,9 +1853,9 @@ void main() {
 
         // One, not two: the bottom layer is what the folder *is*, and a folder
         // cannot be asked to give that up from here.
-        expect(find.byIcon(Icons.more_vert), findsOneWidget);
+        expect(find.byIcon(Icons.more_vert_rounded), findsOneWidget);
 
-        await tester.tap(find.byIcon(Icons.more_vert));
+        await tester.tap(find.byIcon(Icons.more_vert_rounded));
         await tester.pumpAndSettle();
         expect(find.text('Remove patch…'), findsOneWidget);
       });
@@ -1764,7 +1878,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(find.byIcon(Icons.more_vert), findsNothing);
+        expect(find.byIcon(Icons.more_vert_rounded), findsNothing);
       });
 
       testWidgets('ignoring a companion\'s update writes it on the companion',
@@ -1790,9 +1904,9 @@ void main() {
         written.clear();
         // In the companion's own section, not the shared action bar — so it
         // can be below the fold on a folder rendering two full reports.
-        await tester.ensureVisible(find.text('Ignore this update'));
+        await tester.ensureVisible(find.text('Ignore'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Ignore this update'));
+        await tester.tap(find.text('Ignore'));
         await tester.pumpAndSettle();
 
         final block = written.single!;

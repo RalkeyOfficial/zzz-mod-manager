@@ -155,15 +155,43 @@ void main() {
     expect(card.id, working.first.id, reason: 'the Working card became the error');
   });
 
-  testWidgets('the Working card is down once the update takes over', (tester) async {
-    // The page carries the file, so the flow hands it on; the folder is not on disk, which is where the update
-    // stops, before any download.
+  testWidgets('the Working card is down once the question is asked, and Reinstall hands the file to the update', (tester) async {
+    // The page carries the file, so the flow asks; the folder is not on disk, which is where the update stops,
+    // before any download.
     final container = await press(tester, modWith(tracked(fileId: 1732269)));
 
     expect(raised.map((n) => n.title), contains('Getting the mod page…'));
+    expect(container.read(notificationsProvider).where((n) => n.kind == NotificationKind.working), isEmpty);
+    expect(find.text('Reinstall RabbitFX?'), findsOneWidget);
+
+    await tapWithIo(tester, find.byKey(const ValueKey('reinstall_confirm')));
+
     final cards = container.read(notificationsProvider);
     expect(cards.where((n) => n.kind == NotificationKind.working), isEmpty);
     expect(cards.single.title, 'The mod is no longer there');
+  });
+
+  testWidgets('the question names the file from the real page, and says what the repair does', (tester) async {
+    await press(tester, modWith(tracked(fileId: 1732269)));
+
+    final facts = find.textContaining('v77.zip · “Main file” · uploaded 2026-', findRichText: true);
+    expect(facts, findsOneWidget);
+    expect(find.textContaining('· 8.8 KB', findRichText: true), findsOneWidget);
+    expect(find.text('The folder as it is now is saved as a snapshot.'), findsOneWidget);
+    expect(find.textContaining('then the folder is cleared'), findsOneWidget);
+    expect(find.textContaining('stays in the snapshot only'), findsOneWidget);
+    expect(find.textContaining('keys included, are put back'), findsNothing,
+        reason: 'a rebound key is not put back; only the snapshot has it');
+  });
+
+  testWidgets('Cancel changes nothing and the update never starts', (tester) async {
+    final container = await press(tester, modWith(tracked(fileId: 1732269)));
+
+    await tapWithIo(tester, find.text('Cancel'));
+
+    expect(changed, isFalse);
+    expect(find.text('Reinstall RabbitFX?'), findsNothing);
+    expect(container.read(notificationsProvider), isEmpty, reason: 'no "mod is no longer there": the update was not asked');
   });
 }
 

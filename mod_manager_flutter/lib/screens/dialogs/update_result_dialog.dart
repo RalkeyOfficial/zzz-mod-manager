@@ -276,7 +276,9 @@ class _UpdateResultDialog extends StatelessWidget {
           count,
           params: {'count': '$count'},
         ),
-        subtitle: loc.t('mods.update_apply.keybinds_explainer'),
+        subtitle: loc.t(
+          reinstall ? 'mods.update_apply.keybinds_explainer_reinstall' : 'mods.update_apply.keybinds_explainer',
+        ),
         children: [
           // Bounded and scrolling inside itself, like every other list in these
           // dialogs: a mod with a dozen cycle keys must not push the one button

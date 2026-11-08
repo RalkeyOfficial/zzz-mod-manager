@@ -8,11 +8,13 @@ import '../../models/gamebanana/gamebanana.dart';
 import '../../models/mod_download.dart';
 import '../../models/origin_enums.dart';
 import '../../services/gamebanana/file_selection.dart';
+import '../../services/log/confirmations.dart';
 import '../../services/log/logger.dart';
 import '../../services/update_apply/update_write_route.dart';
 import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
 import 'apply_update_flow.dart';
+import 'reinstall_dialog.dart';
 
 final Logger _log = Logger('update.reinstall');
 
@@ -31,22 +33,21 @@ bool canReinstall(ModInfo mod) {
       origin!.tracking != OriginTracking.off;
 }
 
-/// **Writing the version already installed over the folder again**, to repair
-/// it.
+/// **Writing the version already installed over the folder again**, to repair it.
 ///
-/// The same operation as an update at the same file id, and deliberately the
-/// same code: [applyUpdateFlow] takes a `GbFile` and does not care whether it is
-/// newer than what is on disk. So a repair inherits the snapshot, the patch
-/// set-aside, the old-file removal and the confirmation without any of them
-/// being written twice.
+/// The same operation as an update at the same file id, and deliberately the same code: [applyUpdateFlow] takes a
+/// `GbFile` and does not care whether it is newer than what is on disk. So a repair inherits the snapshot, the patch
+/// set-aside and the write without any of them being written twice.
 ///
-/// **What it removes is what the record says the last version wrote and the file does not ship.**
-/// With a record, a second mod merged in by hand or a texture the user swapped in stays where it is.
-/// With none, the whole folder counts as the last version, and the confirmation names what goes.
+/// **The folder is emptied.** What the file does not ship goes with the old version, a rebound key and a file added by
+/// hand included; the snapshot taken first has them all, and only a recorded patch is put back on top
+/// (`docs/applying-updates.md` §6).
 ///
-/// The surface exists because the update dialog only appears when there is a
-/// finding, and a repair is wanted precisely when there is none — a mod broken
-/// by a game patch, a file deleted by accident, an edit that went wrong.
+/// The surface exists because the update dialog only appears when there is a finding, and a repair is wanted
+/// precisely when there is none: a mod broken by a game patch, a file deleted by accident, an edit that went wrong.
+///
+/// **Two questions at most.** [showReinstallDialog] asks first, naming the file and stating what the repair does. The
+/// confirmation that follows the download appears only when the preview has something the first one could not say.
 ///
 /// Returns true when the mod folder changed, so the caller rescans.
 ///
@@ -127,10 +128,20 @@ Future<bool> reinstallFlow(
     // over this download and rewriting the bottom layer has to set it aside and
     // place it back. Reinstalling with no route would flatten it.
     route = updateWriteRoute(origin: mod.origin, subject: DownloadKey.base(modId));
-    if (route.kind != UpdateWriteKind.base) return false;
+    if (route.kind != UpdateWriteKind.base) {
+      fail(
+        loc.t('mods.reinstall.refused_title'),
+        loc.t('mods.reinstall.refused_body', params: {'mod': mod.name}),
+      );
+      return false;
+    }
   } finally {
     if (!ended) fetching.dismiss();
   }
+
+  final accepted = await showReinstallDialog(context, mod: mod, file: file);
+  logConfirmation('update.reinstall', accepted: accepted, subject: mod.id, fields: {'file_id': fileId});
+  if (!accepted || !context.mounted) return false;
 
   return applyUpdateFlow(
     context,
@@ -143,5 +154,6 @@ Future<bool> reinstallFlow(
     asCompanion: route.asCompanion,
     flattensPatch: route.flattensPatch,
     reinstall: true,
+    confirmOnlyIfNeeded: true,
   );
 }

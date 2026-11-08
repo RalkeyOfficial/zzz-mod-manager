@@ -59,19 +59,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Update checks say whether they are sure or guessing.
   - The library check reports mods it couldn't reach separately from mods with nothing new.
   - Files an author published together count as one release, so another variant isn't read as an update.
-  - An update can be ignored from its dialog, and one click undoes it, there or on the mod's History tab.
+  - An update can be ignored from its dialog, and one click undoes it, there or on the mod's History tab. Ignored files stay installable, and a newer file brings the mark back.
   - Updates filters narrow the character list, and a character's mods, to those with updates.
   - Settings' Mods section can check for updates when the app starts, or only when you press Check, which is how it starts. It never installs anything.
 - Updates can be installed from the update dialog. The mod keeps its name, character tag, favourite star and on/off state.
-  - The dialog lists every newer file and marks the one it would pick.
+  - The dialog lists every newer file to pick from, marks the one it would pick, and says whether the pick is the app's or yours; with none to start from, Update waits until you pick one.
   - Updating replaces the mod's files with the new version's. Old files are removed.
   - An update empties the mod folder before writing the new version, so nothing of the old one is left loading. Anything you added to the folder by hand goes with it, and the saved copy still has all of it.
   - Every update saves a copy of the mod first, and Restore on the mod's History tab puts it back. The confirmation says that anything added to the folder since is removed.
   - Saved versions survive renaming a mod, including renaming its folder outside the app.
   - Deleting a mod asks whether its saved versions go too, with their count and size, and keeps them listed under Settings' Storage when they stay.
-  - "Reinstall this file…" in a mod's right-click menu, or Reinstall on its History tab, empties the folder and puts the author's files back, without changing which version you have. It is offered once the mod names the file you have, and not for a mod marked Local.
+  - "Reinstall this file…" in a mod's right-click menu, or Reinstall on its History tab, empties the folder and puts the author's files back, without changing which version you have. It is offered once the mod names the file you have, and not for a mod marked Local. A card names the file and says what will happen first, and a second confirmation follows only when the download needs one.
   - A mod whose file has been taken off GameBanana says so instead of quietly reinstalling a different version.
-  - The dialog shows the author's release notes for anything published since your version.
+  - The dialog shows the author's latest update post when it is newer than your file, with a link to the mod's page in the Marketplace.
   - Hotkeys the new version moved are listed after an update.
   - You're told what an update will do before it runs.
   - An update whose archive has several folders, with no record of which is the mod or a record that no longer matches, asks which folders are the mod and remembers the answer.
@@ -87,7 +87,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - When the patch's page names a mod you already have, that mod goes to the top of the list.
   - A patch whose files don't belong in the mod you picked installs as its own mod instead, and says which of the two reasons it was.
   - A folder holding a patch plus the mod it patches can be told about both, and both are checked for updates.
-  - Checking such a folder for updates reports on both mods in full — each with its own verdict, its own before-and-after, its own release notes and its own Update button.
+  - Checking such a folder for updates reports on both mods in full — each with its own verdict, its own before-and-after and its own Update button.
   - Its details panel lists the mods it is made of by name, base first and patches on top, with each one's file, author and upload date once the app has its page. The tracking dialog lists both side by side, each marked as the mod or the patch. Which one you installed first makes no difference to how any of it reads.
   - A patch can be taken back out, from "Remove patch…" in the mod's right-click menu, from its row in the tracking dialog, or with Take out on the mod's History tab: the files it added are deleted and the mod's own files come back. It saves a copy of the mod first, tells you what it will do before it does it, and says so when one of your mod's files was never saved.
   - Updating a patch takes its old version back out: your mod's own files return wherever the new patch no longer replaces them, and anything the old patch added and the new one doesn't goes.

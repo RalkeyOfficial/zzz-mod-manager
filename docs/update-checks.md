@@ -697,9 +697,9 @@ It returns the two file lists plus `_bIsTrashed` / `_bIsWithheld` and nothing el
 
 **A folder holding two downloads gets a full report each.** Not a verdict plus a
 summary of the other one: a check is about *the mods in a folder*, both are in scope,
-so both get the whole treatment — headline, the before-and-after box, the file list
-where there is a choice, the author's notes, and their own Ignore and Update. A
-section per download, separated by a rule, ordered mod then patch.
+so both get the whole treatment — a header naming the layer with a Mod or Patch badge, its verdict, the "You have" box, the file list
+where there is a choice, and their own Ignore and Update. A
+block per download, separated by a rule, ordered mod then patch; the dialog's own footer is then only Close.
 
 Anything less answers a different question for the second mod than it answered for
 the first. Before this, a download was named at all only when it **won** the fold, so
@@ -714,9 +714,8 @@ Three things this rests on:
   nothing about the mod it patched, and a `folderOwn` field existed to carry it
   back. A stack has no privileged entry, so the field is gone and the section list
   is a plain lookup.
-- **Everything per-download is keyed by layer** — whether its accordion is open, which file the user picked, what Ignore and Update act on.
+- **Everything per-download is keyed by layer** — which file the user picked, what Ignore and Update act on.
   One shared "chosen file" would let a choice made for the patch install the mod it patches, and a mod id would do the same for a base and a patch from one page.
-  The release feed is the page's, so it is fetched once and shared by both.
 - **Two layers of one page each name their file** under the page's name: the filename, with the variant text in grey beneath ([§7](#7-how-a-file-is-named)).
 - **Actions live in the section, not the action bar.** Two subjects cannot share one
   Update button: it would have to pick a mod on the user's behalf, and picking wrong
@@ -768,15 +767,10 @@ behalf:
 - **An ignored update is still installable.** The user waved the badge away, not
   the file, and this dialog is where they come to change their mind.
 
-With several candidates the rows are **tappable** and the selection decides what
-gets installed. The chip on the chosen row then says `your choice` rather than
+The chip on a row the user chose says `your choice` rather than
 `matches your variant` or `newest published` — those are the app's grounds for
 its own pick, and reusing them for the user's would be taking credit for a
 decision it did not make.
-
-The marketplace shortcut stays beside it, demoted from the primary action: it
-installs a *second* mod folder alongside this one, which is occasionally what
-someone wants and is now clearly the other option rather than the only one.
 
 **There is no "check again", and a retry appears only after a failure.** The
 dialog has two entry points and neither leaves anything to press: arriving from
@@ -790,7 +784,7 @@ up to three buttons in every other state.
 That retry bypasses the client's response cache, for the reason the marketplace's refresh button does: a re-check answerable from a ten-minute-old copy is a control that sometimes cannot do its one job, with no way for the user to tell which press was which.
 Re-checking the whole library, cache and all, is the job of the All mods table's Check all for updates.
 
-**"Ignore this update" and its undo live here.** Ignore is in the dialog and on the Updates page's Newer files rows ([`library-screen.md`](library-screen.md) §17), both of which show the file you have beside the newer one, so an update is read before it is waved away; it is never on a card or a badge, where it would dismiss something the user has not read.
+**Ignore and its undo live here.** Ignore is in the dialog and on the Updates page's Newer files rows ([`library-screen.md`](library-screen.md) §17), both of which show the file you have beside the newer one, so an update is read before it is waved away; it is never on a card or a badge, where it would dismiss something the user has not read.
 It writes to the sidecar, so the dialog reports back whether it wrote anything and the mods screen rescans on the way out; the status slot is drawn from `ModInfo.origin`, which only a scan re-reads. See [§4](#4-dismissing-an-update) for what it stores and why it is a date.
 The report is the same however the dialog closes, by a button, Escape or a click outside, and comes once every write it started has ended (`ModUpdateWrites`): closed while Ignore's write is still running, the rescan waits for that write rather than reading the folder before it.
 The verdict is re-folded when the write ends through the app's container, not the dialog's, so a dialog closed mid-write still leaves the badge reading as ignored.
@@ -802,19 +796,22 @@ brings the badge back, so it needs no finding read first. It re-folds the
 session's verdict with the same `refoldDismissal` the dialog uses, so the badge
 speaks up without another check.
 
-The button's label, "Ignore this update", is worth guarding. "Not now" would read as a deferral, and this is not one: it is permanent until the author publishes something newer.
+**A folder of one download collapses to "Update ignored" when Ignore is pressed in the dialog**: the title, what stopped showing as an update (the files ignored count, and "anything uploaded after them will" still does), and Undo and Done in the footer.
+The dialog stays open, and Undo opens the files again with the pick cleared.
+A mod that was already ignored when the dialog opened does not collapse: it shows the same files with a line saying so, **Stop ignoring it** in the footer's place of Ignore, and Update still on.
+The words never say the ignored files are "never offered again": they stay installable from here, and only a newer file brings the mark back.
+
+The button's label, "Ignore", is worth guarding against "Not now", which would read as a deferral; this is not one, and **Later** beside it is the way out that writes nothing. An ignore lasts until the author publishes something newer.
+
+**A verdict with nothing to install has no list.** Up to date, not tracked, version unknown, tracking off, the page gone: the title says which, hints under it say what to do, the file the mod holds is in a "You have" box when one is known, and the footer offers Open mod page and Close.
 
 **The flag is flipped on the verdict already in hand, never re-derived from a mod page**, and that matters more than it looks.
 Opened from a card badge this dialog fetches nothing — the bulk pass already answered — so re-folding would produce null, and a write that *succeeded* would leave the dialog, the card badge and the Updates count all showing the state before the dismissal.
 The button would look dead with nothing thrown, and only the entry point that fetches a record would show it working.
 
-The dialog also names **the release** a candidate shipped in (`Version 1.5`),
-taken from the update post's `_sName`. Very often that is the only real version
-number a mod page has, since `_sVersion` on the files themselves is routinely
-null.
-
-**Release notes — what the author says changed — are shown for releases published
-after the file you have.** Two shapes, and they are complementary rather than
+**The latest update post — what the author says changed — sits under the file list** when one says something and is newer than the file you have: the same card the mod page's History tab shows (`LatestUpdatePost`), with the link "Open the mod page to compare screenshots" in place of its source line.
+There is no per-release list and no release-name chip; the History tab and the mod page carry the rest of the feed.
+Two shapes, and they are complementary rather than
 alternatives: `_aChangeLog` is a categorised bullet list and `_sText` is prose,
 and captured feeds carry each without the other. The prose is HTML and goes
 through the same `htmlToMarkdown` a mod page's description does.
@@ -824,25 +821,14 @@ Hungarian-prefixed** — bare `text` and `cat`, not `_sText` / `_sCat`. Reading 
 the usual way yields an empty changelog for every mod, silently; that is exactly
 how the `_aTags` two-shape bug went unnoticed, so it is pinned by a fixture test.
 
-They live in a **collapsible section, closed by default**, whose header doubles
-as the divider. Dropped into the middle of the dialog with no boundary and no way
-to put them away, an author's three paragraphs push the verdict off the top of a
-scroll view nobody asked to grow.
+The post is **fetched when the dialog opens on a verdict with an update**: one `modUpdates` request, which the client caches for ten minutes.
+When the dialog checked on the way in, the feed was already fetched for [`ReleaseGroups`](#where-this-stops-and-why-it-stops-there) and nothing more is asked.
+A feed that does not load leaves the card out and the verdict as it is; a mod with no post that says anything shows the link alone.
 
-The notes are **fetched on demand when that section is first opened**, so
-expanding it is also what fetches and one gesture does both — there is
-deliberately no separate "show notes" button that then turns into a heading. It
-matters on the card-badge path, which otherwise makes no request at all: the
-bulk pass has already answered, and spending one on every badge click to render
-a changelog nobody asked for is the cost that path exists to avoid. When the
-dialog *did* check on the way in, the feed was already fetched for
-[`ReleaseGroups`](#where-this-stops-and-why-it-stops-there) and opening the
-section costs nothing.
-
-Scoping them to releases newer than the installed file is the point: a mod with
+Scoping it to posts newer than the installed file is the point: a mod with
 forty update posts is not offering to tell you about all of them, it is offering
 to tell you what you would be getting. With no date to compare against — an
-`assumed_latest` install, or a page whose files carry none — the whole feed is
+`assumed_latest` install, or a page whose files carry none — the newest post is
 shown rather than nothing.
 
 ### One file gets a line; several get a list
@@ -879,11 +865,10 @@ Two behaviours worth knowing, both pinned by tests:
   is still `updateAvailable` — the installed file is archived, which is a fact —
   but the candidate is null and the list is the answer.
 
-**The rows are informational; downloading still happens in the marketplace.**
-Reusing `GbFileList` with its per-row download buttons would mean reaching the
-install pipeline, which lives in `marketplace_screen` and is not extracted —
-filed rather than done, and the reason the "view in marketplace" button is the
-action here.
+**The rows are a radio group, and the pick is what Update installs.**
+The row the check would pick starts selected with its chip, so Update is on at once; a tap moves the pick and the chip reads `your choice`.
+With several files and no candidate nothing starts selected and Update waits for a tap: guesses inform, they never drive.
+The file the Update button writes goes through the same flow as every other update ([`applying-updates.md`](applying-updates.md)); the link to the mod page opens the in-app Browse page of the mod, for screenshots.
 
 ### The other mods from the same archive
 
@@ -915,7 +900,7 @@ The provider holds what the last scan found, and this dialog is reachable from a
 ## 7. How a file is named
 
 Every surface that lists a GameBanana file — the marketplace detail view, the
-resolve dialog's picker, the update dialog's comparison and its options list —
+resolve dialog's picker, the update dialog's "You have" box and its file list —
 names it the same way, from two pure helpers in
 `services/gamebanana/file_selection.dart`:
 

@@ -26,6 +26,7 @@ class ZenithDialog extends StatelessWidget {
     this.headerPadding = const EdgeInsets.fromLTRB(24, 20, 24, 16),
     this.headerDivider = false,
     this.closeAlignsStart = true,
+    this.coverHeader = false,
     this.bodyPadding = const EdgeInsets.fromLTRB(24, 0, 24, 18),
     this.footerStart,
     this.footerPadding = const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
@@ -43,16 +44,17 @@ class ZenithDialog extends StatelessWidget {
     required this.body,
     required this.actions,
     this.subtitle,
+    this.subtitleWidget,
     this.leading,
     this.alert = false,
     this.onSubmit,
     this.busy = false,
   }) : compact = true,
-       subtitleWidget = null,
        maxHeight = 860,
        headerPadding = EdgeInsets.zero,
        headerDivider = false,
        closeAlignsStart = false,
+       coverHeader = false,
        bodyPadding = EdgeInsets.zero,
        footerStart = null,
        footerPadding = EdgeInsets.zero,
@@ -82,6 +84,10 @@ class ZenithDialog extends StatelessWidget {
   final EdgeInsets headerPadding;
   final bool headerDivider;
   final bool closeAlignsStart;
+
+  /// The header of a dialog about one mod, led by its cover: the title in the 17px Geist of a question rather than
+  /// the page-title face, and the subtitle quieter.
+  final bool coverHeader;
   final Widget body;
   final EdgeInsets bodyPadding;
 
@@ -197,7 +203,11 @@ class ZenithDialog extends StatelessWidget {
             spacing: 14,
             children: [
               ?leading,
-              Expanded(child: _titles(context, palette, text.headlineSmall!, text.bodyMedium!, 4)),
+              Expanded(
+                child: coverHeader
+                    ? _titles(context, palette, text.titleLarge!, text.bodySmall!, 2, subtitleColor: palette.text3)
+                    : _titles(context, palette, text.headlineSmall!, text.bodyMedium!, 4),
+              ),
               _CloseButton(onPressed: busy ? null : (onClose ?? () => Navigator.of(context).maybePop())),
             ],
           ),

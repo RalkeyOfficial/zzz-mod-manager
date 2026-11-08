@@ -41,6 +41,12 @@ class UpdateConfirmChoice {
   final Set<String> accepted;
 }
 
+/// Whether [preview] holds something the confirmation has to say that a caller's own question cannot: a layout that
+/// cannot be reconciled, a download shaped like a patch, folders in the archive that are left out, or a patch in the
+/// folder that cannot be put back.
+bool confirmationHasNews(UpdatePreview preview, {required bool flattensPatch}) =>
+    !preview.canProceed || preview.incomingIsPatch || preview.layout.unused.isNotEmpty || flattensPatch;
+
 Future<UpdateConfirmChoice?> showUpdateConfirmDialog(
   BuildContext context, {
   required ModInfo mod,

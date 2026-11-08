@@ -18,10 +18,10 @@ import '../../services/installed_record.dart';
 import '../../services/patch_removal.dart';
 import '../../services/update_check.dart';
 import '../../utils/byte_format.dart';
-import '../../utils/html_to_markdown.dart';
 import '../../utils/state_providers.dart';
 import '../components/character_tile.dart';
 import '../components/folder_downloads_summary.dart' show sharedPageFile;
+import '../components/latest_update_post.dart';
 import '../components/mod_detail_parts.dart';
 import '../components/resolve/resolve_fragments.dart' show formatResolveDate;
 import '../components/zenith_controls.dart';
@@ -66,7 +66,7 @@ class ModHistoryTab extends ConsumerWidget {
     final origin = mod.origin;
     final patches = origin?.patches ?? const <ModDownload>[];
     final ignored = [for (final download in origin?.downloads ?? const <ModDownload>[]) if (download.updatesDismissedUntil != null) download];
-    final post = _latestPost(updates);
+    final post = latestUpdatePost(updates);
     // While a restore, a patch removal or a stop-ignoring writes this folder, nothing else may start on it.
     final busy = ref.watch(modWritesInProgressProvider).contains(mod.id);
     WorkingCallback? unlessBusy(WorkingCallback action) => busy ? null : action;
@@ -98,7 +98,7 @@ class ModHistoryTab extends ConsumerWidget {
               ),
           ],
         ),
-        if (post != null) _UpdatePost(post: post),
+        if (post != null) LatestUpdatePost(post: post),
         if (patches.isNotEmpty)
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -127,18 +127,6 @@ class ModHistoryTab extends ConsumerWidget {
           ),
       ],
     );
-  }
-
-  /// The newest post that says something: a post with no text and no change list is a file upload, not news.
-  static GbUpdate? _latestPost(List<GbUpdate>? updates) {
-    GbUpdate? latest;
-    for (final update in updates ?? const <GbUpdate>[]) {
-      if (!update.hasNotes) continue;
-      final date = update.dateAdded;
-      final best = latest?.dateAdded;
-      if (latest == null || (date != null && (best == null || date.isAfter(best)))) latest = update;
-    }
-    return latest;
   }
 }
 
@@ -324,49 +312,6 @@ class _SnapshotRow extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// The newest of the author's update posts: its title, the change list and the text.
-class _UpdatePost extends StatelessWidget {
-  const _UpdatePost({required this.post});
-
-  final GbUpdate post;
-
-  @override
-  Widget build(BuildContext context) {
-    final loc = context.loc;
-    final palette = ZenithPalette.of(context);
-    final text = Theme.of(context).textTheme;
-    final prose = post.text == null ? '' : htmlToMarkdown(post.text!).trim();
-    final heading = [
-      loc.t('library.history.latest_post'),
-      if (post.dateAdded case final date?) formatResolveDate(date),
-    ].join(' · ');
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: palette.dialog,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: palette.outline),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 6,
-        children: [
-          SectionHeading(heading),
-          if (post.name case final name? when name.trim().isNotEmpty)
-            Text(name, style: text.bodyMedium?.copyWith(color: palette.text, fontWeight: FontWeight.w600)),
-          for (final entry in post.changeLog)
-            Text(
-              entry.category == null ? '• ${entry.text}' : '• ${entry.text} (${entry.category})',
-              style: text.bodyMedium?.copyWith(color: palette.textProse),
-            ),
-          if (prose.isNotEmpty) ModDescription(key: ValueKey('post_${post.idRow}'), text: prose),
-          Text(loc.t('library.history.post_source'), style: text.bodySmall?.copyWith(color: palette.text3)),
-        ],
-      ),
     );
   }
 }

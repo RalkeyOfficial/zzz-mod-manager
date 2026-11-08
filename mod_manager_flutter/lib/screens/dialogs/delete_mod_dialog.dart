@@ -207,13 +207,8 @@ class _CoverThumb extends StatelessWidget {
   final ModInfo mod;
 
   @override
-  Widget build(BuildContext context) => Container(
-    foregroundDecoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: ZenithPalette.of(context).outline),
-    ),
-    child: ClipRRect(borderRadius: BorderRadius.circular(8), child: ModThumb(mod: mod, width: 64, height: 44)),
-  );
+  Widget build(BuildContext context) =>
+      ModThumb(mod: mod, width: 64, height: 44, radius: 8, spacing: 7, bordered: true);
 }
 
 /// "Also delete its N snapshots (size)", ticked by default. Shared by the single and the bulk delete.

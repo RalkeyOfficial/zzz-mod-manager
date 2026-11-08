@@ -720,10 +720,7 @@ class _NewerFileRow extends ConsumerWidget {
     );
   }
 
-  /// Whether the check compared by a date rather than by a file: a mod marked as current, or the layer that won the
-  /// fold in a folder whose base is.
-  bool get _byDate =>
-      check.installedFile == null && check.evidence == InstalledFileEvidence.none && check.comparedAgainst != null;
+  bool get _byDate => check.comparedByDate;
 
   Widget _youHave(BuildContext context) {
     final loc = context.loc;

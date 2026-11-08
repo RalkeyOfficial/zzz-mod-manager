@@ -125,6 +125,14 @@ void main() {
     expect(find.textContaining('A copy of this mod'), findsOneWidget);
   });
 
+  test('a reinstall asks again only for what its own dialog could not say', () {
+    expect(confirmationHasNews(preview(), flattensPatch: false), isFalse);
+    expect(confirmationHasNews(preview(), flattensPatch: true), isTrue);
+    expect(confirmationHasNews(preview(unused: ['Extras']), flattensPatch: false), isTrue);
+    expect(confirmationHasNews(preview(missing: ['a.dds']), flattensPatch: false), isTrue);
+    expect(confirmationHasNews(preview(problem: UpdateLayoutProblem.layoutChanged), flattensPatch: false), isTrue);
+  });
+
   testWidgets('cancelling answers nothing', (tester) async {
     UpdateConfirmChoice? choice;
     await pumpLocalized(

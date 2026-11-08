@@ -479,10 +479,10 @@ void main() {
       expect(tester.widget<ModUpdateDialog>(find.byType(ModUpdateDialog)).mod.id, 'Ellen (alt)');
       expect(container.read(libraryScansProvider), 0);
 
-      await tapWithIo(tester, find.text('Ignore this update'));
+      await tapWithIo(tester, find.text('Ignore'));
       expect(temp.originOf('Ellen (alt)')?.updatesDismissedUntil, DateTime.utc(2026, 6, 19));
 
-      await tester.tap(find.text('View in marketplace'));
+      await tester.tap(find.text('Done'));
       await tester.pumpAndSettle();
       expect(find.byType(ModUpdateDialog), findsNothing);
       expect(container.read(libraryScansProvider), 1, reason: 'the dialog wrote, so the library is read again');

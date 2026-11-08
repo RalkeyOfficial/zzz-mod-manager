@@ -356,6 +356,11 @@ class UpdateCheck {
       (outcome == UpdateOutcome.updateAvailable ||
           outcome == UpdateOutcome.possiblyOutdated);
 
+  /// Whether the check compared by a date rather than by a file: a mod marked as current, or the layer that won the fold
+  /// in a folder whose base is.
+  bool get comparedByDate =>
+      installedFile == null && evidence == InstalledFileEvidence.none && comparedAgainst != null;
+
   /// What a dismissal would have to cover to silence this verdict — the date of
   /// the newest thing it is reporting.
   ///

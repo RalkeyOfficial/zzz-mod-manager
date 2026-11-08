@@ -131,6 +131,11 @@ Future<bool> applyUpdateFlow(
   /// which one the user asked for. "Update Ellen?" in front of a reinstall
   /// reads as an offer of something newer.
   bool reinstall = false,
+
+  /// Asks only when the preview has something to say that the caller's own question did not: a layout that cannot be
+  /// reconciled, a patch-shaped download, folders the write leaves out, or a patch that cannot be put back. Otherwise
+  /// the caller's question is the confirmation. Set by [reinstallFlow], whose dialog states the standard facts.
+  bool confirmOnlyIfNeeded = false,
 }) async {
   final loc = context.loc;
   final notify = context.notify;
@@ -320,13 +325,16 @@ Future<bool> applyUpdateFlow(
           )
         : const _SiblingPreviews();
 
+    // The question this write asks, if any: a reinstall's own dialog has already said the standard facts.
+    final ask = confirm && (!confirmOnlyIfNeeded || confirmationHasNews(preview, flattensPatch: flattensPatch));
+
     // **Down immediately before the question**, so the two never overlap and
     // there is no gap between them either.
     hold.release();
-    if (confirm) queue.updateStep(download.seq, UpdateStep.confirming);
+    if (ask) queue.updateStep(download.seq, UpdateStep.confirming);
 
     if (!context.mounted) return false;
-    final choice = confirm
+    final choice = ask
         ? await showUpdateConfirmDialog(
             context,
             mod: mod,
@@ -342,7 +350,7 @@ Future<bool> applyUpdateFlow(
             otherFolders: group.otherFolders,
           )
         : const UpdateConfirmChoice();
-    if (confirm) {
+    if (ask) {
       // **What the consent covered, keyed on what was accepted rather than on
       // how many.** Unticking the mod the dialog was opened on is coherent, and
       // a log naming only that mod would describe a folder nothing wrote.

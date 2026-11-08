@@ -3,34 +3,40 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/palette.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../models/gamebanana/gamebanana.dart';
+import '../../models/mod_download.dart';
 import '../../models/mod_origin.dart';
+import '../../models/origin_enums.dart';
 import '../../services/api_service.dart';
 import '../../services/download_names.dart';
 import '../../services/log/logger.dart';
 import '../../services/mod_manager_service.dart';
-import '../../services/origin_write.dart';
-import '../../services/update_apply/sibling_group.dart';
-import '../../utils/notifications.dart';
-import '../../models/mod_download.dart';
-import '../../models/origin_enums.dart';
-import '../../services/gamebanana/file_selection.dart';
 import '../../services/origin_summary.dart';
+import '../../services/origin_write.dart';
 import '../../services/patch_removal.dart';
+import '../../services/update_apply/sibling_group.dart';
+import '../../services/update_apply/update_write_route.dart';
 import '../../services/update_check.dart';
 import '../../services/update_check_run.dart';
-import '../../services/update_apply/update_write_route.dart';
+import '../../utils/categories.dart' show libraryGroupOf;
 import '../../utils/gamebanana_url.dart';
-import '../../utils/html_to_markdown.dart';
-import '../../utils/markdown_description.dart';
 import '../../utils/marketplace_providers.dart';
+import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
-import '../components/folder_downloads_summary.dart';
 import '../../utils/url_utils.dart';
-import '../../core/palette.dart';
+import '../components/character_tile.dart' show libraryGroupName;
+import '../components/folder_downloads_summary.dart';
+import '../components/latest_update_post.dart';
+import '../components/mod_thumb.dart';
+import '../components/resolve/resolve_fragments.dart' show formatResolveDate;
+import '../components/update_file_rows.dart';
+import '../components/zenith_controls.dart';
+import '../components/zenith_dialog.dart';
 import 'apply_update_flow.dart';
+import 'mod_update_parts.dart';
 import 'remove_patch_flow.dart';
 
 final Logger _log = Logger('update');
@@ -48,10 +54,11 @@ enum _PatchAction { remove }
 ///
 /// **The "Update" button writes over the installed folder**, through
 /// `apply_update_flow.dart` — download, extract to temp, snapshot, then
-/// overwrite. It is offered only where an update was actually found, and only
-/// once a file has been named: with several candidates the user picks the row
-/// first, because a ZZZ mod routinely ships an SFW and an NSFW build together
-/// and only they know which one they have.
+/// overwrite. It is offered only where an update was actually found, and it
+/// stays disabled until a file has been named: with several candidates the user
+/// picks the row first, because a ZZZ mod routinely ships an SFW and an NSFW
+/// build together and only they know which one they have. The app's own
+/// candidate starts picked and says on what grounds.
 ///
 /// Returns true when anything the library renders changed — a dismissal writes
 /// to the origin block and an applied update rewrites the folder, and both are
@@ -163,9 +170,9 @@ class _Section {
 
   final ModDownload download;
 
-  /// What a write, a dismissal, a file choice and an open accordion key on:
-  /// this layer, by its page and its place. A page can be the base and a patch
-  /// at once, and its id alone would reach both sections.
+  /// What a write, a dismissal and a file choice key on: this layer, by its
+  /// page and its place. A page can be the base and a patch at once, and its
+  /// id alone would reach both sections.
   final DownloadKey? key;
 
   final String name;
@@ -212,15 +219,11 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   GbMod? _profile;
   ReleaseGroups _releases = ReleaseGroups.empty;
 
-  /// Release feeds, **by remote mod id** — the folder's own and every companion
-  /// alike.
-  ///
-  /// Keyed rather than held in one field because a folder holding two downloads
-  /// renders a full section each, notes accordion included, and two mods'
-  /// changelogs are not interchangeable. Everything else that used to be a
-  /// single value for "the mod this dialog is about" is keyed the same way and
-  /// for the same reason.
+  /// Update posts, **by remote mod id**. The latest one that says something is shown under the file list.
   Map<int, List<GbUpdate>> _updatesByMod = const <int, List<GbUpdate>>{};
+
+  /// Which mods' update posts have been asked for, so each is asked once.
+  final Set<int> _feedAsked = <int>{};
 
   /// The **other** mods in this folder, by remote id.
   ///
@@ -231,26 +234,10 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   Map<int, GbMod> _companionProfiles = const <int, GbMod>{};
   Map<int, ReleaseGroups> _companionReleases = const <int, ReleaseGroups>{};
 
-  /// Which mods' release feeds have been asked for at all.
-  ///
-  /// Opened from a card badge this dialog fetches nothing — the bulk pass
-  /// already answered — so the notes are behind a button rather than costing a
-  /// request every time somebody looks at a verdict they have already seen.
-  final Set<int> _notesRequestedFor = <int>{};
-  final Set<int> _loadingNotesFor = <int>{};
-
-  /// Which accordions are open, by section. All start closed even when a check
-  /// has already fetched the feed: the verdict is what the dialog is for, and
-  /// release notes are what you open when you have decided to care.
-  final Set<DownloadKey> _notesOpenFor = <DownloadKey>{};
-
   /// Which published file the update would install, by section, when the user
   /// has chosen.
   ///
-  /// Absent means "whatever the check would pick". Only ever set by tapping a
-  /// row, and only offered when there is more than one — with a single candidate
-  /// there is nothing to choose between and a selection control would be a
-  /// question with one answer.
+  /// Absent means "whatever the check would pick". Only set by tapping a row.
   final Map<DownloadKey, int> _chosenFileIdBy = <DownloadKey, int>{};
 
   /// Names fetched purely to label a section — see [_lookUpNames].
@@ -265,6 +252,10 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// to the wrong one is silent in both directions at once.
   DownloadKey? _dismissedSubject;
   bool _dismissalEdited = false;
+
+  /// The Ignore pressed in this dialog on a folder of one download, which collapses the dialog to "Update ignored"
+  /// with Undo. A mod that was already ignored when the dialog opened never collapses: its files stay on offer.
+  bool _ignoredHere = false;
 
   /// The library as it was when this dialog opened, or null until it has been
   /// read — and permanently null for a mod with no sibling group, which is what
@@ -285,11 +276,12 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     } else {
       _lookUpNames();
       unawaited(_lookUpSiblings());
+      _lookUpPost();
     }
   }
 
   /// The other mods this mod's archive installed, for the notice below the
-  /// verdict.
+  /// file list.
   ///
   /// **Read on open rather than off `libraryProvider`.** This dialog is
   /// reachable from a card the marketplace has just installed, and the sibling
@@ -321,6 +313,20 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       _log.debug('could not read the library for a sibling group',
           fields: {'mod': widget.mod.id, 'reason': '$e'});
     }
+  }
+
+  /// The author's update posts for the card under the file list, when this dialog opens on a verdict a check already
+  /// made and so has fetched nothing. One request, which the client caches for ten minutes; a feed that will not load
+  /// leaves the card out and the verdict as it is.
+  void _lookUpPost() {
+    final check = verdictWithoutAsking(widget.mod.origin) ?? ref.read(modUpdateChecksProvider)[widget.mod.id];
+    final modId = widget.mod.origin?.base?.modId;
+    if (check == null || !(check.hasUpdate || check.dismissed) || modId == null) return;
+    if (!_feedAsked.add(modId)) return;
+    ref.read(gameBananaClientProvider).modUpdates(modId).then((updates) {
+      if (!mounted) return;
+      setState(() => _updatesByMod = {..._updatesByMod, modId: updates});
+    }).catchError((Object _) {});
   }
 
   /// Names for the section headers, when no check is going to fetch them.
@@ -434,9 +440,6 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
           continue;
         }
         try {
-          // Kept whole, not just folded into groups: a folder holding two
-          // downloads renders a notes accordion each, and the author's prose is
-          // what those show.
           final patchUpdates =
               await client.modUpdates(patchModId, refresh: refresh);
           feeds[patchModId] = patchUpdates;
@@ -457,9 +460,8 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
         _updatesByMod = feeds;
         _companionProfiles = companionProfiles;
         _companionReleases = companionReleases;
-        // The check already paid for the feeds, so those notes are simply
-        // there. Only for the mods it actually reached.
-        _notesRequestedFor.addAll(feeds.keys);
+        // The check already paid for the feeds, so the latest post is simply there.
+        _feedAsked.addAll(feeds.keys);
       });
       _store(_fold());
       unawaited(_lookUpSiblings());
@@ -494,34 +496,6 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
       );
     } catch (e) {
       _log.warning('download names were not saved', error: e, fields: {'mod': widget.mod.id});
-    }
-  }
-
-  /// Fetches the author's release feed for its **notes**, on demand.
-  ///
-  /// Separate from [_check] and deliberately not folded into it. The check reads
-  /// the same feed for `_aFileRowIds` and would happily hand over `_sText` too —
-  /// but the path that matters here is the one where no check ran, and spending
-  /// a request on every badge click to show a changelog nobody asked for is
-  /// exactly the cost that path exists to avoid.
-  Future<void> _loadNotes(int modId) async {
-    if (_loadingNotesFor.contains(modId)) return;
-    setState(() {
-      _loadingNotesFor.add(modId);
-      _notesRequestedFor.add(modId);
-    });
-    try {
-      final updates = await ref.read(gameBananaClientProvider).modUpdates(modId);
-      if (!mounted) return;
-      setState(() {
-        _updatesByMod = {..._updatesByMod, modId: updates};
-        _loadingNotesFor.remove(modId);
-      });
-    } catch (_) {
-      // A feed that won't load is not a failed anything: the verdict beside it
-      // is unaffected, and a mod with no update posts renders identically.
-      if (!mounted) return;
-      setState(() => _loadingNotesFor.remove(modId));
     }
   }
 
@@ -651,7 +625,10 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// press, and dismissing to the current time would swallow it before the user
   /// ever saw it. Anything published after this date speaks up again on its
   /// own, which is what makes this "ignore *this*" rather than a mute.
-  Future<void> _setDismissed(_Section? section, bool dismissed) async {
+  ///
+  /// [collapse] is the dialog's own Ignore and Undo on a folder of one download, which switch it between the file list
+  /// and "Update ignored"; a layer's Ignore in a mixed folder leaves the dialog as it is.
+  Future<void> _setDismissed(_Section? section, bool dismissed, {bool collapse = false}) async {
     final folded = _stored;
     if (folded == null) return;
     // The section's own verdict when there is one, and the folded verdict when
@@ -714,16 +691,23 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
         characterId: widget.mod.characterId,
       );
     }
-    if (mounted) setState(() => _writing = false);
+    if (!mounted) return;
+    setState(() {
+      _writing = false;
+      if (ok && collapse) {
+        _ignoredHere = dismissed;
+        _chosenFileIdBy.remove(subject);
+      }
+    });
   }
 
   /// The file the Update button would install.
   ///
   /// The user's tap wins; otherwise it is the check's own pick, which the list
-  /// already labels with the grounds it was chosen on. Null when the check named
-  /// nothing at all — the installed file is gone and none of the current files
-  /// is identifiably its replacement — and the button is absent rather than
-  /// disabled there, because the honest action then is the mod page.
+  /// already labels with the grounds it was chosen on, or the one file there is.
+  /// Null when the check named nothing: with several files and no candidate the
+  /// button stays disabled until a row is picked, and with none at all there is
+  /// no button, because the honest action then is the mod page.
   GbFile? _fileToInstall(_Section? section) {
     final check = section?.check;
     if (section == null || check == null) return null;
@@ -821,306 +805,6 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     Navigator.of(context).pop();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final check = _stored;
-    final modId = widget.mod.origin?.base?.modId;
-    // An *ignored* update is still installable: the user waved the badge away,
-    // not the file. The dialog is where they come to change their mind, so the
-    // action has to be here rather than only while the mark is showing.
-    final hasFinding =
-        check != null && (check.hasUpdate || check.dismissed);
-    // **A verdict about either half of the folder can be installed**, because
-    // the write is chosen by which half it is: base by layout with the patch
-    // placed back on top, patch by placement over the base. What is refused is
-    // a verdict about a mod this folder does not claim to hold, which no write
-    // could apply without overwriting one mod with another.
-    final route = hasFinding
-        ? updateWriteRoute(
-            origin: widget.mod.origin,
-            subject: check.subject,
-          )
-        : UpdateWriteRoute.refused;
-    // **One subject, one action bar.** A folder holding several downloads gives
-    // each its own Ignore and Update beneath its own facts, because a shared
-    // button would have to pick which mod it means and picking wrong writes
-    // another mod's archive over this folder. With one download nothing moves.
-    final sections = check == null ? const <_Section>[] : _sections(check);
-    final sole = sections.length == 1 ? sections.single : null;
-    final barActions = sections.length < 2;
-    final installable = modId == null ||
-            !hasFinding ||
-            !barActions ||
-            route.kind == UpdateWriteKind.none
-        ? null
-        : _fileToInstall(sole);
-
-    // Every close is a plain pop, Escape and a click outside included: whether anything was written is
-    // `ModUpdateWrites`'s answer, never the route's result.
-    return AlertDialog(
-        title: Text(
-          loc.t('mods.update.title', params: {'mod': widget.mod.name}),
-        ),
-        content: SizedBox(
-          width: 480,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (_checking)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 28),
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                else if (_error != null)
-                  ..._failure()
-                else if (check == null)
-                  _notice(loc.t('mods.update.not_checked'), Icons.help_outline)
-                else
-                  ..._body(check),
-                // **Last, next to the button it is about.** It says nothing
-                // about the mod's own verdict, and it is only true where there
-                // is something to install.
-                if (installable case final file?) ..._siblingNotice(file),
-              ],
-            ),
-          ),
-        ),
-        // A Wrap, not the default Row: five controls at their longest wording
-        // overflow an AlertDialog's action bar, and an OverflowBar clips rather
-        // than wrapping. Buttons here are whole words with nothing to ellipsise.
-        actionsOverflowDirection: VerticalDirection.down,
-        actions: [
-          if (modId != null)
-            TextButton.icon(
-              onPressed: () =>
-                  launchExternalUrl(context, gameBananaModUrl(modId)),
-              icon: const Icon(Icons.open_in_new, size: 16),
-              label: Text(loc.t('mods.update.open_page')),
-            ),
-          // "Ignore" against a live finding; "stop ignoring" once dismissed. The
-          // undo sits in the same place as the thing it undoes, so a user who
-          // dismissed the wrong mod does not have to work out where it went.
-          if (barActions && (check?.dismissed ?? false))
-            TextButton(
-              onPressed: _busy ? null : () => _setDismissed(sole, false),
-              child: Text(loc.t('mods.update.undismiss')),
-            )
-          else if (barActions && (check?.hasUpdate ?? false))
-            TextButton(
-              onPressed: _busy || (check?.dismissableUpTo == null)
-                  ? null
-                  : () => _setDismissed(sole, true),
-              child: Text(loc.t('mods.update.dismiss')),
-            ),
-          if (modId != null &&
-              ((check?.hasUpdate ?? false) || (check?.dismissed ?? false)))
-            TextButton(
-              onPressed: _busy ? null : () => _openInMarketplace(modId),
-              child: Text(loc.t('mods.update.open_marketplace')),
-            )
-          else
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(loc.t('mods.update.close')),
-            ),
-          // The primary action, and the only one that touches the mod folder.
-          // Present only where a file could actually be named — with the
-          // installed file gone and nothing identifiable as its successor, the
-          // honest offer is the mod page, not a guess installed over a live mod.
-          if (installable case final file?)
-            FilledButton.icon(
-              onPressed: _busy ? null : () => _applyUpdate(sole, file),
-              icon: const Icon(Icons.download_for_offline_outlined, size: 16),
-              label: Text(loc.t('mods.update_apply.action')),
-            ),
-        ],
-    );
-  }
-
-  /// The couldn't-reach-GameBanana state, and **the only place a retry is
-  /// offered**.
-  ///
-  /// There is deliberately no general "check again" button. Either the bulk
-  /// pass has just answered this mod, in which case re-asking spends a request
-  /// to redraw the same sentence, or the dialog opened with nothing on record
-  /// and checked on the way in — neither leaves the user anything to press. A
-  /// check that *failed* is the one case that does, and without this the only
-  /// way to retry is closing and reopening.
-  ///
-  /// Inline with the message rather than in the action bar: that row already
-  /// carries up to three buttons in the normal case, and a control that is
-  /// meaningless in every state but this one should not occupy space in all of
-  /// them.
-  List<Widget> _failure() => [
-    _notice(loc.t('mods.update.check_failed'), Icons.cloud_off),
-    const SizedBox(height: 4),
-    Align(
-      alignment: Alignment.centerLeft,
-      child: TextButton.icon(
-        onPressed: _busy ? null : () => _check(refresh: true),
-        icon: const Icon(Icons.refresh, size: 16),
-        label: Text(loc.t('mods.update.retry')),
-        style: TextButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          visualDensity: VisualDensity.compact,
-        ),
-      ),
-    ),
-  ];
-
-  // ------------------------------------------------------------------ verdict
-
-  /// The dialog's content: **one full report per download in the folder.**
-  ///
-  /// A check is about the mods *in a folder*, and a folder frequently holds two
-  /// — a patch and the mod it patches. Both are in scope, so both get the whole
-  /// treatment: a verdict, the before-and-after box, the file list where there
-  /// is a choice, and the author's notes. Summarising the second one in a line
-  /// was answering a different question from the one the first one answers.
-  ///
-  /// **A folder with one download renders exactly as it always has**, including
-  /// keeping its Update and Ignore in the action bar. The per-section controls
-  /// below exist because two subjects cannot share one action row; introducing
-  /// them for a single subject would move a button nobody asked to have moved.
-  List<Widget> _body(UpdateCheck check) {
-    final sections = _sections(check);
-    if (sections.length < 2) {
-      return _verdict(
-        sections.isEmpty
-            ? _Section(
-                // A folder with nothing recorded still renders one card: the
-                // verdict is `untracked` or `trackingOff`, and there is no layer
-                // to attribute it to.
-                download: const ModDownload(),
-                key: null,
-                name: widget.mod.name,
-                check: check,
-              )
-            : sections.single,
-        withActions: false,
-      );
-    }
-
-    return [
-      for (final (index, section) in sections.indexed) ...[
-        if (index > 0) ...[
-          const SizedBox(height: 20),
-          const Divider(height: 1),
-          const SizedBox(height: 20),
-        ],
-        _sectionHeader(section),
-        const SizedBox(height: 10),
-        ..._verdict(section, withActions: true),
-      ],
-    ];
-  }
-
-  /// Names the download a section is about, and marks a patch as one.
-  ///
-  /// **The marker is a left rule and a chip, not a position.** Which download a
-  /// sidecar stores first is install order, so a patch has to be legible as a
-  /// patch wherever it sits — see `docs/origin-tracking.md` §10.
-  Widget _sectionHeader(_Section section) {
-    final scheme = Theme.of(context).colorScheme;
-    return Row(
-      children: [
-        Container(
-          width: 3,
-          height: 22,
-          decoration: BoxDecoration(
-            color: section.isPatch ? scheme.tertiary : scheme.primary,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                section.name,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleSmall
-                    ?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              // Two layers of one page carry one name, so each names its file,
-              // with the variant text in grey beneath (update-checks §7).
-              if (section.file case final file?) ...[
-                Text(file.name, style: Theme.of(context).textTheme.bodySmall),
-                if (file.detail case final detail?)
-                  Text(
-                    detail,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: scheme.onSurfaceVariant),
-                  ),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(width: 6),
-        _chip(
-          loc.t(section.isPatch
-              ? 'mods.folder.role_patch'
-              : 'mods.folder.role_mod'),
-          section.isPatch ? scheme.tertiary : scheme.primary,
-        ),
-        if (section.modId case final id?)
-          IconButton(
-            icon: const Icon(Icons.open_in_new, size: 16),
-            tooltip: loc.t('mods.folder.open_page'),
-            visualDensity: VisualDensity.compact,
-            onPressed: () => launchExternalUrl(context, gameBananaModUrl(id)),
-          ),
-        // **On the layer, not in the row of buttons below it.** Those two act on
-        // the update being reported; this acts on whether the folder holds this
-        // patch at all, which is a different question about a different thing —
-        // and the surface reporting a patch's update is where a user meets the
-        // patch they no longer have.
-        if (_removablePatch(section))
-          PopupMenuButton<_PatchAction>(
-            icon: const Icon(Icons.more_vert, size: 16),
-            tooltip: loc.t('mods.update.patch_menu'),
-            enabled: !_busy,
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: _PatchAction.remove,
-                child: Row(
-                  children: [
-                    const Icon(Icons.layers_clear, size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        loc.t('mods.context_menu.remove_patch'),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            onSelected: (_) => _removePatch(section),
-          ),
-      ],
-    );
-  }
-
-  /// Whether this section's layer is one the folder can be asked to give up.
-  ///
-  /// Through [removablePatches] rather than its own test, so "which patches can
-  /// come out" is one rule: the context menu and this offer the same set, and a
-  /// layer with no file registry is excluded by both.
-  bool _removablePatch(_Section section) {
-    if (!section.isPatch) return false;
-    return removablePatches(widget.mod.origin)
-        .any((patch) => patch.modId == section.download.modId);
-  }
-
   /// Takes this patch out of the folder, through the flow the context menu uses.
   ///
   /// Closes on success for the same reason [_applyUpdate] does: the sections are
@@ -1142,711 +826,409 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     if (removed) Navigator.of(context).pop();
   }
 
-  List<Widget> _verdict(_Section section, {required bool withActions}) {
-    final check = section.check;
-    final scheme = Theme.of(context).colorScheme;
-    return [
-      _headline(check),
-      if (check.isObsolete) ...[
-        const SizedBox(height: 8),
-        // Its own line, never folded into the verdict: an obsolete mod still
-        // exists and still downloads, and it can be perfectly up to date. It is
-        // the author saying "there is something better now", which is a
-        // different sentence from "your copy is old".
-        _notice(loc.t('mods.update.obsolete'), Icons.new_releases_outlined),
-      ],
-      if (check.dismissed) ...[
-        const SizedBox(height: 8),
-        // Shown *with* the finding rather than instead of it. "You dismissed an
-        // update" and "there is nothing new" are different facts, and a user
-        // opening this dialog after dismissing is almost always here to change
-        // their mind.
-        _notice(
-          loc.t('mods.update.dismissed'),
-          Icons.notifications_paused_outlined,
-        ),
-      ],
-      if (check.outcome == UpdateOutcome.untracked) ...[
-        const SizedBox(height: 8),
-        _notice(loc.t('mods.update.untracked_hint'), Icons.link_off),
-      ],
-      if (check.outcome == UpdateOutcome.versionUnknown) ...[
-        const SizedBox(height: 8),
-        _notice(loc.t('mods.update.version_unknown_hint'), Icons.help_outline),
-      ],
-      // "Your file is gone and nothing on the page replaces it." Reachable when
-      // every file the mod still offers was shipped alongside the archived one,
-      // so the release grouping filters them all out. Without this the dialog
-      // says an update is available and then shows nothing at all, which reads
-      // as a rendering failure rather than as the answer it is.
-      if (check.outcome == UpdateOutcome.updateAvailable &&
-          check.candidate == null &&
-          check.newerFiles.isEmpty) ...[
-        const SizedBox(height: 8),
-        _notice(loc.t('mods.update.no_successor'), Icons.help_outline),
-      ],
-      const SizedBox(height: 12),
-      Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: scheme.outlineVariant.withValues(alpha: 0.5),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _line(
-              Icons.inventory_2_outlined,
-              loc.t('mods.update.you_have'),
-              _installedDescription(section),
-              // Only when there is a published record to read it from. With the
-              // installed file gone from the page the headline already falls
-              // back to what the sidecar stored, and repeating it underneath
-              // would print the same words twice.
-              detail: check.installedFile == null
-                  ? null
-                  : _fileDetail(check.installedFile!),
-            ),
-            // One file gets a line; several get a list. A mod that ships an SFW
-            // and an NSFW build together offers a *choice*, and the user knows
-            // which of them they installed — so the check says which one it
-            // would pick and on what grounds, and shows the rest rather than
-            // quietly discarding them.
-            if (check.newerFiles.length < 2) ...[
-              if (check.candidate case final candidate?) ...[
-                const SizedBox(height: 6),
-                _line(
-                  Icons.arrow_circle_up,
-                  loc.t('mods.update.published'),
-                  _fileHeadline(candidate),
-                  detail: _fileDetail(candidate),
-                ),
-              ],
-              if (_releaseName(section, check.candidate) case final release?) ...[
-                const SizedBox(height: 6),
-                // The author's own title for the release ("Version 1.5") — very
-                // often the only real version number a mod page has, since
-                // `_sVersion` on the files themselves is routinely null.
-                _line(
-                  Icons.label_outline,
-                  loc.t('mods.update.release'),
-                  release,
-                ),
-              ],
-            ],
-            // **The cutoff, and only where it is not already on screen.**
-            //
-            // The check reads a mod page's file list; it never reads the mod
-            // folder, so "compared against <date>" invited the reading that
-            // something about the *files* was compared. On the ordinary path
-            // that date is the upload date of the file named in the row above,
-            // so the line was restating it under a label that overclaimed.
-            //
-            // It survives only where there is no installed file to name — an
-            // `assumed_latest` install, where a date really is the whole of
-            // what the answer rests on — and it says what the date does rather
-            // than what it is, in the same words the resolve dialog uses for
-            // the same state.
-            if (check.installedFile == null)
-              if (check.comparedAgainst case final date?) ...[
-                const SizedBox(height: 6),
-                _line(
-                  Icons.event_outlined,
-                  loc.t('mods.update.baseline_label'),
-                  loc.t('mods.update.baseline_value',
-                      params: {'date': _formatDate(date)}),
-                ),
-              ],
-          ],
-        ),
-      ),
-      if (check.newerFiles.length >= 2) ..._options(section),
-      ..._releaseNotes(section),
-      // The caveat the locked decision requires, and it is placed *below* the
-      // facts rather than above them: it qualifies the verdict, it is not the
-      // verdict. Shown for every guessed answer, including the ones that came
-      // back clean — "probably nothing new" and "nothing new" are different
-      // claims and the weaker one must not borrow the stronger's certainty.
-      if (check.isGuess && check.outcome != UpdateOutcome.untracked) ...[
-        const SizedBox(height: 10),
-        Text(
-          loc.t('mods.update.guess_caveat'),
-          style: Theme.of(context).textTheme.bodySmall
-              ?.copyWith(color: scheme.onSurfaceVariant),
-        ),
-      ],
-      if (check.hasUpdate) ...[
-        const SizedBox(height: 10),
-        Text(
-          loc.t('mods.update.manual_note'),
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-        ),
-      ],
-      // The per-section controls. **Only where there are several sections** —
-      // with one subject the action bar keeps them, which is where they have
-      // always been. Two subjects cannot share one action row: an "Update"
-      // there would have to pick a mod on the user's behalf, and picking the
-      // wrong one writes another mod's archive over this folder.
-      if (withActions) ..._sectionActions(section),
-    ];
+  /// Whether this section's layer is one the folder can be asked to give up.
+  ///
+  /// Through [removablePatches] rather than its own test, so "which patches can
+  /// come out" is one rule: the context menu and this offer the same set, and a
+  /// layer with no file registry is excluded by both.
+  bool _removablePatch(_Section section) {
+    if (!section.isPatch) return false;
+    return removablePatches(widget.mod.origin)
+        .any((patch) => patch.modId == section.download.modId);
   }
 
-  /// Ignore and Update, for one download.
-  ///
-  /// Right-aligned under that download's own facts, so which mod a press acts
-  /// on is answered by where the button is rather than by the user tracking a
-  /// subject through a shared action bar.
-  List<Widget> _sectionActions(_Section section) {
-    final check = section.check;
-    final installable = _fileToInstall(section);
-    final canDismiss = check.hasUpdate && check.dismissableUpTo != null;
-    if (!check.dismissed && !canDismiss && installable == null) {
-      return const <Widget>[];
-    }
+  // --------------------------------------------------------------------- view
 
-    return [
-      const SizedBox(height: 10),
-      Wrap(
-        alignment: WrapAlignment.end,
-        spacing: 8,
-        runSpacing: 4,
-        children: [
-          if (check.dismissed)
-            TextButton(
-              onPressed: _busy ? null : () => _setDismissed(section, false),
-              child: Text(loc.t('mods.update.undismiss')),
-            )
-          else if (canDismiss)
-            TextButton(
-              onPressed: _busy ? null : () => _setDismissed(section, true),
-              child: Text(loc.t('mods.update.dismiss')),
-            ),
-          if (installable case final file?)
-            FilledButton.icon(
-              onPressed: _busy ? null : () => _applyUpdate(section, file),
-              icon: const Icon(Icons.download_for_offline_outlined, size: 16),
-              label: Text(loc.t('mods.update_apply.action')),
-            ),
-        ],
-      ),
-    ];
-  }
+  @override
+  Widget build(BuildContext context) {
+    final check = _stored;
+    final sections = check == null || _checking ? const <_Section>[] : _sections(check);
+    final view = _checking
+        ? _View(title: loc.t('mods.update.title', params: {'mod': widget.mod.name}), body: [const UpdateSpinner()])
+        : _error != null
+        ? _View(title: loc.t('mods.update.title', params: {'mod': widget.mod.name}), body: _failure())
+        : check == null
+        ? _View(
+            title: loc.t('mods.update.title', params: {'mod': widget.mod.name}),
+            body: [UpdateHint(loc.t('mods.update.not_checked'))],
+          )
+        : sections.length >= 2
+        ? _mixedView(sections)
+        : _soleView(check, sections.isEmpty ? null : sections.single);
 
-  /// Every file published since the installed one, newest first.
-  ///
-  /// Shown whenever there is more than one, because that is precisely when
-  /// naming a single file stops being an answer. A ZZZ mod routinely publishes
-  /// an SFW and an NSFW build in the same release, and only the user knows
-  /// which they installed — so the row we would pick carries a chip saying
-  /// **why**, and the alternatives stay visible rather than being discarded.
-  ///
-  /// The chip distinguishes two very different grounds: `matches your variant`
-  /// is a real match on the author's own label, while `newest published` is the
-  /// fallback that fires when labels drift, and which may well be somebody
-  /// else's variant. Presenting those identically would be the whole problem.
-  ///
-  /// Bounded and separately scrollable for the reason the resolve dialog's
-  /// picker is: a mod can publish more than a screenful, and the buttons below
-  /// must stay reachable.
-  List<Widget> _options(_Section section) {
-    final check = section.check;
-    final chosen = _chosenFileIdBy[section.key];
-    final scheme = Theme.of(context).colorScheme;
-    return [
-      const SizedBox(height: 12),
-      Text(
-        loc.t('mods.update.options_heading'),
-        style: Theme.of(
-          context,
-        ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-      ),
-      const SizedBox(height: 2),
-      Text(
-        loc.t('mods.update.options_hint'),
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-      ),
-      const SizedBox(height: 6),
-      ConstrainedBox(
-        constraints: const BoxConstraints(maxHeight: 210),
-        child: ListView(
-          shrinkWrap: true,
-          padding: EdgeInsets.zero,
-          children: [
-            for (final file in check.newerFiles)
-              _optionRow(
-                file,
-                section: section,
-                isPick: file.idRow == _fileToInstall(section)?.idRow,
-                // Only the check's *own* pick may claim grounds. Once the user
-                // has tapped a row the chip says so, rather than the app taking
-                // credit for their decision under a label it did not choose.
-                pickLabelKey: chosen != null
-                    ? 'mods.update.pick_chosen'
-                    : check.candidateMatchesVariant
-                        ? 'mods.update.pick_variant'
-                        : 'mods.update.pick_newest',
-              ),
-          ],
-        ),
-      ),
-    ];
-  }
+    final character = libraryGroupName(libraryGroupOf(widget.mod.characterId), loc);
+    final state = loc.t(widget.mod.isActive ? 'mods.update.state_on_now' : 'mods.update.state_off_now');
 
-  /// What the author says changed — the thing you read *before* pressing
-  /// update.
-  ///
-  /// Scoped to releases published **after** the file you have, because that is
-  /// the question: a mod with forty update posts is not offering to tell you
-  /// about all of them, it is offering to tell you what you would be getting.
-  /// With no date to compare against (an `assumed_latest` install, or a page
-  /// whose files carry none) the whole feed is shown rather than nothing — an
-  /// over-long list is a worse answer than an empty one, but only slightly, and
-  /// silently hiding notes is worse than both.
-  ///
-  /// Two shapes, and they are complementary rather than alternatives:
-  /// `_aChangeLog` is the author's categorised bullet list and `_sText` is their
-  /// prose, and captured feeds carry each without the other. The prose is HTML,
-  /// so it goes through the same `htmlToMarkdown` a mod page's description does.
-  ///
-  /// **An accordion, not a section that appears and then cannot leave.** The
-  /// first version dropped the notes into the middle of the dialog with no
-  /// boundary around them and no way to put them away again, so an author's
-  /// three paragraphs pushed the verdict and the file list off the top of a
-  /// scroll view the user had not asked to grow. Collapsing is the fix, and it
-  /// also gives the section the edge it was missing — the header *is* the
-  /// separator.
-  List<Widget> _releaseNotes(_Section section) {
-    final modId = section.modId;
-    final key = section.key;
-    if (modId == null || key == null) return const [];
-
-    // The feed is the page's, so two layers of one page share it; which
-    // accordion is open is each section's own.
-    final requested = _notesRequestedFor.contains(modId);
-    final loading = _loadingNotesFor.contains(modId);
-    final open = _notesOpenFor.contains(key);
-    final since = section.check.comparedAgainst;
-    final relevant = [
-      for (final update in _updatesByMod[modId] ?? const <GbUpdate>[])
-        if (update.hasNotes &&
-            (since == null || (update.dateAdded?.isAfter(since) ?? true)))
-          update,
-    ];
-    // Nothing to offer, and nothing to say about it: a mod with no update posts
-    // is ordinary, so an empty "Release notes" header would be noise.
-    if (requested && !loading && relevant.isEmpty) {
-      return const [];
-    }
-
-    final scheme = Theme.of(context).colorScheme;
-    return [
-      const SizedBox(height: 14),
-      Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            InkWell(
-              // Expanding is also what *fetches* on the badge path, so one
-              // gesture does both and there is no separate "show notes" button
-              // that turns into a heading.
-              onTap: _busy || loading
-                  ? null
-                  : () {
-                      if (!requested) {
-                        setState(() => _notesOpenFor.add(key));
-                        unawaited(_loadNotes(modId));
-                      } else {
-                        setState(() => open
-                            ? _notesOpenFor.remove(key)
-                            : _notesOpenFor.add(key));
-                      }
-                    },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.notes_outlined, size: 20,
-                        color: scheme.onSurfaceVariant),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        loc.t('mods.update.notes_heading'),
-                        style: Theme.of(context).textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    if (loading)
-                      const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    else
-                      Icon(
-                        open ? Icons.expand_less : Icons.expand_more,
-                        color: scheme.onSurfaceVariant,
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            if (open && !loading && relevant.isNotEmpty)
-              // Bounded and scrolling inside itself, the rule every list in
-              // these dialogs follows: the buttons underneath must stay one
-              // click away.
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 280),
-                child: ListView(
-                  shrinkWrap: true,
-                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                  children: [
-                    for (final update in relevant) _releaseNote(update, scheme),
-                  ],
-                ),
-              ),
-          ],
-        ),
+    // Every close is a plain pop, Escape and a click outside included: whether anything was written is
+    // `ModUpdateWrites`'s answer, never the route's result.
+    return ZenithDialog.sectioned(
+      width: 640,
+      coverHeader: true,
+      closeAlignsStart: false,
+      leading: ModThumb(mod: widget.mod, width: 64, height: 44, radius: 8, spacing: 7, bordered: true),
+      title: view.title,
+      subtitle: '${widget.mod.name} · $character · $state',
+      bodyPadding: view.bodyPadding,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 14,
+        children: view.body,
       ),
-    ];
-  }
-
-  Widget _releaseNote(GbUpdate update, ColorScheme scheme) {
-    final theme = Theme.of(context);
-    final prose = update.text == null ? '' : htmlToMarkdown(update.text!).trim();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(
-                update.name ?? loc.t('mods.update.notes_untitled'),
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              if (update.dateAdded case final date?)
-                Text(
-                  _formatDate(date),
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: scheme.onSurfaceVariant),
-                ),
-            ],
-          ),
-          for (final entry in update.changeLog)
-            Padding(
-              padding: const EdgeInsets.only(left: 4, top: 4),
-              child: Text(
-                entry.category == null
-                    ? '• ${entry.text}'
-                    : '• ${entry.text} (${entry.category})',
-                style: theme.textTheme.bodyMedium,
-              ),
-            ),
-          if (prose.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: buildDescriptionMarkdown(
-                context,
-                prose,
-                onLaunchUrl: (href) => launchExternalUrl(context, href),
-              ),
-            ),
-        ],
-      ),
+      footerStart: view.footerStart,
+      actions: view.actions ?? [_closeButton()],
     );
   }
 
-  /// One candidate row. **Tappable**, because there is now something to do with
-  /// the answer: the row decides which file the Update button installs, and the
-  /// user is the only one who knows which variant they run.
+  Widget _closeButton() =>
+      OutlinedButton(onPressed: () => Navigator.of(context).pop(), child: Text(loc.t('mods.update.close')));
+
+  Widget _laterButton() =>
+      OutlinedButton(onPressed: () => Navigator.of(context).pop(), child: Text(loc.t('mods.update.later')));
+
+  /// The couldn't-reach-GameBanana state, and **the only place a retry is
+  /// offered**.
   ///
-  /// [isPick] is the row that would be used — the check's own choice until the
-  /// user overrides it — so the highlight moves with the tap rather than staying
-  /// on the suggestion.
-  Widget _optionRow(
-    GbFile file, {
-    required _Section section,
-    required bool isPick,
-    required String pickLabelKey,
-  }) {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        // Keyed by layer, so choosing a file for the patch cannot silently
-        // become the choice for the mod it patches, even from one page.
-        onTap: _busy || section.key == null
-            ? null
-            : () => setState(
-                  () => _chosenFileIdBy[section.key!] = file.idRow,
-                ),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: isPick
-                  ? ZenithPalette.of(context).amber.withValues(alpha: 0.7)
-                  : scheme.outlineVariant.withValues(alpha: 0.4),
-            ),
-            color: isPick
-                ? ZenithPalette.of(context).amber.withValues(alpha: 0.06)
-                : null,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // A Wrap, not a Row: the chips are short phrases with nothing to
-              // ellipsise, so in a Row the filename is the only thing that can
-              // give way and the row overflows once it has.
-              Wrap(
-                spacing: 6,
-                runSpacing: 2,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(
-                    fileDisplayName(file),
-                    style: Theme.of(context).textTheme.bodyMedium
-                        ?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                  if (isPick)
-                    _chip(
-                      loc.t(pickLabelKey),
-                      scheme.onPrimary,
-                      background: ZenithPalette.of(context).amber,
-                    ),
-                  if (_releaseName(section, file) case final release?)
-                    _chip(release, scheme.primary),
-                ],
-              ),
-              if (fileDisplayDetail(file) case final detail?)
-                Text(
-                  detail,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                ),
-              if (file.dateAdded case final date?)
-                Text(
-                  _formatDate(date),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                ),
-            ],
-          ),
-        ),
+  /// There is deliberately no general "check again" button. Either the bulk
+  /// pass has just answered this mod, in which case re-asking spends a request
+  /// to redraw the same sentence, or the dialog opened with nothing on record
+  /// and checked on the way in — neither leaves the user anything to press. A
+  /// check that *failed* is the one case that does, and without this the only
+  /// way to retry is closing and reopening.
+  List<Widget> _failure() => [
+    UpdateHint(loc.t('mods.update.check_failed')),
+    Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        style: smallButtonStyle(context),
+        onPressed: _busy ? null : () => _check(refresh: true),
+        icon: const Icon(Icons.refresh_rounded),
+        label: Text(loc.t('mods.update.retry')),
       ),
+    ),
+  ];
+
+  /// A folder of one download, or none that the record names.
+  _View _soleView(UpdateCheck check, _Section? sole) {
+    final section = sole ??
+        _Section(
+          // A folder with nothing recorded still renders one card: the verdict is `untracked` or `trackingOff`, and
+          // there is no layer to attribute it to.
+          download: const ModDownload(),
+          key: null,
+          name: widget.mod.name,
+          check: check,
+        );
+    final modId = widget.mod.origin?.base?.modId;
+    if (!(check.hasUpdate || check.dismissed)) return _quietView(section, modId);
+    if (_ignoredHere) return _ignoredView(check, sole);
+
+    // **A verdict about either half of the folder can be installed**, because the write is chosen by which half it is:
+    // base by layout with the patch placed back on top, patch by placement over the base. What is refused is a verdict
+    // about a mod this folder does not claim to hold, which no write could apply without overwriting one mod with
+    // another.
+    final route = updateWriteRoute(origin: widget.mod.origin, subject: check.subject);
+    final installable = modId == null || route.kind == UpdateWriteKind.none ? null : _fileToInstall(sole);
+    final files = check.newerFiles;
+    final post = modId == null ? null : latestUpdatePost(_updatesByMod[modId], since: check.comparedAgainst);
+
+    return _View(
+      title: files.isEmpty
+          ? loc.t(_verdictKey(check.outcome))
+          : loc.plural('mods.update.newer_title', files.length, params: {'count': '${files.length}'}),
+      body: [
+        if (files.isNotEmpty) UpdateHint(loc.t('mods.update.intro'), prose: true),
+        ..._layerBody(section),
+        if (modId != null) _postOrLink(post, modId),
+        if (installable case final file?) ..._siblingNotice(file),
+      ],
+      footerStart: _ignoreButton(sole, check, collapse: true),
+      actions: [
+        _laterButton(),
+        if (files.isNotEmpty)
+          FilledButton(
+            key: const ValueKey('update_apply'),
+            onPressed: _busy || installable == null ? null : () => _applyUpdate(sole, installable),
+            child: Text(loc.t('mods.update_apply.action')),
+          ),
+      ],
     );
   }
 
-  Widget _chip(String label, Color color, {Color? background}) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-    decoration: BoxDecoration(
-      color: background ?? color.withValues(alpha: 0.14),
-      borderRadius: BorderRadius.circular(6),
-    ),
-    child: Text(
-      label,
-      style: Theme.of(context)
-          .textTheme
-          .labelSmall
-          ?.copyWith(color: color, fontWeight: FontWeight.w600),
-    ),
+  /// The collapsed state after Ignore: what was ignored, and Undo.
+  _View _ignoredView(UpdateCheck check, _Section? sole) {
+    final count = check.newerFiles.isEmpty ? 1 : check.newerFiles.length;
+    return _View(
+      title: loc.t('mods.update.ignored_title'),
+      bodyPadding: const EdgeInsets.fromLTRB(24, 4, 24, 22),
+      body: [
+        UpdateHint(
+          loc.plural('mods.update.ignored_body', count, params: {'count': '$count', 'mod': widget.mod.name}),
+          prose: true,
+        ),
+        UpdateHint(loc.t('mods.update.ignored_note')),
+      ],
+      footerStart: TextButton(
+        key: const ValueKey('update_undo'),
+        onPressed: _busy ? null : () => _setDismissed(sole, false, collapse: true),
+        child: Text(loc.t('library.updates.undo')),
+      ),
+      actions: [FilledButton(onPressed: () => Navigator.of(context).pop(), child: Text(loc.t('mods.update.done')))],
+    );
+  }
+
+  /// A verdict with nothing to install: up to date, not tracked, not comparable, the page gone.
+  _View _quietView(_Section section, int? modId) {
+    final check = section.check;
+    return _View(
+      title: loc.t(_verdictKey(check.outcome)),
+      body: [..._quietBody(section)],
+      footerStart: modId == null
+          ? null
+          : TextButton(
+              onPressed: () => launchExternalUrl(context, gameBananaModUrl(modId)),
+              child: Text(loc.t('mods.update.open_page')),
+            ),
+    );
+  }
+
+  /// A folder holding a patch as well as the mod it patches: one block for each, with its own Ignore and Update
+  /// beside its own files, because a shared button would have to pick which mod it means and picking wrong writes
+  /// another mod's archive over this folder.
+  _View _mixedView(List<_Section> sections) => _View(
+    title: loc.t('mods.update.title', params: {'mod': widget.mod.name}),
+    body: [
+      for (final (index, section) in sections.indexed) ...[
+        if (index > 0) Divider(height: 1, color: ZenithPalette.of(context).divider),
+        _layerHeader(section),
+        if (section.check.hasUpdate || section.check.dismissed)
+          ..._layerBody(section, verdict: true)
+        else
+          ..._quietBody(section, verdict: true),
+        if (section.check.hasUpdate || section.check.dismissed) _layerActions(section),
+      ],
+    ],
   );
 
-  Widget _headline(UpdateCheck check) {
-    final (key, icon, colour) = _outcomeStyle(check.outcome);
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 24, color: colour),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            loc.t(key),
-            style: Theme.of(context).textTheme.titleSmall
-                ?.copyWith(fontWeight: FontWeight.w700),
+  /// The part of a block that is about its files: the "You have" box, and the newer ones to pick from. [verdict] says
+  /// the layer's verdict in words first, for a block of a mixed folder with no title of its own to carry it.
+  List<Widget> _layerBody(_Section section, {bool verdict = false}) {
+    final check = section.check;
+    final files = check.newerFiles;
+    final picked = _fileToInstall(section);
+    return [
+      if (verdict) UpdateHint(loc.t(_verdictKey(check.outcome)), prose: true),
+      if (check.dismissed) UpdateStrip(loc.t('mods.update.dismissed')),
+      UpdateGroup(label: loc.t('mods.update.you_have'), child: _youHave(section)),
+      if (files.isEmpty)
+        UpdateHint(loc.t('mods.update.no_successor'))
+      else
+        UpdateGroup(
+          label: loc.t('mods.update.newer_label'),
+          child: FileRadioGroup(
+            label: loc.t('mods.update.newer_label'),
+            rows: [
+              for (final file in files)
+                FileRadioRow(
+                  file: file,
+                  selected: file.idRow == picked?.idRow,
+                  chip: _pickChip(section, file, picked),
+                  onTap: _busy || section.key == null
+                      ? null
+                      // Keyed by layer, so choosing a file for the patch cannot silently become the choice for the mod
+                      // it patches, even from one page.
+                      : () => setState(() => _chosenFileIdBy[section.key!] = file.idRow),
+                ),
+            ],
           ),
         ),
+      if (check.isGuess && check.outcome != UpdateOutcome.untracked) UpdateHint(loc.t('mods.update.guess_caveat')),
+    ];
+  }
+
+  /// What a verdict with nothing to install says: what the mod holds, and why there is no update.
+  ///
+  /// [verdict] says it in words, for a layer of a mixed folder whose block has no title of its own to carry it.
+  List<Widget> _quietBody(_Section section, {bool verdict = false}) {
+    final check = section.check;
+    return [
+      if (verdict) UpdateHint(loc.t(_verdictKey(check.outcome)), prose: true),
+      if (check.installedFile != null || section.download.hasIdentity)
+        UpdateGroup(label: loc.t('mods.update.you_have'), child: _youHave(section)),
+      if (check.isObsolete) UpdateHint(loc.t('mods.update.obsolete')),
+      if (check.outcome == UpdateOutcome.untracked) UpdateHint(loc.t('mods.update.untracked_hint')),
+      if (check.outcome == UpdateOutcome.versionUnknown) UpdateHint(loc.t('mods.update.version_unknown_hint')),
+      if (check.outcome == UpdateOutcome.tracksPatchOnly) UpdateHint(loc.t('mods.update.verdict_patch_only_detail')),
+      if (check.isGuess && check.outcome != UpdateOutcome.untracked) UpdateHint(loc.t('mods.update.guess_caveat')),
+    ];
+  }
+
+  /// The grounds of the row the Update button would install: why the app picked it, or that the user did. Only where
+  /// there is a choice to make.
+  Widget? _pickChip(_Section section, GbFile file, GbFile? picked) {
+    final check = section.check;
+    if (check.newerFiles.length < 2 || picked == null || file.idRow != picked.idRow) return null;
+    final palette = ZenithPalette.of(context);
+    // Only the check's *own* pick may claim grounds. Once the user has tapped a row the chip says so, rather than the
+    // app taking credit for their decision under a label it did not choose.
+    if (_chosenFileIdBy[section.key] != null) {
+      return ZenithBadge(label: loc.t('mods.update.pick_chosen'), tone: palette.badgeInfo, small: true);
+    }
+    return check.candidateMatchesVariant
+        ? ZenithBadge(label: loc.t('mods.update.pick_variant'), tone: palette.badgeInfo, small: true)
+        : ZenithBadge(label: loc.t('mods.update.pick_newest'), tone: palette.badgeNeutral, small: true);
+  }
+
+  /// The file the layer holds, preferring the published record and falling back to what the sidecar stored.
+  ///
+  /// The fallback is the interesting half: the strongest verdict this feature produces is "the file you installed is
+  /// gone from the mod page", and in exactly that case there is no published record left to describe. Saying
+  /// "unknown" there would contradict the verdict beside it.
+  Widget _youHave(_Section section) {
+    final check = section.check;
+    if (check.installedFile case final file?) {
+      return YouHaveBox.file(
+        file: file,
+        uploaded: file.dateAdded == null
+            ? null
+            : loc.t('mods.update.uploaded', params: {'date': formatResolveDate(file.dateAdded!)}),
+      );
+    }
+    // **This layer's own record, not the folder's.** Every layer carries its own `version` / `version_label`, and
+    // reading another's here would describe the wrong download.
+    final label = summarizeDownload(
+      section.download,
+      provenance: widget.mod.origin?.provenance ?? OriginProvenance.importedFolder,
+    ).versionLabel;
+    if (check.comparedByDate) {
+      return YouHaveBox(
+        name: loc.t('library.updates.marked_current'),
+        plainName: true,
+        uploaded: loc.t('library.updates.newest_on', params: {'date': formatResolveDate(check.comparedAgainst!)}),
+      );
+    }
+    return YouHaveBox(
+      name: label != null && label.isNotEmpty
+          ? label
+          : loc.t(check.outcome == UpdateOutcome.versionUnknown ? 'mods.update.unknown_file' : 'library.updates.file_gone'),
+      plainName: true,
+    );
+  }
+
+  /// "Ignore" against a live finding; "Stop ignoring it" once ignored. The undo sits in the same place as the thing it
+  /// undoes, so a user who ignored the wrong mod does not have to work out where it went.
+  Widget? _ignoreButton(_Section? section, UpdateCheck check, {bool collapse = false}) {
+    if (check.dismissed) {
+      return TextButton(
+        key: const ValueKey('update_stop_ignoring'),
+        onPressed: _busy ? null : () => _setDismissed(section, false, collapse: collapse),
+        child: Text(loc.t('mods.update.undismiss')),
+      );
+    }
+    if (!check.hasUpdate) return null;
+    return TextButton.icon(
+      key: const ValueKey('update_ignore'),
+      onPressed: _busy || check.dismissableUpTo == null ? null : () => _setDismissed(section, true, collapse: collapse),
+      icon: const Icon(Icons.visibility_off_outlined),
+      label: Text(loc.t('library.updates.ignore')),
+    );
+  }
+
+  /// Ignore and Update for one layer of a mixed folder.
+  Widget _layerActions(_Section section) {
+    final check = section.check;
+    final installable = _fileToInstall(section);
+    return Wrap(
+      alignment: WrapAlignment.spaceBetween,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        _ignoreButton(section, check) ?? const SizedBox.shrink(),
+        if (check.newerFiles.isNotEmpty)
+          FilledButton(
+            key: ValueKey('update_apply_${section.key?.role.name}'),
+            onPressed: _busy || installable == null ? null : () => _applyUpdate(section, installable),
+            child: Text(loc.t('mods.update_apply.action')),
+          ),
       ],
     );
   }
 
-  /// How an outcome is worded, iconed and coloured.
+  /// Names the download a block is about, and marks a patch as one.
   ///
-  /// One switch, because the headline states the folder's verdict and the
-  /// companion section states each other identity's — and two switches over the
-  /// same enum is how one of them ends up missing a case, silently, since a
-  /// missing key renders as its own dotted path rather than throwing.
-  (String, IconData, Color) _outcomeStyle(UpdateOutcome outcome) {
-    return switch (outcome) {
-      UpdateOutcome.updateAvailable => (
-        'mods.update.verdict_update',
-        Icons.arrow_circle_up,
-        ZenithPalette.of(context).amber,
-      ),
-      UpdateOutcome.possiblyOutdated => (
-        'mods.update.verdict_possibly',
-        Icons.arrow_circle_up,
-        ZenithPalette.of(context).amber,
-      ),
-      UpdateOutcome.upToDate => (
-        'mods.update.verdict_current',
-        Icons.check_circle_outline,
-        Theme.of(context).colorScheme.primary,
-      ),
-      // Amber rather than the primary tick: this is the absence of an answer,
-      // not a clean bill of health, and it reads next to the tick it replaces.
-      UpdateOutcome.tracksPatchOnly => (
-        'mods.update.verdict_patch_only',
-        Icons.call_split,
-        ZenithPalette.of(context).blue,
-      ),
-      UpdateOutcome.versionUnknown => (
-        'mods.update.verdict_version_unknown',
-        Icons.priority_high,
-        ZenithPalette.of(context).blue,
-      ),
-      UpdateOutcome.untracked => (
-        'mods.update.verdict_untracked',
-        Icons.link_off,
-        Theme.of(context).colorScheme.onSurfaceVariant,
-      ),
-      UpdateOutcome.trackingOff => (
-        'mods.update.verdict_tracking_off',
-        Icons.notifications_off_outlined,
-        Theme.of(context).colorScheme.onSurfaceVariant,
-      ),
-      UpdateOutcome.sourceGone => (
-        'mods.update.verdict_source_gone',
-        Icons.link_off,
-        ZenithPalette.of(context).blue,
-      ),
-      UpdateOutcome.indeterminate => (
-        'mods.update.verdict_indeterminate',
-        Icons.help_outline,
-        Theme.of(context).colorScheme.onSurfaceVariant,
-      ),
-    };
-  }
-
-  /// What the user has, preferring the published record and falling back to
-  /// what the sidecar stored.
-  ///
-  /// The fallback is the interesting half: the strongest verdict this feature
-  /// produces is "the file you installed is gone from the mod page", and in
-  /// exactly that case there is no published record left to describe. Saying
-  /// "unknown" there would contradict the headline directly above it.
-  String _installedDescription(_Section section) {
-    if (section.check.installedFile case final file?) return _fileHeadline(file);
-    // **This layer's own record, not the folder's.** Every layer carries its
-    // own `version` / `version_label`, and reading another's here would
-    // describe the wrong download — exactly the confusion a section per
-    // download exists to remove.
-    if (summarizeDownload(
-          section.download,
-          provenance: widget.mod.origin?.provenance ??
-              OriginProvenance.importedFolder,
-        ).versionLabel
-        case final label?) {
-      if (label.isNotEmpty) return label;
-    }
-    return loc.t('mods.update.unknown_file');
-  }
-
-  /// The update post that shipped [file], by name (`Version 1.5`).
-  String? _releaseName(_Section section, GbFile? file) {
-    if (file == null) return null;
-    for (final update in _updatesByMod[section.modId ?? -1] ??
-        const <GbUpdate>[]) {
-      if (!update.fileRowIds.contains(file.idRow)) continue;
-      final name = update.name?.trim();
-      return name == null || name.isEmpty ? null : name;
-    }
-    return null;
-  }
-
-  /// The filename with its upload date, for the compact "you have" /
-  /// "published" pair. The author's own words go on the greyed line beneath —
-  /// see [_fileDetail].
-  /// **The filename, and nothing glued to it.**
-  ///
-  /// The upload date used to be appended with a dash, which read as part of the
-  /// name — `v77.zip — 2026-06-19` looks like a file called that. It is a fact
-  /// *about* the file, the same kind as its version, so it belongs on the
-  /// greyed line with them.
-  String _fileHeadline(GbFile file) => fileDisplayName(file);
-
-  /// What the author said about the file **and when it went up**, for the
-  /// second line of those rows.
-  ///
-  /// It has to be *there*, not folded into the headline: those two rows sit
-  /// directly above one another and are frequently the same variant of the
-  /// same mod, so `7.4 · Main file` against `7.7 · Main file` is the comparison
-  /// the user opened the dialog for.
-  ///
-  /// The date joins it rather than the filename because it is the same kind of
-  /// thing — a fact about the file — and because on the rows where the author's
-  /// labels are identical it is the only thing telling them apart.
-  String? _fileDetail(GbFile file) {
-    final parts = [
-      if (fileDisplayDetail(file) case final detail?) detail,
-      if (file.dateAdded case final date?)
-        loc.t('mods.update.uploaded', params: {'date': _formatDate(date)}),
-    ];
-    return parts.isEmpty ? null : parts.join(' · ');
-  }
-
-  // ---------------------------------------------------------------- fragments
-
-  Widget _line(IconData icon, String label, String value, {String? detail}) {
-    final scheme = Theme.of(context).colorScheme;
+  /// **The marker is a badge, not a position.** Which download a sidecar stores first is install order, so a patch has
+  /// to be legible as a patch wherever it sits — see `docs/origin-tracking.md` §10.
+  Widget _layerHeader(_Section section) {
+    final palette = ZenithPalette.of(context);
+    final text = Theme.of(context).textTheme;
+    final file = section.file;
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 8,
       children: [
-        Icon(icon, size: 18, color: scheme.onSurfaceVariant),
-        const SizedBox(width: 6),
-        SizedBox(
-          width: 130,
-          child: Text(
-            label,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-          ),
+        ZenithBadge(
+          label: loc.t(section.isPatch ? 'mods.folder.role_patch' : 'mods.folder.role_mod'),
+          tone: section.isPatch ? palette.badgeNeutral : palette.badgeOn,
         ),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(value, style: Theme.of(context).textTheme.bodyMedium),
-              // The author's description, greyed and underneath, never standing
-              // in for the filename above it.
-              if (detail != null)
-                Text(
-                  detail,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                ),
+              Text(section.name, style: text.titleSmall?.copyWith(color: palette.text)),
+              // Two layers of one page carry one name, so each names its file, with the variant text in grey beneath
+              // (update-checks §7).
+              if (file != null) ...[
+                Text(file.name, style: text.bodySmall?.copyWith(color: palette.text2)),
+                if (file.detail case final detail?) Text(detail, style: text.bodySmall?.copyWith(color: palette.text3)),
+              ],
             ],
           ),
         ),
+        if (section.modId case final id?)
+          IconButton(
+            style: smallButtonStyle(context, iconOnly: true),
+            icon: const Icon(Icons.open_in_new_rounded),
+            tooltip: loc.t('mods.folder.open_page'),
+            onPressed: () => launchExternalUrl(context, gameBananaModUrl(id)),
+          ),
+        // **On the layer, not in the row of buttons below it.** Those two act on the update being reported; this acts
+        // on whether the folder holds this patch at all, which is a different question about a different thing — and
+        // the surface reporting a patch's update is where a user meets the patch they no longer have.
+        if (_removablePatch(section))
+          PopupMenuButton<_PatchAction>(
+            icon: const Icon(Icons.more_vert_rounded),
+            tooltip: loc.t('mods.update.patch_menu'),
+            enabled: !_busy,
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: _PatchAction.remove,
+                child: Row(
+                  spacing: 8,
+                  children: [
+                    const Icon(Icons.layers_clear_outlined),
+                    Expanded(child: Text(loc.t('mods.context_menu.remove_patch'), overflow: TextOverflow.ellipsis)),
+                  ],
+                ),
+              ),
+            ],
+            onSelected: (_) => _removePatch(section),
+          ),
       ],
     );
+  }
+
+  /// The author's latest update post with the link to compare on the mod's page, or the link alone when no post says
+  /// anything.
+  Widget _postOrLink(GbUpdate? post, int modId) {
+    final palette = ZenithPalette.of(context);
+    final link = ZenithLink(
+      loc.t('mods.update.compare_link'),
+      onTap: () {
+        if (!_busy) _openInMarketplace(modId);
+      },
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: palette.link, decoration: TextDecoration.underline),
+    );
+    if (post == null) return Align(alignment: Alignment.centerLeft, child: link);
+    return LatestUpdatePost(post: post, footer: Align(alignment: Alignment.centerLeft, child: link));
   }
 
   /// "2 other mods came from this archive."
@@ -1870,45 +1252,40 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     if (waiting.isEmpty) return const <Widget>[];
 
     return [
-      const SizedBox(height: 4),
-      _notice(
-        loc.plural(
-          'mods.update.siblings',
-          waiting.length,
-          params: {'count': '${waiting.length}'},
-        ),
-        Icons.folder_copy_outlined,
-      ),
+      UpdateHint(loc.plural('mods.update.siblings', waiting.length, params: {'count': '${waiting.length}'})),
     ];
   }
 
-  Widget _notice(String message, IconData icon) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 20, color: ZenithPalette.of(context).blue),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              message,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  /// The headline of an outcome, one switch because the dialog's title and each layer's verdict say the same thing and
+  /// a missing key renders as its own dotted path rather than throwing.
+  String _verdictKey(UpdateOutcome outcome) => switch (outcome) {
+    UpdateOutcome.updateAvailable => 'mods.update.verdict_update',
+    UpdateOutcome.possiblyOutdated => 'mods.update.verdict_possibly',
+    UpdateOutcome.upToDate => 'mods.update.verdict_current',
+    UpdateOutcome.tracksPatchOnly => 'mods.update.verdict_patch_only',
+    UpdateOutcome.versionUnknown => 'mods.update.verdict_version_unknown',
+    UpdateOutcome.untracked => 'mods.update.verdict_untracked',
+    UpdateOutcome.trackingOff => 'mods.update.verdict_tracking_off',
+    UpdateOutcome.sourceGone => 'mods.update.verdict_source_gone',
+    UpdateOutcome.indeterminate => 'mods.update.verdict_indeterminate',
+  };
+}
 
-  static String _formatDate(DateTime date) {
-    final d = date.toLocal();
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${d.year}-${two(d.month)}-${two(d.day)}';
-  }
+/// What [_ModUpdateDialogState.build] hands the dialog frame: the title, the body's blocks, and the footer.
+class _View {
+  const _View({
+    required this.title,
+    required this.body,
+    this.footerStart,
+    this.actions,
+    this.bodyPadding = const EdgeInsets.fromLTRB(24, 0, 24, 18),
+  });
+
+  final String title;
+  final List<Widget> body;
+  final Widget? footerStart;
+
+  /// Null leaves the dialog's one Close button.
+  final List<Widget>? actions;
+  final EdgeInsets bodyPadding;
 }

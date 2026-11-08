@@ -825,10 +825,16 @@ semantics.
 
 **"Reinstall this version…" is an update at the file id already recorded.**
 `screens/dialogs/reinstall_flow.dart` fetches the mod page, finds that one file and
-hands it to the same flow — so a repair inherits the snapshot, the wipe, the patch
-put back and the confirmation without any of them existing twice. Only the wording
+hands it to the same flow — so a repair inherits the snapshot, the wipe and the patch
+put back without any of them existing twice. Only the wording
 differs, and it has to: "Update Ellen?" in front of a reinstall reads as an offer of
 something newer.
+
+**It asks first, in its own card, and the confirmation after the download is not asked twice.**
+`ReinstallDialog` opens once the page is fetched, so it can name the file: its name, the author's words for it, when it was uploaded and its size, then the three steps: the folder is saved as a snapshot; the file is downloaded and unpacked, then the folder is cleared and the author's files are written into it; a recorded patch is put back on top, and anything else the user changed, rebound keys included, stays in the snapshot only, while the mod stays on or off as it is.
+Cancel there writes nothing and starts no download.
+Pressing Reinstall is the consent for those standard facts, so the confirmation (`showUpdateConfirmDialog`) is shown only when the preview has something the card could not say: a layout that cannot be reconciled, a download shaped like a patch, folders in the archive that the write leaves out, or a patch in the folder that cannot be put back (`confirmationHasNews`, set by `confirmOnlyIfNeeded`).
+Otherwise two screens would state the same things twice. The result dialog's keys explainer says the author's file replaced the keys, since nothing newer was installed.
 
 It needs its own surface because the update dialog appears when there is a *finding*,
 and a repair is wanted precisely when there is none — a mod broken by a game patch, a

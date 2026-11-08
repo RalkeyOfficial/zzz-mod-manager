@@ -340,6 +340,9 @@ class ZenithPalette extends ThemeExtension<ZenithPalette> {
   /// The accent washed into the card, behind something focused.
   Color get accentWash => Color.lerp(card, accent, 0.14)!;
 
+  /// The accent washed 8% into the card, behind the picked row of a list of files.
+  Color get rowPicked => Color.lerp(card, accent, 0.08)!;
+
   TonePair get badgeOn => TonePair(accent, onAccent);
 
   /// Accent text on the ink ground whatever the accent: the accent mixed 70% into white. The Paper accent's
