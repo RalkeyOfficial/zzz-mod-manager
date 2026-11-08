@@ -59,6 +59,7 @@ Future<void> showDeleteModDialog(
         if (context.mounted) {
           onDeleted();
         } else {
+          forgetDeletedMod(container, mod.id);
           await container.read(libraryProvider.notifier).rescan();
         }
       case DeleteStatus.missing || DeleteStatus.failed:
@@ -95,6 +96,19 @@ Future<void> showDeleteModDialog(
       actions: [copyDetailsAction(loc, notify, title: title, body: '$e')],
     );
   }
+}
+
+/// What the app holds about [modId] outside the mod list once it is deleted: the selection, an open page, a tick in
+/// All mods (or a mod installed later under the same name would come in ticked) and the cached set of mods with saved
+/// versions, which is stale when they went too.
+void forgetDeletedMod(ProviderContainer container, String modId) {
+  final selected = container.read(selectedModIdProvider.notifier);
+  if (selected.state == modId) selected.state = null;
+  final page = container.read(openModPageProvider.notifier);
+  if (page.state?.modId == modId) page.state = null;
+  final ticked = container.read(allModsSelectionProvider.notifier);
+  if (ticked.state.contains(modId)) ticked.state = ticked.state.difference({modId});
+  container.invalidate(modBackupsProvider);
 }
 
 /// The second question, asked after the trash had no room for the mod: delete it from the disk, for good.

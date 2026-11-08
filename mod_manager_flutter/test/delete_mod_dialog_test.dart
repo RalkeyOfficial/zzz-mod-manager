@@ -6,6 +6,7 @@ import 'package:mod_manager_flutter/screens/components/zenith_dialog.dart';
 import 'package:mod_manager_flutter/screens/dialogs/delete_mod_dialog.dart';
 import 'package:mod_manager_flutter/services/platform_service.dart' show TrashResult;
 import 'package:mod_manager_flutter/utils/notifications.dart';
+import 'package:mod_manager_flutter/utils/state_providers.dart';
 
 import 'support/localized_harness.dart';
 import 'support/temp_library.dart';
@@ -136,6 +137,7 @@ void main() {
     late TempLibrary temp;
     late ProviderContainer container;
     late bool deleted;
+    late ValueNotifier<bool> hostShown;
 
     Future<void> run(WidgetTester tester, {TrashResult answer = TrashResult.trashed}) async {
       temp = (await tester.runAsync(() => TempLibrary.create(prefix: 'zzz_delete_dialog_')))!;
@@ -144,13 +146,20 @@ void main() {
       container = ProviderContainer(overrides: temp.overrides);
       addTearDown(container.dispose);
       deleted = false;
+      hostShown = ValueNotifier(true);
+      addTearDown(hostShown.dispose);
       await pumpLocalized(
         tester,
-        Builder(
-          builder: (context) => TextButton(
-            onPressed: () => showDeleteModDialog(context, mod(), onDeleted: () => deleted = true),
-            child: const Text('open'),
-          ),
+        ValueListenableBuilder<bool>(
+          valueListenable: hostShown,
+          builder: (_, shown, _) => shown
+              ? Builder(
+                  builder: (context) => TextButton(
+                    onPressed: () => showDeleteModDialog(context, mod(), onDeleted: () => deleted = true),
+                    child: const Text('open'),
+                  ),
+                )
+              : const SizedBox(),
         ),
         container: container,
       );
@@ -194,6 +203,27 @@ void main() {
       expect(temp.modFolder('Winter Maid').existsSync(), isFalse);
       expect(temp.trash.names, isEmpty);
       expect(deleted, isTrue);
+    });
+
+    testWidgets('a delete that finishes after the screen is gone still lets go of the deleted mod', (tester) async {
+      await run(tester, answer: TrashResult.unavailable);
+      container.read(selectedModIdProvider.notifier).state = 'Winter Maid';
+      container.read(allModsSelectionProvider.notifier).state = {'Winter Maid', 'Other'};
+      final forGood = container.read(notificationsProvider).single.actions.last;
+      hostShown.value = false;
+      await tester.pump();
+
+      await tester.runAsync(() async {
+        forGood.onPressed();
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      });
+      await tester.pumpAndSettle();
+      await tapWithIo(tester, find.widgetWithText(FilledButton, 'Delete for good'));
+
+      expect(temp.modFolder('Winter Maid').existsSync(), isFalse);
+      expect(deleted, isFalse, reason: 'the caller is gone, so its own cleanup cannot run');
+      expect(container.read(selectedModIdProvider), isNull);
+      expect(container.read(allModsSelectionProvider), {'Other'});
     });
 
     testWidgets('cancelling the second question leaves the mod', (tester) async {

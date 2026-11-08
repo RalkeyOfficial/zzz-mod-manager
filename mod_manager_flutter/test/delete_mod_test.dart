@@ -108,6 +108,27 @@ void main() {
     expect(config.modKeyLabels.keys, ['Miyabi']);
   });
 
+  test('a cleanup step that throws or fails after the folder has moved does not turn the delete into a failure', () async {
+    // The folder is in the trash by then, so "delete failed" would be false, and the steps after the bad one must
+    // still run.
+    final uid = await modWithHistory('Ellen');
+    await config.setModNote('Ellen', 'keep me');
+    final faulty = ModManagerService(
+      _FaultyConfig(await SharedPreferences.getInstance(), configFile: File(p.join(temp.path, 'config.json'))),
+      snapshots: snapshots,
+      uids: uids,
+      moveToTrash: trash.move,
+      shaderFixes: ShaderFixesService(recordPath: p.join(temp.path, 'shader_fixes.json')),
+    );
+
+    final outcome = await faulty.deleteMod('Ellen');
+
+    expect(outcome.status, DeleteStatus.deleted);
+    expect(trash.names, ['Ellen']);
+    expect(config.modNotes.containsKey('Ellen'), isFalse, reason: 'the step after the one that threw still ran');
+    expect(await snapshots.list(uid), isEmpty, reason: 'and so did the ticked saved versions');
+  });
+
   test('a mod that was never snapshotted deletes cleanly', () async {
     // No uid, nothing filed under one — and nothing to go wrong.
     final folder = Directory(p.join(mods.path, 'Ellen'))..createSync();
@@ -210,4 +231,15 @@ void main() {
     expect((await service.deleteMod('Nobody')).status, DeleteStatus.missing);
     expect(trash.calls, isEmpty);
   });
+}
+
+/// A config whose favourites throw and whose key labels cannot be written.
+class _FaultyConfig extends ConfigService {
+  _FaultyConfig(super.prefs, {super.configFile});
+
+  @override
+  Future<bool> removeFavoriteMod(String modId) async => throw StateError('favourites are unreadable');
+
+  @override
+  Future<bool> setModKeyLabels(String modId, Map<String, String> labels) async => false;
 }

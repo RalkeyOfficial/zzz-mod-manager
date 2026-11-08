@@ -526,6 +526,36 @@ void main() {
         expect([for (final a in actions) a.label], ['Copy details'], reason: 'no Delete for good in bulk');
       });
 
+      testWidgets('a trash refusal and another failure end as one error card, which keeps Copy details', (tester) async {
+        installMod('Ellen School');
+        // No folder on disk: that mod's delete fails for another reason than the trash.
+        final container = await pumpTable(tester, [mod('Ellen School'), mod('Ghost', characterId: 'miyabi')]);
+        await tick(tester, ['Ellen School', 'Ghost']);
+        temp.trash.answer = TrashResult.unavailable;
+
+        await deleteTicked(tester, container, 'Delete 2 mods');
+
+        final cards = container.read(notificationsProvider);
+        expect([for (final n in cards) (n.kind, n.title, n.body)], [
+          (NotificationKind.error, "Couldn't delete 2 mods", 'Ellen School, Ghost'),
+        ]);
+        expect([for (final a in cards.single.actions) a.label], ['Copy details']);
+      });
+
+      testWidgets('a failure that is not the trash ends the Working card as the error, with no Copy details',
+          (tester) async {
+        final container = await pumpTable(tester, [mod('Ghost', characterId: 'miyabi')]);
+        await tick(tester, ['Ghost']);
+
+        await deleteTicked(tester, container, 'Delete 1 mod');
+
+        final cards = container.read(notificationsProvider);
+        expect([for (final n in cards) (n.kind, n.title, n.body)], [
+          (NotificationKind.error, "Couldn't delete 1 mod", 'Ghost'),
+        ]);
+        expect(cards.single.actions, isEmpty);
+      });
+
       testWidgets('shows its Working card once confirmed, and dismisses it on success', (tester) async {
         installMod('Alpha');
         installMod('Bravo');

@@ -86,13 +86,15 @@ NotificationHandle? _working(AppLocalizations loc, NotificationCenter notify, St
           );
 
 /// Ends a bulk action's Working [card]: as the error naming [failed], under the counted [titleKey], or dismissed
-/// when nothing failed. Raised after the action's other notices, so the result is the newest card.
+/// when nothing failed. Raised after the action's other notices, so the result is the newest card. [actions] builds
+/// the result's buttons from its title and body.
 void _endBulk(
   AppLocalizations loc,
   NotificationCenter notify,
   NotificationHandle? card, {
   required String titleKey,
   required List<ModInfo> failed,
+  List<NotificationAction> Function(String title, String body)? actions,
 }) {
   if (failed.isEmpty) {
     card?.dismiss();
@@ -100,10 +102,17 @@ void _endBulk(
   }
   final title = loc.plural(titleKey, failed.length, params: {'count': '${failed.length}'});
   final body = failed.map((m) => m.name).join(', ');
+  final buttons = actions?.call(title, body) ?? const <NotificationAction>[];
   if (card == null) {
-    notify.error(title, body: body, characterId: _soleCharacter(failed));
+    notify.error(title, body: body, characterId: _soleCharacter(failed), actions: buttons);
   } else {
-    card.update(kind: NotificationKind.error, title: title, body: body, characterId: _soleCharacter(failed));
+    card.update(
+      kind: NotificationKind.error,
+      title: title,
+      body: body,
+      characterId: _soleCharacter(failed),
+      actions: buttons,
+    );
   }
 }
 
@@ -322,21 +331,18 @@ Future<bool> bulkDelete(BuildContext context, ProviderContainer container, List<
     await container.read(libraryProvider.notifier).rescan();
 
     reportSkippedWhileWriting(loc, notify, writing);
-    if (notTrashed.isNotEmpty) {
-      final title = loc.plural(
-        'mods.delete.trash_failed_many_title',
-        notTrashed.length,
-        params: {'count': '${notTrashed.length}'},
-      );
-      final body = notTrashed.map((m) => m.name).join(', ');
-      notify.error(
-        title,
-        body: body,
-        characterId: _soleCharacter(notTrashed),
-        actions: [copyDetailsAction(loc, notify, title: title, body: body)],
-      );
-    }
-    _endBulk(loc, notify, card, titleKey: 'library.all.delete_failed_title', failed: failed);
+    // One result for every refusal: the card names the mods the trash refused as the trash's own error, and any other
+    // failure under the plain "couldn't delete" title.
+    _endBulk(
+      loc,
+      notify,
+      card,
+      titleKey: failed.isEmpty ? 'mods.delete.trash_failed_many_title' : 'library.all.delete_failed_title',
+      failed: [for (final mod in selected) if (failed.contains(mod) || notTrashed.contains(mod)) mod],
+      actions: (title, body) => [
+        if (notTrashed.isNotEmpty) copyDetailsAction(loc, notify, title: title, body: body),
+      ],
+    );
     ended = true;
   } finally {
     if (!ended) card?.dismiss();

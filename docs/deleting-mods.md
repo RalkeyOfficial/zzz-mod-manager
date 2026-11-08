@@ -16,10 +16,14 @@ One mod, one confirmation. After it, `ModManagerService.deleteMod` does these in
 5. **Move the folder to the trash.**
 6. **Only if that worked:** clear the mod's settings (active, favourite, note, character tag), drop its cached keybinds, and delete its saved versions when the box was ticked.
 
+Once the folder has moved, the delete is `deleted` whatever step 6 does. Each of its steps runs on its own, and one that fails or throws is logged and skipped, since reporting "delete failed" for a mod that is already in the trash is wrong, and a skipped step only leaves a stale entry or wasted space behind.
+A stale entry is not cleared when a mod of the same folder name is added later: settings keyed by folder name (the favourite, the note, the key labels, the character tag) belong to that name.
+
 A trash that refuses leaves everything as it was: steps 3 and 4 are undone by turning the mod on again when it was on, and steps 1 and 6 touched nothing.
 That is why the folder moves before any setting is cleared. A delete that clears settings first and then fails to move the folder leaves a mod that is still in the library with its favourite, note and character gone.
 
 The caller owns the confirmation and the Working state on the button that asked, and reports a failure as one notification. A success is silent: the grid shows it ([`notifications.md`](notifications.md) §1).
+A delete that finishes after the screen that asked has gone, which the "Delete for good…" button on a card can, still clears the selection, an open page and the mod's tick in All mods, and reads the library again; only the screen's own list update is skipped.
 
 ## 2. The trash on each platform
 
@@ -95,7 +99,7 @@ A compact `ZenithDialog`, 480 wide, an alert dialog to a screen reader.
 A ticked set of mods goes through the same steps one by one, with the same box: **Also delete their N snapshots (size)**, ticked by default, counted over the set.
 The confirmation names the mods (six, then "and N more"), the total size when measured, and how many are on.
 
-Each mod that cannot be trashed is left as it is, and one notification at the end names them all with **Copy details**. It does not offer Delete for good: a bulk permanent delete is a decision about a whole set that no one has looked at, and the single delete is where that choice is made.
+Each mod that cannot be deleted is left as it is, and one notification at the end names them all. It is the Working card turned into its result ([`notifications.md`](notifications.md) §6), never a second card beside it: "N mods couldn't be moved to the trash" when every refusal was the trash's, "Couldn't delete N mods" when any mod failed for another reason, with **Copy details** whenever the trash refused one. It does not offer Delete for good: a bulk permanent delete is a decision about a whole set that no one has looked at, and the single delete is where that choice is made.
 
 ## 7. What is not done
 

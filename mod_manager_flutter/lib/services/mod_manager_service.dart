@@ -976,21 +976,32 @@ class ModManagerService {
         _files.info('moved to the trash', fields: {'mod': modName});
       }
 
-      await _configService.removeActiveMod(modName);
-      await _configService.removeFavoriteMod(modName);
-      await _configService.setModNote(modName, '');
-      await _configService.setModKeyLabels(modName, const {});
-      await _configService.removeModCharacterTag(modName);
+      // The folder is gone, so nothing below can fail the delete: each step is logged and the rest still run. A mod
+      // with no uid never had a saved version.
+      await _afterDelete(modName, 'active', () => _configService.removeActiveMod(modName));
+      await _afterDelete(modName, 'favourite', () => _configService.removeFavoriteMod(modName));
+      await _afterDelete(modName, 'note', () => _configService.setModNote(modName, ''));
+      await _afterDelete(modName, 'key labels', () => _configService.setModKeyLabels(modName, const {}));
+      await _afterDelete(modName, 'character tag', () => _configService.removeModCharacterTag(modName));
       invalidateKeybinds(modName);
-
-      // After the folder, and never gating the delete: the mod is already gone by here, so a group that could not be
-      // removed is wasted space rather than a failure to report. A mod with no uid never had a saved version.
-      if (deleteSnapshots && uid != null) await _snapshots.deleteGroup(uid);
+      if (deleteSnapshots && uid != null) {
+        await _afterDelete(modName, 'saved versions', () => _snapshots.deleteGroup(uid));
+      }
       return const DeleteOutcome(DeleteStatus.deleted);
     } catch (error, stack) {
       _files.error('delete failed', error: error, stack: stack, fields: {'mod': modName});
       if (wasOn && modDir != null && await modDir.exists()) await _turnBackOn(modName);
       return const DeleteOutcome(DeleteStatus.failed);
+    }
+  }
+
+  /// One cleanup step after the folder has gone. A step that returns false or throws is logged and never fails the
+  /// delete: what it leaves behind is wasted space or a stale entry, not a mod that is still there.
+  Future<void> _afterDelete(String modName, String step, Future<bool> Function() run) async {
+    try {
+      if (!await run()) _files.warning('cleanup after a delete did not finish', fields: {'mod': modName, 'step': step});
+    } catch (error, stack) {
+      _files.warning('cleanup after a delete failed', error: error, stack: stack, fields: {'mod': modName, 'step': step});
     }
   }
 

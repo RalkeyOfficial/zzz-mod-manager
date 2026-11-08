@@ -227,7 +227,7 @@ class ApiService {
       if (outcome.deleted) _publishModNames();
       return outcome;
     } catch (e) {
-      throw Exception('Помилка видалення моду: $e');
+      throw Exception('Failed to delete the mod: $e');
     }
   }
 

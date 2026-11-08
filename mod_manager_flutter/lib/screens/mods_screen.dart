@@ -296,13 +296,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
   /// Removes a deleted mod from the UI without a rescan (its folder and state
   /// are already gone).
   void _onModDeleted(String modId) {
-    final selected = ref.read(selectedModIdProvider.notifier);
-    if (selected.state == modId) selected.state = null;
-    final page = ref.read(openModPageProvider.notifier);
-    if (page.state?.modId == modId) page.state = null;
-    // Or a mod installed later under the same name comes in ticked.
-    final ticked = ref.read(allModsSelectionProvider.notifier);
-    if (ticked.state.contains(modId)) ticked.state = ticked.state.difference({modId});
+    forgetDeletedMod(ProviderScope.containerOf(context, listen: false), modId);
     final allMods = _currentAllMods();
     if (allMods == null) {
       unawaited(loadMods());
@@ -557,11 +551,7 @@ class _ModsScreenState extends ConsumerState<ModsScreen> {
       savedVersions: saved.length,
       savedBytes: saved.fold<int>(0, (sum, snapshot) => sum + snapshot.sizeBytes),
       work: work,
-      onDeleted: () {
-        _onModDeleted(mod.id);
-        // The cached set of uids that have a saved version is stale when the versions went too.
-        ref.invalidate(modBackupsProvider);
-      },
+      onDeleted: () => _onModDeleted(mod.id),
     );
   }
 
