@@ -33,6 +33,8 @@ a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
 .av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 25%}
 .av::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:#9FE1FA}
 .t-elec{background-color:#0F1730;background-image:radial-gradient(#243F73 1.1px,transparent 1.3px);background-size:7px 7px}
+.t-fire{background-color:#25130D;background-image:radial-gradient(#552B19 1.1px,transparent 1.3px);background-size:7px 7px}
+.have{display:flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid #23262B;border-radius:12px;background:#0F1012}
 .folder{display:flex;align-items:center;gap:12px;width:100%;padding:11px 14px;border:0;border-bottom:1px solid #1A1C20;background:transparent;cursor:pointer;text-align:left}
 .folder:last-child{border-bottom:0}
 .folder.on{background:color-mix(in srgb,var(--ac) 7%,#121316)}
@@ -68,15 +70,29 @@ a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
 
 <div role="dialog" aria-modal="true" aria-labelledby="fd-title" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 700px; max-width: calc(100% - 32px); max-height: 860px; display: flex; flex-direction: column; border-radius: 18px; background: #0F1012; border: 1px solid #2A2D33; box-shadow: 0 30px 80px rgba(0,0,0,.6)">
   <div style="display: flex; align-items: center; gap: 14px; padding: 20px 24px 14px">
-    <span class="t-elec" style="width: 64px; height: 44px; border-radius: 8px; flex: none; border: 1px solid #23262B"></span>
+    <span class="{{thumb}}" style="width: 64px; height: 44px; border-radius: 8px; flex: none; border: 1px solid #23262B"></span>
     <div style="flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0">
-      <h2 id="fd-title" class="disp" style="font-size: 20px; font-weight: 700">Pick what to install</h2>
-      <span style="font-size: 12px; color: #80858F"><span class="mono">SharkHoodie_Pack.zip</span> has 3 folders · 289 MB</span>
+      <h2 id="fd-title" class="disp" style="font-size: 20px; font-weight: 700">{{title}}</h2>
+      <span style="font-size: 12px; color: #80858F"><span class="mono">{{file}}</span> {{fileSub}}</span>
     </div>
     <a class="btn btn-ghost btn-sm ibtn" href="Downloads.dc.html" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></a>
   </div>
 
   <div style="flex: 1; min-height: 0; overflow: auto; padding: 0 24px 18px; display: flex; flex-direction: column; gap: 16px">
+    <sc-if value="{{upd}}" hint-placeholder-val="{{false}}">
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <span class="lbl">You have now</span>
+        <div class="have">
+          <svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="color: #80858F"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.5l2 2h7.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path></svg>
+          <span style="flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0">
+            <span class="mono" style="font-size: 12px">PastelBurnice/</span>
+            <span style="font-size: 12px; color: #80858F">PastelBurnice.ini and 38 files · from the 15 Jul file</span>
+          </span>
+          <span class="mono" style="font-size: 11px; color: #80858F; width: 56px; text-align: right">114 MB</span>
+        </div>
+      </div>
+    </sc-if>
+
     <div style="display: flex; flex-direction: column; gap: 6px">
       <span class="lbl">Folders in the archive</span>
       <div role="group" aria-label="Folders to install" style="border: 1px solid #2A2D33; border-radius: 12px; background: #121316; overflow: hidden">
@@ -96,6 +112,11 @@ a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
       <span style="font-size: 12px; color: #80858F">Hints are guesses from what's inside each folder. Nothing is ticked for you.</span>
     </div>
 
+    <sc-if value="{{upd}}" hint-placeholder-val="{{false}}">
+      <p style="font-size: 12px; color: #A9ADB5; line-height: 1.6">The ticked folders replace what Pastel Burnice has now, together. It keeps its name, its character and whether it's on. To keep the other folder as a mod of its own, install it from the mod page.</p>
+    </sc-if>
+
+    <sc-if value="{{notUpd}}" hint-placeholder-val="{{true}}">
     <div style="display: flex; flex-direction: column; gap: 6px">
       <span class="lbl">Install the ticked folders as</span>
       <div role="radiogroup" aria-label="Install as" style="display: flex; gap: 10px; flex-wrap: wrap">
@@ -121,28 +142,35 @@ a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
         </sc-for>
       </div>
     </sc-if>
+    </sc-if>
   </div>
 
   <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 24px; border-top: 1px solid #1E2024; flex-wrap: wrap">
-    <a class="btn btn-ghost" href="Downloads.dc.html">Don't install</a>
+    <a class="btn btn-ghost" href="Downloads.dc.html">{{dontLbl}}</a>
     <div style="display: flex; align-items: center; gap: 12px">
       <span style="font-size: 12px; color: #A9ADB5">{{status}}</span>
       <sc-if value="{{ready}}" hint-placeholder-val="{{true}}"><a class="btn btn-pri" href="Downloads.dc.html">{{goLbl}}</a></sc-if>
-      <sc-if value="{{notReady}}" hint-placeholder-val="{{false}}"><button class="btn btn-pri" disabled style="opacity: .45; cursor: not-allowed">Install</button></sc-if>
+      <sc-if value="{{notReady}}" hint-placeholder-val="{{false}}"><button class="btn btn-pri" disabled style="opacity: .45; cursor: not-allowed">{{offLbl}}</button></sc-if>
     </div>
   </div>
 </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#A98BFF","options":["#A98BFF","#F3EFEB","#C8F031","#5FE1D9"]},"$preview":{"width":1440,"height":900}}'>
+<script type="text/x-dc" data-dc-script data-props='{"context":{"editor":"enum","default":"New install","options":["New install","Update"]},"accent":{"editor":"color","default":"#A98BFF","options":["#A98BFF","#F3EFEB","#C8F031","#5FE1D9"]},"$preview":{"width":1440,"height":900}}'>
 class Component extends DCLogic {
   constructor(props) {
     super(props);
-    this.state = { ticked: [1, 2], mode: 'separate' };
+    this.state = { ticked: null, mode: 'separate' };
   }
   renderVals() {
-    const { ticked, mode } = this.state;
-    const data = [
+    const { mode } = this.state;
+    // An update fills one mod that already exists, so there is nothing to name and no separate mods.
+    const upd = (this.props.context ?? 'New install') === 'Update';
+    const ticked = this.state.ticked ?? (upd ? [] : [1, 2]);
+    const data = upd ? [
+      ['PastelBurnice/', 'PastelBurnice.ini and 38 files', '116 MB', 'Same name as your folder', ''],
+      ['PastelBurnice_NoJacket/', 'PastelBurnice.ini and 36 files', '118 MB', 'Named like the file', '']
+    ] : [
       ['Previews/', '12 images, no .ini', '8 MB', 'Looks like preview images', ''],
       ['Shark Hoodie (Hood up)/', 'SharkHoodie.ini and 41 files', '142 MB', '', 'Shark Hoodie (Hood up)'],
       ['Shark Hoodie (Hood down)/', 'SharkHoodie.ini and 39 files', '139 MB', '', 'Shark Hoodie (Hood down)']
@@ -163,8 +191,23 @@ class Component extends DCLogic {
       ? ticked.map((i) => ({ value: data[i][4] || data[i][0].replace('/', ''), label: 'Name for ' + data[i][0] }))
       : (n > 0 ? [{ value: 'Shark Hoodie', label: 'Mod name' }] : []);
     const mods = sep ? n : (n > 0 ? 1 : 0);
+    if (upd) {
+      return {
+        accent: this.props.accent ?? '#A98BFF',
+        upd, notUpd: false, folders, names: [],
+        thumb: 't-fire', title: 'Pick what to install', file: 'PastelBurnice_NoJacket.zip', fileSub: 'has 2 folders · update for Pastel Burnice',
+        dontLbl: 'Skip this update',
+        anyTicked: false,
+        ready: n > 0, notReady: n === 0,
+        status: n === 0 ? 'Tick the folder that replaces it' : n === 1 ? '1 folder replaces Pastel Burnice' : n + ' folders go into Pastel Burnice together',
+        goLbl: 'Update Pastel Burnice', offLbl: 'Update Pastel Burnice'
+      };
+    }
     return {
       accent: this.props.accent ?? '#A98BFF',
+      upd, notUpd: true,
+      thumb: 't-elec', title: 'Pick what to install', file: 'SharkHoodie_Pack.zip', fileSub: 'has 3 folders · 289 MB',
+      dontLbl: 'Don’t install', offLbl: 'Install',
       folders, names,
       oneCls: sep ? 'how' : 'how on', sepCls: sep ? 'how on' : 'how',
       oneChecked: sep ? 'false' : 'true', sepChecked: sep ? 'true' : 'false',

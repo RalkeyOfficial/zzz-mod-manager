@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Updating mods, through notifications</title>
+<script src="../../runtime/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Unbounded:wght@500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#060708}
+a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
+.app,.app *{box-sizing:border-box}
+.app{font-family:'Geist',system-ui,sans-serif;color:#ECEDEE;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+:where(.app) :where(button,input,textarea){font:inherit;color:inherit}
+.app h1,.app h2,.app h3,.app p{margin:0}
+.disp{font-family:'Unbounded','Geist',sans-serif;letter-spacing:-0.01em}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.logo{width:26px;height:26px;display:block;flex:none;object-fit:contain}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:8px;border:1px solid #363A42;background:#1A1C20;color:#ECEDEE;font-weight:500;font-size:13px;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn:hover{background:#24272C;color:#ECEDEE}
+.btn-pri{background:var(--ac);border-color:var(--ac);color:#0B0C0E;font-weight:600}
+.btn-pri:hover{background:var(--ac);color:#0B0C0E;filter:brightness(1.08)}
+.btn-pri[disabled]{opacity:.45;cursor:not-allowed;filter:none}
+.btn-ghost{background:transparent;border-color:transparent;color:#A9ADB5}
+.btn-sm{height:30px;padding:0 10px;font-size:12px;border-radius:7px}
+.lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#80858F}
+.sk{background:#15171A;border-radius:8px}
+.nav{display:flex;align-items:center;gap:12px;height:38px;padding:0 12px;border-radius:8px;color:#A9ADB5;text-decoration:none;font-weight:500}
+.nav.cur{background:#1C1F24;color:#ECEDEE;box-shadow:inset 0 0 0 1px #2A2D33}
+.nav.cur .i{color:var(--ac)}
+.nav .n{margin-left:auto;font-family:'Geist Mono',monospace;font-size:11px;color:#80858F}
+.nav .n.att{display:inline-flex;align-items:center;gap:4px;background:#3A2A0C;color:#FFC870;padding:1px 6px 1px 5px;border-radius:5px;font-weight:600}
+.pic{position:relative;width:32px;height:32px;flex:none}
+.pic img{width:32px;height:32px;border-radius:9px;object-fit:cover;object-position:50% 22%;display:block}
+.pic .st{position:absolute;right:-5px;bottom:-5px;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;border:2px solid #1B1D21}
+.pic .st .i{width:10px;height:10px;stroke-width:2.8}
+.st-work{background:#2A2D33;color:#ECEDEE}.st-ok{background:var(--ac);color:#0B0C0E}.st-ask{background:#3D8BE0;color:#06111E}.st-err{background:#FF6B5B;color:#160605}
+.fl{display:flex;align-items:baseline;gap:8px;min-width:0;font-size:12px;color:#80858F}
+.fl .fn{font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:#A9ADB5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:none;max-width:60%}
+.fl .vt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.spin{animation:spin .9s linear infinite;transform-origin:50% 50%}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+
+/* Updates page rows */
+.urow{display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid #1A1C20}
+.urow:last-child{border-bottom:0}
+.ust{display:flex;align-items:center;gap:8px;font-size:12px;white-space:nowrap}
+.ust b{font-weight:600}
+.u-work{color:#ECEDEE}.u-wait{color:#80858F}.u-ok{color:var(--ac)}.u-ask{color:#9CCBFF}.u-err{color:#FF9A8E}.u-off{color:#A9ADB5}
+.mini{width:90px;height:4px;border-radius:99px;background:#22252A;overflow:hidden}
+.mini span{display:block;height:100%;background:var(--ac);transition:width .15s linear}
+.link{all:unset;cursor:pointer;color:var(--ac);font-weight:600}
+.link:hover{color:#ECEDEE}
+
+/* notifications */
+.nt{position:relative;overflow:hidden;width:380px;display:flex;gap:12px;align-items:flex-start;padding:12px 10px 12px 12px;border-radius:12px;background:#1B1D21;border:1px solid #30333A;box-shadow:0 14px 40px rgba(0,0,0,.45)}
+.nt .ic{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex:none}
+.nt .tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;padding-top:4px}
+.nt .t{font-weight:600}
+.nt .b{font-size:12px;color:#A9ADB5}
+.nt .acts{display:flex;gap:2px;margin:4px 0 -6px -8px}
+.na{all:unset;cursor:pointer;display:inline-flex;align-items:center;min-height:30px;padding:0 8px;border-radius:7px;font-size:12px;font-weight:600;color:#ECEDEE}
+.na:hover{background:#2A2D33}.na.pri{color:var(--ac)}
+.k-ok .ic{background:color-mix(in srgb,var(--ac) 16%,#1B1D21);color:var(--ac)}
+.k-err{border-color:#5A2620;background:#1E1514}
+.k-err .pic .st{border-color:#1E1514}
+.nbar{position:absolute;left:0;right:0;bottom:0;height:3px;background:#2A2D33}
+.nbar span{display:block;height:100%;background:var(--ac);transition:width .15s linear}
+.deck{position:relative;width:380px;margin-top:14px}
+.deck .ghost{position:absolute;left:50%;height:20px;border-radius:12px 12px 0 0;background:#17191C;border:1px solid #2A2D33;border-bottom:0;transform:translateX(-50%)}
+.more{display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:999px;background:#1B1D21;border:1px solid #30333A;color:#A9ADB5;font-size:12px}
+
+/* Downloads panel */
+.dl{display:flex;gap:12px;padding:12px;border-radius:12px;border:1px solid #23262B;background:#121316}
+.dl.att{border-color:#5A4215;background:#17120A}
+.dl.quiet{opacity:.75}
+.bar{height:6px;border-radius:99px;background:#22252A;overflow:hidden}
+.bar span{display:block;height:100%;background:var(--ac);border-radius:99px;transition:width .15s linear}
+.bar.inst span{background:color-mix(in srgb,var(--ac) 55%,#ECEDEE)}
+
+/* the patch and folders dialogs, in their update version (PatchModal and FoldersModal, context Update) */
+.t-fire{background-color:#25130D;background-image:radial-gradient(#552B19 1.1px,transparent 1.3px);background-size:7px 7px}
+.t-ice{background-color:#0E1D25;background-image:radial-gradient(#1F4556 1.1px,transparent 1.3px);background-size:7px 7px}
+.choice{border:1px solid #2A2D33;border-radius:12px;background:#121316;overflow:hidden}
+.choice.on{border-color:color-mix(in srgb,var(--ac) 55%,#2A2D33)}
+.chead{display:flex;align-items:flex-start;gap:12px;width:100%;padding:14px 16px;border:0;background:transparent;cursor:pointer;text-align:left}
+.radio{width:18px;height:18px;border-radius:50%;border:1.5px solid #4A4E57;flex:none;position:relative;margin-top:1px}
+.on > .chead .radio,.row.on .radio{border-color:var(--ac)}
+.on > .chead .radio::after,.row.on .radio::after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--ac)}
+.cbody{display:flex;flex-direction:column;gap:8px;padding:0 16px 16px 46px}
+.row{display:flex;align-items:center;gap:12px;width:100%;padding:9px 12px;border:1px solid #23262B;border-radius:10px;background:#0F1012;cursor:pointer;text-align:left}
+.row.on{border-color:color-mix(in srgb,var(--ac) 55%,#23262B);background:color-mix(in srgb,var(--ac) 7%,#0F1012)}
+.hint{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;font-size:11px;color:#C9CCD2;border:1px dashed #4A4E57;white-space:nowrap}
+.inp{display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;border-radius:8px;border:1px solid #2F3239;background:#0F1012;color:#80858F}
+.inp input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:#ECEDEE}
+.disc{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:#A9ADB5;cursor:pointer;padding:2px 0;font-size:12px}
+.disc:hover{color:#ECEDEE}
+.folder{display:flex;align-items:center;gap:12px;width:100%;padding:11px 14px;border:0;border-bottom:1px solid #1A1C20;background:transparent;cursor:pointer;text-align:left}
+.folder:last-child{border-bottom:0}
+.folder.on{background:color-mix(in srgb,var(--ac) 7%,#121316)}
+.cb{width:18px;height:18px;border-radius:5px;border:1.5px solid #4A4E57;flex:none;display:grid;place-items:center;color:transparent}
+.folder.on .cb{background:var(--ac);border-color:var(--ac);color:#0B0C0E}
+.have{display:flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid #23262B;border-radius:12px;background:#0F1012}
+.demo{position:absolute;right:150px;top:7px;display:flex;align-items:center;gap:10px;z-index:5}
+.demo span{font-size:12px;color:#80858F}
+</style>
+</helmet>
+<div class="app" style="--ac: {{accent}}; position: relative; width: 100%; height: 900px; background: #0B0C0E; display: flex; flex-direction: column; overflow: hidden">
+
+<header style="display: flex; align-items: center; gap: 16px; height: 44px; padding-left: 16px; border-bottom: 1px solid #1E2024; background: #0A0B0D; flex: none">
+  <div style="display: flex; align-items: center; gap: 10px; width: 200px"><img class="logo" src="../../../mod_manager_flutter/assets/brand/logo-mark-on-dark.png" alt="Zenith"><span class="disp" style="font-weight: 700; letter-spacing: .08em">ZENITH</span></div>
+</header>
+<div class="demo">
+  <span>Plays the whole run from the start</span>
+  <button class="btn btn-sm" onClick="{{replay}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3L4.5 9"></path><path d="M4.5 4.5V9H9"></path></svg>Replay</button>
+</div>
+
+<div style="flex: 1; display: flex; min-height: 0">
+  <nav aria-label="Main" style="flex: 0 0 216px; display: flex; flex-direction: column; gap: 2px; padding: 14px 10px; border-right: 1px solid #1E2024; background: #0A0B0D">
+    <span class="lbl" style="padding: 6px 12px 8px">Library</span>
+    <a class="nav" href="Main.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"></rect><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"></rect><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"></rect><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"></rect></svg>Characters<span class="n">48</span></a>
+    <a class="nav" href="AllMods.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"></path></svg>All mods<span class="n">61</span></a>
+    <a class="nav cur" href="Updates.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="m8.5 12 3.5-3.5 3.5 3.5M12 8.5V16"></path></svg>Updates</a>
+    <a class="nav" href="Loadouts.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.5 8.5 4.5-8.5 4.5L3.5 8z"></path><path d="m3.5 12.5 8.5 4.5 8.5-4.5"></path><path d="m3.5 16.5 8.5 4.5 8.5-4.5"></path></svg>Loadouts<span class="n">4</span></a>
+    <span class="lbl" style="padding: 18px 12px 8px">GameBanana</span>
+    <a class="nav" href="Browse.dc.html"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="m15.5 8.5-2 5-5 2 2-5z"></path></svg>Browse</a>
+    <button class="nav" style="all: unset; display: flex; align-items: center; gap: 12px; height: 38px; padding: 0 12px; border-radius: 8px; color: #A9ADB5; font-weight: 500; cursor: pointer" onClick="{{togglePanel}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"></path><path d="m7 10 5 5 5-5"></path><path d="M5 20h14"></path></svg>Downloads
+      <sc-if value="{{navAtt}}" hint-placeholder-val="{{false}}"><span class="n att" style="margin-left: auto">{{attCount}}</span></sc-if>
+    </button>
+  </nav>
+
+  <main style="flex: 1; min-width: 0; padding: 28px 32px; display: flex; flex-direction: column; gap: 18px">
+    <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px">
+      <div style="display: flex; flex-direction: column; gap: 4px">
+        <h1 class="disp" style="font-size: 24px; font-weight: 700">Updates</h1>
+        <span style="color: #80858F; font-size: 12px">Last checked 2 minutes ago</span>
+      </div>
+      <div class="sk" style="width: 300px; height: 36px"></div>
+    </div>
+    <section style="display: flex; flex-direction: column; gap: 10px">
+      <h2 style="font-size: 15px; font-weight: 600">Newer files</h2>
+      <div style="border: 1px solid #23262B; border-radius: 12px; background: #101114; overflow: hidden">
+        <sc-for list="{{rows}}" as="m" hint-placeholder-count="3">
+          <div class="urow">
+            <span class="pic"><img src="{{m.pic}}" alt=""></span>
+            <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+              <span><b style="font-weight: 600">{{m.name}}</b> <span style="font-size: 12px; color: #80858F">· {{m.char}}</span></span>
+              <span class="fl"><span class="fn">{{m.file}}</span><span class="vt">“{{m.variant}}”</span></span>
+            </span>
+            <span class="{{m.uCls}}">
+              <sc-if value="{{m.uBar}}" hint-placeholder-val="{{false}}"><span class="mini"><span style="width: {{m.barW}}"></span></span></sc-if>
+              <b>{{m.uStat}}</b>
+              <sc-if value="{{m.isAsk}}" hint-placeholder-val="{{false}}"><button class="link" onClick="{{m.answer}}">Answer</button></sc-if>
+              <sc-if value="{{m.isFail}}" hint-placeholder-val="{{false}}"><button class="link" onClick="{{m.retry}}">Retry</button></sc-if>
+              <sc-if value="{{m.isDone}}" hint-placeholder-val="{{false}}"><button class="link" style="color: #A9ADB5; font-weight: 500" onClick="{{m.undo}}">Undo</button></sc-if>
+            </span>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+    <div class="sk" style="height: 160px; background: #0F1012"></div>
+  </main>
+</div>
+
+<sc-if value="{{panelOpen}}" hint-placeholder-val="{{false}}">
+<aside role="dialog" aria-label="Downloads" style="position: absolute; top: 44px; right: -1px; bottom: 0; width: 441px; display: flex; flex-direction: column; background: #0D0E10; border-left: 1px solid #2A2D33; box-shadow: -24px 0 60px rgba(0,0,0,.5); z-index: 2">
+  <div style="display: flex; align-items: center; justify-content: space-between; padding: 18px 20px; border-bottom: 1px solid #1E2024">
+    <h2 class="disp" style="font-size: 18px; font-weight: 700">Downloads</h2>
+    <button class="btn btn-ghost btn-sm" style="width: 30px; padding: 0" aria-label="Close downloads" onClick="{{togglePanel}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+  </div>
+  <div style="flex: 1; overflow: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px">
+    <sc-if value="{{hasAtt}}" hint-placeholder-val="{{false}}">
+      <span class="lbl" style="padding: 4px 2px; color: #FFC870">{{attLbl}}</span>
+      <sc-for list="{{att}}" as="a" hint-placeholder-count="1">
+        <div class="dl att">
+          <span class="pic"><img src="{{a.pic}}" alt=""></span>
+          <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px">
+            <div style="display: flex; flex-direction: column; gap: 2px">
+              <span style="font-weight: 600">{{a.title}}</span>
+              <span class="fl"><span class="fn">{{a.file}}</span></span>
+              <span style="font-size: 12px; color: #E6D3B3">{{a.text}}</span>
+            </div>
+            <div style="display: flex; gap: 6px">
+              <button class="btn btn-sm" onClick="{{a.go}}">{{a.goLbl}}</button>
+              <button class="btn btn-sm btn-ghost" onClick="{{a.skip}}">{{a.skipLbl}}</button>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </sc-if>
+    <sc-if value="{{hasWork}}" hint-placeholder-val="{{true}}">
+      <span class="lbl" style="padding: 12px 2px 4px">Updating · one download at a time</span>
+      <sc-for list="{{work}}" as="w" hint-placeholder-count="2">
+        <div class="{{w.cls}}">
+          <span class="pic"><img src="{{w.pic}}" alt=""></span>
+          <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px">
+            <div style="display: flex; flex-direction: column; gap: 1px">
+              <div style="display: flex; justify-content: space-between; gap: 8px"><span style="font-weight: 600">{{w.name}}</span><span style="font-size: 11px; color: #A9ADB5">{{w.stat}}</span></div>
+              <span class="fl"><span class="fn">{{w.file}}</span><span class="vt">“{{w.variant}}”</span></span>
+            </div>
+            <sc-if value="{{w.showBar}}" hint-placeholder-val="{{true}}"><div class="{{w.barCls}}"><span style="width: {{w.barW}}"></span></div></sc-if>
+            <span style="font-size: 12px; color: #80858F">{{w.sub}}</span>
+          </div>
+        </div>
+      </sc-for>
+    </sc-if>
+    <sc-if value="{{hasFin}}" hint-placeholder-val="{{false}}">
+      <span class="lbl" style="padding: 12px 2px 4px">Finished</span>
+      <sc-for list="{{fin}}" as="f" hint-placeholder-count="1">
+        <div class="dl">
+          <span class="pic"><img src="{{f.pic}}" alt=""></span>
+          <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+            <span style="font-weight: 600">{{f.name}}</span>
+            <span class="fl"><span class="fn">{{f.file}}</span><span class="vt">“{{f.variant}}”</span></span>
+            <span style="font-size: 12px; color: #80858F">{{f.sub}}</span>
+          </div>
+          <sc-if value="{{f.canUndo}}" hint-placeholder-val="{{false}}"><button class="btn btn-sm" onClick="{{f.undo}}">Undo</button></sc-if>
+        </div>
+      </sc-for>
+    </sc-if>
+  </div>
+  <div style="padding: 12px 20px; border-top: 1px solid #1E2024; font-size: 12px; color: #80858F">Each update keeps the file it replaces as a snapshot.</div>
+</aside>
+</sc-if>
+
+<div role="region" aria-label="Notifications" aria-live="polite" style="position: absolute; right: {{toastRight}}; bottom: 16px; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; z-index: 3">
+  <sc-if value="{{moreCount}}" hint-placeholder-val="{{false}}"><span class="more">{{moreLbl}}</span></sc-if>
+  <sc-for list="{{cards}}" as="c" hint-placeholder-count="0">
+    <div class="{{c.wrap}}">
+      <sc-if value="{{c.deck}}" hint-placeholder-val="{{false}}"><span class="ghost" style="top: -14px; width: 340px"></span><span class="ghost" style="top: -7px; width: 360px; background: #1A1C20"></span></sc-if>
+      <div class="{{c.cls}}" style="position: relative">
+        <sc-if value="{{c.plain}}" hint-placeholder-val="{{false}}"><span class="ic"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg></span></sc-if>
+        <sc-if value="{{c.portrait}}" hint-placeholder-val="{{true}}">
+          <span class="pic"><img src="{{c.pic}}" alt="">
+            <sc-if value="{{c.bWork}}" hint-placeholder-val="{{true}}"><span class="st st-work"><svg class="i spin" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 1 1-8.5 8.5"></path></svg></span></sc-if>
+            <sc-if value="{{c.bAsk}}" hint-placeholder-val="{{false}}"><span class="st st-ask"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7v6M12 17v.01"></path></svg></span></sc-if>
+            <sc-if value="{{c.bErr}}" hint-placeholder-val="{{false}}"><span class="st st-err"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 8 8 8M16 8l-8 8"></path></svg></span></sc-if>
+            <sc-if value="{{c.bOk}}" hint-placeholder-val="{{false}}"><span class="st st-ok"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg></span></sc-if>
+          </span>
+        </sc-if>
+        <span class="tx"><span class="t">{{c.title}}</span><span class="b">{{c.body}}</span>
+          <sc-if value="{{c.extra}}" hint-placeholder-val="{{false}}"><span class="b" style="color: #80858F">{{c.extra}}</span></sc-if>
+          <sc-if value="{{c.act}}" hint-placeholder-val="{{true}}"><span class="acts"><button class="na pri" onClick="{{c.go}}">{{c.act}}</button></span></sc-if>
+        </span>
+        <sc-if value="{{c.bar}}" hint-placeholder-val="{{false}}"><span class="nbar"><span style="width: {{c.barW}}"></span></span></sc-if>
+      </div>
+    </div>
+  </sc-for>
+</div>
+
+<sc-if value="{{asking}}" hint-placeholder-val="{{false}}">
+<div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(4,5,6,.72); z-index: 4"></div>
+<div role="dialog" aria-modal="true" aria-labelledby="q-title" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: {{q.width}}; max-width: calc(100% - 32px); max-height: 860px; display: flex; flex-direction: column; border-radius: 18px; background: #0F1012; border: 1px solid #2A2D33; box-shadow: 0 30px 80px rgba(0,0,0,.6); z-index: 5">
+  <div style="display: flex; align-items: center; gap: 14px; padding: 20px 24px 14px">
+    <span class="t-fire" style="width: 64px; height: 44px; border-radius: 8px; flex: none; border: 1px solid #23262B"></span>
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0">
+      <h2 id="q-title" class="disp" style="font-size: 20px; font-weight: 700">{{q.title}}</h2>
+      <span style="font-size: 12px; color: #80858F"><span class="mono">{{q.file}}</span> {{q.fileSub}}</span>
+    </div>
+    <button class="btn btn-ghost btn-sm" style="width: 30px; padding: 0" aria-label="Close, answer later" onClick="{{closeQ}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></button>
+  </div>
+
+  <div style="flex: 1; min-height: 0; overflow: auto; padding: 0 24px 18px; display: flex; flex-direction: column; gap: 12px">
+    <sc-if value="{{q.isPatch}}" hint-placeholder-val="{{true}}">
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <p style="color: #C9CCD2">It changes another mod rather than being a whole mod: 14 files its .ini refers to aren't in the archive. Choose what it should patch.</p>
+        <button class="disc" onClick="{{q.toggleMiss}}">
+          <sc-if value="{{q.missOpen}}" hint-placeholder-val="{{false}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px"><path d="m6 9 6 6 6-6"></path></svg></sc-if>
+          <sc-if value="{{q.missClosed}}" hint-placeholder-val="{{true}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px"><path d="m9 6 6 6-6 6"></path></svg></sc-if>
+          Show the 14 missing files
+        </button>
+        <sc-if value="{{q.missOpen}}" hint-placeholder-val="{{false}}">
+          <div class="mono" style="font-size: 11px; line-height: 1.8; color: #A9ADB5; padding: 10px 12px; border-radius: 10px; border: 1px solid #23262B; background: #0B0C0E">
+            <div>MiyabiBody.ib · MiyabiBody.vb · MiyabiBodyDiffuse.dds · MiyabiBodyLightMap.dds</div>
+            <div>MiyabiKimono.ib · MiyabiKimono.vb · MiyabiKimonoDiffuse.dds · and 7 more</div>
+          </div>
+        </sc-if>
+      </div>
+      <section class="{{q.topCls}}">
+        <button class="chead" role="radio" aria-checked="{{q.topChecked}}" onClick="{{q.pickTop}}">
+          <span class="radio"></span>
+          <span style="display: flex; flex-direction: column; gap: 2px">
+            <span style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap"><b style="font-weight: 600">{{q.topLbl}}</b><span class="hint">The mod this update is for</span></span>
+            <span style="font-size: 12px; color: #80858F">Your files stay and the patch goes on top, so you can take it out again from History.</span>
+          </span>
+        </button>
+      </section>
+      <section class="{{q.exCls}}">
+        <button class="chead" role="radio" aria-checked="{{q.exChecked}}" onClick="{{q.pickEx}}">
+          <span class="radio"></span>
+          <span style="display: flex; flex-direction: column; gap: 2px">
+            <b style="font-weight: 600">Add it to a different mod you have</b>
+            <span style="font-size: 12px; color: #80858F">The files it replaces are kept, so you can take the patch out again.</span>
+          </span>
+        </button>
+        <sc-if value="{{q.exOpen}}" hint-placeholder-val="{{false}}">
+          <div class="cbody">
+            <label class="inp"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg><input placeholder="Search your library" aria-label="Search your library"></label>
+            <div role="radiogroup" aria-label="Mod to patch" style="display: flex; flex-direction: column; gap: 6px">
+              <sc-for list="{{q.targets}}" as="t" hint-placeholder-count="2">
+                <button class="{{t.cls}}" role="radio" aria-checked="{{t.checked}}" onClick="{{t.pick}}">
+                  <span class="radio"></span>
+                  <span class="{{t.thumb}}" style="width: 40px; height: 28px; border-radius: 5px; flex: none"></span>
+                  <span style="flex: 1; display: flex; flex-direction: column; min-width: 0">
+                    <span style="font-weight: 600">{{t.name}}</span>
+                    <span style="font-size: 12px; color: #80858F">{{t.sub}}</span>
+                  </span>
+                  <span class="hint">Same character</span>
+                </button>
+              </sc-for>
+            </div>
+            <span style="font-size: 12px; color: #80858F">Sorted by how well they match. Nothing is picked for you.</span>
+          </div>
+        </sc-if>
+      </section>
+    </sc-if>
+
+    <sc-if value="{{q.isFolders}}" hint-placeholder-val="{{false}}">
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <span class="lbl">You have now</span>
+        <div class="have">
+          <svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="color: #80858F"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.5l2 2h7.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path></svg>
+          <span style="flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0">
+            <span class="mono" style="font-size: 12px">PastelBurnice/</span>
+            <span style="font-size: 12px; color: #80858F">PastelBurnice.ini and 38 files · from the 15 Jul file</span>
+          </span>
+          <span class="mono" style="font-size: 11px; color: #80858F; width: 56px; text-align: right">114 MB</span>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <span class="lbl">Folders in the archive</span>
+        <div role="group" aria-label="Folders to install" style="border: 1px solid #2A2D33; border-radius: 12px; background: #121316; overflow: hidden">
+          <sc-for list="{{q.folders}}" as="f" hint-placeholder-count="2">
+            <button class="{{f.cls}}" role="checkbox" aria-checked="{{f.checked}}" onClick="{{f.toggle}}">
+              <span class="cb"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width: 12px; height: 12px; stroke-width: 3"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg></span>
+              <svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="color: #80858F"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.5l2 2h7.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path></svg>
+              <span style="flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0">
+                <span class="mono" style="font-size: 12px">{{f.name}}</span>
+                <span style="font-size: 12px; color: #80858F">{{f.desc}}</span>
+              </span>
+              <span class="hint">{{f.hint}}</span>
+              <span class="mono" style="font-size: 11px; color: #80858F; width: 56px; text-align: right">{{f.size}}</span>
+            </button>
+          </sc-for>
+        </div>
+        <span style="font-size: 12px; color: #80858F">Hints are guesses from what's inside each folder. Nothing is ticked for you.</span>
+      </div>
+      <p style="font-size: 12px; color: #A9ADB5; line-height: 1.6">The ticked folders replace what Pastel Burnice has now, together. It keeps its name, its character and whether it's on. To keep the other folder as a mod of its own, install it from the mod page.</p>
+    </sc-if>
+  </div>
+
+  <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 24px; border-top: 1px solid #1E2024; flex-wrap: wrap">
+    <button class="btn btn-ghost" onClick="{{q.skip}}">Skip this update</button>
+    <div style="display: flex; align-items: center; gap: 12px">
+      <span style="font-size: 12px; color: #A9ADB5">{{q.status}}</span>
+      <sc-if value="{{q.ready}}" hint-placeholder-val="{{true}}"><button class="btn btn-pri" onClick="{{q.go}}">{{q.goLbl}}</button></sc-if>
+      <sc-if value="{{q.notReady}}" hint-placeholder-val="{{false}}"><button class="btn btn-pri" disabled>{{q.goLbl}}</button></sc-if>
+    </div>
+  </div>
+</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"stage":{"editor":"enum","default":"Running","options":["Running","Needs you","Finished","Finished, not all"]},"mods":{"editor":"enum","default":"3 mods","options":["3 mods","1 mod"]},"panel":{"editor":"enum","default":"Closed","options":["Closed","Downloads open"]},"accent":{"editor":"color","default":"#A98BFF","options":["#A98BFF","#F3EFEB","#C8F031","#5FE1D9"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { run: null, panel: null, asking: null, picks: {}, gone: [] };
+    this.timer = null;
+  }
+  componentWillUnmount() { clearInterval(this.timer); }
+  mods() {
+    const all = [
+      { name: 'Shark Hoodie Recolor', char: 'Ellen Joe', on: false, pic: '../../../mod_manager_flutter/assets/characters/ellen.png', file: 'SharkHoodie_v2.1.7z', variant: 'Hood up', mb: 142, had: '12 Aug', ask: null },
+      { name: 'Crimson Kimono', char: 'Hoshimi Miyabi', on: true, pic: '../../../mod_manager_flutter/assets/characters/miyabi.png', file: 'CrimsonKimono_fixed.zip', variant: 'fixed hair clipping!!', mb: 233, had: '21 Aug', ask: 'patch' },
+      { name: 'Pastel Burnice', char: 'Burnice White', on: true, pic: '../../../mod_manager_flutter/assets/characters/burnice.png', file: 'PastelBurnice_NoJacket.zip', variant: 'No jacket version, for people who asked in the comments', mb: 118, had: '15 Jul', ask: 'folders' }
+    ];
+    return (this.props.mods ?? '3 mods') === '1 mod' ? all.slice(0, 1) : all;
+  }
+  preset(n) {
+    const stage = this.props.stage ?? 'Running';
+    const p = (phase, pct = 0, extra = {}) => ({ phase, pct, ...extra });
+    if (n === 1) {
+      if (stage === 'Running') return [p('dl', 58)];
+      if (stage === 'Finished, not all') return [p('fail', 0)];
+      return [p('done', 100)];
+    }
+    if (stage === 'Running') return [p('inst', 55), p('dl', 34), p('wait')];
+    if (stage === 'Needs you') return [p('done', 100), p('ask'), p('dl', 71)];
+    if (stage === 'Finished') return [p('done', 100), p('done', 100, { asPatch: true }), p('done', 100)];
+    return [p('done', 100), p('ask'), p('fail', 0)];
+  }
+  tick() {
+    const mods = this.mods();
+    const run = this.state.run.map((r) => ({ ...r }));
+    const dl = run.findIndex((r) => r.phase === 'dl');
+    if (dl >= 0) {
+      run[dl].pct = Math.min(100, run[dl].pct + Math.round(1100 / mods[dl].mb));
+      if (run[dl].pct >= 100) {
+        run[dl].phase = 'check'; run[dl].pct = 0; run[dl].t = 0;
+        const next = run.findIndex((r) => r.phase === 'wait');
+        if (next >= 0) { run[next].phase = 'dl'; run[next].pct = 0; }
+      }
+    }
+    run.forEach((r, i) => {
+      if (r.phase === 'check' && ++r.t > 5) {
+        if (mods[i].ask && !r.answered) r.phase = 'ask';
+        else { r.phase = 'inst'; r.pct = 0; }
+      } else if (r.phase === 'inst') {
+        r.pct = Math.min(100, r.pct + 6);
+        if (r.pct >= 100) r.phase = 'done';
+      }
+    });
+    if (!run.some((r) => ['wait', 'dl', 'check', 'inst'].includes(r.phase))) { clearInterval(this.timer); this.timer = null; }
+    this.setState({ run });
+  }
+  resume() { if (!this.timer) this.timer = setInterval(() => this.tick(), 130); }
+  start() {
+    clearInterval(this.timer); this.timer = null;
+    const n = this.mods().length;
+    this.setState({ run: Array.from({ length: n }, (_, i) => ({ phase: i === 0 ? 'dl' : 'wait', pct: 0 })), asking: null, picks: {}, gone: [] });
+    this.resume();
+  }
+  renderVals() {
+    const mods = this.mods();
+    const n = mods.length;
+    const run = this.state.run || this.preset(n);
+    const panelOpen = this.state.panel ?? ((this.props.panel ?? 'Closed') === 'Downloads open');
+    const set = (i, patch, more = {}) => {
+      const next = run.map((r, k) => (k === i ? { ...r, ...patch } : r));
+      this.setState({ run: next, ...more });
+      if (next.some((r) => ['dl', 'check', 'inst'].includes(r.phase))) this.resume();
+    };
+    const answer = (i) => this.setState({ asking: i });
+    const retry = (i) => set(i, { phase: run.some((x) => x.phase === 'dl') ? 'wait' : 'dl', pct: 0 });
+    const undo = (i) => set(i, { phase: 'undone' });
+    const step = (pct) => (pct < 40 ? 'saving the old file as a snapshot' : pct < 85 ? 'replacing the files' : 'linking it in');
+    const ahead = (i) => run.slice(0, i).filter((r) => ['wait', 'dl'].includes(r.phase)).length;
+
+    // The Updates page row, where the update was started.
+    const rows = mods.map((m, i) => {
+      const r = run[i];
+      const ph = r.phase;
+      const row = {
+        name: m.name, char: m.char + (m.on ? ' · on' : ' · off'), pic: m.pic, file: m.file, variant: m.variant,
+        uCls: 'ust u-work', uStat: '', uBar: false, barW: r.pct + '%',
+        isAsk: ph === 'ask', isFail: ph === 'fail', isDone: ph === 'done',
+        answer: () => answer(i), retry: () => retry(i), undo: () => undo(i)
+      };
+      if (ph === 'wait') Object.assign(row, { uCls: 'ust u-wait', uStat: 'Waiting to update' });
+      if (ph === 'dl') Object.assign(row, { uStat: 'Downloading', uBar: true });
+      if (ph === 'check') Object.assign(row, { uStat: 'Unpacking' });
+      if (ph === 'inst') Object.assign(row, { uStat: 'Installing', uBar: true });
+      if (ph === 'ask') Object.assign(row, { uCls: 'ust u-ask', uStat: 'Needs you ·' });
+      if (ph === 'done') Object.assign(row, { uCls: 'ust u-ok', uStat: r.asPatch ? 'Patch added ·' : 'Updated ·' });
+      if (ph === 'fail') Object.assign(row, { uCls: 'ust u-err', uStat: 'Download failed ·' });
+      if (ph === 'undone') Object.assign(row, { uCls: 'ust u-off', uStat: 'Undone, back on the ' + m.had + ' file' });
+      if (ph === 'skipped') Object.assign(row, { uCls: 'ust u-off', uStat: 'Skipped, still on the ' + m.had + ' file' });
+      return row;
+    });
+
+    // Downloads panel.
+    const att = [];
+    const work = [];
+    const fin = [];
+    mods.forEach((m, i) => {
+      const r = run[i];
+      const ph = r.phase;
+      if (ph === 'ask') att.push({
+        pic: m.pic, title: m.name, file: m.file,
+        text: m.ask === 'patch' ? 'This update looks like a patch. Choose what it should do.' : 'This update has 2 folders. Pick the one that replaces it.',
+        goLbl: m.ask === 'patch' ? 'Choose…' : 'Pick folder…', go: () => answer(i),
+        skipLbl: 'Skip update', skip: () => set(i, { phase: 'skipped' })
+      });
+      if (ph === 'fail') att.push({
+        pic: m.pic, title: m.name, file: m.file,
+        text: 'GameBanana stopped sending the file at 70 of ' + m.mb + ' MB. Nothing was changed.',
+        goLbl: 'Retry', go: () => retry(i), skipLbl: 'Remove', skip: () => set(i, { phase: 'skipped' })
+      });
+      if (['wait', 'dl', 'check', 'inst'].includes(ph)) {
+        const w = { pic: m.pic, name: m.name, file: m.file, variant: m.variant, cls: 'dl', showBar: true, barCls: 'bar', barW: r.pct + '%', stat: '', sub: '' };
+        if (ph === 'wait') Object.assign(w, { cls: 'dl quiet', showBar: false, stat: 'Waiting', sub: m.mb + ' MB · ' + (ahead(i) <= 1 ? 'downloads next' : ahead(i) + ' ahead of it') });
+        if (ph === 'dl') Object.assign(w, { stat: r.pct + '%', sub: Math.round(m.mb * r.pct / 100) + ' of ' + m.mb + ' MB · 4.1 MB/s' });
+        if (ph === 'check') Object.assign(w, { stat: 'Unpacking', showBar: false, sub: 'Checking what is in the file' });
+        if (ph === 'inst') Object.assign(w, { stat: 'Installing', barCls: 'bar inst', sub: 'The ' + m.had + ' file is kept: ' + step(r.pct) });
+        work.push(w);
+      }
+      if (['done', 'undone', 'skipped'].includes(ph)) fin.push({
+        pic: m.pic, name: m.name, file: m.file, variant: m.variant, canUndo: ph === 'done', undo: () => undo(i),
+        sub: ph === 'done' ? (r.asPatch ? 'Patch added on top' : 'Updated') + ' · the ' + m.had + ' file is a snapshot' : ph === 'undone' ? 'Undone · back on the ' + m.had + ' file' : 'Skipped · still on the ' + m.had + ' file'
+      });
+    });
+
+    // Notifications: the running updates as one deck, each question and failure as its own card,
+    // and the finished ones merged into one card.
+    const cards = [];
+    const active = run.map((r, i) => i).filter((i) => ['wait', 'dl', 'check', 'inst'].includes(run[i].phase));
+    if (active.length) {
+      const top = active.find((i) => run[i].phase === 'inst') ?? active.find((i) => run[i].phase === 'dl') ?? active[0];
+      const m = mods[top];
+      const r = run[top];
+      const others = active.length - 1;
+      cards.push({
+        wrap: others ? 'deck' : '', deck: others > 0, cls: 'nt', plain: false, portrait: true, pic: m.pic,
+        bWork: true, bAsk: false, bErr: false, bOk: false,
+        title: 'Updating ' + m.name,
+        body: r.phase === 'dl' ? 'Downloading · ' + Math.round(m.mb * r.pct / 100) + ' of ' + m.mb + ' MB' : r.phase === 'inst' ? 'Installing · ' + step(r.pct) : r.phase === 'check' ? 'Unpacking' : 'Waiting',
+        extra: others ? others + ' more updating' : '',
+        act: '', go: null, bar: r.phase === 'dl' || r.phase === 'inst', barW: r.pct + '%'
+      });
+    }
+    const finished = run.map((r, i) => i).filter((i) => run[i].phase === 'done');
+    if (finished.length && !this.state.gone.includes('done')) {
+      const names = finished.map((i) => mods[i].name);
+      cards.push({
+        wrap: '', deck: false, cls: 'nt k-ok', plain: finished.length > 1, portrait: finished.length === 1, pic: mods[finished[0]].pic,
+        bWork: false, bAsk: false, bErr: false, bOk: true,
+        title: finished.length === 1 ? names[0] + ' updated' : finished.length + ' mods updated',
+        body: finished.length === 1 ? 'The ' + mods[finished[0]].had + ' file is kept as a snapshot.' : names.length > 2 ? names[0] + ', ' + names[1] + ' and ' + (names.length - 2) + ' more.' : names.join(' and ') + '.',
+        extra: '', act: 'Show', go: () => this.setState({ panel: true }), bar: false
+      });
+    }
+    run.forEach((r, i) => {
+      const m = mods[i];
+      if (r.phase === 'ask') cards.push({
+        wrap: '', deck: false, cls: 'nt', plain: false, portrait: true, pic: m.pic, bWork: false, bAsk: true, bErr: false, bOk: false,
+        title: m.name + '’s update needs you', body: m.ask === 'patch' ? 'The new file looks like a patch.' : 'The new file has 2 folders.',
+        extra: '', act: 'Answer', go: () => answer(i), bar: false
+      });
+      if (r.phase === 'fail') cards.push({
+        wrap: '', deck: false, cls: 'nt k-err', plain: false, portrait: true, pic: m.pic, bWork: false, bAsk: false, bErr: true, bOk: false,
+        title: 'Couldn’t update ' + m.name, body: 'GameBanana stopped sending the file. Nothing was changed.',
+        extra: '', act: 'Retry', go: () => retry(i), bar: false
+      });
+    });
+    // At most 3 show. The live deck and the questions stay; the finished card folds into "+N more" first.
+    // Top to bottom: questions and failures, then finished, then the live deck nearest the corner.
+    const rank = (c) => (c.bWork ? 0 : c.bAsk || c.bErr ? 1 : 2);
+    const kept = cards.slice().sort((a, b) => rank(a) - rank(b)).slice(0, 3);
+    const order = (c) => (c.bWork ? 2 : c.bOk ? 1 : 0);
+    const shown = kept.sort((a, b) => order(a) - order(b));
+    const more = cards.length - shown.length;
+
+    // The question dialog, opened from Answer.
+    // The question opens the patch or folders dialog in its update version, as on the PatchModal and
+    // FoldersModal boards with context Update.
+    const ai = this.state.asking;
+    let q = { isPatch: false, isFolders: false };
+    if (ai !== null && mods[ai]) {
+      const m = mods[ai];
+      const a = this.state.picks[ai] || {};
+      const patch = m.ask === 'patch';
+      const save = (patchA) => this.setState({ picks: { ...this.state.picks, [ai]: { ...a, ...patchA } } });
+      const skip = () => set(ai, { phase: 'skipped' }, { asking: null });
+      if (patch) {
+        const mode = a.mode || 'top';
+        const targets = [['Ice Queen Ballgown', 'Hoshimi Miyabi · frostbyte', 't-ice'], ['Shrine Maiden', 'Hoshimi Miyabi · local', 't-fire']].map(([name, sub, thumb], k) => ({
+          name, sub, thumb, cls: a.target === k ? 'row on' : 'row', checked: a.target === k ? 'true' : 'false', pick: () => save({ target: k })
+        }));
+        const other = mode === 'other';
+        const ready = !other || a.target !== undefined;
+        q = {
+          width: '720px', isPatch: true, isFolders: false,
+          title: 'This update looks like a patch', file: m.file, fileSub: '· update for ' + m.name + ' · ' + m.mb + ' MB',
+          missOpen: !!a.miss, missClosed: !a.miss, toggleMiss: () => save({ miss: !a.miss }),
+          topLbl: 'Put it on top of ' + m.name,
+          topCls: other ? 'choice' : 'choice on', topChecked: other ? 'false' : 'true', pickTop: () => save({ mode: 'top' }),
+          exCls: other ? 'choice on' : 'choice', exChecked: other ? 'true' : 'false', pickEx: () => save({ mode: 'other' }), exOpen: other,
+          targets,
+          status: ready ? '' : 'Pick the mod to patch',
+          ready, notReady: !ready,
+          goLbl: !other ? 'Put it on top' : ready ? 'Patch ' + targets[a.target].name : 'Patch',
+          go: () => set(ai, { phase: 'inst', pct: 0, answered: true, asPatch: true }, { asking: null }),
+          skip
+        };
+      } else {
+        const ticked = a.ticked || [];
+        const folders = [
+          ['PastelBurnice/', 'PastelBurnice.ini and 38 files', '116 MB', 'Same name as your folder'],
+          ['PastelBurnice_NoJacket/', 'PastelBurnice.ini and 36 files', '118 MB', 'Named like the file']
+        ].map(([name, desc, size, hint], k) => {
+          const on = ticked.includes(k);
+          return { name, desc, size, hint, cls: on ? 'folder on' : 'folder', checked: on ? 'true' : 'false', toggle: () => save({ ticked: on ? ticked.filter((x) => x !== k) : ticked.concat(k).sort() }) };
+        });
+        const t = ticked.length;
+        q = {
+          width: '700px', isPatch: false, isFolders: true,
+          title: 'Pick what to install', file: m.file, fileSub: 'has 2 folders · update for ' + m.name,
+          folders,
+          status: t === 0 ? 'Tick the folder that replaces it' : t === 1 ? '1 folder replaces ' + m.name : t + ' folders go into ' + m.name + ' together',
+          ready: t > 0, notReady: t === 0,
+          goLbl: 'Update ' + m.name,
+          go: () => set(ai, { phase: 'inst', pct: 0, answered: true }, { asking: null }),
+          skip
+        };
+      }
+    }
+
+    const attCount = att.length;
+    return {
+      accent: this.props.accent ?? '#A98BFF',
+      rows, att, work, fin,
+      hasAtt: attCount > 0, hasWork: work.length > 0, hasFin: fin.length > 0,
+      attLbl: 'Needs your attention · ' + attCount,
+      navAtt: attCount > 0, attCount: String(attCount),
+      panelOpen,
+      togglePanel: () => this.setState({ panel: !panelOpen }),
+      toastRight: panelOpen ? '457px' : '16px',
+      cards: shown, moreCount: more > 0, moreLbl: '+' + more + ' more',
+      asking: ai !== null, q,
+      closeQ: () => this.setState({ asking: null }),
+      replay: () => this.start()
+    };
+  }
+}
+</script>
+</body>
+</html>

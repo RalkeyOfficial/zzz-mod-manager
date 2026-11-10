@@ -71,10 +71,10 @@ a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
 
 <div role="dialog" aria-modal="true" aria-labelledby="pt-title" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 720px; max-width: calc(100% - 32px); max-height: 860px; display: flex; flex-direction: column; border-radius: 18px; background: #0F1012; border: 1px solid #2A2D33; box-shadow: 0 30px 80px rgba(0,0,0,.6)">
   <div style="display: flex; align-items: center; gap: 14px; padding: 20px 24px 14px">
-    <span class="t-ice" style="width: 64px; height: 44px; border-radius: 8px; flex: none; border: 1px solid #23262B"></span>
+    <span class="{{thumb}}" style="width: 64px; height: 44px; border-radius: 8px; flex: none; border: 1px solid #23262B"></span>
     <div style="flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0">
-      <h2 id="pt-title" class="disp" style="font-size: 20px; font-weight: 700">This looks like a patch</h2>
-      <span style="font-size: 12px; color: #80858F"><span class="mono">WinterMaid_StockingFix.zip</span> · from GameBanana · 3 MB</span>
+      <h2 id="pt-title" class="disp" style="font-size: 20px; font-weight: 700">{{title}}</h2>
+      <span style="font-size: 12px; color: #80858F"><span class="mono">{{file}}</span> · {{fileSub}}</span>
     </div>
     <a class="btn btn-ghost btn-sm ibtn" href="Downloads.dc.html" aria-label="Close"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"></path></svg></a>
   </div>
@@ -89,17 +89,29 @@ a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
       </button>
       <sc-if value="{{missOpen}}" hint-placeholder-val="{{false}}">
         <div class="mono" style="font-size: 11px; line-height: 1.8; color: #A9ADB5; padding: 10px 12px; border-radius: 10px; border: 1px solid #23262B; background: #0B0C0E">
-          <div>EllenBody.ib · EllenBody.vb · EllenBodyDiffuse.dds · EllenBodyLightMap.dds</div>
-          <div>EllenHair.ib · EllenHair.vb · EllenHairDiffuse.dds · and 7 more</div>
+          <div>{{missA}}</div>
+          <div>{{missB}}</div>
         </div>
       </sc-if>
     </div>
+
+    <sc-if value="{{upd}}" hint-placeholder-val="{{false}}">
+      <section class="{{topCls}}">
+        <button class="chead" role="radio" aria-checked="{{topChecked}}" onClick="{{pickTop}}">
+          <span class="radio"></span>
+          <span style="display: flex; flex-direction: column; gap: 2px">
+            <span style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap"><b style="font-weight: 600">{{topLbl}}</b><span class="hint">The mod this update is for</span></span>
+            <span style="font-size: 12px; color: #80858F">Your files stay and the patch goes on top, so you can take it out again from History.</span>
+          </span>
+        </button>
+      </section>
+    </sc-if>
 
     <section class="{{exCls}}">
       <button class="chead" role="radio" aria-checked="{{exChecked}}" onClick="{{pickEx}}">
         <span class="radio"></span>
         <span style="display: flex; flex-direction: column; gap: 2px">
-          <b style="font-weight: 600">Add it to a mod you already have</b>
+          <b style="font-weight: 600">{{exLbl}}</b>
           <span style="font-size: 12px; color: #80858F">The files it replaces are kept, so you can take the patch out again.</span>
         </span>
       </button>
@@ -126,6 +138,7 @@ a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
       </sc-if>
     </section>
 
+    <sc-if value="{{notUpd}}" hint-placeholder-val="{{true}}">
     <section class="{{newCls}}">
       <button class="chead" role="radio" aria-checked="{{newChecked}}" onClick="{{pickNew}}">
         <span class="radio"></span>
@@ -149,32 +162,39 @@ a{color:var(--ac,#A98BFF)}a:hover{color:#ECEDEE}
         </div>
       </sc-if>
     </section>
+    </sc-if>
   </div>
 
   <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 24px; border-top: 1px solid #1E2024; flex-wrap: wrap">
-    <a class="btn btn-ghost" href="Downloads.dc.html">Don't install</a>
+    <a class="btn btn-ghost" href="Downloads.dc.html">{{dontLbl}}</a>
     <div style="display: flex; align-items: center; gap: 12px">
       <span style="font-size: 12px; color: #A9ADB5">{{status}}</span>
       <sc-if value="{{ready}}" hint-placeholder-val="{{false}}"><a class="btn btn-pri" href="Downloads.dc.html">{{goLbl}}</a></sc-if>
-      <sc-if value="{{notReady}}" hint-placeholder-val="{{true}}"><button class="btn btn-pri" disabled style="opacity: .45; cursor: not-allowed">Install</button></sc-if>
+      <sc-if value="{{notReady}}" hint-placeholder-val="{{true}}"><button class="btn btn-pri" disabled style="opacity: .45; cursor: not-allowed">{{offLbl}}</button></sc-if>
     </div>
   </div>
 </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#A98BFF","options":["#A98BFF","#F3EFEB","#C8F031","#5FE1D9"]},"$preview":{"width":1440,"height":900}}'>
+<script type="text/x-dc" data-dc-script data-props='{"context":{"editor":"enum","default":"New install","options":["New install","Update"]},"accent":{"editor":"color","default":"#A98BFF","options":["#A98BFF","#F3EFEB","#C8F031","#5FE1D9"]},"$preview":{"width":1440,"height":900}}'>
 class Component extends DCLogic {
   constructor(props) {
     super(props);
-    this.state = { mode: 'existing', target: null, miss: false };
+    this.state = { mode: null, target: null, miss: false };
   }
   renderVals() {
-    const { mode, target, miss } = this.state;
-    const targets = [
+    const { target, miss } = this.state;
+    // An update's patch most likely belongs on the mod being updated, so that choice comes first and is picked.
+    const upd = (this.props.context ?? 'New install') === 'Update';
+    const mode = this.state.mode ?? (upd ? 'top' : 'existing');
+    const targets = (upd ? [
+      ['Ice Queen Ballgown', 'Hoshimi Miyabi · frostbyte', 't-ice', ['Same character']],
+      ['Shrine Maiden', 'Hoshimi Miyabi · local', 't-fire', ['Same character']]
+    ] : [
       ['Winter Maid Uniform', 'Ellen Joe · frostbyte', 't-ice', ['Same author', '12 of 14 missing files are here']],
       ['Classic Long Skirt', 'Ellen Joe · maple.ini', 't-phys', ['Same character']],
       ['Beach Day', 'Ellen Joe · local', 't-fire', ['Same character']]
-    ].map(([name, sub, thumb, hints], i) => ({
+    ]).map(([name, sub, thumb, hints], i) => ({
       name, sub, thumb,
       hints: hints.map((text) => ({ text })),
       cls: target === i ? 'row on' : 'row',
@@ -182,13 +202,28 @@ class Component extends DCLogic {
       pick: () => this.setState({ target: i })
     }));
     const ex = mode === 'existing';
-    const nw = mode === 'new';
+    const nw = mode === 'new' && !upd;
+    const top = mode === 'top' && upd;
     let ready = false, status = 'Choose how to install it', goLbl = 'Install';
     if (ex && target === null) status = 'Pick the mod to patch';
     if (ex && target !== null) { ready = true; status = ''; goLbl = 'Patch ' + targets[target].name; }
     if (nw) { ready = true; status = '2 downloads'; goLbl = 'Install as new mod'; }
+    if (top) { ready = true; status = ''; goLbl = 'Put it on top'; }
     return {
       accent: this.props.accent ?? '#A98BFF',
+      upd, notUpd: !upd,
+      thumb: upd ? 't-fire' : 't-ice',
+      title: upd ? 'This update looks like a patch' : 'This looks like a patch',
+      file: upd ? 'CrimsonKimono_fixed.zip' : 'WinterMaid_StockingFix.zip',
+      fileSub: upd ? 'update for Crimson Kimono · 233 MB' : 'from GameBanana · 3 MB',
+      topLbl: 'Put it on top of Crimson Kimono',
+      topCls: top ? 'choice on' : 'choice', topChecked: top ? 'true' : 'false',
+      pickTop: () => this.setState({ mode: 'top' }),
+      exLbl: upd ? 'Add it to a different mod you have' : 'Add it to a mod you already have',
+      dontLbl: upd ? 'Skip this update' : 'Don’t install',
+      offLbl: upd ? 'Patch' : 'Install',
+      missA: upd ? 'MiyabiBody.ib · MiyabiBody.vb · MiyabiBodyDiffuse.dds · MiyabiBodyLightMap.dds' : 'EllenBody.ib · EllenBody.vb · EllenBodyDiffuse.dds · EllenBodyLightMap.dds',
+      missB: upd ? 'MiyabiKimono.ib · MiyabiKimono.vb · MiyabiKimonoDiffuse.dds · and 7 more' : 'EllenHair.ib · EllenHair.vb · EllenHairDiffuse.dds · and 7 more',
       targets,
       exCls: ex ? 'choice on' : 'choice', newCls: nw ? 'choice on' : 'choice',
       exChecked: ex ? 'true' : 'false', newChecked: nw ? 'true' : 'false',

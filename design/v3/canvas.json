@@ -221,6 +221,14 @@
       "x": 1520,
       "y": 4800
     },
+    "UpdateRunToasts.dc.html": {
+      "h": 900,
+      "is_interactive": true,
+      "title": "Updating mods",
+      "w": 1440,
+      "x": 10640,
+      "y": 4800
+    },
     "Updates.dc.html": {
       "expand": "fill",
       "h": 900,
@@ -327,6 +335,7 @@
     "ImportModal.dc.html",
     "UpdateModal.dc.html",
     "UpdateOneModal.dc.html",
+    "UpdateRunToasts.dc.html",
     "PatchModal.dc.html",
     "FoldersModal.dc.html",
     "MakePatchModal.dc.html",
