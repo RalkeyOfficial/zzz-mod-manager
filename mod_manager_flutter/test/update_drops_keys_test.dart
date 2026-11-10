@@ -74,11 +74,11 @@ void main() {
   }
 
   /// Runs [flow] from a button, with every origin write refused once it starts, and waits for it to end.
-  Future<bool?> runFailingAtTheRecord(
+  Future<UpdateFlowOutcome?> runFailingAtTheRecord(
     WidgetTester tester,
-    Future<bool> Function(BuildContext context, WidgetRef ref) flow,
+    Future<UpdateFlowOutcome> Function(BuildContext context, WidgetRef ref) flow,
   ) async {
-    bool? changed;
+    UpdateFlowOutcome? changed;
     final container = ProviderContainer(overrides: [
       ...service.overrides,
       downloadServiceProvider.overrideWith(
@@ -218,7 +218,7 @@ void main() {
       (context, ref) => applyPatchUpdateFlow(context, ref, mod: mod, remoteModId: patchId, file: file, asCompanion: true),
     );
 
-    expect(changed, isFalse);
+    expect(changed, UpdateFlowOutcome.failed);
     expect(temp.read(modName, 'Textures/Patch.dds'), 'v2', reason: 'the new files are in');
     expect(service.keysDropped, contains(modName));
     expect(markedWriting, {modName}, reason: "a press on the mod's switch waits for the write");

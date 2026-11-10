@@ -19,6 +19,7 @@ import 'package:mod_manager_flutter/screens/all_mods/all_mods_view.dart';
 import 'package:mod_manager_flutter/screens/components/library_actions_host.dart';
 import 'package:mod_manager_flutter/screens/components/mods_toolbar.dart';
 import 'package:mod_manager_flutter/screens/components/zenith_controls.dart';
+import 'package:mod_manager_flutter/screens/dialogs/apply_update_flow.dart' show UpdateFlowOutcome, UpdateRunPosition;
 import 'package:mod_manager_flutter/screens/dialogs/bulk_resolution_dialog.dart';
 import 'package:mod_manager_flutter/screens/dialogs/mod_update_dialog.dart';
 import 'package:mod_manager_flutter/screens/updates/updates_page.dart';
@@ -2007,7 +2008,7 @@ void main() {
         final target = mixedMod();
         final container = ProviderContainer(overrides: [gameBananaClientProvider.overrideWithValue(client)]);
         addTearDown(container.dispose);
-        final update = Completer<bool>();
+        final update = Completer<UpdateFlowOutcome>();
         bool? reported;
         await pumpLocalized(
           tester,
@@ -2035,7 +2036,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byType(ModUpdateDialog), findsNothing);
 
-        update.complete(true);
+        update.complete(UpdateFlowOutcome.written);
         await tester.pumpAndSettle();
 
         expect(container.read(modUpdateChecksProvider).containsKey('EllenBikini'), isFalse);
@@ -2084,10 +2085,10 @@ class _RecordingGateway implements ModUpdateGateway {
   final Future<void>? hold;
 
   /// What a patch's update answers, and when. Unset, the dialog is not expected to start one.
-  final Future<bool>? patchUpdate;
+  final Future<UpdateFlowOutcome>? patchUpdate;
 
   @override
-  Future<bool> applyPatchUpdate(
+  Future<UpdateFlowOutcome> applyPatchUpdate(
     BuildContext context,
     WidgetRef ref, {
     required ModInfo mod,
@@ -2095,6 +2096,7 @@ class _RecordingGateway implements ModUpdateGateway {
     required GbFile file,
     required bool asCompanion,
     required List<GbFile> published,
+    UpdateRunPosition? run,
   }) =>
       patchUpdate ?? (throw StateError('no patch update expected'));
 

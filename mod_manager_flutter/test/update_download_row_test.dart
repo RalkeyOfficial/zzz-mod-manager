@@ -80,14 +80,14 @@ void main() {
 
   /// Presses a button running [flow], and pumps until it ends or [until] says to stop. [closeWhen] says when the
   /// window the flow runs on closes, and [afterClose] runs a pump later.
-  Future<bool?> run(
+  Future<UpdateFlowOutcome?> run(
     WidgetTester tester,
-    Future<bool> Function(BuildContext context, WidgetRef ref) flow, {
+    Future<UpdateFlowOutcome> Function(BuildContext context, WidgetRef ref) flow, {
     bool Function()? until,
     bool Function()? closeWhen,
     void Function()? afterClose,
   }) async {
-    bool? changed;
+    UpdateFlowOutcome? changed;
     final window = ValueNotifier(true);
     addTearDown(window.dispose);
     container = ProviderContainer(overrides: [
@@ -195,8 +195,12 @@ void main() {
     final file = serve(2, {'Ellen/Ellen.ini': '[KeySwap]\nkey = VK_2\n'});
     service.failOriginWrites = true;
 
-    await run(tester, (context, ref) => applyUpdateFlow(context, ref, mod: mod, remoteModId: 100, file: file, confirm: false));
+    final outcome = await run(
+      tester,
+      (context, ref) => applyUpdateFlow(context, ref, mod: mod, remoteModId: 100, file: file, confirm: false),
+    );
 
+    expect(outcome, UpdateFlowOutcome.failed);
     final job = jobs().single;
     expect(job.state, DownloadJobState.failed);
     expect(job.error, isA<InstallFailure>());
@@ -207,8 +211,12 @@ void main() {
     final mod = await installed(tester, tracked());
     final file = serveBytes(2, List<int>.generate(300, (i) => (i * 7) % 256));
 
-    await run(tester, (context, ref) => applyUpdateFlow(context, ref, mod: mod, remoteModId: 100, file: file, confirm: false));
+    final outcome = await run(
+      tester,
+      (context, ref) => applyUpdateFlow(context, ref, mod: mod, remoteModId: 100, file: file, confirm: false),
+    );
 
+    expect(outcome, UpdateFlowOutcome.failed);
     expect(jobs().single.state, DownloadJobState.failed);
   });
 
@@ -217,7 +225,7 @@ void main() {
     final mod = await installed(tester, tracked());
     final file = serve(2, {'Ellen/Ellen.ini': '[KeySwap]\nkey = VK_2\n'});
 
-    final changed = <bool>[];
+    final changed = <UpdateFlowOutcome>[];
     await run(
       tester,
       (context, ref) async {
@@ -234,8 +242,77 @@ void main() {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
       await tester.pump();
     }
-    expect(changed, [false]);
+    expect(changed, [UpdateFlowOutcome.declined]);
     expect(jobs(), isEmpty);
+  });
+
+  testWidgets('cancelling the transfer is declined, where a transfer that fails is a failure', (tester) async {
+    final mod = await installed(tester, tracked());
+    final stream = StreamController<List<int>>();
+    addTearDown(stream.close);
+    final url = Uri.parse('https://gamebanana.com/dl/6');
+    transport.enqueueControlled(url, stream, contentLength: 100);
+    final held = GbFile(idRow: 6, file: 'ellen6.zip', filesize: 100, downloadUrl: '$url');
+
+    final outcomes = <UpdateFlowOutcome>[];
+    await run(
+      tester,
+      (context, ref) async {
+        final result = await applyUpdateFlow(context, ref, mod: mod, remoteModId: 100, file: held, confirm: false);
+        outcomes.add(result);
+        return result;
+      },
+      until: () => find.text('Cancel download').evaluate().isNotEmpty,
+    );
+    await tester.runAsync(() => tester.tap(find.text('Cancel download')));
+    for (var i = 0; i < 40 && outcomes.isEmpty; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump();
+    }
+    expect(outcomes, [UpdateFlowOutcome.declined]);
+
+    final broken = Uri.parse('https://gamebanana.com/dl/7');
+    transport.enqueueError(broken, const SocketException('no route'));
+    outcomes.clear();
+    final failed = await run(
+      tester,
+      (context, ref) => applyUpdateFlow(
+        context,
+        ref,
+        mod: mod,
+        remoteModId: 100,
+        file: GbFile(idRow: 7, file: 'ellen7.zip', filesize: 10, downloadUrl: '$broken'),
+        confirm: false,
+      ),
+    );
+    expect(failed, UpdateFlowOutcome.failed);
+  });
+
+  testWidgets("a run's confirmation says where it is, and its result offers Next until the last", (tester) async {
+    final mod = await installed(tester, tracked());
+    final file = serve(2, {'Ellen/Ellen.ini': '[KeySwap]\nkey = VK_2\n'});
+
+    await run(
+      tester,
+      (context, ref) => applyUpdateFlow(
+        context,
+        ref,
+        mod: mod,
+        remoteModId: 100,
+        file: file,
+        run: const UpdateRunPosition(index: 2, total: 3),
+      ),
+      until: () => find.text('Cancel').evaluate().isNotEmpty,
+    );
+    expect(find.text('2 of 3'), findsOneWidget);
+
+    await tester.runAsync(() => tester.tap(find.widgetWithText(FilledButton, 'Update')));
+    for (var i = 0; i < 100 && find.text('Next').evaluate().isEmpty; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump();
+    }
+    expect(find.text('Next'), findsOneWidget, reason: 'one more update follows this one');
+    expect(find.text('Close'), findsNothing);
   });
 
   testWidgets('a base update confirmed after the window it started from closed still writes, and says so',
@@ -244,7 +321,7 @@ void main() {
     final file = serve(2, {'Ellen/Ellen.ini': '[KeySwap]\nkey = VK_2\n'});
     bool confirmationUp() => find.text('Cancel').evaluate().isNotEmpty;
 
-    final changed = <bool>[];
+    final changed = <UpdateFlowOutcome>[];
     await run(
       tester,
       (context, ref) async {
@@ -283,7 +360,7 @@ void main() {
       afterClose: () => service.holdLookup!.complete(),
     );
 
-    expect(changed, isFalse);
+    expect(changed, UpdateFlowOutcome.notStarted);
     expect(jobs(), isEmpty, reason: 'declined, not failed');
     expect(temp.read(modName, 'Ellen.ini'), '[KeySwap]\nkey = VK_1\n');
   });
@@ -306,7 +383,7 @@ void main() {
       tester,
       // Started from a window of its own, as the mod's update window does.
       (context, ref) {
-        final done = Completer<bool>();
+        final done = Completer<UpdateFlowOutcome>();
         showDialog<void>(
           context: context,
           builder: (_) => _UpdateWindow(
@@ -461,8 +538,8 @@ final bool _writesZip = _sevenZip != null;
 class _UpdateWindow extends ConsumerStatefulWidget {
   const _UpdateWindow({required this.flow, required this.done});
 
-  final Future<bool> Function(BuildContext context, WidgetRef ref) flow;
-  final Completer<bool> done;
+  final Future<UpdateFlowOutcome> Function(BuildContext context, WidgetRef ref) flow;
+  final Completer<UpdateFlowOutcome> done;
 
   @override
   ConsumerState<_UpdateWindow> createState() => _UpdateWindowState();

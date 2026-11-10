@@ -22,6 +22,7 @@ import '../components/character_tile.dart';
 import '../components/library_actions_host.dart';
 import '../components/mod_thumb.dart';
 import '../components/resolve/resolve_fragments.dart';
+import '../components/update_count_button.dart';
 import '../components/zenith_controls.dart';
 import '../dialogs/assume_current_dialog.dart';
 import 'all_mods_bulk.dart';
@@ -579,16 +580,23 @@ class _HeaderState extends ConsumerState<_Header> {
               if (scanned) Text(parts.join(' · '), style: text.bodyMedium?.copyWith(color: palette.text2)),
             ],
           ),
-          // Working while the check it started runs; off while any other check runs.
-          WorkingAction(
-            onPressed: checking || !checkPlan.hasWork
-                ? null
-                : (work) => LibraryActionsHost.of(context).checkForUpdates(work: work),
-            builder: (context, onPressed) => OutlinedButton.icon(
-              onPressed: onPressed,
-              icon: const WorkingIcon(Icon(Icons.sync_rounded)),
-              label: Text(loc.t('library.all.check_all')),
-            ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              // Working while the check it started runs; off while any other check runs.
+              WorkingAction(
+                onPressed: checking || !checkPlan.hasWork
+                    ? null
+                    : (work) => LibraryActionsHost.of(context).checkForUpdates(work: work),
+                builder: (context, onPressed) => OutlinedButton.icon(
+                  onPressed: onPressed,
+                  icon: const WorkingIcon(Icon(Icons.sync_rounded)),
+                  label: Text(loc.t('library.all.check_all')),
+                ),
+              ),
+              if (ref.watch(updatableModsCountProvider) > 0) const UpdateCountButton(),
+            ],
           ),
         ],
       ),

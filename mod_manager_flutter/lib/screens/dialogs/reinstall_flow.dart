@@ -143,7 +143,7 @@ Future<bool> reinstallFlow(
   logConfirmation('update.reinstall', accepted: accepted, subject: mod.id, fields: {'file_id': fileId});
   if (!accepted || !context.mounted) return false;
 
-  return applyUpdateFlow(
+  final outcome = await applyUpdateFlow(
     context,
     ref,
     mod: mod,
@@ -156,4 +156,5 @@ Future<bool> reinstallFlow(
     reinstall: true,
     confirmOnlyIfNeeded: true,
   );
+  return outcome.changed;
 }

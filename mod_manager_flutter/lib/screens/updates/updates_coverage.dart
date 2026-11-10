@@ -4,6 +4,8 @@ import '../../services/origin_status.dart';
 import '../../services/update_check.dart';
 import '../all_mods/all_mods_rows.dart';
 
+export '../../services/newer_files.dart' show newerFilesOf;
+
 /// What the Updates page's coverage strip says about one mod, in the strip's order.
 enum CoverageKind {
   /// Checked this session against its known file, or one worked out and accepted in the tracking screen.
@@ -159,18 +161,3 @@ List<(int, CoverageKind?, int?)> pillChanges(List<CoverageKind?> before, List<Co
   return changes;
 }
 
-/// The mods with an update to show, each with its check, the most recently uploaded newer file first. The same set
-/// the sidebar's Updates count covers.
-List<(ModInfo, UpdateCheck)> newerFilesOf(List<ModInfo> mods, Map<String, UpdateCheck> checks) {
-  final found = [
-    for (final mod in mods)
-      if (checks[mod.id] case final check? when check.hasUpdate) (mod, check),
-  ];
-  found.sort((a, b) {
-    final da = a.$2.dismissableUpTo;
-    final db = b.$2.dismissableUpTo;
-    if (da == null || db == null) return (da == null ? 1 : 0) - (db == null ? 1 : 0);
-    return db.compareTo(da);
-  });
-  return found;
-}

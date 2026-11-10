@@ -31,6 +31,7 @@ import '../../services/update_apply/sibling_group.dart';
 import '../../services/update_apply/update_applier.dart';
 import '../../services/update_apply/update_layout.dart';
 import '../../services/update_apply/update_target.dart';
+import '../../services/update_apply/update_write_route.dart';
 import '../../utils/gamebanana_url.dart';
 import '../../utils/marketplace_providers.dart';
 import '../../utils/notification_actions.dart';
@@ -42,8 +43,11 @@ import 'download_with_progress.dart';
 import 'import_selection_dialog.dart';
 import 'progress_modal.dart';
 import 'update_confirm_dialog.dart';
+import 'update_flow_outcome.dart';
 import 'update_progress_dialog.dart';
 import 'update_result_dialog.dart';
+
+export 'update_flow_outcome.dart';
 
 /// Downloading a newer file and writing it over an installed mod, end to end.
 ///
@@ -76,8 +80,8 @@ import 'update_result_dialog.dart';
 /// placement onto the base's layout and goes through
 /// `UpdateApplier.applyPatchInto` instead of this.
 ///
-/// Returns true when the mod folder changed, so the caller rescans.
-Future<bool> applyUpdateFlow(
+/// Says how it ended ([UpdateFlowOutcome]); `changed` is true when the mod folder may differ, so the caller rescans.
+Future<UpdateFlowOutcome> applyUpdateFlow(
   BuildContext context,
   WidgetRef ref, {
   required ModInfo mod,
@@ -136,6 +140,10 @@ Future<bool> applyUpdateFlow(
   /// reconciled, a patch-shaped download, folders the write leaves out, or a patch that cannot be put back. Otherwise
   /// the caller's question is the confirmation. Set by [reinstallFlow], whose dialog states the standard facts.
   bool confirmOnlyIfNeeded = false,
+
+  /// Where this write sits in a run of several: its confirmation says "2 of 3" and its result offers "Next" while
+  /// more follow.
+  UpdateRunPosition? run,
 }) async {
   final loc = context.loc;
   final notify = context.notify;
@@ -159,7 +167,7 @@ Future<bool> applyUpdateFlow(
       loc.t('marketplace.install_missing_path_body'),
       actions: [openSettingsAction(loc, container)],
     );
-    return false;
+    return UpdateFlowOutcome.failed;
   }
   final modFolder = Directory(path.join(modsPath, mod.id));
   if (!await modFolder.exists()) {
@@ -167,20 +175,21 @@ Future<bool> applyUpdateFlow(
       loc.t('mods.update_apply.mod_missing_title'),
       loc.t('mods.update_apply.mod_missing', params: {'mod': mod.name}),
     );
-    return false;
+    return UpdateFlowOutcome.failed;
   }
 
   // Over the flow's own window, so it asks only while that window's context lives.
   Future<PasswordAnswer?> askPassword({required bool failed}) async =>
       context.mounted ? showArchivePasswordDialog(context, modName: mod.name, failed: failed) : null;
 
-  if (!context.mounted) return false;
+  if (!context.mounted) return UpdateFlowOutcome.notStarted;
   final navigator = Navigator.of(context, rootNavigator: true);
   // **One window from the press to the question.** The download's modal stays
   // up through the unpacking and the two folder walks below, because closing it
   // there is the same signal the user gets when a job has finished — and on a
   // big archive the silence that follows is long enough to read as one.
   final hold = ProgressHold();
+  DownloadStop? stopped;
   final download = await downloadFileWithProgress(
     context,
     ref,
@@ -188,10 +197,11 @@ Future<bool> applyUpdateFlow(
     characterId: mod.characterId,
     subject: mod.name,
     hold: hold,
+    onStopped: (reason) => stopped = reason,
   );
   if (download == null) {
     hold.dispose();
-    return false;
+    return outcomeOfStoppedDownload(stopped);
   }
 
   // **Ended on every path**, in the `finally`: the download stays on the panel
@@ -215,7 +225,7 @@ Future<bool> applyUpdateFlow(
     if (extraction == null) {
       // Declined at the password: the archive has nothing left to be used for.
       await _deleteArchive(download.file);
-      return false;
+      return UpdateFlowOutcome.declined;
     }
     if (!extraction.success) {
       // The archive is kept on purpose: the user can still extract it by hand,
@@ -230,7 +240,7 @@ Future<bool> applyUpdateFlow(
       );
       fail(lines.title, lines.body, actions: lines.actions);
       end = UpdateFailed(lines.title);
-      return false;
+      return UpdateFlowOutcome.failed;
     }
     archiveConsumed = true;
     // The directory the unpack made, never one guessed from a folder: a `Mods/<mod>` layout is a level deeper.
@@ -243,7 +253,7 @@ Future<bool> applyUpdateFlow(
         loc.t('marketplace.install_empty_body'),
       );
       end = UpdateFailed(loc.t('marketplace.install_empty_title'));
-      return false;
+      return UpdateFlowOutcome.failed;
     }
 
     final mods = await container.read(modManagerServiceProvider.future);
@@ -281,7 +291,7 @@ Future<bool> applyUpdateFlow(
       ];
       hold.release();
       queue.updateStep(download.seq, UpdateStep.confirming);
-      if (!context.mounted) return false;
+      if (!context.mounted) return UpdateFlowOutcome.notStarted;
       final chosen = await pickUpdateFolders(
         context,
         mod: mod,
@@ -296,7 +306,7 @@ Future<bool> applyUpdateFlow(
             'problem': problem.name,
             if (chosen != null) 'folders': [for (final folder in chosen) path.basename(folder)],
           });
-      if (chosen == null) return false;
+      if (chosen == null) return UpdateFlowOutcome.declined;
       picked = ingestFromPick([for (final folder in chosen) path.basename(folder)]);
       preview = await previewWith(picked);
     }
@@ -333,7 +343,7 @@ Future<bool> applyUpdateFlow(
     hold.release();
     if (ask) queue.updateStep(download.seq, UpdateStep.confirming);
 
-    if (!context.mounted) return false;
+    if (!context.mounted) return UpdateFlowOutcome.notStarted;
     final choice = ask
         ? await showUpdateConfirmDialog(
             context,
@@ -342,6 +352,7 @@ Future<bool> applyUpdateFlow(
             preview: preview,
             flattensPatch: flattensPatch,
             reinstall: reinstall,
+            run: run,
             siblings: group.targets,
             // Carries the primary's own refusal when the group contested its
             // folder — the dialog reads the row's state off this list, so there
@@ -370,7 +381,7 @@ Future<bool> applyUpdateFlow(
               'subject_skipped': true,
           });
     }
-    if (choice == null) return false;
+    if (choice == null) return UpdateFlowOutcome.declined;
 
     // Empty when the confirmation was skipped, which is the one path that has
     // no group: `installNamedBase` answered this question in its own prompt.
@@ -380,7 +391,7 @@ Future<bool> applyUpdateFlow(
             for (final target in [primary, ...group.targets])
               if (choice.accepted.contains(target.mod.id)) target,
           ];
-    if (chosen.isEmpty) return false;
+    if (chosen.isEmpty) return UpdateFlowOutcome.declined;
     queue.updateStep(download.seq, UpdateStep.writing);
 
     // **The modal is optional and the write is not.** The user has consented,
@@ -470,18 +481,20 @@ Future<bool> applyUpdateFlow(
       } else if (context.mounted) {
         notify.error(lines.title, body: lines.body, characterId: only.mod.characterId);
       }
-      if (!context.mounted) return only.result.snapshot != null;
-      // A failed *copy* still moved files. Anything else left the folder alone.
-      return only.result.failure == UpdateApplyFailure.copy;
+      // A failed *copy* still moved files, and so did a write that got as far as its snapshot. Anything else left
+      // the folder alone.
+      final moved = context.mounted
+          ? only.result.failure == UpdateApplyFailure.copy
+          : only.result.snapshot != null;
+      return moved ? UpdateFlowOutcome.failedAfterChange : UpdateFlowOutcome.failed;
     }
-
-    final changed = outcome.changed;
 
     writing?.dismiss();
     writing = null;
     // The row is Finished as the result opens, rather than when it is closed.
     queue.endUpdate(download.seq, end);
-    if (!context.mounted) return changed;
+    final result = outcomeOfGroupWrite(applied);
+    if (!context.mounted) return result;
     await showUpdateResultDialog(
       context,
       mod: applied.first.mod,
@@ -489,8 +502,9 @@ Future<bool> applyUpdateFlow(
       result: applied.first.result,
       reinstall: reinstall,
       others: applied.skip(1).toList(),
+      nextLabel: run != null && run.hasMore ? loc.t('mods.update_bulk.next') : null,
     );
-    return changed;
+    return result;
   } catch (e) {
     final title = loc.t('mods.update_apply.failed_title');
     end = UpdateFailed(title);
@@ -503,7 +517,7 @@ Future<bool> applyUpdateFlow(
     } else if (context.mounted) {
       fail(title, body, actions: actions);
     }
-    return false;
+    return UpdateFlowOutcome.failed;
   } finally {
     writing?.dismiss();
     // Belt and braces: every path above releases it, and a throw between the
@@ -529,7 +543,7 @@ Future<bool> applyUpdateFlow(
 ///
 /// Everything else is the same and shared: the cancellable download, the
 /// snapshot, and the record written against whichever identity this was.
-Future<bool> applyPatchUpdateFlow(
+Future<UpdateFlowOutcome> applyPatchUpdateFlow(
   BuildContext context,
   WidgetRef ref, {
   required ModInfo mod,
@@ -540,6 +554,10 @@ Future<bool> applyPatchUpdateFlow(
   /// Every file the check listed beside [file], so a pick below the newest
   /// records the ones above it as passed over. Same field as [applyUpdateFlow]'s.
   List<GbFile> published = const <GbFile>[],
+
+  /// Where this write sits in a run of several, as for [applyUpdateFlow]. A patch placement asks nothing, so only its
+  /// result dialog shows it.
+  UpdateRunPosition? run,
 }) async {
   final loc = context.loc;
   final notify = context.notify;
@@ -555,19 +573,20 @@ Future<bool> applyPatchUpdateFlow(
       loc.t('mods.update_apply.mod_missing_title'),
       loc.t('mods.update_apply.mod_missing', params: {'mod': mod.name}),
     );
-    return false;
+    return UpdateFlowOutcome.failed;
   }
   final layer = _layerKey(remoteModId, asCompanion: asCompanion);
 
   Future<PasswordAnswer?> askPassword({required bool failed}) async =>
       context.mounted ? showArchivePasswordDialog(context, modName: mod.name, failed: failed) : null;
 
-  if (!context.mounted) return false;
+  if (!context.mounted) return UpdateFlowOutcome.notStarted;
   final navigator = Navigator.of(context, rootNavigator: true);
   // **The whole wait, because this path asks nothing but an archive's password.** A patch placement has
   // no confirmation between the download and the write, so the modal carries
   // on through the unpacking *and* the copy, and comes down on the result.
   final hold = ProgressHold();
+  DownloadStop? stopped;
   final download = await downloadFileWithProgress(
     context,
     ref,
@@ -575,10 +594,11 @@ Future<bool> applyPatchUpdateFlow(
     characterId: mod.characterId,
     subject: mod.name,
     hold: hold,
+    onStopped: (reason) => stopped = reason,
   );
   if (download == null) {
     hold.dispose();
-    return false;
+    return outcomeOfStoppedDownload(stopped);
   }
 
   // Ended on every path, in the `finally`, as [applyUpdateFlow]'s is.
@@ -598,7 +618,7 @@ Future<bool> applyPatchUpdateFlow(
     );
     if (extraction == null) {
       await _deleteArchive(download.file);
-      return false;
+      return UpdateFlowOutcome.declined;
     }
     if (!extraction.success) {
       final lines = extractFailureMessage(
@@ -611,7 +631,7 @@ Future<bool> applyPatchUpdateFlow(
       );
       fail(lines.title, lines.body, actions: lines.actions);
       end = UpdateFailed(lines.title);
-      return false;
+      return UpdateFlowOutcome.failed;
     }
     archiveConsumed = true;
     // The directory the unpack made, never one guessed from a folder: a `Mods/<mod>` layout is a level deeper.
@@ -624,7 +644,7 @@ Future<bool> applyPatchUpdateFlow(
         loc.t('marketplace.install_empty_body'),
       );
       end = UpdateFailed(loc.t('marketplace.install_empty_title'));
-      return false;
+      return UpdateFlowOutcome.failed;
     }
 
     hold.say(loc.t('marketplace.preparing_comparing'));
@@ -685,9 +705,11 @@ Future<bool> applyPatchUpdateFlow(
     if (!result.success) {
       final lines = updateFailureMessage(loc, result, mod);
       end = UpdateFailed(lines.title);
-      if (!context.mounted) return result.snapshot != null;
+      if (!context.mounted) {
+        return result.snapshot != null ? UpdateFlowOutcome.failedAfterChange : UpdateFlowOutcome.failed;
+      }
       fail(lines.title, lines.body);
-      return result.failure == UpdateApplyFailure.copy;
+      return result.failure == UpdateApplyFailure.copy ? UpdateFlowOutcome.failedAfterChange : UpdateFlowOutcome.failed;
     }
     end = UpdateWritten(JobOutcome.updated, mods: [mod.id]);
 
@@ -730,16 +752,22 @@ Future<bool> applyPatchUpdateFlow(
     container.invalidate(libraryProvider);
 
     queue.endUpdate(download.seq, end);
-    if (!context.mounted) return true;
-    await showUpdateResultDialog(context, mod: mod, file: file, result: result);
-    return true;
+    if (!context.mounted) return UpdateFlowOutcome.written;
+    await showUpdateResultDialog(
+      context,
+      mod: mod,
+      file: file,
+      result: result,
+      nextLabel: run != null && run.hasMore ? loc.t('mods.update_bulk.next') : null,
+    );
+    return UpdateFlowOutcome.written;
   } catch (e) {
     final title = loc.t('mods.update_apply.failed_title');
     end = UpdateFailed(title);
     if (context.mounted) {
       fail(title, '$e', actions: [copyDetailsAction(loc, notify, title: title, body: '$e')]);
     }
-    return false;
+    return UpdateFlowOutcome.failed;
   } finally {
     hold.dispose();
     queue.endUpdate(download.seq, end);
@@ -747,6 +775,76 @@ Future<bool> applyPatchUpdateFlow(
     await _cleanupExtract(extractRoot);
     if (archiveConsumed) await _deleteArchive(download.file);
   }
+}
+
+/// Writes a patch layer's update, for [applyModUpdate]. The seam is the update dialog's gateway, which a test replaces.
+typedef PatchUpdateApplier =
+    Future<UpdateFlowOutcome> Function(
+      BuildContext context,
+      WidgetRef ref, {
+      required ModInfo mod,
+      required int remoteModId,
+      required GbFile file,
+      required bool asCompanion,
+      required List<GbFile> published,
+      UpdateRunPosition? run,
+    });
+
+/// Installs [file], a newer file of the layer [subject] names, over [mod]'s folder: the one entry every surface that
+/// updates a mod goes through.
+///
+/// **Base by layout, patch by placement**, and the folder decides which this is rather than the caller
+/// (`update_write_route.dart`). A patch write clears the folder's session verdict itself, since the verdict names
+/// layers; a base write clears the marks it settled inside [applyUpdateFlow]. [published] is every file the check
+/// found newer, so a pick below the newest records the rest as passed over.
+///
+/// [UpdateFlowOutcome.notStarted] when the folder's record names nothing this file could be written against.
+Future<UpdateFlowOutcome> applyModUpdate(
+  BuildContext context,
+  WidgetRef ref, {
+  required ModInfo mod,
+  required DownloadKey? subject,
+  required GbFile file,
+  required List<GbFile> published,
+  UpdateRunPosition? run,
+  PatchUpdateApplier patchFlow = applyPatchUpdateFlow,
+}) async {
+  // The identity this file belongs to, which is the folder's own only when the verdict is about it. A companion's
+  // file recorded against the primary would claim this folder is that other mod.
+  final modId = subject?.modId ?? mod.origin?.base?.modId;
+  if (modId == null) return UpdateFlowOutcome.notStarted;
+  final route = updateWriteRoute(origin: mod.origin, subject: subject);
+  if (route.kind == UpdateWriteKind.none) return UpdateFlowOutcome.notStarted;
+
+  final container = ProviderScope.containerOf(context, listen: false);
+  if (route.kind != UpdateWriteKind.patch) {
+    return applyUpdateFlow(
+      context,
+      ref,
+      mod: mod,
+      remoteModId: modId,
+      file: file,
+      patchFiles: route.patchFiles,
+      patchModId: route.patchModId,
+      asCompanion: route.asCompanion,
+      flattensPatch: route.flattensPatch,
+      published: published,
+      run: run,
+    );
+  }
+  final outcome = await patchFlow(
+    context,
+    ref,
+    mod: mod,
+    remoteModId: modId,
+    file: file,
+    asCompanion: route.asCompanion,
+    published: published,
+    run: run,
+  );
+  // Through the app's container: the window may have been closed while the write ran.
+  if (outcome.changed) forgetUpdateCheck(container, mod.id);
+  return outcome;
 }
 
 /// Open mod page in an update's password dialog, once the update has ended: every window over the pages closes, the

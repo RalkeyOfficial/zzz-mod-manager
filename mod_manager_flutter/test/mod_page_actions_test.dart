@@ -124,7 +124,7 @@ void main() {
     addTearDown(container.dispose);
     container.read(modUpdateChecksProvider.notifier).state = {modName: check};
 
-    expect(await ignoreUpdate(container, mod: mod(), check: check), isTrue);
+    expect(await ignoreUpdate(container, mod: mod(), check: check), isNotEmpty);
 
     final written = temp.originOf(modName)!;
     expect(written.base!.updatesDismissedUntil, DateTime.utc(2026, 3));

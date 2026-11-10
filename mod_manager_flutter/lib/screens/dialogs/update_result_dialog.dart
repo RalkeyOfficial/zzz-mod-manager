@@ -33,6 +33,9 @@ Future<void> showUpdateResultDialog(
   required UpdateApplyResult result,
   bool reinstall = false,
   List<AppliedUpdate> others = const <AppliedUpdate>[],
+
+  /// The primary button's text where more updates follow in a run: "Next" in place of "Close".
+  String? nextLabel,
 }) =>
     showDialog<void>(
       context: context,
@@ -42,6 +45,7 @@ Future<void> showUpdateResultDialog(
         result: result,
         reinstall: reinstall,
         others: others,
+        nextLabel: nextLabel,
       ),
     );
 
@@ -52,11 +56,13 @@ class _UpdateResultDialog extends StatelessWidget {
     required this.result,
     this.reinstall = false,
     this.others = const <AppliedUpdate>[],
+    this.nextLabel,
   });
 
   final ModInfo mod;
   final GbFile file;
   final UpdateApplyResult result;
+  final String? nextLabel;
 
   /// The other folders this one download was written into.
   final List<AppliedUpdate> others;
@@ -118,7 +124,7 @@ class _UpdateResultDialog extends StatelessWidget {
       actions: [
         FilledButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(loc.t('mods.update.close')),
+          child: Text(nextLabel ?? loc.t('mods.update.close')),
         ),
       ],
     );

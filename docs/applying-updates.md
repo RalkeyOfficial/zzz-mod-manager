@@ -1045,7 +1045,7 @@ A verdict names the folder's layers, so kept it would go on naming the patch tha
 
 ---
 
-## 7. What is not built, and what is refused
+## 7. Updating several mods, and what is refused
 
 ### Automatic updating — considered and refused
 
@@ -1090,13 +1090,41 @@ Consequently no code gates on "`exact` on both axes": nothing acts unattended, s
 The rule is stated in prose in [`origin-tracking.md` §1](origin-tracking.md#1-two-axes-confidence-and-provenance),
 and what the code does draw on is the weaker `OriginConfidence.isConfirmed` line, which caps the update verdict.
 
-### "Update all" — considered and refused
+### Updating several mods
 
-The bulk check lists every mod with something newer, and each one is then its own update dialog. For a library left alone for months that is tedious, and it stays that way.
-One button that downloads and overwrites many mod folders is the most destructive gesture in the app, and running the applies back-to-back removes no question:
-every apply still needs its confirmation, its folder choice where a patch is involved and its stale-`.ini` answer.
-What the user would get is the same dialogs in a row with no visible end, after already pressing the button that agreed to all of them.
-The surfaces also carry different weight on purpose: the bulk screen only ever rewrites sidecars.
+**Update N** sits beside Check all for updates on All mods and on the Updates page, and opens one list of every mod that has a newer file to install.
+It is not "Update all": the user names the file for each mod, and every update is asked about when its turn comes.
+A button that downloads and overwrites many mod folders from a single answer is the most destructive gesture in the app, so the run keeps every question and spares only the walk back to the page for each mod.
+Only one list is open at a time, and none opens while a run is under way.
+
+**The list** (`UpdateModal`) is a snapshot of the mods the checks found a newer file for, taken when it opens, newest upload first.
+It is a snapshot because an ignore turns a verdict into "no update", and a list read live would drop the card before Undo could be pressed.
+N counts the mods that have a file to install and a write route, which can be fewer than the sidebar's Updates count: a verdict with no file to name ("its page changed", a taken-down file whose page lists only files released with it) is an update to know about and has nothing to install.
+One card per folder, on the layer that has the update, marked Patch when that is a patch.
+- **One file per mod, and nothing is picked for the user** except where a mod has exactly one newer file. With several, the app's own candidate carries a chip ("matches your variant", "newest published") and is never selected, since a guess may inform and never drive.
+- **Ignore** is the Updates page's: it is written at once, dismisses the layer and every same-page layer listing the same files, and collapses the card to "Update ignored" with Undo, which takes back exactly what it dismissed and reopens the card with no file picked. Leaving the list does not undo an ignore, and the title keeps the count the list opened with.
+- **The button counts the mods with a pick**, and reads "Update" disabled when none has one. It starts nothing itself: it hands the picks back, and the host that owns long work above the page switcher runs them.
+
+**The run** (`LibraryActions.updateMods`, one at a time) takes the picks in list order and runs each through the flow one update runs from its own dialog (`applyModUpdate`): its download wait, the folder question when the layout is unknown or changed, the archive's password, the confirmation, the write and the result.
+The confirmation says where it is ("2 of 3"), and the result's button reads Next only while a later pick can still run: it is asked when the result appears, after this write has settled any mod of the same archive.
+A base update is never past its confirmation; a patch layer is placed as it is from its own dialog, which asks nothing.
+Each download appears on the Downloads panel as an Updating row while its own wait runs, one at a time.
+- **Declining anywhere ends the run**: Cancel in the download wait, a closed folder question, Cancel on the confirmation, an archive's password left unanswered. The mods already written stay written, the rest are untouched, and a note says how many of the picks were updated. Only an explicit refusal ends it.
+- **A failure does not end it.** The failed update has reported itself as its own error card and its own row on the panel, and the next one starts. So does a download that ends with no reason given, which is not read as a refusal.
+- **A mod already written is skipped.** When two mods came from one archive, the first one's confirmation lists the other and writes it, which settles its mark; at its own turn it is skipped with a note, since the folder is already current ([§4](#one-archive-several-mods-one-download) keeps its cautions).
+- **A mod whose folder is being written when its turn comes is skipped**, with a note naming it.
+- **A mod whose update was ignored while the run went is skipped**, with a note naming it, and is not counted as updated. A mod that left the library is skipped without a note.
+- **The count in the stopped note** is the mods whose update was written plus the ones written along with another mod of their archive. A mod that stays marked after its write, because the user unticked it on a group confirmation, is not in it. A write into several folders counts as written when any folder took the new version, and reads as failed after a change when none did and a copy had moved files.
+- **The run stops before the next mod if the window it was started from is gone**, after the entry in hand finishes: a write begun after its confirmation always runs to the end.
+
+A clean run raises no card of its own, since each write has already shown its result. One rescan follows the last entry.
+
+**What the run does not do:**
+- It does not fetch archives ahead of their turns, because an archive's layout and patch facts exist only once it is downloaded and unpacked, and archives reach 1.24 GB.
+- It does not combine the confirmations, because each folder has its own preview, its own patch put back and its own keybinds, and each needs its own consent.
+- It does not run in the background or with nobody at the keyboard, which is the refusal above.
+
+Keybinds rebound inside a folder are reverted by each update's shipped `.ini` and are not carried over, as [§5](#what-survives-of-preserve-the-users-ini-edits) states; the confirmation says so for every mod in turn.
 
 ### Known gaps
 

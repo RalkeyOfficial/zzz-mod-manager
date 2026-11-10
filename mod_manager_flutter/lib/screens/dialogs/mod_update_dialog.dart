@@ -31,7 +31,6 @@ import '../components/character_tile.dart' show libraryGroupName;
 import '../components/folder_downloads_summary.dart';
 import '../components/latest_update_post.dart';
 import '../components/mod_thumb.dart';
-import '../components/resolve/resolve_fragments.dart' show formatResolveDate;
 import '../components/update_file_rows.dart';
 import '../components/zenith_controls.dart';
 import '../components/zenith_dialog.dart';
@@ -135,9 +134,8 @@ class ModUpdateGateway {
   /// backfilled library.
   Future<List<ModInfo>> library() => ApiService.getMods();
 
-  /// Writes a patch's update over its placement in this mod's folder, through [applyPatchUpdateFlow]. True when the
-  /// folder changed.
-  Future<bool> applyPatchUpdate(
+  /// Writes a patch's update over its placement in this mod's folder, through [applyPatchUpdateFlow].
+  Future<UpdateFlowOutcome> applyPatchUpdate(
     BuildContext context,
     WidgetRef ref, {
     required ModInfo mod,
@@ -145,6 +143,7 @@ class ModUpdateGateway {
     required GbFile file,
     required bool asCompanion,
     required List<GbFile> published,
+    UpdateRunPosition? run,
   }) =>
       applyPatchUpdateFlow(
         context,
@@ -154,6 +153,7 @@ class ModUpdateGateway {
         file: file,
         asCompanion: asCompanion,
         published: published,
+        run: run,
       );
 }
 
@@ -740,16 +740,11 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     final modId = subject?.modId ?? widget.mod.origin?.base?.modId;
     if (modId == null) return;
 
-    final route = updateWriteRoute(
-      origin: widget.mod.origin,
-      subject: subject,
-    );
     // Not redundant with `build`'s guard: that one is a widget condition, this
     // is the call that overwrites a live folder.
-    if (route.kind == UpdateWriteKind.none) return;
+    if (updateWriteRoute(origin: widget.mod.origin, subject: subject).kind == UpdateWriteKind.none) return;
 
     setState(() => _writing = true);
-    final container = ProviderScope.containerOf(context, listen: false);
     // **What this check found newer than what this mod holds.** A pick below
     // the newest of them records the rest as passed over, and the group needs
     // it to tell a sibling that wants this file from one that has already gone
@@ -757,45 +752,22 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
     // folder holding two downloads has one per layer.
     final published =
         (section?.check ?? _stored)?.newerFiles ?? const <GbFile>[];
-    // **Base by layout, patch by placement**, and the folder decides which this
-    // is rather than the button. See `update_write_route.dart`.
-    final changed = await _writes.track(
-      route.kind == UpdateWriteKind.patch
-          ? _gateway.applyPatchUpdate(
-              context,
-              ref,
-              mod: widget.mod,
-              remoteModId: modId,
-              file: file,
-              asCompanion: route.asCompanion,
-              published: published,
-            )
-          : applyUpdateFlow(
-              context,
-              ref,
-              mod: widget.mod,
-              remoteModId: modId,
-              file: file,
-              patchFiles: route.patchFiles,
-              patchModId: route.patchModId,
-              asCompanion: route.asCompanion,
-              flattensPatch: route.flattensPatch,
-              published: published,
-            ),
-      (changed) => changed,
+    // Base by layout, patch by placement, and the verdicts the write settles are cleared inside.
+    final outcome = await _writes.track(
+      applyModUpdate(
+        context,
+        ref,
+        mod: widget.mod,
+        subject: subject,
+        file: file,
+        published: published,
+        patchFlow: _gateway.applyPatchUpdate,
+      ),
+      (outcome) => outcome.changed,
     );
-    // **Not cleared here for the base.** The base write can go into several
-    // folders and can skip this one entirely — the user may untick it in favour
-    // of the archive's other mods — so only the flow knows which marks are
-    // stale. The patch path writes this folder and nothing else, so it clears
-    // its own, through the app's container: the dialog may have been closed
-    // while the write ran.
-    if (changed && route.kind == UpdateWriteKind.patch) {
-      forgetUpdateCheck(container, widget.mod.id);
-    }
     if (!mounted) return;
     setState(() => _writing = false);
-    if (changed) Navigator.of(context).pop();
+    if (outcome.changed) Navigator.of(context).pop();
   }
 
   /// Opens this mod's page in the in-app marketplace.
@@ -1096,34 +1068,13 @@ class _ModUpdateDialogState extends ConsumerState<ModUpdateDialog> {
   /// gone from the mod page", and in exactly that case there is no published record left to describe. Saying
   /// "unknown" there would contradict the verdict beside it.
   Widget _youHave(_Section section) {
-    final check = section.check;
-    if (check.installedFile case final file?) {
-      return YouHaveBox.file(
-        file: file,
-        uploaded: file.dateAdded == null
-            ? null
-            : loc.t('mods.update.uploaded', params: {'date': formatResolveDate(file.dateAdded!)}),
-      );
-    }
     // **This layer's own record, not the folder's.** Every layer carries its own `version` / `version_label`, and
     // reading another's here would describe the wrong download.
     final label = summarizeDownload(
       section.download,
       provenance: widget.mod.origin?.provenance ?? OriginProvenance.importedFolder,
     ).versionLabel;
-    if (check.comparedByDate) {
-      return YouHaveBox(
-        name: loc.t('library.updates.marked_current'),
-        plainName: true,
-        uploaded: loc.t('library.updates.newest_on', params: {'date': formatResolveDate(check.comparedAgainst!)}),
-      );
-    }
-    return YouHaveBox(
-      name: label != null && label.isNotEmpty
-          ? label
-          : loc.t(check.outcome == UpdateOutcome.versionUnknown ? 'mods.update.unknown_file' : 'library.updates.file_gone'),
-      plainName: true,
-    );
+    return YouHaveBox.parts(YouHaveParts.of(loc, section.check, recordedLabel: label));
   }
 
   /// "Ignore" against a live finding; "Stop ignoring it" once ignored. The undo sits in the same place as the thing it

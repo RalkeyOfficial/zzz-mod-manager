@@ -10,7 +10,10 @@ import '../../services/bulk_update_check.dart';
 import '../../services/origin_write.dart';
 import '../../services/update_check_run.dart';
 import '../../utils/state_providers.dart';
+import '../dialogs/apply_update_flow.dart';
 import '../dialogs/bulk_resolution_dialog.dart';
+import '../dialogs/update_modal.dart';
+import '../dialogs/update_run.dart';
 import 'update_check_feedback.dart';
 
 /// The update checks a press starts and that outlive the page it was pressed on: checking every mod or the ticked
@@ -30,9 +33,13 @@ class LibraryActionsHost extends ConsumerStatefulWidget {
     this.updateFetcher,
     this.updatesFetcher,
     this.originWriter,
+    this.modUpdater,
   });
 
   final Widget child;
+
+  /// Injected only by tests, in place of the update flow, which downloads and writes.
+  final ModUpdater? modUpdater;
 
   /// Injected only by tests. Defaults to the shared GameBanana client, which a widget test must not be allowed to
   /// reach.
@@ -69,6 +76,10 @@ abstract interface class LibraryActions {
 
   /// Opens the "sort out mod tracking" screen, running the check first when there is nothing in hand to show.
   Future<void> sortOutTracking();
+
+  /// Updates the mods [picks] names, one after another, each through the flow a single update runs
+  /// (`runModUpdates`). One run at a time ([libraryUpdateRunProvider]); a second request while one runs does nothing.
+  Future<void> updateMods(List<UpdatePick> picks);
 }
 
 class _LibraryActionsScope extends InheritedWidget {
@@ -194,6 +205,20 @@ class _LibraryActionsHostState extends ConsumerState<LibraryActionsHost> impleme
       // page is gone and whose patch was not reached counts once.
       unreachable: {...outcome.failed, ...resolution.goneIds}.length,
     );
+  }
+
+  /// The run belongs to this host, which sits above the page switcher, so it carries on whichever page is showing.
+  @override
+  Future<void> updateMods(List<UpdatePick> picks) async {
+    final running = ref.read(libraryUpdateRunProvider.notifier);
+    if (running.state || picks.isEmpty) return;
+    running.state = true;
+    try {
+      await runModUpdates(context, ref, picks, update: widget.modUpdater ?? applyModUpdate);
+    } finally {
+      // Unconditional: the controller outlives this host, and a flag left set would disable every Update N.
+      running.state = false;
+    }
   }
 
   /// Untracked mods open the screen on their own, with no check at all when nothing is tracked:

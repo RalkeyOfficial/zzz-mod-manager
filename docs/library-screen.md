@@ -422,6 +422,7 @@ When the library fails to load, the table shows what the character view shows in
   A check of the ticked mods doesn't set it, and neither does a pass that aborted: either would say the library was checked when only part of it was. Like the verdicts (§8), it is never persisted.
   The line is redrawn every 30 seconds while the page is open, so "2 min ago" stays true.
 - **Check all for updates** is the whole-library check ([`update-checks.md`](update-checks.md) §5), showing the check it started working (a spinner in its icon's place once the check has run 200 ms, ignoring a press), and disabled while any other check runs or while no mod can be checked.
+- **Update N** is the primary button beside it, `UpdateCountButton`, shared with the Updates page (§17). It is there while some mod has a newer file to install and counts those mods library-wide (`updatableModsProvider`), which can be fewer than the sidebar's Updates count: a verdict with no file to name has nothing to install. It opens the list of those mods at once, stays pressable while a check runs, and is disabled, with a tooltip, while a run of updates is under way (`libraryUpdateRunProvider`). The list and the run are in [`applying-updates.md`](applying-updates.md) §7.
 
 ### Search, filters and grouping
 
@@ -528,7 +529,7 @@ Its state that outlives the page is in providers, as the table's is (§16).
 
 ### The header
 
-"Updates", and under it "Last checked <ago>" from `libraryCheckedAtProvider` (§16), redrawn every 30 seconds, or "Not checked since Zenith started" before a whole-library check has finished this session. Beside it, Check all for updates, the table's button.
+"Updates", and under it "Last checked <ago>" from `libraryCheckedAtProvider` (§16), redrawn every 30 seconds, or "Not checked since Zenith started" before a whole-library check has finished this session. Beside it, Check all for updates, the table's button, and Update N, the same button as the table's (§16).
 
 ### Coverage
 

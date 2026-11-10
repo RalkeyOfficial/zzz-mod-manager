@@ -60,6 +60,9 @@ Future<ForegroundDownload?> downloadFileWithProgress(
   /// closes here, which is what a caller with nothing further to do wants. See
   /// [ProgressHold].
   ProgressHold? hold,
+
+  /// Told why the result is null, for a caller that treats a cancel differently from a failure.
+  void Function(DownloadStop reason)? onStopped,
 }) async {
   final loc = context.loc;
   // Read before the first await and kept: the dialog this runs behind can be
@@ -89,6 +92,7 @@ Future<ForegroundDownload?> downloadFileWithProgress(
       characterId: characterId,
       actions: [openDownloadsAction(loc, ProviderScope.containerOf(context, listen: false))],
     );
+    onStopped?.call(DownloadStop.alreadyRunning);
     return null;
   }
 
@@ -105,6 +109,7 @@ Future<ForegroundDownload?> downloadFileWithProgress(
     // all.
     report(loc.t('marketplace.download_failed_title'));
     queue.remove(job.seq);
+    onStopped?.call(DownloadStop.failed);
     return null;
   }
 
@@ -155,9 +160,11 @@ Future<ForegroundDownload?> downloadFileWithProgress(
     return result;
   } on DownloadCancelledException {
     close();
+    onStopped?.call(DownloadStop.cancelled);
     return null;
   } catch (e) {
     close();
+    onStopped?.call(DownloadStop.failed);
     if (e is DownloadStalledException) {
       // The one recoverable failure, so its body is the way out rather than the
       // name of what stalled.
@@ -188,6 +195,18 @@ Future<ForegroundDownload?> downloadFileWithProgress(
       progress.dispose();
     }
   }
+}
+
+/// Why [downloadFileWithProgress] returned null.
+enum DownloadStop {
+  /// The user cancelled the transfer.
+  cancelled,
+
+  /// The transfer failed, and a notification has said so.
+  failed,
+
+  /// Another job was already fetching the file, so nothing was started.
+  alreadyRunning,
 }
 
 /// A foreground download's archive, and the queue job the caller now owns until it ends it.

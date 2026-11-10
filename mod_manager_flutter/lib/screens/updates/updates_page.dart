@@ -25,6 +25,7 @@ import '../components/character_tile.dart';
 import '../components/library_actions_host.dart';
 import '../components/mod_thumb.dart';
 import '../components/resolve/resolve_fragments.dart';
+import '../components/update_count_button.dart';
 import '../components/zenith_controls.dart';
 import '../dialogs/assume_current_dialog.dart';
 import 'updates_coverage.dart';
@@ -149,16 +150,23 @@ class _HeaderState extends ConsumerState<_Header> {
             Text(_lastChecked(loc, checkedAt), style: text.bodyMedium?.copyWith(color: palette.text2)),
           ],
         ),
-        // Working while the check it started runs; off while any other check runs.
-        WorkingAction(
-          onPressed: checking || !checkPlan.hasWork
-              ? null
-              : (work) => LibraryActionsHost.of(context).checkForUpdates(work: work),
-          builder: (context, onPressed) => OutlinedButton.icon(
-            onPressed: onPressed,
-            icon: const WorkingIcon(Icon(Icons.sync_rounded)),
-            label: Text(loc.t('library.all.check_all')),
-          ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            // Working while the check it started runs; off while any other check runs.
+            WorkingAction(
+              onPressed: checking || !checkPlan.hasWork
+                  ? null
+                  : (work) => LibraryActionsHost.of(context).checkForUpdates(work: work),
+              builder: (context, onPressed) => OutlinedButton.icon(
+                onPressed: onPressed,
+                icon: const WorkingIcon(Icon(Icons.sync_rounded)),
+                label: Text(loc.t('library.all.check_all')),
+              ),
+            ),
+            if (ref.watch(updatableModsCountProvider) > 0) const UpdateCountButton(),
+          ],
         ),
       ],
     );
@@ -786,8 +794,8 @@ class _NewerFileRow extends ConsumerWidget {
     final loc = context.loc;
     final notify = context.notify;
     final container = ProviderScope.containerOf(context, listen: false);
-    final ok = await ignoreUpdate(container, mod: mod, check: check, writer: writer);
-    if (ok) return;
+    final dismissed = await ignoreUpdate(container, mod: mod, check: check, writer: writer);
+    if (dismissed.isNotEmpty) return;
     notify.error(
       loc.t('mods.update.dismiss_failed_title'),
       body: loc.t('mods.update.dismiss_failed', params: {'mod': mod.name}),

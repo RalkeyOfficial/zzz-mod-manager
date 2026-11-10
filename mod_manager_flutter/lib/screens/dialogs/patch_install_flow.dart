@@ -677,7 +677,7 @@ Future<bool> installNamedBase(
   // "not installed" is honest — nothing was — and leaves the warning standing.
   if (!context.mounted) return false;
 
-  return applyUpdateFlow(
+  final outcome = await applyUpdateFlow(
     context,
     ref,
     // The folder exists and its sidecar is written, but nothing has rescanned
@@ -698,6 +698,7 @@ Future<bool> installNamedBase(
     asCompanion: true,
     confirm: false,
   );
+  return outcome.changed;
 }
 
 /// What an install says about the patches it found, in the order it says it.

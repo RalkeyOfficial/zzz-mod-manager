@@ -81,6 +81,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - A mod that already has a newer file, or whose updates you're ignoring, is offered but not ticked, and the row says which.
   - A progress bar counts through the folders as they're written, and the result names each one.
   - The window you wait in stays up from pressing Update until you're asked, saying whether it's unpacking the download or checking what it changes, instead of vanishing for a few seconds first.
+- Update several mods at once: Update N beside Check all for updates on All mods and Updates lists every mod with a newer file, you pick the file for each, and the updates then run one after another, each asking before it writes.
+  - A mod with exactly one newer file starts picked; with several, nothing is picked for you.
+  - Ignore on a mod's card writes at once and Undo takes it back, there or on the mod's History tab.
+  - Cancelling anywhere in a run ends it, leaving the mods already written as they are, and says how many were updated.
+  - A mod already written along with another from the same archive is skipped, and so is one whose folder is being written or whose update was ignored when its turn comes, each with a note.
+  - Only one update list opens at a time, and Next on a result appears only while a later mod can still run.
+  - The button counts the mods that have a file to install, which can be fewer than the Updates count in the sidebar.
 - An install that turns out to be a patch says so, and remembers it for later.
   - Installing a patch asks where it goes: its own folder with the mod it patches fetched in for you, or straight into a mod you already have, picked from a searchable list with cover images.
   - That list puts the folders holding the files the patch replaces first, and each one says how many it holds.

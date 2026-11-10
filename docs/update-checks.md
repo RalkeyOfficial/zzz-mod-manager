@@ -535,7 +535,7 @@ half a user might object to.
 **It checks; it never installs.** The switch says *check* and never *update*,
 and its description says so a second time in a sentence. Applying an update is
 not automated in this app at all, and that is a rejected design rather than an
-unbuilt one — [`applying-updates.md` §7](applying-updates.md#7-what-is-not-built-and-what-is-refused).
+unbuilt one — [`applying-updates.md` §7](applying-updates.md#automatic-updating--considered-and-refused).
 A control a user could read as consenting to automatic installs would be
 promising something that does not exist.
 

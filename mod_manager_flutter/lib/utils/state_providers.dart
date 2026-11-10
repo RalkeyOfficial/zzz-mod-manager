@@ -27,6 +27,7 @@ import '../models/mod_origin.dart';
 import '../services/log/logger.dart';
 import '../services/mod_manager_service.dart';
 import '../services/mod_metadata_service.dart';
+import '../services/newer_files.dart';
 import '../services/origin_status.dart';
 import '../services/origin_write.dart';
 import '../services/platform_service.dart';
@@ -1083,8 +1084,9 @@ Future<bool> stopIgnoringUpdate(
   return true;
 }
 
-/// Ignores the update [check] found on [mod], as the update dialog's Ignore does, and rescans. Returns false when
-/// the sidecar could not be written, or the check names nothing to ignore.
+/// Ignores the update [check] found on [mod], as the update dialog's Ignore does, and rescans. Returns the layers it
+/// dismissed, which [stopIgnoringUpdate] takes back one by one; empty when the sidecar could not be written, or the
+/// check names nothing to ignore.
 ///
 /// The dismissal is written on the layer whose page has the update, up to the newest file the check reported
 /// (`UpdateCheck.dismissableUpTo`), so anything uploaded after speaks up again.
@@ -1093,7 +1095,7 @@ Future<bool> stopIgnoringUpdate(
 /// same files: a newer file nobody labelled is listed under both a base and a patch from one page, and dismissed on
 /// the winner alone, the other layer wins the re-fold with the file just ignored. The update dialog's and History's
 /// Ignore act on one layer and stay per layer.
-Future<bool> ignoreUpdate(
+Future<Set<DownloadKey>> ignoreUpdate(
   ProviderContainer container, {
   required ModInfo mod,
   required UpdateCheck check,
@@ -1101,7 +1103,7 @@ Future<bool> ignoreUpdate(
 }) async {
   final subject = check.subject;
   final until = check.dismissableUpTo;
-  if (subject == null || until == null) return false;
+  if (subject == null || until == null) return const <DownloadKey>{};
   Set<int> listed(UpdateCheck verdict) => {for (final file in verdict.newerFiles) file.idRow};
   final same = listed(check);
   final dismissals = <DownloadKey, DateTime>{
@@ -1123,7 +1125,7 @@ Future<bool> ignoreUpdate(
       return next;
     }),
   );
-  if (!result.ok) return false;
+  if (!result.ok) return const <DownloadKey>{};
   final checks = container.read(modUpdateChecksProvider.notifier);
   if (checks.state[mod.id] case final held?) {
     var refolded = held;
@@ -1133,7 +1135,7 @@ Future<bool> ignoreUpdate(
     checks.state = {...checks.state, mod.id: refolded};
   }
   await container.read(libraryProvider.notifier).rescan();
-  return true;
+  return dismissals.keys.toSet();
 }
 
 /// Writes the titles of [pages] onto the sidecars of the library's mods whose downloads they name
@@ -1232,6 +1234,30 @@ final libraryUpdateCountProvider = Provider<int>((ref) {
 final libraryHasUpdatesProvider = Provider<bool>((ref) {
   return ref.watch(libraryUpdateCountProvider) > 0;
 });
+
+/// The mods **anywhere in the library** with a newer file that can be installed, each with its verdict: what the
+/// "Update N" button counts and the bulk update dialog lists.
+///
+/// Not [libraryUpdateCountProvider]: that is the sidebar's number and counts every verdict that shows an update,
+/// including those with no file to name. A button that promised N cards and opened with fewer would be wrong, so this
+/// counts only the mods the dialog can offer (`installableUpdatesOf`). Library-wide for the reason that provider is.
+final updatableModsProvider = Provider<List<(ModInfo, UpdateCheck)>>((ref) {
+  final checks = ref.watch(modUpdateChecksProvider);
+  if (checks.isEmpty) return const [];
+  return installableUpdatesOf(ref.watch(modsProvider), checks);
+});
+
+/// How many mods [updatableModsProvider] holds: the N of "Update N". Its own provider so a header that holds the button
+/// rebuilds when the number changes, not whenever a verdict does.
+final updatableModsCountProvider = Provider<int>((ref) => ref.watch(updatableModsProvider).length);
+
+/// Whether a run of several updates is under way, started by `LibraryActions.updateMods`. Read by the control that
+/// would start another, since two runs would write into the same folders at once.
+final libraryUpdateRunProvider = StateProvider<bool>((ref) => false);
+
+/// Whether the list of mods to update is open, so a second press of Update N, on this page or another, opens no second
+/// one. Set by `showUpdateModal`.
+final updateModalOpenProvider = StateProvider<bool>((ref) => false);
 
 /// Pre-update snapshots, in `<appData>/backups`.
 ///

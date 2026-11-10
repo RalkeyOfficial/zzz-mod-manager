@@ -7,6 +7,7 @@ import '../../core/type_scale.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/gamebanana/gamebanana.dart';
 import '../../services/gamebanana/file_selection.dart';
+import '../../services/update_check.dart';
 import '../../utils/byte_format.dart';
 import 'resolve/resolve_fragments.dart' show formatResolveDate;
 import 'zenith_controls.dart' show ZenithBadge;
@@ -20,10 +21,13 @@ const double _narrowRow = 420;
 /// [label] names what is chosen, for a screen reader. Arrow keys move focus between the rows, and Space or Enter picks
 /// the one that has it.
 class FileRadioGroup extends StatelessWidget {
-  const FileRadioGroup({super.key, required this.label, required this.rows});
+  const FileRadioGroup({super.key, required this.label, required this.rows, this.framed = true});
 
   final String label;
   final List<Widget> rows;
+
+  /// False inside a card that already has its own box, which draws the rows' lines and nothing around them.
+  final bool framed;
 
   @override
   Widget build(BuildContext context) {
@@ -34,12 +38,14 @@ class FileRadioGroup extends StatelessWidget {
       label: label,
       child: FocusTraversalGroup(
         child: Container(
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: palette.card,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: palette.outline),
-          ),
+          clipBehavior: framed ? Clip.antiAlias : Clip.none,
+          decoration: framed
+              ? BoxDecoration(
+                  color: palette.card,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: palette.outline),
+                )
+              : null,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -215,6 +221,105 @@ class VariantLine extends StatelessWidget {
   }
 }
 
+/// What a "You have" block says about the file a mod holds, for [YouHaveBox] and [YouHaveStrip].
+///
+/// The installed file when the check found its record; otherwise what the mod holds without one: "Marked as current"
+/// with the day it was compared by, the version label the sidecar kept ([recordedLabel]), or that the file is no longer
+/// on its page.
+class YouHaveParts {
+  const YouHaveParts({required this.name, this.variant, this.uploaded, this.size, this.plainName = false});
+
+  factory YouHaveParts.of(AppLocalizations loc, UpdateCheck check, {String? recordedLabel}) {
+    if (check.installedFile case final file?) {
+      final date = file.dateAdded;
+      return YouHaveParts(
+        name: fileDisplayName(file),
+        variant: fileDisplayDetail(file) ?? '',
+        uploaded: date == null ? null : loc.t('mods.update.uploaded', params: {'date': formatResolveDate(date)}),
+        size: file.filesize,
+      );
+    }
+    if (check.comparedByDate) {
+      return YouHaveParts(
+        name: loc.t('library.updates.marked_current'),
+        plainName: true,
+        uploaded: loc.t('library.updates.newest_on', params: {'date': formatResolveDate(check.comparedAgainst!)}),
+      );
+    }
+    return YouHaveParts(
+      name: recordedLabel != null && recordedLabel.isNotEmpty
+          ? recordedLabel
+          : loc.t(check.outcome == UpdateOutcome.versionUnknown ? 'mods.update.unknown_file' : 'library.updates.file_gone'),
+      plainName: true,
+    );
+  }
+
+  final String name;
+  final String? variant;
+  final String? uploaded;
+  final int? size;
+  final bool plainName;
+}
+
+/// [YouHaveBox]'s content in the canvas's `.have`: a strip across the card of a mod in the bulk dialog, on the
+/// dialog's ground between two rules, with its caps label in a column of its own.
+class YouHaveStrip extends StatelessWidget {
+  const YouHaveStrip(this.parts, {super.key, required this.label});
+
+  final YouHaveParts parts;
+
+  /// "You have".
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ZenithPalette.of(context);
+    final text = Theme.of(context).textTheme;
+    final type = ZenithType.of(context);
+    final rule = BorderSide(color: palette.rowDivider);
+    final uploaded = parts.uploaded;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: palette.dialog,
+        border: Border(top: rule, bottom: rule),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final narrow = constraints.maxWidth < _narrowRow;
+          return Row(
+            spacing: 10,
+            children: [
+              SizedBox(
+                width: 76,
+                child: Text(label.toUpperCase(), style: type.caps.copyWith(color: palette.text3)),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: 2,
+                  children: [
+                    Text(
+                      parts.name,
+                      style: parts.plainName
+                          ? text.bodySmall?.copyWith(color: palette.text)
+                          : type.mono.copyWith(color: palette.text),
+                    ),
+                    if (parts.variant case final variant?) VariantLine(variant),
+                    if (narrow && uploaded != null)
+                      Text(uploaded, style: text.bodySmall?.copyWith(color: palette.text2)),
+                  ],
+                ),
+              ),
+              if (!narrow && uploaded != null) Text(uploaded, style: text.bodySmall?.copyWith(color: palette.text2)),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
 /// The file the mod holds now, above the newer ones: name, the author's words, when it was uploaded and its size, in a
 /// box on the dialog's own ground.
 ///
@@ -236,6 +341,14 @@ class YouHaveBox extends StatelessWidget {
       variant = fileDisplayDetail(file) ?? '',
       size = file.filesize,
       plainName = false;
+
+  /// The box for what [parts] says the mod holds.
+  YouHaveBox.parts(YouHaveParts parts, {super.key})
+    : name = parts.name,
+      variant = parts.variant,
+      uploaded = parts.uploaded,
+      size = parts.size,
+      plainName = parts.plainName;
 
   final String name;
   final String? variant;
