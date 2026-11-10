@@ -58,7 +58,7 @@ A folder the user drops onto a mod they already have is written the same way, wi
 `.zzz-mod-manager/`, recursively. `utils/directory_copy.dart` is the copy into the
 emptied folder.
 
-**The flows outlive the window that started them.** The update flows (`applyUpdateFlow`, `applyPatchUpdateFlow`) read providers and invalidate through the app's container, never through the window's `ref`, which throws once that window is closed. A window closed after the confirmation, or during a patch update, which asks nothing, leaves the write to finish and the row to say what happened, where a `ref` read after the write would turn a landed write into a failure. Before the confirmation a closed window ends the flow with nothing written.
+**The flows outlive the window that started them.** The update flows (`applyUpdateFlow`, `applyPatchUpdateFlow`) and the `prepareUpdate` and `writeUpdate` they call read providers and invalidate through the app's container, never through the window's `ref`, which throws once that window is closed. A window closed after the confirmation, or during a patch update, which asks nothing, leaves the write to finish and the row to say what happened, where a `ref` read after the write would turn a landed write into a failure. Before the confirmation a closed window ends the flow with nothing written.
 
 ### What goes, what comes back, and the patch layer's own update
 
@@ -747,7 +747,7 @@ update succeeded** — and the failure path is the one that matters. A copy that
 halfway leaves the folder half-old and half-new, and the error message sends the user
 to the History tab. The tab is drawn from `modBackupsProvider`'s cached set, so for a mod
 being updated for the first time it would have had nothing to list at the single moment the rollback is needed.
-`applyUpdateFlow` invalidates *before* the success check, so there is one call rather than one per branch.
+`writeUpdate` invalidates *before* the success check, so there is one call rather than one per branch.
 
 ### What survives of "preserve the user's `.ini` edits"
 
@@ -797,14 +797,15 @@ they were.
 
 ## 6. The order, and why it is the safety argument
 
-`screens/dialogs/apply_update_flow.dart` owns the sequence. Each step exists to make
-the next one refusable:
+`screens/dialogs/apply_update_flow.dart` owns the sequence of windows, and the work between them is in `services/update_apply/`: `prepareUpdate` (`update_prepare.dart`) is steps 2 and 3, and `writeUpdate` (`update_write.dart`) is steps 5 and 6.
+Each step exists to make the next one refusable:
 
 1. **Download** to `<appData>/downloads`. Cancellable; nothing local has changed.
 2. **Extract to temp** and check it produced folders. A failed extraction keeps the
    archive and says where it is.
-3. **Preview** — layout and patch shape. Every question that can only be asked
-   before the wipe.
+3. **Preview** — layout and patch shape. Every question that can only be asked before the wipe.
+   A question that stops the preparation (the archive's password, which of the archive's folders is this mod) comes back as a value and the preparation is called again with the answer.
+   The three that a confirmation states (a patch-shaped download, folders left out, a patch nothing records) are found together once the preview exists.
 4. **Ask.** Including the accepted keybind loss and the snapshot, stated rather than
    discovered. Those three sit together under *what this does to the folder*, with
    **the snapshot first within that section** — overwriting and reverting keybinds
@@ -815,11 +816,18 @@ the next one refusable:
 5. **Deactivate → snapshot → wipe → copy → put the patch back → reactivate.**
 6. **Record** the new origin block, prune snapshots, rescan.
 
-The orchestration is at the widget layer because it is a *conversation*. Every
-decision inside it is in `services/update_apply/`, which knows nothing about dialogs
-and is tested against real temp directories rather than a fake filesystem — the point
-of the mechanism is what it does to files, so a fake would be asserting the fake's
-semantics.
+The orchestration is at the widget layer because it is a *conversation*.
+Every decision inside it, and the unpack, the preview and the write themselves, are in `services/update_apply/`, which knows nothing about dialogs and is tested against real temp directories rather than a fake filesystem.
+The point of the mechanism is what it does to files, so a fake would be asserting the fake's semantics.
+
+`UpdateApplier` reports each part of a write as it starts through an optional `onStep` (`UpdateWriteStep`): saving the old file as a snapshot, replacing the files, and linking it in.
+Linking it in is reported only for a mod that was on and is going to stay on, so not when One at a time turned it off during the write.
+A write has no progress to report, so these are the only things that can be said about it while it runs.
+The patch placement reports the same three, and a callback that throws is logged and ignored, since the write has already turned the mod off.
+
+What the applier does with a download shaped like a patch is pinned by `test/update_applier_patch_shaped_wipe_test.dart`: `_write` clears the folder with no branch on the download's shape, so a patch-shaped file written as a base update leaves only the patch's own files and the recorded patch put back.
+The modal update flow accepts a patch-shaped base update and the applier clears the folder first, while the confirmation's warning (`patch_warning`) says everything else in the folder is left as it is, which does not match what the wipe does.
+That is the applier's behaviour and not a way to write a patch; a patch is a layer, placed by `applyPatchInto`.
 
 ### The same order, for a repair
 

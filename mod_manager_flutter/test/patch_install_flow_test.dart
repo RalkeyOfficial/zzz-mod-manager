@@ -94,6 +94,7 @@ class _CopyFailsApplier extends UpdateApplier {
     int? patchModId,
     List<InstalledFile> recorded = const <InstalledFile>[],
     Iterable<String> claimedAbove = const <String>[],
+    void Function(UpdateWriteStep step)? onStep,
   }) async => UpdateApplyResult.failed(UpdateApplyFailure.copy);
 }
 

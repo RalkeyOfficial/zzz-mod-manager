@@ -194,7 +194,7 @@ A question is a decision the prepare cannot make. There are five.
 | A patch is in the folder and nothing records which files are its. | The recorded patch files against the folder. | A small question: update anyway, with the saved copy keeping the patch, or skip. |
 | A change at the write (below). | The write's own re-read. | The question it has become. |
 
-**The patch question.** A patch-shaped download for a mod's base layer cannot go through the update's write, which clears the folder: `UpdateApplier._write` calls `_wipe` with no branch on whether the download is patch-shaped, so a patch-shaped file written as a base update leaves a folder that holds only the patch's files (and the recorded patch put back), while the confirmation window today says "Only its .ini files are being replaced — everything else here is left as it is". A run never writes a patch-shaped file by the wipe path. The window's two answers write it as a layer by placement (`applyPatchInto`, as a patch installed into a mod is written):
+**The patch question.** A patch-shaped download for a mod's base layer cannot go through the update's write, which clears the folder: `UpdateApplier._write` calls `_wipe` with no branch on whether the download is patch-shaped, so a patch-shaped file written as a base update leaves a folder that holds only the patch's files (and the recorded patch put back, which `test/update_applier_patch_shaped_wipe_test.dart` pins), while the confirmation window today says "Only its .ini files are being replaced — everything else here is left as it is". A run never writes a patch-shaped file by the wipe path. The window's two answers write it as a layer by placement (`applyPatchInto`, as a patch installed into a mod is written):
 - **Put it on top of <the mod this update is for>**, preselected, "Your files stay and the patch goes on top, so you can take it out again from History."
 - **Add it to a different mod you have**, with a library search and a ranked list, nothing picked, "The files it replaces are kept, so you can take the patch out again."
 
@@ -280,10 +280,18 @@ Each is specified here in the board's idiom: a row status in the status cell's c
 **The work is done by `DownloadQueueHost`**, mounted above the page switcher and below the `Navigator`, which already drains installs, owns the cards and opens questions from its own context. It gains the update drain beside the install drain. Work that outlives a press is owned by the host and providers, never a page.
 
 **The same three-part split as an install**, with the first part in its own lane:
-1. `prepareUpdate`, in the unpack lane: unpack, extract, preview (the folder and the siblings), test each question without asking it, stop at the first.
+1. `prepareUpdate`, in the unpack lane: unpack, extract, preview (the folder and the siblings), test each question without asking it, stop at the first that needs an answer.
 2. `answerUpdateQuestion`, from the row or the card: the window from the host's context; closing keeps the job waiting; Skip declines.
 3. `writeUpdate`, in the install lane: re-read the mod, re-preview, `whileWritingMod`, snapshot, wipe, copy, put the patch back, record, prune, the keybind diff into an update report, rescan once.
-Neither half takes a `BuildContext`. They take the app's `ProviderContainer` and a localiser, as the write does now.
+Neither half takes a `BuildContext`. They take the app's `ProviderContainer` and say nothing in words: what a failure is called belongs to the caller.
+
+**Parts 1 and 3 exist** as `prepareUpdate` (`services/update_apply/update_prepare.dart`) and `writeUpdate` (`update_write.dart`), and the modal flows are their only callers.
+`prepareUpdate` unpacks, previews and returns what has to be answered as a value, never asking.
+A password or a choice of the archive's folders stops it and it is called again with the answer, and the rest (a patch-shaped download, folders left out, a patch nothing records) are found together once the preview exists.
+`writeUpdate` writes a base into the ticked folders or places a patch layer, and returns an `UpdateReport` holding what happened to each folder, the outcome it adds up to and the update marks it removed.
+A patch write removes no marks and leaves the folder's verdict to the caller.
+The sub-steps of §2 come from the applier's `onStep`.
+Part 2, the re-read and re-preview at the write, and the questions' queue are not built.
 
 **The report** (`UpdateReport`) is on the finished job: files written, dropped and restored, keybind changes, the snapshot id per folder, the mark the write removed (for Undo), the kind, and the folders of the archive left out. It is session state, like the verdicts.
 
@@ -364,7 +372,6 @@ Choices made in this note that neither the plan nor the user settled: update job
 
 ## 15. Not verified
 
-- That a patch-shaped base update leaves a folder holding only the patch's files. This is from reading `UpdateApplier._write` and `_wipe`, which have no branch on the download's shape, and the only readers of `incomingIsPatch` are the confirmation window's; no test pins it. U1 adds the test.
 - That a failed capture leaves a partial snapshot that History lists as the newest of its mod. This is from reading `capture` and `_read`; not run.
 - That a patch added by an update leaves the base layer listing that file as newer, and that the base layer's `dismissableUpTo` silences it without also silencing a newer base file the user would want to hear about.
 - That `SnapshotService.prune` is safe against a capture in flight in another group, that two updates on different folders race on nothing in `ModManagerService`, and that links and One at a time's turn-offs come out right with two writes at once ([§4.3](#43-stage-by-stage-what-the-code-allows-today)).

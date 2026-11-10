@@ -8,6 +8,7 @@ import '../../services/gamebanana/file_selection.dart';
 import '../../services/update_apply/sibling_group.dart';
 import '../../services/update_apply/update_applier.dart';
 import '../../services/update_apply/update_layout.dart';
+import '../../services/update_apply/update_prepare.dart';
 import '../../services/update_apply/update_target.dart';
 import '../components/dialog_section.dart';
 import 'update_flow_outcome.dart';
@@ -47,7 +48,7 @@ class UpdateConfirmChoice {
 /// cannot be reconciled, a download shaped like a patch, folders in the archive that are left out, or a patch in the
 /// folder that cannot be put back.
 bool confirmationHasNews(UpdatePreview preview, {required bool flattensPatch}) =>
-    !preview.canProceed || preview.incomingIsPatch || preview.layout.unused.isNotEmpty || flattensPatch;
+    !preview.canProceed || confirmationQuestions(preview, flattensPatch: flattensPatch).isNotEmpty;
 
 Future<UpdateConfirmChoice?> showUpdateConfirmDialog(
   BuildContext context, {

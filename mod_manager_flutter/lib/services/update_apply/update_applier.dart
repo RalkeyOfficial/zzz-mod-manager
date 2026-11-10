@@ -43,10 +43,38 @@ class UpdateApplier {
     required this.activation,
     this.store = const PatchStore(),
     ModUid? uids,
+    this.staysOff,
   }) : uids = uids ?? ModUid();
 
   final SnapshotService snapshots;
   final ModActivationPort activation;
+
+  /// Whether a mod is to stay off when its write ends, so [UpdateWriteStep.linking] is not reported for a turn-on the activation will not make.
+  /// The same answer the activation port gives its `leaveOff`.
+  final bool Function(String modName)? staysOff;
+
+  /// Tells [onStep] about [step].
+  /// A callback that throws is logged and ignored: a write that has already turned the mod off must reach its re-activation whatever the caller's progress does.
+  void _report(void Function(UpdateWriteStep step)? onStep, UpdateWriteStep step) {
+    try {
+      onStep?.call(step);
+    } catch (e) {
+      _log.warning('a step callback threw', error: e, fields: {'step': step.name});
+    }
+  }
+
+  /// Turns the mod back on when it [wasActive], and reports [UpdateWriteStep.linking] first unless it is to stay off.
+  /// A write that failed puts the mod back the same way, so the step is reported there too.
+  /// False when the mod was off, stays off, or the turn-on was refused.
+  Future<bool> _reactivate(
+    String modName, {
+    required bool wasActive,
+    required void Function(UpdateWriteStep step)? onStep,
+  }) async {
+    if (!wasActive) return false;
+    if (!(staysOff?.call(modName) ?? false)) _report(onStep, UpdateWriteStep.linking);
+    return activation.activate(modName);
+  }
 
   /// The mod folder's identity, which is what its snapshots are filed under.
   ///
@@ -158,6 +186,7 @@ class UpdateApplier {
     required UpdatePreview preview,
     String? previousVersion,
     String? previousVersionLabel,
+    void Function(UpdateWriteStep step)? onStep,
   }) =>
       _write(
         modName: modName,
@@ -166,6 +195,7 @@ class UpdateApplier {
         previousVersion: previousVersion,
         previousVersionLabel: previousVersionLabel,
         patchFiles: const <String>[],
+        onStep: onStep,
       );
 
   /// Writes a new **base** into a folder that also holds a patch, in the order
@@ -193,6 +223,7 @@ class UpdateApplier {
   /// user that.
   /// [patchModId] is whose store of displaced originals to rebuild as the patch
   /// goes back — see [UpdateWriteRoute.patchModId]. Null leaves any store alone.
+  /// [onStep] is told which part of the write is starting, see [UpdateWriteStep].
   Future<UpdateApplyResult> applyBaseThenPatch({
     required String modName,
     required Directory modFolder,
@@ -201,6 +232,7 @@ class UpdateApplier {
     int? patchModId,
     String? previousVersion,
     String? previousVersionLabel,
+    void Function(UpdateWriteStep step)? onStep,
   }) =>
       _write(
         modName: modName,
@@ -210,6 +242,7 @@ class UpdateApplier {
         previousVersionLabel: previousVersionLabel,
         patchFiles: patchFiles,
         patchModId: patchModId,
+        onStep: onStep,
       );
 
   Future<UpdateApplyResult> _write({
@@ -220,6 +253,7 @@ class UpdateApplier {
     int? patchModId,
     String? previousVersion,
     String? previousVersionLabel,
+    void Function(UpdateWriteStep step)? onStep,
   }) async {
     if (!preview.layout.canProceed) {
       return UpdateApplyResult.failed(UpdateApplyFailure.layout);
@@ -247,6 +281,7 @@ class UpdateApplier {
     final wasActive = await activation.isActive(modName);
     if (wasActive) await activation.deactivate(modName);
 
+    _report(onStep, UpdateWriteStep.savingSnapshot);
     final snapshot = await _snapshot(
       modName: modName,
       modFolder: modFolder,
@@ -258,7 +293,7 @@ class UpdateApplier {
       // No snapshot, no write. There is no other way back from an overwrite, so
       // proceeding here would trade a recoverable failure for an unrecoverable
       // one.
-      if (wasActive) await activation.activate(modName);
+      await _reactivate(modName, wasActive: wasActive, onStep: onStep);
       return UpdateApplyResult.failed(UpdateApplyFailure.snapshot);
     }
 
@@ -277,6 +312,7 @@ class UpdateApplier {
     final aside = _findPatch(before, recorded);
 
     final written = <InstalledFile>[];
+    _report(onStep, UpdateWriteStep.replacingFiles);
     try {
       await _wipe(modFolder);
       _log.info('cleared the folder for the new version',
@@ -284,7 +320,7 @@ class UpdateApplier {
     } catch (e) {
       _log.error('update failed',
           error: e, fields: {'mod': modName, 'phase': 'wipe'});
-      if (wasActive) await activation.activate(modName);
+      await _reactivate(modName, wasActive: wasActive, onStep: onStep);
       return UpdateApplyResult.failed(
         UpdateApplyFailure.copy,
         snapshot: snapshot,
@@ -312,7 +348,7 @@ class UpdateApplier {
     } catch (e) {
       _log.error('update failed',
           error: e, fields: {'mod': modName, 'phase': 'copy'});
-      if (wasActive) await activation.activate(modName);
+      await _reactivate(modName, wasActive: wasActive, onStep: onStep);
       return UpdateApplyResult.failed(
         UpdateApplyFailure.copy,
         snapshot: snapshot,
@@ -328,7 +364,7 @@ class UpdateApplier {
       patchModId: patchModId,
     );
     final placed = placedFrom.values.toList();
-    final reactivated = wasActive && await activation.activate(modName);
+    final reactivated = await _reactivate(modName, wasActive: wasActive, onStep: onStep);
 
     // What the wipe took that nothing wrote again: a report, not a decision.
     // The patch's files count as kept under the path they *left*, since where
@@ -492,6 +528,7 @@ class UpdateApplier {
   /// this patch had written over one, and the patch's own additions go.
   /// [claimedAbove] is any path a layer sitting over this one records, which is
   /// not this one's to touch.
+  /// [onStep] is told which part of the write is starting, see [UpdateWriteStep].
   Future<UpdateApplyResult> applyPatchInto({
     required String modName,
     required Directory modFolder,
@@ -502,6 +539,7 @@ class UpdateApplier {
     int? patchModId,
     List<InstalledFile> recorded = const <InstalledFile>[],
     Iterable<String> claimedAbove = const <String>[],
+    void Function(UpdateWriteStep step)? onStep,
   }) async {
     if (placement.needsChoice) {
       return UpdateApplyResult.failed(UpdateApplyFailure.layout);
@@ -513,6 +551,7 @@ class UpdateApplier {
     final wasActive = await activation.isActive(modName);
     if (wasActive) await activation.deactivate(modName);
 
+    _report(onStep, UpdateWriteStep.savingSnapshot);
     final snapshot = await _snapshot(
       modName: modName,
       modFolder: modFolder,
@@ -520,7 +559,7 @@ class UpdateApplier {
     );
     if (snapshot == null) {
       // No snapshot, no write — the same trade [apply] refuses to make.
-      if (wasActive) await activation.activate(modName);
+      await _reactivate(modName, wasActive: wasActive, onStep: onStep);
       return UpdateApplyResult.failed(UpdateApplyFailure.snapshot);
     }
 
@@ -530,6 +569,7 @@ class UpdateApplier {
     );
 
     final placed = <InstalledFile>[];
+    _report(onStep, UpdateWriteStep.replacingFiles);
     try {
       for (final entry in placement.mapping.entries) {
         // Real on-disk spelling on both sides. The placement is computed over
@@ -578,7 +618,7 @@ class UpdateApplier {
     } catch (e) {
       _log.error('patch write failed',
           error: e, fields: {'mod': modName, 'phase': 'copy'});
-      if (wasActive) await activation.activate(modName);
+      await _reactivate(modName, wasActive: wasActive, onStep: onStep);
       return UpdateApplyResult.failed(
         UpdateApplyFailure.copy,
         snapshot: snapshot,
@@ -617,7 +657,7 @@ class UpdateApplier {
       spelling: existing,
     );
 
-    final reactivated = wasActive && await activation.activate(modName);
+    final reactivated = await _reactivate(modName, wasActive: wasActive, onStep: onStep);
 
     return UpdateApplyResult(
       snapshot: snapshot,
@@ -993,6 +1033,22 @@ class UpdatePreview {
   /// The download expects files it does not carry, so the folder it is going
   /// into holds more than one download and only part of it is being replaced.
   bool get incomingIsPatch => patch.looksLikePatch;
+}
+
+/// The part of a write that is starting, reported to the applier's `onStep` in this order.
+///
+/// A write has no progress to report, so these are the only things that can be said about it: the three parts that take time, and the last of them only for a mod that was on.
+enum UpdateWriteStep {
+  /// Saving the folder as it is now, the way back.
+  savingSnapshot,
+
+  /// Clearing the folder and writing the new files into it, a recorded patch put back included.
+  replacingFiles,
+
+  /// Turning the mod on again, which a write that failed also does.
+  /// Not reported for a mod that was off, nor for one that stays off because another was turned on meanwhile.
+  /// A turn-on that is refused after it starts is still reported, since the attempt happened.
+  linking,
 }
 
 enum UpdateApplyFailure {

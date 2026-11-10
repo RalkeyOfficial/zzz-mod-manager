@@ -244,6 +244,11 @@ Each is reviewable on its own and ends with tests green, docs and changelog upda
 6c. **Review follow-ups, what is left:**
    - Older buttons outside the press and ring rules until their screens are rebuilt: `welcome_screen.dart` (phase 10) sets its own shape or foreground.
 8a. **Review follow-ups, phase 8 slices 1 to 5** (outside their slices):
+   - Nothing checks that the unpacked source folders still exist before `writeUpdate` deactivates the mod, snapshots and wipes: a missing unpack empties the folder and then fails the copy. The modal flow keeps the unpack until its `finally`, but U4's run holds `FoldersAnswer.unpacked` across a waiting question, so an exists-check before the deactivate belongs in U4.
+   - A patch placement with two possible spots (`needsChoice`) is never asked, so a patch update fails with a layout failure after its download.
+   - `writeUpdate`'s patch branch does not invalidate the library when the copy fails part-way, so callers rescan on `changed`.
+   - The progress hold's release (a `navigator.pop()` with no mounted check) sits between the patch placement and the origin record, and `onFolder` and `onWritesDone` are called unguarded in a group write.
+   - When `writeUpdate`'s folder loop throws partway (for example prune or the origin record on a later folder), the library invalidation and mark removal are skipped for folders that already landed, and the caller reports `failed` instead of `failedAfterChange`.
    - In an update run, a mod's data is read at its turn but the library is rescanned only after the loop, so a sibling write that changes another picked folder's origin or layout leaves that folder's route and confirmation preview computed from the earlier state. Moot once 8b's U4 removes the loop.
    - Ignore in `UpdateModal` dismisses against the check the list opened with, so a newer file that arrives while it is open stays outside the dismissal while the card reads "Ignored".
    - `updatableModsProvider` recomputes every mod's write route on each library or check change, and a bulk run triggers many.
@@ -261,7 +266,7 @@ Each is reviewable on its own and ends with tests green, docs and changelog upda
    - Editing a symlinked `.ini` replaces the link with a plain file, and the path guard is lexical (stated in `key-editing.md`).
    - Windows trash: the call passes a null window handle with confirmation prompts on, and paths over 260 characters aren't handled.
    - `YouHaveBox` repeats `FileRadioRow`'s date and size layout.
-   - The update confirmation's patch warning says only the `.ini` files are replaced, but a base update clears the folder first (`UpdateApplier._write` calls `_wipe` with no branch on a patch-shaped download), so the folder is left with only the patch's files. No test pins it. 8b's U1 pins it and U4 stops writing a patch-shaped file by that path.
+   - The update confirmation's patch warning says only the `.ini` files are replaced, but a base update clears the folder first (`UpdateApplier._write` calls `_wipe` with no branch on a patch-shaped download), so the folder is left with only the patch's files. `update_applier_patch_shaped_wipe_test.dart` pins it, and the confirmation's wording still contradicts it. 8b's U4 stops writing a patch-shaped file by that path.
    - `SnapshotService.capture` has no space check, so a snapshot that does not fit is found by the copy failing. Built by 8b's U2.
    - A failed `capture` leaves the directory it made, and `_read` lists any directory with a `files/` folder as a snapshot, so a partial one can be the newest of its mod and, with one snapshot kept, push out the last good one. Built by 8b's U2.
    - `ConfigService._saveToFile` rewrites `config.json` with a plain `writeAsString`, neither atomic nor serialised, so a kill mid-write or two overlapping saves can leave it torn. Built by 8b's U2.

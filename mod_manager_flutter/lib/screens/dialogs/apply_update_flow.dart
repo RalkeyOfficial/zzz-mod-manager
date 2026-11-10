@@ -8,31 +8,16 @@ import 'package:path/path.dart' as path;
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../models/gamebanana/gamebanana.dart';
-import '../../models/installed_file.dart';
-import '../../models/mod_ingest.dart';
-import '../../models/mod_origin.dart';
 import '../../models/mod_download.dart';
-import '../../models/origin_enums.dart';
 import '../../services/api_service.dart';
 import '../../services/archive_service.dart';
 import '../../services/download/download_job.dart';
 import '../../services/download/download_queue.dart';
-import '../../services/shader_fixes/shader_fixes_service.dart';
-import '../../services/backup/snapshot_service.dart';
-import '../../services/folder_contents.dart';
-import '../../services/mod_manager_service.dart';
-import '../../services/update_check.dart';
 import '../../services/log/confirmations.dart';
-import '../../services/log/logger.dart';
-import '../../services/patch_placement.dart';
-import '../../services/patch_record.dart';
-import '../../services/update_apply/mod_activation_port.dart';
-import '../../services/update_apply/sibling_group.dart';
 import '../../services/update_apply/update_applier.dart';
-import '../../services/update_apply/update_layout.dart';
-import '../../services/update_apply/update_target.dart';
+import '../../services/update_apply/update_prepare.dart';
+import '../../services/update_apply/update_write.dart';
 import '../../services/update_apply/update_write_route.dart';
-import '../../utils/gamebanana_url.dart';
 import '../../utils/marketplace_providers.dart';
 import '../../utils/notification_actions.dart';
 import '../../utils/notifications.dart';
@@ -51,26 +36,17 @@ export 'update_flow_outcome.dart';
 
 /// Downloading a newer file and writing it over an installed mod, end to end.
 ///
-/// The orchestration lives at the widget layer because it is a *conversation* —
-/// download, then show what is about to happen, then write only if the user
-/// agrees. The decisions it is built on are all in
-/// `services/update_apply/`, which knows nothing about dialogs.
+/// The orchestration lives at the widget layer because it is a conversation: download, then show what is about to happen, then write only if the user agrees.
+/// The work between the questions is not here: `prepareUpdate` unpacks and previews and says what has to be answered, and `writeUpdate` writes.
+/// Both live in `services/update_apply/`, which knows nothing about dialogs, so this function is the windows and the order they come in.
 ///
-/// The order is the safety argument, and each step exists to make the next one
-/// refusable:
+/// The order is the safety argument, and each step exists to make the next one refusable:
 ///
-/// 1. **Download to `<appData>/downloads`.** Cancellable; nothing local has
-///    changed yet.
-/// 2. **Extract to a temp directory and sanity-check it.** A failed or
-///    half-finished extraction never touches the installed mod, which is the
-///    crash-safety property the rejected swap-the-folder design needed a swap
-///    for.
-/// 3. **Preview.** Patch shape, the old files going, and whether the archive's layout still matches how this mod was installed —
-///    every question that can only be asked before the copy.
-/// 4. **Ask.** Including the one thing the user must be told rather than
-///    discover: keybinds they rebound inside the folder will be reverted by a
-///    shipped `.ini`, and the snapshot is the way back.
-/// 5. **Apply**, then record what the folder now is.
+/// 1. **Download to `<appData>/downloads`.** Cancellable; nothing local has changed yet.
+/// 2. **Extract to a temp directory and sanity-check it** (`prepareUpdate`). A failed or half-finished extraction never touches the installed mod.
+/// 3. **Preview** (`prepareUpdate`). Patch shape, the old files going, and whether the archive's layout still matches how this mod was installed: every question that can only be asked before the copy.
+/// 4. **Ask.** Including the one thing the user must be told rather than discover: keybinds they rebound inside the folder will be reverted by a shipped `.ini`, and the snapshot is the way back.
+/// 5. **Apply**, then record what the folder now is (`writeUpdate`).
 ///
 /// **It writes one of the folder's two halves.** A mixed folder holds a base mod
 /// and a patch over it, and the rule is the same whichever of them is the
@@ -215,88 +191,57 @@ Future<UpdateFlowOutcome> applyUpdateFlow(
   NotificationHandle? writing;
   try {
     hold.say(loc.t('marketplace.preparing_unpacking'));
-    final extraction = await _extractAsking(
+    void onUnpacked(UpdateUnpacked unpacked) {
+      archiveConsumed = true;
+      extractRoot = unpacked.root;
+    }
+
+    // A repair (the user asked about one folder) and a companion write (a patch layer is not a folder this archive produced) do not look for the archive's other mods.
+    final request = UpdateRequest(
+      mod: mod,
+      modsPath: modsPath,
+      remoteModId: remoteModId,
+      file: file,
+      patchFiles: patchFiles.toList(),
+      patchModId: patchModId,
+      asCompanion: asCompanion,
+      flattensPatch: flattensPatch,
+      published: published,
+      reinstall: reinstall,
+      previewSiblings: confirm && !reinstall && !asCompanion,
+    );
+    var prepared = await _prepareAsking(
+      container,
+      request,
       download: download,
       modName: mod.name,
       ask: askPassword,
       openModPage: () => openModPage = true,
       queue: queue,
+      onUnpacked: onUnpacked,
+      onPreviewing: () => hold.say(loc.t('marketplace.preparing_comparing')),
     );
-    if (extraction == null) {
+    if (prepared == null) {
       // Declined at the password: the archive has nothing left to be used for.
-      await _deleteArchive(download.file);
+      await deleteConsumedArchive(download.file);
       return UpdateFlowOutcome.declined;
     }
-    if (!extraction.success) {
-      // The archive is kept on purpose: the user can still extract it by hand,
-      // and saying where it is turns a dead end into a workaround.
-      final lines = extractFailureMessage(
-        loc,
-        archivePath: download.file.path,
-        reason: extraction.failure ?? ExtractFailure.other,
-        requiredBytes: extraction.requiredBytes,
-        availableBytes: extraction.availableBytes,
-        notify: notify,
-      );
-      fail(lines.title, lines.body, actions: lines.actions);
-      end = UpdateFailed(lines.title);
-      return UpdateFlowOutcome.failed;
-    }
-    archiveConsumed = true;
-    // The directory the unpack made, never one guessed from a folder: a `Mods/<mod>` layout is a level deeper.
-    extractRoot = switch (extraction.extractionRoot) { final root? => Directory(root), null => null };
-
-    final folders = extraction.extractedFolders ?? const <String>[];
-    if (folders.isEmpty) {
-      fail(
-        loc.t('marketplace.install_empty_title'),
-        loc.t('marketplace.install_empty_body'),
-      );
-      end = UpdateFailed(loc.t('marketplace.install_empty_title'));
-      return UpdateFlowOutcome.failed;
-    }
-
-    final mods = await container.read(modManagerServiceProvider.future);
-    // Read once, before anything is written: retention is a disk operation and
-    // has to run even if the widget that owns `ref` has gone by then.
-    final snapshots = container.read(snapshotServiceProvider);
-    final applier = UpdateApplier(
-      snapshots: snapshots,
-      activation: ModManagerActivationPort(mods, leaveOff: (m) => leftOffAfterWrite(container, m)),
-    );
-
-    hold.say(loc.t('marketplace.preparing_comparing'));
-    Future<UpdatePreview> previewWith(ModIngest? ingest) => applier.preview(
-          modFolder: modFolder,
-          incomingFolders: folders,
-          ingest: ingest,
-        );
-    var preview = await previewWith(mod.origin?.ingest);
 
     // **Asked once, whether or not [confirm] is set**: a skipped confirmation covers a question the user already answered,
     // and which folder is the mod is not one anybody has asked. The answer is recorded after the write, so the next update replays it.
-    ModIngest? picked;
-    final problem = preview.layout.problem;
-    if (problem == UpdateLayoutProblem.layoutUnknown ||
-        problem == UpdateLayoutProblem.layoutChanged) {
-      // The `.ini` walk runs under the progress window, so it comes down right before the question.
-      final choices = [
-        for (final folder in folders)
-          ImportFolderChoice(
-            path: folder,
-            name: path.basename(folder),
-            looksLikeMod: await ArchiveService.containsIniFile(folder) ||
-            await ShaderFixesService.shaderPartOf(folder) != null,
-          ),
-      ];
+    if (prepared case UpdateAsks(question: final FoldersQuestion question)) {
+      final FoldersQuestion(:problem, :choices) = question;
       hold.release();
       queue.updateStep(download.seq, UpdateStep.confirming);
       if (!context.mounted) return UpdateFlowOutcome.notStarted;
       final chosen = await pickUpdateFolders(
         context,
         mod: mod,
-        choices: choices,
-        problem: problem!,
+        choices: [
+          for (final choice in choices)
+            ImportFolderChoice(path: choice.path, name: choice.name, looksLikeMod: choice.looksLikeMod),
+        ],
+        problem: problem,
         reinstall: reinstall,
       );
       logConfirmation('update.layout',
@@ -307,33 +252,49 @@ Future<UpdateFlowOutcome> applyUpdateFlow(
             if (chosen != null) 'folders': [for (final folder in chosen) path.basename(folder)],
           });
       if (chosen == null) return UpdateFlowOutcome.declined;
-      picked = ingestFromPick([for (final folder in chosen) path.basename(folder)]);
-      preview = await previewWith(picked);
+      prepared = await prepareUpdate(
+        container,
+        request,
+        archive: download.file,
+        archiveMd5: download.md5,
+        foldersAnswer: question.answer(chosen),
+      );
     }
 
-    final primary = UpdateTarget(
-      mod: mod,
-      preview: preview,
-      patchFiles: patchFiles.toList(),
-      patchModId: patchModId,
-      flattensPatch: flattensPatch,
-    );
-
-    // **The archive's other mods, previewed against the same extraction.**
-    // Refused outright for a repair (the user asked about one folder) and for a
-    // companion write (a patch layer is not a folder this archive produced).
-    final group = confirm && !reinstall && !asCompanion
-        ? await _previewSiblings(
-            applier: applier,
-            mod: mod,
-            primaryIngest: picked,
-            modsPath: modsPath,
-            remoteModId: remoteModId,
-            file: file,
-            published: published,
-            folders: folders,
-          )
-        : const _SiblingPreviews();
+    final PreparedFolders ready;
+    switch (prepared) {
+      case final PreparedFolders folders:
+        ready = folders;
+      case UpdateUnpackFailed(:final extraction):
+        // The archive is kept on purpose: the user can still extract it by hand,
+        // and saying where it is turns a dead end into a workaround.
+        final lines = extractFailureMessage(
+          loc,
+          archivePath: download.file.path,
+          reason: extraction.failure ?? ExtractFailure.other,
+          requiredBytes: extraction.requiredBytes,
+          availableBytes: extraction.availableBytes,
+          notify: notify,
+        );
+        fail(lines.title, lines.body, actions: lines.actions);
+        end = UpdateFailed(lines.title);
+        return UpdateFlowOutcome.failed;
+      case UpdateNothingToInstall():
+        fail(
+          loc.t('marketplace.install_empty_title'),
+          loc.t('marketplace.install_empty_body'),
+        );
+        end = UpdateFailed(loc.t('marketplace.install_empty_title'));
+        return UpdateFlowOutcome.failed;
+      // The password and the folders question are answered above.
+      case UpdateAsks():
+        throw StateError('a base update asked a question after the password and the folders were answered');
+      case PreparedPatch():
+        throw StateError('a base update was prepared as a patch placement');
+    }
+    final preview = ready.primary.preview;
+    final primary = ready.primary;
+    final group = ready.group;
 
     // The question this write asks, if any: a reinstall's own dialog has already said the standard facts.
     final ask = confirm && (!confirmOnlyIfNeeded || confirmationHasNews(preview, flattensPatch: flattensPatch));
@@ -414,31 +375,16 @@ Future<UpdateFlowOutcome> applyUpdateFlow(
       );
     }
 
-    final applied = await _writeAll(
-      container: container,
-      progress: progress,
-      applier: applier,
-      snapshots: snapshots,
-      mods: mods,
-      // Every member takes the same file off the same list, so a pick below
-      // the newest is the same passed-over release for each of them.
-      dismissUntil: dismissalAfterTaking(file, published),
-      // Handed in as a callback so the write itself holds no provider handle.
-      // The container rather than `ref` for the same reason as above: a
-      // `WidgetRef` throws once its widget is disposed, and a throw between the
-      // copy and `_recordOrigin` would leave a folder holding new files under a
-      // record naming the old version.
-      onSnapshotTaken: () => container.invalidate(modBackupsProvider),
+    // The container rather than `ref`: a `WidgetRef` throws once its widget is disposed, and a throw between the copy and the record would leave a folder holding new files under a record naming the old version.
+    final report = await writeUpdate(
+      container,
+      ready,
       targets: chosen,
-      modsPath: modsPath,
-      remoteModId: remoteModId,
-      file: file,
-      archiveMd5: extraction.archiveMd5 ?? download.md5,
-      asCompanion: asCompanion,
-      primary: primary,
+      onFolder: (folder, index, _) => progress.step(folder.name, index),
+      onWritesDone: progress.close,
     );
-
-    final outcome = summariseGroupWrite(applied, reinstall: reinstall);
+    final applied = report.applied;
+    final outcome = report.outcome;
     end = outcome.changed
         ? UpdateWritten(
             switch (()) {
@@ -449,18 +395,6 @@ Future<UpdateFlowOutcome> applyUpdateFlow(
             mods: [for (final a in applied) if (a.result.success) a.mod.id],
           )
         : UpdateFailed(loc.t('mods.update_apply.failed_title'));
-
-    container.invalidate(modBackupsProvider);
-    container.invalidate(libraryProvider);
-
-    // **Only what this write settled may lose its mark**, which is neither
-    // "all the targets" nor "all but the one the dialog was opened on". A
-    // folder the user unticked still has its update to take, one whose write
-    // failed needs its mark more than before, and a repair takes nothing —
-    // see `summariseGroupWrite`.
-    final notifier = container.read(modUpdateChecksProvider.notifier);
-    notifier.state = {...notifier.state}
-      ..removeWhere((id, _) => outcome.settledMarks.contains(id));
 
     // **One folder reports its failure as a notification, several report it in
     // the dialog.** With one mod the split is not the information and the
@@ -526,8 +460,8 @@ Future<UpdateFlowOutcome> applyUpdateFlow(
     queue.endUpdate(download.seq, end);
     // After the modal's own close, so the windows it closes are the ones left over the pages.
     if (openModPage) _openInBrowse(navigator, container, remoteModId);
-    await _cleanupExtract(extractRoot);
-    if (archiveConsumed) await _deleteArchive(download.file);
+    await deleteExtraction(extractRoot);
+    if (archiveConsumed) await deleteConsumedArchive(download.file);
   }
 }
 
@@ -575,7 +509,6 @@ Future<UpdateFlowOutcome> applyPatchUpdateFlow(
     );
     return UpdateFlowOutcome.failed;
   }
-  final layer = _layerKey(remoteModId, asCompanion: asCompanion);
 
   Future<PasswordAnswer?> askPassword({required bool failed}) async =>
       context.mounted ? showArchivePasswordDialog(context, modName: mod.name, failed: failed) : null;
@@ -609,98 +542,68 @@ Future<UpdateFlowOutcome> applyPatchUpdateFlow(
   Directory? extractRoot;
   try {
     hold.say(loc.t('marketplace.preparing_unpacking'));
-    final extraction = await _extractAsking(
+    final request = UpdateRequest(
+      mod: mod,
+      modsPath: modsPath,
+      remoteModId: remoteModId,
+      file: file,
+      asCompanion: asCompanion,
+      published: published,
+      placeAsPatch: true,
+    );
+    final prepared = await _prepareAsking(
+      container,
+      request,
       download: download,
       modName: mod.name,
       ask: askPassword,
       openModPage: () => openModPage = true,
       queue: queue,
+      onUnpacked: (unpacked) {
+        archiveConsumed = true;
+        extractRoot = unpacked.root;
+      },
+      onPreviewing: () => hold.say(loc.t('marketplace.preparing_comparing')),
     );
-    if (extraction == null) {
-      await _deleteArchive(download.file);
+    if (prepared == null) {
+      await deleteConsumedArchive(download.file);
       return UpdateFlowOutcome.declined;
     }
-    if (!extraction.success) {
-      final lines = extractFailureMessage(
-        loc,
-        archivePath: download.file.path,
-        reason: extraction.failure ?? ExtractFailure.other,
-        requiredBytes: extraction.requiredBytes,
-        availableBytes: extraction.availableBytes,
-        notify: notify,
-      );
-      fail(lines.title, lines.body, actions: lines.actions);
-      end = UpdateFailed(lines.title);
-      return UpdateFlowOutcome.failed;
+    final PreparedPatch ready;
+    switch (prepared) {
+      case final PreparedPatch patch:
+        ready = patch;
+      case UpdateUnpackFailed(:final extraction):
+        final lines = extractFailureMessage(
+          loc,
+          archivePath: download.file.path,
+          reason: extraction.failure ?? ExtractFailure.other,
+          requiredBytes: extraction.requiredBytes,
+          availableBytes: extraction.availableBytes,
+          notify: notify,
+        );
+        fail(lines.title, lines.body, actions: lines.actions);
+        end = UpdateFailed(lines.title);
+        return UpdateFlowOutcome.failed;
+      case UpdateNothingToInstall():
+        fail(
+          loc.t('marketplace.install_empty_title'),
+          loc.t('marketplace.install_empty_body'),
+        );
+        end = UpdateFailed(loc.t('marketplace.install_empty_title'));
+        return UpdateFlowOutcome.failed;
+      // The password is answered above, and a patch is placed rather than written by layout, which is what asks the folders question.
+      case UpdateAsks():
+        throw StateError('a patch placement asked a question after the password was answered');
+      case PreparedFolders():
+        throw StateError('a patch placement was prepared as a base update');
     }
-    archiveConsumed = true;
-    // The directory the unpack made, never one guessed from a folder: a `Mods/<mod>` layout is a level deeper.
-    extractRoot = switch (extraction.extractionRoot) { final root? => Directory(root), null => null };
-
-    final folders = extraction.extractedFolders ?? const <String>[];
-    if (folders.isEmpty) {
-      fail(
-        loc.t('marketplace.install_empty_title'),
-        loc.t('marketplace.install_empty_body'),
-      );
-      end = UpdateFailed(loc.t('marketplace.install_empty_title'));
-      return UpdateFlowOutcome.failed;
-    }
-
-    hold.say(loc.t('marketplace.preparing_comparing'));
-    // One folder's contents, never the folder itself — an extraction wrapper
-    // invented for a rootless archive must not end up nested inside the target.
-    final source = Directory(folders.first);
-    final incoming = await readFolderContents(source);
-    final existing = await readFolderContents(modFolder);
-    final placement = resolvePatchPlacement(
-      incoming: incoming.files,
-      target: existing.files,
-    );
 
     hold.say(loc.t('marketplace.preparing_writing'));
     queue.updateStep(download.seq, UpdateStep.writing);
-    final mods = await container.read(modManagerServiceProvider.future);
-    final snapshots = container.read(snapshotServiceProvider);
-    final applier = UpdateApplier(
-      snapshots: snapshots,
-      activation: ModManagerActivationPort(mods, leaveOff: (m) => leftOffAfterWrite(container, m)),
-    );
-    final result = await whileWritingMod(container, mod.id, () => applier.applyPatchInto(
-      modName: mod.id,
-      modFolder: modFolder,
-      source: source,
-      incoming: incoming,
-      existing: existing,
-      placement: placement,
-      // **Only where a removal flow can reach it.** A `patch` companion is the
-      // one shape that can be taken back out, so it is the one that needs the
-      // mod's displaced files kept. A folder that *is* the patch has no such
-      // operation — stripping it leaves a block naming a mod the folder does
-      // not hold — so nothing is stored under it.
-      patchModId: asCompanion ? remoteModId : null,
-      // **This layer's own last version**, so what it no longer places is taken
-      // back out: the mod's file returns where this patch had written over one,
-      // and the patch's own additions go.
-      recorded: mod.origin?.downloadOf(layer)?.files ??
-          const <InstalledFile>[],
-      // A folder can hold two patches, and the one above this has overwritten
-      // some of its files in turn — those paths are not this layer's to touch.
-      claimedAbove: _recordedAbove(mod.origin, layer),
-    ));
-    // The write is over, so the wait is: whatever comes next is the report.
-    hold.release();
-    // Before the success check, as after a base update: a failed write may still have changed the folder.
-    mods.invalidateKeybinds(mod.id);
-
-    if (result.snapshot != null) {
-      container.invalidate(modBackupsProvider);
-      // **Whenever one was taken, not only on a write that landed.** The
-      // snapshot comes before the copy, so a placement that failed part-way
-      // still added a whole folder to the budget — see §5 of
-      // `docs/applying-updates.md`.
-      await snapshots.prune();
-    }
+    final report = await writeUpdate(container, ready, targets: const [], onWritesDone: hold.release);
+    final applied = report.applied.single;
+    final result = applied.result;
 
     if (!result.success) {
       final lines = updateFailureMessage(loc, result, mod);
@@ -712,44 +615,6 @@ Future<UpdateFlowOutcome> applyPatchUpdateFlow(
       return result.failure == UpdateApplyFailure.copy ? UpdateFlowOutcome.failedAfterChange : UpdateFlowOutcome.failed;
     }
     end = UpdateWritten(JobOutcome.updated, mods: [mod.id]);
-
-    // **One write for whichever layer this was**, which is what the stack
-    // bought: the two shapes a mixed folder comes in used to need two branches
-    // here, and they were doing the same thing to a different record.
-    //
-    // `ingest` is deliberately *not* refreshed from this archive's layout: the
-    // folder's shape belongs to its bottom layer, and this archive's folder
-    // names describe a patch. `patch_files` is re-derived from the layers by
-    // `withDownloadUpdatedTo`, so it follows the files recorded just below.
-    await mods.updateModOrigin(mod.id, (current) {
-      if (current == null) return null;
-      final updated = withDownloadUpdatedTo(
-        current,
-        layer: layer,
-        fileId: file.idRow,
-        version: file.version,
-        versionLabel: file.description,
-        archiveMd5: extraction.archiveMd5 ?? download.md5,
-        // This version's files, replacing the last one's — the paths move
-        // whenever the two authors' layouts differ.
-        files: result.writtenFiles,
-        updatesDismissedUntil: dismissalAfterTaking(file, published),
-      );
-      if (updated == null) return null;
-      // The **folder's** facts only when what the folder *is* was written. A
-      // patch arriving on top does not re-date the folder or re-describe how it
-      // got here.
-      if (current.indexOf(layer) != 0) return updated;
-      return updated.copyWith(
-        source: gameBananaSource,
-        provenance: OriginProvenance.downloaded,
-        installedAt: DateTime.now(),
-      );
-    });
-
-    // Pruning already ran with the snapshot, and the keys were dropped with the write, above.
-    container.invalidate(modBackupsProvider);
-    container.invalidate(libraryProvider);
 
     queue.endUpdate(download.seq, end);
     if (!context.mounted) return UpdateFlowOutcome.written;
@@ -772,8 +637,8 @@ Future<UpdateFlowOutcome> applyPatchUpdateFlow(
     hold.dispose();
     queue.endUpdate(download.seq, end);
     if (openModPage) _openInBrowse(navigator, container, remoteModId);
-    await _cleanupExtract(extractRoot);
-    if (archiveConsumed) await _deleteArchive(download.file);
+    await deleteExtraction(extractRoot);
+    if (archiveConsumed) await deleteConsumedArchive(download.file);
   }
 }
 
@@ -856,142 +721,43 @@ void _openInBrowse(NavigatorState navigator, ProviderContainer container, int mo
   container.read(destinationProvider.notifier).state = AppDestination.browse;
 }
 
-/// Unpacks an update's archive, asking for its password when it has one: over the flow's own window, since an update
-/// is a conversation the user is in, and again after a password that did not open it. The unpack's own listing is
-/// what says it has one, before anything is written. Null when the user declined, which is also what Open mod page
-/// is, told to [openModPage]: the update ends and the mod's page opens in Browse.
-Future<ArchiveExtractionResult?> _extractAsking({
+/// Prepares an update, asking for the archive's password when it has one: over the flow's own window, since an update is a conversation the user is in, and again after a password that did not open it.
+/// The unpack's own listing is what says it has one, before anything is written.
+/// Null when the user declined, which is also what Open mod page is, told to [openModPage]: the update ends and the mod's page opens in Browse.
+/// Any other question is the caller's.
+Future<UpdatePrepareResult?> _prepareAsking(
+  ProviderContainer container,
+  UpdateRequest request, {
   required ForegroundDownload download,
   required String modName,
   required Future<PasswordAnswer?> Function({required bool failed}) ask,
   required void Function() openModPage,
   required DownloadQueue queue,
+  required void Function(UpdateUnpacked unpacked) onUnpacked,
+  required void Function() onPreviewing,
 }) async {
-  queue.updateStep(download.seq, UpdateStep.unpacking);
   String? password;
   while (true) {
-    final extraction = await ArchiveService.extractArchive(
-      archiveFile: download.file,
-      knownMd5: download.md5,
+    queue.updateStep(download.seq, UpdateStep.unpacking);
+    final prepared = await prepareUpdate(
+      container,
+      request,
+      archive: download.file,
+      archiveMd5: download.md5,
       password: password,
+      onUnpacked: onUnpacked,
+      onPreviewing: onPreviewing,
     );
-    final bool failed;
-    switch (extraction.failure) {
-      case ExtractFailure.wrongPassword:
-        failed = true;
-      case ExtractFailure.passwordRequired when password == null:
-        failed = false;
-      default:
-        return extraction;
-    }
+    if (prepared is! UpdateAsks || prepared.question is! PasswordQuestion) return prepared;
     queue.updateStep(download.seq, UpdateStep.confirming);
-    final answer = await ask(failed: failed);
+    final answer = await ask(failed: (prepared.question as PasswordQuestion).failed);
     if (answer is PasswordOpenModPage) openModPage();
     if (answer is! PasswordGiven) {
       logConfirmation('update.password', accepted: false, subject: modName, dismissed: answer == null);
       return null;
     }
     password = answer.password;
-    queue.updateStep(download.seq, UpdateStep.unpacking);
   }
-}
-
-/// The archive's other mods, previewed and split into offered and refused.
-class _SiblingPreviews {
-  const _SiblingPreviews({
-    this.targets = const <UpdateTarget>[],
-    this.refused = const <SiblingRefused>[],
-    this.otherFolders = const <String>[],
-  });
-
-  final List<UpdateTarget> targets;
-
-  /// Includes the **primary** when the group contested its folder. That is the
-  /// only channel the confirmation has for it, deliberately: a second field
-  /// carrying the same fact is a field a caller can forget, and forgetting it
-  /// writes a folder the group refused.
-  final List<SiblingRefused> refused;
-
-  final List<String> otherFolders;
-}
-
-/// Finds the mods this archive also installed, and previews the write into each.
-///
-/// **The library is read here, when the question is asked**, rather than off
-/// `libraryProvider`: the mods this archive also installed are what the write is
-/// about, and one of them can have landed since the last scan — a group member
-/// missing from the list is a folder this write would silently skip. See
-/// `test/modal_freshness_test.dart`.
-///
-/// **Nothing is read at all for a mod with no group**, which is every mod in a
-/// backfilled library: the check is one field already in hand.
-Future<_SiblingPreviews> _previewSiblings({
-  required UpdateApplier applier,
-  required ModInfo mod,
-
-  /// The layout the user picked at a stop, so the group sees what the primary is really written with.
-  required ModIngest? primaryIngest,
-  required String modsPath,
-  required int remoteModId,
-  required GbFile file,
-  required List<GbFile> published,
-  required List<String> folders,
-}) async {
-  if (mod.origin?.ingest?.siblingGroup == null) return const _SiblingPreviews();
-
-  final List<ModInfo> library;
-  try {
-    library = await ApiService.getMods();
-  } catch (e) {
-    // The group is an addition to a write that works without it, so a failed
-    // scan costs the user the offer and nothing else.
-    Logger('update').warning('could not read the library for a sibling group',
-        error: e, fields: {'mod': mod.id});
-    return const _SiblingPreviews();
-  }
-
-  final plan = planSiblingUpdates(
-    primary: mod,
-    primaryIngest: primaryIngest,
-    library: library,
-    subjectModId: remoteModId,
-    target: file,
-    published: published,
-    incomingFolders: [for (final folder in folders) path.basename(folder)],
-  );
-
-  final targets = <UpdateTarget>[];
-  for (final sibling in plan.targets) {
-    final folder = Directory(path.join(modsPath, sibling.mod.id));
-    // Gone between the scan and here, or renamed by the user mid-flow. Silently
-    // dropped rather than refused with a reason: there is no folder left to name
-    // one about.
-    if (!await folder.exists()) continue;
-    targets.add(UpdateTarget(
-      mod: sibling.mod,
-      preview: await applier.preview(
-        modFolder: folder,
-        incomingFolders: folders,
-        ingest: sibling.mod.origin?.ingest,
-      ),
-      patchFiles: sibling.route.patchFiles,
-      patchModId: sibling.route.patchModId,
-      flattensPatch: sibling.route.flattensPatch,
-      caution: sibling.caution,
-    ));
-  }
-
-  return _SiblingPreviews(
-    targets: targets,
-    refused: [
-      // The primary first when it is the refused one, since it is the mod the
-      // user was asking about.
-      if (plan.primaryRefused case final reason?)
-        SiblingRefused(mod: mod, reason: reason),
-      ...plan.refused,
-    ],
-    otherFolders: plan.otherFolders,
-  );
 }
 
 /// The progress modal for a group write, and nothing at all for a single one.
@@ -1032,229 +798,6 @@ class _GroupProgress {
   }
 }
 
-/// Writes the download into every folder the user left ticked.
-///
-/// **Sequential, and a failure does not stop the rest.** Each folder is its own
-/// mod with its own snapshot and its own copy, so one that fails leaves the
-/// others correctly updated — and stopping would waste the download the whole
-/// feature exists to share. Every outcome comes back so the result dialog can
-/// say which folders landed.
-///
-/// **It holds no `WidgetRef`**, which is what makes the write independent of the
-/// widget that started it. `WidgetRef` throws once its widget is disposed, and a
-/// throw between the copy and the record would leave a folder holding the new
-/// version's files under a sidecar still naming the old one — the record an
-/// update replays from, so that folder would silently drop to "layout unknown"
-/// and its next dropped-file pass would compare against the wrong manifest.
-///
-/// **Retention runs per folder rather than once at the end.** Three members of a
-/// large archive add three whole-folder snapshots against a 5 GB budget and the
-/// tail of an archive is 1.24 GB, so pruning between them keeps the budget
-/// honest during the run instead of reporting an overage after it. Each folder's
-/// own new snapshot is the one retention never prunes, so this cannot delete
-/// what it just took.
-Future<List<AppliedUpdate>> _writeAll({
-  /// Where each folder is marked as being written, so a press on its switch waits.
-  required ProviderContainer container,
-  required _GroupProgress progress,
-  required UpdateApplier applier,
-  required SnapshotService snapshots,
-  required ModManagerService mods,
-
-  /// What the dismissal becomes on every record written — see
-  /// `dismissalAfterTaking`.
-  required DateTime? dismissUntil,
-
-  /// Called after a folder's snapshot exists, so the rollback menu can be
-  /// re-read. A callback rather than a `ref` for the reason above.
-  required void Function() onSnapshotTaken,
-  required List<UpdateTarget> targets,
-  required String modsPath,
-  required int remoteModId,
-  required GbFile file,
-  required String? archiveMd5,
-  required bool asCompanion,
-  required UpdateTarget primary,
-}) async {
-  final applied = <AppliedUpdate>[];
-  try {
-    for (var i = 0; i < targets.length; i++) {
-      final target = targets[i];
-      progress.step(target.mod.name, i + 1);
-
-      final result = await whileWritingMod(
-        container,
-        target.mod.id,
-        () => applier.applyBaseThenPatch(
-          modName: target.mod.id,
-          modFolder: Directory(path.join(modsPath, target.mod.id)),
-          preview: target.preview,
-          patchFiles: target.patchFiles,
-          patchModId: target.patchModId,
-          previousVersion: target.mod.origin?.base?.version,
-          previousVersionLabel: target.mod.origin?.base?.versionLabel,
-        ),
-      );
-      applied.add(AppliedUpdate(mod: target.mod, result: result));
-      // Whether the write landed or not, and before anything below can throw: a failed write may still have changed
-      // the folder. Dropped outright rather than left to the `.ini` stamp, since a file written over one of the same
-      // size can keep its times on NTFS (`docs/library-screen.md` §12).
-      mods.invalidateKeybinds(target.mod.id);
-
-      // **Before the success check, deliberately.** A snapshot exists the
-      // moment `apply` got past its snapshot step, and the *failure* path is
-      // where it matters most: a copy that broke halfway leaves the folder
-      // half-old and half-new, and the error message sends the user straight to
-      // "Restore a previous version…". That entry is drawn from this provider's
-      // cached set, so a mod being updated for the first time was not in it —
-      // the one moment the rollback is needed was the one moment it was missing
-      // from the menu.
-      if (result.snapshot != null) {
-        onSnapshotTaken();
-        // **Whenever one was taken, not only on a write that landed.** The
-        // snapshot comes before the copy, so a copy that failed part-way still
-        // added a whole folder to the budget — and a retry against a nearly
-        // full disk is exactly when retention is load-bearing.
-        await snapshots.prune();
-      }
-      if (!result.success) continue;
-
-      await _recordOrigin(
-        mods: mods,
-        mod: target.mod,
-        remoteModId: remoteModId,
-        dismissUntil: dismissUntil,
-        file: file,
-        archiveMd5: archiveMd5,
-        layout: target.preview.layout,
-        // **Only ever the mod the user opened.** A sibling's write is that
-        // folder's own bottom layer by definition — the group refuses any
-        // member whose stack says otherwise.
-        asCompanion: asCompanion && target.mod.id == primary.mod.id,
-        // Where the patch is *now*. `applyBaseThenPatch` moves it onto the new
-        // base's layout by design, so recording the paths it started from would
-        // send the next rebuild looking in the wrong place.
-        patchFiles: target.patchFiles.isEmpty ? null : result.patchFiles,
-        // **Only when this write was the folder's own download.** With
-        // `asCompanion` the files that moved belong to the *other* one, and
-        // stamping them onto `ingest` would credit the folder's own record with
-        // a patch's file list.
-        files: result.writtenFiles,
-        placedFrom: target.patchFiles.isEmpty ? null : result.placedFrom,
-      );
-    }
-  } finally {
-    progress.close();
-  }
-  return applied;
-}
-
-/// The layer a write of [modId] is about: a patch for a companion, else the
-/// base. A page can be both in one folder, so the id alone does not say which.
-DownloadKey _layerKey(int modId, {required bool asCompanion}) =>
-    asCompanion ? DownloadKey.patch(modId) : DownloadKey.base(modId);
-
-/// Every path recorded by a layer sitting **over** [layer] in this folder.
-///
-/// What a write to [layer] must not remove: the layers above it overwrote some
-/// of its files by design, so the file at such a path is theirs. Upward only —
-/// a layer *under* it records the same path precisely because this one wrote
-/// over it, and reading that as a claim would make every displacement
-/// untouchable.
-List<String> _recordedAbove(ModOrigin? origin, DownloadKey layer) {
-  if (origin == null) return const <String>[];
-  final index = origin.indexOf(layer);
-  if (index < 0) return const <String>[];
-  return [
-    for (final layer in origin.downloads.skip(index + 1))
-      for (final file in layer.files) file.path,
-  ];
-}
-
-/// Writes what the folder now is.
-///
-/// Both confidences reach `exact` here on the same grounds a marketplace
-/// install does — the user picked this row of this mod's file list and we wrote
-/// exactly that file id — and the clearing rules live in [ModOrigin.updatedTo]
-/// and [ModDownload.updatedTo] rather than here.
-///
-/// **Against the identity that was actually written.** A folder can hold two
-/// downloads, and stamping a companion's file id onto the primary would claim the
-/// folder is that other mod.
-///
-/// The `ingest` record is refreshed from what actually happened, which is a real
-/// gain for the pre-`ingest` library: a mod that had no layout on record now has
-/// one, so its *next* update replays instead of stopping to ask.
-///
-/// **Two downloads moved and each gets its own record**, which is the whole
-/// reason a mixed folder can be rebuilt. [files] is what this write laid down —
-/// the base — and [placedFrom] is where each patch ended up on top of it.
-/// Which of the two records is the folder's own depends on [asCompanion], and
-/// nothing else about the write does.
-Future<void> _recordOrigin({
-  required ModManagerService mods,
-  required ModInfo mod,
-  required int remoteModId,
-  required GbFile file,
-  required String? archiveMd5,
-  required UpdateLayout layout,
-  required bool asCompanion,
-  required List<String>? patchFiles,
-  required DateTime? dismissUntil,
-  List<InstalledFile>? files,
-  Map<String, InstalledFile>? placedFrom,
-}) async {
-  final now = DateTime.now();
-  await mods.updateModOrigin(mod.id, (current) {
-    var block = current ??
-        const ModOrigin(provenance: OriginProvenance.downloaded);
-
-    // **The layer that was written**, whether it is the bottom of the stack or
-    // one above it. `updatedTo` owns the clearing rules; the stack is what makes
-    // the two cases one line instead of two branches.
-    ModDownload record(ModDownload download) => download.updatedTo(
-          modId: remoteModId,
-          fileId: file.idRow,
-          version: file.version,
-          versionLabel: file.description,
-          archiveMd5: archiveMd5,
-          files: files,
-          updatesDismissedUntil: dismissUntil,
-        );
-    // This write is always the bottom layer's (`applyBaseThenPatch`), whatever
-    // [asCompanion] says about the wording; a page can also be a patch on top.
-    final layer = DownloadKey.base(remoteModId);
-    final written = block.downloadOf(layer);
-    block = written == null
-        // Not on record at all — a mod the app updated without ever having a
-        // block for it, which is most of a library that predates origin
-        // tracking. The layer it wrote is what the folder now is.
-        ? block.withBase(record)
-        : block.withDownload(layer, record);
-
-    // The layers above moved onto the new base's layout, so their records are
-    // rewritten too. One write, not two: they are layers of one stack.
-    if (placedFrom != null) block = withPlacedPatches(block, placedFrom);
-
-    block = block.copyWith(
-      source: gameBananaSource,
-      ingest: ingestAfterUpdate(layout, block.ingest, patchFiles: patchFiles),
-    );
-
-    // **Only when what the folder *is* was written.** A patch arriving on top
-    // does not re-date the folder or re-describe how it got here.
-    if (block.indexOf(layer) != 0) return withRebuiltPatchFiles(block);
-    return withRebuiltPatchFiles(block.copyWith(
-      provenance: OriginProvenance.downloaded,
-      installedAt: now,
-      // **Observed, so the proxy flag goes.** We watched this happen; leaving a
-      // flag that says the date was derived from file timestamps would have
-      // anything comparing dates distrust one it can rely on.
-      installedAtIsProxy: false,
-    ));
-  });
-}
-
 /// What a write that did not land says, by how it failed: the snapshot, a mod gone, the copy, or a layout that could
 /// not be settled.
 NotificationLines updateFailureMessage(
@@ -1287,32 +830,3 @@ NotificationLines updateFailureMessage(
           kind: NotificationKind.error,
         ),
     };
-
-Future<void> _cleanupExtract(Directory? root) async {
-  if (root == null) return;
-  try {
-    if (!root.path.contains('zzz_archive_extract_')) return;
-    if (await root.exists()) await root.delete(recursive: true);
-  } catch (e) {
-    Logger('fileops').debug('temp cleanup failed',
-        fields: {'path': root.path, 'reason': '$e'});
-  }
-}
-
-/// The file we just consumed and nothing else — never its directory. Archives
-/// share `<appData>/downloads`, so deleting a parent here would take every other
-/// archive and every in-flight partial with it.
-///
-/// **Cancelling at the confirmation still deletes it**, because `archiveConsumed`
-/// is set once the extraction succeeds and the dialog comes after. Backing out
-/// therefore costs a full re-download. Deliberate rather than overlooked: the
-/// alternative is keeping every declined archive in a folder the user does not
-/// manage, and mod archives reach 1.24 GB. Revisit if anyone reports it.
-Future<void> _deleteArchive(File archive) async {
-  try {
-    if (await archive.exists()) await archive.delete();
-  } catch (e) {
-    Logger('fileops').warning('could not delete a consumed archive',
-        error: e, fields: {'archive': archive.path});
-  }
-}
