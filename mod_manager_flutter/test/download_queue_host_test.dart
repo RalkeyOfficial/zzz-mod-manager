@@ -23,6 +23,7 @@ import 'package:mod_manager_flutter/utils/state_providers.dart';
 
 import 'support/library_override.dart';
 import 'support/localized_harness.dart';
+import 'support/seeded_queue.dart';
 
 /// The half of the queue that has a `BuildContext`.
 ///
@@ -69,12 +70,12 @@ void main() {
 
   setUp(() => nextSeq = 0);
 
-  late _SeededQueue queue;
+  late SeededQueue queue;
 
   ProviderContainer seeded(List<DownloadJob> jobs, {List<Override> extra = const []}) {
     final container = ProviderContainer(
       overrides: [
-        downloadQueueProvider.overrideWith(() => queue = _SeededQueue(jobs)),
+        downloadQueueProvider.overrideWith(() => queue = SeededQueue(jobs)),
         ...extra,
       ],
     );
@@ -888,26 +889,4 @@ class _RescanThrows extends LibraryNotifier {
 
   @override
   Future<void> rescan() async => throw const FileSystemException('library unreadable');
-}
-
-class _SeededQueue extends DownloadQueue {
-  _SeededQueue(this._seed);
-
-  final List<DownloadJob> _seed;
-
-  @override
-  List<DownloadJob> build() {
-    super.build();
-    return _seed;
-  }
-
-  /// Re-emits without changing anything — a stand-in for a progress tick, which
-  /// the real queue produces twice a second per running transfer.
-  void tick() => state = [...state];
-
-  /// Moves [seq] to [next], as the real queue does on a pause or a handover.
-  void put(int seq, DownloadJobState next) => state = [
-        for (final job in state)
-          if (job.seq == seq) job.copyWith(state: next) else job,
-      ];
 }

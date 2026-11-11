@@ -558,7 +558,8 @@ class ArchiveService {
   /// unpack created, and nothing else.
   ///
   /// The nearest such ancestor of each folder, not only its parent: a ZZMI-root
-  /// archive's mods come out a level down, as `Mods/<mod>`.
+  /// archive's mods come out a level down, as `Mods/<mod>`. A folder that is such a directory itself is deleted too,
+  /// for an unpack that came out with no folders in it.
   static Future<void> deleteExtraction(Iterable<String> folders) async {
     final roots = <String>{
       for (final folder in folders)
@@ -570,7 +571,7 @@ class ArchiveService {
   }
 
   static String? _extractionRootOf(String folder) {
-    var directory = path.dirname(folder);
+    var directory = folder;
     while (true) {
       if (path.basename(directory).startsWith('zzz_archive_extract_')) return directory;
       final parent = path.dirname(directory);

@@ -33,10 +33,18 @@ import 'update_target.dart';
 
 /// What a write did, for the caller to say.
 class UpdateReport {
-  const UpdateReport({required this.applied, required this.outcome, this.removedMarks = const <String, UpdateCheck>{}});
+  const UpdateReport({
+    required this.applied,
+    required this.outcome,
+    this.removedMarks = const <String, UpdateCheck>{},
+    this.skipped = const <ModInfo>[],
+  });
 
   /// What the write did to each folder it attempted, in order.
   final List<AppliedUpdate> applied;
+
+  /// The folders it did not attempt, because the caller's `skipWhen` said so at their turn.
+  final List<ModInfo> skipped;
 
   /// What those add up to: whether the library changed, which marks were settled, and the one failure when there was one attempt and it failed.
   final GroupWriteOutcome outcome;
@@ -55,6 +63,10 @@ class UpdateReport {
 /// [onFolder] is told which folder is starting, of how many, and [onStep] which part of that folder's write is starting ([UpdateWriteStep]).
 /// [onWritesDone] is called exactly once, in a `finally`, when the files are written and a caller's progress window can come down: for a base after the last folder is recorded, and for a patch right after its files are placed, before the snapshots are pruned and the record is written.
 /// Either way it is called when the write threw too, and not when the arguments were rejected.
+///
+/// [skipWhen] is asked about each folder immediately before its write starts;
+/// a folder it answers true for is not written and is listed in [UpdateReport.skipped].
+/// It lets a caller with nobody watching leave a folder that something else started writing meanwhile.
 Future<UpdateReport> writeUpdate(
   ProviderContainer container,
   UpdatePrepared prepared, {
@@ -62,6 +74,7 @@ Future<UpdateReport> writeUpdate(
   void Function(ModInfo mod, int index, int total)? onFolder,
   void Function(ModInfo mod, UpdateWriteStep step)? onStep,
   void Function()? onWritesDone,
+  bool Function(ModInfo mod)? skipWhen,
 }) => switch (prepared) {
   final PreparedFolders folders => _writeFolders(
     container,
@@ -70,10 +83,11 @@ Future<UpdateReport> writeUpdate(
     onFolder: onFolder,
     onStep: onStep,
     onWritesDone: onWritesDone,
+    skipWhen: skipWhen,
   ),
   // The prune and the record are part of the write, so closing the app waits for them too.
   final PreparedPatch patch => WritesInFlight.shared.track(
-      () => _writePatch(container, patch, onStep: onStep, onWritesDone: onWritesDone),
+      () => _writePatch(container, patch, onStep: onStep, onWritesDone: onWritesDone, skipWhen: skipWhen),
     ),
 };
 
@@ -84,6 +98,7 @@ Future<UpdateReport> _writeFolders(
   required void Function(ModInfo mod, int index, int total)? onFolder,
   required void Function(ModInfo mod, UpdateWriteStep step)? onStep,
   required void Function()? onWritesDone,
+  required bool Function(ModInfo mod)? skipWhen,
 }) async {
   if (targets.isEmpty) throw ArgumentError.value(targets, 'targets', 'a base is written into at least one folder');
   if (targets.any((target) => !target.canProceed)) {
@@ -91,9 +106,13 @@ Future<UpdateReport> _writeFolders(
   }
   final request = prepared.request;
 
-  final List<AppliedUpdate> applied;
+  final applied = <AppliedUpdate>[];
+  final skipped = <ModInfo>[];
   try {
-    applied = await _writeAll(
+    await _writeAll(
+      applied: applied,
+      skipped: skipped,
+      skipWhen: skipWhen,
       container: container,
       services: prepared.services,
       // Every member takes the same file off the same list, so a pick below the newest is the same passed-over release for each of them.
@@ -125,11 +144,16 @@ Future<UpdateReport> _writeFolders(
   };
   notifier.state = {...notifier.state}..removeWhere((id, _) => outcome.settledMarks.contains(id));
 
-  return UpdateReport(applied: applied, outcome: outcome, removedMarks: removed);
+  return UpdateReport(applied: applied, outcome: outcome, removedMarks: removed, skipped: skipped);
 }
 
 /// Writes the download into every folder in [targets], pruning snapshots after each folder rather than once at the end: several whole-folder snapshots can land together against the 5 GB budget, and each folder's own new snapshot is the one retention never prunes.
-Future<List<AppliedUpdate>> _writeAll({
+/// What it attempted goes into [applied], and the folders [skipWhen] left out into [skipped].
+Future<void> _writeAll({
+  required List<AppliedUpdate> applied,
+  required List<ModInfo> skipped,
+  required bool Function(ModInfo mod)? skipWhen,
+
   /// Where each folder is marked as being written, so a press on its switch waits.
   required ProviderContainer container,
   required UpdateServices services,
@@ -147,9 +171,12 @@ Future<List<AppliedUpdate>> _writeAll({
   required void Function(ModInfo mod, UpdateWriteStep step)? onStep,
 }) async {
   final (:mods, :snapshots, :applier) = services;
-  final applied = <AppliedUpdate>[];
   for (var i = 0; i < targets.length; i++) {
     final target = targets[i];
+    if (skipWhen?.call(target.mod) ?? false) {
+      skipped.add(target.mod);
+      continue;
+    }
     onFolder?.call(target.mod, i + 1, targets.length);
 
     // The prune and the record are part of the folder's write, so closing the app waits for them too.
@@ -197,7 +224,6 @@ Future<List<AppliedUpdate>> _writeAll({
       );
     });
   }
-  return applied;
 }
 
 Future<UpdateReport> _writePatch(
@@ -205,6 +231,7 @@ Future<UpdateReport> _writePatch(
   PreparedPatch prepared, {
   required void Function(ModInfo mod, UpdateWriteStep step)? onStep,
   required void Function()? onWritesDone,
+  required bool Function(ModInfo mod)? skipWhen,
 }) async {
   final request = prepared.request;
   final mod = request.mod;
@@ -214,6 +241,13 @@ Future<UpdateReport> _writePatch(
   final UpdateApplyResult result;
   try {
     services = await updateServicesFor(container);
+    if (skipWhen?.call(mod) ?? false) {
+      return UpdateReport(
+        applied: const [],
+        outcome: const GroupWriteOutcome(settledMarks: <String>{}, changed: false),
+        skipped: [mod],
+      );
+    }
     result = await whileWritingMod(container, mod.id, () => services.applier.applyPatchInto(
       modName: mod.id,
       modFolder: request.modFolder,

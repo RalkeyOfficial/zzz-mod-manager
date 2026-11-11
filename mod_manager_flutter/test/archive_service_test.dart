@@ -221,6 +221,14 @@ void main() {
       expect(root.existsSync(), isFalse);
     });
 
+    test('takes an extraction directory named itself, for an unpack with no folders in it', () async {
+      final root = Directory(path.join(tmp.path, 'zzz_archive_extract_empty'))..createSync();
+
+      await ArchiveService.deleteExtraction([root.path]);
+
+      expect(root.existsSync(), isFalse);
+    });
+
     test('leaves a folder no unpack created alone', () async {
       final folder = Directory(path.join(tmp.path, 'library', 'Ellen'))..createSync(recursive: true);
 

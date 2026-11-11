@@ -18,6 +18,7 @@ This file is rules and pointers only. Every subject below has a doc in [`../docs
 | [`metadata-autofill.md`](../docs/metadata-autofill.md) | What an install copies from a mod page |
 | [`update-checks.md`](../docs/update-checks.md) | Whether a mod has a newer version |
 | [`applying-updates.md`](../docs/applying-updates.md) | How an update is written over an installed mod |
+| [`update-runs.md`](../docs/update-runs.md) | Updating several mods as a run in the background — the jobs, the download, unpack and install lanes and their limits, the halt, Cancel all; what is built and what is still the design |
 | [`importing-mods.md`](../docs/importing-mods.md) | Dropping and pasting mods — the order of the questions, the review step, Keep both, Update it (a local update and the record it leaves), Turn on after import |
 | [`key-editing.md`](../docs/key-editing.md) | Edit info's in-game keys — the rows, labels in `config.json`, recording a combination, the `.ini` editor's guarantees, the `;zenith:` marker behind "Restore the author's keys", why there is no Add a key |
 | [`shader-fixes.md`](../docs/shader-fixes.md) | Mods that replace the game's shaders — how their `ShaderFixes/` is copied into ZZMI's shader folder while on, and taken back out |

@@ -7,8 +7,8 @@ import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/services/download/download_exceptions.dart';
 import 'package:mod_manager_flutter/services/download/download_job.dart';
 import 'package:mod_manager_flutter/services/download/download_queue.dart';
-import 'package:mod_manager_flutter/services/download/download_service.dart';
 
+import '../support/download_queue_rig.dart';
 import '../support/fake_download_transport.dart';
 
 /// The queue, end to end, against a scripted transport and a temp directory.
@@ -40,27 +40,6 @@ void main() {
   /// Whether the row left the list, as a cancelled or declined one does.
   bool gone(int seq) => jobs().every((j) => j.seq != seq);
 
-  /// Waits for a state the queue reaches on its own.
-  ///
-  /// Polled rather than pumped a fixed number of turns: the transport is
-  /// in-memory but the service underneath does **real** file I/O, so "how many
-  /// microtasks is a completed download" has no answer and a fixed pump is a
-  /// flaky test waiting to happen.
-  Future<void> waitUntil(bool Function() done, String because) async {
-    final deadline = DateTime.now().add(const Duration(seconds: 5));
-    while (!done()) {
-      if (DateTime.now().isAfter(deadline)) fail('timed out waiting: $because');
-      await Future<void>.delayed(const Duration(milliseconds: 1));
-    }
-  }
-
-  /// A short fixed pump, for asserting that something has *not* happened.
-  Future<void> settle() async {
-    for (var i = 0; i < 40; i++) {
-      await Future<void>.delayed(const Duration(milliseconds: 1));
-    }
-  }
-
   /// Closing a `StreamController` nobody ever listened to never completes, and a
   /// queued job's response is exactly that — so these are dropped rather than
   /// awaited.
@@ -70,28 +49,18 @@ void main() {
     }
   }
 
+  late DownloadQueueRig rig;
+
   setUp(() {
-    temp = Directory.systemTemp.createTempSync('download_queue_test_');
-    transport = FakeDownloadTransport();
-    container = ProviderContainer(
-      overrides: [
-        downloadServiceProvider.overrideWith(
-          (ref) => DownloadService(
-            transport: transport,
-            directory: temp,
-            progressInterval: const Duration(milliseconds: 10),
-            // Room for anything, and no `df` spawned per download: the space
-            // preflight has its own tests and is not what this file is about.
-            freeSpace: (_) async => 1 << 40,
-          ),
-        ),
-      ],
-    );
+    rig = DownloadQueueRig();
+    temp = rig.temp;
+    transport = rig.transport;
+    container = rig.container();
   });
 
   tearDown(() {
     container.dispose();
-    if (temp.existsSync()) temp.deleteSync(recursive: true);
+    rig.dispose();
   });
 
   DownloadJob enqueue(

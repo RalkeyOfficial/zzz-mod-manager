@@ -278,6 +278,10 @@ flight, which is exactly what the rule above exists to prevent.
 so parked behind two background transfers its window would say it is waiting for a slot until a download it has nothing to do with ended.
 Admitting it closes the door behind it rather than raising the ceiling, so the worst case is one over the cap and only while a dialog is open.
 
+**An update run's jobs (`DownloadIntent.update`) are a pool of their own**, three at once (`kUpdateDownloadConcurrency`), beside the two above, which they neither take nor bypass, so at most five connections; six while the modal one-mod update's foreground job, which bypasses the cap, runs beside a run, which can happen from U4 until U7 moves that update onto the run.
+They also start only while the lookahead admits them: at most three update jobs or 1 GiB of listed size between the start of their download and the end of their install, one always admitted when none is ahead. Smallest file first, a stalled one sent to the end of the line.
+Why these numbers, what counts as ahead and the lanes after the download are [`update-runs.md`](update-runs.md) §4.1. The engine is built and no screen starts a run yet, so today only the modal update flow's foreground job reaches the queue for an update.
+
 **Nothing is persisted.** A queue restored from disk would start re-fetching on
 launch. The partials in `<appData>/downloads` are already the durable half: an
 interrupted job is resumed by asking for it again.
@@ -290,14 +294,14 @@ Not verified on Windows, for the queue or the transfer beneath it.
 The queue moves bytes and stops. Unpacking, importing and reporting need
 localized strings and can raise a dialog, and a `Notifier` has neither — so a
 finished transfer parks in `downloaded` and **`DownloadQueueHost`** takes it from
-there. `DownloadIntent`, fixed when the user presses the button, says which of
-three things happens:
+there. `DownloadIntent`, fixed when the user presses the button, says which of four things happens:
 
 | intent | who finishes it |
 |---|---|
 | `install` | the host, through `dialogs/install_archive_flow.dart` (§10) |
 | `keepArchive` | the host — one notification naming the path |
 | `callerHandles` | the caller awaiting `completionOf`, i.e. `applyUpdateFlow`, which ends the job itself (§13) |
+| `update` | the host, unpacking it in the update unpack lane and writing it on the install chain ([`update-runs.md`](update-runs.md) §11); no screen enqueues one yet |
 
 **What else a job carries is fixed at the same press**, for the same reason: the page that knew may be gone when the bytes land. Besides the file and the mod page (for the origin block and the autofill), an install job carries `characterId`, the character the mod page showed, which is the GameBanana category's, Unassigned when it names none, or the user's Install for pick, and the host hands it to the import as the character to file every new mod under; and `turnOn`, the mod page's Turn on after installing, after which the host turns each new mod on through `ApiService.enableMod` ([`marketplace.md`](marketplace.md) §5).
 A retry keeps both. Installing a paused file again resumes its job with that press's intent, character and Turn on (`DownloadJob.pressedAgain`, §11), since the latest press is what the user asked for. A `keepArchive` job never turns anything on.
@@ -313,7 +317,7 @@ impossible, and removing that barrier is the whole point of a queue. It must als
 **An install that ends settles its job whether or not the host is still mounted**, through the app's container rather than the host's own `ref`: the queue outlives the widget, and a job left `installing` would hold the install slot and the Storage reclaim's gate for good.
 Only what needs the host is skipped once it is gone, Turn on after installing and the result's card, so new mods stay installed and off.
 
-**One install at a time.** Installing runs `7z` and writes into the mods folder through a service held as a singleton, and two of those interleaving would race on both. An install that needs an answer does not hold the slot while it waits for one (§10). Turn on after installing is part of the install, so the slot stays held while it waits for a running bulk action of the All mods table to end ([`marketplace.md`](marketplace.md) §5).
+**One install at a time.** Installing runs `7z` and writes into the mods folder through a service held as a singleton, and two of those interleaving would race on both. An update run's write takes the same slot, so a Browse install and a run's write never overlap ([`update-runs.md`](update-runs.md) §4.1). An install that needs an answer does not hold the slot while it waits for one (§10). Turn on after installing is part of the install, so the slot stays held while it waits for a running bulk action of the All mods table to end ([`marketplace.md`](marketplace.md) §5).
 
 ### The filename, and why it must not reach the mod
 
@@ -472,7 +476,7 @@ The install (`dialogs/install_archive_flow.dart`) is three parts, and only the m
   What it waits for is `WritesInFlight`, which every write `whileWritingMod` marks feeds (an update, a reinstall, a patch put in or taken out, a restore, Edit info, an Ignore, a tracking change), and which the library's own import and combined import join.
   Counted with them: an update's, a restore's and a patch removal's record and snapshot prune; Update it's character change; the sidecar write of what an install or the resolve dialog's "also fill in what's missing" filled in from the mod page (the description, tags and pictures, after they were fetched, never the fetch); the record that marks a newly installed folder as a patch.
   Not counted: turning a mod on or off (a link, the shader files it places, `config.json`), a rename and a delete; a character, favourite, tag or note changed on its own outside Edit info; the sidecar writes a library scan makes (an identity or an origin it fills in); and the names of downloads saved after an update check, except the one the update dialog's own check saves, which goes through `whileWritingMod` (the Library, launch and mod-page paths are not counted).
-  **No new write starts once closing has begun** (`WritesInFlight.close`): one asked for from then on never starts and its caller is never answered, since the app is about to exit, while a step of a write already running still runs, so a write is never stopped between its own parts. The download queue still admits its next install; that install's unpack can run, and its copy into the library does not start.
+  **No new write starts once closing has begun** (`WritesInFlight.close`): one asked for from then on never starts and its caller is never answered, since the app is about to exit, while a step of a write already running still runs, so a write is never stopped between its own parts. The download queue claims no install and no update write from then on, reading the flag itself so a claim made from inside a running write's steps is held back too. An install already running goes on. A write it asks for from then on never starts, except when the drain loop that runs it started inside a tracked write: the install then runs in that write's zone, where a step of a running write is let through, so its own writes pass the gate.
   The window should stay open while it waits, with the write's own progress showing, and a second press of close changes nothing; this is tested as logic and not yet tried in the running app on either platform. The log flush after it is bounded at 250 ms for the same reason the wait is: a hung volume must not keep the window from closing.
 
 ### The drop asks directly
@@ -491,7 +495,7 @@ The Needs you card is [`notifications.md`](notifications.md) §4.
 ## 11. Pause
 
 - **Pause stops a running transfer and keeps its partial.** The queue marks the job `paused`, then stops it with `DownloadHandle.cancel(deletePartial: false)`, the path the app's shutdown takes, so the `.part` and its record stay. The slot frees and the next queued job starts. Marking first is what makes the stop that comes back read as the pause rather than as a cancel. A transfer whose last byte lands as Pause is pressed finishes: the archive is on disk, and that wins.
-- **Only a background transfer pauses**, an install or a saved archive. An update's download runs behind its own window, which has Cancel, and pausing a wait the user is sitting in means nothing. A queued job holds nothing to pause; Remove from queue is its control.
+- **Only a background transfer pauses**, an install or a saved archive. An update's download runs behind its own window, which has Cancel, and pausing a wait the user is sitting in means nothing. An update run's job has Cancel and no Pause in its first build ([`update-runs.md`](update-runs.md) §2). A queued job holds nothing to pause; Remove from queue is its control.
 - **Resume puts it back in line** as `queued`, marked `resumed`, which puts it first of the queued jobs (`admissions`), and it starts when a slot is free. The service resumes from the partial under the resume policy (§4), where a `200` to the ranged request starts over.
   Pressing Install again for a paused file resumes the job the queue already has for that file id (§7), since the press asks for the file, and the job takes that press's intent, character and Turn on (`DownloadJob.pressedAgain`).
 - **Resume pressed before the pause has taken effect waits for the stop**, then resumes: a transfer started at once would write into the `.part` the stopping one still holds. Cancel in that window takes the row off and deletes the partial once the stop lands, and the archive when the last byte landed instead.

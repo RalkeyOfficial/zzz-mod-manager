@@ -308,6 +308,7 @@ Future<UpdateServices> updateServicesFor(ProviderContainer container) async {
 /// A question comes back and the call is made again with the answer.
 /// A [PasswordQuestion] is answered by calling again with [password], which unpacks again.
 /// A [FoldersQuestion] is answered with [foldersAnswer], which carries the unpack it was found in, so nothing is unpacked twice.
+/// [unpacked] previews an unpack made earlier again, as found, against the folder as it is now; [archive] is needed only when neither is given.
 ///
 /// [onUnpacked] is called once the archive is unpacked and before anything is read from it, so a caller that owns the cleanup holds the unpack even if a later step throws.
 /// [onPreviewing] is called when the unpack has been checked and the folders are about to be read, which a call that answers a [FoldersQuestion] does not repeat.
@@ -316,15 +317,17 @@ Future<UpdateServices> updateServicesFor(ProviderContainer container) async {
 Future<UpdatePrepareResult> prepareUpdate(
   ProviderContainer container,
   UpdateRequest request, {
-  required File archive,
+  File? archive,
   String? archiveMd5,
   String? password,
   FoldersAnswer? foldersAnswer,
+  UpdateUnpacked? unpacked,
   void Function(UpdateUnpacked unpacked)? onUnpacked,
   void Function()? onPreviewing,
 }) async {
-  var unpack = foldersAnswer?.unpacked;
+  var unpack = foldersAnswer?.unpacked ?? unpacked;
   if (unpack == null) {
+    if (archive == null) throw ArgumentError.notNull('archive');
     final extraction = await ArchiveService.extractArchive(
       archiveFile: archive,
       knownMd5: archiveMd5,

@@ -5,6 +5,7 @@ import '../../models/gamebanana/gb_mod.dart';
 import 'download_handle.dart';
 import 'download_progress.dart';
 import 'download_request.dart';
+import 'update_job.dart';
 
 /// Why a download was started, and therefore what happens when the bytes land.
 ///
@@ -24,6 +25,11 @@ enum DownloadIntent {
   /// the bytes onwards — the update flow, which writes over an existing mod
   /// rather than importing a new one.
   callerHandles,
+
+  /// A job of an update run ([DownloadJob.update]): downloaded in a pool of its own,
+  /// then unpacked and written by `DownloadQueueHost` in the unpack and install lanes (`docs/update-runs.md` §4.1).
+  /// It never bypasses a cap.
+  update,
 }
 
 /// A job that failed at the **install** half rather than the transfer.
@@ -75,8 +81,9 @@ enum DownloadJobState {
   /// The host is unpacking and importing it.
   installing,
 
-  /// A download the update flow owns: its bytes are handed over and the flow is unpacking, asking or writing. The
-  /// flow ends it. See [DownloadJob.updateStep].
+  /// An update past its download ([DownloadJob.updateStep] says where).
+  /// For the modal update flow's download, the flow is unpacking, asking or writing, and ends it.
+  /// For an update run's job, the host is unpacking it, it is unpacked and waits for the install lane, or the host is writing it.
   updating,
 
   /// Finished, whatever the intent asked for.
@@ -154,6 +161,16 @@ enum JobOutcome {
   /// An install that put nothing in, such as one whose folders were all in the library already. The row says the
   /// result's headline ([DownloadJob.headline]).
   nothingInstalled,
+
+  /// An update run placed a patch-shaped file on top of a mod.
+  patchAdded,
+
+  /// An update run wrote nothing: the user skipped it at a question, or its folder could not be written at its turn ([DownloadJob.skipReason]).
+  /// The row stays.
+  skipped,
+
+  /// An update run's write was undone. The row stays.
+  undone,
 }
 
 /// The step an update download is on, while it is [DownloadJobState.updating].
@@ -163,6 +180,9 @@ enum UpdateStep {
 
   /// Waiting for the user to answer the update's own window.
   confirming,
+
+  /// An update run's job is unpacked and previewed, and waits for the install lane.
+  unpacked,
 
   /// Writing the file over the mod, the old one kept as a snapshot.
   writing,
@@ -207,6 +227,16 @@ class DownloadJob {
     this.filedUnder,
     this.headline,
     this.finishedAt,
+    this.update,
+    this.updateWait,
+    this.waited = false,
+    this.deferred = false,
+    this.stalled = false,
+    this.stopOnSettle = false,
+    this.skipReason,
+    this.halt,
+    this.report,
+    this.modResults = const <UpdateModResult>[],
   });
 
   /// Monotonic per session. Both the identity (a `Map` key, a `ValueKey`) and
@@ -264,7 +294,7 @@ class DownloadJob {
 
   /// What the install kept between its runs: the unpack's results and the answers so far. Owned by the install flow
   /// (`PreparedInstall` in `install_archive_flow.dart`), which is why it is opaque here: the queue only carries it.
-  /// Set on a job that has waited, which is what puts it ahead of jobs that have not ([nextAwaitingHost]).
+  /// An update job keeps its stage's unpack here ([HoldsUnpack]).
   final Object? prepared;
 
   /// The password the user gave, held in memory until the unpack it was given for, and never written anywhere.
@@ -291,10 +321,70 @@ class DownloadJob {
   /// When it finished, for the Finished line's relative time.
   final DateTime? finishedAt;
 
+  /// What a [DownloadIntent.update] job writes.
+  final UpdateTask? update;
+
+  /// The question a waiting update job stopped at.
+  final UpdateWait? updateWait;
+
+  /// The job has waited on a question and been answered ([hasWaited]).
+  final bool waited;
+
+  /// Sent to the end of the line: an update job whose transfer stalled, or one tried again.
+  final bool deferred;
+
+  /// The update job's transfer has stalled once since it was last asked for; a second stall fails it.
+  final bool stalled;
+
+  /// Cancel all was pressed while the update job was unpacking or writing: what the stage comes to ends the job,
+  /// and a result that would keep it going drops it instead.
+  final bool stopOnSettle;
+
+  /// Why an update job ended as [JobOutcome.skipped].
+  final UpdateSkipReason? skipReason;
+
+  /// The halt holding this update job back, until Continue or Cancel all.
+  final UpdateHalt? halt;
+
+  /// What an update job's write did, opaque here (`UpdateReport`).
+  final Object? report;
+
+  /// What an ended update job came to for each of its mods, in the order of [UpdateTask.mods].
+  final List<UpdateModResult> modResults;
+
   /// The archive at its final name, once the transfer is done.
   File? get archive => result?.file;
 
   bool get isTerminal => state.isTerminal;
+
+  /// A job of an update run.
+  bool get isUpdate => intent == DownloadIntent.update;
+
+  /// Whether it has waited on a question and been answered, which puts it ahead of the jobs that have not.
+  /// An install keeps its answers in [prepared] only once it has waited; an update job holds its unpack there anyway.
+  bool get hasWaited => waited || password != null || (!isUpdate && prepared != null);
+
+  /// Whether Cancel can stop it here and now.
+  /// An install or an update between its unpack and its write has no safe stopping point,
+  /// except an update job that is unpacked and waits for the install lane: it has left the unpack and not reached the write.
+  bool get cancellable => switch (state) {
+        DownloadJobState.queued ||
+        DownloadJobState.running ||
+        DownloadJobState.paused ||
+        DownloadJobState.downloaded ||
+        DownloadJobState.waiting =>
+          true,
+        DownloadJobState.updating => isUpdate && updateStep == UpdateStep.unpacked,
+        DownloadJobState.installing || DownloadJobState.done || DownloadJobState.failed => false,
+      };
+
+  /// What an ended update job came to for the mod [modId], or null when it has not ended or has no such mod.
+  UpdateModResult? resultFor(String modId) {
+    for (final result in modResults) {
+      if (result.mod.modId == modId) return result;
+    }
+    return null;
+  }
 
   /// Never blocked by the concurrency cap.
   ///
@@ -306,8 +396,11 @@ class DownloadJob {
   bool get bypassesCap => intent == DownloadIntent.callerHandles;
 
   /// Whether the user can pause it: a background transfer. An update's download runs behind its own window, which
-  /// has Cancel.
-  bool get pausable => state == DownloadJobState.running && intent != DownloadIntent.callerHandles;
+  /// has Cancel, and an update run has Cancel and no Pause.
+  bool get pausable =>
+      state == DownloadJobState.running &&
+      intent != DownloadIntent.callerHandles &&
+      intent != DownloadIntent.update;
 
   DownloadJob copyWith({
     DownloadJobState? state,
@@ -325,16 +418,14 @@ class DownloadJob {
     String? filedUnder,
     String? headline,
     DateTime? finishedAt,
+    UpdateTask? update,
+    bool? waited,
+    bool? stopOnSettle,
+    UpdateSkipReason? skipReason,
+    Object? report,
+    List<UpdateModResult>? modResults,
   }) =>
-      DownloadJob(
-        seq: seq,
-        request: request,
-        intent: intent,
-        subject: subject,
-        file: file,
-        mod: mod,
-        characterId: characterId,
-        turnOn: turnOn,
+      _rebuild(
         state: state ?? this.state,
         progress: progress ?? this.progress,
         error: error ?? this.error,
@@ -343,7 +434,6 @@ class DownloadJob {
         wait: wait ?? this.wait,
         unpacked: unpacked ?? this.unpacked,
         prepared: prepared ?? this.prepared,
-        password: password,
         updateStep: updateStep ?? this.updateStep,
         installStage: installStage ?? this.installStage,
         outcome: outcome ?? this.outcome,
@@ -351,36 +441,26 @@ class DownloadJob {
         filedUnder: filedUnder ?? this.filedUnder,
         headline: headline ?? this.headline,
         finishedAt: finishedAt ?? this.finishedAt,
+        update: update ?? this.update,
+        waited: waited ?? this.waited,
+        stopOnSettle: stopOnSettle ?? this.stopOnSettle,
+        skipReason: skipReason ?? this.skipReason,
+        report: report ?? this.report,
+        modResults: modResults ?? this.modResults,
       );
 
   /// The same job with its question and its password set as given, both of which `copyWith` cannot clear: a job
   /// leaving the wait drops its question, and a password goes once the unpack it was given for has run.
-  DownloadJob withWait(InstallWait? wait, {String? password}) => DownloadJob(
-        seq: seq,
-        request: request,
-        intent: intent,
-        subject: subject,
-        file: file,
-        mod: mod,
-        characterId: characterId,
-        turnOn: turnOn,
-        state: state,
-        progress: progress,
-        error: error,
-        result: result,
-        resumed: resumed,
-        wait: wait,
-        unpacked: unpacked,
-        prepared: prepared,
-        password: password,
-        updateStep: updateStep,
-        installStage: installStage,
-        outcome: outcome,
-        installed: installed,
-        filedUnder: filedUnder,
-        headline: headline,
-        finishedAt: finishedAt,
-      );
+  DownloadJob withWait(InstallWait? wait, {String? password}) => _rebuild(wait: wait, password: password);
+
+  /// [withWait] for an update job's question.
+  DownloadJob withUpdateWait(UpdateWait? wait, {String? password}) => _rebuild(updateWait: wait, password: password);
+
+  /// The same job out of its wait, an install's or an update's, holding [password] for the unpack it was given for.
+  DownloadJob withNoQuestion({String? password}) => _rebuild(wait: null, updateWait: null, password: password);
+
+  /// The same job held back by [halt], or let go when it is null.
+  DownloadJob withHalt(UpdateHalt? halt) => _rebuild(halt: halt);
 
   /// The same job, asked for again by a new press: what happens once the bytes land is the new press's, everything
   /// about the transfer stays.
@@ -391,39 +471,18 @@ class DownloadJob {
     required String? characterId,
     required bool turnOn,
   }) =>
-      DownloadJob(
-        seq: seq,
-        request: request,
-        intent: intent,
-        subject: subject,
-        file: file,
-        mod: mod,
-        characterId: characterId,
-        turnOn: turnOn,
-        state: state,
-        progress: progress,
-        error: error,
-        result: result,
-        resumed: resumed,
-        wait: wait,
-        unpacked: unpacked,
-        prepared: prepared,
-        password: password,
-        updateStep: updateStep,
-        installStage: installStage,
-        outcome: outcome,
-        installed: installed,
-        filedUnder: filedUnder,
-        headline: headline,
-        finishedAt: finishedAt,
-      );
+      _rebuild(intent: intent, subject: subject, mod: mod, characterId: characterId, turnOn: turnOn);
 
   /// Clears the transfer's outcome so the job can be tried again from scratch.
   ///
   /// Separate from [copyWith] rather than a nullable flag on it: `copyWith`
   /// cannot express "set this back to null" without a sentinel, and a retry that
   /// silently kept the previous error is exactly the bug that would look fixed.
-  DownloadJob restarted() => DownloadJob(
+  ///
+  /// An update job keeps what it is for, and is held by [halt] and nothing else:
+  /// the caller passes the run's current halt, or the job's own when it goes on in the same life.
+  /// [deferred] sends it to the end of the line, and [stalled] says the stall that sent it there was its first.
+  DownloadJob restarted({bool deferred = false, bool stalled = false, UpdateHalt? halt}) => DownloadJob(
         seq: seq,
         request: request,
         intent: intent,
@@ -432,5 +491,80 @@ class DownloadJob {
         mod: mod,
         characterId: characterId,
         turnOn: turnOn,
+        update: update,
+        halt: halt,
+        deferred: deferred,
+        stalled: stalled,
+      );
+
+  /// Every field as it is, but for those given. [_keep] marks one not given, so a nullable one can be set to null.
+  DownloadJob _rebuild({
+    DownloadIntent? intent,
+    String? subject,
+    Object? mod = _keep,
+    Object? characterId = _keep,
+    bool? turnOn,
+    DownloadJobState? state,
+    DownloadProgress? progress,
+    Object? error,
+    DownloadResult? result,
+    bool? resumed,
+    Object? wait = _keep,
+    List<String>? unpacked,
+    Object? prepared,
+    Object? password = _keep,
+    UpdateStep? updateStep,
+    InstallStage? installStage,
+    JobOutcome? outcome,
+    List<String>? installed,
+    String? filedUnder,
+    String? headline,
+    DateTime? finishedAt,
+    UpdateTask? update,
+    Object? updateWait = _keep,
+    bool? waited,
+    bool? stopOnSettle,
+    UpdateSkipReason? skipReason,
+    Object? halt = _keep,
+    Object? report,
+    List<UpdateModResult>? modResults,
+  }) =>
+      DownloadJob(
+        seq: seq,
+        request: request,
+        intent: intent ?? this.intent,
+        subject: subject ?? this.subject,
+        file: file,
+        mod: identical(mod, _keep) ? this.mod : mod as GbMod?,
+        characterId: identical(characterId, _keep) ? this.characterId : characterId as String?,
+        turnOn: turnOn ?? this.turnOn,
+        state: state ?? this.state,
+        progress: progress ?? this.progress,
+        error: error ?? this.error,
+        result: result ?? this.result,
+        resumed: resumed ?? this.resumed,
+        wait: identical(wait, _keep) ? this.wait : wait as InstallWait?,
+        unpacked: unpacked ?? this.unpacked,
+        prepared: prepared ?? this.prepared,
+        password: identical(password, _keep) ? this.password : password as String?,
+        updateStep: updateStep ?? this.updateStep,
+        installStage: installStage ?? this.installStage,
+        outcome: outcome ?? this.outcome,
+        installed: installed ?? this.installed,
+        filedUnder: filedUnder ?? this.filedUnder,
+        headline: headline ?? this.headline,
+        finishedAt: finishedAt ?? this.finishedAt,
+        update: update ?? this.update,
+        updateWait: identical(updateWait, _keep) ? this.updateWait : updateWait as UpdateWait?,
+        waited: waited ?? this.waited,
+        deferred: deferred,
+        stalled: stalled,
+        stopOnSettle: stopOnSettle ?? this.stopOnSettle,
+        skipReason: skipReason ?? this.skipReason,
+        halt: identical(halt, _keep) ? this.halt : halt as UpdateHalt?,
+        report: report ?? this.report,
+        modResults: modResults ?? this.modResults,
       );
 }
+
+const Object _keep = Object();

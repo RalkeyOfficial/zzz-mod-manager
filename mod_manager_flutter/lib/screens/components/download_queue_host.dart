@@ -9,9 +9,11 @@ import '../../services/api_service.dart';
 import '../../services/download/download_job.dart';
 import '../../services/download/download_queue.dart';
 import '../../services/download/queue_policy.dart';
+import '../../services/download/update_job.dart';
 import '../../services/log/logger.dart';
 import '../../services/platform_service.dart';
 import '../../services/shader_fixes/shader_fixes_service.dart';
+import '../../services/update_apply/update_run_stages.dart';
 import '../../utils/byte_format.dart';
 import '../../utils/marketplace_providers.dart';
 import '../../utils/notification_actions.dart';
@@ -23,6 +25,7 @@ import 'network_link_notice.dart';
 import 'shader_fixes_notices.dart';
 
 final Logger _log = Logger('install');
+final Logger _updateLog = Logger('update');
 
 /// Turns a mod on, as `ApiService.enableMod`: the dry run, then the mods in [switchOff], then the mod. False when a
 /// link could not be made or removed. A test substitutes its own so no link is made.
@@ -175,9 +178,17 @@ class DownloadQueueHost extends ConsumerStatefulWidget {
     this.installer = runArchiveInstall,
     this.asker = answerInstallQuestion,
     this.enabler = ApiService.enableMod,
+    this.updatePreparer = prepareUpdateJob,
+    this.updateWriter = writeUpdateJob,
   });
 
   final Widget child;
+
+  /// Seam for tests. Production is [prepareUpdateJob], an update job's unpack and preview.
+  final UpdatePreparer updatePreparer;
+
+  /// Seam for tests. Production is [writeUpdateJob], an update job's write.
+  final UpdateWriter updateWriter;
 
   /// Seam for tests. Production is [runArchiveInstall].
   final ArchiveInstaller installer;
@@ -198,6 +209,9 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
   /// working is picked up by the next iteration rather than needing to be
   /// remembered.
   bool _draining = false;
+
+  /// Whether the update unpack lane's loop is running, the same guard as [_draining].
+  bool _unpacking = false;
 
   /// Whether a question's dialog is open, so a second press does not stack another.
   bool _answering = false;
@@ -232,6 +246,7 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
       final jobs = ref.read(downloadQueueProvider);
       _syncCards(jobs);
       unawaited(_drain());
+      unawaited(_drainUnpacks());
     });
   }
 
@@ -253,6 +268,7 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
     ref.listen<List<DownloadJob>>(downloadQueueProvider, (_, jobs) {
       _syncCards(jobs);
       unawaited(_drain());
+      unawaited(_drainUnpacks());
     });
     return widget.child;
   }
@@ -277,6 +293,7 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
   /// A paused download has no card, since its spinner and bar would claim work that is not happening, and Resume
   /// raises it again as a download becoming active. A waiting download is on the Needs you card instead, and an
   /// update download's card goes once its bytes are handed over, since the update flow reports it.
+  /// An update run's jobs have no Working card here.
   void _syncCards(List<DownloadJob> jobs) {
     _reportFailedTransfers(jobs);
     _syncNeedsYou(jobs);
@@ -284,6 +301,7 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
     final active = {
       for (final job in jobs)
         if (job.state.isActive &&
+            !job.isUpdate &&
             job.state != DownloadJobState.paused &&
             job.state != DownloadJobState.waiting &&
             job.state != DownloadJobState.updating)
@@ -462,7 +480,8 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
     if (_answering || !mounted) return;
     final queue = ref.read(downloadQueueProvider.notifier);
     final job = ref.read(downloadQueueProvider).where((j) => j.seq == seq).firstOrNull;
-    if (job == null || job.state != DownloadJobState.waiting) return;
+    // An update's question is answered through `DownloadQueue.answerUpdate`, not an install's dialogs.
+    if (job == null || job.state != DownloadJobState.waiting || job.isUpdate) return;
 
     _answering = true;
     try {
@@ -497,20 +516,92 @@ class _DownloadQueueHostState extends ConsumerState<DownloadQueueHost> {
 
   // ── Finishing the work ─────────────────────────────────────────────────────
 
-  Future<void> _drain() async {
-    if (_draining) return;
-    _draining = true;
+  /// The install chain: one Browse install or one update write at a time.
+  Future<void> _drain() => _lane(
+        running: () => _draining,
+        mark: (on) => _draining = on,
+        // Claim-and-mark in one call: as two steps a rebuild between them could hand the same job to a second pass.
+        claim: (queue) => queue.claimNextForHost(),
+        run: (job) => job.isUpdate ? _writeUpdate(job) : _handle(job),
+      );
+
+  /// The update unpack lane, beside the install chain: it unpacks and previews the next update while one is written.
+  Future<void> _drainUnpacks() => _lane(
+        running: () => _unpacking,
+        mark: (on) => _unpacking = on,
+        claim: (queue) => queue.claimNextUpdateUnpack(),
+        run: (job) => _runStage(
+          job,
+          (container) => widget.updatePreparer(container, job),
+          failure: UpdateFailureKind.other,
+        ),
+      );
+
+  /// One lane's loop: a job at a time, while the host is mounted and the queue has one to claim.
+  /// One loop per lane at a time, guarded by [running];
+  /// it re-reads the list every turn, so anything that arrives while it works is picked up by the next turn rather than needing to be remembered.
+  Future<void> _lane({
+    required bool Function() running,
+    required void Function(bool on) mark,
+    required DownloadJob? Function(DownloadQueue queue) claim,
+    required Future<void> Function(DownloadJob job) run,
+  }) async {
+    if (running()) return;
+    mark(true);
     try {
       while (mounted) {
-        // Claim-and-mark in one call: as two steps a rebuild between them could
-        // hand the same job to a second pass.
-        final job = ref.read(downloadQueueProvider.notifier).claimNextForHost();
+        final job = claim(ref.read(downloadQueueProvider.notifier));
         if (job == null) return;
-        await _handle(job);
+        await run(job);
       }
     } finally {
-      _draining = false;
+      mark(false);
     }
+  }
+
+  /// Runs one stage of an update job and settles the job from it, through the app's container as an install does,
+  /// since a job left in its stage would hold the lane for good. A stage that throws is a failure of [failure].
+  Future<void> _runStage(
+    DownloadJob job,
+    Future<UpdateStageResult> Function(ProviderContainer container) stage, {
+    required UpdateFailureKind failure,
+  }) async {
+    final container = ProviderScope.containerOf(context, listen: false);
+    UpdateStageResult result;
+    try {
+      result = await stage(container);
+    } catch (error, stack) {
+      _updateLog.error('update stage failed', error: error, stack: stack, fields: {'download': job.subject});
+      result = UpdateStageFailed(UpdateFailure(failure, cause: error));
+    }
+    container.read(downloadQueueProvider.notifier).settleUpdate(job.seq, result);
+  }
+
+  /// Writes an update job ([DownloadQueueHost.updateWriter]).
+  /// A folder of the job that is being written by something else (a restore, Edit info, a patch) is not written and not waited for,
+  /// so an update never lands over a restore pressed while it queued;
+  /// a job whose every folder is being written is skipped whole.
+  /// A write that throws is [UpdateFailureKind.writeInterrupted], since how far it got is not known.
+  Future<void> _writeUpdate(DownloadJob job) {
+    final container = ProviderScope.containerOf(context, listen: false);
+    final task = job.update!;
+    final busy = container.read(modWritesInProgressProvider).intersection(task.folders);
+    if (busy.length == task.folders.length) {
+      _updateLog.info('update skipped, its folder is being written', fields: {'mods': busy.toList()});
+      container.read(downloadQueueProvider.notifier).settleUpdate(
+            job.seq,
+            UpdateStageSkipped(
+              UpdateSkipReason.beingWritten,
+              results: [for (final mod in task.mods) UpdateModResult.skipped(mod, UpdateSkipReason.beingWritten)],
+            ),
+          );
+      return Future<void>.value();
+    }
+    return _runStage(
+      job,
+      (container) => widget.updateWriter(container, job, skip: busy),
+      failure: UpdateFailureKind.writeInterrupted,
+    );
   }
 
   Future<void> _handle(DownloadJob job) async {

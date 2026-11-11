@@ -14,6 +14,7 @@ import 'package:mod_manager_flutter/services/storage/storage_roots.dart';
 import 'package:path/path.dart' as path;
 
 import '../support/library_override.dart';
+import '../support/seeded_queue.dart';
 
 /// The Storage reclaim's gate as the app wires it, from the download queue: the temp extractions a download is
 /// still using are refused whole, whatever their age.
@@ -55,7 +56,7 @@ void main() {
 
     final container = ProviderContainer(overrides: [
       storageRootsProvider.overrideWithValue(roots()),
-      downloadQueueProvider.overrideWith(() => _SeededQueue([job(state)])),
+      downloadQueueProvider.overrideWith(() => SeededQueue([job(state)])),
       libraryOf(const []),
     ]);
     addTearDown(container.dispose);
@@ -86,7 +87,7 @@ void main() {
       ..writeAsStringSync('log');
     final container = ProviderContainer(overrides: [
       storageRootsProvider.overrideWithValue(roots()),
-      downloadQueueProvider.overrideWith(() => _SeededQueue(const [])),
+      downloadQueueProvider.overrideWith(() => SeededQueue(const [])),
       libraryOf(const []),
     ]);
     addTearDown(container.dispose);
@@ -106,16 +107,4 @@ void main() {
     expect(kept, isFalse);
     expect(refusal, isNull);
   });
-}
-
-class _SeededQueue extends DownloadQueue {
-  _SeededQueue(this._seed);
-
-  final List<DownloadJob> _seed;
-
-  @override
-  List<DownloadJob> build() {
-    super.build();
-    return _seed;
-  }
 }

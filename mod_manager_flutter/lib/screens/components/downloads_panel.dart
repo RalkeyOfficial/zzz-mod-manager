@@ -871,7 +871,7 @@ String _progressLine(AppLocalizations loc, DownloadJob job) {
         UpdateStep.confirming => loc.t('downloads.update_confirming'),
         UpdateStep.writing =>
           loc.t(date == null ? 'downloads.update_writing_undated' : 'downloads.update_writing', params: params),
-        UpdateStep.unpacking || null =>
+        UpdateStep.unpacking || UpdateStep.unpacked || null =>
           loc.t(date == null ? 'downloads.update_unpacking_undated' : 'downloads.update_unpacking', params: params),
       };
     default:
@@ -893,7 +893,9 @@ String _finishedLine(AppLocalizations loc, DownloadJob job, _RowCallbacks action
     JobOutcome.reinstalled => dated('downloads.reinstalled', 'downloads.reinstalled_undated'),
     JobOutcome.baseInstalled => loc.t('downloads.base_installed'),
     JobOutcome.saved => loc.t('downloads.saved'),
-    JobOutcome.nothingInstalled || null => job.headline ?? loc.t('downloads.done'),
+    // An update run's own outcomes, which no screen enqueues yet.
+    JobOutcome.nothingInstalled || JobOutcome.patchAdded || JobOutcome.skipped || JobOutcome.undone || null =>
+      job.headline ?? loc.t('downloads.done'),
   };
   if (job.outcome == JobOutcome.nothingInstalled) return head;
 

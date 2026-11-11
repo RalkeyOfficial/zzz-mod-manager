@@ -1,10 +1,15 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_mod.dart';
+import 'package:mod_manager_flutter/models/mod_download.dart';
+import 'package:mod_manager_flutter/services/download/download_exceptions.dart';
 import 'package:mod_manager_flutter/services/download/download_job.dart';
 import 'package:mod_manager_flutter/services/download/download_progress.dart';
 import 'package:mod_manager_flutter/services/download/download_request.dart';
 import 'package:mod_manager_flutter/services/download/queue_policy.dart';
+import 'package:mod_manager_flutter/services/download/update_job.dart';
+
+import '../support/update_jobs.dart';
 
 /// The queue's decisions, with no queue, no network and no clock.
 ///
@@ -414,5 +419,420 @@ void main() {
       expect(state.isTerminal, state == DownloadJobState.done || state == DownloadJobState.failed, reason: state.name);
       expect(state.isActive, !state.isTerminal, reason: state.name);
     }
+  });
+
+  group('the lanes of an update run', () {
+    /// An update job of [size] MB for the folder [modId] (by default its own), at [state] and, while updating, [step].
+    DownloadJob update(
+      int size, {
+      DownloadJobState state = DownloadJobState.queued,
+      UpdateStep? step,
+      String? modId,
+      DownloadKey? layer,
+      bool waited = false,
+      bool deferred = false,
+      UpdateHalt? halt,
+    }) {
+      final seq = ++nextSeq;
+      return updateJob(
+        seq,
+        state: state,
+        step: step,
+        size: size * mb,
+        mods: [UpdateMod(modId: modId ?? 'mod$seq', layer: layer ?? DownloadKey.base(seq))],
+        waited: waited,
+        deferred: deferred,
+        halt: halt,
+      );
+    }
+
+    DownloadJob unpacking(int size) => update(size, state: DownloadJobState.updating, step: UpdateStep.unpacking);
+    DownloadJob unpacked(int size, {String? modId}) =>
+        update(size, state: DownloadJobState.updating, step: UpdateStep.unpacked, modId: modId);
+    DownloadJob writing(int size) => update(size, state: DownloadJobState.updating, step: UpdateStep.writing);
+
+    List<int> admitted(List<DownloadJob> jobs) => [for (final j in admissions(jobs)) j.seq];
+
+    /// The jobs ahead of the install, by listed size in MB.
+    List<int> ahead(List<DownloadJob> jobs) =>
+        [for (final j in jobs) if (isAheadOfInstall(j)) (j.file.filesize ?? 0) ~/ mb];
+
+    group('D, update downloads at once', () {
+      for (final (queued, starts) in [(1, 1), (2, 2), (3, 3), (4, 3)]) {
+        test('$queued queued, $starts start', () {
+          final jobs = [for (var i = 0; i < queued; i++) update(10)];
+          expect(admissions(jobs), hasLength(starts));
+        });
+      }
+
+      test('in a pool of their own: two Browse downloads running take none of its places', () {
+        final jobs = [
+          job(state: DownloadJobState.running),
+          job(state: DownloadJobState.running),
+          job(),
+          update(10),
+          update(10),
+          update(10),
+        ];
+        expect(admitted(jobs), [4, 5, 6], reason: 'five connections at most, and the third Browse job waits');
+      });
+
+      test('an update never bypasses a cap, and its running jobs hold no Browse place', () {
+        final jobs = [
+          update(10, state: DownloadJobState.running),
+          update(10, state: DownloadJobState.running),
+          update(10, state: DownloadJobState.running),
+          update(10),
+          job(),
+          job(),
+        ];
+        expect(admitted(jobs), [5, 6]);
+        expect(jobs[3].bypassesCap, isFalse);
+      });
+
+      test('a value of D other than three is honoured', () {
+        final jobs = [for (var i = 0; i < 4; i++) update(10)];
+        for (final d in [1, 2, 3, 4]) {
+          expect(updateAdmissions(jobs, concurrency: d, lookaheadCount: 10), hasLength(d), reason: 'D = $d');
+        }
+      });
+    });
+
+    group('L, the lookahead', () {
+      test('counts every job between the start of its download and the end of its install', () {
+        final jobs = [
+          update(10),
+          update(10, state: DownloadJobState.running),
+          update(10, state: DownloadJobState.downloaded),
+          unpacking(10),
+          unpacked(10),
+          writing(10),
+          update(10, state: DownloadJobState.waiting),
+          update(10, state: DownloadJobState.done),
+          update(10, state: DownloadJobState.failed),
+          job(state: DownloadJobState.running),
+        ];
+        expect([for (final j in jobs) isAheadOfInstall(j)],
+            [false, true, true, true, true, true, true, false, false, false]);
+      });
+
+      test('admits nothing more once three are ahead, whatever their size', () {
+        final jobs = [update(1, state: DownloadJobState.downloaded), unpacked(1), writing(1), update(1)];
+        expect(admitted(jobs), isEmpty);
+      });
+
+      test('admits a job only while the sizes ahead, its own included, fit in 1 GB', () {
+        expect(admitted([update(900, state: DownloadJobState.running), update(200)]), isEmpty);
+        expect(admitted([update(900, state: DownloadJobState.running), update(100)]), [4]);
+      });
+
+      test('always admits one when none is ahead, however large', () {
+        expect(admitted([update(1229)]), [1]);
+        expect(lookaheadAdmits(aheadCount: 0, aheadBytes: 0, size: 5 * 1024 * mb), isTrue);
+        expect(lookaheadAdmits(aheadCount: 1, aheadBytes: 20 * mb, size: 1229 * mb), isFalse);
+      });
+
+      test('a 1.2 GB file after smaller ones waits until nothing is ahead, then runs alone', () {
+        final big = update(1229);
+        final small = [update(20), update(40), update(80)];
+        expect(admitted([big, ...small]), [2, 3, 4], reason: 'smallest first, and the large one does not fit beside them');
+
+        final installed = [for (final j in small) j.copyWith(state: DownloadJobState.done)];
+        final late = update(10);
+        expect(admitted([big, ...installed, late]), [late.seq], reason: 'the 10 MB file is smaller and goes first');
+
+        final running = big.copyWith(state: DownloadJobState.running);
+        expect(admitted([running, ...installed, update(10)]), isEmpty, reason: 'nothing fits beside 1.2 GB');
+      });
+
+      test('a job waiting on a question keeps its place', () {
+        final jobs = [
+          update(10, state: DownloadJobState.waiting),
+          update(10, state: DownloadJobState.waiting),
+          update(10, state: DownloadJobState.waiting),
+          update(10),
+        ];
+        expect(admitted(jobs), isEmpty, reason: 'three questions fill the lookahead, and the run waits for answers');
+        expect(nextUpdateToUnpack(jobs), isNull, reason: 'a question holds no unpack');
+      });
+    });
+
+    test('the five-mod picture: 20, 40, 80, 200 and 300 MB', () {
+      var jobs = [update(300), update(20), update(200), update(80), update(40)];
+      DownloadJob of(int size) => jobs.firstWhere((j) => j.file.filesize == size * mb);
+      void move(int size, DownloadJobState state, [UpdateStep? step]) => jobs = [
+            for (final j in jobs)
+              if (j.file.filesize == size * mb) j.copyWith(state: state, updateStep: step) else j,
+          ];
+      void start() {
+        for (final j in admissions(jobs)) {
+          move((j.file.filesize ?? 0) ~/ mb, DownloadJobState.running);
+        }
+        expect(ahead(jobs).length, lessThanOrEqualTo(3));
+      }
+
+      start();
+      expect(ahead(jobs), unorderedEquals([20, 40, 80]), reason: 'the first three start together, 140 MB');
+
+      move(20, DownloadJobState.downloaded);
+      start();
+      expect(nextUpdateToUnpack(jobs)?.seq, of(20).seq);
+      move(20, DownloadJobState.updating, UpdateStep.unpacking);
+      move(40, DownloadJobState.downloaded);
+      expect(nextUpdateToUnpack(jobs), isNull, reason: 'one unpack at a time');
+      move(20, DownloadJobState.updating, UpdateStep.unpacked);
+      expect(nextUpdateToWrite(jobs)?.seq, of(20).seq);
+      move(20, DownloadJobState.updating, UpdateStep.writing);
+      expect(nextUpdateToUnpack(jobs)?.seq, of(40).seq, reason: 'the 40 MB archive is unpacked while 20 installs');
+      move(40, DownloadJobState.updating, UpdateStep.unpacked);
+      start();
+      expect(ahead(jobs), unorderedEquals([20, 40, 80]), reason: '200 MB waits for the 20 MB install to end');
+
+      move(20, DownloadJobState.done);
+      start();
+      expect(of(200).state, DownloadJobState.running, reason: 'a place opened');
+      expect(of(300).state, DownloadJobState.queued);
+
+      move(40, DownloadJobState.updating, UpdateStep.writing);
+      move(40, DownloadJobState.done);
+      start();
+      expect(of(300).state, DownloadJobState.running);
+      expect(ahead(jobs), unorderedEquals([80, 200, 300]));
+    });
+
+    group('the order of work', () {
+      test('smallest listed file first, then in the order asked for', () {
+        expect([for (final j in updateLine([update(300), update(20), update(20), update(80)])) j.seq], [2, 3, 4, 1]);
+      });
+
+      test('a stalled file goes to the end of the line', () {
+        expect([for (final j in updateLine([update(20, deferred: true), update(300), update(80)])) j.seq], [3, 2, 1]);
+      });
+
+      test('a job a halt holds back is not in line', () {
+        const halt = UpdateHalt(cause: UpdateFailure(UpdateFailureKind.noSpace), bySeq: 99);
+        expect(updateLine([update(20, halt: halt), update(30)]).map((j) => j.seq), [2]);
+        expect(admitted([update(20, halt: halt)]), isEmpty);
+      });
+    });
+
+    group('U, the unpack lane', () {
+      test('one unpack at a time', () {
+        expect(nextUpdateToUnpack([unpacking(10), update(10, state: DownloadJobState.downloaded)]), isNull);
+      });
+
+      test('with one unpacked archive waiting for the install, no other unpack starts', () {
+        expect(nextUpdateToUnpack([writing(10), unpacked(10), update(10, state: DownloadJobState.downloaded)]), isNull);
+      });
+
+      test('while an install runs and none waits, the next is unpacked', () {
+        expect(nextUpdateToUnpack([writing(10), update(10, state: DownloadJobState.downloaded)])?.seq, 2);
+      });
+
+      test('an answered job goes ahead of the ones that have not waited, and smaller before larger otherwise', () {
+        final jobs = [
+          update(10, state: DownloadJobState.downloaded),
+          update(300, state: DownloadJobState.downloaded, waited: true),
+        ];
+        expect(nextUpdateToUnpack(jobs)?.seq, 2);
+        expect(
+          nextUpdateToUnpack([update(300, state: DownloadJobState.downloaded), update(20, state: DownloadJobState.downloaded)])
+              ?.seq,
+          4,
+        );
+      });
+
+      test('nothing is unpacked once the app is closing, or while a halt holds the job', () {
+        expect(nextUpdateToUnpack([update(10, state: DownloadJobState.downloaded)], closing: true), isNull);
+        const halt = UpdateHalt(cause: UpdateFailure(UpdateFailureKind.snapshotFailed), bySeq: 99);
+        expect(nextUpdateToUnpack([update(10, state: DownloadJobState.downloaded, halt: halt)]), isNull);
+      });
+    });
+
+    group('one write pipeline per folder', () {
+      test('the second job of a folder waits until the first has ended, even when it landed first', () {
+        final base = update(200, state: DownloadJobState.running, modId: 'Ellen', layer: const DownloadKey.base(1));
+        final patch =
+            update(5, state: DownloadJobState.downloaded, modId: 'Ellen', layer: const DownloadKey.patch(2));
+        expect(folderPipelineFree(patch, [base, patch]), isFalse);
+        expect(nextUpdateToUnpack([base, patch]), isNull);
+
+        final ended = base.copyWith(state: DownloadJobState.done);
+        expect(nextUpdateToUnpack([ended, patch])?.seq, patch.seq);
+      });
+
+      test('other folders go on', () {
+        final ellen = update(200, state: DownloadJobState.waiting, modId: 'Ellen');
+        final lycaon = update(5, state: DownloadJobState.downloaded, modId: 'Lycaon');
+        expect(nextUpdateToUnpack([ellen, lycaon])?.seq, lycaon.seq);
+      });
+
+      test('a base and its patch over 1 GiB together: the base downloads first, alone, and the patch after it', () {
+        final base = update(900, modId: 'Ellen', layer: const DownloadKey.base(1));
+        final patch = update(150, modId: 'Ellen', layer: const DownloadKey.patch(2));
+        expect(admitted([base, patch]), [base.seq], reason: 'the smaller patch is passed over, holding no place');
+
+        final landed = base.copyWith(state: DownloadJobState.downloaded);
+        expect(admitted([landed, patch]), isEmpty, reason: 'the patch waits for the base to end');
+        expect(admitted([base.copyWith(state: DownloadJobState.done), patch]), [patch.seq]);
+      });
+
+      test('three bases with their patches never fill the lookahead with patches that cannot go on', () {
+        final pairs = [
+          for (final name in ['Ellen', 'Lycaon', 'Nicole'])
+            (
+              update(300, modId: name, layer: DownloadKey.base(++nextSeq)),
+              update(5, modId: name, layer: DownloadKey.patch(++nextSeq)),
+            ),
+        ];
+        final jobs = [for (final (base, patch) in pairs) ...[base, patch]];
+        expect(admitted(jobs), [for (final (base, _) in pairs) base.seq]);
+      });
+
+      test('a later job of a folder that landed before an earlier one came back holds no place', () {
+        // Tried again: the base is back in line while its patch is already unpacked.
+        final base = update(50, modId: 'Ellen', layer: const DownloadKey.base(1), deferred: true);
+        final patch = update(10,
+            state: DownloadJobState.updating,
+            step: UpdateStep.unpacked,
+            modId: 'Ellen',
+            layer: const DownloadKey.patch(2));
+        final other = update(10, state: DownloadJobState.downloaded, modId: 'Lycaon');
+        expect(isHeldByPipeline(patch, [base, patch, other]), isTrue);
+        expect(nextUpdateToWrite([base, patch, other]), isNull, reason: 'the patch waits for its base');
+        expect(nextUpdateToUnpack([base, patch, other])?.seq, other.seq, reason: 'and does not take the one place');
+        expect(admitted([base, patch, other]), [base.seq]);
+
+        final landed = base.copyWith(state: DownloadJobState.downloaded);
+        expect(nextUpdateToUnpack([landed, patch])?.seq, landed.seq, reason: 'the held patch leaves the place free');
+        final unpackedBase = landed.copyWith(state: DownloadJobState.updating, updateStep: UpdateStep.unpacked);
+        expect(nextUpdateToWrite([unpackedBase, patch, other])?.seq, unpackedBase.seq, reason: 'base first, then patch');
+      });
+    });
+
+    group('I, the install chain', () {
+      test('an update writing holds a Browse install back, and a Browse install holds an update write back', () {
+        expect(nextForInstallChain([writing(10), job(state: DownloadJobState.downloaded)]), isNull);
+        expect(nextForInstallChain([job(state: DownloadJobState.installing), unpacked(10)]), isNull);
+      });
+
+      test('an unpacked update and a landed install: the one asked for first', () {
+        final jobs = [unpacked(10), job(state: DownloadJobState.downloaded)];
+        expect(nextForInstallChain(jobs)?.seq, jobs.first.seq);
+        expect(nextForInstallChain(jobs.reversed.toList())?.seq, jobs.first.seq);
+      });
+
+      test('nothing starts its write once the app is closing', () {
+        expect(nextForInstallChain([unpacked(10)], closing: true), isNull);
+        expect(nextForInstallChain([job(state: DownloadJobState.downloaded)], closing: true), isNull);
+        expect(nextAwaitingHost([job(state: DownloadJobState.downloaded)], closing: true), isNull);
+      });
+
+      test('a Browse install never picks an update job up', () {
+        expect(nextAwaitingHost([update(10, state: DownloadJobState.downloaded)]), isNull);
+      });
+    });
+
+    test('an update job is never pausable', () {
+      expect(update(10, state: DownloadJobState.running).pausable, isFalse);
+      expect(rowActions(update(10, state: DownloadJobState.running), const []), [DownloadRowAction.cancel]);
+    });
+
+    test('Cancel is offered exactly where the queue can cancel', () {
+      expect(unpacked(10).cancellable, isTrue);
+      expect(rowActions(unpacked(10), const []), [DownloadRowAction.cancel]);
+      for (final busy in [unpacking(10), writing(10), job(state: DownloadJobState.installing)]) {
+        expect(busy.cancellable, isFalse);
+        expect(rowActions(busy, const []), isEmpty);
+      }
+    });
+
+    test('a failure after the download offers no Try again', () {
+      final unpackFailed = update(10, state: DownloadJobState.failed).copyWith(
+        error: const UpdateFailure(UpdateFailureKind.unpackFailed),
+      );
+      expect(rowActions(unpackFailed, [unpackFailed]), [DownloadRowAction.dismiss]);
+    });
+
+    test('the halt of the run is one rule, read off the jobs that have not ended', () {
+      const first = UpdateHalt(cause: UpdateFailure(UpdateFailureKind.noSpace), bySeq: 1);
+      const ended = UpdateHalt(cause: UpdateFailure(UpdateFailureKind.snapshotFailed), bySeq: 2);
+      expect(currentHalt([update(10, state: DownloadJobState.done, halt: ended), update(10, halt: first)]), same(first));
+      expect(currentHalt([update(10)]), isNull);
+    });
+
+    test('a pick joins a job of its file only before the file is unpacked or the job has waited', () {
+      expect(joinsUpdateJob(update(10)), isTrue);
+      expect(joinsUpdateJob(update(10, state: DownloadJobState.running)), isTrue);
+      expect(joinsUpdateJob(update(10, state: DownloadJobState.downloaded)), isTrue);
+      expect(joinsUpdateJob(update(10, state: DownloadJobState.downloaded, waited: true)), isFalse);
+      expect(joinsUpdateJob(unpacking(10)), isFalse);
+      expect(joinsUpdateJob(unpacked(10)), isFalse);
+      expect(joinsUpdateJob(job()), isFalse, reason: 'a Browse download of the same file');
+    });
+
+    test('a finished row: Show for a patch added, nothing for a skipped or undone one', () {
+      for (final (outcome, actions) in [
+        (JobOutcome.patchAdded, [DownloadRowAction.show]),
+        (JobOutcome.skipped, <DownloadRowAction>[]),
+        (JobOutcome.undone, <DownloadRowAction>[]),
+      ]) {
+        final done = update(10, state: DownloadJobState.done).copyWith(outcome: outcome);
+        expect(rowActions(done, [done]), actions, reason: outcome.name);
+      }
+    });
+
+    test('what halts a run: the disk, never one mod of its own', () {
+      expect(haltsUpdateRun(const InsufficientSpaceException('', requiredBytes: 2, availableBytes: 1)), isTrue);
+      expect(haltsUpdateRun(const DownloadWriteException('')), isTrue);
+      for (final kind in UpdateFailureKind.values) {
+        final halts = {
+          UpdateFailureKind.noSpace,
+          UpdateFailureKind.snapshotFailed,
+          UpdateFailureKind.writtenPartway,
+          UpdateFailureKind.writeInterrupted,
+        }.contains(kind);
+        expect(haltsUpdateRun(UpdateFailure(kind)), halts, reason: kind.name);
+      }
+      expect(haltsUpdateRun(const DownloadHttpException('gone', statusCode: 404)), isFalse);
+      expect(haltsUpdateRun(const DownloadStalledException('', stallTimeout: Duration(seconds: 60))), isFalse);
+    });
+
+    test('the run summary and the job of a mod', () {
+      const halt = UpdateHalt(cause: UpdateFailure(UpdateFailureKind.noSpace), bySeq: 3);
+      final jobs = [
+        update(10, modId: 'Ellen', halt: halt),
+        update(10, state: DownloadJobState.waiting, modId: 'Lycaon'),
+        update(10, state: DownloadJobState.failed, modId: 'Nicole'),
+        update(10, state: DownloadJobState.done, modId: 'Ellen'),
+        unpacked(10, modId: 'Anby'),
+        job(state: DownloadJobState.running),
+      ];
+      final summary = summariseUpdateRun(jobs);
+      expect((summary.live, summary.asking, summary.done, summary.failed), (2, 1, 1, 1));
+      expect(summary.halt, same(halt));
+      expect(summariseUpdateRun([job()]).isEmpty, isTrue);
+
+      expect(updateJobOfMod(jobs, 'Ellen')?.job.seq, jobs.first.seq,
+          reason: 'the one going wins over the one that ended');
+      expect(updateJobOfMod(jobs, 'Ellen')?.result, isNull, reason: 'it has not ended');
+      expect(updateJobOfMod(jobs, 'Nicole')?.job.state, DownloadJobState.failed);
+      expect(updateJobOfMod(jobs, 'Rina'), isNull);
+    });
+
+    test("a mod's row reads its own result, not its job's", () {
+      final ellen = baseOf('Ellen', 1);
+      final alt = baseOf('Ellen Alt', 2);
+      final job = updateJob(1, state: DownloadJobState.done, mods: [ellen, alt]).copyWith(
+        outcome: JobOutcome.updated,
+        modResults: [
+          UpdateModResult.written(ellen),
+          const UpdateModResult.skipped(UpdateMod(modId: 'Ellen Alt', layer: DownloadKey.base(2)),
+              UpdateSkipReason.beingWritten),
+        ],
+      );
+      expect(updateJobOfMod([job], 'Ellen')?.result?.end, UpdateModEnd.written);
+      expect(updateJobOfMod([job], alt.modId)?.result?.skipReason, UpdateSkipReason.beingWritten);
+    });
   });
 }
