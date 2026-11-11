@@ -12,6 +12,7 @@ import '../../services/mod_manager_service.dart' show ModManagerService;
 import '../../services/update_apply/local_update.dart';
 import '../../services/update_apply/mod_activation_port.dart';
 import '../../services/update_apply/update_applier.dart';
+import '../../services/writes_in_flight.dart';
 import '../../utils/state_providers.dart';
 import '../components/import_failure_message.dart';
 import 'apply_update_flow.dart' show updateFailureMessage;
@@ -77,35 +78,39 @@ Future<({List<String> updated, List<NotificationLines> failures})> updateFromDro
       );
       continue;
     }
-    final outcome = await whileWritingMod(
-      container,
-      mod.id,
-      () => applyLocalUpdate(
-        applier: applier,
-        amend: service.updateModOrigin,
-        mod: mod,
-        modsPath: modsPath,
-        folders: {for (final folder in row.item.sources) folder: combined ? path.basename(folder) : ''},
-        seed: seed,
-      ),
-    );
-    // Whether the write landed or not: a failed copy may have changed the folder part-way.
-    service.invalidateKeybinds(mod.id);
-    if (outcome.write.snapshot != null) {
-      container.invalidate(modBackupsProvider);
-      await snapshots.prune();
-    }
+    // The prune is part of the write, so closing the app waits for it too.
+    final outcome = await WritesInFlight.shared.track(() async {
+      final outcome = await whileWritingMod(
+        container,
+        mod.id,
+        () => applyLocalUpdate(
+          applier: applier,
+          amend: service.updateModOrigin,
+          mod: mod,
+          modsPath: modsPath,
+          folders: {for (final folder in row.item.sources) folder: combined ? path.basename(folder) : ''},
+          seed: seed,
+        ),
+      );
+      // Whether the write landed or not: a failed copy may have changed the folder part-way.
+      service.invalidateKeybinds(mod.id);
+      if (outcome.write.snapshot != null) {
+        container.invalidate(modBackupsProvider);
+        await snapshots.prune();
+      }
+      // Only a character the user changed in the row: a guess never moves a mod.
+      final character = row.character;
+      if (outcome.success && character != null && character != mod.characterId) {
+        await service.setModCharacter(mod.id, character);
+      }
+      return outcome;
+    });
     if (!outcome.success) {
       failures.add(updateFailureMessage(loc, outcome.write, mod));
       continue;
     }
     // A verdict names the folder's layers and its file, and both just changed.
     forgetUpdateCheck(container, mod.id);
-    // Only a character the user changed in the row: a guess never moves a mod.
-    final character = row.character;
-    if (character != null && character != mod.characterId) {
-      await service.setModCharacter(mod.id, character);
-    }
     updated.add(mod.name);
   }
   return (updated: updated, failures: failures);

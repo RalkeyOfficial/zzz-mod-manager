@@ -4,6 +4,7 @@ import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
 import '../utils/path_helper.dart';
+import '../utils/serial_queue.dart';
 import 'backup/retention.dart';
 import 'log/logger.dart';
 import 'mod_metadata_repository.dart';
@@ -719,9 +720,16 @@ class ConfigService implements ModCharacterTagStore {
 
   Future<bool> loadFromFile() async {
     try {
-      if (_configFile == null || !await _configFile!.exists()) return false;
+      if (_configFile == null) return false;
+      // With `config.json` gone, a whole temporary file is a save stopped between the two halves of a rename that removes the old file first.
+      // One that does not decode fails the load, as a torn `config.json` would.
+      var source = _configFile!;
+      if (!await source.exists()) {
+        if (!await _tempConfigFile.exists()) return false;
+        source = _tempConfigFile;
+      }
 
-      final content = await _configFile!.readAsString();
+      final content = await source.readAsString();
       final Map<String, dynamic> config = jsonDecode(content);
 
       if (config.containsKey('mods_path')) {
@@ -831,7 +839,28 @@ class ConfigService implements ModCharacterTagStore {
     }
   }
 
-  Future<bool> _saveToFile() async {
+  /// The save that has not started yet, which every later save joins.
+  Future<bool>? _pendingSave;
+  final SerialQueue _saves = SerialQueue();
+
+  /// Writes `config.json`, one save at a time.
+  ///
+  /// A save reads the settings when it starts, so a save asked for while one is writing waits for it and then writes the newest state, and saves asked for while one waits join it: the file always ends with the last state asked for.
+  Future<bool> _saveToFile() {
+    final pending = _pendingSave;
+    if (pending != null) return pending;
+    return _pendingSave = _saves.run(() {
+      _pendingSave = null;
+      return _writeConfigFile();
+    });
+  }
+
+  /// The file a save is written to before it is renamed over `config.json`.
+  /// A leftover one is a save that never finished: it is read only when `config.json` is missing ([loadFromFile]), and the next save writes over it.
+  File get _tempConfigFile => File('${_configFile!.path}.tmp');
+
+  /// Writes the whole file to [_tempConfigFile] and renames it over `config.json`, so a save killed or failing part-way leaves the previous file whole.
+  Future<bool> _writeConfigFile() async {
     try {
       if (_configFile == null) return false;
 
@@ -870,7 +899,18 @@ class ConfigService implements ModCharacterTagStore {
       };
 
       final jsonString = const JsonEncoder.withIndent('  ').convert(config);
-      await _configFile!.writeAsString(jsonString);
+      final temp = _tempConfigFile;
+      try {
+        await temp.writeAsString(jsonString, flush: true);
+        await temp.rename(_configFile!.path);
+      } catch (_) {
+        try {
+          if (await temp.exists()) await temp.delete();
+        } catch (_) {
+          // The next save writes over it.
+        }
+        rethrow;
+      }
 
       return true;
     } catch (e) {

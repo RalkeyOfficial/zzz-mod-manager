@@ -40,7 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - A download that needs your answer (a password, an archive you already have, which folders to install, or where a patch goes) waits in Downloads instead of opening a window over what you're doing, and the next download installs meanwhile. One notification says how many are waiting, with Open Downloads.
   - Password-protected archives ask for their password, whether downloaded, dropped or pasted into the Library, or fetched for an update. A wrong one asks again and keeps the archive, and the password is never saved or logged.
   - An update's download stays in Downloads until the update is written, declined or fails.
-- An archive that won't fit when unpacked is refused before unpacking, saying how much is needed and how much is free. The archive is kept, so clearing space and installing again is all it takes.
+- An archive that won't fit when unpacked, beside any others being unpacked at the same time, is refused before unpacking, saying how much is needed and how much is free. The archive is kept, so clearing space and installing again is all it takes.
 - A mod that won't fit in your mods folder is refused before anything is copied there, saying how much is needed and how much is free.
 - Settings has a Storage section that shows what the app is keeping on disk, as a bar broken down by kind: installed mods, saved versions, leftovers, downloads, covers and metadata, and logs.
   - Pointing at or tabbing to a part of the bar names it and its share, and free space is shown for every disk the app writes to.
@@ -67,6 +67,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updating replaces the mod's files with the new version's. Old files are removed.
   - An update empties the mod folder before writing the new version, so nothing of the old one is left loading. Anything you added to the folder by hand goes with it, and the saved copy still has all of it.
   - Every update saves a copy of the mod first, and Restore on the mod's History tab puts it back. The confirmation says that anything added to the folder since is removed.
+  - An update, a restore, a patch installed into a mod you have or taking a patch out stops before changing anything when there isn't room on the disk to save that copy first.
+  - Closing the app while an update, a restore, a patch installed into a mod you have or taking a patch out is writing waits for it to finish, up to 30 seconds.
   - Saved versions survive renaming a mod, including renaming its folder outside the app.
   - Deleting a mod asks whether its saved versions go too, with their count and size, and keeps them listed under Settings' Storage when they stay.
   - "Reinstall this file…" in a mod's right-click menu, or Reinstall on its History tab, empties the folder and puts the author's files back, without changing which version you have. It is offered once the mod names the file you have, and not for a mod marked Local. A card names the file and says what will happen first, and a second confirmation follows only when the download needs one.
@@ -243,6 +245,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Renaming a mod whose folder can't be renamed, such as one with a file open in the game, says so instead of saying the name is taken, and a mod that is on stays on.
 - Renaming a mod that is on, when its link can't be made under the new name, keeps its old name and leaves it on, and says so, instead of renaming it and turning it off.
 - On Windows, a mod whose folder name contains `&`, `^` or `%` can no longer start another program or be linked to the wrong folder.
+- The app's settings file is no longer left half-written, losing your folders and which mods are on, when the app is closed while saving it or two changes save at once.
+- Closing the app while a mod is being installed waits up to 30 seconds for the files and the record being written, instead of cutting them off half-written; what the install had not started yet, such as filling in its description and pictures, is left undone.
 - On Windows, opening a folder whose path contains a comma opens that folder instead of another one.
 - On Windows without Developer Mode, turning on a mod in a library on a network folder says it needs Developer Mode, instead of failing without a reason or leaving a link that leads nowhere.
 - On Windows with Developer Mode on, a mod in a library on a mapped network drive is linked to the network share rather than the drive letter, so the game started through the launcher finds it.

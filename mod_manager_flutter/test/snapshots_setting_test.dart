@@ -33,7 +33,7 @@ void main() {
     Future<SnapshotService> keeping(int count) async {
       final service = SnapshotService(rootPath: p.join(root.path, 'backups'), policy: RetentionPolicy(keepPerMod: count));
       for (var i = 0; i < 6; i++) {
-        await service.capture(
+        await service.take(
           modName: 'Ellen',
           modUid: 'ellen-uid',
           modFolder: mod,

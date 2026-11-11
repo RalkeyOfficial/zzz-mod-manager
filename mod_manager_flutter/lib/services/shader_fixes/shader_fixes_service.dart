@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 
 import '../../utils/path_helper.dart';
 import '../../utils/directory_copy.dart';
+import '../../utils/serial_queue.dart';
 import '../archive_hash.dart';
 import '../log/logger.dart';
 import 'shader_fixes_plan.dart';
@@ -96,13 +97,9 @@ class ShaderFixesService {
 
   /// Operations run one at a time: each reads the record, changes the folder
   /// and writes the record back.
-  Future<void> _queue = Future.value();
+  final SerialQueue _queue = SerialQueue();
 
-  Future<T> _serialised<T>(Future<T> Function() body) {
-    final result = _queue.then((_) => body());
-    _queue = result.then((_) {}, onError: (_) {});
-    return result;
-  }
+  Future<T> _serialised<T>(Future<T> Function() body) => _queue.run(body);
 
   /// The mod's `ShaderFixes/` folder, matched case-insensitively, if it has one.
   static Future<Directory?> shaderPartOf(String modDir) async {

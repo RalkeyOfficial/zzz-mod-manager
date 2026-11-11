@@ -15,6 +15,7 @@ import 'ini_resources.dart';
 import 'log/logger.dart';
 import 'platform_service_factory.dart';
 import 'shader_fixes/zzmi_layout.dart';
+import 'unpacks_in_flight.dart';
 
 final Logger _log = Logger('archive');
 final Logger _files = Logger('fileops');
@@ -242,10 +243,15 @@ class ArchiveService {
     /// is ignored. Given a password, a rar or 7z whose listing said nothing is listed again with it: encrypted
     /// headers, a failed or timed-out listing, or no 7-Zip.
     ArchiveListing? listing,
+
+    /// The other unpacks the space check counts, and where this one is registered while it runs.
+    /// [UnpacksInFlight.shared] by default.
+    UnpacksInFlight? unpacks,
   }) async {
     final started = DateTime.now();
     // The directory this call made, which every failure deletes. A destination the caller passed is the caller's.
     Directory? made;
+    void Function()? endUnpack;
     // Held for the whole unpack so the storage reclaim can see work the
     // download queue cannot: a dragged-in archive has no job behind it.
     ArchiveActivity.begin();
@@ -322,16 +328,23 @@ class ArchiveService {
       // volume out leaves a half-written folder tree to clean up and reports an
       // I/O error that names none of it, and the destination is `/tmp` — on
       // most Linux desktops a tmpfs, so filling it fills memory.
-      final shortfall = await _spaceShortfall(
-        needed,
-        tempExtractDir,
-        freeSpace ?? PlatformServiceFactory.getInstance().freeSpaceBytes,
-      );
+      final inFlight = unpacks ?? UnpacksInFlight.shared;
+      final shortfall = await inFlight.serialised(() async {
+        final refusal = await _spaceShortfall(
+          needed,
+          tempExtractDir,
+          freeSpace ?? PlatformServiceFactory.getInstance().freeSpaceBytes,
+          inFlight,
+        );
+        if (refusal == null && needed != null && needed > 0) endUnpack = inFlight.begin(needed, tempExtractDir);
+        return refusal;
+      });
       if (shortfall != null) {
         _log.warning('refused for space', fields: {
           'archive': path.basename(archiveFile.path),
           'required': shortfall.requiredBytes,
           'available': shortfall.availableBytes,
+          'in_flight': inFlight.count,
           'into': tempExtractDir.path,
         });
         return refused(shortfall);
@@ -413,6 +426,7 @@ class ArchiveService {
       if (dir != null) await _deleteQuietly(dir);
       return ArchiveExtractionResult.failure('Extraction failed: $error');
     } finally {
+      endUnpack?.call();
       ArchiveActivity.end();
     }
   }
@@ -581,18 +595,23 @@ class ArchiveService {
   /// refusal is only ever issued against two real numbers, because refusing an
   /// unpack that would have fit is worse than the failure this prevents — the
   /// user has an archive they cannot install and no way to tell why.
+  ///
+  /// What the other unpacks in flight still have to write is part of what this one has to fit beside, so the figure named can exceed this archive's size.
   static Future<ArchiveExtractionResult?> _spaceShortfall(
     int? needed,
     Directory destination,
     Future<int?> Function(String path) freeSpace,
+    UnpacksInFlight unpacks,
   ) async {
     if (needed == null || needed <= 0) return null;
 
+    // The others first, so the free space is read after them: what they write meanwhile is then off both figures.
+    final required = needed + await unpacks.stillToWrite();
     final available = await freeSpace(destination.path);
-    if (available == null || needed <= available) return null;
+    if (available == null || required <= available) return null;
 
     return ArchiveExtractionResult.noSpace(
-      requiredBytes: needed,
+      requiredBytes: required,
       availableBytes: available,
     );
   }

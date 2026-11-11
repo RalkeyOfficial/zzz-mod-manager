@@ -28,6 +28,7 @@ import 'shader_fixes/shader_fixes_service.dart';
 import 'ini_files_stamp.dart';
 import 'ini_key_editor.dart';
 import 'ini_parser_service.dart';
+import 'writes_in_flight.dart';
 
 /// Головний сервіс для керування модами через symbolic links
 final Logger _log = Logger('mods');
@@ -1078,9 +1079,24 @@ class ModManagerService {
   /// because the longest matching term wins). Same map shape as the two above,
   /// for the same reason. An unassigned value is told too: the folder is filed
   /// under Unassigned, and only a folder with no entry has its name read.
-  /// [targetNames] maps a source folder path to the mod folder name to install
-  /// it as, in place of the source folder's own name.
+  /// [targetNames] maps a source folder path to the mod folder name to install it as, in place of the source folder's own name.
+  /// Counted in [WritesInFlight.shared] while it runs, so closing the app waits for the copy.
   Future<ImportResult> importMods(
+    List<String> folderPaths, {
+    Map<String, String>? detectionHints,
+    Map<String, ModOriginSeed>? originSeeds,
+    Map<String, String>? knownCharacters,
+    Map<String, String>? targetNames,
+  }) =>
+      WritesInFlight.shared.track(() => _importMods(
+            folderPaths,
+            detectionHints: detectionHints,
+            originSeeds: originSeeds,
+            knownCharacters: knownCharacters,
+            targetNames: targetNames,
+          ));
+
+  Future<ImportResult> _importMods(
     List<String> folderPaths, {
     Map<String, String>? detectionHints,
     Map<String, ModOriginSeed>? originSeeds,
@@ -1275,13 +1291,25 @@ class ModManagerService {
   /// `<modName>` folder is what gets activated. Returns the same
   /// [ImportResult] as [importMods] so callers can share result handling.
   ///
-  /// [origin] describes where the merged folders came from. Scalar rather than
-  /// a map because this produces exactly one mod — and for the same reason it
-  /// never carries a sibling group. [knownCharacter] is the same fact
-  /// `importMods` takes per folder: a character the caller was told rather than
-  /// one to guess at, Unassigned included, replacing name detection when it is
-  /// set.
+  /// [origin] describes where the merged folders came from. Scalar rather than a map because this produces exactly one mod — and for the same reason it never carries a sibling group.
+  /// [knownCharacter] is the same fact `importMods` takes per folder: a character the caller was told rather than one to guess at, Unassigned included, replacing name detection when it is set.
+  /// Counted in [WritesInFlight.shared], as [importMods] is.
   Future<ImportResult> importCombinedMod(
+    List<String> folderPaths,
+    String modName, {
+    String? detectionHint,
+    ModOriginSeed? origin,
+    String? knownCharacter,
+  }) =>
+      WritesInFlight.shared.track(() => _importCombinedMod(
+            folderPaths,
+            modName,
+            detectionHint: detectionHint,
+            origin: origin,
+            knownCharacter: knownCharacter,
+          ));
+
+  Future<ImportResult> _importCombinedMod(
     List<String> folderPaths,
     String modName, {
     String? detectionHint,

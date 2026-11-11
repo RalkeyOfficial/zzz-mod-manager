@@ -558,7 +558,7 @@ void main() {
       final mod = modFolder('Ellen');
       write(mod, 'Body.dds', 'v1');
       for (var i = 0; i < 5; i++) {
-        await snapshots.capture(
+        await snapshots.take(
           modName: 'Ellen',
           modUid: 'ellen-uid',
           modFolder: mod,
@@ -571,27 +571,6 @@ void main() {
       final plan = await snapshots.prune();
       expect(plan.prune.length, 2);
       expect((await snapshots.list('ellen-uid')).length, 3);
-    });
-
-    test('a snapshot survives a missing manifest', () async {
-      final mod = modFolder('Ellen');
-      write(mod, 'Body.dds', 'v1');
-      final taken = await snapshots.capture(
-        modName: 'Ellen',
-        modUid: 'ellen-uid',
-        modFolder: mod,
-        reason: SnapshotReason.beforeUpdate,
-      );
-      File(p.join(taken!.directory.path, 'manifest.json')).deleteSync();
-
-      final listed = await snapshots.list('ellen-uid');
-      expect(listed.length, 1);
-      expect(listed.single.sizeBytes, greaterThan(0));
-      expect(listed.single.modUid, 'ellen-uid',
-          reason: 'the group it is in answers for which mod it is, so a '
-              'manifest that cannot be read costs a display name and not the '
-              'snapshot');
-      expect(listed.single.modName, isEmpty);
     });
   });
 
@@ -812,7 +791,7 @@ class _RefusingSnapshots extends SnapshotService {
   _RefusingSnapshots({required super.rootPath});
 
   @override
-  Future<ModSnapshot?> capture({
+  Future<SnapshotAttempt> take({
     required String modName,
     required String modUid,
     required Directory modFolder,
@@ -821,5 +800,5 @@ class _RefusingSnapshots extends SnapshotService {
     String? versionLabel,
     DateTime? now,
   }) async =>
-      null;
+      const SnapshotAttempt.failed();
 }

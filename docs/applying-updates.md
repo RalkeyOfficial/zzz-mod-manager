@@ -566,6 +566,22 @@ It is also the only recovery from a wipe or a copy that fails part-way: the fold
 is emptied in place with no aside-folder to fall back on, and a partly-written one
 holds some of the new files and nothing of the old.
 
+### A write needs room for its snapshot, and a failed one leaves nothing
+
+**A snapshot that provably will not fit is refused before a byte is copied** (`SnapshotService.take`), and with it the write: an update, a restore, a patch put into an installed mod and taking a patch out all stop at that point with the folder as it was.
+The free space is asked of the backups folder (or the nearest folder above it that exists) through the same `PlatformService.freeSpaceBytes` the transfer and the unpack ask ([`downloads.md`](downloads.md) §4.1), and only when it is known is the mod folder walked for what it needs; the snapshot's recorded size comes from the copy itself, so the walk is not repeated.
+The rule is theirs too: a refusal is issued only against two real numbers, so an unknown free space copies anyway, and a walk that could not read everything still refuses when what it did read is already over the free space.
+The refusal is a typed value with both figures (`SnapshotNoRoom`, carried on `UpdateApplyResult.snapshotNoRoom` and `PatchRemovalResult.snapshotNoRoom` beside the `snapshot` failure), so a caller can tell "no room for a snapshot" from a snapshot that failed for another reason, and the words are the caller's. No screen shows the figures yet: each of these still says only that the saved version could not be taken.
+The size is apparent, as everywhere else in the app ([`disk-usage.md`](disk-usage.md)): a volume that would store the copy as a copy-on-write clone could have taken a snapshot this refuses.
+
+**A capture that fails part-way deletes the directory it made**, and the group's directory when that leaves it empty, so no partial snapshot is ever listed, let alone the newest of its mod.
+That matters beyond the space it wastes: retention never prunes a mod's newest snapshot, so a partial one in that place would push out the last good one, and a restore from it would remove every file it is missing.
+
+**The manifest is written last, and a directory without one is not a snapshot.** A capture killed before it finished (the app closed past the bound of the close guard, [`downloads.md`](downloads.md) §10, or the machine lost power) leaves a directory the catch above never ran for, and its missing manifest is what marks it.
+History, retention and the Storage figure skip it; it goes when its mod's saved versions are deleted, or with the reclaim's unclaimed groups once the mod no longer exists ([`disk-usage.md`](disk-usage.md) §5).
+A manifest that is there but cannot be read still lists the snapshot (below), since its presence means the copy before it finished.
+Deleting a snapshot removes its manifest first, so a delete that stops part-way also leaves a directory that is not listed, rather than a manifest beside half its files.
+
 ### A patch's displaced files are kept separately, and in the folder
 
 A snapshot answers "put this mod back as it was". Taking a patch out asks
@@ -655,29 +671,18 @@ matches might be a mod the user renamed and still wants.
 
 Two consequences worth stating:
 
-- **The uid is assigned by the snapshot itself.** `UpdateApplier` calls
-  `ModUid.ensure` before every capture, so **no identity means no snapshot** and
-  therefore no write — the same refusal a snapshot that could not be taken already
-  produces. The only folder that hits it is one whose sidecar cannot be written,
-  which the copy would fail on a moment later anyway.
-- **A restore cannot cost a mod its identity.** A snapshot is a complete copy,
-  sidecar included, and a restore overwrites with the same semantics — so a restored
-  sidecar carries whatever uid it held when taken. Because `ensure` always runs
-  before `capture`, every snapshot in this store was taken *after* its folder had a
-  uid, and rolling one back restores that same identity rather than none. That
-  ordering is load-bearing: reversed, the first rollback would strand every saved
-  version of the mod at the moment of recovery.
+- **The uid is assigned by the snapshot itself.** `UpdateApplier` calls `ModUid.ensure` before every `SnapshotService.take`, so **no identity means no snapshot** and therefore no write — the same refusal a snapshot that could not be taken already produces.
+  The only folder that hits it is one whose sidecar cannot be written, which the copy would fail on a moment later anyway.
+- **A restore cannot cost a mod its identity.** A snapshot is a complete copy, sidecar included, and a restore overwrites with the same semantics — so a restored sidecar carries whatever uid it held when taken.
+  Because `ensure` always runs before `take`, every snapshot in this store was taken *after* its folder had a uid, and rolling one back restores that same identity rather than none. That ordering is load-bearing: reversed, the first rollback would strand every saved version of the mod at the moment of recovery.
 
 The cost is a directory nobody can read by eye. Each manifest carries the name the
 mod had when its snapshot was taken, which is what a screen shows; the path is for
 the machine.
 
-The manifest sits **beside** `files/` rather than inside it, so a restore copies
-`files/` back wholesale without carrying bookkeeping into the mod. The sidecar **is**
-included: a rollback that restored the files but kept the new origin block would leave
-the app checking for updates against a file the folder no longer holds. A corrupt or
-missing manifest never hides the snapshot — the files are still restorable, and a
-rollback the user cannot reach is the failure this exists to prevent.
+The manifest sits **beside** `files/` rather than inside it, so a restore copies `files/` back wholesale without carrying bookkeeping into the mod.
+The sidecar **is** included: a rollback that restored the files but kept the new origin block would leave the app checking for updates against a file the folder no longer holds.
+A corrupt manifest never hides the snapshot — the files are still restorable, and a rollback the user cannot reach is the failure this exists to prevent. A missing one does, since it marks a copy that never finished or a delete that stopped part-way (above).
 
 `manifest.json` is its own small format and is **not** the mod sidecar; nothing in
 [`metadata-schema.md`](metadata-schema.md) describes it. Fields: `mod` (**the name

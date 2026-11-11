@@ -170,7 +170,7 @@ void main() {
   /// Takes a snapshot of a folder under [uid], so the Saved versions category has a group.
   Future<void> snapshotOf(WidgetTester tester, StorageRoots roots, String folder, String uid, String name) async {
     await tester.runAsync(() async {
-      await SnapshotService(rootPath: roots.backups.path).capture(
+      await SnapshotService(rootPath: roots.backups.path).take(
         modName: name,
         modUid: uid,
         modFolder: Directory(path.join(root.path, folder)),
@@ -1110,7 +1110,7 @@ void main() {
       File(path.join(target.path, 'body.ini')).writeAsBytesSync(List<int>.filled(4096, 0));
       Link(path.join(root.path, 'mods', 'Linked')).createSync(target.path);
       await tester.runAsync(() async {
-        await SnapshotService(rootPath: roots.backups.path).capture(
+        await SnapshotService(rootPath: roots.backups.path).take(
           modName: 'Linked',
           modUid: 'u-linked',
           modFolder: target,

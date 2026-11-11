@@ -553,4 +553,83 @@ void main() {
       expect(await service.migrateModName('Winter Maid', 'Winter Maid 2'), isFalse);
     });
   });
+
+  group('writing config.json', () {
+    File tempFile() => File('${configFile().path}.tmp');
+
+    test('a save is renamed into place, leaving no temporary file', () async {
+      final service = await build();
+      expect(await service.setModNote('Winter Maid', 'the blue one'), isTrue);
+
+      expect(tempFile().existsSync(), isFalse);
+      expect((await readFile())['mod_notes'], {'Winter Maid': 'the blue one'});
+    });
+
+    test('a save that fails part-way leaves the previous file whole', () async {
+      final service = await build();
+      expect(await service.setModNote('Winter Maid', 'kept'), isTrue);
+      final before = await configFile().readAsString();
+
+      // A folder where the temporary file goes, so the write fails before the rename.
+      Directory(tempFile().path).createSync();
+      expect(await service.setModNote('Winter Maid', 'lost'), isFalse);
+      expect(await configFile().readAsString(), before);
+
+      Directory(tempFile().path).deleteSync();
+      expect(await service.setModNote('Winter Maid', 'written'), isTrue);
+      expect((await readFile())['mod_notes'], {'Winter Maid': 'written'});
+    });
+
+    test('overlapping saves end with the last state on disk', () async {
+      final service = await build();
+      final saves = [
+        for (var i = 0; i < 5; i++) service.setModNote('Winter Maid', 'note $i'),
+      ];
+
+      expect(await Future.wait(saves), everyElement(isTrue));
+      expect((await readFile())['mod_notes'], {'Winter Maid': 'note 4'});
+      expect(tempFile().existsSync(), isFalse);
+    });
+
+    test('a save asked for while another writes is written after it, with the newer state', () async {
+      final service = await build();
+      final first = service.setModNote('Winter Maid', 'first');
+      // Lets the first save start writing before the second is asked for.
+      await Future<void>.delayed(Duration.zero);
+      final second = service.setModNote('Winter Maid', 'second');
+
+      expect(await first, isTrue);
+      expect(await second, isTrue);
+      expect((await readFile())['mod_notes'], {'Winter Maid': 'second'});
+    });
+
+    test('a leftover temporary file is not read, and the next save writes over it', () async {
+      await (await build()).setMarketplaceSort('mostLiked');
+      tempFile().writeAsStringSync('{ "marketplace_sort": "torn');
+
+      SharedPreferences.setMockInitialValues({});
+      final next = await build();
+      expect(await next.loadFromFile(), isTrue);
+      expect(next.marketplaceSort, 'mostLiked');
+
+      await next.setMarketplaceSort('newest');
+      expect(tempFile().existsSync(), isFalse);
+      expect((await readFile())['marketplace_sort'], 'newest');
+    });
+
+    test('with config.json gone, a whole temporary file is what loads', () async {
+      await (await build()).setMarketplaceSort('mostLiked');
+      configFile().renameSync(tempFile().path);
+
+      SharedPreferences.setMockInitialValues({});
+      final next = await build();
+      expect(await next.loadFromFile(), isTrue);
+      expect(next.marketplaceSort, 'mostLiked');
+    });
+
+    test('with config.json gone, a torn temporary file loads nothing', () async {
+      tempFile().writeAsStringSync('{ "marketplace_sort": "torn');
+      expect(await (await build()).loadFromFile(), isFalse);
+    });
+  });
 }

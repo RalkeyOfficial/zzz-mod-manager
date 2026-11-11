@@ -36,6 +36,7 @@ import '../services/shader_fixes/zzmi_layout.dart';
 import '../services/storage/storage_scanner.dart';
 import '../services/update_check.dart';
 import '../services/update_check_run.dart';
+import '../services/writes_in_flight.dart';
 import 'categories.dart';
 import 'directory_size.dart';
 import 'mod_sorting.dart';
@@ -1317,29 +1318,32 @@ final _modWriteCountsProvider = StateProvider<Map<String, int>>((ref) => const {
 /// end (`UpdateCheckStart`), which catches a write that ended before the results landed but whose rescan hadn't.
 final modWritesStartedProvider = StateProvider<Map<String, int>>((ref) => const {});
 
-/// Runs [write] with [modId] in [modWritesInProgressProvider], counted in [modWritesStartedProvider].
-Future<T> whileWritingMod<T>(ProviderContainer container, String modId, Future<T> Function() write) async {
-  final counts = container.read(_modWriteCountsProvider.notifier);
-  final busy = container.read(modWritesInProgressProvider.notifier);
-  void add(int delta) {
-    final count = (counts.state[modId] ?? 0) + delta;
-    counts.state = {...counts.state, modId: count}..removeWhere((_, n) => n <= 0);
-    busy.state = counts.state.keys.toSet();
-  }
+/// Runs [write] with [modId] in [modWritesInProgressProvider], counted in [modWritesStartedProvider] and in [WritesInFlight.shared], which closing the app waits for.
+///
+/// [WritesInFlight.track] is outermost, so a write that closing holds back marks nothing and leaves no mod waiting on it.
+Future<T> whileWritingMod<T>(ProviderContainer container, String modId, Future<T> Function() write) =>
+    WritesInFlight.shared.track(() async {
+      final counts = container.read(_modWriteCountsProvider.notifier);
+      final busy = container.read(modWritesInProgressProvider.notifier);
+      void add(int delta) {
+        final count = (counts.state[modId] ?? 0) + delta;
+        counts.state = {...counts.state, modId: count}..removeWhere((_, n) => n <= 0);
+        busy.state = counts.state.keys.toSet();
+      }
 
-  final started = container.read(modWritesStartedProvider.notifier);
-  started.state = {...started.state, modId: (started.state[modId] ?? 0) + 1};
-  add(1);
-  try {
-    return await write();
-  } finally {
-    add(-1);
-    if (!busy.state.contains(modId)) {
-      final marked = container.read(_turnedOffDuringWriteProvider.notifier);
-      if (marked.state.contains(modId)) marked.state = {...marked.state}..remove(modId);
-    }
-  }
-}
+      final started = container.read(modWritesStartedProvider.notifier);
+      started.state = {...started.state, modId: (started.state[modId] ?? 0) + 1};
+      add(1);
+      try {
+        return await write();
+      } finally {
+        add(-1);
+        if (!busy.state.contains(modId)) {
+          final marked = container.read(_turnedOffDuringWriteProvider.notifier);
+          if (marked.state.contains(modId)) marked.state = {...marked.state}..remove(modId);
+        }
+      }
+    });
 
 /// The mods One at a time turned off while their folders were being written. The write leaves such a mod off when it
 /// ends rather than turning it back on, which would also place its shader files again (`docs/applying-updates.md`).

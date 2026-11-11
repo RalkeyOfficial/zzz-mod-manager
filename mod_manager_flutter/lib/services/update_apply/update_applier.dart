@@ -282,19 +282,20 @@ class UpdateApplier {
     if (wasActive) await activation.deactivate(modName);
 
     _report(onStep, UpdateWriteStep.savingSnapshot);
-    final snapshot = await _snapshot(
+    final attempt = await _snapshot(
       modName: modName,
       modFolder: modFolder,
       reason: SnapshotReason.beforeUpdate,
       version: previousVersion,
       versionLabel: previousVersionLabel,
     );
+    final snapshot = attempt.snapshot;
     if (snapshot == null) {
       // No snapshot, no write. There is no other way back from an overwrite, so
       // proceeding here would trade a recoverable failure for an unrecoverable
       // one.
       await _reactivate(modName, wasActive: wasActive, onStep: onStep);
-      return UpdateApplyResult.failed(UpdateApplyFailure.snapshot);
+      return UpdateApplyResult.failed(UpdateApplyFailure.snapshot, snapshotNoRoom: attempt.noRoom);
     }
 
     // Read *before* the copy: after it, the folder's keybinds are the new
@@ -552,15 +553,16 @@ class UpdateApplier {
     if (wasActive) await activation.deactivate(modName);
 
     _report(onStep, UpdateWriteStep.savingSnapshot);
-    final snapshot = await _snapshot(
+    final attempt = await _snapshot(
       modName: modName,
       modFolder: modFolder,
       reason: SnapshotReason.beforeUpdate,
     );
+    final snapshot = attempt.snapshot;
     if (snapshot == null) {
       // No snapshot, no write — the same trade [apply] refuses to make.
       await _reactivate(modName, wasActive: wasActive, onStep: onStep);
-      return UpdateApplyResult.failed(UpdateApplyFailure.snapshot);
+      return UpdateApplyResult.failed(UpdateApplyFailure.snapshot, snapshotNoRoom: attempt.noRoom);
     }
 
     final keybindsBefore = await _keybindsIn(
@@ -708,14 +710,15 @@ class UpdateApplier {
     final wasActive = await activation.isActive(modName);
     if (wasActive) await activation.deactivate(modName);
 
-    final snapshot = await _snapshot(
+    final attempt = await _snapshot(
       modName: modName,
       modFolder: modFolder,
       reason: SnapshotReason.beforePatchRemoval,
     );
+    final snapshot = attempt.snapshot;
     if (snapshot == null) {
       if (wasActive) await activation.activate(modName);
-      return const PatchRemovalResult(failure: UpdateApplyFailure.snapshot);
+      return PatchRemovalResult(failure: UpdateApplyFailure.snapshot, snapshotNoRoom: attempt.noRoom);
     }
 
     final restored = <String>[];
@@ -777,14 +780,15 @@ class UpdateApplier {
     final wasActive = await activation.isActive(modName);
     if (wasActive) await activation.deactivate(modName);
 
-    final safety = await _snapshot(
+    final attempt = await _snapshot(
       modName: modName,
       modFolder: modFolder,
       reason: SnapshotReason.beforeRestore,
     );
+    final safety = attempt.snapshot;
     if (safety == null) {
       if (wasActive) await activation.activate(modName);
-      return UpdateApplyResult.failed(UpdateApplyFailure.snapshot);
+      return UpdateApplyResult.failed(UpdateApplyFailure.snapshot, snapshotNoRoom: attempt.noRoom);
     }
 
     final restoring = await readFolderContents(
@@ -824,12 +828,9 @@ class UpdateApplier {
   /// its name — so a rename, in the app or in a file manager, leaves every
   /// rollback point reachable.
   ///
-  /// **No identity, no snapshot, and therefore no write.** The uid is assigned
-  /// here if the folder has never needed one, so the only way this returns null
-  /// is a sidecar that cannot be written — a folder the copy about to follow
-  /// would fail on anyway. The alternative is putting a snapshot somewhere
-  /// nothing can ever find again, which is not a way back at all.
-  Future<ModSnapshot?> _snapshot({
+  /// **No identity, no snapshot, and therefore no write.** The uid is assigned here if the folder has never needed one, so a missing uid is a sidecar that cannot be written — a folder the copy about to follow would fail on anyway.
+  /// The alternative is putting a snapshot somewhere nothing can ever find again, which is not a way back at all.
+  Future<SnapshotAttempt> _snapshot({
     required String modName,
     required Directory modFolder,
     required SnapshotReason reason,
@@ -837,8 +838,8 @@ class UpdateApplier {
     String? versionLabel,
   }) async {
     final uid = await uids.ensure(modFolder);
-    if (uid == null) return null;
-    return snapshots.capture(
+    if (uid == null) return const SnapshotAttempt.failed();
+    return snapshots.take(
       modName: modName,
       modUid: uid,
       modFolder: modFolder,
@@ -1095,12 +1096,14 @@ class UpdateApplyResult {
     this.placedFrom = const <String, InstalledFile>{},
     this.patchFiles = const <String>[],
     this.missingPatchFiles = const <String>[],
+    this.snapshotNoRoom,
   });
 
   factory UpdateApplyResult.failed(
     UpdateApplyFailure failure, {
     ModSnapshot? snapshot,
     String? error,
+    SnapshotNoRoom? snapshotNoRoom,
   }) =>
       UpdateApplyResult(
         snapshot: snapshot,
@@ -1109,6 +1112,7 @@ class UpdateApplyResult {
         reactivated: false,
         failure: failure,
         error: error,
+        snapshotNoRoom: snapshotNoRoom,
       );
 
   /// The snapshot taken before writing. Present even on a [UpdateApplyFailure.copy]
@@ -1183,6 +1187,9 @@ class UpdateApplyResult {
   /// corruption. Named so the caller can say what it could not put back.
   final List<String> missingPatchFiles;
 
+  /// Set with [UpdateApplyFailure.snapshot] when the snapshot was refused for space, with both figures. Nothing was written.
+  final SnapshotNoRoom? snapshotNoRoom;
+
   bool get success => failure == null;
 }
 
@@ -1200,6 +1207,7 @@ class PatchRemovalResult {
     this.failed = const <String>[],
     this.reactivated = false,
     this.failure,
+    this.snapshotNoRoom,
   });
 
   /// Taken before anything changed. Present even on a partial failure — that is
@@ -1221,6 +1229,9 @@ class PatchRemovalResult {
   /// Set when nothing was done at all. A per-file problem lands in [failed]
   /// instead: the folder did change, and the caller must not report otherwise.
   final UpdateApplyFailure? failure;
+
+  /// Set with [UpdateApplyFailure.snapshot] when the snapshot was refused for space, with both figures.
+  final SnapshotNoRoom? snapshotNoRoom;
 
   bool get success => failure == null;
 }

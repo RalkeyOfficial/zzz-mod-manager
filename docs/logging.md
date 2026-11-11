@@ -45,9 +45,7 @@ The distinction that matters in practice is **warning vs error**: anything a use
 would describe as "it didn't work" is `error` or above, because that is what
 somebody reading a log for a bug report greps for first.
 
-`critical` has exactly one non-crash site — `SnapshotService.capture` failing —
-because the applier's contract is that nothing is written without a snapshot
-first, and that is the moment the contract breaks.
+`critical` has exactly one non-crash site — `SnapshotService.take` failing (a refusal for space is a `warning`) — because the applier's contract is that nothing is written without a snapshot first, and that is the moment the contract breaks.
 
 `error` and `critical` flush the file immediately. Everything else is buffered:
 flushing per line would make a library scan I/O-bound.
@@ -87,7 +85,7 @@ than which file noticed it.
 
 | Tag | Owns |
 |---|---|
-| `app` | Startup, the header, first run, a failed initialisation |
+| `app` | Startup, the header, first run, a failed initialisation, closing while writes are in flight |
 | `system` | The machine description (§7) |
 | `gamebanana.client` | Requests, responses, retries, cache, parse failures |
 | `download` | Resume decisions, stalls, collisions |

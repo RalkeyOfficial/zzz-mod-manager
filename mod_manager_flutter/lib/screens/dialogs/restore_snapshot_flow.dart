@@ -12,6 +12,7 @@ import '../../services/backup/snapshot_service.dart';
 import '../../services/log/logger.dart';
 import '../../services/update_apply/mod_activation_port.dart';
 import '../../services/update_apply/update_applier.dart';
+import '../../services/writes_in_flight.dart';
 import '../../utils/notification_actions.dart';
 import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
@@ -122,15 +123,19 @@ Future<UpdateApplyResult> writeSnapshotBack(
     snapshots: snapshots,
     activation: ModManagerActivationPort(mods, leaveOff: (m) => leftOffAfterWrite(container, m)),
   );
-  final result = await whileWritingMod(
-    container,
-    mod.id,
-    () => applier.restore(modName: mod.id, modFolder: Directory(path.join(modsPath, mod.id)), snapshot: snapshot),
-  );
+  // The prune is part of the write, so closing the app waits for it too.
+  final result = await WritesInFlight.shared.track(() async {
+    final result = await whileWritingMod(
+      container,
+      mod.id,
+      () => applier.restore(modName: mod.id, modFolder: Directory(path.join(modsPath, mod.id)), snapshot: snapshot),
+    );
 
-  // A rollback takes a safety copy of its own before it writes, so the store's budget moved here as on any other
-  // write. Whether the restore landed or not: the copy was taken first.
-  if (result.snapshot != null) await snapshots.prune();
+    // A rollback takes a safety copy of its own before it writes, so the store's budget moved here as on any other write.
+    // Whether the restore landed or not: the copy was taken first.
+    if (result.snapshot != null) await snapshots.prune();
+    return result;
+  });
   container.invalidate(modBackupsProvider);
   // Read again whatever the stamp says: a restore puts back old times, which can match what was there before.
   mods.invalidateKeybinds(mod.id);

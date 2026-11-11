@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
 import 'package:mod_manager_flutter/services/archive_hash.dart';
 import 'package:mod_manager_flutter/services/archive_service.dart';
+import 'package:mod_manager_flutter/services/unpacks_in_flight.dart';
 
 import 'support/system_temp.dart';
 
@@ -22,6 +23,17 @@ File _makeZip(String zipPath, Map<String, String> entries) {
   final bytes = ZipEncoder().encode(archive)!;
   final file = File(zipPath)..writeAsBytesSync(bytes);
   return file;
+}
+
+/// An [UnpacksInFlight] that remembers the size of every unpack registered with it.
+class _RecordingUnpacks extends UnpacksInFlight {
+  final List<int> begun = [];
+
+  @override
+  void Function() begin(int bytes, Directory into) {
+    begun.add(bytes);
+    return super.begin(bytes, into);
+  }
 }
 
 /// Sorted top-level entry names inside [dir].
@@ -463,6 +475,96 @@ void main() {
       );
 
       expect(result.failure, ExtractFailure.other);
+    });
+
+    group('beside other unpacks', () {
+      // What another unpack's folder holds so far, held fixed so a test reads the same figure whenever it asks.
+      UnpacksInFlight ledger({int written = 0}) => UnpacksInFlight(written: (_) async => written);
+
+      Future<ArchiveExtractionResult> extract(UnpacksInFlight unpacks, int free) async {
+        final zip = _makeZip(path.join(tmp.path, 'Mod.zip'), entries());
+        final dest = Directory(path.join(tmp.path, 'out'))..createSync();
+        addTearDown(() {
+          if (dest.existsSync()) dest.deleteSync(recursive: true);
+        });
+        return ArchiveService.extractArchive(
+          archiveFile: File(zip.path),
+          destinationDir: dest,
+          freeSpace: (_) async => free,
+          unpacks: unpacks,
+        );
+      }
+
+      test('counts what two unpacks in flight still have to write', () async {
+        final unpacks = ledger(written: 1000);
+        unpacks.begin(4000, Directory(path.join(tmp.path, 'a')));
+        unpacks.begin(3000, Directory(path.join(tmp.path, 'b')));
+
+        // 5000 for this one, 3000 and 2000 left for the others.
+        final refused = await extract(unpacks, 9999);
+        expect(refused.failure, ExtractFailure.insufficientSpace);
+        expect(refused.requiredBytes, 10000);
+        expect(refused.availableBytes, 9999);
+
+        expect((await extract(unpacks, 10000)).success, isTrue);
+      });
+
+      test('an unpack that has ended is not counted', () async {
+        final unpacks = ledger();
+        final end = unpacks.begin(4000, Directory(path.join(tmp.path, 'a')));
+        expect((await extract(unpacks, 5000)).failure, ExtractFailure.insufficientSpace);
+
+        end();
+        end();
+        expect((await extract(unpacks, 5000)).success, isTrue);
+        expect(unpacks.count, 0, reason: 'each unpack lets go of its place when it ends');
+      });
+
+      test('an unpack further along than its listing counts nothing more', () async {
+        final unpacks = ledger(written: 9000);
+        unpacks.begin(4000, Directory(path.join(tmp.path, 'a')));
+        expect((await extract(unpacks, 5000)).success, isTrue);
+      });
+
+      test('an unpack that fails after it was registered lets go of its place', () async {
+        final unpacks = _RecordingUnpacks();
+        final zip = _makeZip(path.join(tmp.path, 'Mod.zip'), entries());
+        // A file where the unpack's folder should be: the check passes and registers, and the unpack cannot write.
+        final notAFolder = File(path.join(tmp.path, 'out'))..writeAsStringSync('');
+
+        final result = await ArchiveService.extractArchive(
+          archiveFile: zip,
+          destinationDir: Directory(notAFolder.path),
+          freeSpace: (_) async => 1 << 30,
+          unpacks: unpacks,
+        );
+
+        expect(result.success, isFalse);
+        expect(unpacks.begun, [5000], reason: 'it was registered before the unpack failed');
+        expect(unpacks.count, 0);
+      });
+
+      test('two unpacks started together are checked one after the other, so they cannot both pass', () async {
+        final unpacks = ledger();
+        Future<ArchiveExtractionResult> start(String name) {
+          final zip = _makeZip(path.join(tmp.path, '$name.zip'), entries());
+          final dest = Directory(path.join(tmp.path, 'out_$name'))..createSync();
+          return ArchiveService.extractArchive(
+            archiveFile: File(zip.path),
+            destinationDir: dest,
+            freeSpace: (_) async => 7000,
+            unpacks: unpacks,
+          );
+        }
+
+        final results = await Future.wait([start('One'), start('Two')]);
+
+        expect(results.where((r) => r.success), hasLength(1));
+        final refused = results.singleWhere((r) => !r.success);
+        expect(refused.failure, ExtractFailure.insufficientSpace);
+        expect(refused.requiredBytes, 10000);
+        expect(unpacks.count, 0);
+      });
     });
   });
 

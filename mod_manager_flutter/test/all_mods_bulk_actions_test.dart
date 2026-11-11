@@ -477,7 +477,7 @@ void main() {
         late String uid;
         await tester.runAsync(() async {
           uid = (await ModUid().ensure(temp.modFolder(name)))!;
-          await temp.snapshots.capture(
+          await temp.snapshots.take(
             modName: name,
             modUid: uid,
             modFolder: temp.modFolder(name),

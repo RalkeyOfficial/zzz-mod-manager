@@ -58,6 +58,12 @@ App-data locations are `~/.local/share/zzz-mod-manager` (Linux) and
 }
 ```
 
+**`config.json` is written whole and atomically, one save at a time.** A save writes `config.json.tmp` beside it, flushed to disk, and renames it over `config.json`, so a save killed or failing part-way leaves the previous file whole rather than a torn one that would fail to load and reset the library paths.
+Turning a mod on or off saves, so saves overlap whenever several mods change at once; they are serialised, and a save reads the settings when it starts, so the file always ends with the last state asked for, and saves asked for while one waits are written once.
+
+A leftover `config.json.tmp` is a save that never finished, and the next save writes over it. It is read only when `config.json` itself is missing, which is what a save stopped part-way through a rename that removes the old file before moving the new one leaves behind; a temporary file that does not decode loads nothing, as a torn `config.json` would.
+A rename the system refuses, such as over a file another program holds open, fails that save and keeps the old file, and the next save tries again. None of this has been run on Windows, where whether the rename replaces the old file in one step is not known here.
+
 ---
 
 ## 2. Every key

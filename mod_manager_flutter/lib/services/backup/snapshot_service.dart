@@ -7,6 +7,7 @@ import '../../utils/directory_copy.dart';
 import '../../utils/directory_size.dart';
 import '../../utils/path_helper.dart';
 import '../log/logger.dart';
+import '../platform_service_factory.dart';
 import 'retention.dart';
 
 final Logger _log = Logger('snapshot');
@@ -63,11 +64,23 @@ final Logger _log = Logger('snapshot');
 /// carries the name the mod had when it was taken, which is what a screen
 /// shows; the path is for the machine.
 class SnapshotService {
-  SnapshotService({String? rootPath, this.policy = RetentionPolicy.standard})
-      : _rootPath = rootPath;
+  /// [freeSpace] is the free-space seam `ArchiveService.extractArchive` and `DownloadService` take, for the preflight in [take]; the platform's answer by default.
+  /// [deleteTree] removes a snapshot's directory once its manifest is gone; a recursive delete by default, injected by a test that needs it to stop part-way.
+  SnapshotService({
+    String? rootPath,
+    this.policy = RetentionPolicy.standard,
+    Future<int?> Function(String path)? freeSpace,
+    Future<void> Function(Directory dir)? deleteTree,
+  })  : _rootPath = rootPath,
+        _freeSpace = freeSpace,
+        _deleteTree = deleteTree ?? _deleteRecursively;
 
   final String? _rootPath;
   final RetentionPolicy policy;
+  final Future<void> Function(Directory dir) _deleteTree;
+
+  static Future<void> _deleteRecursively(Directory dir) => dir.delete(recursive: true);
+  final Future<int?> Function(String path)? _freeSpace;
 
   /// `<appData>/backups`, or an injected path in tests.
   String get rootPath => _rootPath ?? path.join(PathHelper.getAppDataPath(), 'backups');
@@ -76,15 +89,14 @@ class SnapshotService {
 
   Directory _groupDir(String modUid) => Directory(path.join(rootPath, modUid));
 
-  /// Copies [modFolder] into a new snapshot. Returns null if nothing could be
-  /// written — a full disk, a read-only app-data directory.
+  /// Copies [modFolder] into a new snapshot, or says why nothing was written.
   ///
-  /// A failure here is the caller's cue to **stop**, not to carry on unprotected:
-  /// there is no other way back from an overwrite.
-  /// [modUid] is which group this belongs to — the mod's identity, not its name
-  /// ([ModUid]). [modName] is recorded in the manifest as what the mod was
-  /// called at the time, for a screen to show.
-  Future<ModSnapshot?> capture({
+  /// A failure here is the caller's cue to **stop**, not to carry on unprotected: there is no other way back from an overwrite.
+  /// [modUid] is which group this belongs to — the mod's identity, not its name ([ModUid]). [modName] is recorded in the manifest as what the mod was called at the time, for a screen to show.
+  ///
+  /// **Refused before copying when the folder provably will not fit** in the backups volume ([SnapshotAttempt.noRoom]), against two real numbers as the unpack's check is: an unknown free space copies anyway.
+  /// A copy that fails part-way deletes the directory it made, so no partial snapshot is ever the newest of its mod.
+  Future<SnapshotAttempt> take({
     required String modName,
     required String modUid,
     required Directory modFolder,
@@ -93,30 +105,42 @@ class SnapshotService {
     String? versionLabel,
     DateTime? now,
   }) async {
+    Directory? dir;
     try {
-      if (!await modFolder.exists()) return null;
+      if (!await modFolder.exists()) return const SnapshotAttempt.failed();
+
+      final noRoom = await _spaceShortfall(modFolder);
+      if (noRoom != null) {
+        _log.warning('refused for space', fields: {
+          'mod': modName,
+          'required': noRoom.requiredBytes,
+          'available': noRoom.availableBytes,
+        });
+        return SnapshotAttempt.refused(noRoom);
+      }
+
       final takenAt = now ?? DateTime.now();
-      final dir = await _createSnapshotDir(modUid, takenAt);
+      dir = await _createSnapshotDir(modUid, takenAt);
       final files = Directory(path.join(dir.path, 'files'));
 
-      final written = (await copyDirectory(modFolder, files)).length;
-      final size = await _directorySize(files);
+      final written = await copyDirectory(modFolder, files);
 
       final snapshot = ModSnapshot(
         modName: modName,
         modUid: modUid,
         id: path.basename(dir.path),
         takenAt: takenAt,
-        sizeBytes: size,
-        fileCount: written,
+        sizeBytes: written.fold(0, (sum, file) => sum + file.bytes),
+        fileCount: written.length,
         reason: reason,
         version: version,
         versionLabel: versionLabel,
         directory: dir,
       );
+      // Written last: its presence is what marks the copy as whole ([_read]).
       await File(path.join(dir.path, _manifestName))
           .writeAsString(const JsonEncoder.withIndent('  ').convert(snapshot.toJson()));
-      return snapshot;
+      return SnapshotAttempt.taken(snapshot);
     } catch (e) {
       // **Critical, and the only place that earns it.** The applier's contract
       // is that no update is written without a snapshot first; this is the
@@ -124,7 +148,8 @@ class SnapshotService {
       // overwritten with no way back.
       _log.critical('could not take a snapshot',
           error: e, fields: {'mod': modName});
-      return null;
+      await _discard(modUid, dir);
+      return const SnapshotAttempt.failed();
     }
   }
 
@@ -211,15 +236,8 @@ class SnapshotService {
 
   Future<bool> delete(ModSnapshot snapshot) async {
     try {
-      if (await snapshot.directory.exists()) {
-        await snapshot.directory.delete(recursive: true);
-      }
-      // Leave no empty group directory behind — it would otherwise show up in
-      // `listAll` forever as a mod with no snapshots.
-      final groupDir = _groupDir(snapshot.modUid);
-      if (await groupDir.exists() && await groupDir.list().isEmpty) {
-        await groupDir.delete();
-      }
+      await _deleteSnapshotDir(snapshot.directory);
+      await _deleteGroupIfEmpty(snapshot.modUid);
       return true;
     } catch (e) {
       _log.warning('could not delete a snapshot',
@@ -239,6 +257,9 @@ class SnapshotService {
     final dir = _groupDir(modUid);
     try {
       if (!await dir.exists()) return true;
+      await for (final entity in dir.list(followLinks: false)) {
+        if (entity is Directory) await _deleteSnapshotDir(entity);
+      }
       await dir.delete(recursive: true);
       return true;
     } catch (e) {
@@ -299,16 +320,66 @@ class SnapshotService {
     throw StateError('could not allocate a snapshot directory for $modUid');
   }
 
+  /// Deletes one snapshot's directory, its manifest first, so a delete stopped part-way leaves a directory [_read] does not list rather than a manifest beside half its files.
+  Future<void> _deleteSnapshotDir(Directory dir) async {
+    if (!await dir.exists()) return;
+    final manifest = File(path.join(dir.path, _manifestName));
+    if (await manifest.exists()) await manifest.delete();
+    await _deleteTree(dir);
+  }
+
+  /// Leaves no empty group directory behind: it would otherwise read as a mod with snapshots in [uidsWithSnapshots].
+  Future<void> _deleteGroupIfEmpty(String modUid) async {
+    final groupDir = _groupDir(modUid);
+    if (await groupDir.exists() && await groupDir.list().isEmpty) {
+      await groupDir.delete();
+    }
+  }
+
+  /// Deletes what a failed [take] made. Never throws: the failure being reported is the capture's.
+  Future<void> _discard(String modUid, Directory? dir) async {
+    try {
+      if (dir != null) await _deleteSnapshotDir(dir);
+      await _deleteGroupIfEmpty(modUid);
+    } catch (e) {
+      _log.warning('could not delete an unfinished snapshot',
+          error: e, fields: {'uid': modUid, 'snapshot': dir?.path});
+    }
+  }
+
+  /// A refusal when [modFolder] provably will not fit in the backups volume, or null to carry on: an unknown free space, an empty folder, or room.
+  ///
+  /// The free space is asked first, so an unknown one costs no walk. A walk that could not read everything still refuses when what it did read is over the free space, since the copy needs at least that.
+  Future<SnapshotNoRoom?> _spaceShortfall(Directory modFolder) async {
+    final freeSpace = _freeSpace ?? PlatformServiceFactory.getInstance().freeSpaceBytes;
+    final available = await freeSpace(await _nearestExisting(rootPath));
+    if (available == null) return null;
+    final needed = (await measureDirectory(modFolder.path)).bytes;
+    if (needed <= available) return null;
+    return SnapshotNoRoom(requiredBytes: needed, availableBytes: available);
+  }
+
+  /// [dirPath], or its nearest ancestor that exists: free space is asked of a path that exists, and `backups/` is made by the first snapshot.
+  static Future<String> _nearestExisting(String dirPath) async {
+    var current = dirPath;
+    while (!await Directory(current).exists()) {
+      final parent = path.dirname(current);
+      if (parent == current) break;
+      current = parent;
+    }
+    return current;
+  }
+
+  /// A directory with no manifest is not a snapshot: [take] writes the manifest after the copy and a delete removes it first, so its absence means a copy that never finished or a delete that did not, and a restore from it would delete every file it is missing.
   Future<ModSnapshot?> _read(String modUid, Directory dir) async {
     final files = Directory(path.join(dir.path, 'files'));
     if (!await files.exists()) return null;
     final manifest = File(path.join(dir.path, _manifestName));
+    if (!await manifest.exists()) return null;
     Map<String, dynamic>? json;
     try {
-      if (await manifest.exists()) {
-        final decoded = jsonDecode(await manifest.readAsString());
-        if (decoded is Map<String, dynamic>) json = decoded;
-      }
+      final decoded = jsonDecode(await manifest.readAsString());
+      if (decoded is Map<String, dynamic>) json = decoded;
     } catch (_) {
       // A corrupt manifest must not hide the files it describes: the snapshot
       // is still restorable, and a rollback the user cannot reach is the one
@@ -319,8 +390,7 @@ class SnapshotService {
       id: path.basename(dir.path),
       directory: dir,
       json: json,
-      // Falls back to a real walk when there is no manifest to read a size from,
-      // so retention still bounds a directory this app did not write.
+      // Falls back to a real walk when the manifest gives no size, so retention still bounds it.
       fallbackSize: json == null ? await _directorySize(files) : 0,
       fallbackTakenAt: await dir.stat().then((s) => s.modified),
     );
@@ -331,6 +401,28 @@ class SnapshotService {
   /// towards the budget instead of being treated as free.
   Future<int> _directorySize(Directory dir) async =>
       (await measureDirectory(dir.path)).bytes;
+}
+
+/// What [SnapshotService.take] came to: a snapshot, or none, and when the reason is space, the figures.
+class SnapshotAttempt {
+  const SnapshotAttempt.taken(ModSnapshot this.snapshot) : noRoom = null;
+  const SnapshotAttempt.refused(SnapshotNoRoom this.noRoom) : snapshot = null;
+  const SnapshotAttempt.failed()
+      : snapshot = null,
+        noRoom = null;
+
+  final ModSnapshot? snapshot;
+
+  /// Set when the snapshot was refused before copying because it would not fit.
+  final SnapshotNoRoom? noRoom;
+}
+
+/// A snapshot refused for space: what the mod folder holds and what the backups volume has free, in bytes. The words are the caller's.
+class SnapshotNoRoom {
+  const SnapshotNoRoom({required this.requiredBytes, required this.availableBytes});
+
+  final int requiredBytes;
+  final int availableBytes;
 }
 
 /// Why a snapshot was taken. Shown in the restore list, because "before the

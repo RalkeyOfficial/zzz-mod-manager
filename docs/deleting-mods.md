@@ -84,6 +84,7 @@ The dialog has one checkbox, **Also delete its N snapshots (size)**, shown only 
   The uid is still in the sidecar of the folder in the trash, so a folder put back from the trash gets its history back, as long as that button has not been pressed.
 
 The count comes from the store's manifests, and the size is the apparent size the manifests record ([`disk-usage.md`](disk-usage.md) §5). Both are read before the dialog opens.
+A directory a delete or a capture stopped part-way left without a manifest is in neither figure, though deleting the group removes it too, so the dialog can name less than the delete frees.
 
 ## 5. The dialog
 

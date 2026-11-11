@@ -129,6 +129,7 @@ there are three of them on three different volumes: the transfer into
 `<appData>/downloads`, the unpack into a temp directory, the copy into the mods
 folder. None of the three is ever a guess — every number is read or measured
 rather than estimated, which is the only reason a refusal is allowed at all.
+A write into a mod that is already installed (an update, a restore, a patch put into it, taking a patch out) has a fourth, on the same terms: the snapshot of the old folder into `<appData>/backups`, refused before it copies when the folder will not fit, and with it the write ([`applying-updates.md`](applying-updates.md) §5).
 
 ### The transfer
 
@@ -191,6 +192,12 @@ sums to less than the archive holds. That number would say an install fits when
 it does not, which is the failure this check exists to prevent, so the probe
 reports truncation (`ProbeResult.truncated`) and a truncated listing is treated
 as an unknown size. The cap it runs under is 32 MB, past any real mod.
+
+**It counts every unpack in flight, not just the one starting**, as the transfer's check counts every transfer. A drop, a background install and an update can each unpack at once into the same temp folder, so two that each fit can together fill it.
+`UnpacksInFlight` holds each running unpack's listed size and folder; the check adds what each other one still has to write (its listed size less what its folder holds so far) to its own, and the requirement it names can exceed the archive's size.
+The others are measured before the free space is read, so what they write in between is taken off the free space and still counted as theirs to write, which errs towards refusing.
+The check and the registration that follows it run one at a time, so two unpacks started together cannot both pass against the same free space. This is tested with two unpacks at once and an injected free space; it has not been tried in the running app or on Windows.
+An unpacked folder that is waiting (an install question in the panel, the drop's next step) is not added: its bytes are on the volume already, so the free space the check reads has them taken off, and adding them again would refuse unpacks that fit.
 
 A refusal writes nothing, keeps the archive, and names both figures — the archive
 is the way out, so an install that could not unpack is retried by clearing space
@@ -460,7 +467,13 @@ The install (`dialogs/install_archive_flow.dart`) is three parts, and only the m
 - **The temp folder goes when the job ends**: at Don't install, at a Cancel of an answered job still waiting for the slot, and at the end of the finish, once the import and the patch writes have read it, as the drop's import deletes its own.
   `ArchiveService.deleteExtraction` walks up from the folders to the nearest `zzz_archive_extract_*` directory and deletes that, so an archive laid out as `Mods/<mod>` leaves no empty `Mods` behind.
 - **The Storage reclaim refuses the temp extractions while a job waits, installs or updates**: a waiting one with a skip reason of its own ("a download is waiting for your answer in Downloads"), an installing or updating one as any install in progress, since an update holds its unpack while it asks and writes. A waiting job's folder can be older than that target's one-hour grace, and so can the folder the finish is copying from after a long wait. The archive and partial targets need nothing more: a waiting job is not terminal, so `downloadsBusy` already closes their gate.
-- **App exit loses a waiting job with its answers**, since the queue is not persisted; the download is asked for again from Browse. Nothing runs at close, which stays instant, as the log flush is bounded for the same reason. A password wait's archive goes at the next launch's sweep (§8). An unpacked folder is left to the reclaim's temp extractions, which take it once it is an hour old, and on a tmpfs a reboot takes it first. There is no "close anyway?" question: closing with a download waiting is the user's own doing.
+- **App exit loses a waiting job with its answers**, since the queue is not persisted; the download is asked for again from Browse. Closing never waits for a download or a question. A password wait's archive goes at the next launch's sweep (§8). An unpacked folder is left to the reclaim's temp extractions, which take it once it is an hour old, and on a tmpfs a reboot takes it first. There is no "close anyway?" question: closing with a download waiting is the user's own doing.
+- **Closing waits for a write in flight**, at most 30 seconds (`kCloseWaitForWrites`), and then exits whatever is left. A download killed part-way loses only bytes that resume; a write killed part-way loses a folder: an update between its wipe and its copy, a restore, a library import half copied.
+  What it waits for is `WritesInFlight`, which every write `whileWritingMod` marks feeds (an update, a reinstall, a patch put in or taken out, a restore, Edit info, an Ignore, a tracking change), and which the library's own import and combined import join.
+  Counted with them: an update's, a restore's and a patch removal's record and snapshot prune; Update it's character change; the sidecar write of what an install or the resolve dialog's "also fill in what's missing" filled in from the mod page (the description, tags and pictures, after they were fetched, never the fetch); the record that marks a newly installed folder as a patch.
+  Not counted: turning a mod on or off (a link, the shader files it places, `config.json`), a rename and a delete; a character, favourite, tag or note changed on its own outside Edit info; the sidecar writes a library scan makes (an identity or an origin it fills in); and the names of downloads saved after an update check, except the one the update dialog's own check saves, which goes through `whileWritingMod` (the Library, launch and mod-page paths are not counted).
+  **No new write starts once closing has begun** (`WritesInFlight.close`): one asked for from then on never starts and its caller is never answered, since the app is about to exit, while a step of a write already running still runs, so a write is never stopped between its own parts. The download queue still admits its next install; that install's unpack can run, and its copy into the library does not start.
+  The window should stay open while it waits, with the write's own progress showing, and a second press of close changes nothing; this is tested as logic and not yet tried in the running app on either platform. The log flush after it is bounded at 250 ms for the same reason the wait is: a hung volume must not keep the window from closing.
 
 ### The drop asks directly
 

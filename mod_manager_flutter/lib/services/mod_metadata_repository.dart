@@ -14,6 +14,7 @@ import 'mod_metadata_service.dart';
 import 'mod_uid.dart';
 import 'origin_backfill.dart';
 import 'origin_write.dart';
+import 'writes_in_flight.dart';
 
 /// The slice of `ConfigService` this repository needs: the legacy per-mod
 /// character tag mirror in `config.json`.
@@ -556,9 +557,9 @@ class ModMetadataRepository {
       final modName = entry.key;
       final folder = entry.value.folder;
       try {
-        final filled = await lockSidecar(
-          folder,
-          () => _fillOne(folder, remote, entry.value.preview, bytes),
+        // The sidecar write is counted as a write in flight, so closing the app waits for it; the fetch above is not.
+        final filled = await WritesInFlight.shared.track(
+          () => lockSidecar(folder, () => _fillOne(folder, remote, entry.value.preview, bytes)),
         );
         if (filled == null) continue;
         final (:plan, :storedImages, :written) = filled;

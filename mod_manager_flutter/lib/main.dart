@@ -28,6 +28,7 @@ import 'services/download/download_queue.dart';
 import 'services/log/log_setup.dart';
 import 'services/log/logger.dart';
 import 'services/log/system_probe.dart';
+import 'services/writes_in_flight.dart';
 import 'l10n/app_localizations.dart';
 
 void main() async {
@@ -237,26 +238,55 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
   void initState() {
     super.initState();
     windowManager.addListener(this);
+    // Without it the window closes natively and [onWindowClose] only races the exit, so nothing it waits for is waited for.
+    _preventClose(true);
   }
 
   @override
   void dispose() {
+    _preventClose(false);
     windowManager.removeListener(this);
     super.dispose();
   }
 
+  static void _preventClose(bool prevent) {
+    unawaited(windowManager.setPreventClose(prevent).catchError((Object error) {
+      Log.of('app').warning('could not hold the window open on close', error: error);
+    }));
+  }
+
+  bool _closing = false;
+
   @override
   void onWindowClose() async {
-    // The buffered tail of the log, on its way to disk before the process
-    // goes. Without this every clean exit loses its last seconds, which is
-    // the half of a session most worth reading. Bounded, because a hung
-    // volume must not be able to stop the window closing.
-    await Log.shutdown().timeout(
-      const Duration(milliseconds: 250),
-      onTimeout: () {},
-    );
-    await windowManager.destroy();
-    exit(0);
+    // Arrives twice per press, as `close` and through [onWindowEvent].
+    if (_closing) return;
+    _closing = true;
+    try {
+      // A write killed part-way loses a folder, so closing starts no new write and waits for the ones in flight, bounded.
+      // Downloads and waiting questions are not waited for.
+      final writes = WritesInFlight.shared..close();
+      if (writes.count > 0) {
+        final log = Log.of('app');
+        log.info('closing waits for writes in flight', fields: {'writes': writes.count});
+        if (!await writes.settle(kCloseWaitForWrites)) {
+          log.warning('closed with writes in flight', fields: {'writes': writes.count});
+        }
+      }
+
+      // The buffered tail of the log, on its way to disk before the process goes. Without this every clean exit loses its last seconds, which is the half of a session most worth reading.
+      // Bounded, because a hung volume must not be able to stop the window closing.
+      await Log.shutdown().timeout(
+        const Duration(milliseconds: 250),
+        onTimeout: () {},
+      );
+    } finally {
+      // In its own try, so a destroy that throws still reaches the exit; one that never returns would still hold the process. The log is already shut down, so nothing is said.
+      try {
+        await windowManager.destroy();
+      } catch (_) {}
+      exit(0);
+    }
   }
 
   @override

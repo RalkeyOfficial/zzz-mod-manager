@@ -305,7 +305,7 @@ class _NoSnapshots extends SnapshotService {
   _NoSnapshots({required super.rootPath});
 
   @override
-  Future<ModSnapshot?> capture({
+  Future<SnapshotAttempt> take({
     required String modName,
     required String modUid,
     required Directory modFolder,
@@ -313,6 +313,6 @@ class _NoSnapshots extends SnapshotService {
     String? version,
     String? versionLabel,
     DateTime? now,
-  }) async => null;
+  }) async => const SnapshotAttempt.failed();
 }
 

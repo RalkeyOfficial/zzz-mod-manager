@@ -41,12 +41,12 @@ void main() {
     origin: temp.originOf(modName),
   );
 
-  Future<ModSnapshot> snapshotNow() async => (await temp.snapshots.capture(
+  Future<ModSnapshot> snapshotNow() async => (await temp.snapshots.take(
     modName: modName,
     modUid: (await ModUid().ensure(temp.modFolder(modName)))!,
     modFolder: temp.modFolder(modName),
     reason: SnapshotReason.beforeUpdate,
-  ))!;
+  )).snapshot!;
 
   test('a snapshot is listed with the origin its own copy of the sidecar recorded', () async {
     temp.write(modName, 'mod.ini', 'old');

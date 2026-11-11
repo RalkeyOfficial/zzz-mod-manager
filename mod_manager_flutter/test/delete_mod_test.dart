@@ -62,7 +62,7 @@ void main() {
     File(p.join(folder.path, 'mod.ini')).writeAsStringSync('[Constants]\n');
     final uid = (await uids.ensure(folder))!;
     for (var i = 0; i < count; i++) {
-      await snapshots.capture(
+      await snapshots.take(
         modName: name,
         modUid: uid,
         modFolder: folder,

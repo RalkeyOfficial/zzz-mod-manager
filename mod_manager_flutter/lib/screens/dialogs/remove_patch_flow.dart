@@ -17,6 +17,7 @@ import '../../services/patch_removal.dart';
 import '../../services/patch_store.dart';
 import '../../services/update_apply/mod_activation_port.dart';
 import '../../services/update_apply/update_applier.dart';
+import '../../services/writes_in_flight.dart';
 import '../../utils/notification_actions.dart';
 import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
@@ -123,34 +124,35 @@ Future<bool> removePatchFlow(
       snapshots: snapshots,
       activation: ModManagerActivationPort(mods, leaveOff: (m) => leftOffAfterWrite(container, m)),
     );
-    final result = await work(
-      () => whileWritingMod(
-        container,
-        mod.id,
-        () => applier.removePatch(
-          modName: mod.id,
-          modFolder: modFolder,
-          patchModId: patchModId,
-          plan: plan,
+    // The prune and the record are part of the write, so closing the app waits for them too.
+    final result = await WritesInFlight.shared.track(() async {
+      final result = await work(
+        () => whileWritingMod(
+          container,
+          mod.id,
+          () => applier.removePatch(
+            modName: mod.id,
+            modFolder: modFolder,
+            patchModId: patchModId,
+            plan: plan,
+          ),
         ),
-      ),
-    );
+      );
 
-    // **Before the success check**, the same as the update path: a snapshot exists
-    // the moment the capture succeeded, and the failure branch is where a user
-    // needs "Restore a previous version…" to be in the menu.
-    //
-    // Retention runs on the same condition and for the same reason: the snapshot
-    // comes before anything is moved, so a removal that failed part-way still
-    // added a whole folder to the budget — see §5 of
-    // `docs/applying-updates.md`.
-    if (result.snapshot != null) {
-      container.invalidate(modBackupsProvider);
-      await snapshots.prune();
-    }
-    // Read again whatever the `.ini` stamp says, and before the success check: a removal that failed part-way may
-    // still have moved files.
-    mods.invalidateKeybinds(mod.id);
+      // **Before the success check**, the same as the update path: a snapshot exists the moment the capture succeeded, and the failure branch is where a user needs "Restore a previous version…" to be in the menu.
+      //
+      // Retention runs on the same condition and for the same reason: the snapshot comes before anything is moved, so a removal that failed part-way still added a whole folder to the budget — see §5 of `docs/applying-updates.md`.
+      if (result.snapshot != null) {
+        container.invalidate(modBackupsProvider);
+        await snapshots.prune();
+      }
+      // Read again whatever the `.ini` stamp says, and before the success check: a removal that failed part-way may still have moved files.
+      mods.invalidateKeybinds(mod.id);
+
+      // **The record goes even when some files could not be moved.** What it claims is that this folder holds that patch, and after this it does not — the leftovers are named on screen rather than kept as a claim that would go on offering to update a patch that has been taken out.
+      if (result.success) await whileWritingMod(container, mod.id, () => _forget(mods, mod, patch));
+      return result;
+    });
 
     if (!result.success) {
       card.update(
@@ -168,11 +170,6 @@ Future<bool> removePatchFlow(
       return false;
     }
 
-    // **The record goes even when some files could not be moved.** What it claims
-    // is that this folder holds that patch, and after this it does not — the
-    // leftovers are named on screen rather than kept as a claim that would go on
-    // offering to update a patch that has been taken out.
-    await whileWritingMod(container, mod.id, () => _forget(mods, mod, patch));
     // The folder's verdict can name the patch's layer, which is gone.
     forgetUpdateCheck(container, mod.id);
 

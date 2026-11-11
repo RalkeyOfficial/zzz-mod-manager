@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/services/config_service.dart';
 import 'package:mod_manager_flutter/services/import_result.dart';
 import 'package:mod_manager_flutter/services/mod_manager_service.dart';
+import 'package:mod_manager_flutter/services/writes_in_flight.dart';
 import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -65,6 +66,33 @@ void main() {
       .map((e) => path.basename(e.path))
       .toList()
     ..sort();
+
+  group('closing the app waits for an import', () {
+    test('importMods is counted as a write in flight until it ends', () async {
+      final folder = await sourceFolder('Ellen Swimsuit');
+      final before = WritesInFlight.shared.count;
+
+      final importing = serviceWith(free: null).importMods([folder]);
+      expect(WritesInFlight.shared.count, before + 1);
+
+      await importing;
+      expect(WritesInFlight.shared.count, before);
+      expect(modsInLibrary(), ['Ellen Swimsuit']);
+    });
+
+    test('importCombinedMod is counted as a write in flight until it ends', () async {
+      final first = await sourceFolder('Body');
+      final second = await sourceFolder('Hair');
+      final before = WritesInFlight.shared.count;
+
+      final importing = serviceWith(free: null).importCombinedMod([first, second], 'Ellen Swimsuit');
+      expect(WritesInFlight.shared.count, before + 1);
+
+      await importing;
+      expect(WritesInFlight.shared.count, before);
+      expect(modsInLibrary(), ['Ellen Swimsuit']);
+    });
+  });
 
   test('an import that does not fit copies nothing', () async {
     final folder = await sourceFolder('Ellen Swimsuit', bytes: 1000);

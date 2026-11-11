@@ -52,6 +52,8 @@ The import preflight treats partial differently and more strictly: `ModManagerSe
 `SnapshotService.totalBytes()` sums the size each snapshot recorded at capture, rather than re-walking. One `readdir` per group plus one small JSON each, against gigabytes this app already measured — and the drill-down's dates, reasons and version labels come free, which a raw walk would have to reconstruct by reading the same manifests anyway.
 
 What it trades: `manifest.json` itself is uncounted, and the figure drifts if someone edits `<appData>/backups` by hand.
+A directory without a manifest, which a delete or a capture stopped part-way leaves ([`applying-updates.md`](applying-updates.md) §5), is not a snapshot: it is not in the Saved versions figure, in Manage's list or in a mod's count, so the figure can be lower than what the folder holds.
+Its bytes are still on the volume, and its group still reads as having saved versions. The reclaim (§9) walks whole group directories rather than manifests, so for a mod that no longer exists it counts such a directory and deletes it with the group; for a mod that still exists the group is claimed, and the directory stays until the mod's saved versions are deleted with it.
 
 ## 6. Free space is a list, not a segment
 

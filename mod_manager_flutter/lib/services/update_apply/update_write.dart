@@ -25,6 +25,7 @@ import '../../utils/state_providers.dart';
 import '../mod_manager_service.dart';
 import '../patch_record.dart';
 import '../update_check.dart';
+import '../writes_in_flight.dart';
 import 'update_applier.dart';
 import 'update_layout.dart';
 import 'update_prepare.dart';
@@ -70,7 +71,10 @@ Future<UpdateReport> writeUpdate(
     onStep: onStep,
     onWritesDone: onWritesDone,
   ),
-  final PreparedPatch patch => _writePatch(container, patch, onStep: onStep, onWritesDone: onWritesDone),
+  // The prune and the record are part of the write, so closing the app waits for them too.
+  final PreparedPatch patch => WritesInFlight.shared.track(
+      () => _writePatch(container, patch, onStep: onStep, onWritesDone: onWritesDone),
+    ),
 };
 
 Future<UpdateReport> _writeFolders(
@@ -148,47 +152,50 @@ Future<List<AppliedUpdate>> _writeAll({
     final target = targets[i];
     onFolder?.call(target.mod, i + 1, targets.length);
 
-    final result = await whileWritingMod(
-      container,
-      target.mod.id,
-      () => applier.applyBaseThenPatch(
-        modName: target.mod.id,
-        modFolder: Directory(path.join(modsPath, target.mod.id)),
-        preview: target.preview,
-        patchFiles: target.patchFiles,
-        patchModId: target.patchModId,
-        previousVersion: target.mod.origin?.base?.version,
-        previousVersionLabel: target.mod.origin?.base?.versionLabel,
-        onStep: onStep == null ? null : (step) => onStep(target.mod, step),
-      ),
-    );
-    applied.add(AppliedUpdate(mod: target.mod, result: result));
-    // Whether the write landed or not, and before anything below can throw: a failed write may still have changed the folder, and a file written over one of the same size can keep its times on NTFS (`docs/library-screen.md` §12).
-    mods.invalidateKeybinds(target.mod.id);
+    // The prune and the record are part of the folder's write, so closing the app waits for them too.
+    await WritesInFlight.shared.track(() async {
+      final result = await whileWritingMod(
+        container,
+        target.mod.id,
+        () => applier.applyBaseThenPatch(
+          modName: target.mod.id,
+          modFolder: Directory(path.join(modsPath, target.mod.id)),
+          preview: target.preview,
+          patchFiles: target.patchFiles,
+          patchModId: target.patchModId,
+          previousVersion: target.mod.origin?.base?.version,
+          previousVersionLabel: target.mod.origin?.base?.versionLabel,
+          onStep: onStep == null ? null : (step) => onStep(target.mod, step),
+        ),
+      );
+      applied.add(AppliedUpdate(mod: target.mod, result: result));
+      // Whether the write landed or not, and before anything below can throw: a failed write may still have changed the folder, and a file written over one of the same size can keep its times on NTFS (`docs/library-screen.md` §12).
+      mods.invalidateKeybinds(target.mod.id);
 
-    // Before the success check: a snapshot exists once the write got past its snapshot step, and a failed copy sends the user to the rollback menu, which is drawn from this cached set.
-    // Pruning runs whenever one was taken, since a copy that failed part-way still added a whole folder to the budget.
-    if (result.snapshot != null) {
-      container.invalidate(modBackupsProvider);
-      await snapshots.prune();
-    }
-    if (!result.success) continue;
+      // Before the success check: a snapshot exists once the write got past its snapshot step, and a failed copy sends the user to the rollback menu, which is drawn from this cached set.
+      // Pruning runs whenever one was taken, since a copy that failed part-way still added a whole folder to the budget.
+      if (result.snapshot != null) {
+        container.invalidate(modBackupsProvider);
+        await snapshots.prune();
+      }
+      if (!result.success) return;
 
-    await _recordOrigin(
-      mods: mods,
-      mod: target.mod,
-      remoteModId: remoteModId,
-      dismissUntil: dismissUntil,
-      file: file,
-      archiveMd5: archiveMd5,
-      layout: target.preview.layout,
-      // Only ever the mod the user opened: a sibling's write is that folder's own bottom layer, since the group refuses any member whose stack says otherwise.
-      asCompanion: asCompanion && target.mod.id == primary.mod.id,
-      // Where the patch is now, since `applyBaseThenPatch` moves it onto the new base's layout.
-      patchFiles: target.patchFiles.isEmpty ? null : result.patchFiles,
-      files: result.writtenFiles,
-      placedFrom: target.patchFiles.isEmpty ? null : result.placedFrom,
-    );
+      await _recordOrigin(
+        mods: mods,
+        mod: target.mod,
+        remoteModId: remoteModId,
+        dismissUntil: dismissUntil,
+        file: file,
+        archiveMd5: archiveMd5,
+        layout: target.preview.layout,
+        // Only ever the mod the user opened: a sibling's write is that folder's own bottom layer, since the group refuses any member whose stack says otherwise.
+        asCompanion: asCompanion && target.mod.id == primary.mod.id,
+        // Where the patch is now, since `applyBaseThenPatch` moves it onto the new base's layout.
+        patchFiles: target.patchFiles.isEmpty ? null : result.patchFiles,
+        files: result.writtenFiles,
+        placedFrom: target.patchFiles.isEmpty ? null : result.placedFrom,
+      );
+    });
   }
   return applied;
 }

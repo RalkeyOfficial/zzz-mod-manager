@@ -41,6 +41,7 @@ import '../../services/patch_placement.dart';
 import '../../services/patch_record.dart';
 import '../../services/patch_scan.dart';
 import '../../services/update_apply/update_applier.dart';
+import '../../services/writes_in_flight.dart';
 import '../../utils/zzz_characters.dart';
 import 'apply_update_flow.dart';
 import 'import_selection_dialog.dart';
@@ -594,10 +595,11 @@ Future<List<NotificationLines>> applyPatchInstall(
   final namedBases = decision.namedBases;
   for (final name in decision.scan.patchShaped) {
     if (!imported.contains(name)) continue;
-    await amend(
-      name,
-      (current) => withPatchShape(current, base: namedBases[name]),
-    );
+    // A sidecar write, counted so closing the app waits for it.
+    await WritesInFlight.shared.track(() => amend(
+          name,
+          (current) => withPatchShape(current, base: namedBases[name]),
+        ));
   }
 
   // **Recorded first, then fetched.** The companion is written at `user` before
