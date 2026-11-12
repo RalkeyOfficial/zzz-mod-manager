@@ -116,10 +116,6 @@ Future<UpdateFlowOutcome> applyUpdateFlow(
   /// reconciled, a patch-shaped download, folders the write leaves out, or a patch that cannot be put back. Otherwise
   /// the caller's question is the confirmation. Set by [reinstallFlow], whose dialog states the standard facts.
   bool confirmOnlyIfNeeded = false,
-
-  /// Where this write sits in a run of several: its confirmation says "2 of 3" and its result offers "Next" while
-  /// more follow.
-  UpdateRunPosition? run,
 }) async {
   final loc = context.loc;
   final notify = context.notify;
@@ -313,7 +309,6 @@ Future<UpdateFlowOutcome> applyUpdateFlow(
             preview: preview,
             flattensPatch: flattensPatch,
             reinstall: reinstall,
-            run: run,
             siblings: group.targets,
             // Carries the primary's own refusal when the group contested its
             // folder — the dialog reads the row's state off this list, so there
@@ -436,7 +431,6 @@ Future<UpdateFlowOutcome> applyUpdateFlow(
       result: applied.first.result,
       reinstall: reinstall,
       others: applied.skip(1).toList(),
-      nextLabel: run != null && run.hasMore ? loc.t('mods.update_bulk.next') : null,
     );
     return result;
   } catch (e) {
@@ -488,10 +482,6 @@ Future<UpdateFlowOutcome> applyPatchUpdateFlow(
   /// Every file the check listed beside [file], so a pick below the newest
   /// records the ones above it as passed over. Same field as [applyUpdateFlow]'s.
   List<GbFile> published = const <GbFile>[],
-
-  /// Where this write sits in a run of several, as for [applyUpdateFlow]. A patch placement asks nothing, so only its
-  /// result dialog shows it.
-  UpdateRunPosition? run,
 }) async {
   final loc = context.loc;
   final notify = context.notify;
@@ -623,7 +613,6 @@ Future<UpdateFlowOutcome> applyPatchUpdateFlow(
       mod: mod,
       file: file,
       result: result,
-      nextLabel: run != null && run.hasMore ? loc.t('mods.update_bulk.next') : null,
     );
     return UpdateFlowOutcome.written;
   } catch (e) {
@@ -652,7 +641,6 @@ typedef PatchUpdateApplier =
       required GbFile file,
       required bool asCompanion,
       required List<GbFile> published,
-      UpdateRunPosition? run,
     });
 
 /// Installs [file], a newer file of the layer [subject] names, over [mod]'s folder: the one entry every surface that
@@ -671,7 +659,6 @@ Future<UpdateFlowOutcome> applyModUpdate(
   required DownloadKey? subject,
   required GbFile file,
   required List<GbFile> published,
-  UpdateRunPosition? run,
   PatchUpdateApplier patchFlow = applyPatchUpdateFlow,
 }) async {
   // The identity this file belongs to, which is the folder's own only when the verdict is about it. A companion's
@@ -694,7 +681,6 @@ Future<UpdateFlowOutcome> applyModUpdate(
       asCompanion: route.asCompanion,
       flattensPatch: route.flattensPatch,
       published: published,
-      run: run,
     );
   }
   final outcome = await patchFlow(
@@ -705,7 +691,6 @@ Future<UpdateFlowOutcome> applyModUpdate(
     file: file,
     asCompanion: route.asCompanion,
     published: published,
-    run: run,
   );
   // Through the app's container: the window may have been closed while the write ran.
   if (outcome.changed) forgetUpdateCheck(container, mod.id);

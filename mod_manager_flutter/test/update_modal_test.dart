@@ -8,6 +8,8 @@ import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
 import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/dialogs/update_modal.dart';
+import 'package:mod_manager_flutter/services/download/download_job.dart';
+import 'package:mod_manager_flutter/services/download/download_queue.dart';
 import 'package:mod_manager_flutter/services/origin_write.dart';
 import 'package:mod_manager_flutter/services/update_check.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
@@ -15,6 +17,8 @@ import 'package:mod_manager_flutter/utils/state_providers.dart';
 import 'support/library_override.dart';
 import 'support/localized_harness.dart';
 import 'support/origin_shorthand.dart';
+import 'support/seeded_queue.dart';
+import 'support/update_jobs.dart';
 
 /// The list behind "Update N": a snapshot of every mod with a newer file, a file picked for each, Ignore with Undo,
 /// and what it hands back to the run.
@@ -75,12 +79,15 @@ void main() {
     List<ModInfo>? mods,
     Map<String, UpdateCheck>? checks,
     Size surfaceSize = const Size(1200, 900),
+    List<DownloadJob> jobs = const [],
   }) async {
     written = [];
     result = null;
     closed = false;
     final library = mods ?? [shark, kimono];
-    container = ProviderContainer(overrides: [libraryOf(library)]);
+    container = ProviderContainer(
+      overrides: [libraryOf(library), downloadQueueProvider.overrideWith(() => SeededQueue(jobs))],
+    );
     addTearDown(container.dispose);
     container.read(modUpdateChecksProvider.notifier).state = checks ?? {'Shark': sharkCheck(), 'Kimono': kimonoCheck()};
     final byId = {for (final m in library) m.id: m};
@@ -131,7 +138,12 @@ void main() {
     expect(find.text('CrimsonKimono_fixed.zip'), findsOneWidget);
     expect(find.text('YOU HAVE'), findsNWidgets(2));
     expect(find.textContaining('Ignoring an update stops it showing as a newer file'), findsOneWidget);
-    expect(find.textContaining('Updates run one after another'), findsOneWidget);
+    // The press is the consent, so the footer states what every update does.
+    expect(
+      find.textContaining("Each update keeps the file you have now as a snapshot, then replaces the folder's contents."),
+      findsOneWidget,
+    );
+    expect(find.textContaining('keys you rebound are replaced by the author'), findsOneWidget);
   });
 
   testWidgets('a sole newer file starts picked, and with several nothing is, so the button counts one mod',
@@ -181,7 +193,15 @@ void main() {
     expect(result!.first.subject, const DownloadKey.base(100));
   });
 
-  testWidgets('asking for the list while it is open, or while a run is under way, opens no second one', (tester) async {
+  testWidgets('a mod already in an update run is not listed, and a run does not stop the list opening', (tester) async {
+    await open(tester, jobs: [updateJob(1, mods: [baseOf('Shark', 100)])]);
+
+    expect(find.text('1 mod has a newer file'), findsOneWidget);
+    expect(find.text('Crimson Kimono'), findsOneWidget);
+    expect(find.text('Shark Hoodie Recolor'), findsNothing);
+  });
+
+  testWidgets('asking for the list while it is open opens no second one', (tester) async {
     await open(tester);
     final context = tester.element(find.byType(UpdateModal));
 
@@ -193,12 +213,6 @@ void main() {
     await tester.tap(find.widgetWithText(OutlinedButton, 'Later'));
     await tester.pumpAndSettle();
     expect(container.read(updateModalOpenProvider), isFalse, reason: 'closing frees it for the next press');
-
-    container.read(libraryUpdateRunProvider.notifier).state = true;
-    final root = tester.element(find.text('open'));
-    expect(await showUpdateModal(root), isNull);
-    await tester.pumpAndSettle();
-    expect(find.byType(UpdateModal), findsNothing);
   });
 
   testWidgets('Later and Escape hand back nothing', (tester) async {

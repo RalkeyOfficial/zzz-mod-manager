@@ -3,11 +3,14 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../models/character_info.dart';
 import '../../models/gamebanana/gb_file.dart';
 import '../../models/gamebanana/gb_mod.dart';
+import '../../utils/state_providers.dart' show updatableModsProvider;
 import '../archive_service.dart';
 import '../log/confirmations.dart';
 import '../log/logger.dart';
+import '../update_check.dart';
 import '../writes_in_flight.dart';
 import 'download_exceptions.dart';
 import 'download_handle.dart';
@@ -53,6 +56,23 @@ final updateRunSummaryProvider =
 final updateJobOfModProvider = Provider.family<ModUpdateState?, String>(
   (ref, modId) => updateJobOfMod(ref.watch(downloadQueueProvider), modId),
 );
+
+/// The mods Update N offers: those with a newer file to install ([updatableModsProvider]) whose layer is not already in
+/// an update job that has not ended. A press during a run adds only these (`docs/update-runs.md` §9).
+final modsToUpdateProvider = Provider<List<(ModInfo, UpdateCheck)>>((ref) {
+  final updatable = ref.watch(updatableModsProvider);
+  if (updatable.isEmpty) return const [];
+  // Selected, so a progress tick does not recompute the list.
+  final inRun = ref.watch(downloadQueueProvider.select(layersInRun));
+  if (inRun.isEmpty) return updatable;
+  return [
+    for (final entry in updatable)
+      if (entry.$2.subject case final layer? when !inRun.contains(entry.$1.id, layer)) entry,
+  ];
+});
+
+/// How many mods [modsToUpdateProvider] holds: the N of "Update N".
+final modsToUpdateCountProvider = Provider<int>((ref) => ref.watch(modsToUpdateProvider).length);
 
 /// How an update download ended, told to [DownloadQueue.endUpdate].
 sealed class UpdateEnd {
@@ -419,12 +439,16 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
     _drop(seq);
   }
 
-  /// Drops every finished row, leaving whatever is still working.
-  void clearFinished() {
-    for (final job in state.where((j) => j.isTerminal)) {
+  /// Drops every finished row, leaving whatever is still working. [updatesOnly] drops only an update run's, as the
+  /// Updates page's Clear finished does.
+  ///
+  /// A failed update stays: it is in Needs your attention, which only Remove from the list ([remove]) leaves.
+  void clearFinished({bool updatesOnly = false}) {
+    bool clears(DownloadJob job) => clearedByClearFinished(job) && (!updatesOnly || job.isUpdate);
+    for (final job in state.where(clears)) {
       _forget(job.seq);
     }
-    state = state.where((j) => !j.isTerminal).toList();
+    state = state.where((j) => !clears(j)).toList();
   }
 
   // ── The host's half ────────────────────────────────────────────────────────
@@ -443,7 +467,7 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
     if (job == null) return null;
     if (job.isUpdate) {
       _timeStage(job, 'waited_for_install');
-      _replace(job.seq, (j) => j.copyWith(updateStep: UpdateStep.writing));
+      _replace(job.seq, (j) => j.copyWith(updateStep: UpdateStep.writing).withWriting(null));
     } else {
       _replace(job.seq, (j) => j.copyWith(state: DownloadJobState.installing, installStage: InstallStage.unpacking));
     }
@@ -532,9 +556,26 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
         _end(job, keepArchive: failure.kind == UpdateFailureKind.unpackFailed);
         markFailed(seq, failure);
         _replace(seq, (j) => j.copyWith(report: report, modResults: all));
-        if (failure.haltsRun && !job.stopOnSettle) _haltUpdates(seq, failure);
+        if (failure.haltsRun && !job.stopOnSettle) {
+          // The mod the stage named, else the one a thrown write was writing, else the first the failure covers.
+          final writingId = writing ? job.writing?.modId : null;
+          final by = results.where((r) => identical(r.failure, failure)).firstOrNull?.mod ??
+              (writingId == null ? null : job.update!.modIn(writingId)) ??
+              all.where((r) => identical(r.failure, failure)).firstOrNull?.mod ??
+              job.update!.primary;
+          _haltUpdates(job, by, failure);
+        }
     }
     _pump();
+  }
+
+  /// The part of its write an update job has started, for its row and card. Only while it is writing.
+  void reportWriteStep(int seq, UpdateWriting writing) {
+    final job = _jobOf(seq);
+    if (job == null || !job.isUpdate || job.state != DownloadJobState.updating || job.updateStep != UpdateStep.writing) {
+      return;
+    }
+    _replace(seq, (j) => j.withWriting(writing));
   }
 
   /// The end of [job]'s stages: its clock stops, and what it holds on disk goes.
@@ -567,10 +608,12 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
     markAnswered(seq, prepared: prepared, password: password);
   }
 
-  /// Skip, at an update question: [decline] for an update job, whose row stays as skipped.
-  Future<void> skipUpdate(int seq) async {
+  /// Skip, at an update question: [decline] for an update job, whose row stays as skipped for [reason].
+  /// A reason other than the user's own is what the question found about the job's first mod when it was answered, such as the mod gone;
+  /// the job's other mods are skipped as sharing a file that was not written.
+  Future<void> skipUpdate(int seq, {UpdateSkipReason reason = UpdateSkipReason.skippedByUser}) async {
     if (_jobOf(seq)?.isUpdate != true) return;
-    await decline(seq);
+    await _decline(seq, updateSkip: reason);
   }
 
   /// An update job's write was undone. The row stays, as [JobOutcome.undone].
@@ -619,10 +662,15 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
     await Future.wait([for (final job in stopping) _discard(job, handles[job.seq])]);
   }
 
-  /// Holds back every update job that has not ended, [bySeq]'s failure being one every later job would share.
-  void _haltUpdates(int bySeq, Object cause) {
-    final halt = UpdateHalt(cause: cause, bySeq: bySeq);
-    _log.warning('update run halted', error: cause, fields: {'job': bySeq});
+  /// Holds back every update job that has not ended, the failure of [job]'s [mod] being one every later job would share.
+  void _haltUpdates(DownloadJob job, UpdateMod mod, Object cause) {
+    final halt = UpdateHalt(
+      cause: cause,
+      bySeq: job.seq,
+      modId: mod.modId,
+      modName: mod.name ?? (identical(mod, job.update!.primary) ? job.subject : null),
+    );
+    _log.warning('update run halted', error: cause, fields: {'job': job.seq, 'mod': mod.modId});
     state = [
       for (final job in state)
         if (job.isUpdate && !job.isTerminal && job.halt == null) job.withHalt(halt) else job,
@@ -699,19 +747,34 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
 
   /// Don't install: what the waiting job kept is deleted, its archive or its unpacked folders, and the row leaves
   /// the list. For an update run's job it is Skip, whose row stays.
-  Future<void> decline(int seq) async {
+  Future<void> decline(int seq) => _decline(seq);
+
+  /// [decline], an update job skipped for [updateSkip].
+  Future<void> _decline(int seq, {UpdateSkipReason updateSkip = UpdateSkipReason.skippedByUser}) async {
     final job = _jobOf(seq);
     if (job == null || job.state != DownloadJobState.waiting) return;
-    logConfirmation(job.isUpdate ? 'update.question' : 'install.question',
-        accepted: false,
-        subject: job.subject,
-        fields: {'question': (job.updateWait?.question ?? job.wait?.question)?.name});
+    final question = (job.updateWait?.question ?? job.wait?.question)?.name;
+    if (!job.isUpdate || updateSkip == UpdateSkipReason.skippedByUser) {
+      logConfirmation(job.isUpdate ? 'update.question' : 'install.question',
+          accepted: false, subject: job.subject, fields: {'question': question});
+    } else {
+      _log.info('update skipped at its question',
+          fields: {'mod': job.update!.primary.modId, 'question': question, 'reason': updateSkip.name});
+    }
     if (job.isUpdate) {
-      final all = _modResults(job, const [], (mod, _) => UpdateModResult.skipped(mod, UpdateSkipReason.skippedByUser));
+      // The user's Skip is every mod's own; a reason the answer found is the first mod's, and the others share its file.
+      final all = _modResults(
+        job,
+        const [],
+        (mod, first) => UpdateModResult.skipped(
+          mod,
+          first || updateSkip == UpdateSkipReason.skippedByUser ? updateSkip : UpdateSkipReason.sharedFileNotWritten,
+        ),
+      );
       markDone(seq, outcome: JobOutcome.skipped);
       _replace(
         seq,
-        (j) => j.copyWith(skipReason: UpdateSkipReason.skippedByUser, modResults: all).withNoQuestion(),
+        (j) => j.copyWith(skipReason: updateSkip, modResults: all).withNoQuestion(),
       );
     } else {
       _completeError(seq, const DownloadCancelledException());
@@ -873,7 +936,7 @@ class DownloadQueue extends Notifier<List<DownloadJob>> {
         (j) => j.copyWith(state: DownloadJobState.failed, error: error, finishedAt: DateTime.now()).withHalt(null),
       );
       _completeError(seq, error);
-      if (job != null && job.isUpdate && haltsUpdateRun(error)) _haltUpdates(seq, error);
+      if (job != null && job.isUpdate && haltsUpdateRun(error)) _haltUpdates(job, job.update!.primary, error);
     }
     _pump();
   }

@@ -50,10 +50,9 @@ Four rules follow from the split, and they govern everything below:
   outdated" ([`update-checks.md`](update-checks.md#the-cap-that-confidence-imposes)).
   `inferred` in particular came from a free-form text field a human typed, so its verdicts stay capped until it is confirmed.
   Reinstall still writes from it on the user's yes, since a link the user typed is their own registration ([`applying-updates.md`](applying-updates.md) §6).
-  **This is not a licence to overwrite unattended.** `exact` is a claim about
+  **This is not a licence to overwrite on its own.** `exact` is a claim about
   *which remote file this is*; it says nothing about what the mod folder holds,
-  which is where every hazard of applying an update actually lives. No update is
-  applied without the user present, and that is refused rather than unbuilt —
+  which is where every hazard of applying an update actually lives. An update is applied only by a run the user started, from a press that names the mods and the files they picked; automatic updating, with no press, is refused rather than unbuilt —
   [`applying-updates.md` §7](applying-updates.md#automatic-updating--considered-and-refused).
 - **Identity and version are separate unknowns.** "Which remote mod is this?" is
   often recoverable offline by parsing an existing `source_url`; "which file of it?"

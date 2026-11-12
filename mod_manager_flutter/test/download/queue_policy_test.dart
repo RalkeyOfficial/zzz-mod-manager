@@ -600,6 +600,29 @@ void main() {
       expect(ahead(jobs), unorderedEquals([80, 200, 300]));
     });
 
+    group('why a queued job is not admitted, as its row says it', () {
+      test('with the pool full, the first in line held by the lookahead waits for an install, not downloads next', () {
+        final jobs = [for (var i = 0; i < 3; i++) update(10, state: DownloadJobState.running), update(10)];
+        expect(updateHolds(jobs)[jobs.last.seq], UpdateHold.lookahead);
+        expect(updateQueuedPlace(jobs.last, jobs), isA<WaitsForInstall>());
+      });
+
+      test('with the pool full and the lookahead admitting it, the first in line downloads next', () {
+        final jobs = [for (var i = 0; i < 3; i++) update(10, state: DownloadJobState.running), update(10)];
+        expect(updateHolds(jobs, lookaheadCount: 5)[jobs.last.seq], UpdateHold.pool);
+        expect(updateQueuedPlace(jobs.last, jobs, lookaheadCount: 5), isA<DownloadsNext>());
+      });
+
+      test('the admissions are the jobs the walk holds nothing back, and the line behind a refusal waits too', () {
+        final jobs = [update(400, state: DownloadJobState.running), update(500), update(700), update(10, deferred: true)];
+        final holds = updateHolds(jobs);
+        expect(admitted(jobs), [jobs[1].seq]);
+        expect(holds[jobs[2].seq], UpdateHold.lookahead);
+        expect(holds[jobs[3].seq], UpdateHold.lookahead, reason: 'the line stops at the first job it refuses');
+        expect(updateQueuedPlace(jobs[3], jobs), isA<AheadOfIt>());
+      });
+    });
+
     group('the order of work', () {
       test('smallest listed file first, then in the order asked for', () {
         expect([for (final j in updateLine([update(300), update(20), update(20), update(80)])) j.seq], [2, 3, 4, 1]);
@@ -613,6 +636,19 @@ void main() {
         const halt = UpdateHalt(cause: UpdateFailure(UpdateFailureKind.noSpace), bySeq: 99);
         expect(updateLine([update(20, halt: halt), update(30)]).map((j) => j.seq), [2]);
         expect(admitted([update(20, halt: halt)]), isEmpty);
+      });
+
+      test('the jobs a halt holds at a gate are last at work, behind a transfer that goes on', () {
+        const halt = UpdateHalt(cause: UpdateFailure(UpdateFailureKind.noSpace), bySeq: 99);
+        final jobs = [
+          update(10, state: DownloadJobState.updating, step: UpdateStep.unpacked, halt: halt),
+          update(10, state: DownloadJobState.downloaded, halt: halt),
+          update(10, state: DownloadJobState.running, halt: halt),
+          update(10, halt: halt),
+        ];
+        final running = jobs[2].seq;
+        expect(updatesInOrderOfWork(jobs).first.seq, running);
+        expect([for (final j in updatesInOrderOfWork(jobs)) j.seq].skip(1), [jobs[0].seq, jobs[1].seq, jobs[3].seq]);
       });
     });
 

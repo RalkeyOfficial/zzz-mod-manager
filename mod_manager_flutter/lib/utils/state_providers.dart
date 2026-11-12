@@ -1237,7 +1237,8 @@ final libraryHasUpdatesProvider = Provider<bool>((ref) {
 });
 
 /// The mods **anywhere in the library** with a newer file that can be installed, each with its verdict: what the
-/// "Update N" button counts and the bulk update dialog lists.
+/// "Update N" button counts and the bulk update dialog lists, less the ones already in an update run
+/// (`modsToUpdateProvider`).
 ///
 /// Not [libraryUpdateCountProvider]: that is the sidebar's number and counts every verdict that shows an update,
 /// including those with no file to name. A button that promised N cards and opened with fewer would be wrong, so this
@@ -1247,14 +1248,6 @@ final updatableModsProvider = Provider<List<(ModInfo, UpdateCheck)>>((ref) {
   if (checks.isEmpty) return const [];
   return installableUpdatesOf(ref.watch(modsProvider), checks);
 });
-
-/// How many mods [updatableModsProvider] holds: the N of "Update N". Its own provider so a header that holds the button
-/// rebuilds when the number changes, not whenever a verdict does.
-final updatableModsCountProvider = Provider<int>((ref) => ref.watch(updatableModsProvider).length);
-
-/// Whether a run of several updates is under way, started by `LibraryActions.updateMods`. Read by the control that
-/// would start another, since two runs would write into the same folders at once.
-final libraryUpdateRunProvider = StateProvider<bool>((ref) => false);
 
 /// Whether the list of mods to update is open, so a second press of Update N, on this page or another, opens no second
 /// one. Set by `showUpdateModal`.

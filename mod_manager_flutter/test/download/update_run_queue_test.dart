@@ -3,11 +3,16 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mod_manager_flutter/models/character_info.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
+import 'package:mod_manager_flutter/models/mod_download.dart';
+import 'package:mod_manager_flutter/screens/dialogs/update_modal.dart';
 import 'package:mod_manager_flutter/services/download/download_exceptions.dart';
 import 'package:mod_manager_flutter/services/download/download_job.dart';
 import 'package:mod_manager_flutter/services/download/download_queue.dart';
+import 'package:mod_manager_flutter/services/download/download_request.dart';
 import 'package:mod_manager_flutter/services/download/update_job.dart';
+import 'package:mod_manager_flutter/services/update_apply/update_applier.dart' show UpdateWriteStep;
 import 'package:mod_manager_flutter/services/writes_in_flight.dart';
 import 'package:path/path.dart' as p;
 
@@ -96,6 +101,18 @@ void main() {
       expect(enqueueUpdate(2, [baseOf('Ellen', 1)]), isNull);
       expect(jobs(), hasLength(1));
       expect(first.intent, DownloadIntent.update);
+    });
+
+    test("Update N's second press for the same mod adds nothing, whichever newer file it picks", () {
+      rig.controlled(1);
+      final ellen = ModInfo(id: 'Ellen', name: 'Ellen', characterId: 'ellen', isActive: false, uid: 'u1');
+      UpdatePick pick(int fileId) =>
+          UpdatePick(modId: 'Ellen', file: fileFor(fileId), subject: const DownloadKey.base(100), published: const []);
+
+      expect(queue().enqueueUpdates([updateEnqueueOf(pick(1), ellen)]).single, isNotNull);
+      expect(queue().enqueueUpdates([updateEnqueueOf(pick(1), ellen)]).single, isNull);
+      expect(queue().enqueueUpdates([updateEnqueueOf(pick(2), ellen)]).single, isNull);
+      expect(jobs(), hasLength(1));
     });
 
     test('another layer of the same folder is a job of its own', () {
@@ -465,6 +482,54 @@ void main() {
       expect(gone(1), isTrue);
     });
 
+    test("the Updates page's Clear finished takes only the run's finished rows", () {
+      final seeded = seed([
+        updateJob(1, state: DownloadJobState.done),
+        updateJob(2, state: DownloadJobState.waiting),
+        DownloadJob(
+          seq: 3,
+          request: DownloadRequest(url: Uri.parse('https://gamebanana.com/dl/3')),
+          intent: DownloadIntent.install,
+          subject: 'Browse 3',
+          file: GbFile(idRow: 3),
+          state: DownloadJobState.done,
+        ),
+      ]);
+      seeded.clearFinished(updatesOnly: true);
+      expect([for (final j in jobs()) j.seq], [2, 3]);
+    });
+
+    test('neither Clear finished takes a failed update, which only Remove from the list does', () {
+      final seeded = seed([
+        updateJob(1, state: DownloadJobState.failed),
+        updateJob(2, state: DownloadJobState.done),
+        DownloadJob(
+          seq: 3,
+          request: DownloadRequest(url: Uri.parse('https://gamebanana.com/dl/3')),
+          intent: DownloadIntent.install,
+          subject: 'Browse 3',
+          file: GbFile(idRow: 3),
+          state: DownloadJobState.failed,
+        ),
+      ]);
+      seeded.clearFinished(updatesOnly: true);
+      expect([for (final j in jobs()) j.seq], [1, 3]);
+      seeded.clearFinished();
+      expect([for (final j in jobs()) j.seq], [1], reason: 'a failed download is a Finished row, cleared as before');
+      seeded.remove(1);
+      expect(jobs(), isEmpty);
+    });
+
+    test('a writing job carries the part of its write that has started, and a new write starts without one', () {
+      final seeded = seed([updateJob(1, state: DownloadJobState.updating, step: UpdateStep.writing)]);
+      seeded.reportWriteStep(1, const UpdateWriting('mod1', UpdateWriteStep.replacingFiles));
+      expect(jobOf(1).writing?.step, UpdateWriteStep.replacingFiles);
+
+      seeded.settleUpdate(1, const UpdateStageAsks(UpdateWait(UpdateQuestionKind.unrecordedPatch)));
+      seeded.reportWriteStep(1, const UpdateWriting('mod1', UpdateWriteStep.linking));
+      expect(jobOf(1).writing?.step, UpdateWriteStep.replacingFiles, reason: 'only a writing job takes a step');
+    });
+
     test('a job that ends before its unpack deletes its archive; one that could not be unpacked keeps it', () async {
       File archive(String name) => File(p.join(rig.temp.path, name))..writeAsStringSync('bytes');
       final gone = archive('gone.zip');
@@ -503,6 +568,26 @@ void main() {
       expect(jobOf(1).updateWait?.question, UpdateQuestionKind.folders);
       expect(container.read(updateRunSummaryProvider).asking, 1);
       expect(container.read(updateJobOfModProvider('mod1'))?.job.seq, 1);
+    });
+
+    test("a mod's row is not told about a change to another job, and is told about one to its own", () {
+      final seeded = seed([
+        updateJob(1, state: DownloadJobState.updating, step: UpdateStep.unpacked),
+        updateJob(2, state: DownloadJobState.updating, step: UpdateStep.writing),
+      ]);
+      final before = container.read(updateJobOfModProvider('mod1'));
+
+      seeded.reportWriteStep(2, const UpdateWriting('mod2', UpdateWriteStep.replacingFiles));
+      expect(container.read(updateJobOfModProvider('mod1')), before, reason: 'equal, so its row is not rebuilt');
+      seeded.settleUpdate(1, const UpdateStageAsks(UpdateWait(UpdateQuestionKind.unrecordedPatch)));
+      expect(container.read(updateJobOfModProvider('mod1')), isNot(before));
+    });
+
+    test('Skip with a reason of its own leaves the row skipped for it', () async {
+      final seeded = seed([updateJob(1, state: DownloadJobState.waiting)]);
+      await seeded.skipUpdate(1, reason: UpdateSkipReason.modGone);
+      expect(jobOf(1).skipReason, UpdateSkipReason.modGone);
+      expect(jobOf(1).resultFor('mod1')?.skipReason, UpdateSkipReason.modGone);
     });
   });
 

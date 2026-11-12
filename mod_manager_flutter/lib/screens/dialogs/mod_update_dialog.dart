@@ -143,7 +143,6 @@ class ModUpdateGateway {
     required GbFile file,
     required bool asCompanion,
     required List<GbFile> published,
-    UpdateRunPosition? run,
   }) =>
       applyPatchUpdateFlow(
         context,
@@ -153,7 +152,6 @@ class ModUpdateGateway {
         file: file,
         asCompanion: asCompanion,
         published: published,
-        run: run,
       );
 }
 

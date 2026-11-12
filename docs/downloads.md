@@ -280,7 +280,7 @@ Admitting it closes the door behind it rather than raising the ceiling, so the w
 
 **An update run's jobs (`DownloadIntent.update`) are a pool of their own**, three at once (`kUpdateDownloadConcurrency`), beside the two above, which they neither take nor bypass, so at most five connections; six while the modal one-mod update's foreground job, which bypasses the cap, runs beside a run, which can happen from U4 until U7 moves that update onto the run.
 They also start only while the lookahead admits them: at most three update jobs or 1 GiB of listed size between the start of their download and the end of their install, one always admitted when none is ahead. Smallest file first, a stalled one sent to the end of the line.
-Why these numbers, what counts as ahead and the lanes after the download are [`update-runs.md`](update-runs.md) §4.1. The engine is built and no screen starts a run yet, so today only the modal update flow's foreground job reaches the queue for an update.
+Why these numbers, what counts as ahead and the lanes after the download are [`update-runs.md`](update-runs.md) §4.1. Update N's run puts its jobs in that pool; the one-mod update window's download is still the modal flow's foreground job, which bypasses the cap on the way in.
 
 **Nothing is persisted.** A queue restored from disk would start re-fetching on
 launch. The partials in `<appData>/downloads` are already the durable half: an
@@ -301,7 +301,7 @@ there. `DownloadIntent`, fixed when the user presses the button, says which of f
 | `install` | the host, through `dialogs/install_archive_flow.dart` (§10) |
 | `keepArchive` | the host — one notification naming the path |
 | `callerHandles` | the caller awaiting `completionOf`, i.e. `applyUpdateFlow`, which ends the job itself (§13) |
-| `update` | the host, unpacking it in the update unpack lane and writing it on the install chain ([`update-runs.md`](update-runs.md) §11); no screen enqueues one yet |
+| `update` | the host, unpacking it in the update unpack lane and writing it on the install chain ([`update-runs.md`](update-runs.md) §11); Update N enqueues them |
 
 **What else a job carries is fixed at the same press**, for the same reason: the page that knew may be gone when the bytes land. Besides the file and the mod page (for the origin block and the autofill), an install job carries `characterId`, the character the mod page showed, which is the GameBanana category's, Unassigned when it names none, or the user's Install for pick, and the host hands it to the import as the character to file every new mod under; and `turnOn`, the mod page's Turn on after installing, after which the host turns each new mod on through `ApiService.enableMod` ([`marketplace.md`](marketplace.md) §5).
 A retry keeps both. Installing a paused file again resumes its job with that press's intent, character and Turn on (`DownloadJob.pressedAgain`, §11), since the latest press is what the user asked for. A `keepArchive` job never turns anything on.
@@ -357,7 +357,7 @@ rest of the session.
 
 ## 9. What the user sees
 
-Three surfaces, and they answer different questions. The **wait modal** says *you are waiting for this, and it is still going*; the **notification** says *something is happening in the background and here is how fast*; the **panel** says *what, exactly, and let me change it*. Only an update has a wait modal: an install runs in the background from the press to its result (§10).
+Three surfaces, and they answer different questions. The **wait modal** says *you are waiting for this, and it is still going*; the **notification** says *something is happening in the background and here is how fast*; the **panel** says *what, exactly, and let me change it*. Only a one-mod update has a wait modal: an install runs in the background from the press to its result (§10), and so does an update run, whose jobs have no window at all ([`update-runs.md`](update-runs.md) §5).
 
 ### The wait modal: one window from the press to the question
 
@@ -418,6 +418,9 @@ blocking it.
 
 This is also why the stack's backstop drops the oldest card **with a clock** rather than simply the oldest: an update to a Working card that has been dropped is a no-op, so dropping one silently throws away the only report of the work it was tracking. See `notifications.md` §7.
 
+**An update run's jobs have a deck of their own** (`updates`), so a run and the Browse downloads are two slots of the stack ([`notifications.md`](notifications.md) §6). A card per job at work, titled "Updating <mod>" with its step as the body ("Connecting...", "Downloading · 79.0 MB of 233 MB", "Unpacking", "Installing · replacing the files", "Waiting", or "Stopped: <reason>" for a job the run's halt holds, landed and unpacked ones included), and "2 more updating" under the front card. The front card is the job furthest along, whatever order they started in: the oldest card takes the words of the furthest-along job, then the next, so the cards are not each tied to a job. A card is rewritten only when what it says changes, so another download's progress does not touch it. The bar is a download's share, a sweep for the unpack and the write, and empty for a job not started or held by the halt. The deck is outside the stack's backstop, so a run longer than it keeps every card ([`notifications.md`](notifications.md) §7).
+A job that ends leaves the deck and tells its result once: the mods it wrote are counted on one Done card ("Pastel Burnice updated" with "The old file is kept as a snapshot.", or "3 mods updated" with their names), whose Show opens the panel, counting one mod or several, since it is about the list they are all in ([`notifications.md`](notifications.md) §7); each mod that failed has an Error card of its own, "Couldn't update <mod>", with the reason and Open Downloads, a mod a written job refused and every mod of a shared file whose transfer failed included; a skip raises nothing, since the user pressed it or the row says why. A failure every later job would share is one Error card instead, "Updates stopped", naming the mod and the reason, which stays until it is closed; it stands in for that one mod's card, and the job's other mods keep theirs.
+
 ### The panel
 
 `DownloadsNavItem`, the sidebar's **Downloads** row, opening `DownloadsPanel`, the side panel of §13, as a route on the root `Navigator` (`DownloadsPanelRoute`). The row is always there, under Browse, and its badge is §14's.
@@ -447,6 +450,17 @@ Four questions can wait, tested in this order:
 | Already installed | the archive's md5 against the library, after the unpack (`installsOfArchiveNow`, the drop's test too) | "This archive is byte-identical to the one you installed as Ellen Swimsuit." | Install anyway · Don't install |
 | Several folders | more than one folder unpacked | "The archive has 3 folders. Pick which to install and how." | Pick folders… · Don't install |
 | A patch | the patch scan of the planned mods (`scanPlannedMods`) | "Looks like a patch for another mod. Choose what it should patch." | Choose… · Don't install |
+
+An update run's job waits in the same group with a question of its own ([`update-runs.md`](update-runs.md) §6), and its no is Skip update, which writes nothing and keeps the row as skipped, where an install's Don't install takes the row off the list:
+
+| Question | The row says | Its buttons |
+|---|---|---|
+| Password | "The archive asks for a password. Authors usually put it in the mod description.", or "That password didn't open the archive." | Enter password · Skip update |
+| Which folders are the mod | "This update has 2 folders. Pick the ones that replace the mod." | Pick folders… · Skip update |
+| A download shaped like a patch | "The new file looks like a patch, so it is held and nothing is written. Skip it to leave the mod as it is." | Skip update |
+| A patch nothing records in the folder | "This folder holds a patch too, and nothing records which files are its, so the update would remove it. Nothing is written; skip it to leave the mod as it is." | Skip update |
+
+Enter password opens §12's password window from the host, with Skip update and Update in place of Don't install and Install, and Open mod page opening the page of the layer the update is for; a wrong password asks again. Pick folders… opens the import selection dialog in its update form (`pickUpdateFolders`), the one the one-mod update asks. Closing either leaves the question waiting. The answer goes back to the job's unpack lane with what the job kept, so the archive is not unpacked twice. The last two have no window here and wait with only Skip update.
 
 - **The already-installed question waits like the others.** Declining it for the user turns a download into nothing that anyone asked for, and re-installing an identical archive is the repair the question exists to allow; installing it unasked is the answer the question exists to avoid. It has no dialog: its sentence fits on the row, and the row's two buttons are its two answers. The wording is "byte-identical", never "verified".
 - The other buttons open their dialogs: the import selection dialog, the patch prompt, and §12's password dialog.
@@ -577,9 +591,9 @@ Its width is never more than the window's. A row's question opens from `Download
 
 - Rejected: a `MenuAnchor` beside the sidebar. It paints in the page's overlay, so with a dialog up the panel would open behind its barrier.
 
-The header has "Downloads", Clear finished while the Finished group has a row, and close. The footer says "Archives are deleted once they're installed.", which is true of every install: the archive goes once it is unpacked. With no row at all, the body says "Nothing is downloading."
+The header has "Downloads", Clear finished while the Finished group has a row, and close. Clear finished takes the Finished group and nothing else: a failed update is in Needs your attention and leaves only by its Remove from the list. The footer says "Archives are deleted once they're installed.", which is true of every install: the archive goes once it is unpacked. While any update run's row is in the list it says "Each update keeps the file it replaces as a snapshot." instead. With no row at all, the body says "Nothing is downloading."
 
-**Four groups, in this order, each left out when empty**: Needs your attention with its count, In progress, Waiting, Finished. The first three are in queue order and Finished is newest first. A paused download stays in In progress where it was, so Resume comes up under the pointer that pressed Pause, and so does a resumed one while it waits for a slot, its line "Waiting for a free slot · 133 MB of 214 MB" and its bar still dimmed.
+**Five groups, in this order, each left out when empty**: Needs your attention with its count, Updating, In progress, Waiting, Finished. Needs your attention holds every question and every failed update run's job, which has nothing else to say it did not happen; a failed download stays in Finished. Updating holds the update run's jobs at work in the order of work ([`update-runs.md`](update-runs.md) §4.6), and its heading says only "Updating", never how many downloads run at once. In progress and Waiting hold the other jobs in queue order, and Finished is newest first. A paused download stays in In progress where it was, so Resume comes up under the pointer that pressed Pause, and so does a resumed one while it waits for a slot, its line "Waiting for a free slot · 133 MB of 214 MB" and its bar still dimmed.
 
 A row leads with a 56×42 thumbnail: the mod page's first preview, on the character's element tile while it loads or where there is none, the misc tile for a category or Unknown. A preview the content filter would hide is blurred instead, since the user asked for this download. A waiting row is amber and leads with its question's icon on an amber tile instead: a link for a patch, a folder, a lock, and two overlapping squares for an identical archive. Then the name, the file, a line, and the controls.
 The file is which file of the mod page the row is: its name in mono, and the author's variant text in quotes beside it in grey, as the mod page's file list words it (`fileDisplayName`, `fileDisplayDetail`), on every row. Two files of one mod read the same by name alone, "Victorian Ballgown" twice, so it is what tells them apart; a long file name gives way before the variant text does.
@@ -610,9 +624,26 @@ The file is which file of the mod page the row is: its name in mono, and the aut
 
 **What a job records** besides its transfer: when it finished; the folders an install created or an update wrote, and what it ended as (installed, updated, reinstalled, a patch's base installed, saved, or nothing installed with the result's headline); the character it was filed under, which is the job's `characterId` (the category's, Unassigned, or the user's pick with Install for); for an update, its file and the step its flow is on; and for a waiting job its question, what the question needs (the folder count, the names an identical archive was installed as, a password that failed) and the prepared install (the unpacked folders, the md5, the shader sources, the answers so far, and the password until it is used).
 
+### An update run's rows
+
+What an update run's job says in the panel, beside the questions of §10:
+
+| State | Group | At the right | The line | Bar |
+|---|---|---|---|---|
+| `queued` | Updating, at 75% | "Waiting" | "118 MB · downloads next" for the first in line, "118 MB · 2 ahead of it" for the rest; for the first held by the lookahead "118 MB · waits for an install to finish", whether or not the download pool is full, or "118 MB · waits for your answers" when every job ahead of it waits on a question | none |
+| held by the halt: `queued`, `downloaded` or unpacked | Updating, at 75% | "Waiting" | "Stopped: <reason>" | none |
+| `running` | Updating | the share, "34%" | "79.0 MB of 233 MB · 4.1 MB/s", or "Connecting..." until it is connected and the rate has a figure | the share |
+| `downloaded`, unpacking, unpacked | Updating | "Unpacking" | "Checking what is in the file" | none, since neither step reports how far along it is |
+| writing | Updating | "Installing" | "The 2026-08-12 file is kept: replacing the files", the part of the write that has started, "linking it in" only for a mod that was on | a sweep in the accent drawn towards the text colour |
+| `waiting` | Needs your attention | the question (§10) | | |
+| `failed` | Needs your attention | | the reason, the space figures included; "GameBanana stopped sending the file. Nothing was changed." for a stall | none; Remove from the list |
+| `done` | Finished | | "Updated to the file from 2026-10-01", "Patch added", "Skipped · still on the 2026-08-12 file" or the skip's reason, "Undone" | none |
+
+A job of several mods picked with one file says "Updating 3 mods from this file" under its file. Its controls are `rowActions`': Cancel where the queue can cancel it, none while it unpacks or writes, and Show on a written one. A failed update offers no Try again.
+
 ### Update downloads
 
-**A download the update flow owns stays on the panel until the update ends**, as the canvas's Updating row draws it, rather than ending when its bytes land, which leaves a Finished row for an update the user may still decline.
+**A download the one-mod update flow owns stays on the panel until the update ends**, as the canvas's Updating row draws it, rather than ending when its bytes land, which leaves a Finished row for an update the user may still decline.
 Its bytes landing moves it to `updating`. The flow reports its steps (unpacking, the confirmation, writing) and ends the job in a `finally`, so no path leaves a row in progress: `done` with what it wrote, off the list when the user declined or cancelled, or `failed` with the flow's own headline and no Try again. A written update's row is Finished as its result window opens, not when that window is closed. Reinstall and the base fetched for a patch go through the same flow and say what they did (`JobOutcome.reinstalled`, `baseInstalled`). A transfer that fails before the handover stays as a failed row with Dismiss, since the flow that would consume a retry has already ended.
 The flow's window and cards still report it, and the host raises no card for it after the handover. The row has no controls: the window has Cancel, and a write is not stopped half way.
 
@@ -631,3 +662,4 @@ One badge on the Downloads row at a time, the first of these that applies:
 - A failure ranks under the count: while downloads run the deck reports them and the failure is already an Error card that stays until closed, and once the queue is idle the pill keeps it findable. The row keeps its download arrow whatever the state, and a failure takes the same shape as a question in the colour of an error.
   - Rejected: swapping the row's icon for a warning. The row's arrow is what it is, and a pill says how many.
 - A cancel shows nothing: it is what the user asked for.
+- An update run's jobs are counted with the downloads, by the same rules: one waiting on a question is in the amber pill, one at work in the plain count, a failed one in the red pill ([`update-runs.md`](update-runs.md) §5). The canvas counts questions and failures together in one amber pill; amber stays the jobs waiting on an answer.

@@ -47,8 +47,10 @@ DownloadJob updateJob(
   );
 }
 
-/// The base layer of the folder [modId], whose mod page is [modId].
-UpdateMod baseOf(String modId, int remoteId) => UpdateMod(modId: modId, layer: DownloadKey.base(remoteId));
+/// The base layer of the folder [modId], whose mod page is [remoteId], picked while its record named [heldFileId].
+UpdateMod baseOf(String modId, int remoteId, {int? heldFileId, String? name}) =>
+    UpdateMod(modId: modId, layer: DownloadKey.base(remoteId), heldFileId: heldFileId, name: name);
 
-/// A patch layer of the folder [modId], whose mod page is [remoteId].
-UpdateMod patchOf(String modId, int remoteId) => UpdateMod(modId: modId, layer: DownloadKey.patch(remoteId));
+/// A patch layer of the folder [modId], whose mod page is [remoteId], picked while its record named [heldFileId].
+UpdateMod patchOf(String modId, int remoteId, {int? heldFileId}) =>
+    UpdateMod(modId: modId, layer: DownloadKey.patch(remoteId), heldFileId: heldFileId);

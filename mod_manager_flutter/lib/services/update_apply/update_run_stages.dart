@@ -12,12 +12,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
 
 import '../../models/character_info.dart';
+import '../../models/mod_download.dart';
 import '../../utils/state_providers.dart';
 import '../api_service.dart';
 import '../archive_service.dart';
 import '../download/download_job.dart';
+import '../download/download_queue.dart';
 import '../download/update_job.dart';
 import '../log/logger.dart';
+import '../update_check.dart';
 import 'update_applier.dart';
 import 'update_layout.dart';
 import 'update_prepare.dart';
@@ -40,14 +43,17 @@ typedef UpdateWriter = Future<UpdateStageResult> Function(
 });
 
 /// What an update job keeps between its stages, as its `prepared`:
-/// the unpack, and the folders the user picked when the layout asked.
+/// the unpack, the folders question while it waits on one, and the folders the user picked when the layout asked.
 class UpdateRunKept implements HoldsUnpack {
-  const UpdateRunKept({this.unpacked, this.pickedFolders});
+  const UpdateRunKept({this.unpacked, this.pickedFolders, this.foldersQuestion});
 
   final UpdateUnpacked? unpacked;
 
   /// The answer to a folders question, paths of [unpacked]'s folders.
   final List<String>? pickedFolders;
+
+  /// The folders question the job waits on: the archive's folders to pick from, and why the layout asks.
+  final FoldersQuestion? foldersQuestion;
 
   UpdateRunKept withPickedFolders(List<String> folders) => UpdateRunKept(unpacked: unpacked, pickedFolders: folders);
 
@@ -85,7 +91,7 @@ Future<UpdateStageResult> prepareUpdateJob(ProviderContainer container, Download
       onUnpacked: (unpacked) => made = unpacked,
     );
     if (made != null && archive != null) await deleteConsumedArchive(archive);
-    return await _classify(result, kept);
+    return await _classify(result, kept, writes: [for (final mod in job.update!.mods) mod.modId]);
   } catch (_) {
     await ArchiveService.deleteExtraction(UpdateRunKept(unpacked: made).unpackedFolders);
     rethrow;
@@ -97,8 +103,9 @@ Future<UpdateStageResult> prepareUpdateJob(ProviderContainer container, Download
 /// Before anything is turned off or cleared it checks that the unpacked folders are still there, and again just before the write,
 /// since a write from a missing unpack would empty the folder and then fail its copy.
 /// A mod no longer in the library, or renamed, is skipped,
-/// and a verdict changed since the unpack (a restore, a rename of another mod, a patch) is a new question.
-/// Each folder is checked for a write by something else immediately before its own write.
+/// and so is one whose update was ignored or written by something else while the job waited ([_settledMeanwhile]).
+/// A verdict changed since the unpack (a restore, a rename of another mod, a patch) is a new question.
+/// Each folder is checked immediately before its own write for a write by something else that is running or has started since the stage began reading ([_WritesSince]).
 /// What came of every mod of the job is in the result.
 Future<UpdateStageResult> writeUpdateJob(
   ProviderContainer container,
@@ -111,6 +118,9 @@ Future<UpdateStageResult> writeUpdateJob(
     return UpdateStageFailed(UpdateFailure(UpdateFailureKind.other, cause: StateError('no unpack to write')));
   }
 
+  // Before anything is read: a write by something else that starts after this is not in what the reads below saw.
+  final since = _WritesSince(container);
+
   // Nothing is written until `writeUpdate`, so a failure before it is not an interrupted write.
   final UpdatePrepared prepared;
   final _Plan plan;
@@ -118,11 +128,21 @@ Future<UpdateStageResult> writeUpdateJob(
     if (!await _unpackThere(unpacked)) return const UpdateStageFailed(UpdateFailure(UpdateFailureKind.unpackGone));
     final found = await _found(container, job);
     if (found case _Unfound(:final result)) return result;
-    final result = await _prepare(container, (found as _Found).request, kept);
-    final verdict = await _classify(result, kept);
+    final request = (found as _Found).request;
+    final skipped = await _settledMeanwhile(container, job, request.mod);
+    final busy = {...skip, ...container.read(modWritesInProgressProvider)};
+    for (final mod in job.update!.mods) {
+      if (busy.contains(mod.modId) || since.moved(mod.modId)) {
+        skipped.putIfAbsent(mod.modId, () => UpdateModResult.skipped(mod, UpdateSkipReason.beingWritten));
+      }
+    }
+    final writes = [for (final mod in job.update!.mods) if (!skipped.containsKey(mod.modId)) mod.modId];
+    if (writes.isEmpty) return _settled(job, [for (final mod in job.update!.mods) skipped[mod.modId]!], null);
+    final result = await _prepare(container, request, kept);
+    final verdict = await _classify(result, kept, writes: writes);
     if (verdict is! UpdateStageReady) return verdict;
     prepared = result as UpdatePrepared;
-    plan = _planFor(prepared, job.update!, {...skip, ...container.read(modWritesInProgressProvider)});
+    plan = _planFor(prepared, job.update!, skipped);
     if (plan.targets.isEmpty && !plan.writesPatch) return _settled(job, plan.results, null);
     if (!await _unpackThere(unpacked)) return const UpdateStageFailed(UpdateFailure(UpdateFailureKind.unpackGone));
   } catch (error, stack) {
@@ -132,22 +152,38 @@ Future<UpdateStageResult> writeUpdateJob(
   }
 
   final clock = _WriteClock(job.update!.primary.modId);
-  final UpdateReport report;
+  final queue = container.read(downloadQueueProvider.notifier);
+  UpdateReport report;
   try {
     report = await writeUpdate(
       container,
       prepared,
       targets: plan.targets,
-      onStep: clock.step,
+      onStep: (mod, step) {
+        clock.step(mod, step);
+        queue.reportWriteStep(job.seq, UpdateWriting(mod.id, step));
+      },
       // Read again at each folder's turn: the mark is set by a write, not held by a lock.
-      skipWhen: (mod) => container.read(modWritesInProgressProvider).contains(mod.id),
+      // A write that started and ended since the reads above is caught by the folder's counter.
+      skipWhen: (mod) => container.read(modWritesInProgressProvider).contains(mod.id) || since.moved(mod.id),
     );
   } finally {
     clock.end();
   }
   if (prepared is PreparedPatch && report.outcome.changed) {
     // A patch write leaves the folder's verdict to its caller, since the verdict names layers.
-    forgetUpdateCheck(container, prepared.request.mod.id);
+    // It is kept as the mark the write removed, as a base write keeps its own, so the row reads the same after it.
+    final id = prepared.request.mod.id;
+    final mark = container.read(modUpdateChecksProvider)[id];
+    forgetUpdateCheck(container, id);
+    if (mark != null) {
+      report = UpdateReport(
+        applied: report.applied,
+        outcome: report.outcome,
+        skipped: report.skipped,
+        removedMarks: {id: mark},
+      );
+    }
   }
 
   final results = {for (final result in plan.results) result.mod.modId: result};
@@ -181,7 +217,8 @@ class _Plan {
   final List<UpdateModResult> results;
 }
 
-_Plan _planFor(UpdatePrepared prepared, UpdateTask task, Set<String> busy) {
+/// [skipped] holds the mods already left out, by folder id, each with why.
+_Plan _planFor(UpdatePrepared prepared, UpdateTask task, Map<String, UpdateModResult> skipped) {
   final results = <UpdateModResult>[];
   final targets = <UpdateTarget>[];
   var writesPatch = false;
@@ -192,8 +229,8 @@ _Plan _planFor(UpdatePrepared prepared, UpdateTask task, Set<String> busy) {
 
   for (final mod in task.mods) {
     final first = identical(mod, task.primary);
-    if (busy.contains(mod.modId)) {
-      results.add(UpdateModResult.skipped(mod, UpdateSkipReason.beingWritten));
+    if (skipped[mod.modId] case final result?) {
+      results.add(result);
       continue;
     }
     switch (prepared) {
@@ -264,6 +301,19 @@ final class _Unfound extends _Lookup {
   final UpdateStageResult result;
 }
 
+/// [pick]'s mod in [library]: the mod in its folder, unless that folder now holds a mod of another uid.
+ModInfo? pickedModIn(List<ModInfo> library, UpdateMod pick) {
+  final cached = library.where((mod) => mod.id == pick.modId).firstOrNull;
+  final same = cached != null && (pick.uid == null || cached.uid == null || cached.uid == pick.uid);
+  return same ? cached : null;
+}
+
+/// Why [pick] has no mod to write into: renamed when its uid is under another folder, else gone.
+UpdateSkipReason missingPickReason(List<ModInfo> library, UpdateMod pick) {
+  final moved = pick.uid != null && library.any((mod) => mod.uid == pick.uid && mod.id != pick.modId);
+  return moved ? UpdateSkipReason.folderRenamed : UpdateSkipReason.modGone;
+}
+
 Future<_Lookup> _found(ProviderContainer container, DownloadJob job) async {
   final config = await ApiService.getConfig();
   final modsPath = config['mods_path'] ?? '';
@@ -274,21 +324,21 @@ Future<_Lookup> _found(ProviderContainer container, DownloadJob job) async {
   final pick = task.primary;
 
   final library = await container.read(libraryProvider.future);
-  final cached = library.where((mod) => mod.id == pick.modId).firstOrNull;
+  final cached = pickedModIn(library, pick);
   final there = await Directory(path.join(modsPath, pick.modId)).exists();
-  final same = cached != null && (pick.uid == null || cached.uid == null || cached.uid == pick.uid);
-  if (!there || !same) {
-    final moved = pick.uid != null && library.any((mod) => mod.uid == pick.uid && mod.id != pick.modId);
-    _log.info('update skipped, the mod is not there', fields: {'mod': pick.modId, 'renamed': moved});
-    return _Unfound(UpdateStageSkipped(moved ? UpdateSkipReason.folderRenamed : UpdateSkipReason.modGone));
+  if (!there || cached == null) {
+    final reason = missingPickReason(library, pick);
+    _log.info('update skipped, the mod is not there',
+        fields: {'mod': pick.modId, 'renamed': reason == UpdateSkipReason.folderRenamed});
+    return _Unfound(UpdateStageSkipped(reason));
   }
   // The origin from disk: a restore or another write may have changed it since the last scan.
   final service = await container.read(modManagerServiceProvider.future);
   final mod = cached.copyWith(origin: await service.readModOrigin(pick.modId));
 
-  final remoteModId = pick.layer?.modId ?? mod.origin?.base?.modId;
+  final remoteModId = pick.layer.modId;
   final route = updateWriteRoute(origin: mod.origin, subject: pick.layer);
-  if (remoteModId == null || route.kind == UpdateWriteKind.none) {
+  if (route.kind == UpdateWriteKind.none) {
     return const _Unfound(UpdateStageFailed(UpdateFailure(UpdateFailureKind.refused)));
   }
   final reinstall = task.kind == UpdateKind.reinstall;
@@ -336,16 +386,104 @@ Future<UpdatePrepareResult> _prepare(
   );
 }
 
+/// The mods' write counters (`modWritesStartedProvider`) and the writes running, as they were when the write stage started.
+///
+/// Taken before the stage reads a sidecar, so a write by something else that starts after it, an Ignore or a one-mod write, is seen even when it ends before the stage's own read or before a folder's turn.
+/// The run's own earlier writes are not mistaken for one: a folder's next job starts its write stage only after its previous job has ended, and a job's folders are written one after another, each counted on its own.
+class _WritesSince {
+  _WritesSince(ProviderContainer container)
+      : _container = container,
+        _started = container.read(modWritesStartedProvider),
+        _running = container.read(modWritesInProgressProvider);
+
+  final ProviderContainer _container;
+  final Map<String, int> _started;
+  final Set<String> _running;
+
+  /// Whether a write on [modId] was running at the start or has started since.
+  bool moved(String modId) =>
+      _running.contains(modId) || _container.read(modWritesStartedProvider)[modId] != _started[modId];
+}
+
+/// The mods of [job] whose update settled while the job waited, by folder id, each skipped with why (`docs/update-runs.md` §10).
+///
+/// Ignored meanwhile: the verdict dismisses the layer, or the sidecar's dismissal changed since the press and reaches the picked file's date.
+/// A dismissal the layer already held at the press is not read as one: the user pressed Update with it in place.
+/// Already updated: the layer's record names the picked file, or it names another file than at the press, none included, while the verdict neither offers the update nor dismisses it,
+/// so a file written through the one-mod window is not written over with this older one.
+/// A layer whose record is unchanged is written even without a verdict: a base written earlier in the run drops the folder's whole verdict, its patch layer's included.
+/// A reinstall writes the file the layer holds, so none of this applies to it.
+Future<Map<String, UpdateModResult>> _settledMeanwhile(ProviderContainer container, DownloadJob job, ModInfo primary) async {
+  final task = job.update!;
+  final settled = <String, UpdateModResult>{};
+  if (task.kind == UpdateKind.reinstall) return settled;
+  final checks = container.read(modUpdateChecksProvider);
+  final service = await container.read(modManagerServiceProvider.future);
+  final fileDate = job.file.dateAdded;
+  for (final mod in task.mods) {
+    final origin = mod.modId == primary.id ? primary.origin : await service.readModOrigin(mod.modId);
+    if (origin == null) continue;
+    final record = origin.downloadOf(mod.layer);
+    final verdict = _layerVerdict(checks[mod.modId], mod.layer);
+    final until = record?.updatesDismissedUntil;
+    final held = mod.heldDismissedUntil;
+    // By instant: the press read the library's copy and this reads the disk, which can differ in time zone only.
+    final ignoredSince = until != null &&
+        (held == null || !until.isAtSameMomentAs(held)) &&
+        fileDate != null &&
+        !fileDate.isAfter(until);
+    final changed = record?.fileId != mod.heldFileId;
+    final written = record?.fileId == job.file.idRow ||
+        (changed && verdict?.hasUpdate != true && verdict?.dismissed != true);
+    if (written) {
+      settled[mod.modId] = UpdateModResult.skipped(
+        mod,
+        UpdateSkipReason.alreadyUpdated,
+        alongWith: _writtenAlongWith(container.read(downloadQueueProvider), job, mod),
+      );
+    } else if (verdict?.dismissed == true || ignoredSince) {
+      settled[mod.modId] = UpdateModResult.skipped(mod, UpdateSkipReason.ignoredMeanwhile);
+    }
+  }
+  if (settled.isNotEmpty) {
+    _log.info('update skipped, settled while it waited', fields: {
+      for (final MapEntry(key: id, value: result) in settled.entries) id: result.skipReason!.name,
+    });
+  }
+  return settled;
+}
+
+/// What [check], a folder's verdict, says about [layer], or null when it says nothing about it.
+UpdateCheck? _layerVerdict(UpdateCheck? check, DownloadKey layer) {
+  if (check == null) return null;
+  for (final own in check.layers) {
+    if (own.key == layer) return own.check;
+  }
+  return check.layers.isEmpty || check.subject == layer ? check : null;
+}
+
+/// The folder id of the mod whose job, another of the run, wrote [mod]'s layer, or null.
+String? _writtenAlongWith(List<DownloadJob> jobs, DownloadJob job, UpdateMod mod) {
+  for (final other in jobs) {
+    if (other.seq == job.seq || !other.isUpdate) continue;
+    final wrote = other.modResults.any((r) => r.end == UpdateModEnd.written && r.mod.sameLayerAs(mod));
+    final by = other.update!.primary.modId;
+    if (wrote && by != mod.modId) return by;
+  }
+  return null;
+}
+
 /// Whether [result] can go on to the write, and what stops it when not.
-/// A patch-shaped download and a patch nothing records are questions; the folders the write leaves out are not.
-Future<UpdateStageResult> _classify(UpdatePrepareResult result, UpdateRunKept kept) async {
+/// A patch-shaped download and a patch nothing records are questions, for every mod the write takes ([writes], in the job's order);
+/// the folders the write leaves out are not.
+Future<UpdateStageResult> _classify(UpdatePrepareResult result, UpdateRunKept kept, {required List<String> writes}) async {
   switch (result) {
     case UpdateAsks(question: PasswordQuestion(:final failed)):
       return UpdateStageAsks(UpdateWait(UpdateQuestionKind.password, passwordFailed: failed), prepared: kept);
     case UpdateAsks(question: final FoldersQuestion question):
       return UpdateStageAsks(
         const UpdateWait(UpdateQuestionKind.folders),
-        prepared: UpdateRunKept(unpacked: question.unpacked),
+        prepared: UpdateRunKept(unpacked: question.unpacked, foldersQuestion: question),
       );
     case UpdateAsks(:final question):
       return UpdateStageFailed(UpdateFailure(UpdateFailureKind.other, cause: StateError('unexpected $question')));
@@ -362,16 +500,36 @@ Future<UpdateStageResult> _classify(UpdatePrepareResult result, UpdateRunKept ke
       return const UpdateStageFailed(UpdateFailure(UpdateFailureKind.nothingToInstall));
     case final UpdatePrepared prepared:
       final next = UpdateRunKept(unpacked: prepared.unpacked, pickedFolders: kept.pickedFolders);
-      final stop = [
-        for (final question in prepared.questions)
+      final stop = _questionOf(prepared, writes);
+      if (stop != null) return UpdateStageAsks(UpdateWait(stop), prepared: next);
+      return UpdateStageReady(prepared: next);
+  }
+}
+
+/// The first question that stops the write of [writes]: the primary's, from its own preview, then each picked sibling's from its own.
+/// A sibling the group refused is refused at the write, not asked about.
+UpdateQuestionKind? _questionOf(UpdatePrepared prepared, List<String> writes) {
+  UpdateQuestionKind? first(List<UpdateQuestion> questions) => [
+        for (final question in questions)
           if (question is PatchShapedQuestion)
             UpdateQuestionKind.patchShaped
           else if (question is UnrecordedPatchQuestion)
             UpdateQuestionKind.unrecordedPatch,
       ].firstOrNull;
-      if (stop != null) return UpdateStageAsks(UpdateWait(stop), prepared: next);
-      return UpdateStageReady(prepared: next);
+
+  final primary = prepared.request.mod.id;
+  for (final modId in writes) {
+    final question = switch (prepared) {
+      _ when modId == primary => first(prepared.questions),
+      PreparedFolders(:final group) => switch (group.targets.where((t) => t.mod.id == modId && t.canProceed).firstOrNull) {
+          final target? => first(confirmationQuestions(target.preview, flattensPatch: target.flattensPatch)),
+          null => null,
+        },
+      PreparedPatch() => null,
+    };
+    if (question != null) return question;
   }
+  return null;
 }
 
 UpdateFailure _refusalOf(UpdateTarget target) => target.preview.layout.problem == UpdateLayoutProblem.nothingToInstall

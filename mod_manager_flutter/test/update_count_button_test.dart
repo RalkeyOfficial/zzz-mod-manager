@@ -8,6 +8,7 @@ import 'package:mod_manager_flutter/models/origin_enums.dart';
 import 'package:mod_manager_flutter/screens/components/library_actions_host.dart';
 import 'package:mod_manager_flutter/screens/dialogs/update_modal.dart';
 import 'package:mod_manager_flutter/screens/updates/updates_page.dart';
+import 'package:mod_manager_flutter/services/download/download_queue.dart';
 import 'package:mod_manager_flutter/services/origin_write.dart';
 import 'package:mod_manager_flutter/services/update_check.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
@@ -16,9 +17,11 @@ import 'support/all_mods_harness.dart';
 import 'support/library_override.dart';
 import 'support/localized_harness.dart';
 import 'support/origin_shorthand.dart';
+import 'support/seeded_queue.dart';
+import 'support/update_jobs.dart';
 
 /// "Update N" beside Check all for updates, on All mods and on Updates: shown for the mods that have a file to
-/// install, which is not the sidebar's count, and held off while a run is under way.
+/// install and are not already in an update run, which is not the sidebar's count, and never disabled by a run.
 void main() {
   ModInfo mod(String id, int modId) => ModInfo(
         id: id,
@@ -95,15 +98,23 @@ void main() {
     expect(tester.widget<FilledButton>(updateButton('Update 1')).onPressed, isNotNull);
   });
 
-  testWidgets('it is disabled, and says why, while a run of updates is under way', (tester) async {
-    final container = await pumpAllMods(tester, {'A': withFile(100)});
-    container.read(libraryUpdateRunProvider.notifier).state = true;
-    await tester.pump();
-
-    expect(tester.widget<FilledButton>(updateButton('Update 1')).onPressed, isNull);
-    await tester.longPress(updateButton('Update 1'));
+  testWidgets('a run never disables it: it counts the mods not already in the run', (tester) async {
+    final container = await pumpAllModsTable(
+      tester,
+      mods,
+      overrides: [
+        downloadQueueProvider.overrideWith(() => SeededQueue([updateJob(1, mods: [baseOf('A', 100)])])),
+      ],
+    );
+    container.read(modUpdateChecksProvider.notifier).state = {'A': withFile(100), 'B': withFile(200)};
     await tester.pumpAndSettle();
-    expect(find.text('Updates are already running'), findsOneWidget);
+
+    expect(updateButton('Update 1'), findsOneWidget, reason: "A's base is already in the run");
+    expect(tester.widget<FilledButton>(updateButton('Update 1')).onPressed, isNotNull);
+
+    await tester.tap(updateButton('Update 1'));
+    await tester.pumpAndSettle();
+    expect(find.text('1 mod has a newer file'), findsOneWidget, reason: 'the list offers only B');
   });
 
   group('in a narrow window', () {
@@ -177,14 +188,13 @@ void main() {
       expect(updateButton('Update 1'), findsOneWidget);
     });
 
-    testWidgets('it is absent with nothing to install, and disabled during a run', (tester) async {
+    testWidgets('it is absent with nothing to install, and stays pressable during a run', (tester) async {
       final container = await pumpUpdates(tester, {'B': pageChanged(200)});
       expect(find.byType(FilledButton), findsNothing);
 
       container.read(modUpdateChecksProvider.notifier).state = {'A': withFile(100)};
-      container.read(libraryUpdateRunProvider.notifier).state = true;
       await tester.pumpAndSettle();
-      expect(tester.widget<FilledButton>(updateButton('Update 1')).onPressed, isNull);
+      expect(tester.widget<FilledButton>(updateButton('Update 1')).onPressed, isNotNull);
     });
   });
 }

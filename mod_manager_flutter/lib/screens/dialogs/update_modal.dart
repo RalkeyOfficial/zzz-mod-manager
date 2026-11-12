@@ -9,6 +9,8 @@ import '../../models/character_info.dart';
 import '../../models/gamebanana/gamebanana.dart';
 import '../../models/mod_download.dart';
 import '../../models/origin_enums.dart';
+import '../../services/download/download_queue.dart';
+import '../../services/download/update_job.dart';
 import '../../services/origin_summary.dart';
 import '../../services/origin_write.dart';
 import '../../services/update_check.dart';
@@ -30,23 +32,49 @@ class UpdatePick {
   final GbFile file;
 
   /// The layer the file belongs to: the folder's own mod, or a patch over it.
-  final DownloadKey? subject;
+  final DownloadKey subject;
 
   /// Every file the check found newer, so a pick below the newest records the rest as passed over.
   final List<GbFile> published;
+}
+
+/// The update job [pick] asks for, of [mod] as the library holds it now: what a press of Update N puts in the queue.
+/// The layer is the pick's own key, so a second press for the same layer is the same layer and adds nothing.
+/// What the layer's record holds now is kept, so the write tells what changed since the press from what was already there.
+UpdateEnqueue updateEnqueueOf(UpdatePick pick, ModInfo mod) {
+  final record = mod.origin?.downloadOf(pick.subject);
+  return UpdateEnqueue(
+    file: pick.file,
+    subject: mod.name,
+    characterId: mod.characterId,
+    task: UpdateTask(
+      mods: [
+        UpdateMod(
+          modId: mod.id,
+          layer: pick.subject,
+          name: mod.name,
+          uid: mod.uid,
+          heldFileId: record?.fileId,
+          heldDismissedUntil: record?.updatesDismissedUntil,
+        ),
+      ],
+      published: pick.published,
+    ),
+  );
 }
 
 /// Every mod with a newer file in one list: a file to pick for each, and Ignore for the ones to leave. Resolves to the
 /// picks, or null when the user left without pressing Update. Nothing is written by this dialog but the ignores, which
 /// are written at once and are undone by Undo here or on the mod's History tab, never by leaving.
 ///
-/// Opens nothing, and resolves to null, while the list is already open or a run of updates is under way.
+/// A mod already in an update run is not listed, so a press while a run is going adds only the others.
+/// Opens nothing, and resolves to null, while the list is already open.
 ///
 /// [writer] is the seam the ignore writes through, for tests only.
 Future<List<UpdatePick>?> showUpdateModal(BuildContext context, {OriginWriter? writer}) async {
   final container = ProviderScope.containerOf(context, listen: false);
   final open = container.read(updateModalOpenProvider.notifier);
-  if (open.state || container.read(libraryUpdateRunProvider)) return null;
+  if (open.state) return null;
   open.state = true;
   try {
     return await showDialog<List<UpdatePick>>(context: context, builder: (_) => UpdateModal(writer: writer));
@@ -77,7 +105,7 @@ class _Entry {
 class _UpdateModalState extends ConsumerState<UpdateModal> {
   /// **A snapshot, not a watch.** An ignore turns the verdict into "no update", and a card built from the live
   /// verdicts would vanish before Undo could be pressed.
-  late final List<_Entry> _entries = [for (final (mod, check) in ref.read(updatableModsProvider)) _Entry(mod, check)];
+  late final List<_Entry> _entries = [for (final (mod, check) in ref.read(modsToUpdateProvider)) _Entry(mod, check)];
 
   /// The file picked for each mod, by folder id and file id. A mod with exactly one newer file starts picked; with
   /// several, nothing is, since which variant is wanted is the user's to say.
@@ -148,14 +176,15 @@ class _UpdateModalState extends ConsumerState<UpdateModal> {
     );
   }
 
+  /// Every listed mod has a layer to write (`installableUpdatesOf`), so a verdict with no subject is never picked.
   List<UpdatePick> _picks() => [
     for (final entry in _entries)
       if (!_ignored.containsKey(entry.id))
-        if (_picked[entry.id] case final fileId?)
+        if ((_picked[entry.id], entry.check.subject) case (final fileId?, final subject?))
           UpdatePick(
             modId: entry.id,
             file: entry.check.newerFiles.firstWhere((file) => file.idRow == fileId),
-            subject: entry.check.subject,
+            subject: subject,
             published: entry.check.newerFiles,
           ),
   ];

@@ -13,6 +13,7 @@ import '../../models/character_info.dart';
 import '../../models/origin_enums.dart';
 import '../../services/bulk_assume_current.dart';
 import '../../services/bulk_update_check.dart';
+import '../../services/download/download_queue.dart';
 import '../../services/origin_write.dart';
 import '../../utils/byte_format.dart';
 import '../../utils/categories.dart';
@@ -595,7 +596,7 @@ class _HeaderState extends ConsumerState<_Header> {
                   label: Text(loc.t('library.all.check_all')),
                 ),
               ),
-              if (ref.watch(updatableModsCountProvider) > 0) const UpdateCountButton(),
+              if (ref.watch(modsToUpdateCountProvider) > 0) const UpdateCountButton(),
             ],
           ),
         ],

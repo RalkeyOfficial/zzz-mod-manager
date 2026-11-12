@@ -5,6 +5,7 @@ import 'package:archive/archive.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mod_manager_flutter/models/gamebanana/gb_file.dart';
+import 'package:mod_manager_flutter/models/installed_file.dart';
 import 'package:mod_manager_flutter/models/mod_download.dart';
 import 'package:mod_manager_flutter/models/mod_ingest.dart';
 import 'package:mod_manager_flutter/models/mod_origin.dart';
@@ -13,18 +14,22 @@ import 'package:mod_manager_flutter/services/archive_service.dart';
 import 'package:mod_manager_flutter/services/backup/snapshot_service.dart';
 import 'package:mod_manager_flutter/services/download/download_handle.dart';
 import 'package:mod_manager_flutter/services/download/download_job.dart';
+import 'package:mod_manager_flutter/services/download/download_queue.dart';
 import 'package:mod_manager_flutter/services/download/download_request.dart';
 import 'package:mod_manager_flutter/services/download/update_job.dart';
-import 'package:mod_manager_flutter/services/update_apply/sibling_group.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_applier.dart';
+import 'package:mod_manager_flutter/services/update_apply/update_layout.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_prepare.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_run_stages.dart';
+import 'package:mod_manager_flutter/services/update_apply/update_write.dart';
+import 'package:mod_manager_flutter/services/update_check.dart';
 import 'package:mod_manager_flutter/utils/state_providers.dart';
 import 'package:path/path.dart' as p;
 
 import 'support/held_write.dart';
 import 'support/origin_shorthand.dart';
 import 'support/recording_service.dart';
+import 'support/seeded_queue.dart';
 import 'support/temp_library.dart';
 import 'support/update_jobs.dart';
 
@@ -75,6 +80,7 @@ void main() {
   }
 
   /// The job as the queue hands it to the unpack lane: its file landed as [archive].
+  /// By default it is Ellen's base, picked while its record named the file [origin] records.
   DownloadJob landed(File archive, {List<UpdateMod>? mods, DateTime? published}) => DownloadJob(
         seq: 1,
         request: DownloadRequest(url: Uri.parse('https://gamebanana.com/dl/2')),
@@ -84,7 +90,7 @@ void main() {
         state: DownloadJobState.updating,
         updateStep: UpdateStep.unpacking,
         result: DownloadResult(file: archive, totalBytes: archive.lengthSync()),
-        update: UpdateTask(mods: mods ?? [baseOf(modName, 100)]),
+        update: UpdateTask(mods: mods ?? [baseOf(modName, 100, heldFileId: 1)]),
       );
 
   /// The job as the queue hands it to the install lane, with what the unpack lane kept.
@@ -243,6 +249,37 @@ void main() {
       final result = await writeUpdateJob(container, unpacked(job, ready));
       expect((result as UpdateStageAsks).wait.question, UpdateQuestionKind.folders);
       expect(temp.read(modName, 'Body.dds'), 'v1');
+
+      // The question carries what the picker offers, and the pick goes back through the same unpack.
+      final kept = result.prepared! as UpdateRunKept;
+      addTearDown(() => deleteKept(kept));
+      final question = kept.foldersQuestion!;
+      expect(question.problem, UpdateLayoutProblem.layoutChanged);
+      expect([for (final c in question.choices) c.name], unorderedEquals(['Ellen', 'Extras']));
+      final ellen = question.choices.firstWhere((c) => c.name == 'Ellen').path;
+      final picked = kept.withPickedFolders([ellen]);
+      expect(picked.foldersQuestion, isNull, reason: 'an answered question is no longer kept');
+      final again = await prepareUpdateJob(container, job.copyWith(prepared: picked));
+      expect(again, isA<UpdateStageReady>());
+    });
+
+    test("a write tells the queue the part it has started, and a mod that was off is never 'linked in'", () async {
+      await installed();
+      final job = landed(plainZip());
+      final ready = await prepared(job);
+      final writing = unpacked(job, ready);
+      final seeded = ProviderContainer(
+        overrides: [...service.overrides, downloadQueueProvider.overrideWith(() => SeededQueue([writing]))],
+      );
+      addTearDown(seeded.dispose);
+      final steps = <UpdateWriteStep>[];
+      seeded.listen(downloadQueueProvider, (_, jobs) {
+        final step = jobs.single.writing?.step;
+        if (step != null && (steps.isEmpty || steps.last != step)) steps.add(step);
+      });
+
+      await writeUpdateJob(seeded, writing);
+      expect(steps, [UpdateWriteStep.savingSnapshot, UpdateWriteStep.replacingFiles]);
     });
 
     test('a folder the host passes as being written is skipped', () async {
@@ -265,6 +302,201 @@ void main() {
       await restore.release();
       expect((result as UpdateStageSkipped).reason, UpdateSkipReason.beingWritten);
       expect(temp.read(modName, 'Body.dds'), 'v1');
+    });
+
+    test('a mod whose update was ignored while the job waited is skipped, and nothing is written', () async {
+      await installed();
+      final job = landed(plainZip());
+      final ready = await prepared(job);
+      container.read(modUpdateChecksProvider.notifier).state = {
+        modName: const UpdateCheck(
+          outcome: UpdateOutcome.updateAvailable,
+          dismissed: true,
+          subject: DownloadKey.base(100),
+        ),
+      };
+
+      final result = await writeUpdateJob(container, unpacked(job, ready));
+      expect((result as UpdateStageSkipped).reason, UpdateSkipReason.ignoredMeanwhile);
+      expect(temp.read(modName, 'Body.dds'), 'v1');
+    });
+
+    test('a dismissal on the sidecar that reaches the picked file is an Ignore too, and it is kept', () async {
+      await installed();
+      final until = DateTime.utc(2026, 3, 1);
+      final job = landed(plainZip(), published: until);
+      final ready = await prepared(job);
+      await temp.writeOrigin(modName, origin().copyBase(updatesDismissedUntil: until));
+
+      final result = await writeUpdateJob(container, unpacked(job, ready));
+      expect((result as UpdateStageSkipped).reason, UpdateSkipReason.ignoredMeanwhile);
+      expect(temp.read(modName, 'Body.dds'), 'v1');
+      expect((await service.readModOrigin(modName))?.updatesDismissedUntil, until);
+    });
+
+    group('a dismissal is read against the one the layer held at the press', () {
+      final jan1 = DateTime.utc(2026, 1, 1);
+      final jan5 = DateTime.utc(2026, 1, 5);
+
+      // SFW v2 of Jan 1 and NSFW v2 of Jan 5 were ignored, NSFW v3 brought the mod back, and the user picked SFW v2.
+      Future<DownloadJob> pickedOverIgnore() async {
+        await installed(recorded: origin().copyBase(updatesDismissedUntil: jan5));
+        final job = landed(
+          plainZip(),
+          published: jan1,
+          mods: [UpdateMod(modId: modName, layer: const DownloadKey.base(100), heldFileId: 1, heldDismissedUntil: jan5)],
+        );
+        return unpacked(job, await prepared(job));
+      }
+
+      test('one already there at the press is not an Ignore: the picked file is written', () async {
+        final result = await writeUpdateJob(container, await pickedOverIgnore());
+        expect(result, isA<UpdateStageWritten>());
+        expect(temp.read(modName, 'Body.dds'), 'v2');
+      });
+
+      test('one raised since the press is, and it is kept', () async {
+        final job = await pickedOverIgnore();
+        final feb2 = DateTime.utc(2026, 2, 2);
+        await temp.writeOrigin(modName, origin().copyBase(updatesDismissedUntil: feb2));
+
+        final result = await writeUpdateJob(container, job);
+        expect((result as UpdateStageSkipped).reason, UpdateSkipReason.ignoredMeanwhile);
+        expect(temp.read(modName, 'Body.dds'), 'v1');
+        expect((await service.readModOrigin(modName))?.updatesDismissedUntil, feb2);
+      });
+    });
+
+    test('a layer that named no file at the press and names one now is already updated, not written back', () async {
+      // Marked current by date: the record names no file.
+      await installed(
+        recorded: originFixture(
+          modId: 100,
+          modIdConfidence: OriginConfidence.exact,
+          ingest: const ModIngest(folders: [modName]),
+        ),
+      );
+      final job = landed(plainZip(), mods: [baseOf(modName, 100)]);
+      final ready = await prepared(job);
+      // A newer file through the one-mod window, which records it and drops the folder's verdict.
+      await temp.writeOrigin(modName, origin().copyBase(fileId: 3));
+      temp.write(modName, 'Body.dds', 'v3');
+
+      final result = await writeUpdateJob(container, unpacked(job, ready));
+      expect((result as UpdateStageSkipped).reason, UpdateSkipReason.alreadyUpdated);
+      expect(temp.read(modName, 'Body.dds'), 'v3');
+    });
+
+    test('a write by something else that starts after the stage began reading skips the folder', () async {
+      await installed();
+      final job = landed(plainZip());
+      final ready = await prepared(job);
+
+      final result = writeUpdateJob(container, unpacked(job, ready));
+      // Started and ended while the stage reads, so it is neither running at the folder's turn nor seen by the reads
+      // that came before it landed.
+      await whileWritingMod(container, modName, () async {});
+      expect(container.read(modWritesInProgressProvider), isEmpty, reason: 'the other write has ended');
+
+      expect(((await result) as UpdateStageSkipped).reason, UpdateSkipReason.beingWritten);
+      expect(temp.read(modName, 'Body.dds'), 'v1');
+    });
+
+    test("a base and then its patch, picked in one press, both write: the run's own write is not something else's",
+        () async {
+      const patchPage = 605460;
+      final patchFiles = [const InstalledFile(path: 'Body.dds', role: InstalledFileRole.replaced)];
+      await installed(
+        recorded: originFixture(
+          modId: 100,
+          modIdConfidence: OriginConfidence.exact,
+          fileId: 1,
+          versionConfidence: OriginConfidence.exact,
+          ingest: const ModIngest(folders: [modName], patchFiles: ['Body.dds']),
+          patches: [patchFixture(fileId: 9, files: patchFiles)],
+        ),
+      );
+
+      final base = landed(plainZip());
+      final baseResult = await writeUpdateJob(container, unpacked(base, await prepared(base)));
+      expect(resultFor(baseResult, modName).end, UpdateModEnd.written);
+
+      // The folder's next job is unpacked and written only once the base's job has ended.
+      final patch = landed(zip('fix.zip', {'Fix/Body.dds': 'p2'}), mods: [patchOf(modName, patchPage, heldFileId: 9)]);
+      final patchResult = await writeUpdateJob(container, unpacked(patch, await prepared(patch)));
+      expect(resultFor(patchResult, modName).end, UpdateModEnd.written);
+      expect(temp.read(modName, 'Body.dds'), 'p2');
+    });
+
+    test('a layer written by something else meanwhile is skipped as already updated, not written back', () async {
+      await installed();
+      final job = landed(plainZip(), mods: [const UpdateMod(modId: modName, layer: DownloadKey.base(100), heldFileId: 1)]);
+      final ready = await prepared(job);
+      // A newer file written through the one-mod window: the record moves on and the folder's mark goes.
+      await temp.writeOrigin(modName, origin().copyBase(fileId: 3));
+      temp.write(modName, 'Body.dds', 'v3');
+
+      final result = await writeUpdateJob(container, unpacked(job, ready));
+      expect((result as UpdateStageSkipped).reason, UpdateSkipReason.alreadyUpdated);
+      expect(resultFor(result, modName).alongWith, isNull);
+      expect(temp.read(modName, 'Body.dds'), 'v3');
+    });
+
+    test('a layer whose record changed while the verdict still offers the update is written', () async {
+      await installed();
+      final job = landed(plainZip(), mods: [const UpdateMod(modId: modName, layer: DownloadKey.base(100), heldFileId: 1)]);
+      final ready = await prepared(job);
+      // Restored to an older file meanwhile: the update is still wanted.
+      await temp.writeOrigin(modName, origin().copyBase(fileId: 0));
+      container.read(modUpdateChecksProvider.notifier).state = {
+        modName: const UpdateCheck(outcome: UpdateOutcome.updateAvailable, subject: DownloadKey.base(100)),
+      };
+
+      final result = await writeUpdateJob(container, unpacked(job, ready));
+      expect(result, isA<UpdateStageWritten>());
+      expect(temp.read(modName, 'Body.dds'), 'v2');
+    });
+
+    test('a mod another job of the run wrote reads as updated along with that job\'s mod', () async {
+      await installed();
+      final job = landed(plainZip());
+      final ready = await prepared(job);
+      final writing = unpacked(job, ready);
+      final other = updateJob(5, state: DownloadJobState.done, mods: [baseOf('Miyabi', 100), baseOf(modName, 100)])
+          .copyWith(modResults: [UpdateModResult.written(baseOf('Miyabi', 100)), UpdateModResult.written(baseOf(modName, 100))]);
+      final seeded = ProviderContainer(
+        overrides: [...service.overrides, downloadQueueProvider.overrideWith(() => SeededQueue([other, writing]))],
+      );
+      addTearDown(seeded.dispose);
+      // That job's write recorded the file this job holds.
+      await temp.writeOrigin(modName, origin().copyBase(fileId: 2));
+
+      final result = await writeUpdateJob(seeded, writing);
+      expect((result as UpdateStageSkipped).reason, UpdateSkipReason.alreadyUpdated);
+      expect(resultFor(result, modName).alongWith, 'Miyabi');
+      expect(temp.read(modName, 'Body.dds'), 'v1');
+    });
+
+    test('a patch layer\'s write keeps the verdict it drops as the mark it removed', () async {
+      const patchPage = 605460;
+      temp.write(modName, 'Ellen.ini', ini);
+      temp.write(modName, 'Body.dds', 'v1');
+      await temp.writeOrigin(
+        modName,
+        origin(patches: [
+          patchFixture(fileId: 9, files: const [InstalledFile(path: 'Body.dds', role: InstalledFileRole.replaced)]),
+        ]),
+      );
+      const verdict = UpdateCheck(outcome: UpdateOutcome.updateAvailable, subject: DownloadKey.patch(patchPage));
+      container.read(modUpdateChecksProvider.notifier).state = {modName: verdict};
+      final job = landed(zip('fix.zip', {'Fix/Body.dds': 'p2'}), mods: [patchOf(modName, patchPage, heldFileId: 9)]);
+      final ready = await prepared(job);
+
+      final result = await writeUpdateJob(container, unpacked(job, ready));
+      final report = (result as UpdateStageWritten).report! as UpdateReport;
+      expect(temp.read(modName, 'Body.dds'), 'p2');
+      expect(report.removedMarks[modName], same(verdict), reason: 'the Updates row reads the same after the write');
+      expect(container.read(modUpdateChecksProvider), isNot(contains(modName)));
     });
 
     test('no room for the snapshot halts the run, with both figures, and nothing is written', () async {
@@ -327,8 +559,11 @@ void main() {
           for (final name in names) ...{'$name/$name.ini': ini, '$name/Body.dds': 'v2'},
         });
 
-    DownloadJob job(List<String> picked) =>
-        landed(groupZip(), mods: [for (final name in picked) baseOf(name, 100)], published: published);
+    DownloadJob job(List<String> picked) => landed(
+          groupZip(),
+          mods: [for (final name in picked) baseOf(name, 100, heldFileId: name == 'Nicole' ? 2 : 1)],
+          published: published,
+        );
 
     test('a pick joined by its file that the archive\'s group does not list is refused, and the rest written',
         () async {
@@ -344,7 +579,7 @@ void main() {
       expect(temp.read('Rina', 'Rina.ini'), ini, reason: 'nothing is written into it');
     });
 
-    test('a busy sibling is skipped and a refused one says why, while the others are written', () async {
+    test('a busy sibling is skipped and one already on the file says so, while the others are written', () async {
       await group();
       final picks = job(['Ellen', 'Miyabi', 'Soukaku', 'Nicole']);
       final ready = await prepared(picks);
@@ -354,8 +589,8 @@ void main() {
       expect(resultFor(result, 'Ellen').end, UpdateModEnd.written);
       expect(resultFor(result, 'Miyabi').end, UpdateModEnd.written);
       expect(resultFor(result, 'Soukaku').skipReason, UpdateSkipReason.beingWritten);
-      expect(resultFor(result, 'Nicole').end, UpdateModEnd.refused);
-      expect(resultFor(result, 'Nicole').failure?.cause, SiblingRefusal.alreadyCurrent);
+      // Her record already names this file, so there is nothing to write.
+      expect(resultFor(result, 'Nicole').skipReason, UpdateSkipReason.alreadyUpdated);
       expect(temp.read('Soukaku', 'Body.dds'), 'v1');
       expect(temp.read('Nicole', 'Body.dds'), 'v1');
     });
@@ -378,6 +613,49 @@ void main() {
       expect(restore, isNotNull);
       expect(resultFor(result, 'Ellen').end, UpdateModEnd.written);
       expect(resultFor(result, 'Miyabi').skipReason, UpdateSkipReason.beingWritten);
+      expect(temp.read('Miyabi', 'Body.dds'), 'v1');
+    });
+
+    // Each picked sibling carries its own preview, and the confirmation a run does not show checked every one of them.
+    test('a picked sibling whose download is shaped like a patch stops the job, and nothing is written', () async {
+      await group();
+      File halfZip() => zip('half.zip', {'Ellen/Ellen.ini': ini, 'Ellen/Body.dds': 'v2', 'Miyabi/Miyabi.ini': ini});
+
+      final alone = await prepared(job(['Ellen']).copyWith(result: DownloadResult(file: halfZip(), totalBytes: 1)));
+      expect(alone, isA<UpdateStageReady>(), reason: 'Ellen\'s own preview is a plain update');
+
+      final both = landed(
+        halfZip(),
+        mods: [baseOf('Ellen', 100, heldFileId: 1), baseOf('Miyabi', 100, heldFileId: 1)],
+        published: published,
+      );
+      final result = await prepareUpdateJob(container, both);
+      final asks = result as UpdateStageAsks;
+      addTearDown(() => deleteKept(asks.prepared));
+      expect(asks.wait.question, UpdateQuestionKind.patchShaped);
+
+      // The same at the write, from a preview made again then.
+      final again = await writeUpdateJob(container, both.copyWith(updateStep: UpdateStep.writing, prepared: asks.prepared));
+      expect((again as UpdateStageAsks).wait.question, UpdateQuestionKind.patchShaped);
+      expect(temp.read('Ellen', 'Body.dds'), 'v1');
+      expect(temp.read('Miyabi', 'Body.dds'), 'v1');
+    });
+
+    test('a picked sibling whose folder holds a patch nothing records stops the job', () async {
+      await group();
+      await temp.writeOrigin('Miyabi', originFixture(
+        modId: 100,
+        modIdConfidence: OriginConfidence.exact,
+        fileId: 1,
+        versionConfidence: OriginConfidence.exact,
+        ingest: const ModIngest(folders: ['Miyabi'], siblingGroup: 'g1'),
+        patches: [patchFixture(fileId: 9)],
+      ));
+
+      final result = await prepareUpdateJob(container, job(['Ellen', 'Miyabi']));
+      final asks = result as UpdateStageAsks;
+      addTearDown(() => deleteKept(asks.prepared));
+      expect(asks.wait.question, UpdateQuestionKind.unrecordedPatch);
       expect(temp.read('Miyabi', 'Body.dds'), 'v1');
     });
 

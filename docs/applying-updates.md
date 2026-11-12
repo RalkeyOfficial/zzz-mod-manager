@@ -59,6 +59,7 @@ A folder the user drops onto a mod they already have is written the same way, wi
 emptied folder.
 
 **The flows outlive the window that started them.** The update flows (`applyUpdateFlow`, `applyPatchUpdateFlow`) and the `prepareUpdate` and `writeUpdate` they call read providers and invalidate through the app's container, never through the window's `ref`, which throws once that window is closed. A window closed after the confirmation, or during a patch update, which asks nothing, leaves the write to finish and the row to say what happened, where a `ref` read after the write would turn a landed write into a failure. Before the confirmation a closed window ends the flow with nothing written.
+An update run's two stages (`prepareUpdateJob`, `writeUpdateJob`, [`update-runs.md`](update-runs.md) §11) have no window at all: `DownloadQueueHost` drives them through the app's container, and the same rule holds for them.
 
 ### What goes, what comes back, and the patch layer's own update
 
@@ -821,7 +822,10 @@ Each step exists to make the next one refusable:
 5. **Deactivate → snapshot → wipe → copy → put the patch back → reactivate.**
 6. **Record** the new origin block, prune snapshots, rescan.
 
-The orchestration is at the widget layer because it is a *conversation*.
+An update run ([§7](#updating-several-mods)) keeps this order as the three parts of a job, with step 4 split between the press and the questions: steps 1 to 3 are its download and its unpack lane (`prepareUpdateJob`), the press of Update N is the consent the confirmation gives here, with the snapshot and the replaced contents stated in the list's footer, and a question only the user can answer stops the job before anything is written; steps 5 and 6 are its write (`writeUpdateJob`), which previews the folder again first.
+A run never writes a patch-shaped download, and never clears a folder holding a patch nothing records without asking: the preview stops the job as a question, for the mod it is for from its own preview and for every other picked mod of the same archive from that mod's own preview, as the confirmation checked every folder it was about to write.
+
+The one-mod flow's orchestration is at the widget layer because it is a *conversation*.
 Every decision inside it, and the unpack, the preview and the write themselves, are in `services/update_apply/`, which knows nothing about dialogs and is tested against real temp directories rather than a fake filesystem.
 The point of the mechanism is what it does to files, so a fake would be asserting the fake's semantics.
 
@@ -1062,9 +1066,7 @@ A verdict names the folder's layers, so kept it would go on naming the patch tha
 
 ### Automatic updating — considered and refused
 
-**No update is ever applied without the user present.** This is a rule about the
-feature, not a gap in it, and it is recorded here so it is not re-proposed as an
-obvious convenience.
+**An update is applied only by a run the user started, from a press that names the mods and the files they picked.** Automatic updating, with no press, is refused. This is a rule about the feature, not a gap in it, and it is recorded here so it is not re-proposed as an obvious convenience.
 
 The reason is the subject of this whole document: **an update overwrites a live
 install, and ZZZ modding has no standard.** Everything §1 to §3 describes is the
@@ -1072,8 +1074,9 @@ app doing its careful best with folders that are frequently two downloads deep,
 `.ini` files written against a case-insensitive loader by hand, and archives
 whose layout the author changed between releases. When that goes wrong the
 recovery is a person looking at a mod folder and working out what happened —
-and that person has to be **at the keyboard when it lands**, not discovering
-days later that a mod they have since edited was silently replaced.
+and that person has to have **asked for this update of this mod**, not discover days later that a mod they have since edited was silently replaced.
+
+A run goes on in the background once pressed, and that does not make it automatic in this sense ([`update-runs.md`](update-runs.md) §3): the user pressed a button that names how many mods, picked a file for each and read the footer that says what an update does; every case that can hurt a folder in a way the snapshot does not announce still stops and asks; and the run's rows say what happened to each mod.
 
 Two things follow, and the second is the one that is easy to get wrong:
 
@@ -1086,29 +1089,27 @@ Two things follow, and the second is the one that is easy to get wrong:
   none of the accepted losses announce themselves, which is exactly why the age
   floor beats the count cap. A recovery nobody knows to reach for is not a
   substitute for the user having seen the change happen.
-- **Nor is the folder the unit.** One `exact` verdict now fans out to **N
+- **Nor is the folder the unit.** One `exact` verdict fans out to **N
   folders** ([§4](#one-archive-several-mods-one-download)), and one banked
-  archive hash can mark a whole sibling group `exact` at once — so an unattended
+  archive hash can mark a whole sibling group `exact` at once — so an automatic
   write would rewrite every member of an archive from a single decision nobody
-  watched. Whoever builds this has two obligations the attended path discharges
-  on screen: snapshot the **group** rather than the folder, and honour the two
-  cautions §4 states, since a member that has diverged or been ignored is
-  precisely the one an unattended pass would get wrong with nothing to say so.
+  made. A run writes only the mods the user picked, and a member nobody picked stays marked.
 
 **Checking is a different act and is automatable**, because it reads a mod page
 and draws a badge: nothing it does is hard to undo. That half is opt-in and
 shipped — [`update-checks.md` §5.1](update-checks.md#51-checking-at-startup).
 
-Consequently no code gates on "`exact` on both axes": nothing acts unattended, so nothing needs the gate.
+Consequently no code gates on "`exact` on both axes": nothing writes without a press, so nothing needs the gate.
 The rule is stated in prose in [`origin-tracking.md` §1](origin-tracking.md#1-two-axes-confidence-and-provenance),
 and what the code does draw on is the weaker `OriginConfidence.isConfirmed` line, which caps the update verdict.
 
 ### Updating several mods
 
-**Update N** sits beside Check all for updates on All mods and on the Updates page, and opens one list of every mod that has a newer file to install.
-It is not "Update all": the user names the file for each mod, and every update is asked about when its turn comes.
-A button that downloads and overwrites many mod folders from a single answer is the most destructive gesture in the app, so the run keeps every question and spares only the walk back to the page for each mod.
-Only one list is open at a time, and none opens while a run is under way.
+**Update N** sits beside Check all for updates on All mods and on the Updates page, and opens one list of every mod that has a newer file to install and is not already in an update run.
+It is not "Update all": the user names the file for each mod.
+Pressing the list's Update starts the picks as a run in the background ([`update-runs.md`](update-runs.md)) and closes the list: no window opens for any mod, nothing is confirmed, waited on or reported in a window, and the app stays usable while the Updates page's rows, the Downloads panel, the sidebar badge and the cards show the run.
+**The press is the consent**, as Reinstall's card is for a repair: the list's footer says that each update keeps the file the user has now as a snapshot and then replaces the folder's contents, and that changes made by hand and keys the user rebound are replaced by the author's.
+Only one list is open at a time. A run never disables Update N: it counts the mods not already in the run, and a press while a run goes adds those.
 
 **The list** (`UpdateModal`) is a snapshot of the mods the checks found a newer file for, taken when it opens, newest upload first.
 It is a snapshot because an ignore turns a verdict into "no update", and a list read live would drop the card before Undo could be pressed.
@@ -1116,28 +1117,18 @@ N counts the mods that have a file to install and a write route, which can be fe
 One card per folder, on the layer that has the update, marked Patch when that is a patch.
 - **One file per mod, and nothing is picked for the user** except where a mod has exactly one newer file. With several, the app's own candidate carries a chip ("matches your variant", "newest published") and is never selected, since a guess may inform and never drive.
 - **Ignore** is the Updates page's: it is written at once, dismisses the layer and every same-page layer listing the same files, and collapses the card to "Update ignored" with Undo, which takes back exactly what it dismissed and reopens the card with no file picked. Leaving the list does not undo an ignore, and the title keeps the count the list opened with.
-- **The button counts the mods with a pick**, and reads "Update" disabled when none has one. It starts nothing itself: it hands the picks back, and the host that owns long work above the page switcher runs them.
+- **The button counts the mods with a pick**, and reads "Update" disabled when none has one. It starts nothing itself: it hands the picks back, and the host that owns long work above the page switcher puts them in the download queue.
 
-**The run** (`LibraryActions.updateMods`, one at a time) takes the picks in list order and runs each through the flow one update runs from its own dialog (`applyModUpdate`): its download wait, the folder question when the layout is unknown or changed, the archive's password, the confirmation, the write and the result.
-The confirmation says where it is ("2 of 3"), and the result's button reads Next only while a later pick can still run: it is asked when the result appears, after this write has settled any mod of the same archive.
-A base update is never past its confirmation; a patch layer is placed as it is from its own dialog, which asks nothing.
-Each download appears on the Downloads panel as an Updating row while its own wait runs, one at a time.
-- **Declining anywhere ends the run**: Cancel in the download wait, a closed folder question, Cancel on the confirmation, an archive's password left unanswered. The mods already written stay written, the rest are untouched, and a note says how many of the picks were updated. Only an explicit refusal ends it.
-- **A failure does not end it.** The failed update has reported itself as its own error card and its own row on the panel, and the next one starts. So does a download that ends with no reason given, which is not read as a refusal.
-- **A mod already written is skipped.** When two mods came from one archive, the first one's confirmation lists the other and writes it, which settles its mark; at its own turn it is skipped with a note, since the folder is already current ([§4](#one-archive-several-mods-one-download) keeps its cautions).
-- **A mod whose folder is being written when its turn comes is skipped**, with a note naming it.
-- **A mod whose update was ignored while the run went is skipped**, with a note naming it, and is not counted as updated. A mod that left the library is skipped without a note.
-- **The count in the stopped note** is the mods whose update was written plus the ones written along with another mod of their archive. A mod that stays marked after its write, because the user unticked it on a group confirmation, is not in it. A write into several folders counts as written when any folder took the new version, and reads as failed after a change when none did and a copy had moved files.
-- **The run stops before the next mod if the window it was started from is gone**, after the entry in hand finishes: a write begun after its confirmation always runs to the end.
+**The run** (`LibraryActions.updateMods`) puts one update job per pick in the download queue in one call (`enqueueUpdates`), and `DownloadQueueHost` downloads, unpacks, previews and writes them in lanes of their own: how many at once and in what order is [`update-runs.md`](update-runs.md) §4.1.
+A job's write is this document's: snapshot, clear, copy, the recorded patch put back, record ([§1](#1-the-mechanism-is-wipe-and-write), [§6](#6-the-order-and-why-it-is-the-safety-argument)).
+- **What stops a job and asks.** The archive's password, asked in the archive password window from the row's Enter password and asked again after one that did not open the archive; and which of the archive's folders is the mod, when the layout is unknown or changed, asked in the folder picker from Pick folders…. Closing either window leaves the question waiting; Skip update ends it, writing nothing and leaving the mod's update mark. A download shaped like a patch, and a folder holding a patch nothing records, wait as Needs you with only Skip update, whether the download or the folder is the mod's the job is for or another picked mod's of the same archive: the run has no window for them, and a patch-shaped download is never written by the update's clear ([§6](#6-the-order-and-why-it-is-the-safety-argument)).
+- **A failure is the mod's own.** It has its own row, card and reason, and the other jobs go on. A failure every later job would share (no room, a snapshot that could not be taken, a write that failed part-way) holds the jobs not yet written instead, each reading "Stopped" with the reason, reported by one card, "Updates stopped" ([`update-runs.md`](update-runs.md) §4.4). Nothing on screen sets a stopped run going again: a held job leaves only by its Downloads panel row's Cancel or Remove from queue, and the rest wait until the app is closed.
+- **A mod whose folder something else is writing at its turn is skipped**, and so is one whose folder something else started writing after its job began reading it, one that left the library or whose folder was renamed meanwhile, one whose update was ignored since the press (in the session's verdict, or a sidecar dismissal written or raised since the press that reaches the picked file), and one whose layer's record names another file than at the press while the session's verdict no longer offers the update (the one-mod Update window, or another job of the run); each has its reason on its row ([`update-runs.md`](update-runs.md) §10). So a write through the one-mod window or an Ignore, made while a job waits or while it reads, is not written over or erased.
+  The limit is the session's verdict, which a restore leaves as it is: a restore made before the job's turn that brings back a newer file than the picked one, or a file with no record, leaves the verdict offering the update, and the job writes the picked file over it. That write takes its snapshot first, so the restored version is on the mod's History tab. A restore of a version whose record names the picked file, or whose sidecar holds another dismissal than at the press that reaches it, is read as already updated or ignored.
+- **Mods picked with the same file are one job**: one download, one unpack, and a write per folder in the order picked. The run writes only the picked mods; a member of the archive's group that was not picked stays marked ([§4](#one-archive-several-mods-one-download)).
+- **A second press for a mod already in the run adds nothing**, and neither does a pick whose file another download already holds past the point it could join; a Note says how many picks were not added and names them. A press during a run takes later places than the first press's jobs, so a patch picked in the earlier press is written before a base picked in the later one; the base write puts the recorded patch back, so the folder comes out the same.
 
-A clean run raises no card of its own, since each write has already shown its result. One rescan follows the last entry.
-
-**What the run does not do:**
-- It does not fetch archives ahead of their turns, because an archive's layout and patch facts exist only once it is downloaded and unpacked, and archives reach 1.24 GB.
-- It does not combine the confirmations, because each folder has its own preview, its own patch put back and its own keybinds, and each needs its own consent.
-- It does not run in the background or with nobody at the keyboard, which is the refusal above.
-
-Keybinds rebound inside a folder are reverted by each update's shipped `.ini` and are not carried over, as [§5](#what-survives-of-preserve-the-users-ini-edits) states; the confirmation says so for every mod in turn.
+Keybinds rebound inside a folder are reverted by each update's shipped `.ini` and are not carried over, as [§5](#what-survives-of-preserve-the-users-ini-edits) states; the list's footer says so before the press.
 
 ### Known gaps
 

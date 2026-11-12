@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Downloads resume where they left off and survive the app closing.
   - A download that won't fit is refused before it starts, saying how much is needed and how much is free.
   - Downloads can be paused and resumed, or cancelled. Installing a paused download again resumes it, for the character and Turn on picked this time.
-  - Downloads in the sidebar opens a panel from the right, above any open window, grouping downloads under Needs your attention, In progress, Waiting and Finished, each with its picture, its progress or result, and what can be done with it: pause, resume, cancel, answer, Turn on, Show, Try again, or clear the finished ones.
+  - Downloads in the sidebar opens a panel from the right, above any open window, grouping downloads under Needs your attention, Updating, In progress, Waiting and Finished, each with its picture, its progress or result, and what can be done with it: pause, resume, cancel, answer, Turn on, Show, Try again, or clear the finished ones.
   - The sidebar's Downloads shows an amber count while downloads wait for your answer, the number in progress otherwise, and a red count when only failed ones are left.
   - Each download shows its progress in a notification, "Installing Ellen Swimsuit" with how far it is, which becomes its "Mod installed" notification as it lands. Downloads running at once are stacked into one notification that reads "2 more downloading" and spreads out under the pointer; a failed one leaves the stack as its own notification.
   - A download that needs your answer (a password, an archive you already have, which folders to install, or where a patch goes) waits in Downloads instead of opening a window over what you're doing, and the next download installs meanwhile. One notification says how many are waiting, with Open Downloads.
@@ -83,12 +83,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - A mod that already has a newer file, or whose updates you're ignoring, is offered but not ticked, and the row says which.
   - A progress bar counts through the folders as they're written, and the result names each one.
   - The window you wait in stays up from pressing Update until you're asked, saying whether it's unpacking the download or checking what it changes, instead of vanishing for a few seconds first.
-- Update several mods at once: Update N beside Check all for updates on All mods and Updates lists every mod with a newer file, you pick the file for each, and the updates then run one after another, each asking before it writes.
+- Update several mods at once: Update N beside Check all for updates on All mods and Updates lists every mod with a newer file, you pick the file for each, and the updates run in the background while you keep using the app, shown on each mod's row on the Updates page, in Downloads and in the notifications, asking for an archive's password or which of its folders is the mod. A download shaped like a patch, or a folder holding a patch nothing records, waits for you to skip it and is never written.
   - A mod with exactly one newer file starts picked; with several, nothing is picked for you.
   - Ignore on a mod's card writes at once and Undo takes it back, there or on the mod's History tab.
-  - Cancelling anywhere in a run ends it, leaving the mods already written as they are, and says how many were updated.
-  - A mod already written along with another from the same archive is skipped, and so is one whose folder is being written or whose update was ignored when its turn comes, each with a note.
-  - Only one update list opens at a time, and Next on a result appears only while a later mod can still run.
+  - Finished updates are counted on one notification, "3 mods updated", whose Show opens Downloads.
+  - A mod that fails says why on its row and in a notification of its own, and the others go on; a failure every update would share, such as a full disk, stops the rest, which read "Stopped" with the reason, and one notification names the mod that stopped them and why.
+  - A mod whose folder is being changed by something else when its turn comes, that left the library, whose update you ignored meanwhile or that was updated meanwhile is skipped and not written.
+  - Only one update list opens at a time, and pressing Update N while updates run adds the mods not already updating; a mod whose file is already in another download is not added, and a notification says so.
   - The button counts the mods that have a file to install, which can be fewer than the Updates count in the sidebar.
 - An install that turns out to be a patch says so, and remembers it for later.
   - Installing a patch asks where it goes: its own folder with the mod it patches fetched in for you, or straight into a mod you already have, picked from a searchable list with cover images.

@@ -72,9 +72,10 @@ NotificationAction openSettingsAction(
   container.read(destinationProvider.notifier).state = AppDestination.settings;
 });
 
-/// **Open Downloads**: opens the sidebar's Downloads panel, which keeps the per-download view.
-NotificationAction openDownloadsAction(AppLocalizations loc, ProviderContainer container) =>
-    NotificationAction(loc.t('notifications.actions.open_downloads'), () {
+/// **Open Downloads**: opens the sidebar's Downloads panel, which keeps the per-download view. [label] names it on a
+/// card where the panel is where to see what the card counts, as a finished update's Show.
+NotificationAction openDownloadsAction(AppLocalizations loc, ProviderContainer container, {String? label}) =>
+    NotificationAction(label ?? loc.t('notifications.actions.open_downloads'), () {
       container.read(downloadsPanelRequestProvider.notifier).state++;
     });
 

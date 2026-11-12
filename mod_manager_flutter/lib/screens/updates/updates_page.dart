@@ -13,19 +13,27 @@ import '../../models/character_info.dart';
 import '../../models/gamebanana/gb_file.dart';
 import '../../models/mod_download.dart';
 import '../../services/bulk_assume_current.dart';
+import '../../services/download/download_job.dart';
+import '../../services/download/download_queue.dart';
+import '../../services/download/queue_policy.dart';
+import '../../services/download/update_job.dart';
 import '../../services/gamebanana/file_selection.dart';
 import '../../services/installed_record.dart';
 import '../../services/origin_write.dart';
+import '../../services/update_apply/update_write.dart' show UpdateReport;
 import '../../services/update_check.dart';
 import '../../utils/categories.dart';
 import '../../utils/notifications.dart';
 import '../../utils/state_providers.dart';
 import '../all_mods/all_mods_bulk.dart';
 import '../components/character_tile.dart';
+import '../components/download_queue_host.dart' show downloadQuestionsProvider;
 import '../components/library_actions_host.dart';
 import '../components/mod_thumb.dart';
+import '../components/progress_track.dart';
 import '../components/resolve/resolve_fragments.dart';
 import '../components/update_count_button.dart';
+import '../components/update_run_words.dart';
 import '../components/zenith_controls.dart';
 import '../dialogs/assume_current_dialog.dart';
 import 'updates_coverage.dart';
@@ -165,7 +173,7 @@ class _HeaderState extends ConsumerState<_Header> {
                 label: Text(loc.t('library.all.check_all')),
               ),
             ),
-            if (ref.watch(updatableModsCountProvider) > 0) const UpdateCountButton(),
+            if (ref.watch(modsToUpdateCountProvider) > 0) const UpdateCountButton(),
           ],
         ),
       ],
@@ -554,7 +562,9 @@ class _LegendItem extends StatelessWidget {
   }
 }
 
-/// Every mod with an update to show: the file the user has, and the newer one.
+/// Every mod with an update to show: the file the user has, and the newer one. A mod in an update run keeps its row
+/// until the run's finished rows are cleared, a written one with the verdict its write removed, so the row does not
+/// leave the moment it reads Updated (`docs/update-runs.md` §9).
 class _NewerFiles extends ConsumerWidget {
   const _NewerFiles({required this.mods, required this.onOpenPage, required this.onShowUpdate, required this.writer});
 
@@ -570,7 +580,25 @@ class _NewerFiles extends ConsumerWidget {
     final text = Theme.of(context).textTheme;
     final checks = ref.watch(modUpdateChecksProvider);
     final checkedAt = ref.watch(libraryCheckedAtProvider);
-    final found = newerFilesOf(mods, checks);
+    // Which update jobs there are, where each stands and how many mods each holds (a pick can join a job), so a
+    // progress tick does not rebuild the list; each row watches its own job.
+    ref.watch(downloadQueueProvider.select(
+      (jobs) => [
+        for (final j in jobs)
+          if (j.isUpdate) '${j.seq}:${j.state.name}:${j.outcome?.name}:${j.update!.mods.length}',
+      ].join(','),
+    ));
+    final run = [for (final job in ref.read(downloadQueueProvider)) if (job.isUpdate) job];
+
+    final shown = {...checks};
+    for (final job in run) {
+      if (job.report case UpdateReport(:final removedMarks)) {
+        for (final MapEntry(key: id, value: check) in removedMarks.entries) {
+          if (shown[id]?.hasUpdate != true) shown[id] = check;
+        }
+      }
+    }
+    final rows = newerFilesOf(mods, shown);
     final frame = BoxDecoration(
       color: palette.dialog,
       borderRadius: BorderRadius.circular(14),
@@ -587,11 +615,13 @@ class _NewerFiles extends ConsumerWidget {
           spacing: 10,
           children: [
             Text(loc.t('library.updates.newer_files'), style: text.titleMedium?.copyWith(color: palette.text)),
-            if (found.isNotEmpty)
-              Text('${found.length}', style: ZenithType.of(context).mono.copyWith(color: palette.badgeUpdate.foreground)),
+            if (rows.isNotEmpty)
+              Text('${rows.length}', style: ZenithType.of(context).mono.copyWith(color: palette.badgeUpdate.foreground)),
+            const Spacer(),
+            if (run.isNotEmpty) _RunLine(run: run),
           ],
         ),
-        if (found.isEmpty)
+        if (rows.isEmpty)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
             decoration: frame,
@@ -607,11 +637,12 @@ class _NewerFiles extends ConsumerWidget {
               borderRadius: BorderRadius.circular(13),
               child: Column(
                 children: [
-                  for (final (i, (mod, check)) in found.indexed)
+                  for (final (i, (mod, check)) in rows.indexed)
                     _NewerFileRow(
+                      key: ValueKey(mod.id),
                       mod: mod,
                       check: check,
-                      last: i == found.length - 1,
+                      last: i == rows.length - 1,
                       onOpenPage: onOpenPage,
                       onShowUpdate: onShowUpdate,
                       writer: writer,
@@ -627,6 +658,7 @@ class _NewerFiles extends ConsumerWidget {
 
 class _NewerFileRow extends ConsumerWidget {
   const _NewerFileRow({
+    super.key,
     required this.mod,
     required this.check,
     required this.last,
@@ -636,6 +668,8 @@ class _NewerFileRow extends ConsumerWidget {
   });
 
   final ModInfo mod;
+
+  /// The verdict the row shows: the session's, or the one a run's write removed.
   final UpdateCheck check;
   final bool last;
   final void Function(ModInfo mod) onOpenPage;
@@ -648,6 +682,11 @@ class _NewerFileRow extends ConsumerWidget {
     final palette = ZenithPalette.of(context);
     final text = Theme.of(context).textTheme;
     final writing = ref.watch(modWritesInProgressProvider).contains(mod.id);
+    final run = ref.watch(updateJobOfModProvider(mod.id));
+    // Update and Ignore give way to the run's status while the mod is in it, and come back beside an ended job's
+    // status while the mod still has a newer file: a skip or a failure writes nothing.
+    final hasUpdate = ref.watch(modUpdateChecksProvider.select((checks) => checks[mod.id]?.hasUpdate ?? false));
+    final offerUpdate = run == null || (run.job.isTerminal && hasUpdate);
     final ignorable = check.subjectModId != null && check.dismissableUpTo != null;
     final author = modAuthor(mod, installedRecord(mod, ref.watch(knownModPagesProvider)).page);
     final character = libraryGroupName(libraryGroupOf(mod.characterId), loc);
@@ -679,25 +718,37 @@ class _NewerFileRow extends ConsumerWidget {
     final files = Row(
       spacing: 16,
       children: [
-        Expanded(child: _youHave(context)),
+        Expanded(child: _youHave(context, check)),
         Icon(Icons.arrow_forward_rounded, size: 20, color: palette.amber),
-        Expanded(child: _newer(context)),
+        Expanded(child: _newer(context, check)),
       ],
     );
     final actions = Row(
       mainAxisSize: MainAxisSize.min,
-      spacing: 6,
+      spacing: 12,
       children: [
-        TextButton(
-          style: smallButtonStyle(context),
-          onPressed: writing || !ignorable ? null : () => unawaited(_ignore(context)),
-          child: Text(loc.t('library.updates.ignore')),
-        ),
-        OutlinedButton(
-          style: smallButtonStyle(context),
-          onPressed: writing ? null : () => onShowUpdate(mod),
-          child: Text(loc.t('library.updates.update')),
-        ),
+        if (run != null)
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 320),
+            child: _RunStatus(mod: mod, run: run, heldFileDate: check.installedFile?.dateAdded),
+          ),
+        if (offerUpdate)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            spacing: 6,
+            children: [
+              TextButton(
+                style: smallButtonStyle(context),
+                onPressed: writing || !ignorable ? null : () => unawaited(_ignore(context, check)),
+                child: Text(loc.t('library.updates.ignore')),
+              ),
+              OutlinedButton(
+                style: smallButtonStyle(context),
+                onPressed: writing ? null : () => onShowUpdate(mod),
+                child: Text(loc.t('library.updates.update')),
+              ),
+            ],
+          ),
       ],
     );
 
@@ -728,25 +779,24 @@ class _NewerFileRow extends ConsumerWidget {
     );
   }
 
-  bool get _byDate => check.comparedByDate;
-
-  Widget _youHave(BuildContext context) {
+  Widget _youHave(BuildContext context, UpdateCheck check) {
     final loc = context.loc;
     final installed = check.installedFile;
     final compared = check.comparedAgainst;
+    final byDate = check.comparedByDate;
     return _FileColumn(
       label: loc.t('library.updates.you_have'),
       file: installed == null ? null : fileDisplayName(installed),
-      plain: installed != null ? null : loc.t(_byDate ? 'library.updates.marked_current' : 'library.updates.file_gone'),
+      plain: installed != null ? null : loc.t(byDate ? 'library.updates.marked_current' : 'library.updates.file_gone'),
       detail: installed?.dateAdded != null
           ? loc.t('library.updates.uploaded', params: {'date': formatResolveDate(installed!.dateAdded!)})
-          : _byDate
+          : byDate
           ? loc.t('library.updates.newest_on', params: {'date': formatResolveDate(compared!)})
           : null,
     );
   }
 
-  Widget _newer(BuildContext context) {
+  Widget _newer(BuildContext context, UpdateCheck check) {
     final loc = context.loc;
     final palette = ZenithPalette.of(context);
     final GbFile? file = check.candidate ?? (check.newerFiles.length == 1 ? check.newerFiles.single : null);
@@ -762,7 +812,7 @@ class _NewerFileRow extends ConsumerWidget {
         labelColor: palette.badgeUpdate.foreground,
         file: null,
         plain: loc.t('library.updates.page_changed'),
-        detail: _byDate
+        detail: check.comparedByDate
             ? loc.t('library.updates.after', params: {'date': formatResolveDate(check.comparedAgainst!)})
             : null,
       );
@@ -790,7 +840,7 @@ class _NewerFileRow extends ConsumerWidget {
   }
 
   /// Ignores this update, as the update dialog's Ignore does. The row leaves the list, so only a failure is said.
-  Future<void> _ignore(BuildContext context) async {
+  Future<void> _ignore(BuildContext context, UpdateCheck check) async {
     final loc = context.loc;
     final notify = context.notify;
     final container = ProviderScope.containerOf(context, listen: false);
@@ -800,6 +850,160 @@ class _NewerFileRow extends ConsumerWidget {
       loc.t('mods.update.dismiss_failed_title'),
       body: loc.t('mods.update.dismiss_failed', params: {'mod': mod.name}),
       characterId: mod.characterId,
+    );
+  }
+}
+
+/// Where a mod is in an update run, in the row's status cell (`docs/update-runs.md` §2, §5): a mini bar and the phase,
+/// Answer or Skip beside a question, and an ended job's outcome with its reason under it.
+class _RunStatus extends ConsumerWidget {
+  const _RunStatus({required this.mod, required this.run, required this.heldFileDate});
+
+  final ModInfo mod;
+  final ModUpdateState run;
+
+  /// The upload date of the file the mod holds, for a skip the user chose.
+  final DateTime? heldFileDate;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final loc = context.loc;
+    final palette = ZenithPalette.of(context);
+    final text = Theme.of(context).textTheme;
+    final job = run.job;
+    final result = run.result;
+    final phase = updatePhaseOf(job, mod.id);
+    // The mod's own result, once there is one: a job that failed for another mod may have written or skipped this one.
+    // A transfer fails the whole job before any mod has a result.
+    final failed = phase == null &&
+        (result == null
+            ? job.state == DownloadJobState.failed
+            : result.end == UpdateModEnd.failed || result.end == UpdateModEnd.refused);
+
+    Widget? bar;
+    Widget? link;
+    String? reason;
+    final (String label, Color color) = switch (phase) {
+      UpdateAsking() => (updatePhaseLabel(loc, phase), palette.badgeInfo.foreground),
+      UpdateStopped() => (updatePhaseLabel(loc, phase), palette.text2),
+      UpdateInLine() => (updatePhaseLabel(loc, phase), palette.text3),
+      final UpdatePhase working => (updatePhaseLabel(loc, working), palette.text),
+      null when failed && result == null && job.error is! UpdateFailure => (
+          loc.t('library.updates.status.download_failed'),
+          palette.badgeMissing.foreground,
+        ),
+      null when failed => (loc.t('library.updates.status.failed'), palette.badgeMissing.foreground),
+      null when result?.end == UpdateModEnd.skipped || job.outcome == JobOutcome.skipped => (
+          updateSkipText(
+            loc,
+            result?.skipReason ?? job.skipReason,
+            stillOn: heldFileDate,
+            alongWith: switch (result?.alongWith) { final id? => _modName(ref, id), null => null },
+          ),
+          palette.text2,
+        ),
+      null => switch (job.outcome) {
+          JobOutcome.patchAdded => (loc.t('downloads.update.patch_added'), palette.accent),
+          JobOutcome.reinstalled => (loc.t('downloads.reinstalled_undated'), palette.accent),
+          JobOutcome.undone => (loc.t('downloads.update.undone'), palette.text2),
+          _ => (loc.t('downloads.updated_undated'), palette.accent),
+        },
+    };
+
+    switch (phase) {
+      case UpdateAsking():
+        final answerable = updateQuestionAnswerable(job.updateWait?.question);
+        link = ZenithLink(
+          loc.t(answerable ? 'library.updates.status.answer' : 'downloads.update.skip'),
+          onTap: answerable
+              ? () => unawaited(ref.read(downloadQuestionsProvider).answer(job.seq))
+              : () => unawaited(ref.read(downloadQueueProvider.notifier).skipUpdate(job.seq)),
+          style: text.bodySmall?.copyWith(fontWeight: FontWeight.w600, color: palette.accent),
+        );
+      case UpdateConnecting() || UpdateDownloading():
+        bar = ProgressTrack(value: job.progress?.fraction ?? 0, height: 4);
+      case UpdateInstalling():
+        bar = const ProgressTrack(value: null, height: 4);
+      case UpdateStopped(:final halt):
+        reason = updateFailureText(loc, halt.cause);
+      case null when failed:
+        reason = updateFailureText(loc, result?.failure ?? job.error, keptIn: job.archive?.parent.path);
+      default:
+    }
+
+    final style = text.bodySmall?.copyWith(fontWeight: FontWeight.w600, color: color);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      spacing: 2,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          spacing: 8,
+          children: [
+            if (bar != null) SizedBox(width: 90, child: bar),
+            Flexible(
+              child: Text(
+                link == null ? label : '$label ·',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: style,
+              ),
+            ),
+            ?link,
+          ],
+        ),
+        if (reason != null)
+          Text(
+            reason,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.end,
+            style: text.bodySmall?.copyWith(color: palette.text3),
+          ),
+      ],
+    );
+  }
+}
+
+/// The library's name for the folder [modId], or the id when it is no longer there.
+String _modName(WidgetRef ref, String modId) =>
+    ref.read(modsProvider).where((mod) => mod.id == modId).firstOrNull?.name ?? modId;
+
+/// Over the list while it holds an update run's rows: how many of the run's mods are updated, and Clear finished once
+/// a job has ended without failing, which takes those rows off this page and the Downloads panel. A failed job stays
+/// until Remove from the list in the panel, as it does there.
+class _RunLine extends ConsumerWidget {
+  const _RunLine({required this.run});
+
+  final List<DownloadJob> run;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final loc = context.loc;
+    final palette = ZenithPalette.of(context);
+    final total = run.fold(0, (sum, job) => sum + job.update!.mods.length);
+    final updated = run.fold(
+      0,
+      (sum, job) => sum + job.modResults.where((result) => result.end == UpdateModEnd.written).length,
+    );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      spacing: 8,
+      children: [
+        Text(
+          loc.plural('library.updates.run_line', total, params: {'done': '$updated', 'count': '$total'}),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: palette.text2),
+        ),
+        if (ref.watch(updateRunSummaryProvider.select((summary) => summary.done > 0)))
+          TextButton(
+            style: smallButtonStyle(context),
+            onPressed: () => ref.read(downloadQueueProvider.notifier).clearFinished(updatesOnly: true),
+            child: Text(loc.t('downloads.clear_finished')),
+          ),
+      ],
     );
   }
 }

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../core/palette.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../models/gamebanana/gamebanana.dart';
@@ -11,7 +10,6 @@ import '../../services/update_apply/update_layout.dart';
 import '../../services/update_apply/update_prepare.dart';
 import '../../services/update_apply/update_target.dart';
 import '../components/dialog_section.dart';
-import 'update_flow_outcome.dart';
 
 /// The last screen before an update touches a live install.
 ///
@@ -60,7 +58,6 @@ Future<UpdateConfirmChoice?> showUpdateConfirmDialog(
   List<UpdateTarget> siblings = const <UpdateTarget>[],
   List<SiblingRefused> refused = const <SiblingRefused>[],
   List<String> otherFolders = const <String>[],
-  UpdateRunPosition? run,
 }) =>
     showDialog<UpdateConfirmChoice>(
       context: context,
@@ -73,7 +70,6 @@ Future<UpdateConfirmChoice?> showUpdateConfirmDialog(
         siblings: siblings,
         refused: refused,
         otherFolders: otherFolders,
-        run: run,
       ),
     );
 
@@ -87,15 +83,11 @@ class _UpdateConfirmDialog extends StatefulWidget {
     this.siblings = const <UpdateTarget>[],
     this.refused = const <SiblingRefused>[],
     this.otherFolders = const <String>[],
-    this.run,
   });
 
   final ModInfo mod;
   final GbFile file;
   final UpdatePreview preview;
-
-  /// Where this update sits in a run of several, shown as "2 of 3" under the title.
-  final UpdateRunPosition? run;
 
   /// The other mods this archive installed, each with its own preview.
   final List<UpdateTarget> siblings;
@@ -219,23 +211,7 @@ class _UpdateConfirmDialogState extends State<_UpdateConfirmDialog> {
 
     final title = _titleFor(nothingWritable, writable);
     return AlertDialog(
-      title: widget.run == null
-          ? Text(title)
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              spacing: 4,
-              children: [
-                Text(title),
-                Text(
-                  loc.t(
-                    'mods.update_bulk.run_position',
-                    params: {'index': '${widget.run!.index}', 'total': '${widget.run!.total}'},
-                  ),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: ZenithPalette.of(context).text3),
-                ),
-              ],
-            ),
+      title: Text(title),
       content: SizedBox(
         width: 500,
         child: SingleChildScrollView(

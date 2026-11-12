@@ -9,17 +9,19 @@ import '../../l10n/app_localizations.dart';
 import '../../models/character_info.dart';
 import '../../models/gamebanana/gb_file.dart';
 import '../../services/api_service.dart';
-import '../../services/download/download_exceptions.dart';
 import '../../services/download/download_job.dart';
 import '../../services/download/download_progress.dart';
 import '../../services/download/download_queue.dart';
 import '../../services/download/queue_policy.dart';
+import '../../services/download/update_job.dart';
 import '../../services/gamebanana/content_filter.dart';
 import '../../services/gamebanana/file_selection.dart';
 import '../../services/log/logger.dart';
 import '../../services/platform_service.dart';
 import '../../services/platform_service_factory.dart';
 import '../../services/shader_fixes/shader_fixes_service.dart';
+import '../../services/update_apply/update_run_stages.dart' show UpdateRunKept;
+import '../../services/update_check.dart';
 import '../../utils/byte_format.dart';
 import '../../utils/categories.dart';
 import '../../utils/notification_actions.dart';
@@ -31,8 +33,10 @@ import 'character_tile.dart';
 import 'download_queue_host.dart';
 import 'marketplace/gb_thumbnail.dart';
 import 'network_link_notice.dart';
+import 'progress_track.dart';
 import 'resolve/resolve_fragments.dart';
 import 'shader_fixes_notices.dart';
+import 'update_run_words.dart';
 import 'zenith_controls.dart';
 
 final Logger _log = Logger('ui.downloads');
@@ -134,18 +138,26 @@ class _DownloadsPanelState extends ConsumerState<DownloadsPanel> {
     final mods = ref.watch(modsProvider);
     final now = widget.clock();
 
-    final attention = [for (final j in jobs) if (j.state == DownloadJobState.waiting) j];
+    // A failed update waits for the user too: nothing else says it did not happen (`docs/update-runs.md` §5).
+    bool needsAttention(DownloadJob j) =>
+        j.state == DownloadJobState.waiting || (j.isUpdate && j.state == DownloadJobState.failed);
+    final attention = [for (final j in jobs) if (needsAttention(j)) j];
+    final updating = updatesInOrderOfWork(jobs);
     // A resumed download waiting for a slot stays with In progress, where its Resume was pressed.
     final inProgress = [
       for (final j in jobs)
-        if (j.state.isActive && j.state != DownloadJobState.waiting && (j.state != DownloadJobState.queued || j.resumed))
+        if (!j.isUpdate &&
+            j.state.isActive &&
+            j.state != DownloadJobState.waiting &&
+            (j.state != DownloadJobState.queued || j.resumed))
           j,
     ];
-    final waiting = [for (final j in jobs) if (j.state == DownloadJobState.queued && !j.resumed) j];
-    final finished = [for (final j in jobs) if (j.isTerminal) j]..sort(_newestFirst);
+    final waiting = [for (final j in jobs) if (!j.isUpdate && j.state == DownloadJobState.queued && !j.resumed) j];
+    final finished = [for (final j in jobs) if (j.isTerminal && !needsAttention(j)) j]..sort(_newestFirst);
 
     final groups = <(String, Color?, List<DownloadJob>)>[
       (loc.t('downloads.group_attention', params: {'count': '${attention.length}'}), palette.attentionTile.foreground, attention),
+      (loc.t('downloads.update.group'), null, updating),
       (loc.t('downloads.group_in_progress'), null, inProgress),
       (loc.t('downloads.group_waiting'), null, waiting),
       (loc.t('downloads.group_finished'), null, finished),
@@ -153,8 +165,10 @@ class _DownloadsPanelState extends ConsumerState<DownloadsPanel> {
 
     final actions = _RowCallbacks(
       jobs: jobs,
+      holds: updateHolds(jobs),
       mods: mods,
       writing: ref.watch(modWritesInProgressProvider),
+      checks: ref.watch(modUpdateChecksProvider),
       now: now,
       turnOn: _turnOn,
       show: _show,
@@ -202,7 +216,7 @@ class _DownloadsPanelState extends ConsumerState<DownloadsPanel> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(border: Border(top: BorderSide(color: palette.divider))),
               child: Text(
-                loc.t('downloads.footer'),
+                loc.t(jobs.any((j) => j.isUpdate) ? 'downloads.update.footer' : 'downloads.footer'),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(color: palette.text3),
               ),
             ),
@@ -374,21 +388,33 @@ class _GroupLabel extends StatelessWidget {
 class _RowCallbacks {
   const _RowCallbacks({
     required this.jobs,
+    required this.holds,
     required this.mods,
     required this.writing,
+    required this.checks,
     required this.now,
     required this.turnOn,
     required this.show,
   });
 
   final List<DownloadJob> jobs;
+
+  /// Why each queued update waits, walked once for every row ([updateHolds]).
+  final Map<int, UpdateHold> holds;
   final List<ModInfo> mods;
   final Set<String> writing;
+
+  /// The session's verdicts, for the date of the file an update's mod holds.
+  final Map<String, UpdateCheck> checks;
   final DateTime now;
   final Future<void> Function(String modId) turnOn;
   final Future<void> Function(DownloadJob job) show;
 
   ModInfo? mod(String id) => mods.where((m) => m.id == id).firstOrNull;
+
+  /// The upload date of the file an update job's mod [modId] holds now, its first mod's when null, when the check knows it.
+  DateTime? heldFileDate(DownloadJob job, [String? modId]) =>
+      checks[modId ?? job.update?.primary.modId]?.installedFile?.dateAdded;
 
   /// The character the row is about: the one the job named, the one the install filed it under, else the installed
   /// mod's own as the library reads it.
@@ -446,12 +472,17 @@ class _DownloadRow extends ConsumerWidget {
           DownloadRowAction.answer => OutlinedButton(
               style: smallButtonStyle(context),
               onPressed: () => questions.answer(job.seq),
-              child: Text(loc.t(_answerKey(job.wait?.question))),
+              child: Text(loc.t(job.isUpdate ? _updateAnswerKey(job.updateWait?.question) : _answerKey(job.wait?.question))),
             ),
           DownloadRowAction.dontInstall => TextButton(
               style: smallButtonStyle(context),
               onPressed: () => queue.decline(job.seq),
               child: Text(loc.t('downloads.dont_install')),
+            ),
+          DownloadRowAction.skipUpdate => TextButton(
+              style: smallButtonStyle(context),
+              onPressed: () => queue.skipUpdate(job.seq),
+              child: Text(loc.t('downloads.update.skip')),
             ),
           DownloadRowAction.openModPage => TextButton(
               style: smallButtonStyle(context),
@@ -477,8 +508,19 @@ class _DownloadRow extends ConsumerWidget {
             iconButton(Icons.close_rounded, loc.t('downloads.dismiss'), () => queue.remove(job.seq)),
         };
 
+    final failedUpdate = job.isUpdate && job.state == DownloadJobState.failed;
     switch (job.state) {
       case DownloadJobState.waiting:
+      case DownloadJobState.failed when failedUpdate:
+        final kept = job.prepared is UpdateRunKept ? job.prepared! as UpdateRunKept : null;
+        final String line;
+        if (failedUpdate) {
+          line = updateFailureText(loc, job.error, keptIn: job.archive?.parent.path);
+        } else if (job.isUpdate) {
+          line = updateQuestionText(loc, job, folderCount: kept?.foldersQuestion?.choices.length ?? 0);
+        } else {
+          line = _questionLine(loc, job.wait);
+        }
         return _RowFrame(
           attention: true,
           children: [
@@ -494,14 +536,52 @@ class _DownloadRow extends ConsumerWidget {
                     children: [
                       name,
                       file,
-                      Text(_questionLine(loc, job.wait), style: lineStyle?.copyWith(color: palette.attention.foreground)),
+                      Text(line, style: lineStyle?.copyWith(color: palette.attention.foreground)),
                     ],
                   ),
-                  Wrap(spacing: 6, runSpacing: 6, children: [for (final a in rowActions) control(a)]),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final a in rowActions)
+                        // On an attention row the way off the list is a word, beside the board's other buttons.
+                        if (a == DownloadRowAction.dismiss)
+                          TextButton(
+                            style: smallButtonStyle(context),
+                            onPressed: () => queue.remove(job.seq),
+                            child: Text(loc.t('downloads.dismiss')),
+                          )
+                        else
+                          control(a),
+                    ],
+                  ),
                 ],
               ),
             ),
           ],
+        );
+
+      // In line, or held by the run's halt at any gate, where it reads "Stopped: <reason>" in place of its wait.
+      case _ when job.isUpdate && (updatePhaseOf(job) is UpdateInLine || updatePhaseOf(job) is UpdateStopped):
+        final place = updateQueuedPlace(job, actions.jobs, holds: actions.holds);
+        return Opacity(
+          opacity: 0.75,
+          child: _RowFrame(
+            children: [
+              tile,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  spacing: 6,
+                  children: [
+                    _UpdateHeading(job: job, name: name, file: file, trailing: loc.t('downloads.update.waiting')),
+                    Text(queuedPlaceText(loc, place, _sizeOf(job)), style: lineStyle),
+                  ],
+                ),
+              ),
+              for (final a in rowActions) control(a),
+            ],
+          ),
         );
 
       case DownloadJobState.queued when !job.resumed:
@@ -526,7 +606,7 @@ class _DownloadRow extends ConsumerWidget {
                 name: name,
                 file: file,
                 line: Text(
-                  failed ? _failureLine(loc, job.error) : _finishedLine(loc, job, actions),
+                  failed ? downloadFailureText(loc, job.error) : _finishedLine(loc, job, actions),
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                   style: failed ? lineStyle?.copyWith(color: palette.redText) : lineStyle,
@@ -534,6 +614,24 @@ class _DownloadRow extends ConsumerWidget {
               ),
             ),
             for (final a in rowActions) control(a),
+          ],
+        );
+
+      case _ when job.isUpdate && !job.isTerminal:
+        return _RowFrame(
+          children: [
+            tile,
+            Expanded(
+              child: _UpdateWorking(
+                job: job,
+                name: name,
+                file: file,
+                // The mod being written, which in a shared archive's job is not always the first.
+                heldFileDate: actions.heldFileDate(job, job.writing?.modId),
+              ),
+            ),
+            if (rowActions.isNotEmpty)
+              Column(mainAxisSize: MainAxisSize.min, spacing: 2, children: [for (final a in rowActions) control(a)]),
           ],
         );
 
@@ -682,12 +780,17 @@ class _Tile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = ZenithPalette.of(context);
-    if (job.state == DownloadJobState.waiting) {
+    if (job.state == DownloadJobState.waiting || (job.isUpdate && job.state == DownloadJobState.failed)) {
+      final icon = switch (job) {
+        DownloadJob(state: DownloadJobState.failed) => Icons.error_outline_rounded,
+        DownloadJob(isUpdate: true) => _updateQuestionIcon(job.updateWait?.question),
+        _ => _questionIcon(job.wait?.question),
+      };
       return Container(
         width: width,
         height: height,
         decoration: BoxDecoration(color: palette.attentionTile.background, borderRadius: BorderRadius.circular(7)),
-        child: Icon(_questionIcon(job.wait?.question), size: 16, color: palette.attentionTile.foreground),
+        child: Icon(icon, size: 16, color: palette.attentionTile.foreground),
       );
     }
     final ground = DottedGround(ground: palette.groundFor(elementToneOf(characterId ?? unknownCharacterId)), spacing: 7);
@@ -728,83 +831,128 @@ String _answerKey(InstallQuestion? question) => switch (question) {
       InstallQuestion.password || null => 'downloads.answer_password',
     };
 
-/// The bar under a row's name: [value] filled in the accent, or a sweep when null. [dimmed] for one not moving.
-class _Bar extends StatelessWidget {
-  const _Bar({required this.value, this.dimmed = false});
+IconData _updateQuestionIcon(UpdateQuestionKind? question) => switch (question) {
+      UpdateQuestionKind.folders => Icons.folder_outlined,
+      UpdateQuestionKind.patchShaped || UpdateQuestionKind.unrecordedPatch => Icons.link_rounded,
+      UpdateQuestionKind.password || null => Icons.lock_outline_rounded,
+    };
 
-  final double? value;
-  final bool dimmed;
+/// The answer button of an update question the app asks itself (`updateQuestionAnswerable`).
+String _updateAnswerKey(UpdateQuestionKind? question) =>
+    question == UpdateQuestionKind.folders ? 'downloads.answer_several_folders' : 'downloads.answer_password';
+
+/// An update row's head: its name with what it is doing at the right, the file, and for a shared archive how many
+/// mods it updates.
+class _UpdateHeading extends StatelessWidget {
+  const _UpdateHeading({required this.job, required this.name, required this.file, required this.trailing});
+
+  final DownloadJob job;
+  final Widget name;
+  final Widget file;
+  final String trailing;
 
   @override
   Widget build(BuildContext context) {
     final palette = ZenithPalette.of(context);
-    final fill = palette.accent.withValues(alpha: dimmed ? 0.4 : 1);
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(99),
-      child: SizedBox(
-        height: 6,
-        child: ColoredBox(
-          color: palette.track,
-          child: value == null
-              ? _Sweep(color: palette.accent.withValues(alpha: 0.7))
-              : Align(
-                  alignment: Alignment.centerLeft,
-                  child: FractionallySizedBox(
-                    widthFactor: value!.clamp(0.0, 1.0),
-                    heightFactor: 1,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(color: fill, borderRadius: BorderRadius.circular(99)),
-                    ),
-                  ),
-                ),
+    final text = Theme.of(context).textTheme;
+    final mods = job.update?.mods.length ?? 1;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 1,
+      children: [
+        Row(
+          spacing: 8,
+          children: [
+            Expanded(child: name),
+            Text(
+              trailing,
+              style: text.labelSmall?.copyWith(fontWeight: FontWeight.w400, letterSpacing: 0, color: palette.text2),
+            ),
+          ],
         ),
-      ),
+        file,
+        if (mods > 1)
+          Text(
+            context.loc.plural('downloads.update.shared', mods, params: {'count': '$mods'}),
+            style: text.bodySmall?.copyWith(color: palette.text3),
+          ),
+      ],
     );
   }
 }
 
-/// A third of the bar running across it, for work that reports no fraction.
-class _Sweep extends StatefulWidget {
-  const _Sweep({required this.color});
+/// An update row at work: downloading with its bar and real rate, unpacking with no bar, since no step of it reports
+/// how far along it is, or installing with a sweep and the part of the write that is true (`docs/update-runs.md` §2).
+class _UpdateWorking extends StatelessWidget {
+  const _UpdateWorking({required this.job, required this.name, required this.file, required this.heldFileDate});
 
-  final Color color;
+  final DownloadJob job;
+  final Widget name;
+  final Widget file;
+
+  /// The upload date of the file the mod holds, which the write keeps as a snapshot.
+  final DateTime? heldFileDate;
 
   @override
-  State<_Sweep> createState() => _SweepState();
+  Widget build(BuildContext context) {
+    final loc = context.loc;
+    final palette = ZenithPalette.of(context);
+    final lineStyle = Theme.of(context).textTheme.bodySmall?.copyWith(color: palette.text3);
+
+    final String trailing;
+    final String line;
+    Widget? bar;
+    switch (updatePhaseOf(job)) {
+      case final phase && (UpdateConnecting() || UpdateDownloading()):
+        final fraction = job.progress?.fraction;
+        trailing = fraction == null ? '' : '${(fraction * 100).round()}%';
+        bar = _Bar(value: fraction ?? 0);
+        line = phase is UpdateConnecting ? loc.t('downloads.connecting') : _updateTransferLine(loc, job);
+      case UpdateInstalling(:final step):
+        trailing = loc.t('downloads.update.installing');
+        // The installing bar is the accent drawn towards the text colour, so it reads apart from a download's.
+        bar = _Bar(value: null, color: Color.lerp(palette.text, palette.accent, 0.55));
+        line = switch (step) {
+          final step? => heldFileDate == null
+              ? loc.t('downloads.update.kept_step_undated', params: {'step': updateStepText(loc, step)})
+              : loc.t('downloads.update.kept_step',
+                  params: {'date': formatResolveDate(heldFileDate!), 'step': updateStepText(loc, step)}),
+          null => loc.t('downloads.update.checking'),
+        };
+      default:
+        trailing = loc.t('downloads.update.unpacking');
+        line = loc.t('downloads.update.checking');
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 6,
+      children: [
+        _UpdateHeading(job: job, name: name, file: file, trailing: trailing),
+        ?bar,
+        Text(line, maxLines: 2, overflow: TextOverflow.ellipsis, style: lineStyle),
+      ],
+    );
+  }
 }
 
-class _SweepState extends State<_Sweep> with SingleTickerProviderStateMixin {
-  late final AnimationController _run =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))..repeat();
+/// "79 of 233 MB · 4.1 MB/s", for a transfer past its "Connecting..." ([updateIsConnecting]).
+String _updateTransferLine(AppLocalizations loc, DownloadJob job) => [
+      ?_transferred(loc, job),
+      if (job.progress?.bytesPerSecond case final rate?)
+        loc.t('marketplace.download_rate', params: {'rate': formatBytes(rate.round())}),
+    ].join(' · ');
+
+/// The 6px bar under a panel row's name ([ProgressTrack]).
+class _Bar extends StatelessWidget {
+  const _Bar({required this.value, this.dimmed = false, this.color});
+
+  final double? value;
+  final bool dimmed;
+  final Color? color;
 
   @override
-  void dispose() {
-    _run.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-        builder: (context, constraints) {
-          final span = constraints.maxWidth * 0.35;
-          return AnimatedBuilder(
-            animation: _run,
-            builder: (context, _) => Stack(
-              children: [
-                Positioned(
-                  left: -span + (constraints.maxWidth + span) * _run.value,
-                  top: 0,
-                  bottom: 0,
-                  width: span,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(color: widget.color, borderRadius: BorderRadius.circular(99)),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      );
+  Widget build(BuildContext context) => ProgressTrack(value: value, height: 6, dimmed: dimmed, sweepColor: color);
 }
 
 /// The question a waiting row says.
@@ -893,9 +1041,18 @@ String _finishedLine(AppLocalizations loc, DownloadJob job, _RowCallbacks action
     JobOutcome.reinstalled => dated('downloads.reinstalled', 'downloads.reinstalled_undated'),
     JobOutcome.baseInstalled => loc.t('downloads.base_installed'),
     JobOutcome.saved => loc.t('downloads.saved'),
-    // An update run's own outcomes, which no screen enqueues yet.
-    JobOutcome.nothingInstalled || JobOutcome.patchAdded || JobOutcome.skipped || JobOutcome.undone || null =>
-      job.headline ?? loc.t('downloads.done'),
+    JobOutcome.patchAdded => loc.t('downloads.update.patch_added'),
+    JobOutcome.skipped => updateSkipText(
+        loc,
+        job.skipReason,
+        stillOn: actions.heldFileDate(job),
+        alongWith: switch (job.resultFor(job.update?.primary.modId ?? '')?.alongWith) {
+          final id? => actions.mod(id)?.name ?? id,
+          null => null,
+        },
+      ),
+    JobOutcome.undone => loc.t('downloads.update.undone'),
+    JobOutcome.nothingInstalled || null => job.headline ?? loc.t('downloads.done'),
   };
   if (job.outcome == JobOutcome.nothingInstalled) return head;
 
@@ -909,20 +1066,3 @@ String _finishedLine(AppLocalizations loc, DownloadJob job, _RowCallbacks action
     if (finishedAt != null) relativeAgeLabel(loc, finishedAt, actions.now),
   ].join(' · ');
 }
-
-/// What went wrong, as specifically as the failure allows.
-///
-/// A stall is the one transfer failure with a way out, so it says so instead of sharing the generic wording with a
-/// 404. An install failure carries its own message: the bytes arrived fine, so "Download failed" would name the one
-/// half that worked.
-String _failureLine(AppLocalizations loc, Object? error) => switch (error) {
-      InstallFailure(:final message) => message,
-      DownloadStalledException() => loc.t('downloads.failed_stalled'),
-      DownloadNetworkException() => loc.t('downloads.failed_network'),
-      // Named with its numbers, or "not enough space" is a dead end.
-      InsufficientSpaceException(:final requiredBytes, :final availableBytes) => loc.t('downloads.failed_space', params: {
-          'required': formatBytes(requiredBytes),
-          'available': formatBytes(availableBytes),
-        }),
-      _ => loc.t('downloads.failed'),
-    };

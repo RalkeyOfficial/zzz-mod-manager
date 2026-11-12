@@ -198,7 +198,7 @@ class NotificationCenter extends Notifier<List<AppNotification>> {
   }
 
   /// [card] counting [subjects]. Past one, it takes the repeat's counted title and body, and its portrait and
-  /// actions go, since both were about one mod.
+  /// actions go, since both were about one mod; only the repeat's counted actions, which are about the count, stay.
   static AppNotification _counted(AppNotification card, NotificationRepeat repeat, List<String> subjects) {
     final count = subjects.isEmpty ? 1 : subjects.length;
     if (count == 1) return card.copyWith(repeat: repeat, subjects: subjects, count: 1);
@@ -209,6 +209,7 @@ class NotificationCenter extends Notifier<List<AppNotification>> {
       body: repeat.body?.call(count) ?? card.body,
       icon: card.icon,
       progress: card.progress,
+      actions: repeat.countedActions,
       keycap: card.keycap,
       stays: card.stays,
       repeat: repeat,
@@ -248,13 +249,16 @@ class NotificationCenter extends Notifier<List<AppNotification>> {
   ///
   /// A card with no clock is waiting for something: an owner holding its handle, or a reader who has not seen an
   /// error yet. Dropping it throws away the only report of that. It still goes once nothing else can, so the
-  /// backstop holds whatever the stack is made of.
+  /// backstop holds whatever the stack is made of. The cards [AppNotification.outsideCap] are neither counted nor
+  /// dropped.
   static List<AppNotification> _kept(List<AppNotification> all) {
-    if (all.length <= kKeptNotifications) return all;
+    var counted = all.where((n) => !n.outsideCap).length;
+    if (counted <= kKeptNotifications) return all;
     final kept = List<AppNotification>.of(all);
-    while (kept.length > kKeptNotifications) {
-      final oldestTimed = kept.indexWhere((n) => n.hasClock);
-      kept.removeAt(oldestTimed >= 0 ? oldestTimed : 0);
+    while (counted > kKeptNotifications) {
+      final oldestTimed = kept.indexWhere((n) => !n.outsideCap && n.hasClock);
+      kept.removeAt(oldestTimed >= 0 ? oldestTimed : kept.indexWhere((n) => !n.outsideCap));
+      counted--;
     }
     return kept;
   }

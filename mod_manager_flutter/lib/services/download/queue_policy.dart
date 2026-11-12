@@ -1,3 +1,6 @@
+import 'package:flutter/foundation.dart' show setEquals;
+
+import '../../models/mod_download.dart';
 import 'download_job.dart';
 import 'update_job.dart';
 
@@ -91,15 +94,39 @@ List<DownloadJob> admissions(
   ];
 }
 
-/// The update jobs to start downloading now:
-/// in the order of [updateLine], while fewer than [concurrency] update jobs are downloading and the lookahead admits the next ([lookaheadAdmits]).
+/// The update jobs to start downloading now: the jobs of [updateLine] that [updateHolds] holds nothing back.
+List<DownloadJob> updateAdmissions(
+  List<DownloadJob> jobs, {
+  int concurrency = kUpdateDownloadConcurrency,
+  int lookaheadCount = kUpdateLookaheadCount,
+  int lookaheadBytes = kUpdateLookaheadBytes,
+}) {
+  final holds = updateHolds(jobs, concurrency: concurrency, lookaheadCount: lookaheadCount, lookaheadBytes: lookaheadBytes);
+  return [for (final job in updateLine(jobs)) if (!holds.containsKey(job.seq)) job];
+}
+
+/// Why a job in [updateLine] is not started now.
+enum UpdateHold {
+  /// An earlier job of the run has not finished with its folder. It waits in line without holding a place.
+  folder,
+
+  /// The lookahead refuses it, or refused a job ahead of it in line.
+  lookahead,
+
+  /// The download pool is full.
+  pool,
+}
+
+/// Why each job of [updateLine] that is not started now waits, by `seq`; a job that is started is not in it.
+/// The one walk of the line that both [updateAdmissions] and a queued row's words ([updateQueuedPlace]) read.
 ///
-/// A job whose folder an earlier job of the run has not finished with is passed over, and waits in line without holding a place,
+/// In line order: a job whose folder an earlier job of the run has not finished with is passed over,
 /// so the lookahead never fills with jobs that cannot go on.
-/// The line stops at the first job the lookahead refuses.
+/// The line stops at the first job the lookahead refuses ([lookaheadAdmits]), and every job behind it waits for the lookahead too.
 /// The line is smallest first, so only a job sent to the end of it (a stalled or retried one) could otherwise pass a large file the lookahead refused,
 /// and a large file runs alone once nothing is ahead.
-List<DownloadJob> updateAdmissions(
+/// A job the lookahead admits waits for the pool while [concurrency] update jobs are downloading.
+Map<int, UpdateHold> updateHolds(
   List<DownloadJob> jobs, {
   int concurrency = kUpdateDownloadConcurrency,
   int lookaheadCount = kUpdateLookaheadCount,
@@ -112,26 +139,33 @@ List<DownloadJob> updateAdmissions(
   ];
   var aheadCount = ahead.length;
   var aheadBytes = ahead.fold(0, (sum, job) => sum + listedSize(job));
-  final starting = <DownloadJob>[];
+  var stopped = false;
+  final holds = <int, UpdateHold>{};
   for (final job in updateLine(jobs)) {
-    if (running >= concurrency) break;
-    if (!folderPipelineFree(job, jobs)) continue;
-    final size = listedSize(job);
-    if (!lookaheadAdmits(
-      aheadCount: aheadCount,
-      aheadBytes: aheadBytes,
-      size: size,
-      maxCount: lookaheadCount,
-      maxBytes: lookaheadBytes,
-    )) {
-      break;
+    if (!folderPipelineFree(job, jobs)) {
+      holds[job.seq] = UpdateHold.folder;
+      continue;
     }
-    starting.add(job);
-    running++;
-    aheadCount++;
-    aheadBytes += size;
+    final size = listedSize(job);
+    stopped = stopped ||
+        !lookaheadAdmits(
+          aheadCount: aheadCount,
+          aheadBytes: aheadBytes,
+          size: size,
+          maxCount: lookaheadCount,
+          maxBytes: lookaheadBytes,
+        );
+    if (stopped) {
+      holds[job.seq] = UpdateHold.lookahead;
+    } else if (running >= concurrency) {
+      holds[job.seq] = UpdateHold.pool;
+    } else {
+      running++;
+      aheadCount++;
+      aheadBytes += size;
+    }
   }
-  return starting;
+  return holds;
 }
 
 /// The size a job's file lists on GameBanana, 0 when it lists none.
@@ -357,6 +391,9 @@ enum DownloadRowAction {
   /// End a waiting install: what it kept is deleted and the row leaves the list.
   dontInstall,
 
+  /// End a waiting update: nothing is written, what it kept is deleted, and the row stays as skipped.
+  skipUpdate,
+
   /// Open the download's mod page in Browse, where the author usually puts an archive's password.
   openModPage,
 
@@ -404,6 +441,12 @@ List<DownloadRowAction> rowActions(
           : const [DownloadRowAction.cancel],
       DownloadJobState.paused => const [DownloadRowAction.resume, DownloadRowAction.cancel],
       DownloadJobState.downloaded => const [DownloadRowAction.cancel],
+      DownloadJobState.waiting when job.isUpdate => [
+          if (updateQuestionAnswerable(job.updateWait?.question)) DownloadRowAction.answer,
+          DownloadRowAction.skipUpdate,
+        ],
+      // A failed update is only taken off the list: no Try again is offered on it.
+      DownloadJobState.failed when job.isUpdate => const [DownloadRowAction.dismiss],
       DownloadJobState.waiting => job.wait?.question == InstallQuestion.password
           ? [DownloadRowAction.answer, if (job.mod != null) DownloadRowAction.openModPage]
           : const [DownloadRowAction.answer, DownloadRowAction.dontInstall],
@@ -418,6 +461,11 @@ List<DownloadRowAction> rowActions(
           ? const [DownloadRowAction.dismiss]
           : const [DownloadRowAction.retry],
     };
+
+/// Whether the app can ask an update's [question] itself: the archive's password and which of its folders is the mod.
+/// The rest wait with only Skip, and a patch-shaped file is never written by the update's wipe.
+bool updateQuestionAnswerable(UpdateQuestionKind? question) =>
+    question == UpdateQuestionKind.password || question == UpdateQuestionKind.folders;
 
 List<DownloadRowAction> _finishedActions(
   DownloadJob job,
@@ -498,6 +546,15 @@ class ModUpdateState {
   /// Null while the job has not ended.
   /// A job writes some of its mods and not others, so the job's own outcome is not this mod's.
   final UpdateModResult? result;
+
+  // The queue replaces only the jobs that change, so the same job object means nothing about this mod's row changed,
+  // and a tick of another download does not rebuild it.
+  @override
+  bool operator ==(Object other) =>
+      other is ModUpdateState && identical(other.job, job) && identical(other.result, result);
+
+  @override
+  int get hashCode => Object.hash(identityHashCode(job), identityHashCode(result));
 }
 
 /// The update job of the mod [modId] for its row: the one still going if there is one,
@@ -512,10 +569,154 @@ ModUpdateState? updateJobOfMod(List<DownloadJob> jobs, String modId) {
   return ended == null ? null : ModUpdateState(ended, ended.resultFor(modId));
 }
 
+/// Whether Clear finished takes [job] off the list: an ended job, except a failed update, which waits in Needs your
+/// attention until Remove from the list.
+bool clearedByClearFinished(DownloadJob job) =>
+    job.isTerminal && !(job.isUpdate && job.state == DownloadJobState.failed);
+
 /// Whether a job of the run that has not ended already holds [mod]'s layer: a second press for it adds nothing.
 bool layerInRun(List<DownloadJob> jobs, UpdateMod mod) => jobs.any(
       (job) => job.isUpdate && !job.isTerminal && job.update!.mods.any(mod.sameLayerAs),
     );
+
+/// Every layer [layerInRun] holds, as one value that compares equal while the layers do, so a provider selecting it
+/// is not told about a progress tick.
+LayersInRun layersInRun(List<DownloadJob> jobs) => LayersInRun({
+      for (final job in jobs)
+        if (job.isUpdate && !job.isTerminal)
+          for (final mod in job.update!.mods) (mod.modId, mod.layer),
+    });
+
+class LayersInRun {
+  const LayersInRun(this._layers);
+
+  final Set<(String, DownloadKey)> _layers;
+
+  bool get isEmpty => _layers.isEmpty;
+
+  bool contains(String modId, DownloadKey layer) => _layers.contains((modId, layer));
+
+  @override
+  bool operator ==(Object other) => other is LayersInRun && setEquals(other._layers, _layers);
+
+  @override
+  int get hashCode => Object.hashAllUnordered(_layers);
+}
+
+/// How far along an update job is, lower first: what the Updating group of the panel and the deck's front card go by
+/// (`docs/update-runs.md` §4.6). Writing, then unpacked and waiting for the write, then unpacking, then landed, then
+/// downloading, then waiting. A job the halt holds at a gate (landed, unpacked or in line) is with the waiting, last.
+int _workRank(DownloadJob job) => switch (job.state) {
+      _ when job.halt != null && _heldAtGate(job) => 5,
+      DownloadJobState.updating => switch (job.updateStep) {
+          UpdateStep.writing => 0,
+          UpdateStep.unpacked => 1,
+          _ => 2,
+        },
+      DownloadJobState.downloaded => 3,
+      DownloadJobState.running || DownloadJobState.paused => 4,
+      _ => 5,
+    };
+
+/// Whether [job] is at a gate a halt stops it at: in line, landed, or unpacked and waiting for the write.
+/// A transfer or an unpack under way goes on to the next gate.
+bool _heldAtGate(DownloadJob job) => switch (job.state) {
+      DownloadJobState.queued || DownloadJobState.paused || DownloadJobState.downloaded => true,
+      DownloadJobState.updating => job.updateStep == UpdateStep.unpacked,
+      _ => false,
+    };
+
+/// The update jobs still at work without the user (not waiting on a question, not ended), in the order of work:
+/// the furthest along first, a download by how much has arrived, and the queued ones in the order they start, then the
+/// ones a halt holds. Ties go by the order they were asked for.
+List<DownloadJob> updatesInOrderOfWork(List<DownloadJob> jobs) {
+  final line = {for (final (i, job) in updateLine(jobs).indexed) job.seq: i};
+  final working = [
+    for (final job in jobs)
+      if (job.isUpdate && !job.isTerminal && job.state != DownloadJobState.waiting) job,
+  ];
+  int byPlace(DownloadJob a, DownloadJob b) {
+    final rank = _workRank(a).compareTo(_workRank(b));
+    if (rank != 0) return rank;
+    if (_workRank(a) == 4) {
+      final arrived = (b.progress?.fraction ?? 0).compareTo(a.progress?.fraction ?? 0);
+      if (arrived != 0) return arrived;
+    }
+    if (_workRank(a) == 5) {
+      final place = (line[a.seq] ?? line.length).compareTo(line[b.seq] ?? line.length);
+      if (place != 0) return place;
+    }
+    return a.seq.compareTo(b.seq);
+  }
+
+  return working..sort(byPlace);
+}
+
+/// What a queued update job waits for, for its dimmed row (`docs/update-runs.md` §4.6, §10).
+sealed class UpdateQueuedPlace {
+  const UpdateQueuedPlace();
+}
+
+/// First in line: it starts as soon as a download slot frees.
+final class DownloadsNext extends UpdateQueuedPlace {
+  const DownloadsNext();
+}
+
+/// [count] queued jobs start before it.
+final class AheadOfIt extends UpdateQueuedPlace {
+  const AheadOfIt(this.count);
+
+  final int count;
+}
+
+/// First in line and held by the lookahead (or by an earlier job of its folder) while something ahead of it is moving.
+final class WaitsForInstall extends UpdateQueuedPlace {
+  const WaitsForInstall();
+}
+
+/// First in line and held by the lookahead, with every job ahead of it waiting on a question: nothing frees a place
+/// until the user answers.
+final class WaitsForAnswers extends UpdateQueuedPlace {
+  const WaitsForAnswers();
+}
+
+/// Held by the run's halt.
+final class StoppedBy extends UpdateQueuedPlace {
+  const StoppedBy(this.halt);
+
+  final UpdateHalt halt;
+}
+
+/// Where the queued update job [job] stands, given everything else in the queue.
+/// [holds] is [updateHolds] of [jobs] when the caller has it already, as a list of rows does once for all of them.
+UpdateQueuedPlace updateQueuedPlace(
+  DownloadJob job,
+  List<DownloadJob> jobs, {
+  Map<int, UpdateHold>? holds,
+  int concurrency = kUpdateDownloadConcurrency,
+  int lookaheadCount = kUpdateLookaheadCount,
+  int lookaheadBytes = kUpdateLookaheadBytes,
+}) {
+  if (job.halt case final halt?) return StoppedBy(halt);
+  holds ??= updateHolds(jobs, concurrency: concurrency, lookaheadCount: lookaheadCount, lookaheadBytes: lookaheadBytes);
+  final hold = holds[job.seq];
+  UpdateQueuedPlace held() {
+    final ahead = [
+      for (final other in jobs)
+        if (isAheadOfInstall(other) && !isHeldByPipeline(other, jobs)) other,
+    ];
+    return ahead.isNotEmpty && ahead.every((j) => j.state == DownloadJobState.waiting)
+        ? const WaitsForAnswers()
+        : const WaitsForInstall();
+  }
+
+  // Passed over in line until the earlier job of its folder has ended.
+  if (hold == UpdateHold.folder) return held();
+  final line = [for (final j in updateLine(jobs)) if (holds[j.seq] != UpdateHold.folder) j];
+  final place = line.indexWhere((j) => j.seq == job.seq);
+  if (place > 0) return AheadOfIt(place);
+  return hold == UpdateHold.lookahead ? held() : const DownloadsNext();
+}
 
 /// The downloads in progress or waiting for a slot, paused included: the sidebar's plain count. A queued job has not
 /// started, but it is certainly not finished. A waiting job is counted by [waitingJobCount] instead.

@@ -119,6 +119,32 @@ void main() {
       expect(state(), hasLength(kKeptNotifications));
       expect(state().first.title, 'error 2');
     });
+
+    test("an uncapped deck's Working cards are neither counted nor dropped; the other cards still are", () {
+      final deck = NotificationDeck('run', more: (n) => '$n more', uncapped: true);
+      for (var i = 0; i < kKeptNotifications + 5; i++) {
+        center().working('job $i', body: 'x', deck: deck);
+      }
+      center().done('finished', body: 'x');
+      expect(state(), hasLength(kKeptNotifications + 6), reason: 'the only clocked card is not dropped for the deck');
+      expect(state().first.title, 'job 0');
+
+      for (var i = 0; i < kKeptNotifications; i++) {
+        center().note('note $i', body: 'x');
+      }
+      final capped = [for (final n in state()) if (!n.outsideCap) n.title];
+      expect(capped, hasLength(kKeptNotifications));
+      expect(capped.first, 'note 0', reason: 'the oldest card with a clock went');
+      expect(state().where((n) => n.outsideCap), hasLength(kKeptNotifications + 5));
+    });
+
+    test("a capped deck's Working cards are counted as before", () {
+      final deck = NotificationDeck('downloads', more: (n) => '$n more');
+      for (var i = 0; i < kKeptNotifications + 2; i++) {
+        center().working('job $i', body: 'x', deck: deck);
+      }
+      expect(state(), hasLength(kKeptNotifications));
+    });
   });
 
   group('the same sentence again', () {
@@ -161,6 +187,17 @@ void main() {
           body: 'B', characterId: 'ellen', actions: [NotificationAction('Open', noop)], repeat: installed('B'));
       expect(state().single.characterId, isNull);
       expect(state().single.actions, isEmpty);
+    });
+
+    test('an action about the count stays once it counts several', () {
+      void noop() {}
+      final show = [NotificationAction('Show', noop)];
+      NotificationRepeat updated(String subject) =>
+          NotificationRepeat('update-run-done', subjects: [subject], title: (n) => '$n mods updated', countedActions: show);
+      center().done('A updated', body: 'kept', actions: [NotificationAction('Open', noop)], repeat: updated('A'));
+      center().done('B updated', body: 'kept', actions: [NotificationAction('Open', noop)], repeat: updated('B'));
+      expect(state().single.count, 2);
+      expect([for (final a in state().single.actions) a.label], ['Show']);
     });
 
     test('a merge moves the card to the newest place', () {

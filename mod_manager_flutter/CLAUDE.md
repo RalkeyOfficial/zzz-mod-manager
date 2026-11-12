@@ -94,14 +94,14 @@ Claims the UI may make
 - A mod folder is a stack of downloads (`origin.downloads`, bottom-most first); position is the role, never a separate stored flag ([`origin-tracking.md`](../docs/origin-tracking.md)).
 - An `InstalledFileRole` we do not recognise resolves to `replaced`, never `added`.
 - A displaced original is renamed, never stored under its real name — files kept in `.zzz-mod-manager/replaced/` take a `.orig` suffix ([`applying-updates.md`](../docs/applying-updates.md) §5).
-- No update is applied without the user present. Automatic updating is refused rather than unbuilt; checking is automatable and opt-in ([`applying-updates.md`](../docs/applying-updates.md) §7, [`update-checks.md`](../docs/update-checks.md) §5.1).
+- An update is applied only by a run the user started, from a press that names the mods and the files they picked. Automatic updating, with no press, is refused rather than unbuilt; checking is automatable and opt-in ([`applying-updates.md`](../docs/applying-updates.md) §7, [`update-runs.md`](../docs/update-runs.md) §3, [`update-checks.md`](../docs/update-checks.md) §5.1).
 - Guesses may inform, never drive. A suggestion is never preselected, and nothing but a checksum match ever reaches `exact`.
 - The app never presses F10 for the user — built, measured, removed ([`mod-reload.md`](../docs/mod-reload.md)).
 
 Notifications — full rules in [`notifications.md`](../docs/notifications.md)
 - Never call `ScaffoldMessenger`. `context.notify.<kind>(…)` is the only way.
 - A change the user can see reports only its failure; a change they cannot see may report its success.
-- Every notification is `title` = what happened, `body` = what it happened to. Both required.
+- Every notification is `title` = what happened, `body` = what it happened to. Both required. An update run's Done and failure cards are the one exception, the mod in the title ([`notifications.md`](../docs/notifications.md) §2).
 - The kind is the only thing a call site decides — colour, icon and duration come from it in one place. The one exception is `stays`, which keeps a warning until it is closed.
 
 Diagnostics — full rules in [`logging.md`](../docs/logging.md)

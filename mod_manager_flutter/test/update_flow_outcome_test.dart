@@ -5,8 +5,8 @@ import 'package:mod_manager_flutter/screens/dialogs/download_with_progress.dart'
 import 'package:mod_manager_flutter/services/update_apply/update_applier.dart';
 import 'package:mod_manager_flutter/services/update_apply/update_target.dart';
 
-/// How an update flow reports its end to a run: what stops a run, what a download that returned nothing means, and what
-/// a write into several folders adds up to.
+/// How a one-mod update flow reports its end: what a download that returned nothing means, and what a write into
+/// several folders adds up to.
 void main() {
   test('only a written update, or one that failed after moving files, may have changed the folder', () {
     expect({for (final o in UpdateFlowOutcome.values) o: o.changed}, {
@@ -16,10 +16,6 @@ void main() {
       UpdateFlowOutcome.failed: false,
       UpdateFlowOutcome.notStarted: false,
     });
-  });
-
-  test('only a decline stops a run', () {
-    expect([for (final o in UpdateFlowOutcome.values) if (o.stopsRun) o], [UpdateFlowOutcome.declined]);
   });
 
   group('a download that returned nothing', () {
@@ -37,7 +33,6 @@ void main() {
 
     test('with no reason given is never read as a refusal', () {
       expect(outcomeOfStoppedDownload(null), UpdateFlowOutcome.notStarted);
-      expect(outcomeOfStoppedDownload(null).stopsRun, isFalse);
     });
   });
 
@@ -89,15 +84,6 @@ void main() {
       ]) {
         expect(outcomeOfGroupWrite(set).changed, summariseGroupWrite(set).changed);
       }
-    });
-  });
-
-  group('where an update sits in a run', () {
-    test('has more while a later one is expected, unless the later ones cannot run', () {
-      expect(const UpdateRunPosition(index: 1, total: 3).hasMore, isTrue);
-      expect(const UpdateRunPosition(index: 3, total: 3).hasMore, isFalse);
-      expect(UpdateRunPosition(index: 1, total: 3, laterCanRun: () => false).hasMore, isFalse);
-      expect(UpdateRunPosition(index: 3, total: 3, laterCanRun: () => true).hasMore, isFalse);
     });
   });
 }

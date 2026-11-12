@@ -34,16 +34,25 @@ class PasswordOpenModPage extends PasswordAnswer {
 /// matters more than hiding it. It is never stored: the answer is held in memory for the unpack it is given for.
 ///
 /// [failed] says the last password did not open the archive. [offerModPage] adds the Open mod page link, which a
-/// dropped archive has no page for.
+/// dropped archive has no page for. [declineLabel] and [confirmLabel] name the two buttons for an update, whose no is
+/// Skip update.
 Future<PasswordAnswer?> showArchivePasswordDialog(
   BuildContext context, {
   required String modName,
   bool failed = false,
   bool offerModPage = true,
+  String? declineLabel,
+  String? confirmLabel,
 }) =>
     showDialog<PasswordAnswer>(
       context: context,
-      builder: (_) => ArchivePasswordDialog(modName: modName, failed: failed, offerModPage: offerModPage),
+      builder: (_) => ArchivePasswordDialog(
+        modName: modName,
+        failed: failed,
+        offerModPage: offerModPage,
+        declineLabel: declineLabel,
+        confirmLabel: confirmLabel,
+      ),
     );
 
 class ArchivePasswordDialog extends StatefulWidget {
@@ -52,11 +61,17 @@ class ArchivePasswordDialog extends StatefulWidget {
     required this.modName,
     this.failed = false,
     this.offerModPage = true,
+    this.declineLabel,
+    this.confirmLabel,
   });
 
   final String modName;
   final bool failed;
   final bool offerModPage;
+
+  /// Don't install and Install unless given.
+  final String? declineLabel;
+  final String? confirmLabel;
 
   @override
   State<ArchivePasswordDialog> createState() => _ArchivePasswordDialogState();
@@ -127,11 +142,11 @@ class _ArchivePasswordDialogState extends State<ArchivePasswordDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(const PasswordDeclined()),
-          child: Text(loc.t('downloads.dont_install')),
+          child: Text(widget.declineLabel ?? loc.t('downloads.dont_install')),
         ),
         FilledButton(
           onPressed: _field.text.isEmpty ? null : _submit,
-          child: Text(loc.t('downloads.password.install')),
+          child: Text(widget.confirmLabel ?? loc.t('downloads.password.install')),
         ),
       ],
     );

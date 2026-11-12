@@ -288,33 +288,6 @@ void main() {
     expect(failed, UpdateFlowOutcome.failed);
   });
 
-  testWidgets("a run's confirmation says where it is, and its result offers Next until the last", (tester) async {
-    final mod = await installed(tester, tracked());
-    final file = serve(2, {'Ellen/Ellen.ini': '[KeySwap]\nkey = VK_2\n'});
-
-    await run(
-      tester,
-      (context, ref) => applyUpdateFlow(
-        context,
-        ref,
-        mod: mod,
-        remoteModId: 100,
-        file: file,
-        run: const UpdateRunPosition(index: 2, total: 3),
-      ),
-      until: () => find.text('Cancel').evaluate().isNotEmpty,
-    );
-    expect(find.text('2 of 3'), findsOneWidget);
-
-    await tester.runAsync(() => tester.tap(find.widgetWithText(FilledButton, 'Update')));
-    for (var i = 0; i < 100 && find.text('Next').evaluate().isEmpty; i++) {
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
-      await tester.pump();
-    }
-    expect(find.text('Next'), findsOneWidget, reason: 'one more update follows this one');
-    expect(find.text('Close'), findsNothing);
-  });
-
   testWidgets('a base update confirmed after the window it started from closed still writes, and says so',
       (tester) async {
     final mod = await installed(tester, tracked());

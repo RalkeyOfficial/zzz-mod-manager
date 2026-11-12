@@ -43,6 +43,7 @@ const Map<NotificationKind, Duration> kNotificationDurations = {
 const int kVisibleNotifications = 3;
 
 /// The backstop on the whole stack, folded cards included: past it, the oldest card with a clock goes.
+/// The Working cards of a [NotificationDeck.uncapped] deck are neither counted nor dropped.
 const int kKeptNotifications = 20;
 
 /// Marks the cards that share one slot of the stack as a deck, such as the downloads running at once.
@@ -51,9 +52,13 @@ const int kKeptNotifications = 20;
 /// leaves it as its own card. Two decks are the same deck when their [key]s match.
 @immutable
 class NotificationDeck {
-  const NotificationDeck(this.key, {required this.more});
+  const NotificationDeck(this.key, {required this.more, this.uncapped = false});
 
   final String key;
+
+  /// Its Working cards are outside [kKeptNotifications]: an owner that deals one card per piece of work and keeps
+  /// updating each would lose the ones the backstop dropped, the front card among them. The deck is still one slot.
+  final bool uncapped;
 
   /// The front card's last line, "2 more downloading", for the [count] Working cards behind it.
   final String Function(int count) more;
@@ -85,7 +90,13 @@ class NotificationAction {
 /// is [body] with the subject list drawn under it, or the subject list alone when [body] is null.
 @immutable
 class NotificationRepeat {
-  const NotificationRepeat(this.key, {required this.subjects, this.title, this.body});
+  const NotificationRepeat(
+    this.key, {
+    required this.subjects,
+    this.title,
+    this.body,
+    this.countedActions = const <NotificationAction>[],
+  });
 
   final String key;
 
@@ -98,6 +109,10 @@ class NotificationRepeat {
   /// The counted body, for a card whose body says more than its subject: what to do, what was kept. Null when the
   /// body is the subject itself, which the subject list then replaces.
   final String Function(int count)? body;
+
+  /// The actions the card keeps when it counts more than one subject: ones about the count rather than one subject,
+  /// such as Show, which opens the list every subject is in. Empty for a card whose actions are each about one mod.
+  final List<NotificationAction> countedActions;
 }
 
 /// A headline and its subject, for a producer that decides what to say somewhere other than where it is said.
@@ -223,7 +238,7 @@ class AppNotification {
   final NotificationRepeat? repeat;
 
   /// How many [subjects] this card counts, 1 without a [repeat]. Past 1 the card is drawn counted: the subject list,
-  /// no portrait and no actions.
+  /// no portrait, and only the repeat's [NotificationRepeat.countedActions].
   final int count;
 
   /// The [repeat] subjects so far, oldest first.
@@ -236,6 +251,9 @@ class AppNotification {
   Duration? get duration => stays ? null : kNotificationDurations[kind];
 
   bool get hasClock => duration != null;
+
+  /// Whether [kKeptNotifications] leaves it out: a Working card of a [NotificationDeck.uncapped] deck.
+  bool get outsideCap => kind == NotificationKind.working && (deck?.uncapped ?? false);
 
   /// Whether [other] is *the same thing being said again*, which makes a re-raise move the card to the newest
   /// place instead of stacking a duplicate.

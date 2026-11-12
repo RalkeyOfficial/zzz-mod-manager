@@ -51,6 +51,8 @@ The body **names the subject; it does not describe the work.** The install confi
 | ✅ | `Mod installed` / `Ellen Swimsuit` |
 | ❌ | `Mod installed` / `Auto-tagged Ellen, copied 4 fields from the mod page` |
 
+**Update cards are the exception.** An update run's Done and failure cards name the mod in the title ("<mod> updated", "Couldn't update <mod>") and put the work in the body ("The <date> file is kept as a snapshot.", the reason it failed), because the board draws them so and the work is what the user watches (§6).
+
 Where a call site has no subject in hand, the body is **the single next step the user can take** — never a restatement of the title. If there is neither a subject nor a next step, that is a sign the notification shouldn't be raised at all.
 
 What a caller genuinely cannot drop is what the user must *act* on (no `.ini`, a patch-shaped download, a sidecar that could not be written).
@@ -159,7 +161,9 @@ That is why **raising one requires both levels while every parameter of `update`
 **Hiding a Working card never hides its result.** Its close button reads "Hide". `close(id)` keeps the card's last state aside: progress updates to it stay silent, `dismiss()` forgets it, and an update that turns it into a result raises that result as a card again.
 Every download has a card of its own, so hiding the deck holds for the downloads in it, a new download raises its own card, and each hidden one's result still comes back.
 
-**Cards raised with the same `NotificationDeck` share one slot** (§5). `working(…, deck:)` deals a card in; the download queue is the one user, with one card per download ([`downloads.md`](downloads.md) §9).
+**Cards raised with the same `NotificationDeck` share one slot** (§5). `working(…, deck:)` deals a card in. The download queue has two decks: `downloads`, one card per Browse download, and `updates`, one card per update run's job at work, so a run and the downloads are two slots ([`downloads.md`](downloads.md) §9, [`update-runs.md`](update-runs.md) §5).
+Every job of a run that has not ended has a card in the update deck, a job in line or held by a halt included, and the deck is `uncapped`, so the stack's backstop leaves its Working cards alone however long the run (§7).
+The update deck's front card is the job furthest along rather than the oldest: its cards are not each tied to a job, and the oldest takes the words of the furthest-along job, "Updating <mod>" with the step as its body and "2 more updating" under it. A job's result is not its card turning: the mods a run wrote are counted on one Done card of their own (`update-run-done`, "3 mods updated", with Show opening the Downloads panel, kept on the counted card as §7's exception), each mod that failed is an Error card of its own, and a halted run is one Error card, "Updates stopped", which, having no clock, stays until it is closed. It names the mod whose failure halted the run and stands in for that one mod's failure card; the job's other mods have their own, even when the same failure covered the whole job. A run's question is on the one Needs you card every waiting download shares (§4), which keeps Open Downloads as its only action.
 Only Working cards and the Done cards they turn into are in a deck. Turning one into any other kind, an error, a warning, a note or a Needs you, takes it out, so a failure or a question is a card of its own that the stack shows beside the deck rather than behind it.
 A Done result counted on another card (§7) stays wherever that card is: two downloads finishing in turn end as one "2 mods installed" on top of the deck.
 
@@ -172,7 +176,8 @@ Pass the character id into `working()` **up front** rather than reading it at th
 The count is of subjects, not raises: an install counts its folders, so an archive of three and one more mod read "4 mods installed".
 
 Counting more than one, the title is the repeat's counted title ("3 mods installed"). A body that says more than its subject keeps saying it, in its counted form, with the subject list ("A and B", "A, B and 1 more") under it: the patch and shader-file cards keep what was saved and what to do.
-Where the body was only the subject, as on the install card, the subject list replaces it. The portrait and the actions go, since both were about one mod. The keys in use: `install-done`, `patch-applied`, `asset-patch` and `shader-adopted`.
+Where the body was only the subject, as on the install card, the subject list replaces it. The portrait and the actions go, since both were about one mod.
+The exception is an action about the count rather than one subject, which the repeat names as its `countedActions` and the card keeps: Show on `update-run-done` opens the Downloads panel, where every mod it counts is a row, so "3 mods updated" has it as "Pastel Burnice updated" does. Install's Open is about one mod and goes. The keys in use: `install-done`, `patch-applied`, `asset-patch`, `shader-adopted` and `update-run-done`.
 
 **The same sentence again moves the card instead of stacking a copy.** Re-raising an identical **(kind, title, body)** without a repeat moves it to the newest place with a new id and restarts its clock.
 A Working card is never replaced this way: its owner holds its handle, and two downloads of one mod both read "Installing Ellen Swimsuit / Waiting for a free slot".
@@ -181,6 +186,7 @@ The predicate lives on the model as `saysTheSameAs` rather than inline in `show`
 
 **The backstop.** Nothing is dropped for being old: the fold keeps the corner small. Past `kKeptNotifications` (20), the oldest card *with a clock* goes.
 A card with no clock is waiting for something — an owner holding its handle, or a reader who has not seen an error yet — and dropping it throws away the only report of that. A stack of nothing but such cards still obeys the backstop.
+The one exemption is a deck raised `uncapped`, whose Working cards the backstop neither counts nor drops: the `updates` deck (§6). Its owner deals one card per job and keeps updating each, and a run of 25 mods would otherwise lose five of them, the front card among them, and then the Done card raised beside them, the only card there with a clock. The deck is still one slot, so the three shown and the fold are as for any deck, and every other card, the update run's Done, failure and halt cards included, is counted as before.
 
 ## 8. Actions and the keycap
 

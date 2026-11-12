@@ -237,6 +237,7 @@ class DownloadJob {
     this.halt,
     this.report,
     this.modResults = const <UpdateModResult>[],
+    this.writing,
   });
 
   /// Monotonic per session. Both the identity (a `Map` key, a `ValueKey`) and
@@ -352,6 +353,10 @@ class DownloadJob {
   /// What an ended update job came to for each of its mods, in the order of [UpdateTask.mods].
   final List<UpdateModResult> modResults;
 
+  /// The mod an update job is writing and the part of its write that has started, while [UpdateStep.writing].
+  /// Null until the write reports its first step.
+  final UpdateWriting? writing;
+
   /// The archive at its final name, once the transfer is done.
   File? get archive => result?.file;
 
@@ -462,6 +467,9 @@ class DownloadJob {
   /// The same job held back by [halt], or let go when it is null.
   DownloadJob withHalt(UpdateHalt? halt) => _rebuild(halt: halt);
 
+  /// The same job with its write's step as given, or none.
+  DownloadJob withWriting(UpdateWriting? writing) => _rebuild(writing: writing);
+
   /// The same job, asked for again by a new press: what happens once the bytes land is the new press's, everything
   /// about the transfer stays.
   DownloadJob pressedAgain({
@@ -528,6 +536,7 @@ class DownloadJob {
     Object? halt = _keep,
     Object? report,
     List<UpdateModResult>? modResults,
+    Object? writing = _keep,
   }) =>
       DownloadJob(
         seq: seq,
@@ -564,6 +573,7 @@ class DownloadJob {
         halt: identical(halt, _keep) ? this.halt : halt as UpdateHalt?,
         report: report ?? this.report,
         modResults: modResults ?? this.modResults,
+        writing: identical(writing, _keep) ? this.writing : writing as UpdateWriting?,
       );
 }
 

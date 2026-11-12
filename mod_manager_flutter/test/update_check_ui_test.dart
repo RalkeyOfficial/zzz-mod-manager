@@ -19,7 +19,7 @@ import 'package:mod_manager_flutter/screens/all_mods/all_mods_view.dart';
 import 'package:mod_manager_flutter/screens/components/library_actions_host.dart';
 import 'package:mod_manager_flutter/screens/components/mods_toolbar.dart';
 import 'package:mod_manager_flutter/screens/components/zenith_controls.dart';
-import 'package:mod_manager_flutter/screens/dialogs/apply_update_flow.dart' show UpdateFlowOutcome, UpdateRunPosition;
+import 'package:mod_manager_flutter/screens/dialogs/apply_update_flow.dart' show UpdateFlowOutcome;
 import 'package:mod_manager_flutter/screens/dialogs/bulk_resolution_dialog.dart';
 import 'package:mod_manager_flutter/screens/dialogs/mod_update_dialog.dart';
 import 'package:mod_manager_flutter/screens/updates/updates_page.dart';
@@ -2096,7 +2096,6 @@ class _RecordingGateway implements ModUpdateGateway {
     required GbFile file,
     required bool asCompanion,
     required List<GbFile> published,
-    UpdateRunPosition? run,
   }) =>
       patchUpdate ?? (throw StateError('no patch update expected'));
 
